@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Views.CharacterWorkshop;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -40,6 +41,7 @@ public sealed partial class WorkshopGroupSectionViewModel : WorkshopSectionViewM
     partial void OnSelectedChildChanged(WorkshopSectionViewModel? value)
     {
         if (value is not null) RaiseLayoutChanged();
+        if (value is not null && GuidePageActions.ForWorkshopPage(value.Id) is { } key) GuideActions.Report(key);
     }
 
     private void OnChildLayoutChanged(WorkshopSectionViewModel child)

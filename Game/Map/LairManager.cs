@@ -243,17 +243,23 @@ public sealed class LairManager
     }
 
     // Persist setup under GameDataSetLoopsFolder with the LairFileSuffix
-    // filename extension. No-op when no set is active.
-    public void Save(LairSetup setup)
+    // filename extension. False when nothing was saved: no set active, or a folder
+    // that can't be one (NavFolders.WhyNotFolder), refused with the reason in the log.
+    public bool Save(LairSetup setup)
     {
         ArgumentNullException.ThrowIfNull(setup);
         if (string.IsNullOrWhiteSpace(setup.Name))
             throw new ArgumentException("Setup name is required.", nameof(setup));
-        if (_setName is null) return;
+        if (_setName is null) return false;
 
+        string root = AppPaths.GameDataSetLoopsFolder(_setName);
+        if (NavFolders.WhyNotFolder(root, setup.Folder) is { } whyNot)
+        {
+            _log?.Warn("Lairs", $"lair setup '{setup.Name}' not saved: {whyNot}");
+            return false;
+        }
         setup.SchemaVersion = 1;
         setup.Folder = NavFolders.Normalize(setup.Folder);
-        string root = AppPaths.GameDataSetLoopsFolder(_setName);
         string dir = NavFolders.ToDirectory(root, setup.Folder);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(setup.Name));
@@ -266,6 +272,7 @@ public sealed class LairManager
         Stamp(setup);
         _setups[setup.Name] = setup;
         SetupsChanged?.Invoke();
+        return true;
     }
 
     // Move the setup named name into folder (empty = Loops root). No-op
@@ -276,9 +283,12 @@ public sealed class LairManager
         string target = NavFolders.Normalize(folder);
         if (string.Equals(NavFolders.Normalize(setup.Folder), target, StringComparison.OrdinalIgnoreCase))
             return false;
+        // The catalogue's own object: a refused move leaves it where it was.
+        string previous = setup.Folder;
         setup.Folder = target;
-        Save(setup);
-        return true;
+        if (Save(setup)) return true;
+        setup.Folder = previous;
+        return false;
     }
 
     // Delete the setup named name. No-op when not present or no set is active.

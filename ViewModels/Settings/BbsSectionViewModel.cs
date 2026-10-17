@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
@@ -477,7 +478,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // step. Fires regardless of which section owns focus, since the Settings
         // window applies every dirty section on OK.
         if (!string.IsNullOrWhiteSpace(Host))
-            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionBbsSaved);
+            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(GuideActions.BbsSaved);
     }
 
     // Drop every staged credential edit and the in-flight plaintext password.
@@ -1331,7 +1332,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnPortChanged(int value)                       { PushToCache(); Dirty(); MaybeSignalHostPort(); }
 
     private void OnTourActionChanged()
-        => HighlightHostPort = AppServices.CurrentOrNull?.CurrentTourAction == FirstRunTutorialViewModel.ActionBbsHostPort;
+        => HighlightHostPort = AppServices.CurrentOrNull?.CurrentTourAction == GuideActions.BbsHostPort;
 
     // First-run tour: the host/port line ticks once the USER enters a host (the
     // port has a sensible default). Gated on _suppressDirty so loading or
@@ -1342,7 +1343,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         if (_suppressDirty) return;
         if (!string.IsNullOrWhiteSpace(Host) && Port > 0)
-            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionBbsHostPort);
+            AppServices.CurrentOrNull?.NotifyTourAction?.Invoke(GuideActions.BbsHostPort);
     }
     partial void OnMaxRedialsChanged(int value)                 { PushToCache(); Dirty(); }
     partial void OnRedialPauseSecondsChanged(int value)         { PushToCache(); Dirty(); }

@@ -18,7 +18,7 @@
     </Design.DataContext>
 
     <Window.Styles>
-        <!-- First-run tour: glow the menu item the current step points at. -->
+        <!-- Visual Guides: glow the menu item the current step points at. -->
         <Style Selector="MenuItem.tutTarget">
             <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
         </Style>
@@ -30,9 +30,9 @@
          GlobalHotkeys.AttachMain in MainWindow.axaml.cs. -->
 
 
-    <!-- The DockPanel is the app chrome; the first-run tour's highlight ring
-         floats above it (same Panel) so it can circle a menu. The ring is wholly
-         hit-test-transparent; the step card is a separate window beside this one. -->
+    <!-- The DockPanel is the app chrome; the Visual Guides overlay floats above
+         it (same Panel) so it can spotlight the menu bar. The overlay is
+         hit-test-transparent except its card, so it never blocks the terminal. -->
     <Panel>
     <DockPanel LastChildFill="True">
 
@@ -55,7 +55,7 @@
                 <MenuItem Header="_Profile Management…"
                           InputGesture="{Binding ProfileManagerGesture}"
                           Command="{Binding OpenProfileManagerCommand}"
-                          Classes.tutTarget="{Binding Tutorial.HighlightProfileManagement}"/>
+                          Classes.tutTarget="{Binding Guide.HighlightProfileManagement}"/>
                 <Separator/>
                 <MenuItem Header="Auto-load last profile on startup"
                           ToggleType="CheckBox"
@@ -111,7 +111,7 @@
                 <MenuItem Header="_Quit" Command="{Binding QuitCommand}" InputGesture="{Binding QuitGesture}"/>
             </MenuItem>
 
-            <MenuItem Header="_View">
+            <MenuItem x:Name="ViewMenu" Header="_View">
                 <MenuItem Header="Settings…"     InputGesture="{Binding SettingsGesture}" Command="{Binding OpenSettingsCommand}"/>
                 <MenuItem Header="Backscroll"    InputGesture="{Binding BackscrollGesture}" Command="{Binding OpenBackscrollCommand}"/>
                 <Separator/>
@@ -256,7 +256,7 @@
             <!-- Standalone action, no dropdown — clicking fires the capture
                  directly (freeze client state + recent output into a Markdown
                  report on the Desktop). -->
-            <MenuItem Header="Bug Report" Command="{Binding ReportBugCommand}"
+            <MenuItem x:Name="BugReportMenu" Header="Bug Report" Command="{Binding ReportBugCommand}"
                       ToolTip.Tip="Capture current client state and recent output to a report file on your Desktop"/>
         </Menu>
 
@@ -573,8 +573,8 @@
 
     </DockPanel>
 
-        <!-- First-run setup tour — spotlights the menu bar, non-blocking. -->
-        <views:FirstRunTutorialOverlay DataContext="{Binding Tutorial}"/>
+        <!-- Visual Guides — ring the control the current step points at, non-blocking. -->
+        <views:GuideOverlay DataContext="{Binding Guide}"/>
 
     </Panel>
 

@@ -61,6 +61,11 @@ public static class NavFolders
         return p + Separator + c;
     }
 
+    // The new path of the folder at path when typed is its new name: a bare name
+    // renames it in place, beside its siblings; a typed path is the whole new path.
+    public static string RenameTarget(string path, string typed) =>
+        typed.Contains(Separator) ? Normalize(typed) : Combine(Parent(path), typed);
+
     // Parent folder of path, or empty at the root.
     public static string Parent(string? path)
     {
@@ -131,6 +136,28 @@ public static class NavFolders
             return Path.Combine(rootDir, AppPaths.RefusedName);
         }
         return dir;
+    }
+
+    // Why folder can't be a navigation folder under rootDir, as a sentence for the
+    // user, or null when it can: each segment a plain name or a folder already there
+    // (PathGuard.Usable), so one made before the rule is still used. ToDirectory
+    // sends a refused folder to the holding folder for refused names; the stores ask
+    // this first, so nothing is filed, made, moved or deleted there. The holding
+    // folder's own name is not given to a new folder either; one already there,
+    // holding a loop filed before, is used like any other.
+    public static string? WhyNotFolder(string rootDir, string? folder)
+    {
+        string dir = rootDir;
+        foreach (string seg in Segments(folder))
+        {
+            if (seg.Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase)
+                && !Directory.Exists(Path.Combine(dir, seg)))
+                return $"“{seg}” is kept for names that can't be used, and can't be used as a folder name.";
+            if (!PathGuard.Usable(dir, seg))
+                return PathGuard.WhyNotPlain(seg, "folder name") ?? $"{PathGuard.Show(seg)} can't be used as a folder name.";
+            dir = Path.Combine(dir, seg);
+        }
+        return null;
     }
 
     // Every ancestor folder of the given paths, including the paths themselves,

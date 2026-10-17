@@ -709,6 +709,19 @@ public static class AppPaths
     public static string RealmFolder(string bbsName, string realmName) =>
         Named(RealmsDir(bbsName), realmName, "realm name");
 
+    // The realm's folder, or null when the BBS or realm name can't be a folder (a
+    // bbs.json can hold any text): what is kept for the realm then holds nothing, as
+    // with no BBS, instead of sharing the holding folder for refused names with every
+    // other such realm and reading one board's data as another's.
+    public static string? UsableRealmFolder(string bbsName, string realmName)
+    {
+        if (PathGuard.Child(BbsDir, bbsName) is not null
+            && PathGuard.Child(RealmsDir(bbsName), realmName) is not null)
+            return RealmFolder(bbsName, realmName);
+        PathGuard.Refuse("Finding the active realm's data folder", "realm name", realmName);
+        return null;
+    }
+
     // The folder a BBS's realm folders sit in.
     public static string RealmsDir(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "Realms");

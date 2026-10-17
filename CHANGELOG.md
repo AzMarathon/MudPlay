@@ -1,11 +1,30 @@
 # Version history
 
-## 3.182.4
+## 3.183.11
 
 - Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
 - Stale on-screen text and tooltips corrected to match what the client does
 - Message editor's Use tier box removed (message edits always stay with the game-data set)
 - Auto-Lair's idle penalty setting removed (it had no effect)
+
+## 3.183.7
+
+- A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
+- A profile whose game data set's name can't be used says so on the terminal, not only in the log
+- A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
+- A renamed loop is saved under its new name before the old one goes, so a failed save loses nothing
+
+## 3.183.3
+
+- `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?` or its plain spelling, as in every reply
+- `@divert` forwards telepaths as plain text too
+- The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
+
+## 3.183.0
+
+- Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
+- Each guide ticks its steps as you really do them, keeps your place, and can be restarted
+- The first-time setup tour is one of them and still opens on its own on a new install
 
 ## 3.182.0
 

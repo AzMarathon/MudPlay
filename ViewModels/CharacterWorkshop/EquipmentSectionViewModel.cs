@@ -19,6 +19,7 @@ using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.CharacterWorkshop;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -460,6 +461,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         if (SelectedSet is not { } set) return;
         set.Slots = Rows.Select(r => r.ToEntry()).OfType<EquipmentSlotEntry>().ToList();
         _profile.Save();
+        GuideActions.Report(GuideActions.GearSetEdited);
         // Tell the other open editors (Settings → Combat's weapon boxes) — but not
         // ourselves: our rows already are the new state.
         _notifyingSetsEdited = true;

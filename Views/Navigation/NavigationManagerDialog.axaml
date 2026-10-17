@@ -541,7 +541,7 @@
                                              PlaceholderText="Filter favourites…"
                                              FontSize="11" Margin="0,0,0,3"
                                              IsVisible="{Binding HasFavorites}"/>
-                                    <TextBlock Text="No favourites yet — click Add, or right-click a room on the map → Add to favorites. Restore defaults adds the starter GOTOs for this game data."
+                                    <TextBlock Text="No favourites yet — click Add, or right-click a room on the map → Save as Go To. Restore defaults adds the starter GOTOs for this game data."
                                                Padding="8" FontSize="11" TextWrapping="Wrap"
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                IsVisible="{Binding !HasFavorites}"/>

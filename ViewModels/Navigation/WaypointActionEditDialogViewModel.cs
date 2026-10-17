@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -56,6 +57,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
         // delay-without-command would never fire because the loop only
         // pauses around the command step.
         if (trimmed is null) delay = 0;
+        GuideActions.Report(GuideActions.WaypointActionSaved);
         CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest, DoNotAttack, RestHereHp, RestHereMana));
     }
 

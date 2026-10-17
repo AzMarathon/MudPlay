@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Game.Map.MpFile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -312,6 +313,7 @@ public sealed partial class MpImportReviewViewModel : ObservableObject, IDialogV
 
         Loop loop = new(name, waypoints) { Notes = Notes.Trim() };
         _loops.Save(loop);
+        GuideActions.Report(GuideActions.MpImportAccepted);
         int blanks = Rows.Count(r => r.IsBlank && !r.IsRemoved && r.EffectiveRoom is null);
         int removed = Rows.Count(r => r.IsRemoved), added = Rows.Count(r => r.IsInserted && r.EffectiveRoom is not null);
         _log?.Info("MpImporter",

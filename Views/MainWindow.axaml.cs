@@ -11,6 +11,7 @@ using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.ViewModels;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.Views;
 
@@ -31,43 +32,43 @@ public partial class MainWindow : Window
     // The close questions (confirm exit, the unnamed profile) are up.
     private bool _askingToClose;
 
-    // The free-floating first-run setup card (shown left of the main window).
-    private FirstRunTutorialWindow? _tutorialWindow;
+    // The free-floating Visual Guide step card (shown left of the main window).
+    private GuideCardWindow? _guideCard;
 
-    // Show / hide the floating tour card as the tour activates / deactivates.
-    private void UpdateTutorialWindow(MainWindowViewModel mvm)
+    // Show / hide the floating step card as a guide activates / deactivates.
+    private void UpdateGuideCard(MainWindowViewModel mvm)
     {
-        if (mvm.Tutorial.IsActive)
+        if (mvm.Guide.IsActive)
         {
-            if (_tutorialWindow is null)
+            if (_guideCard is null)
             {
-                _tutorialWindow = new FirstRunTutorialWindow { DataContext = mvm.Tutorial };
-                _tutorialWindow.Closed += (_, _) => _tutorialWindow = null;
-                _tutorialWindow.Show(this);   // owned by main → closes with it
+                _guideCard = new GuideCardWindow { DataContext = mvm.Guide };
+                _guideCard.Closed += (_, _) => _guideCard = null;
+                _guideCard.Show(this);   // owned by main → closes with it
                 Activate();                   // keep keyboard focus on the terminal
-                Dispatcher.UIThread.Post(PositionTutorialWindow, DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(PositionGuideCard, DispatcherPriority.Background);
             }
             else
             {
-                PositionTutorialWindow();
+                PositionGuideCard();
             }
         }
         else
         {
-            _tutorialWindow?.Close();
-            _tutorialWindow = null;
+            _guideCard?.Close();
+            _guideCard = null;
         }
     }
 
     // Park the card just off the main window's left edge, top-aligned. Physical
     // pixels (Position is screen space), so the fixed 300-DIP width is scaled.
-    private void PositionTutorialWindow()
+    private void PositionGuideCard()
     {
-        if (_tutorialWindow is null) return;
-        double scaling = _tutorialWindow.DesktopScaling;
+        if (_guideCard is null) return;
+        double scaling = _guideCard.DesktopScaling;
         int w = (int)System.Math.Round(300 * scaling);
         int gap = (int)System.Math.Round(8 * scaling);
-        _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
+        _guideCard.Position = new PixelPoint(Position.X - w - gap, Position.Y);
     }
 
     // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it
@@ -78,7 +79,7 @@ public partial class MainWindow : Window
     private void ApplyImportMdbHighlight(MainWindowViewModel mvm)
     {
         if (_importMdbMenuItem is null) return;
-        bool on = mvm.Tutorial.HighlightImportMdb;
+        bool on = mvm.Guide.HighlightImportMdb;
         if (on && !_importMdbMenuItem.Classes.Contains("tutTarget"))
             _importMdbMenuItem.Classes.Add("tutTarget");
         else if (!on)
@@ -174,48 +175,47 @@ public partial class MainWindow : Window
             // over Avalonia's default initial focus assignment.
             Dispatcher.UIThread.Post(() => Terminal.Focus());
 
-            // First-run setup tour. The step card is a free-floating window shown
-            // to the LEFT of the main window (never over the terminal); show/hide
-            // it as the tour activates, and keep it glued to our left edge as we
-            // move. Register the force-show hook the Program Log's test button uses
-            // (demo mode), then auto-show when a brand-new install is still missing
-            // a prerequisite and it hasn't been dismissed.
+            // Visual Guides. The step card is a free-floating window shown to the
+            // LEFT of the main window (never over the terminal); show/hide it as a
+            // guide activates, and keep it glued to our left edge as we move.
+            // Register the Program Log's setup-tour demo hook, then auto-show the
+            // setup tour when a brand-new install is still missing a prerequisite
+            // and it hasn't been dismissed.
             if (DataContext is MainWindowViewModel mvm)
             {
-                mvm.Tutorial.PropertyChanged += (_, ev) =>
+                mvm.Guide.PropertyChanged += (_, ev) =>
                 {
-                    if (ev.PropertyName == nameof(FirstRunTutorialViewModel.IsActive))
-                        UpdateTutorialWindow(mvm);
-                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
-                        or nameof(FirstRunTutorialViewModel.HighlightImportMdb))
+                    if (ev.PropertyName == nameof(GuideViewModel.IsActive))
+                        UpdateGuideCard(mvm);
+                    if (ev.PropertyName is nameof(GuideViewModel.IsActive)
+                        or nameof(GuideViewModel.HighlightImportMdb))
                         ApplyImportMdbHighlight(mvm);
-                    // Publish the action the tour wants next so the Profile
-                    // Management / Settings windows can glow the right control.
-                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
-                        or nameof(FirstRunTutorialViewModel.CurrentActionKey))
+                    // Publish the action the guide wants next so other windows
+                    // can glow the right control.
+                    if (ev.PropertyName is nameof(GuideViewModel.IsActive)
+                        or nameof(GuideViewModel.CurrentActionKey))
                         AppServices.Current.SetCurrentTourAction(
-                            mvm.Tutorial.IsActive ? mvm.Tutorial.CurrentActionKey : null);
+                            mvm.Guide.IsActive ? mvm.Guide.CurrentActionKey : null);
                 };
-                PositionChanged += (_, _) => PositionTutorialWindow();
+                PositionChanged += (_, _) => PositionGuideCard();
 
-                // Let other windows report deep tour steps back to the tour VM.
+                // Let other windows report guide actions back to the runner.
                 AppServices.Current.NotifyTourAction = key =>
-                    Dispatcher.UIThread.Post(() => mvm.Tutorial.NotifyActionDone(key));
+                    Dispatcher.UIThread.Post(() => mvm.Guide.NotifyActionDone(key));
 
-                AppServices.Current.StartFirstRunTutorial = demo =>
+                AppServices.Current.StartSetupTourDemo = () =>
                     Dispatcher.UIThread.Post(() =>
                     {
                         Activate();
-                        if (demo) mvm.Tutorial.StartDemo();
-                        else mvm.Tutorial.Start();
+                        mvm.Guide.StartDemo();
                     });
 
                 bool dismissed = AppServices.Current.Settings.Current.FirstRunTutorialDismissed;
-                bool missing = mvm.Tutorial.AnyPrerequisiteMissing;
+                bool missing = MainWindowViewModel.GuideProbes.AnyPrerequisiteMissing;
                 if (!dismissed && missing)
                 {
                     AppServices.Current.Log.Info("Tutorial", "first-run setup tour: showing (a prerequisite is missing)");
-                    Dispatcher.UIThread.Post(mvm.Tutorial.Start);
+                    Dispatcher.UIThread.Post(mvm.Guide.StartSetup);
                 }
                 else
                 {
@@ -225,11 +225,11 @@ public partial class MainWindow : Window
             }
         };
         // Returning to the main window (e.g. after adding a BBS in Profile
-        // Management) re-checks the tour's steps so a finished one shows its check
-        // and the tour advances on its own.
+        // Management) re-checks the guide's steps so a finished one shows its check
+        // and the guide advances on its own.
         Activated += (_, _) =>
         {
-            if (DataContext is MainWindowViewModel mvm) mvm.Tutorial.Refresh();
+            if (DataContext is MainWindowViewModel mvm) mvm.Guide.Refresh();
         };
 
         // Confirm-exit prompt + auto-save the loaded profile before exit.
@@ -340,13 +340,12 @@ public partial class MainWindow : Window
             Command = vm.OpenHelpWindowCommand,
             [ToolTip.TipProperty] = "Searchable guide to features, how to use the client, and what each setting means.",
         });
-        MenuItem firstRunSetup = new()
+        HelpMenu.Items.Add(new MenuItem
         {
-            Header = "First-time setup…",
-            [ToolTip.TipProperty] = "Replay the guided setup tour: import game data, add a BBS + character, connect.",
-        };
-        firstRunSetup.Click += (_, _) => vm.Tutorial.Start();
-        HelpMenu.Items.Add(firstRunSetup);
+            Header  = "Visual Guides…",
+            Command = vm.OpenVisualGuidesCommand,
+            [ToolTip.TipProperty] = "Step-by-step guides that walk you through the client: first-time setup, loops, macros, settings and more.",
+        });
         HelpMenu.Items.Add(new Separator());
 
         foreach (HelpWebsite link in vm.HelpLinks)

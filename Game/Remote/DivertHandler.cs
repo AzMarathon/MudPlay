@@ -113,7 +113,9 @@ public sealed class DivertHandler : IDisposable
     {
         if (_wireSender is null) return;
         string given = GivenName(_target!);
-        string wire = $"/{given} {sender} telepathed: {message}";
+        // Another player's text, relayed as plain ASCII like every other relay: raw
+        // Latin-1 would land on the target's CP437 screen as a different glyph.
+        string wire = $"/{given} {WireText.Ascii(sender)} telepathed: {WireText.Ascii(message)}";
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");
         LastSentForTests.Add(bytes);
         _wireSender(bytes);

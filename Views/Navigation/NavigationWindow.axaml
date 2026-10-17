@@ -940,10 +940,11 @@
                                   Command="{Binding ToggleContextRoomStashCommand}"/>
                         <MenuItem Header="Toggle: Roomba Room"
                                   Command="{Binding ToggleContextGhRoomCommand}"/>
-                        <!-- Auto-lair marking lives in the top-bar Lair
-                             mode toggle: enter the mode, click rooms on
-                             the map to add / remove markers, then Save.
-                             Mirrors Loop build mode. -->
+                        <!-- Auto-lair marking lives in the top-right
+                             "Lair mode" toggle: enter the mode, click
+                             rooms on the map to add / remove markers,
+                             then save via the chip row's Save.
+                             Mirrors how Loop build mode works. -->
 
                         <Separator/>
                         <MenuItem Header="Add this room to Blacklist"
@@ -1918,7 +1919,7 @@
                                          keep wrapping so a long string
                                          can't push the rail wider than
                                          the 290 px column. -->
-                                    <TextBlock Text="No favourites — right-click a room → Add to favorites, or use the Navigation Management GOTO tab."
+                                    <TextBlock Text="No favourites — right-click a room → Save as Go To, or use the Navigation Management Go To tab."
                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                FontSize="11"
                                                TextWrapping="Wrap"
@@ -2677,7 +2678,7 @@
                         <Run Text="{Binding LoopBuilder.Clicks.Count, FallbackValue=0}"/>
                         <Run Text=" room(s) clicked · "/>
                         <Run Text="{Binding LoopBuilder.ExpandedStepCount, FallbackValue=0}"/>
-                        <Run Text=" step(s) total · Run to save+start, toggle Loop to discard"/>
+                        <Run Text=" step(s) total · Go to run it, Save to keep it, toggle Loop to discard"/>
                     </TextBlock>
                     <TextBlock FontSize="11" Foreground="{StaticResource AccentRedBrush}"
                                Text="{Binding LoopBuilder.UnreachableSummary}"

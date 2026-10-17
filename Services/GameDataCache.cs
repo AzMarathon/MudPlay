@@ -259,6 +259,12 @@ public sealed partial class GameDataCache
         return null;
     }
 
+    // What the user is told when a profile's set name is refused (UsableSet), with
+    // the way out: the Game Data menu sets the realm's set.
+    public static string RefusedSetNotice(string? name, string whyNot) =>
+        $"This profile's game data set {PathGuard.Show(name)} can't be used, so no game data is loaded: {whyNot} "
+        + "Pick a set from the Game Data menu.";
+
     // Table names currently held for ActiveSet. Empty before any GetTable call;
     // empty again after EvictAll.
     public IReadOnlyList<string> LoadedTables

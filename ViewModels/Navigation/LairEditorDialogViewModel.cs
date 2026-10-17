@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -389,6 +390,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
             _setups.Delete(_original.Name);
 
         _setups.Save(saved);
+        GuideActions.Report(GuideActions.LairSetupSaved);
         // The tick box is this character's choice, kept apart from the setup file.
         _setups.SetFavorite(saved.Name, Favorite);
         CloseRequested?.Invoke(saved);

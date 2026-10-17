@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -109,6 +110,7 @@ public sealed class AliasesSectionViewModel : GameDataTableSectionViewModel, IEd
         Alias? created = await _dialogs.OpenWindowAsync<AliasEditDialogViewModel, Alias>(vm);
         if (created is null) return;
         _engine.Add(created);
+        GuideActions.Report(GuideActions.AliasAdded);
     }
 
     private async Task RemoveSelectedAsync()

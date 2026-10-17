@@ -14,6 +14,7 @@ using MudPlay.Game.Quests;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels;
 
@@ -213,8 +214,17 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters) or nameof(HideZeroExpMonsters))
-            { RowsView.Refresh(); RaiseCountChanged(); }
-            else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
+            {
+                RowsView.Refresh();
+                RaiseCountChanged();
+                GuideActions.Report(GuideActions.MonsterFiltered);
+            }
+            else if (e.PropertyName == nameof(SelectedEntry))
+            {
+                RebuildDetail();
+                UpdateAcVsTarget();
+                if (SelectedEntry is not null) GuideActions.Report(GuideActions.MonsterSelected);
+            }
         };
 
         if (_observations is not null) _observations.Changed += OnObservationsChanged;

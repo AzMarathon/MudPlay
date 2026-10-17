@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.Guides"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="640"
+        x:Class="MudPlay.Views.GuidePickerWindow"
+        x:DataType="vm:GuidePickerViewModel"
+        x:Name="Root"
+        Title="Visual Guides"
+        Width="560" Height="640" MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <DockPanel Margin="16" LastChildFill="True">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,12" Opacity="0.85"
+                   Text="Pick a guide. A card beside the main window walks you through it, ticking each step as you do it. Close it any time — your place is kept."/>
+
+        <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" MinWidth="80"
+                HorizontalAlignment="Right" Margin="0,12,0,0" Click="OnClose"/>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GuidePickerGroup">
+                        <StackPanel Margin="0,0,0,14" Spacing="6">
+                            <TextBlock Text="{Binding Area}" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentYellowBrush}"/>
+                            <ItemsControl ItemsSource="{Binding Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GuidePickerRow">
+                                        <Border BorderBrush="{StaticResource ChromeBorderBrush}"
+                                                BorderThickness="0,0,0,1" Padding="0,6">
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding Description}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{Binding Status}" FontSize="11"
+                                                           VerticalAlignment="Center" Margin="10,0"
+                                                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                                <Button Grid.Column="2" Content="Open" Margin="0,0,6,0"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding #Root.((vm:GuidePickerViewModel)DataContext).OpenCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Grid.Column="3" Content="Restart"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding CanRestart}"
+                                                        ToolTip.Tip="Forget your place and start this guide from step 1."
+                                                        Command="{Binding #Root.((vm:GuidePickerViewModel)DataContext).RestartCommand}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

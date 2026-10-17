@@ -4,18 +4,18 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using MudPlay.ViewModels;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.Views;
 
-// The first-run setup highlight layer. Given the FirstRunTutorialViewModel as its
+// The Visual Guides highlight layer. Given the GuideViewModel as its
 // DataContext, it draws a ring around the menu the current step points at
-// (resolved by x:Name against the host window). The step card itself lives in a
-// docked left panel in MainWindow, so nothing is drawn over the terminal; this
-// control is hit-test-transparent throughout.
-public partial class FirstRunTutorialOverlay : UserControl
+// (resolved by x:Name against the host window). The step card itself is the
+// floating GuideCardWindow, so nothing is drawn over the terminal; this control is
+// hit-test-transparent throughout.
+public partial class GuideOverlay : UserControl
 {
-    private FirstRunTutorialViewModel? _vm;
+    private GuideViewModel? _vm;
 
     // Resolved via FindControl, NOT the generated x:Name field: this control's own
     // InitializeComponent (=> AvaloniaXamlLoader.Load) doesn't populate those
@@ -23,7 +23,7 @@ public partial class FirstRunTutorialOverlay : UserControl
     // SpellBook / Wire Inspector windows document).
     private readonly Border? _ring;
 
-    public FirstRunTutorialOverlay()
+    public GuideOverlay()
     {
         InitializeComponent();
         _ring = this.FindControl<Border>("Ring");
@@ -36,7 +36,7 @@ public partial class FirstRunTutorialOverlay : UserControl
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
         if (_vm is not null) _vm.PropertyChanged -= OnVmPropertyChanged;
-        _vm = DataContext as FirstRunTutorialViewModel;
+        _vm = DataContext as GuideViewModel;
         if (_vm is not null) _vm.PropertyChanged += OnVmPropertyChanged;
         RepositionDeferred();
     }
@@ -44,9 +44,9 @@ public partial class FirstRunTutorialOverlay : UserControl
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Re-place the ring whenever the active step (or activation) changes.
-        if (e.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
-            or nameof(FirstRunTutorialViewModel.CurrentIndex)
-            or nameof(FirstRunTutorialViewModel.CurrentTargetName))
+        if (e.PropertyName is nameof(GuideViewModel.IsActive)
+            or nameof(GuideViewModel.CurrentIndex)
+            or nameof(GuideViewModel.CurrentTargetName))
             RepositionDeferred();
     }
 

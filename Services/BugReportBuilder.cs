@@ -354,7 +354,11 @@ public static class BugReportBuilder
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
+        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
+            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
+            ? "available"
+            : "none (no BBS, or the realm's name can't be a folder)");
         Kv(sb, "Game data: long text damaged by an old import",
             svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
         Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());

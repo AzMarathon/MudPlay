@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Map;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -225,6 +226,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         Loop? loop = BuildTransient();
         if (loop is null) return null;
         _loops.Save(loop);
+        GuideActions.Report(GuideActions.LoopSaved);
         Clear();
         return loop;
     }

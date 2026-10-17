@@ -270,10 +270,9 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.LoopEditorDialogViewModel,
                 MudPlay.Views.Navigation.LoopEditorDialog>();
 
-            // Auto-Lair setup row → right-click → "Edit…", the top-bar Save
-            // chip in Lair mode, and Navigation Management's lair New / Edit
-            // all open this dialog. Name / Notes / Marker list with
-            // per-marker respawn override.
+            // Auto-Lair Setups pane → right-click → "Edit…", the chip row's Save,
+            // and Navigation Management's lair New / Edit all open this dialog.
+            // Name / Notes / Marker list with per-marker respawn override.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.LairEditorDialogViewModel,
                 MudPlay.Views.Navigation.LairEditorDialog>();

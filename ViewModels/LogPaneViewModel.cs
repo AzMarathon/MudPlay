@@ -420,7 +420,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // profiles / BBSes / game data.
     [RelayCommand]
     private static void RunFirstRunTutorial()
-        => Services.AppServices.Current.StartFirstRunTutorial?.Invoke(true);
+        => Services.AppServices.Current.StartSetupTourDemo?.Invoke();
 
     private static Dictionary<LogSeverity, IBrush> BuildSeverityBrushMap(Application app)
     {

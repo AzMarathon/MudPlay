@@ -317,6 +317,9 @@ public sealed class GhSweepManager : IDisposable
     private GhSurveyTiming? _slowestSurveyHere;
     private TimeSpan? _itemLogWriteHere;
 
+    // The clock floor reads and log writes are timed on.
+    private readonly Func<long> _timestamp;
+
     // Latches the warning that lists can't be told apart, so a sweep says it once.
     private bool _reportedUnattributedLists;
 
@@ -485,7 +488,8 @@ public sealed class GhSweepManager : IDisposable
         Func<RoomKey, bool>? isRoomActivelyManaged = null,
         WirePromptScanner? promptScanner = null,
         GhSuspendedSweepStore? suspendedStore = null,
-        Func<string?>? activeGameData = null)
+        Func<string?>? activeGameData = null,
+        Func<long>? timestamp = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -515,6 +519,7 @@ public sealed class GhSweepManager : IDisposable
         _promptScanner = promptScanner;
         _suspendedStore = suspendedStore;
         _activeGameData = activeGameData ?? (static () => null);
+        _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -1472,7 +1477,7 @@ public sealed class GhSweepManager : IDisposable
 
         RoomKey room = current.Key;
         bool searchingHere = _reconSearchRoom is { } searchRoom && searchRoom.Equals(room);
-        long started = Stopwatch.GetTimestamp();
+        long started = _timestamp();
         if (source == FloorSurveySource.SearchReply)
         {
             // With searching off nothing hidden is recorded or sorted, whoever it
@@ -1511,7 +1516,7 @@ public sealed class GhSweepManager : IDisposable
             if (Phase == SweepPhase.Reconning) _readOnRecon.Add(room);
         }
         _observedByRoom[room] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, room, _itemNames);
-        NoteSurvey(room, _groundItems.LastSurveyReadTime, Stopwatch.GetElapsedTime(started));
+        NoteSurvey(room, _groundItems.LastSurveyReadTime, Stopwatch.GetElapsedTime(started, _timestamp()));
 
         // While its searches run, the room is written and logged once, when they end.
         if (searchingHere) return;
@@ -1536,9 +1541,9 @@ public sealed class GhSweepManager : IDisposable
     private void RecordItemLocations(RoomKey room)
     {
         if (_itemLocations is null || !_observedByRoom.TryGetValue(room, out List<string>? floor)) return;
-        long started = Stopwatch.GetTimestamp();
+        long started = _timestamp();
         _itemLocations.RecordRoom(room, floor);
-        TimeSpan took = Stopwatch.GetElapsedTime(started);
+        TimeSpan took = Stopwatch.GetElapsedTime(started, _timestamp());
         _itemLogWriteHere = took;
         if (SlowestItemLogWrite is not { } slowest || took > slowest.Took) SlowestItemLogWrite = (room, took);
     }
@@ -1642,10 +1647,10 @@ public sealed class GhSweepManager : IDisposable
         if (Phase == SweepPhase.Reconning && lit && _sweepRooms.Contains(here)) _readOnRecon.Add(here);
         if (reading && display is not null && _sweepRooms.Contains(here))
         {
-            long started = Stopwatch.GetTimestamp();
+            long started = _timestamp();
             GhSurveyMerger.Replace(_visibleByRoom, here, display, _itemNames);
             _observedByRoom[here] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, here, _itemNames);
-            NoteSurvey(here, readTime, Stopwatch.GetElapsedTime(started));
+            NoteSurvey(here, readTime, Stopwatch.GetElapsedTime(started, _timestamp()));
             // A room about to be searched is written once, when its searches end.
             if (Phase == SweepPhase.FinalRecon) NoteFinalLapRead(here);
             else if (!_labels.SearchForHidden) RecordItemLocations(here);
