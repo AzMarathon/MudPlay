@@ -303,17 +303,6 @@ public sealed class TickEngineTests
     }
 
     [Fact]
-    public void RegenIntervals_DefaultToZero_DisablingRegenEvents()
-    {
-        var (_, tick) = Setup();
-        Assert.Equal(TimeSpan.Zero, tick.HpRegenInterval);
-        Assert.Equal(TimeSpan.Zero, tick.ManaRegenInterval);
-        Assert.Null(tick.TimeToNextHpRegenTick);
-        Assert.Null(tick.TimeToNextManaRegenTick);
-        tick.Dispose();
-    }
-
-    [Fact]
     public void Dispose_StopsCombatTickEvents()
     {
         var (router, tick) = Setup();

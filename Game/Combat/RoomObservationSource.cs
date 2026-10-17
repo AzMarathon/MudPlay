@@ -3,7 +3,7 @@ namespace MudPlay.Game.Combat;
 // Which code path produced a RoomEntitiesObservation. Carried so consumers (and
 // the LogPane) can tell a real room display apart from a synthetic re-fire.
 // Critical for the "wasted re-attack mid-combat" diagnosis: a target-clearing
-// empty observation can come from a genuine room change, a death-line removal,
+// empty observation can come from a genuine room change, a death removal,
 // or an empty Also-Here parse — and the fix differs per source.
 public enum RoomObservationSource
 {
@@ -14,7 +14,7 @@ public enum RoomObservationSource
     // (RoomEntityClassifier.AppendArrivalEntity).
     Arrival,
 
-    // One entity removed on a death line (RoomEntityClassifier.RemoveDeadEntity).
+    // One entity removed for a monster taken for dead (RoomEntityClassifier.RemoveDeadEntity).
     // May leave the list empty when the last monster dies.
     Death,
 

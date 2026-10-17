@@ -20,10 +20,9 @@ public sealed class SeagullsScene : SplashScene
     private static readonly CellAttributes Wing     = SplashCanvas.Rgb(150, 158, 168);
     private static readonly CellAttributes Beak      = SplashCanvas.Rgb(236, 150, 40);
     private static readonly CellAttributes Eye       = SplashCanvas.Rgb(28, 28, 34);
-    // The wire is a flat background strip, not a row of '━' glyphs: a full-width
-    // glyph line was ~Cols FormattedText per wire per frame (two wires = the bulk of
-    // this scene's per-frame glyph cost), whereas a same-colour bg span batches into
-    // one rectangle with no glyphs. Reads as a perch just the same.
+    // The wire is a flat background strip, not a row of '━' glyphs: a same-colour
+    // bg span batches into one rectangle with no glyphs to draw, which was the bulk
+    // of this scene's per-frame cost as a glyph line. Reads as a perch just the same.
     private static readonly CellAttributes WireBg = CellAttributes.Default.WithBackground(TerminalColor.Rgb(96, 90, 80));
     private static readonly CellAttributes Bubble    = SplashCanvas.Rgb(240, 240, 236);
 

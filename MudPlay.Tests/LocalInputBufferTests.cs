@@ -98,17 +98,6 @@ public sealed class LocalInputBufferTests
     }
 
     [Fact]
-    public void Clear_DropsBuffer_WithoutWireSide()
-    {
-        // Clear is for connection-swap / test housekeeping — Enter
-        // uses FlushBytes which produces the wire payload.
-        LocalInputBuffer b = new();
-        b.Append("abc");
-        b.Clear();
-        Assert.Equal(string.Empty, b.Text);
-    }
-
-    [Fact]
     public void Set_ReplacesWholeBuffer()
     {
         // Recall swaps the live line for a previously-sent command wholesale.

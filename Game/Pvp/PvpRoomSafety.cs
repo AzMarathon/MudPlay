@@ -7,7 +7,7 @@ namespace MudPlay.Game.Pvp;
 
 // Room attacks on a realm with PvP on. A room attack or room debuff hits every
 // player in the room who isn't in the caster's party (GAME_MECHANICS "Damage
-// lines"), so this answers two questions about the room we stand in:
+// lines — who hit whom"), so this answers two questions about the room we stand in:
 //
 //   - RoomAttackHeldBy: who our own room attack would hit. The combat engine
 //     holds its room spells, and breaks one already running, while it names

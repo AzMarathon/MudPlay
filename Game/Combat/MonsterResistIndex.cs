@@ -12,7 +12,8 @@ namespace MudPlay.Game.Combat;
 // damage is cut by dmg*(resist/100), so a resist ≥ 100 means 0 damage (exactly
 // 100) or the spell *heals* the monster (> 100). That determinism is what lets
 // the combat engine pre-emptively skip an attack spell whose element the target
-// resists ≥ 100% — see GAME_MECHANICS.md mechanism 3a.
+// resists ≥ 100% — see GAME_MECHANICS "Elemental resistance — flat,
+// deterministic, pre-emptable".
 //
 // The value is signed: negative = vulnerability (the element deals *extra*
 // damage), so only the ≥ 100 end is a skip signal — a negative or 1–99% resist

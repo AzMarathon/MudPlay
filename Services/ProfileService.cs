@@ -3,7 +3,7 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Owns Data/BBS/{bbs}/profiles/{char}/profile.json — the Character tier of the
+// Owns BBS/{bbs}/profiles/{char}/profile.json — the Character tier of the
 // settings hierarchy. Profiles nest under their BBS folder because each
 // MajorMUD server allows only one character of a given name, so the same name
 // on two BBSes is two different people. Tracks at most one loaded profile at a
@@ -89,8 +89,8 @@ public sealed class ProfileService
     // their state inside the handler.
     public event Action<CharacterProfile>? ProfileLoaded;
 
-    // Fired after Close wipes Current. Used by per-character services to
-    // release per-char resources.
+    // Fired after Close wipes Current, so per-character services can release
+    // per-char resources.
     public event Action? ProfileClosed;
 
     // Fired inside Save just before serialization. Subscribers write their
@@ -111,11 +111,13 @@ public sealed class ProfileService
         if (Current is not null) ProfileMutated?.Invoke(Current);
     }
 
-    // Raised specifically from the Settings → BBS tab's Apply path so consumers
-    // that care about an explicit BBS-pin selection — like the main window's
-    // Quick Connect override — can clear themselves even when the user
-    // re-selected the same BBS (i.e. the pinned name didn't change and
-    // ProfileMutated would not otherwise convey new intent).
+    // Raised whenever the loaded character's BBS or realm is (re)pinned — the
+    // Settings → BBS tab's Apply, a realm assignment or re-home in Profile
+    // Management, or a Save that adopts a realm another client wrote — so
+    // consumers that follow the active realm reload, and ones that care about an
+    // explicit pin selection (the main window's Quick Connect override) can clear
+    // themselves even when the same BBS was re-selected (the pinned name didn't
+    // change and ProfileMutated would not otherwise convey new intent).
     public event Action<CharacterProfile>? BbsPinApplied;
 
     // Fire BbsPinApplied for the current profile, if any.
@@ -257,7 +259,7 @@ public sealed class ProfileService
     }
 
     // Load the profile stored at
-    // Data/BBS/{bbsName}/profiles/{profileName}/profile.json and fire
+    // BBS/{bbsName}/profiles/{profileName}/profile.json and fire
     // ProfileLoaded. If a different profile is already loaded it is closed
     // first (ProfileClosed fires before the new load). Throws
     // FileNotFoundException when no file exists at the expected path.
@@ -712,8 +714,8 @@ public sealed class ProfileService
     // is loaded, and for the unnamed draft, which must be named (Save As) before
     // anything is written.
     // When backup is true and a previously-saved file exists, copy it to
-    // {name}.json.bak (overwriting any prior backup) before the new content is
-    // written. The General-settings Apply path passes true when the user opts
+    // profile.json.bak beside it (overwriting any prior backup) before the new
+    // content is written. The General-settings Apply path passes true when the user opts
     // in via the "Backup profile when making changes" toggle.
     public void Save(bool backup = false)
     {
@@ -738,7 +740,8 @@ public sealed class ProfileService
         }
 
         // A named profile with no pinned BBS has nowhere to write — it's named +
-        // BBS-pinned via the File → Save As / Settings → BBS Apply flow first.
+        // BBS-pinned via Profile Management's Save As / the Settings → BBS Apply
+        // flow first.
         if (CurrentBbsName is null) return;
         string path = AppPaths.CharacterProfileFile(CurrentBbsName, CurrentProfileName);
         bool realmAdopted = AdoptRealmChangedOnDisk(path);
@@ -951,6 +954,8 @@ public sealed class ProfileService
             copy.Equipment?.Sets.Clear();
             copy.LearnedSpells = null;
             copy.DeathHistory = null;
+            // The source holds those items, not the copy.
+            copy.CorpseHandoffs = null;
             copy.StashedCopper = null;
             copy.StateUnverified = true;
             JsonStore.Save(path, copy);
@@ -1045,8 +1050,8 @@ public sealed class ProfileService
 
     // Enumerate every profile across every BBS that has a primary profile.json
     // on disk, as (bbs, char) pairs. Folders missing a primary file are skipped
-    // — they aren't fully initialised yet. Drives the File → Open picker and the
-    // recent-profiles list.
+    // — they aren't fully initialised yet. Drives the Profile Management list and
+    // the recent-profiles list.
     public IEnumerable<ProfileRef> ListAll()
     {
         if (!Directory.Exists(AppPaths.BbsDir)) yield break;

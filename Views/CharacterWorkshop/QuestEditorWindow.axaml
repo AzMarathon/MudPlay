@@ -138,8 +138,9 @@
                 </Grid>
 
                 <!-- Explicit class restriction — for the genuinely class-locked quests the
-                     crawl can't detect (Magebane = Witchunter, Tarl). Comma-separated class
-                     names; blank leaves it to the crawl's own guards. -->
+                     crawl can't detect (Magebane = Witchunter, Tarl). A checklist of classes
+                     saved as Classes-table ids; none ticked leaves it to the crawl's own
+                     guards. -->
                 <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10"
                             Margin="0,8,0,0" VerticalAlignment="Center">
                     <TextBlock Classes="Label" Margin="0" Text="Restrict to classes"

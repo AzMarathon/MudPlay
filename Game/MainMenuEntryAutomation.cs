@@ -97,8 +97,8 @@ public sealed class MainMenuEntryAutomation : IDisposable
     // Gap between successive startup-sequence sends after the entry command
     // lands. Default 400 ms — long enough for a small MajorMUD screen (the stat
     // block or inventory list) to scroll without the next command queueing into
-    // the middle of the previous response, short enough that the commands
-    // complete within ~1.2 s of entering the realm.
+    // the middle of the previous response, short enough that both complete
+    // within about a second of entering the realm.
     public TimeSpan StartupStep { get; set; } = TimeSpan.FromMilliseconds(400);
 
     // Test seam — override the clock so unit tests don't have to sleep.
@@ -126,7 +126,7 @@ public sealed class MainMenuEntryAutomation : IDisposable
         _patternSub = _router.Subscribe(KnownPatterns.MainMenuEnterRealm, OnMainMenuLine);
         // Game-entry confirmation: the first "Obvious exits:" line after
         // an entry-command send proves we're actually in the realm and
-        // unlocks the stat/exp/i refresh. See OnRoomExitsLine.
+        // unlocks the stat / i refresh. See OnRoomExitsLine.
         _roomSub = _router.Subscribe(KnownPatterns.RoomExits, OnRoomExitsLine);
     }
 
@@ -144,10 +144,10 @@ public sealed class MainMenuEntryAutomation : IDisposable
 
     // Open the arm window — UNLESS a hangup signal is pending, in which case
     // consume the suppression flag and refuse to arm so the user manually
-    // re-enters. Called by MainWindowViewModel right after
-    // LoginAutomator.LoggedIntoGame fires (the only point in the session where
-    // auto-entering the realm is authorised). The window closes on first
-    // menu-match OR when ArmWindow elapses, whichever first.
+    // re-enters. Called by MainWindowViewModel at the start of each login, the one
+    // point that decides whether this connect may auto-enter; KeepArmed refreshes
+    // the window as the login advances. The window closes on first menu-match OR
+    // when ArmWindow elapses, whichever first.
     public void Arm()
     {
         // Fresh login → clear any stale room-display gate from a prior
@@ -232,7 +232,7 @@ public sealed class MainMenuEntryAutomation : IDisposable
         _wire.Send(command);
         _log?.Log(LogSeverity.Info, "MainMenuEntry",
             $"Auto-entered realm with '{command}'; awaiting first room display before refresh.");
-        // Don't fire stat/exp/i yet — wait until a room display proves
+        // Don't fire stat / i yet — wait until a room display proves
         // we actually landed in the realm. OnRoomExitsLine releases it.
         _awaitingFirstRoom = true;
     }

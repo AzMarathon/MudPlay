@@ -188,9 +188,9 @@
                  bare 297) or substring against room names; live
                  results dropdown shows up to 50 matches. Enter on
                  the TextBox adds the highlighted (or top) result;
-                 click a row to commit immediately. Save IsDefault
-                 is disabled while typing here so Enter doesn't
-                 accidentally dismiss the dialog. -->
+                 click a row to commit immediately. The TextBox's
+                 KeyDown handler swallows Enter so it adds a row
+                 instead of firing the IsDefault Save. -->
             <Grid Grid.Row="4" RowDefinitions="Auto,Auto,Auto" RowSpacing="2">
                 <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
                     <TextBlock Grid.Column="0"
@@ -254,18 +254,14 @@
                            Foreground="{StaticResource AccentRedBrush}"/>
             </Grid>
 
-            <!-- Per-row command + delay edits live in the modeless
-                 WaypointActionEditDialog spawned by each row's ✎
-                 button. No footer inline editor — dialog is the
-                 single path. -->
-
             <!-- Dialog buttons -->
             <Grid Grid.Row="6"
                   ColumnDefinitions="*,Auto"
                   Margin="0,6,0,0">
                 <!-- Inline save error so the user sees why a Save
                      click didn't persist (empty name, too few
-                     waypoints, no BBS bound). -->
+                     waypoints, no active game-data set, a name
+                     already taken). -->
                 <TextBlock Grid.Column="0"
                            Text="{Binding SaveError}"
                            IsVisible="{Binding HasSaveError}"

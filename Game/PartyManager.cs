@@ -10,7 +10,7 @@ namespace MudPlay.Game;
 // PartyMember (the IL-scan test enforces this).
 //
 // Three input shapes drive membership:
-//   1. "X now follows you." — adds X to PartyState.Members.
+//   1. "X started to follow you." — adds X to PartyState.Members.
 //   2. "X stops following you." — removes X.
 //   3. The multi-line `par` table — parsed via a tiny state machine on
 //      LineExtractor.LineEmitted (same shape as WhoListParser). Each row
@@ -132,16 +132,16 @@ public sealed partial class PartyManager : IDisposable
     private readonly Dictionary<string, DateTimeOffset> _returnedAfterDrop
         = new(StringComparer.OrdinalIgnoreCase);
 
-    // "If leading, accept @comeback for up to" — how long after a member's drop
+    // "If leading, accept @comeback for (min)" — how long after a member's drop
     // their @comeback is still honoured (WasRecentlyPartied). Separate from the
     // re-invite grace window above.
     public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
     private Action<byte[]>? _wireSender;
 
-    // "Wait for party members" grace window — how long after a disconnect we'll
-    // auto-invite a returning party member back. Default 30 s per MegaMUD's
-    // typical Settings.Party value; the Settings.Party tab makes it
-    // user-configurable.
+    // "If leading, wait only" grace window (Settings → Party, mirrored from
+    // PartySettings.IfLeadingWaitTotalSec) — how long after a disconnect we'll
+    // auto-invite a returning party member back. 30 s only until a profile's
+    // setting is applied.
     public TimeSpan DisconnectGraceWindow { get; set; } = TimeSpan.FromSeconds(30);
 
     // Master switch for the auto-invite-on-reconnect flow. When false,
@@ -443,8 +443,8 @@ public sealed partial class PartyManager : IDisposable
     }
 
     // Send `uninvite X` on the wire — drops X's pending invite (or, on a member
-    // who already joined, kicks them from the party). Used by the PartyWindow's
-    // × button on invited rows; safe to call for any roster row. No-op when no
+    // who already joined, kicks them from the party); PartyDeathRosterCleanup uses
+    // it for a member who died mid-route. Safe to call for any roster row. No-op when no
     // wire-sender is bound (pre-connect / tests inspect LastSentForTests
     // directly).
     //

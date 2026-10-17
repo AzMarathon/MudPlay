@@ -2,7 +2,8 @@ namespace MudPlay.Models.Profile;
 
 // A trigger-purposed loadout — the per-slot items a character wants worn when
 // this set's Trigger moment fires. The Equipment Manager keeps one set per
-// EquipTriggerType (Default / Backstab / Pre-rest HP / Pre-rest Mana); a set can
+// EquipTriggerType (Default / Backstab / Pre-rest HP / Pre-rest Mana / While
+// Moving / Bossing); a set can
 // be applied automatically when enabled (Enabled) or remotely via
 // @equip <keyword>.
 public sealed class EquipmentSet

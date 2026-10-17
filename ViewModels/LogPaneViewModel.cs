@@ -13,14 +13,14 @@ namespace MudPlay.ViewModels;
 // and appends to the displayed list.
 //
 // Filter changes (severity checkboxes / search text) trigger a full rebuild
-// from LogService.Snapshot. The ring's 2000-entry cap keeps this cheap; if
+// from LogService.Snapshot. The ring's 4000-entry cap keeps this cheap; if
 // profiling shows the rebuild churning, switch to an in-place predicate
 // update.
 public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
 {
-    // Hard cap on Rows. Matches the underlying LogService ring capacity — the
-    // displayed list can't usefully hold more than the snapshot can ever
-    // serve. Without this cap, the OC grew unbounded as new entries flowed in
+    // Hard cap on Rows: the newest MaxRows entries that pass the filter. The
+    // ring holds more (it is sized for the bug report), but the pane only
+    // needs a working window. Without this cap, the OC grew unbounded as new entries flowed in
     // (the bind path didn't recycle rows on Rebuild), and toggling a filter
     // cleared a 30k-row list then re-added a few thousand which cascaded into
     // a UI lockup via the auto-scroll handler running per-Add.
@@ -54,19 +54,19 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // LogDiagnosticState.DebugDiagnostics — flipping it makes every
     // _log?.Debug(...) site across the engines start (or stop) emitting, AND
     // shows/hides the Debug rows already in the ring. Saved globally via
-    // AppServices. Off by default — verbose tracing is a troubleshooting
-    // affordance, not a per-session default.
+    // AppServices. On by default, so a Program Log already carries the
+    // decision trail a bug report needs.
     [ObservableProperty] private bool _debugDiagnostics;
 
     // Generation toggle for the Combat channel. Mirrors
     // LogDiagnosticState.CombatDiagnostics — flipping it gates the
     // combat-decision trace channel, and shows/hides the Combat rows already in
-    // the ring. Saved globally via AppServices. Off by default.
+    // the ring. Saved globally via AppServices. On by default.
     [ObservableProperty] private bool _combatDiagnostics;
 
     // Toggle for the on-disk diagnostic files. Mirrors
     // LogDiagnosticState.AutoCollectLogs — flipping it opens/closes the
-    // program, memory, and combat-trace writers under Data/Logs. Unlike the two
+    // program, memory, combat-trace and performance writers under Logs/. Unlike the two
     // above it does NOT touch displayed rows, so it drives no Rebuild.
     // Saved globally via AppServices. Off by default.
     [ObservableProperty] private bool _autoCollectLogs;
@@ -124,7 +124,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
 
     // "{matched:N0} / {total:N0} entries". Both counters are pre-cached
     // observable ints — reading StatusText must NOT call LogService.Snapshot,
-    // which allocates a fresh 2000-entry array. Update LogTotalCount
+    // which allocates a fresh copy of the whole ring. Update LogTotalCount
     // alongside any path that mutates the live ring count.
     public string StatusText => $"{MatchCount:N0} / {LogTotalCount:N0} entries";
 
@@ -420,7 +420,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // profiles / BBSes / game data.
     [RelayCommand]
     private static void RunFirstRunTutorial()
-        => Services.AppServices.Current.StartFirstRunTutorial?.Invoke(true);
+        => Services.AppServices.Current.StartSetupTourDemo?.Invoke();
 
     private static Dictionary<LogSeverity, IBrush> BuildSeverityBrushMap(Application app)
     {

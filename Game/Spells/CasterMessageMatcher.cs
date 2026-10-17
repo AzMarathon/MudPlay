@@ -7,8 +7,8 @@ namespace MudPlay.Game.Spells;
 // a spell, e.g. You cast {s} on {s}! — into a regex and matches it against an
 // observed server line, returning the ordered string captures.
 //
-// Used by CastingDirector to confirm OUR successful cast on a party member before
-// starting the buff-duration timer: when we send bles raijin and the bless
+// Its first job is confirming OUR successful cast on a party member before a
+// buff-duration timer starts: when we send bles raijin and the bless
 // record's caster line is You cast {s} on {s}!, the server echo You cast bless on
 // Raijin! matches and yields the captures ["bless", "Raijin"]. We already know who
 // we targeted, so the caller correlates by comparing the captures to the pending

@@ -221,9 +221,8 @@ public sealed class RegenTracker : IDisposable
         if (_hpExpectation?.Invoke() is { } sizes && sizes.Matches(delta)) _lastRegenSizedHpAt = now;
         if (HpGainIsOnRoundGrid(_state.Position) && !OnTheRoundGrid(now)) return;
 
-        // Credit whichever active HP cycle is closer to its boundary. If
-        // both rest + natural look due, both get advanced (a 60 s mark
-        // while resting fires both simultaneously).
+        // Credit whichever active HP cycle is closer to its boundary. A gain
+        // that lands on both cycles' ticks advances both.
         // Where rest rides the round grid it takes the standing gain's place and
         // comes twice as often: the rest cycle owns the gain, and the standing cycle
         // is placed again on standing up (ApplyPositionChange).

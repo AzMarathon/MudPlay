@@ -230,7 +230,7 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
 
         MessageRecord seed = MessageCandidateCommit.BuildSeedRecord(candidate);
         MessageEditDialogViewModel vm = new(
-            seed, SettingsTier.Defaults, _messages.Messages, isNew: true, cache: _cache);
+            seed, _messages.Messages, isNew: true, cache: _cache);
         MessageEditResult? result =
             await _dialogs.OpenWindowAsync<MessageEditDialogViewModel, MessageEditResult>(vm);
         if (result is null) return;

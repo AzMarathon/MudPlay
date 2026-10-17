@@ -33,8 +33,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public override string Title => "Combat";
 
     // Dirtiness is owned by the shared staging session — a combat profile spans the
-    // Combat and Health tabs, and the single Commit writes both Settings sections +
-    // the profile blob + weapons as one unit, so any edit on either tab dirties it.
+    // Combat, Health, Spells and Party tabs, and the single Commit writes their
+    // Settings sections + the profile blob + weapons as one unit, so any edit on any
+    // of those tabs dirties it.
     public override bool IsDirty => _session.IsDirty;
 
     public bool HasProfile => _profile.Current is not null;
@@ -231,7 +232,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _spellManaModePercentage = true;
     [ObservableProperty] private bool _spellManaModeAbsolute;
 
-    // Five slots × 4 fields each — flat to keep the AXAML grid binding straightforward.
+    // One flat set of fields per spell slot, to keep the AXAML grid binding straightforward.
 
     // MaxCastsPerRoom is nullable: blank = no limit, 0 = never cast, N = cap.
     [ObservableProperty]
@@ -416,10 +417,10 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     // ----- Combat profiles (staged quick-swap chip bar) -------------
 
-    // The SHARED staged working list — one per Settings window, edited by BOTH the
-    // Combat and Health tabs through it (a combat profile spans both). Every chip
-    // switch, add / remove, name + box edit happens in memory here; Apply commits,
-    // Cancel discards. This tab owns the spell / verb / room / weapon boxes + the
+    // The SHARED staged working list — one per Settings window, edited by the
+    // Combat, Health, Spells and Party tabs through it (a combat profile spans them
+    // all). Every chip switch, add / remove, name + box edit happens in memory here;
+    // Apply commits, Cancel discards. This tab owns the spell / verb / room / weapon boxes + the
     // name; the Health tab owns the Health section of the same working profiles.
     private readonly CombatProfileStagingSession _session;
 
@@ -543,7 +544,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
 
     // Convenience for SettingsWindowViewModel, which builds the shared session and
-    // passes the same instance to both the Combat and Health section VMs.
+    // passes the same instance to the Combat, Health, Spells and Party section VMs.
     // "Include in combat profile" checkboxes, one per header on this tab.
     public CombatProfileGroupToggle ActionOrderInProfile { get; }
     public CombatProfileGroupToggle WeaponsInProfile { get; }
@@ -753,11 +754,11 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             CapRoundTotalsAtMonsterHp = CapRoundTotalsAtMonsterHp,
     };
 
-    // Commit the staged edits through the shared session, which folds BOTH tabs'
+    // Commit the staged edits through the shared session, which folds every tab's
     // boxes into the working profiles and persists Settings["Combat"] +
-    // Settings["Health"] + the CombatProfiles blob + the Default-set weapons in one
-    // Save. Guarded on the session's dirty flag, so whichever of the Combat / Health
-    // Apply runs first commits and the other no-ops. Until this runs, every chip
+    // Settings["Spells"] + Settings["Health"] + the CombatProfiles blob + the
+    // Default-set weapons in one Save. Guarded on the session's dirty flag, so
+    // whichever tab's Apply runs first commits and the others no-op. Until this runs, every chip
     // switch / add / remove / box edit was in-memory only; Cancel throws them away.
     public override void Apply() => _session.CommitIfDirty();
 

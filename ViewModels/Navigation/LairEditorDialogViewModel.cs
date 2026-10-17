@@ -7,13 +7,13 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Modeless editor for a saved LairSetup — rename, edit notes, remove
-// markers, adjust per-marker respawn overrides. Adding a marker requires
-// picking a room on the map; that's the rail's job (right-click → "Add to
-// Auto-Lair"), not the editor's.
+// Modeless editor for a saved LairSetup — rename, edit notes, add and remove
+// markers, adjust per-marker respawn overrides. Markers are placed by clicking
+// rooms on the map in Lair mode; the editor's own search box adds more.
 //
 // Save persists via LairManager.Save, which fires LairManager.SetupsChanged
 // so the rail refreshes. Cancel / X discards every edit; the dialog works
@@ -37,7 +37,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     // set is active than the one it was opened on.
     private string? OtherGameDataRefusal() => _openedOn.Refusal("setup", _setups.SetName);
 
-    // Window title — "Create Setup" when new, "Edit Setup" otherwise.
+    // Window title — "Create Auto-Lair Setup" when new, "Edit Auto-Lair Setup" otherwise.
     public string DialogTitle => _isNew ? "Create Auto-Lair Setup" : "Edit Auto-Lair Setup";
 
     [ObservableProperty]
@@ -390,6 +390,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
             _setups.Delete(_original.Name);
 
         _setups.Save(saved);
+        GuideActions.Report(GuideActions.LairSetupSaved);
         // The tick box is this character's choice, kept apart from the setup file.
         _setups.SetFavorite(saved.Name, Favorite);
         CloseRequested?.Invoke(saved);

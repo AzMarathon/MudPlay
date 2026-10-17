@@ -53,10 +53,9 @@ public sealed class GhSweepManager : IDisposable
 {
     public const string LogCategory = "GhSweep";
 
-    // Same settle window AutoSearchManager uses for its own single-fire `sea`
-    // (Game/Map/AutoSearchManager.cs) — the reply is just command→reply
-    // latency (~150ms, no server-side delay), this only needs to outlast that
-    // round-trip plus a little parse margin before the NEXT `sea` goes out.
+    // Settle after a recon `sea` before the next one goes out: the reply is just
+    // command→reply latency (~150ms, no server-side delay), so this only needs to
+    // outlast that round-trip plus a little parse margin.
     private static readonly TimeSpan ReconSearchSettle = TimeSpan.FromMilliseconds(350);
 
     // Backstop for a dispatched get/drop that never confirms — e.g. a get for
@@ -80,8 +79,9 @@ public sealed class GhSweepManager : IDisposable
     // command, which earns another nudge. Observed live as bursts of five nudges
     // inside 200ms, repeating every backoff.
     //
-    // 800ms is the one interval known to be safe on this realm (GAME_MECHANICS:
-    // the paced @roomba sync uses it), so it's the floor rather than a guess. The
+    // 800ms is the one interval known to be safe on this realm (GAME_MECHANICS
+    // "Command rate limit (typing/sending too fast)": the paced @roomba sync uses
+    // it), so it's the floor rather than a guess. The
     // prompt still gates — it just can't release EARLY.
     private static readonly TimeSpan MinCommandInterval = TimeSpan.FromMilliseconds(800);
 
@@ -95,7 +95,7 @@ public sealed class GhSweepManager : IDisposable
     // rather than retry forever. Four shapes (GAME_MECHANICS "`get` failure responses"):
     //   "You don't see <echo> here."  — the item is genuinely gone (recon's snapshot
     //       went stale, or another player took it); <echo> is whatever followed `get`.
-    //   "Syntax: GET [Amount] [Currency]" — the game misparsed the item name as a
+    //   "Syntax: GET {Amount} {Currency}" — the game misparsed the item name as a
     //       currency get; retrying the same name can't help.
     //   "You cannot carry that much!" — a capacity refusal; the item is still there,
     //       our tracked working-weight drifted low, so resync (not strand).
@@ -104,13 +104,9 @@ public sealed class GhSweepManager : IDisposable
     private static readonly Regex GetNotHereRegex = new(
         @"^\s*You don't see (?<echo>.+?) here\.\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    // Both bracket and brace forms. GAME_MECHANICS recorded this as
-    // "Syntax: GET [Amount] [Currency]" and the pattern faithfully implemented
-    // that — but the live realm emits BRACES, so it never matched a single one.
-    // The cost was invisible and large: an item the game won't take by that name
-    // failed silently, was never stranded, and got retried every lap forever
-    // (one capture shows `get piece of amber` sent 42 times), which also pinned
-    // the sweep ping-ponging between the two rooms holding them.
+    // Both bracket and brace forms; the live realm prints braces (GAME_MECHANICS
+    // "`get` failure responses"). A miss here isn't harmless: an item the game
+    // won't take by that name is never stranded and gets retried every lap.
     private static readonly Regex GetCurrencySyntaxRegex = new(
         @"^\s*Syntax:\s*GET\s*[\[{]Amount[\]}]\s*[\[{]Currency[\]}]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -321,6 +317,9 @@ public sealed class GhSweepManager : IDisposable
     private GhSurveyTiming? _slowestSurveyHere;
     private TimeSpan? _itemLogWriteHere;
 
+    // The clock floor reads and log writes are timed on.
+    private readonly Func<long> _timestamp;
+
     // Latches the warning that lists can't be told apart, so a sweep says it once.
     private bool _reportedUnattributedLists;
 
@@ -489,7 +488,8 @@ public sealed class GhSweepManager : IDisposable
         Func<RoomKey, bool>? isRoomActivelyManaged = null,
         WirePromptScanner? promptScanner = null,
         GhSuspendedSweepStore? suspendedStore = null,
-        Func<string?>? activeGameData = null)
+        Func<string?>? activeGameData = null,
+        Func<long>? timestamp = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -519,6 +519,7 @@ public sealed class GhSweepManager : IDisposable
         _promptScanner = promptScanner;
         _suspendedStore = suspendedStore;
         _activeGameData = activeGameData ?? (static () => null);
+        _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -1476,7 +1477,7 @@ public sealed class GhSweepManager : IDisposable
 
         RoomKey room = current.Key;
         bool searchingHere = _reconSearchRoom is { } searchRoom && searchRoom.Equals(room);
-        long started = Stopwatch.GetTimestamp();
+        long started = _timestamp();
         if (source == FloorSurveySource.SearchReply)
         {
             // With searching off nothing hidden is recorded or sorted, whoever it
@@ -1515,7 +1516,7 @@ public sealed class GhSweepManager : IDisposable
             if (Phase == SweepPhase.Reconning) _readOnRecon.Add(room);
         }
         _observedByRoom[room] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, room, _itemNames);
-        NoteSurvey(room, _groundItems.LastSurveyReadTime, Stopwatch.GetElapsedTime(started));
+        NoteSurvey(room, _groundItems.LastSurveyReadTime, Stopwatch.GetElapsedTime(started, _timestamp()));
 
         // While its searches run, the room is written and logged once, when they end.
         if (searchingHere) return;
@@ -1540,9 +1541,9 @@ public sealed class GhSweepManager : IDisposable
     private void RecordItemLocations(RoomKey room)
     {
         if (_itemLocations is null || !_observedByRoom.TryGetValue(room, out List<string>? floor)) return;
-        long started = Stopwatch.GetTimestamp();
+        long started = _timestamp();
         _itemLocations.RecordRoom(room, floor);
-        TimeSpan took = Stopwatch.GetElapsedTime(started);
+        TimeSpan took = Stopwatch.GetElapsedTime(started, _timestamp());
         _itemLogWriteHere = took;
         if (SlowestItemLogWrite is not { } slowest || took > slowest.Took) SlowestItemLogWrite = (room, took);
     }
@@ -1646,10 +1647,10 @@ public sealed class GhSweepManager : IDisposable
         if (Phase == SweepPhase.Reconning && lit && _sweepRooms.Contains(here)) _readOnRecon.Add(here);
         if (reading && display is not null && _sweepRooms.Contains(here))
         {
-            long started = Stopwatch.GetTimestamp();
+            long started = _timestamp();
             GhSurveyMerger.Replace(_visibleByRoom, here, display, _itemNames);
             _observedByRoom[here] = GhSurveyMerger.Total(_visibleByRoom, _hiddenByRoom, here, _itemNames);
-            NoteSurvey(here, readTime, Stopwatch.GetElapsedTime(started));
+            NoteSurvey(here, readTime, Stopwatch.GetElapsedTime(started, _timestamp()));
             // A room about to be searched is written once, when its searches end.
             if (Phase == SweepPhase.FinalRecon) NoteFinalLapRead(here);
             else if (!_labels.SearchForHidden) RecordItemLocations(here);
@@ -1851,9 +1852,8 @@ public sealed class GhSweepManager : IDisposable
         // RoomTransition that triggered this call, which should already
         // match the tracker's live current room by construction — but this
         // gang house's rooms all display identically ("Bronze House Room"
-        // repeated across the whole map), a known room-identity ambiguity
-        // (see GAME_MECHANICS.md-adjacent RoomTracker non-strict-match
-        // logging), and a mis-fired dispatch here sends a whole room's worth
+        // repeated across the whole map), a known room-identity ambiguity,
+        // and a mis-fired dispatch here sends a whole room's worth
         // of commands that all fail against wherever the player actually is.
         // Refuse rather than trust the parameter blindly.
         if (_tracker.State.CurrentRoom?.Key.Equals(room) != true)

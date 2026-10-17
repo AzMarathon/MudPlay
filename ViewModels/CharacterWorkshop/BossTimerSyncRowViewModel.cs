@@ -12,9 +12,11 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // status line and no buttons; or a CONFLICT — a responder's timer differs from ours
 // where several can answer, the boss isn't in our list yet, the offer answers no
 // request of the user's, or we hold no timer and the answers of several are still
-// being gathered or did not agree — in which case it shows the "keep ours" default
-// plus a pick button per responder listed. Only conflict rows need a decision;
-// SelectedKilledAt is what the Apply button writes for them (null = keep ours).
+// being gathered or did not agree, or the one player's answer is held back while
+// another telepath request waits to be shown sent — in which case it shows the
+// "keep ours" default plus a pick button per responder listed. Only conflict rows
+// need a decision; SelectedKilledAt is what the Apply button writes for them
+// (null = keep ours).
 public sealed partial class BossTimerSyncRowViewModel : ObservableObject
 {
     // The boss as our list names it, or as the responder did while it is not on it.
@@ -92,6 +94,19 @@ public sealed partial class BossTimerSyncRowViewModel : ObservableObject
         foreach (BossTimerSyncCellViewModel c in Responders)
             if (c.Gathered) gathered.Add(c);
         return gathered;
+    }
+
+    // A gathered answer taken off the row to be weighed again as it arrives
+    // (BossTimerSyncViewModel, once the one player asked turns out to be the only
+    // one). With no cell left the row is no longer a pick.
+    public void Withdraw(BossTimerSyncCellViewModel cell)
+    {
+        if (!Responders.Remove(cell)) return;
+        if (cell.IsSelected) KeepOurs();
+        if (Responders.Count > 0) return;
+        HasConflict = false;
+        ResolvedStatus = _writtenStatus
+            ?? (_inSyncWith.Count > 0 ? $"Already in sync with {string.Join(", ", _inSyncWith)}" : string.Empty);
     }
 
     // We held no timer for this boss and the offer was merged in — the store write

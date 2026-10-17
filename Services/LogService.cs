@@ -12,8 +12,7 @@ namespace MudPlay.Services;
 // themselves.
 //
 // Capacity defaults to DefaultCapacity entries (the running client asks for
-// SessionCapacity); oldest entries are overwritten on wraparound. The size knob is exposed in Settings.Display; the constructor
-// takes the initial value.
+// SessionCapacity); oldest entries are overwritten on wraparound.
 public sealed class LogService
 {
     // Default ring-buffer capacity. Overridable via the constructor.
@@ -46,8 +45,8 @@ public sealed class LogService
     // Session diagnostic state gating generation of the Debug and Combat
     // channels. Null in unit tests that don't exercise gating — treated as
     // "all diagnostics off" so Debug / Combat no-op. The running app wires
-    // AppServices.LogDiagnostics here so the LogPane toggles (persisted
-    // per-character) gate emission at the source, not just at display.
+    // AppServices.LogDiagnostics here so the Log pane toggles (saved globally)
+    // gate emission at the source, not just at display.
     public LogDiagnosticState? Diagnostics { get; set; }
 
     // True when the Debug channel should be generated. Guard hot paths on
@@ -166,12 +165,14 @@ public sealed class LogService
     // copies to the clipboard. See LogEntry.Context for the convention.
     public void Log(LogSeverity severity, string source, string message, string? context)
     {
+        // Another player's corpse password, quoted by a relayed `@do` or any other
+        // line, never reaches the log or its files.
         LogEntry entry = new(
             DateTimeOffset.Now,
             severity,
             source ?? string.Empty,
-            message ?? string.Empty,
-            context);
+            Game.Recovery.CorpseRecoveryLines.Redact(message ?? string.Empty),
+            context is null ? null : Game.Recovery.CorpseRecoveryLines.Redact(context));
 
         lock (_gate)
         {
@@ -297,11 +298,11 @@ public sealed class LogService
 
     // ----- Convenience shorthands ---------------------------------------
     // Info / Warn / Error are always recorded. Debug / Combat are
-    // generation-gated: they no-op unless the matching per-character
-    // diagnostic toggle is on, so producers can call them unconditionally
-    // and pay nothing (beyond the argument evaluation) when the channel is
-    // off. Hot paths that build interpolated messages should still guard on
-    // IsDebugEnabled / IsCombatEnabled to skip the string allocation.
+    // generation-gated: they no-op unless the matching diagnostic toggle is
+    // on, so producers can call them unconditionally and pay nothing (beyond
+    // the argument evaluation) when the channel is off. Hot paths that build
+    // interpolated messages should still guard on IsDebugEnabled /
+    // IsCombatEnabled to skip the string allocation.
 
     public void Info(string source, string message)  => Log(LogSeverity.Info,  source, message);
     public void Warn(string source, string message)  => Log(LogSeverity.Warn,  source, message);

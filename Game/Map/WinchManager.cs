@@ -13,7 +13,7 @@ namespace MudPlay.Game.Map;
 //       success: "You heave mightily on the winch, and it begins to turn!"
 //       failure: "You heave mightily on the winch, but it does not budge."
 //   - It can "not budge" several times before it turns — so failure is a retry,
-//     not a give-up (paced by _pullRetryDelay so a per-pull wind-up isn't spammed).
+//     not a give-up (paced by PullRetryDelay so a per-pull wind-up isn't spammed).
 //   - After it turns the gate opens on a short DELAY, and there is NO "the gate
 //     opens" line — the gate only reads "open gate <dir>" in a room re-display. So
 //     on success we poll a bare `l` (look) until the gate direction shows open

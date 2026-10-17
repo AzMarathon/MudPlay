@@ -15,11 +15,11 @@ public sealed class TempDeathBurstTests
     private static TempDeathBurst Burst() => new(number => number == Lich);
 
     private static MonsterDeathEvent RoomSpellKill(params int[] listedKinds)
-        => new(Array.Empty<MonsterDeathIdentity>(), ExperienceGained: 100, DateTimeOffset.Now, IsFallback: true,
+        => new(ExperienceGained: 100, DateTimeOffset.Now,
             RoomSpellRoster: listedKinds.Select(k => new MonsterDeathIdentity(k, $"monster {k}")).ToArray());
 
     private static MonsterDeathEvent NamedKill()
-        => new(Array.Empty<MonsterDeathIdentity>(), ExperienceGained: 100, DateTimeOffset.Now, IsFallback: true);
+        => new(ExperienceGained: 100, DateTimeOffset.Now);
 
     private static RoomEntitiesObservation Room(RoomObservationSource source, params int[] kinds)
         => new("Also here: …",

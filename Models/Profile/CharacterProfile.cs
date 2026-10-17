@@ -78,21 +78,20 @@ public sealed class CharacterProfile
     public Dictionary<string, LoopSettingsChoice>? LoopSettings { get; set; }
 
     // User-defined outgoing-text aliases. Per-character; loaded into AliasEngine
-    // on profile load. Variables substitution inside an alias's expansion reads
-    // from the shared session-scoped variable store the trigger engine maintains.
+    // on profile load. Substitution is positional only ({0}, {1}, …); the trigger
+    // engine's captured variables are not shared with aliases.
     public List<GameData.Alias>? Aliases { get; set; }
 
     // User-defined keybinds. Per-character; loaded into MacroStore on profile
-    // load. The MacroManager engine intercepts keystrokes on TerminalControl +
+    // load. MacroDispatcher intercepts keystrokes on TerminalControl +
     // ConversationWindow's input field and dispatches the matched command in
     // place of the raw key.
     public List<GameData.Macro>? Macros { get; set; }
 
     // User-defined scheduled / lifecycle events. Per-character; loaded into
-    // Game.Events.EventManager on profile load. Trigger types: Logon / Logoff /
-    // Re-log / AtTime / Every. Action types: Walk to / Loop / Auto-lair /
-    // Command (with ^M / ; multi-fire). Per-event Disabled flag. null means no
-    // events configured.
+    // Game.Events.EventManager on profile load (EventTriggerType and
+    // EventActionType list what an event can do). Per-event Disabled flag. null
+    // means no events configured.
     public List<GameData.ScheduledEvent>? Events { get; set; }
 
     // Master "stop firing every event" switch. When true, EventManager.Fire
@@ -125,9 +124,9 @@ public sealed class CharacterProfile
     // flag, notes. Keyed by player display name (case-insensitive on read).
     // Only non-default entries are persisted: a fresh profile that's never
     // opened the player edit dialog leaves this null, and pristine
-    // "all unchecked" entries are pruned at save time. Per-BBS observation rows
-    // live separately at Data/BBS/{name}/players.json so a customisation on
-    // character A doesn't leak into character B even when both play the same BBS.
+    // "all unchecked" entries are pruned at save time. The realm's observation
+    // rows live separately (AppPaths.RealmPlayersFile), so a customisation on
+    // character A doesn't leak into character B on the same realm.
     public Dictionary<string, GameData.PlayerCustomization>? PlayerCustomizations { get; set; }
 
     // Persisted floating-panel layouts keyed by panel id. Populated by
@@ -136,8 +135,8 @@ public sealed class CharacterProfile
     public Dictionary<string, PanelLayout>? PanelLayouts { get; set; }
 
     // Per-BBS login credentials for this character. Keyed by BBS name (matches
-    // Settings.BbsProfile.Name). Username is plaintext; password lives inline on
-    // BbsCredentials.EncryptedPassword (AES-GCM, decrypted via PasswordProtector).
+    // Settings.BbsProfile.Name). Username and password live inline on
+    // BbsCredentials, both AES-GCM encrypted (PasswordProtector).
     public Dictionary<string, BbsCredentials>? BbsCredentials { get; set; }
 
     // In-game set suicide password, encrypted with PasswordProtector. Captured
@@ -303,10 +302,10 @@ public sealed class CharacterProfile
     // chests' coin. null = nothing listed. See ChestOpenTracker.
     public ChestLootRecord? ChestLoot { get; set; }
 
-    // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
-    // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
-    // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an
-    // existing user's pre-upgrade data into the new BBS-tier file on first load
+    // LEGACY Roomba Mode fields — superseded by the realm's RoombaSettings
+    // (AppPaths.RealmRoombaFile; see GhRoomLabelStore) since every character
+    // on a realm shares one gang house. Kept ONLY so GhRoomLabelStore can lift an
+    // existing user's pre-upgrade data into the realm file on first load
     // after upgrading; cleared (nulled + saved) once migrated. Never written to
     // after that point — do not read these directly outside that migration.
     public List<GhRoomLabel>? GhRoomLabels { get; set; }
@@ -314,9 +313,9 @@ public sealed class CharacterProfile
     public bool? GhSearchForHidden { get; set; }
 
     // Gang-house rooms THIS character actively manages — the ones Start Sweep /
-    // Start Inventory visit. The room labels themselves are shared per-BBS (every
+    // Start Inventory visit. The room labels themselves are shared per realm (every
     // character sees the same labeled rooms), but which subset a character sweeps
-    // is per-character, so alts in different gang houses on one BBS each manage
+    // is per-character, so alts in different gang houses on one realm each manage
     // their own house. Each entry is a "map/room" coordinate string. Maintained by
     // GhManagedRoomStore; null or empty = this character manages nothing yet.
     public List<string>? GhManagedRooms { get; set; }
@@ -380,6 +379,10 @@ public sealed class CharacterProfile
     // deaths yet (the lucky case).
     public List<DeathRecord>? DeathHistory { get; set; }
 
+    // Other players' corpses this character recovered and has not handed back yet
+    // (Game.Recovery.CorpseHandoffManager). null / empty when there are none.
+    public List<CorpseHandoffRecord>? CorpseHandoffs { get; set; }
+
     // Per-character log of players this character has seen — one aggregated row
     // per player (given name), each carrying the last-seen time, the last room
     // they were seen in, and the running total sighting count. Written by
@@ -400,15 +403,12 @@ public sealed class CharacterProfile
     // When true, the DEATH-recovery flow grabs lost items (and re-equips what
     // was worn at death) automatically whenever the character re-enters a room
     // holding one of their own deathpiles — regardless of the item's auto-get
-    // policy. Per-character. Defaults false. The item-grab side is inert until
-    // the inventory tracker lands; the toggle persists now so the preference
-    // survives that gap.
+    // policy. Per-character. Defaults false.
     public bool DeathAutoRecover { get; set; }
 
     // When true, items recovered from a deathpile that were equipped at the
     // moment of death are automatically re-equipped after pickup. Per-character.
-    // Defaults false. Inert until inventory tracking records what was worn at
-    // death.
+    // Defaults false.
     public bool DeathAutoEquip { get; set; }
 
     // The editable per-level CP-allocation plan (Workshop CP Allocation tab) —
@@ -468,18 +468,18 @@ public sealed class CharacterProfile
     // yet.
     public EquipmentSettings? Equipment { get; set; }
 
-    // Per-character party-buff plan (Party window) — the dynamic list of buff
-    // slots the party-bless path casts, each with its own recast timer and (for
-    // single-target buffs) its selected party members. Configured live in the
-    // Party window, not the Settings tab. null means nothing configured yet.
+    // Per-character buff plan — every automated buff, self and party alike, each
+    // with its own recast timer and targeting (BuffSettings). Configured live in
+    // the Buff Watchdog window, not the Settings tab. The property keeps its old
+    // name for storage compatibility. null means nothing configured yet.
     public BuffSettings? PartyBuffs { get; set; }
 
-    // Per-character casting-spell profiles (Settings → Combat) — the named,
-    // quick-swappable snapshots of the Combat tab's spell slots, plus which one is
-    // active. Switching a profile overlays its spells onto the live Combat section
-    // (Settings["Combat"]); non-spell combat settings stay shared. null / empty is
-    // seeded on first load with one profile captured from the current Combat
-    // settings. Managed by CombatProfileManager.
+    // Per-character combat profiles (Settings → Combat) — quick-swap snapshots of
+    // a whole combat posture (spells, verbs, thresholds, action order, weapons,
+    // the Health tab), plus which one is active. Targeting stays shared, and any
+    // settings group can be shared instead (CombatProfileSettings.SharedGroups).
+    // null / empty is seeded on first load with one profile captured from the
+    // current settings. Managed by CombatProfileManager.
     public CombatProfileSettings? CombatProfiles { get; set; }
 
     // Per-character route-Details monster colouring — the "Color monsters by hit %"

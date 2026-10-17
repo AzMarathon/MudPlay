@@ -14,8 +14,8 @@ namespace MudPlay.Game.Remote;
 //   - Party passthrough — @party <command>. A party-membership-gated relay of
 //     the leader's directive to the follower's wire (the party analogue of @do,
 //     but authorised by active party membership rather than the per-player
-//     ExecuteCommands grant). Any command is sent verbatim so the whole party
-//     moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
+//     ExecuteCommands grant). Any command is sent verbatim (in plain ASCII, WireText) so
+//     the whole party moves in lock-step; `meditate`→`medi` and `go <dir>`→bare-direction are the
 //     only token rewrites.
 //   - Receive-only signalling — @wait / @ok. Recorded in WaitingMembers, which
 //     the pause-gate reads to decide whether to hold automation. @waiting is the
@@ -26,7 +26,7 @@ namespace MudPlay.Game.Remote;
 // don't leak handler entries.
 public sealed class PartyEssentialHandlers : IDisposable
 {
-    // Commands this consumer registers. Used by Dispose to clean up.
+    // Commands this consumer registers, so Dispose can unregister them all.
     private static readonly string[] RegisteredCommands =
     {
         "@version", "@health", "@status", "@where", "@who", "@path",
@@ -134,7 +134,7 @@ public sealed class PartyEssentialHandlers : IDisposable
         // for every documented @-command's required permission category.
         // Hardcoding the category per RegisterHandler call led to drift; routing
         // through the catalog keeps every handler consistent with the
-        // Players-tab 12-checkbox UI.
+        // per-category permission checkboxes in the player edit dialog.
         Register("@version", OnVersion);
         Register("@health",  OnHealth);
         Register("@status",  OnStatus);
@@ -554,12 +554,13 @@ public sealed class PartyEssentialHandlers : IDisposable
     // refuses — `set suicide` (arms unattended auto-suicide) and `reroll` (wipes
     // the build) — are stopped at engine level before this handler runs
     // (RemoteCommandManager.IsHardBlocked); a plain `suicide` relays like anything
-    // else.
+    // else. Verbatim stops at plain ASCII: anything outside it goes out as every
+    // reply's text does (WireText).
     private void DispatchPartySubCommand(RemoteCommandContext ctx)
     {
         if (_wireSender is null) return;
         string sub = ctx.Args[0].ToLowerInvariant();
-        string local = sub switch
+        string local = WireText.Ascii(sub switch
         {
             "meditate" => "medi",                                  // MajorMUD's canonical short form
             // @party go <dir> — a CARDINAL direction moves on the bare token, so drop
@@ -571,7 +572,7 @@ public sealed class PartyEssentialHandlers : IDisposable
                      && DirectionExtensions.TryFromToken(ctx.Args[1], out _)
                 => string.Join(" ", ctx.Args.Skip(1)),
             _ => string.Join(" ", ctx.Args),
-        };
+        });
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
         RelayingFor = GivenName(ctx.Sender);
         try { _wireSender(bytes); }

@@ -9,7 +9,7 @@ namespace MudPlay.Services;
 // Loads and resolves the boss catalog for the active realm. Two layers, keyed by
 // boss Name (one boss per Name; usually the game-data spelling, see BossDef.GameName):
 //   1. the realm's overlay {realm}/bosses.json — added / removed bosses, edited
-//      rooms, StopBefore + ExactSpawn overrides;
+//      rooms, StopBefore + respawn-hours overrides;
 //   2. the universal read-only seed BossDefs.seed.json (curated from the boss-timer
 //      sheet).
 // Timer VALUES are not stored — resolved from game data (BossCatalog.ResolveRegenHours)

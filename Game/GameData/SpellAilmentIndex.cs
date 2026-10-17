@@ -7,8 +7,9 @@ namespace MudPlay.Game.GameData;
 
 // Maps a Spells-table row to the ailment keyword(s) it applies, read from its
 // ability codes (following the EndCast cast-chain, e.g. poison bolt -> poison
-// bite). Mirrors the flag-derivation rule recorded in GAME_MECHANICS: a spell
-// APPLIES an ailment when its effective codes include the ailment's code.
+// bite). Mirrors GAME_MECHANICS "Condition Effects flags derive from the linked
+// spell's ability codes": a spell APPLIES an ailment when its effective codes
+// include the ailment's code.
 //
 // Backs the Spells tab's ailment-keyword filter (type "poison" / "confuse" /
 // "blind" / "hold" to surface every spell that applies it). Built lazily off the
@@ -29,7 +30,8 @@ public sealed class SpellAilmentIndex
     // Only EndCast (151) is followed — a damage spell that EndCasts the real DoT
     // (poison bolt -> poison bite). GiveTempSpell (160) GRANTS a castable spell to
     // the caster, so its code would confuse only when the player later casts it —
-    // never followed (matches the flag-derivation script's decision).
+    // never followed (GAME_MECHANICS "Condition Effects flags derive from the
+    // linked spell's ability codes").
     private const int EndCastCode = 151;
 
     private readonly GameDataCache _cache;

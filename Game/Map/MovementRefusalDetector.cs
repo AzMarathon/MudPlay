@@ -107,7 +107,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         // The typing-rate limiter silently dropped the command we just sent
         // ("You are typing too quickly - command ignored"). If that command was
         // the move in flight, it never executed — un-count it so the tracker
-        // doesn't run a room ahead through a same-named grid (issue #478).
+        // doesn't run a room ahead through a same-named grid.
         // NoteCommandDropped self-guards: it reverts only a recently-sent,
         // still-Pending move, since this line doesn't name what it dropped.
         // "You are too afraid!" refuses whatever we sent while feared, move or not,

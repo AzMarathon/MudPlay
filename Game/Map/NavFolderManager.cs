@@ -84,6 +84,10 @@ public sealed class NavFolderManager
     // Every folder (in stored / form) that physically exists under the Loops
     // root, including empty ones. Excludes the root. De-duplicated; order
     // unspecified — the UI sorts.
+    //
+    // The holding folder for refused names (AppPaths.RefusedName) is no folder of
+    // the user's and is left out with all below it. A loop or setup filed in it
+    // before still shows under it, from its own Folder, so nothing is hidden.
     public IReadOnlyCollection<string> AllFolders
     {
         get
@@ -95,10 +99,26 @@ public sealed class NavFolderManager
             foreach (string dir in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories))
             {
                 string rel = NavFolders.Normalize(Path.GetRelativePath(root, dir));
-                if (rel.Length != 0) set.Add(rel);
+                if (rel.Length == 0) continue;
+                if (NavFolders.Segments(rel)[0].Equals(AppPaths.RefusedName, StringComparison.OrdinalIgnoreCase)) continue;
+                set.Add(rel);
             }
             return set;
         }
+    }
+
+    // Why path can't be a folder here, for the dialog that names one, or null when
+    // it can (NavFolders.WhyNotFolder). Null with no set: nothing is made then anyway.
+    public string? WhyNotFolder(string? path) =>
+        SetName is { } setName ? NavFolders.WhyNotFolder(AppPaths.GameDataSetLoopsFolder(setName), path) : null;
+
+    // Refuse path when it can't be a folder: ToDirectory would point at the holding
+    // folder for refused names, and the create, move or delete would act on that.
+    private bool Refused(string operation, string path)
+    {
+        if (WhyNotFolder(path) is not { } whyNot) return false;
+        _log?.Warn("NavFolders", $"{operation} '{path}' refused: {whyNot}");
+        return true;
     }
 
     // Create an empty folder (and any missing ancestors) under the Loops root
@@ -109,7 +129,7 @@ public sealed class NavFolderManager
     {
         if (SetName is not { } setName) return false;
         string norm = NavFolders.Normalize(path);
-        if (norm.Length == 0) return false;
+        if (norm.Length == 0 || Refused("create folder", norm)) return false;
         string dir = NavFolders.ToDirectory(AppPaths.GameDataSetLoopsFolder(setName), norm);
         if (Directory.Exists(dir)) return false;
         Directory.CreateDirectory(dir);
@@ -132,6 +152,7 @@ public sealed class NavFolderManager
         string to = NavFolders.Normalize(newPath);
         if (from.Length == 0 || to.Length == 0) return false;
         if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)) return false;
+        if (Refused("rename folder", from) || Refused("rename folder to", to)) return false;
 
         string root = AppPaths.GameDataSetLoopsFolder(setName);
         string fromDir = NavFolders.ToDirectory(root, from);
@@ -170,7 +191,7 @@ public sealed class NavFolderManager
     {
         if (SetName is not { } setName) return false;
         string from = NavFolders.Normalize(path);
-        if (from.Length == 0) return false;
+        if (from.Length == 0 || Refused("delete folder", from)) return false;
 
         string root = AppPaths.GameDataSetLoopsFolder(setName);
         string dir = NavFolders.ToDirectory(root, from);

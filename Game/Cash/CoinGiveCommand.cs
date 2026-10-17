@@ -2,7 +2,7 @@ namespace MudPlay.Game.Cash;
 
 // The command that hands coins of one denomination to another player:
 // `give {amount} {currency} to {someone}` (GAME_MECHANICS "Giving items and coins
-// to another player"). One place for it, so every hand-over names the fifth coin
+// to another player (`give`, `share`)"). One place for it, so every hand-over names the fifth coin
 // the way the board does.
 public static class CoinGiveCommand
 {

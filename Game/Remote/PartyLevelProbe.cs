@@ -8,11 +8,11 @@ namespace MudPlay.Game.Remote;
 
 // On-demand party-level probe. Asks the whole party "what level are you?" by
 // broadcasting @level to every non-self member and aggregating the replies into a
-// single PartyLevelResult. Backs the leader-side level-gate check: when a
-// leader's planned walk crosses a (Level: MIN to MAX) gate, PartyLevelGate probes
-// the party and warns / prompts when a member's level falls outside the window
-// (the walker's own IRoomFilter already guarantees the leader clears it, so only
-// the followers need checking).
+// single PartyLevelResult. Backs the leader-side level gate: PartyLevelTracker
+// reads the recorded levels for MovementFilter, which routes a following party
+// around a (Level: MIN to MAX) gate a member can't clear, and asks again through
+// here when a level the route depends on is stale (the walker's own IRoomFilter
+// already guarantees the leader clears it, so only the followers need checking).
 //
 // The round-trip rides the same plumbing as PartyInventoryProbe: the query goes
 // out through PartyBroadcaster.Broadcast (one /<given> @level per member) and each

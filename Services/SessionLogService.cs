@@ -5,7 +5,7 @@ using MudPlay.Models.Profile;
 namespace MudPlay.Services;
 
 // Persists the Conversation window and the Transaction-history ledger to
-// per-character rolling files under Data/Logs, so both survive restarts and the
+// per-character rolling files under Logs, so both survive restarts and the
 // in-memory line caps. Filenames are <char>.<bbs>.talk.log and
 // <char>.<bbs>.transactions.log; logging is suppressed until BOTH the profile
 // name and the BBS name resolve — pre-login chatter and no-BBS drafts aren't
@@ -136,7 +136,10 @@ public sealed class SessionLogService : IDisposable
     {
         string speaker = entry.Speaker is null ? string.Empty : $" {entry.Speaker}";
         if (!string.IsNullOrEmpty(entry.HeardFrom)) speaker += $"{HeardFromOpen}{entry.HeardFrom})";
-        return $"[{entry.Timestamp.ToLocalTime().ToString(StampFormat)}] {entry.Channel}{speaker}: {entry.Message}";
+        // A corpse password someone telepathed (`@do recover corpse <name> <pw>`) is
+        // theirs, not something to keep on disk.
+        string message = Game.Recovery.CorpseRecoveryLines.Redact(entry.Message);
+        return $"[{entry.Timestamp.ToLocalTime().ToString(StampFormat)}] {entry.Channel}{speaker}: {message}";
     }
 
     internal static string FormatTxnLine(TransactionEntry entry)

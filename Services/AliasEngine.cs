@@ -11,9 +11,11 @@ namespace MudPlay.Services;
 // expansion path.
 //
 // Match shape: first-word, case-insensitive, literal only — no regex.
-// TryExpand is called from MainWindowViewModel.SendUserText before the text is
-// encoded to bytes, so both the terminal canvas and the Conversation input
-// field get aliases for free.
+// TryExpand is called from MainWindowViewModel.SendOneUserLine before the text
+// is encoded to bytes: lines sent through SendUserText (the Conversation
+// input, the local API, the Quest tab's command buttons) get aliases. A line
+// typed at the terminal is submitted by TerminalControl.SubmitTypedLine
+// straight to the wire, so it never expands.
 //
 // Substitution: positional placeholders only — {0} for the whole rest of the
 // typed line after the alias name; {1}, {2}, … for whitespace-split tokens.

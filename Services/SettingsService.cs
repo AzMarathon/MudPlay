@@ -2,7 +2,7 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
-// Owns Data/Global/global.json — the Global tier of the settings hierarchy.
+// Owns Global/global.json — the Global tier of the settings hierarchy.
 // Singleton owned by AppServices.
 public sealed class SettingsService
 {
@@ -32,7 +32,7 @@ public sealed class SettingsService
         _baseline = AsNode(_current);
     }
 
-    // Replace the in-memory snapshot wholesale (used by OK-commit flows).
+    // Replace the in-memory snapshot wholesale.
     public void Replace(GlobalSettings next)
     {
         _current = next ?? throw new ArgumentNullException(nameof(next));

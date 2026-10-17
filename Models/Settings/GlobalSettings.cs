@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace MudPlay.Models.Settings;
 
-// Root DTO for Data/Global/global.json — the Global tier of the settings
+// Root DTO for Global/global.json — the Global tier of the settings
 // hierarchy. Holds app-wide deltas (the things every character shares) plus
 // pointers the launcher needs before any profile is loaded. Anything in
 // this file must be resolvable without a character profile loaded (Global
@@ -192,9 +192,12 @@ public sealed class GlobalSettings
     // brand-new user through importing game data, adding a BBS + character, and
     // connecting) never auto-shows again. Set when the user completes it or picks
     // "Don't show again". Install-wide (Global tier). The tutorial still auto-shows
-    // when this is false AND a prerequisite is missing; Help → First-time setup
+    // when this is false AND a prerequisite is missing; Help → Visual Guides
     // re-opens it on demand regardless of this flag. Read by MainWindow on open.
     public bool FirstRunTutorialDismissed { get; set; }
+
+    // Step reached / finished per Visual Guide (Help → Visual Guides).
+    public GuideProgress Guides { get; set; } = new();
 
     // Per-tab settings deltas — keyed by tab name (Health / Combat / Talk /
     // etc.). Each value is a partial DTO for that tab containing only the

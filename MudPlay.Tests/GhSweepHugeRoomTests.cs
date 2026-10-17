@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
@@ -37,6 +38,11 @@ public sealed class GhSweepHugeRoomTests : IDisposable
     private readonly GhRoomLabelStore _labels;
     private readonly GhSweepManager _sweep;
     private int _clock;
+    // The clock the floor reads are timed on: each reading moves it 1 ms, so every
+    // stage costs the same on any machine. A vault read (its list split, then its
+    // merge) outranks an empty room's (a merge alone) however busy the machine is.
+    private long _ticks;
+    private long Timestamp() => _ticks += Stopwatch.Frequency / 1000;
 
     public GhSweepHugeRoomTests()
     {
@@ -78,7 +84,7 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         DefaultPatterns.Seed(router);
         GroundItemTracker ground = new(router, new CurrencyNaming(),
             entry => names.FindByName(entry) is not null,
-            isRoomName: line => line == "Bronze House Vault");
+            isRoomName: line => line == "Bronze House Vault", timestamp: Timestamp);
 
         // The condition tracker reads every line against the realm's message
         // catalogue; its cast-line templates are where the seconds went.
@@ -110,7 +116,7 @@ public sealed class GhSweepHugeRoomTests : IDisposable
             postToUi: action => action());
         _sweep = sweep = new GhSweepManager(_labels, runner, _tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false, log: _log,
-            isParadigm: () => true, itemLocations: locations);
+            isParadigm: () => true, itemLocations: locations, timestamp: Timestamp);
         _sweep.SetWireSender(bytes => _sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
         runner.SetWireSender(bytes => _sent.Add(Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
 

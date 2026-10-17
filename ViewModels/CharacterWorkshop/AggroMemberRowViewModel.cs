@@ -65,8 +65,8 @@ public sealed partial class AggroMemberRowViewModel : ObservableObject
         _onLastAttacker = onLastAttacker;
     }
 
-    // Flip the last-attacker flag without re-triggering recompute — used by the
-    // parent to clear the flag on the other rows (only one member is "last").
+    // Flip the last-attacker flag without re-triggering recompute, so clearing it on
+    // the other rows (only one member is "last") costs one recompute, not one per row.
     public void SetLastAttackerSilently(bool value)
     {
         _suppress = true;
@@ -74,9 +74,9 @@ public sealed partial class AggroMemberRowViewModel : ObservableObject
         _suppress = false;
     }
 
-    // Set the party position without re-triggering recompute — used by the parent to
-    // force the first member's rank (Solo alone / Frontrank in a party); the caller
-    // recomputes once after reconciling the whole roster.
+    // Set the party position without re-triggering recompute — the first member's
+    // rank is forced (Solo alone / Frontrank in a party), and the caller recomputes
+    // once after reconciling the whole roster.
     public void SetPositionSilently(string value)
     {
         _suppress = true;

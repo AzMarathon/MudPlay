@@ -6,11 +6,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 7.24 — AutoLairSettings DTO defaults, JSON round-trip, and the
-/// EncumbranceHopTimes lookup. Plus the
-/// <see cref="EncumbranceGatedTravelCostModel"/> hop → duration math.
-/// </summary>
+// AutoLairSettings DTO defaults, JSON round-trip, and the
+// EncumbranceHopTimes lookup. Plus the EncumbranceGatedTravelCostModel
+// hop → duration math.
 public sealed class AutoLairSettingsTests
 {
     // ----- defaults -------------------------------------------------
@@ -20,7 +18,6 @@ public sealed class AutoLairSettingsTests
     {
         AutoLairSettings dto = new();
         Assert.Equal(AutoLairHeuristic.Default, dto.Heuristic);
-        Assert.Equal(1.0, dto.IdlePenalty);
         Assert.Equal(30, dto.EngageTimeoutSeconds);
         // Auto is the default — realm-aware model selection out of the box.
         Assert.Equal(AutoLairTravelCostMode.Auto, dto.TravelCostMode);
@@ -42,7 +39,6 @@ public sealed class AutoLairSettingsTests
         AutoLairSettings dto = new()
         {
             Heuristic = AutoLairHeuristic.Throughput,
-            IdlePenalty = 2.5,
             EngageTimeoutSeconds = 45,
             TravelCostMode = AutoLairTravelCostMode.EncumbranceGated,
             FlatSecondsPerHop = 1.7,
@@ -57,7 +53,6 @@ public sealed class AutoLairSettingsTests
 
         Assert.NotNull(roundTrip);
         Assert.Equal(AutoLairHeuristic.Throughput, roundTrip!.Heuristic);
-        Assert.Equal(2.5, roundTrip.IdlePenalty);
         Assert.Equal(45, roundTrip.EngageTimeoutSeconds);
         Assert.Equal(AutoLairTravelCostMode.EncumbranceGated, roundTrip.TravelCostMode);
         Assert.Equal(1.7, roundTrip.FlatSecondsPerHop);

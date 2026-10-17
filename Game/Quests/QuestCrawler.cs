@@ -666,9 +666,9 @@ public static class QuestCrawler
             int rangeEnd = i == ladder.Count - 1 ? int.MaxValue : ladder[i + 1].Step - 1;
 
             // A tier is complete after its reward hand-in, which is the next tier's gate step
-            // (user, 2026-10-17; GAME_MECHANICS "Quest-flag values"): the highest actual give
-            // value up to that gate, so Paradigm's Evil tiers complete at 3 / 4 / 12 / 14 and
-            // the last tier at the highest give it reaches.
+            // (user, 2026-10-17; GAME_MECHANICS "Quest-flag values (`abil` / `sys god abil`)"):
+            // the highest actual give value up to that gate, so Paradigm's Evil tiers complete
+            // at 3 / 4 / 12 / 14 and the last tier at the highest give it reaches.
             int completeBound = i == ladder.Count - 1 ? rangeEnd : ladder[i + 1].Step;
             int? completeValue = DetectableValue(
                 chains.Select(c => c.GiveStep).Where(v => v <= completeBound).DefaultIfEmpty(0).Max());

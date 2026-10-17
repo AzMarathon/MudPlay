@@ -190,7 +190,7 @@ public static class DefaultPatterns
             @"^\*Combat (?<status>Engaged|Off)\*");
         // Target's character class includes an apostrophe — a spell-cast attack
         // phrase ("summon god's wrath upon <target>") sits inside this same
-        // capture (Megamind's regex only splits source/verb/target/damage, not
+        // capture (the pattern only splits source/verb/target/damage, not
         // spell-name-vs-monster-name), and without it "You summon god's wrath
         // upon whale shark for 121 damage!" (the gwra alt-attack spell) never
         // matched at all — silently invisible to every UserHits subscriber
@@ -218,7 +218,7 @@ public static class DefaultPatterns
         // (or no) tail, so a fight whose swings are armour-deflected or carry no
         // damage number still registers as combat activity for the idle-stall
         // watchdog. Not used for stats; deliberately broader than MobHits/MobMisses.
-        // Keep "The " REQUIRED here — dropping it (tried in the PR for
+        // Keep "The " REQUIRED here — dropping it (tried for report
         // paradigm-20260914-055853) makes this match ordinary non-combat "<name>
         // <verb> you" lines too (party gives/tells/follows/thanks, and even the
         // player's own "A shimmering golden mist descends over you!" self-buff

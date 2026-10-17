@@ -9,8 +9,8 @@ namespace MudPlay.Game.Remote;
 // and shipped on the wire as if the local user had typed them.
 //
 // Sender authorisation is handled by the engine via RemoteCommandCatalog — @do
-// requires PlayerRemoteControls.ExecuteCommands, which the Players-tab tooltip
-// flags as "do something on my behalf". Default deny for any player without an
+// requires PlayerRemoteControls.ExecuteCommands (the "Execute commands" box in the
+// player edit dialog). Default deny for any player without an
 // explicit grant; recommend granting only to known trusted players (party leader,
 // sysop-ranked teammates, etc.).
 //
@@ -79,15 +79,16 @@ public sealed class DoHandler : IDisposable
         // the original message collapse to one space here. That's fine
         // for MUD commands (any modern MUD parses ' '+ between tokens
         // identically), and matters less than the safety of NOT
-        // round-tripping arbitrary bytes from a remote source.
-        string command = string.Join(" ", ctx.Args);
+        // round-tripping arbitrary bytes from a remote source. For the same reason
+        // nothing outside plain ASCII goes out as given (WireText).
+        string command = WireText.Ascii(string.Join(" ", ctx.Args));
         byte[] bytes = Encoding.Latin1.GetBytes(command + "\r");
         LastSentForTests.Add(bytes);
         SendingFor = ctx.Sender;
         try { _wireSender(bytes); }
         finally { SendingFor = null; }
         _log?.Log(LogSeverity.Info, "RemoteCmd",
-            $"@do from {ctx.Sender}: '{command}'");
+            $"@do from {ctx.Sender}: '{Recovery.CorpseRecoveryLines.Redact(command)}'");
         // Acknowledge the request — sender gets {ok} on the same
         // channel they used, mirroring the existing curly-brace
         // meta-line convention every other handler reply uses. Lets

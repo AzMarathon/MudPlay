@@ -13,8 +13,7 @@ using MudPlay.Views.Settings;
 namespace MudPlay.ViewModels.Settings;
 
 // "Other" tab — the misc bucket. Fields land on OtherSettings and wire
-// through ApplyToServices; the inline stub catalog (StubGroups) holds the
-// not-yet-wired fields as disabled placeholders and shrinks as each lands.
+// through ApplyToServices.
 public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
 {
     private const string TabKey = "Other";
@@ -32,13 +31,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public string PhaseTag => "Phase 6 (suicide threshold) + Phases 7 / 11 / 13 (per-row tooltips)";
-
-    public string Description =>
-        "Catch-all for safety thresholds, walker behaviour flags, log retention, and ignore-this-ailment knobs " +
-        "that don't fit the other tabs. The suicide-threshold row at the top is wired into the Phase 6 remote " +
-        "engine; everything below is still skeleton — each toggle's tooltip names the owning phase.";
-
     public override Control View => _view ??= new OtherSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
@@ -53,7 +45,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Pick locks instead of bashing";
             yield return "Attempt pick-lock";
             yield return "Lockpicks";
-            yield return "Search rooms if item needed";
             yield return "Hide items when discarding";
             yield return "Max comeback backtrack rooms";
             yield return "@comeback";
@@ -76,16 +67,14 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Feathered mask";
             yield return "Only auto-invite while navigation is running";
             yield return "Auto-invite";
-            foreach (StubGroup g in StubGroups)
-            foreach (StubField f in g.Fields)
-                yield return f.Label;
+            yield return "Cleanup Player Database";
         }
     }
 
     // ----- Wired -----
 
-    // Block @do suicide / @party suicide when remaining lives are <= this
-    // value. Range 0..20. Pushed into the live engine on Apply + profile load.
+    // Refuse @suicide when remaining lives are <= this value. Range 0..9.
+    // Pushed into the live engine on Apply + profile load.
     [ObservableProperty] private int _maxSuicideLivesThreshold = 5;
 
     // Note: the ailment Ignore* toggles (each gates BOTH the @wait and the say
@@ -160,11 +149,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // Print the yellow monster-HP line in the terminal on a monster look. Default on.
     [ObservableProperty] private bool _printMonsterHpOnLook = true;
 
-    // Per-category Verbose toggles + WriteCombatRoundTrace live in a
-    // session-only umbrella switch in the Log pane menu — see
-    // LogDiagnosticState + LogPaneViewModel.CombatFilter. Verbose tracing
-    // isn't a per-character preference; it's "I'm debugging right now", and
-    // a session toggle in the LogPane is the right home.
+    // The verbose-tracing switches (Debug / Combat diagnostics, the on-disk logs)
+    // live on the Program Log window, saved for all characters — see
+    // LogDiagnosticState. Tracing is "I'm debugging right now", not a
+    // per-character preference.
 
     // Note: the run-away (flee) knobs (Go-backwards-if-running /
     // Break-combat-before-running) graduated to the Combat tab — they sit
@@ -224,26 +212,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     {
         if (row is not null && LocationEquipRules.Remove(row)) MarkDirty();
     }
-
-    // ----- Inline stub catalog (un-wired fields) -----
-
-    // The remaining un-wired Other-tab fields, rendered inline below the wired
-    // group as disabled placeholders. Entries are removed from this list as
-    // their consumer engines wire through OtherSettings.
-    // The inline stub catalog is now empty — every former Other-tab placeholder has
-    // graduated to a real wired control. Kept as a property (the view still binds it)
-    // so re-adding a stub later is a one-liner. Where the old entries went:
-    //   • "Teleport to avoid combat instead of hanging" → wired on the Health tab as
-    //     "Sys goto wimpy instead of hanging" (HealthSettings.SysGotoWimpyInsteadOfHanging
-    //     + SysGotoWimpyLocation; HealthManager substitutes it for the emergency hangup).
-    //   • Auto-train / Auto-train stats → their own Settings → Auto-Trainer tab.
-    //   • "Allow hangup in all-off mode" → wired checkbox on the General tab.
-    //   • "Search rooms if item needed" → wired checkbox below the door caps.
-    //   • "Don't move unless sneaking" → dropped (our movement always sneaks first).
-    //   • "Go backwards if running" / "Break combat before running" → Combat tab.
-    //   • Lock / trap preference toggles → next to their retry-count pickers.
-    //   • Ignored ailments / auto-engage-on-connect → wired inline in OtherSectionView.axaml.
-    public IReadOnlyList<StubGroup> StubGroups { get; } = System.Array.Empty<StubGroup>();
 
     public OtherSectionViewModel()
         : this(AppServices.Current.Profile, AppServices.Current.Settings) { }

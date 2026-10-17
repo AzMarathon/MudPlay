@@ -43,7 +43,7 @@ public sealed partial class TrialSlotRow : ObservableObject
     public ObservableCollection<TrialOption> Options { get; } = new();
 
     // The chosen item, or Empty for none. Bound to the slot's dropdown via
-    // SelectedValue/SelectedValuePath so the ComboBox can display TrialOption rows
+    // SelectedValue/SelectedValueBinding so the ComboBox can display TrialOption rows
     // (name + lazy tooltip) while this stays a plain string everywhere else.
     [ObservableProperty] private string? _selectedItem = Empty;
     // Locks this slot against Find Best.

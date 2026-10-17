@@ -7,7 +7,7 @@ namespace MudPlay.Services;
 // for the Help window: a leading '# ' title becomes an overview topic, each '## '
 // heading a top-level section, and each '### ' its nested sub-topic. The text
 // between a heading and the next becomes that topic's markdown body (rendered by
-// HelpMarkdownInlines). Standalone horizontal rules ('---') are dropped as
+// HelpContentRenderer). Standalone horizontal rules ('---') are dropped as
 // section separators that carry no content (markdown tables' '|---|' rows are
 // kept — they aren't all-dashes).
 //

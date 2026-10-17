@@ -35,14 +35,12 @@ namespace MudPlay.Game.Cash;
 //     the gate. Subscribers (the walker reroute) decide what to do — this layer
 //     only signals.
 //
-// Per-realm runic naming: the runic denomination's word varies per-BBS
-// (Settings → BBS tab). CurrencyNaming resolves the active word; every
+// Per-realm runic naming: the runic denomination's word varies per realm
+// (Settings → BBS + Display, the realm's settings). CurrencyNaming resolves the active word; every
 // denomination check here folds through _naming.IsRunic, and outgoing
 // drop/get commands carry the wire word so the server accepts them.
 //
 // Not yet handled:
-//   - Walker-driven auto-deposit reroute (snapshot activity → pause → walk to
-//     bank → deposit → walk back → resume).
 //   - Realm-resolved bracket percentages — the gate currently hardcodes the
 //     Stock 17 / 34 / 67 starts.
 //
@@ -81,7 +79,7 @@ public sealed class CashManager : IDisposable
 
     // The four stable single-word denominations (case-insensitive). The fifth,
     // runic, is recognised separately through _naming because a board can rename
-    // the runic word per-BBS — IsCashWord folds both checks.
+    // the runic word per realm — IsCashWord folds both checks.
     private static readonly HashSet<string> StableDenominations =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -355,7 +353,7 @@ public sealed class CashManager : IDisposable
         _collectAfterCombatFinished = collectAfterCombatFinished;
         _hasEngageableHostiles = hasEngageableHostiles;
         _isEnabled = isEnabled;
-        // Resolves the per-BBS runic word; unbound (tests) falls back to stock
+        // Resolves the per-realm runic word; unbound (tests) falls back to stock
         // "runic" so the stable-realm behaviour is unchanged.
         _naming = naming ?? new CurrencyNaming();
         // No snapshot bound (or before an `i` parse) → the encumbrance gate
@@ -381,12 +379,9 @@ public sealed class CashManager : IDisposable
         _trainedSub = router.Subscribe(KnownPatterns.TrainAttainLevel, OnTrained);
         _trainedNextSub = router.Subscribe(KnownPatterns.TrainAttainNextLevel, OnTrained);
         // `hide N <coin>` is the stash-room verb — same tally semantics
-        // as drop. Without this subscription, stashing decrements only
-        // via item-hide (UserHides) which isn't currency-aware; the
-        // held tally would go stale and AutoDeposit would misfire on
-        // phantom wealth. Note for future inventory subsystem: its
-        // UserHides handler must skip currency-shape item text so we
-        // don't double-decrement here vs. there.
+        // as drop. The item-hide path (UserHides) leaves coin-shaped hides
+        // to this one, so without this subscription the held tally would
+        // go stale and AutoDeposit would misfire on phantom wealth.
         _hiddenSub   = router.Subscribe(KnownPatterns.CashHidden,    OnCashHidden);
         _noticeSub   = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
         _killDropSub = router.Subscribe(KnownPatterns.CashFromKill,  OnCashFromKill);
@@ -946,20 +941,6 @@ public sealed class CashManager : IDisposable
             _gate?.NoteDeferredCleared();
     }
 
-    // Encumbrance-gated Collect dispatch for one ground currency, holding the
-    // walker via the shared AcquisitionGate until get-clear. Single funnel for
-    // all three collect sites (room display, corpse drop, "You notice" list) so
-    // the gate + acquisition note can't be missed.
-    //
-    // With no SkipCollectIfMakesLight / Medium / Heavy flag set — or before an
-    // `i` parse populates encumbrance — this sends the full `get count currency`
-    // ungated. When a gate flag is set and the InventorySnapshot has a known max
-    // weight, the pickup is clamped to the headroom below the configured
-    // bracket; with DropSmallerForLarger on, lower-value held coin is dropped 1:1
-    // to free room for the higher-value pickup (encumbrance-neutral by
-    // construction). The in-flight projection threads multi-currency batches and
-    // quick re-displays so the budget reflects pickups already dispatched but not
-    // yet confirmed.
     // The coins carried now and how many more the weight limits would let a pickup
     // add. Null when the carry capacity isn't known. A stash transfer reads it to
     // tell a purse that should be banked before it goes for more.
@@ -990,6 +971,20 @@ public sealed class CashManager : IDisposable
         return headroom > 0 ? headroom * 3 : 0;
     }
 
+    // Encumbrance-gated Collect dispatch for one ground currency, holding the
+    // walker via the shared AcquisitionGate until get-clear. Single funnel for
+    // all three collect sites (room display, corpse drop, "You notice" list) so
+    // the gate + acquisition note can't be missed.
+    //
+    // With no SkipCollectIfMakesLight / Medium / Heavy flag set — or before an
+    // `i` parse populates encumbrance — this sends the full `get count currency`
+    // ungated. When a gate flag is set and the InventorySnapshot has a known max
+    // weight, the pickup is clamped to the headroom below the configured
+    // bracket; with DropSmallerForLarger on, lower-value held coin is dropped 1:1
+    // to free room for the higher-value pickup (encumbrance-neutral by
+    // construction). The in-flight projection threads multi-currency batches and
+    // quick re-displays so the budget reflects pickups already dispatched but not
+    // yet confirmed.
     private void CollectCoins(int count, string currency)
     {
         // Stash-room guard at the shared funnel so EVERY collect path is covered —
@@ -1245,7 +1240,7 @@ public sealed class CashManager : IDisposable
     }
 
     // Recognise "N {denomination} ..." as cash — requires a leading integer + the
-    // second word being a CashDenominations entry. Singular form "a gold piece"
+    // second word being a cash word (IsCashWord). Singular form "a gold piece"
     // is also tolerated (count = 1).
     //
     // The count+denomination shape alone can't separate a stacked item whose name

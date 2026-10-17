@@ -41,7 +41,7 @@ public readonly record struct SummonSource(
 //
 // Collecting the drop. A kill's drop lands loose on the room floor and is NOT
 // announced on the death line, so the floor has to be re-surveyed before anything
-// can see it (confirmed mechanic, GAME_MECHANICS.md "Items & acquisition"). This
+// can see it (GAME_MECHANICS "Monster drops land on the ground"). This
 // router therefore issues a bare `look` on each death while it's waiting and
 // leaves the `get` to PathItemFloorCollector, which already grabs any outstanding
 // path item a survey reveals — so the pickup path is the shared one rather than a

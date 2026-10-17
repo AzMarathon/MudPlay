@@ -1,11 +1,83 @@
 # Version history
 
-## 3.181.33
+## 3.183.32
 
 - A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
 - With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
 - A gang-house room renamed to a name the game data has elsewhere is re-learned
 - A look into a named room next door no longer names the house room ahead
+
+## 3.183.28
+
+- Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
+- Stale on-screen text and tooltips corrected to match what the client does
+- Message editor's Use tier box removed (message edits always stay with the game-data set)
+- Auto-Lair's idle penalty setting removed (it had no effect)
+- Monster records show HP regen every 30 seconds, not 90
+
+## 3.183.23
+
+- Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
+## 3.183.22
+
+- Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
+- Navigation: Save, Accept and Go buttons that were meant to stand out now show in the accent colour
+- Field labels in Settings General and Events and on the Roomba tab now use the dimmed label style
+
+## 3.183.19
+
+- Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
+- Sync Timers: a pick you apply no longer reads "changed since you asked"
+- Sync Timers: what you held when you asked is taken as you press Enter, not when the game echoes it
+- Sync Timers: a request typed into the open window before Request Timers is now collected there
+- Sync Timers: an expired timer of yours counts as none, so a reply for it merges in
+- Help: a request typed at a non-game prompt opens no window where the board shows nothing back
+
+## 3.183.13
+
+- A line whose condition was left out by who can cast it here is logged at Info, naming both sides
+- Bug report shows the who-casts index's load, why the room list isn't whole, and the last narrowed line
+- A failed who-casts index build is logged as a warning and shown in the bug report
+- Bug report shows the broadcast channel's answer and refusal counts this minute, without names
+- A negated cast's log line counts the records sharing the spell's name instead of listing them
+
+## 3.183.9
+
+- Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+- Yellow fungus's paralysis now holds and stops attacks instead of confusing, on both realms
+
+## 3.183.7
+
+- A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
+- A profile whose game data set's name can't be used says so on the terminal, not only in the log
+- A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
+- A renamed loop is saved under its new name before the old one goes, so a failed save loses nothing
+
+## 3.183.3
+
+- `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?` or its plain spelling, as in every reply
+- `@divert` forwards telepaths as plain text too
+- The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
+
+## 3.183.0
+
+- Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
+- Each guide ticks its steps as you really do them, keeps your place, and can be restarted
+- The first-time setup tour is one of them and still opens on its own on a new install
+
+## 3.182.0
+
+- Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
+- Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
+- The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
+- Recovering a friend's corpse no longer marks your own open pile recovered
+
+## 3.181.32
+
+- Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
+- Spells cast by an item, a textblock or an exit that the caster list missed are never ruled out (Stock's blazing comet, Paradigm's clean room)
+- A spell that lands when another spell with a duration runs out is never ruled out by who is in the room
 
 ## 3.181.29
 

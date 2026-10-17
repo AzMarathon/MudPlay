@@ -143,6 +143,32 @@ public sealed class CastReach
         return names;
     }
 
+    // For the bug report: why MonstersSeen and StrangersSeen can't take the roster
+    // for everyone in the room, or null when they can. notWholeBecause is the
+    // classifier's reason for a roster not read whole. It restates their rules, so a
+    // change to MonstersSeen or StrangersSeen is made here too.
+    public static string? WhyRosterNotWhole(
+        RoomEntitiesObservation? roster, bool inDarkRoom, bool enteredBlind, bool blinded,
+        bool rosterIsWhole, string? notWholeBecause, Func<string, bool> isMonsterOfTheSet)
+    {
+        ArgumentNullException.ThrowIfNull(isMonsterOfTheSet);
+        if (inDarkRoom) return "the room is dark";
+        if (enteredBlind) return "the room was entered blind";
+        if (blinded) return "the character is blind";
+        // The classifier's reason first: it says why there is no roster too, such as
+        // the game having been left since the last one.
+        if (!rosterIsWhole && notWholeBecause is not null) return notWholeBecause;
+        if (roster is not { } seen) return "no room list has been read";
+        if (!rosterIsWhole) return "not read whole";
+        foreach (RoomEntity entity in seen.Entities)
+        {
+            if (entity.Kind == EntityKind.Unknown) return $"it lists '{entity.ResolvedName}', who can't be placed";
+            if (entity.Kind == EntityKind.Monster && !isMonsterOfTheSet(entity.ResolvedName))
+                return $"it lists '{entity.ResolvedName}', a monster the game data has none of";
+        }
+        return null;
+    }
+
     // The names of the players the roster lists who are not in the party, or null
     // when it can't be taken for everyone in the room, as for MonstersSeen. A name
     // nobody can place may be a player's, so it leaves the answer unknown too.

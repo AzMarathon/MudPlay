@@ -4,11 +4,10 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Full editor for a saved favourite — name, map, and room. Unlike the rail's
-// rename-only dialog this can re-point a favourite at a different room (fix a
-// mis-saved bookmark) as well as relabel it. Returns the edited values on Save,
-// null on Cancel; the caller applies them through FavoritesStore (re-keying when
-// the map/room changed).
+// Full editor for a saved favourite — name, map, and room — so a mis-saved
+// bookmark can be re-pointed at a different room as well as relabelled. Returns the
+// edited values on Save, null on Cancel; the caller applies them through
+// FavoritesStore (re-keying when the map/room changed).
 public sealed partial class FavoriteEditDialogViewModel : ObservableObject, IDialogViewModel<FavoriteEditResult?>
 {
     public event Action<FavoriteEditResult?>? CloseRequested;

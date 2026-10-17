@@ -1,7 +1,7 @@
 namespace MudPlay.Game;
 
-// Seed values for HP / MA regen tick intervals. Used by RegenTracker as the
-// initial estimate until live observation refines the average. These are the
+// Seed values for HP / MA regen tick intervals: the estimate a regen cycle starts
+// from until live observation refines the average. These are the
 // Stock engine's own tick intervals (30 s natural / 21 s rest / 15 s meditate —
 // GAME_MECHANICS "Rest and meditate tick timing"); ParaMud runs its own cadence, see
 // RealmRegenProfile.

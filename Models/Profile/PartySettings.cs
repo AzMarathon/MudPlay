@@ -197,10 +197,6 @@ public sealed class PartySettings
     // CharacterProfile.PartyBuffs (Models/Profile/BuffSettings.cs).
     public bool BlessWhileResting { get; set; }
     public bool BlessDuringCombat { get; set; }
-
-    // Party-cure pickers ship in a follow-up commit — they need
-    // per-member condition tracking, deferred until the spellbook
-    // gamedata duration model lands.
 }
 
 // Local character's combat rank within a party.

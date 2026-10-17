@@ -31,7 +31,7 @@ public readonly record struct BossTimerSyncResponse(
 // in order, decodes, and raises ResponseReceived once a sender's set is complete.
 // Correlation is by responder name (every reply line carries it), so a shared gang/local
 // channel just yields one set per responder — no request token needed. Collection is
-// transient: Begin on send, Stop / Dispose when the merge window closes.
+// transient: Begin on send, Dispose when the merge window closes.
 //
 // Data is taken only on a channel a request of ours went out on. Nothing here turns
 // a responder away for who they are (answering at all is their grant to us), so a
@@ -64,10 +64,16 @@ public sealed class BossTimerSyncCollector : IDisposable
     // answers of a request several players can answer.
     public event Action? Activity;
 
-    // A request of the user's own went out, raised before Activity. The merge
-    // window notes what timers it holds at the first one: a timer of ours that
-    // changes after the user asked is never written over as an answer arrives.
+    // A request of the user's own went out. The merge window notes what timers it
+    // holds at the first one: a timer of ours that changes after the user asked is
+    // never written over as an answer arrives. Raised as the line goes out, when
+    // the user pressed Enter or the button sent it, and again when the game shows
+    // it (before Activity then): a kill of ours in between is a change after asking.
     public event Action? UserAsked;
+
+    // A telepath request of the user's that was waiting for the game's answer has
+    // had it: the game showed it sent, or it reached nobody.
+    public event Action? TelepathRequestAnswered;
 
     // broadcastOff: the Talk tab's "Disallow @commands from broadcast". Ticked, the
     // broadcast channel is not listened to at all, for answers no more than for
@@ -84,7 +90,44 @@ public sealed class BossTimerSyncCollector : IDisposable
         _broadcastOff = broadcastOff ?? (static () => false);
         _isOurName = isOurName ?? (static _ => false);
         _chat.EntryClassified += Ingest;
+        _chat.UsersLineSent += OnUsersLineSent;
+        _chat.UnsentTelepathDropped += OnUnsentTelepathDropped;
     }
+
+    // A request of the user's seen as it goes out, whether or not anything is being
+    // collected yet: a window opened from the Bosses tab may be asked by a line
+    // typed at the terminal. Where its answers would not be read, it asks nothing.
+    private void OnUsersLineSent(string line)
+    {
+        if (AsksForTimerSync(line, _broadcastOff)) UserAsked?.Invoke();
+    }
+
+    // Whether a line as it went out asks for a timer sync on a channel whose
+    // answers would be read: one a timer sync may go by, and not the broadcast
+    // channel while it is switched off. A form whose channel is not recorded may
+    // be any, and counts.
+    public static bool AsksForTimerSync(string sentLine, Func<bool> broadcastOff)
+    {
+        if (TransferChannels.RequestIn(sentLine) is not { Transfer: Transfer.TimerSync, Channel: var channel }) return false;
+        return channel is not { } on
+               || (TransferChannels.Allows(Transfer.TimerSync, on) && !(on == RemoteChannel.Broadcast && broadcastOff()));
+    }
+
+    private static bool IsTimerSyncRequest(string sentLine) =>
+        TransferChannels.RequestIn(sentLine) is { Transfer: Transfer.TimerSync };
+
+    private void OnUnsentTelepathDropped(string line)
+    {
+        if (IsTimerSyncRequest(line)) TelepathRequestAnswered?.Invoke();
+    }
+
+    // True while a telepath request of the user's has gone out and the game has
+    // not yet shown it sent, or said it reached nobody, for as long as a
+    // confirmation can still come. Until then the one player already asked may
+    // not stay the only one. Asked of the chat log's pending sends, not of what
+    // this collector saw go out: a window opened by the first request's
+    // confirmation came into being after a second request was already on its way.
+    public bool AwaitingTelepathSent => _chat.UsersTelepathAwaiting(IsTimerSyncRequest);
 
     // A request of ours went out on askedOn. Its answers are taken from here on,
     // with those of every request made before it while collecting: a second
@@ -124,15 +167,6 @@ public sealed class BossTimerSyncCollector : IDisposable
         Activity?.Invoke();
     }
 
-    public void Stop()
-    {
-        _collecting = false;
-        _partial.Clear();
-        _askedOn.Clear();
-        _usersAskedOn.Clear();
-        _telepathed.Clear();
-    }
-
     // True while the one thing asked is a telepath, of one player the game has
     // named: the case in which that player's answer replaces a timer of ours that
     // differs, with no pick.
@@ -149,6 +183,8 @@ public sealed class BossTimerSyncCollector : IDisposable
         if (_disposed) return;
         _disposed = true;
         _chat.EntryClassified -= Ingest;
+        _chat.UsersLineSent -= OnUsersLineSent;
+        _chat.UnsentTelepathDropped -= OnUnsentTelepathDropped;
     }
 
     private sealed class Partial
@@ -162,13 +198,17 @@ public sealed class BossTimerSyncCollector : IDisposable
 
     internal void Ingest(ChatLogEntry e)
     {
-        if (!_collecting) return;
-
         // A request of ours seen going out: one typed by hand while the window is
-        // open, or the button's own. A telepath's echo names who it went to.
+        // open, or the button's own. A telepath's echo names who it went to. Taken
+        // before anything has been asked in the window too: an open window opens
+        // no second one, so a request typed into a window opened from the Bosses
+        // tab is this window's to collect.
         if (TransferChannels.OwnRequest(e, _isOurName) is { Transfer: Transfer.TimerSync } own)
         {
             if (!TransferChannels.Allows(Transfer.TimerSync, own.Channel)) return;
+            // Nor while the broadcast channel is switched off: every answer there
+            // would be passed over.
+            if (own.Channel == RemoteChannel.Broadcast && _broadcastOff()) return;
             // Whose request it was is asked of the one place that knows, the lines
             // the user sent as they went out (TransferChannels.IsUsersOwn): for a
             // telepath, its confirmation is of a send of the user's to the player
@@ -178,8 +218,10 @@ public sealed class BossTimerSyncCollector : IDisposable
             // nothing that answers it is written without a pick.
             bool byUser = TransferChannels.IsUsersOwn(e, own.Channel, _chat);
             Begin(own.Channel, own.Channel == RemoteChannel.Telepath ? e.Speaker : null, byUser);
+            if (own.Channel == RemoteChannel.Telepath) TelepathRequestAnswered?.Invoke();
             return;
         }
+        if (!_collecting) return;
 
         if (TransferChannels.Of(e.Channel) is not { } heardOn || !AnswersAreTakenOn(heardOn)) return;
         if (heardOn == RemoteChannel.Broadcast && _broadcastOff()) return;

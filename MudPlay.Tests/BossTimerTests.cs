@@ -271,20 +271,18 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.StatusFor(Boss("ghost king", number: 999, rooms: "1/1"), RealmType.ParaMud));
     }
 
-    private static MonsterDeathEvent Death(bool fallback, params (int? Number, string Name)[] candidates) => new(
-        candidates.Select(c => new MonsterDeathIdentity(c.Number, c.Name)).ToList(),
-        ExperienceGained: 100, At: DateTimeOffset.UtcNow, IsFallback: fallback);
+    private static MonsterDeathEvent Death() => new(ExperienceGained: 100, At: DateTimeOffset.UtcNow);
 
     [Fact]
     public void OnMonsterDied_EngagedNameInBossRoom_StartsTimer()
     {
-        // The canonical signal: engaged the boss by name, then a (fallback, no
-        // candidate) death fires in its room.
+        // The canonical signal: engaged the boss by name, then a death fires in
+        // its room.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "ogre king");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "ogre king");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
@@ -295,7 +293,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "The Ogre King");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "The Ogre King");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
@@ -310,32 +308,19 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("colossal midnight dragon", number: 851, rooms: "17/1772"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (null, "colossal  midnight dragon")), new RoomKey(17, 1772), engagedName: null);
+        timers.OnMonsterDied(Death(), new RoomKey(17, 1772), engagedName: "colossal  midnight dragon");
         Assert.NotNull(timers.KilledAt("colossal midnight dragon"));
     }
 
     [Fact]
-    public void OnMonsterDied_SpecificCandidateName_StartsTimer()
+    public void OnMonsterDied_NoEngagedName_Ignored()
     {
-        // Secondary path: a specific death line names the boss even without a live
-        // engaged-target name.
+        // A death with nothing to attribute it to — left to manual override.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (null, "ogre king")), new RoomKey(3, 300), engagedName: null);
-        Assert.NotNull(timers.KilledAt("ogre king"));
-    }
-
-    [Fact]
-    public void OnMonsterDied_NoEngagedNameNoCandidate_Ignored()
-    {
-        // A fallback death with nothing to attribute it to — left to manual override.
-        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
-        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
-        var (_, timers, _) = NewStores();
-
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: null);
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: null);
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -346,7 +331,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "giant rat");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "giant rat");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -357,7 +342,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(9, 999), engagedName: "ogre king");
+        timers.OnMonsterDied(Death(), new RoomKey(9, 999), engagedName: "ogre king");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -642,7 +627,12 @@ public sealed class BossTimerTests : IDisposable
 
     // ----- the merge window: what is written without a pick -----------------
 
-    private static readonly DateTimeOffset Killed = new(2026, 8, 3, 21, 30, 0, TimeSpan.Zero);
+    // Nine hours ago, to the second (the sync data carries whole seconds). On the
+    // bosses' 24-hour respawn it is a running timer, as are the one held ten hours
+    // before it and any a test offers up to eight hours after it: an expired timer
+    // counts as none held.
+    private static readonly DateTimeOffset Killed = new DateTimeOffset(
+        DateTimeOffset.UtcNow.Ticks / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond, TimeSpan.Zero).AddHours(-9);
 
     // A timer of ours, when a test holds one before the answers come.
     private static readonly DateTimeOffset Held = Killed.AddHours(-10);
@@ -652,9 +642,16 @@ public sealed class BossTimerTests : IDisposable
     // the Bosses tab, nothing asked yet); to: who a telepathed one reached; byUser:
     // the request was the user's own. What the window sends goes out through the
     // chat log as a line of the user's, as it does in the app.
+    // beforeOpen: what happens before the window exists, its chat log and timer
+    // store already there (the requests that went out before the echo opened it).
+    // killTimesWhenAsked: the window is handed our kill times as the user's
+    // request went out, as the app hands an auto-opened one. broadcastOff: the
+    // Talk tab's "Disallow @commands from broadcast" is ticked.
     private (BossTimerSyncViewModel window, BossTimerStore timers) NewSyncWindow(
         RemoteChannel? askedOn = RemoteChannel.Broadcast, string? to = null, bool byUser = true,
-        DateTimeOffset? heldWhenAsked = null)
+        DateTimeOffset? heldWhenAsked = null, Action<BossTimerStore>? beforeOpen = null,
+        Func<BossStore, BossTimerStore, IReadOnlyDictionary<string, DateTimeOffset?>>? killTimesWhenAsked = null,
+        bool broadcastOff = false)
     {
         // The golem is in the game data and not on our list.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
@@ -671,6 +668,8 @@ public sealed class BossTimerTests : IDisposable
         _syncChat.LastTelepathOnWire = () => _syncLastOnWire;
         _syncSent.Clear();
         _syncTimers.Clear();
+        IReadOnlyDictionary<string, DateTimeOffset?>? killTimes = killTimesWhenAsked?.Invoke(bosses, timers);
+        beforeOpen?.Invoke(timers);
         BossTimerSyncViewModel window = new(bosses, timers, cache, _syncChat,
             send: line =>
             {
@@ -678,9 +677,10 @@ public sealed class BossTimerTests : IDisposable
                 _syncLastOnWire = line;
                 _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
             },
-            preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => false,
+            preArmedOn: askedOn, _syncLog = new LogService(), broadcastOff: () => broadcastOff,
             isOurName: name => name == "Us", windowActive: _ => { }, preArmedTo: to, onUiThread: act => act(),
-            preArmedByUser: byUser, armTimer: (delay, fire) => _syncTimers.Add((delay, fire)));
+            preArmedByUser: byUser, armTimer: (delay, fire) => _syncTimers.Add((delay, fire)),
+            killTimesWhenAsked: killTimes);
         return (window, timers);
     }
 
@@ -714,9 +714,15 @@ public sealed class BossTimerTests : IDisposable
     // own; the board then shows the line back.
     private void UserTypes(string line)
     {
+        UserPressesEnter(line);
+        BoardShows(line);
+    }
+
+    // The same before the board has shown anything for it.
+    private void UserPressesEnter(string line)
+    {
         _syncLastOnWire = line;
         _syncChat.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"), usersOwn: true);
-        BoardShows(line);
     }
 
     // A line the client put on the wire by itself or for another player.
@@ -1434,7 +1440,7 @@ public sealed class BossTimerTests : IDisposable
             Assert.False(closedWithWrites);
             Assert.Null(timers.KilledAt("ogre king"));
             Assert.Contains(_syncLog.Snapshot(), e => e.Message.Contains(
-                "closed while replies were still being gathered: nothing was merged in for 1 boss(es) whose replies had not settled (ogre king)"));
+                "closed while replies were still being gathered: nothing was written for 1 boss(es) whose replies had not been judged (ogre king)"));
         }
     }
 
@@ -2321,6 +2327,359 @@ public sealed class BossTimerTests : IDisposable
         }
     }
 
+    // ----- the merge window: a second telepath request on its way --------------
+
+    // Two players asked by telepath one after the other, the first answering
+    // before the game shows the second request sent. The first answer is gathered,
+    // not written; once the second is shown sent, several were asked and both
+    // answers are judged together: merged in if they agree and we hold none,
+    // listed otherwise.
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void SyncWindow_TheFirstOfTwoTelepathedAnswersBeforeTheSecondIsShownSent_IsGathered(bool agree, bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            DateTimeOffset? ours = weHoldOne ? Held : null;
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "Bob");
+            Requests(window, 1, "Sue");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.Contains("1 waiting for the game to show your other telepath request sent", window.Status);
+
+            GameConfirms("Sue");
+            Hears(window, ChatChannel.TelepathIncoming, "Sue", hoursLater: agree ? 20.0 / 3600 : 3);
+            Assert.Equal(ours, timers.KilledAt("ogre king"));
+            QuietPasses();
+
+            bool mergedIn = agree && !weHoldOne;
+            Assert.Equal(mergedIn ? Killed : ours, timers.KilledAt("ogre king"));
+            Assert.Equal(mergedIn, row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.Equal(mergedIn ? Array.Empty<string>() : new[] { "Bob", "Sue" }, row.Responders.Select(c => c.Responder));
+        }
+    }
+
+    // The second request reaches nobody (refused on every try): the first player
+    // is still the only one asked, and their answer is written then, merged in or
+    // synced, as it would have been on arrival.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SyncWindow_ASecondTelepathThatReachesNobody_LeavesTheFirstPlayerTheOneAsked(bool weHoldOne)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            if (weHoldOne) timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "Bob");
+            Requests(window, 1, "Sue");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+            Assert.NotEqual(Killed, timers.KilledAt("ogre king"));
+
+            for (int i = 0; i < TelepathPacer.MaxAttempts; i++) BoardShows("--- Telepath Not Sent ---");
+            _syncChat.TelepathGivenUp("/Sue @timer sync");   // the pacer, out of tries
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal(weHoldOne, row.WasSynced);
+            Assert.Equal(!weHoldOne, row.WasAutoMerged);
+            Assert.Empty(row.Responders);
+            Assert.Equal($"1 responder(s): 0 to pick, {(weHoldOne ? 0 : 1)} merged in, {(weHoldOne ? 1 : 0)} synced, 0 already in sync.", window.Status);
+        }
+    }
+
+    // A second request the game never answers is waited on only as long as a
+    // confirmation could still be paired with it.
+    [Fact]
+    public void SyncWindow_ASecondTelepathTheGameNeverAnswers_IsWaitedOnOnlyAsLongAsAConfirmationCanCome()
+    {
+        DateTimeOffset clock = DateTimeOffset.Now;
+        _syncClock = () => clock;
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            Requests(window, 1, "Bob");
+            Requests(window, 1, "Sue");
+            GameConfirms("Bob");
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            QuietPasses();
+            Assert.Null(timers.KilledAt("ogre king"));
+
+            clock += TimeSpan.FromSeconds(16);
+            QuietPasses();
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.True(Assert.Single(window.Rows).WasAutoMerged);
+        }
+    }
+
+    // Two telepath requests sent together (a macro's `/Bob …;/Sue …`): the window
+    // the first one's confirmation opens never saw the second go out. Still
+    // unconfirmed, it holds the first player's answer back all the same, and once
+    // the game shows it sent both players are asked and nothing is written.
+    [Fact]
+    public void SyncWindow_OpenedByTheFirstOfTwoTelepathsSentTogether_HoldsTheFirstAnswerBack()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, to: "Bob", beforeOpen: _ =>
+        {
+            UserPressesEnter("/Bob @timer sync");
+            UserPressesEnter("/Sue @timer sync");
+            GameConfirms("Bob");
+        });
+        using (window)
+        {
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Null(timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.Contains("1 waiting for the game to show your other telepath request sent", window.Status);
+            Assert.Contains(_syncLog.Snapshot(), e =>
+                e.Message.EndsWith("1 gathered until the game shows the user's other telepath request sent or not"));
+
+            GameConfirms("Sue");
+            Assert.Null(timers.KilledAt("ogre king"));
+            Assert.Contains(row.Responders, c => c.Responder == "Bob");
+        }
+    }
+
+    // ----- the merge window: a pick applied with the window left open ---------
+
+    // A pick applied is the user's own doing, like what the window merges in or
+    // syncs: with the window left open (another pick not written), that boss does
+    // not read "changed since you asked", a reply matching the pick is left alone,
+    // and the one player asked can still sync it. A kill of ours after the pick is
+    // a change: the next differing reply is listed, and our kill stands.
+    [Fact]
+    public void SyncWindow_APickAppliedWithTheWindowLeftOpen_IsNoChangeOfOurs()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            timers.MarkKilled("ogre king", Held);
+            Requests(window, 1, "bo");
+            GameConfirms("Bob");
+            // A player not asked offers both bosses: each is a pick.
+            window.Fold(new BossTimerSyncResponse("Mallory", new[]
+            {
+                new BossTimerSyncRecord(50, null, Killed.AddHours(3)),
+                new BossTimerSyncRecord(51, "guardian golem", Killed),
+            }, RemoteChannel.Telepath, TimerSyncStanding.NotAsked));
+            foreach (BossTimerSyncRowViewModel picked in window.Rows) picked.Responders[0].AdoptCommand.Execute(null);
+            timers.MarkKilled("ogre king", Killed.AddHours(6));   // keeps the window open after Apply
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(0, closes);
+            Assert.Equal(Killed, timers.KilledAt("guardian golem"));
+            BossTimerSyncRowViewModel golem = RowOf(window, "guardian golem");
+            Assert.DoesNotContain("changed since you asked", golem.OursText);
+
+            BossTimerSyncResponse BobOffers(double hoursLater) => new("Bob",
+                new[] { new BossTimerSyncRecord(51, "guardian golem", Killed.AddHours(hoursLater)) },
+                RemoteChannel.Telepath, TimerSyncStanding.TheOneAsked);
+            window.Fold(BobOffers(20.0 / 3600));
+            Assert.Equal(Killed, timers.KilledAt("guardian golem"));
+            Assert.DoesNotContain(golem.Responders, c => c.Responder == "Bob");
+            window.Fold(BobOffers(2));
+            Assert.Equal(Killed.AddHours(2), timers.KilledAt("guardian golem"));
+            Assert.True(golem.WasSynced);
+
+            DateTimeOffset ownKill = Killed.AddHours(8);
+            timers.MarkKilled("guardian golem", ownKill);
+            window.Fold(BobOffers(1));
+            Assert.Equal(ownKill, timers.KilledAt("guardian golem"));
+            Assert.Contains(golem.Responders, c => c.Responder == "Bob");
+            Assert.EndsWith("changed since you asked", golem.OursText);
+        }
+    }
+
+    // ----- the merge window: what we held when the user pressed Enter ----------
+
+    // A request typed at the terminal into a window opened from the Bosses tab,
+    // before anything was asked in it, is the window's own: no second window
+    // opens, and its answers are collected and judged as the button's would be.
+    [Fact]
+    public void SyncWindow_ARequestTypedIntoAWindowWhereNothingWasAskedYet_IsCollected()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            UserTypes("bg @timer sync");
+            SeesUsAsk(window, ChatChannel.Gangpath);
+            Assert.StartsWith("Collecting responses to the @timer sync you typed", window.Status);
+
+            Hears(window, ChatChannel.Gangpath, "Ann");
+            QuietPasses();
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.True(Assert.Single(window.Rows).WasAutoMerged);
+        }
+    }
+
+    // What we held when asked is what we held as the user pressed Enter, not when
+    // the game showed the request: a kill of ours in between is a change after
+    // asking. A telepath's answer does not sync over it, and agreeing replies on
+    // the gang are not merged over a timer we cleared in between.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SyncWindow_AChangeOfOursBetweenEnterAndTheEcho_IsAChangeAfterAsking(bool byTelepath)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            if (byTelepath)
+            {
+                UserPressesEnter("/bo @timer sync");
+                DateTimeOffset ownKill = Killed.AddHours(6);
+                timers.MarkKilled("ogre king", ownKill);
+                BoardShows("/bo @timer sync");
+                GameConfirms("Bob");
+                Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+                Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            }
+            else
+            {
+                timers.MarkKilled("ogre king", Held);
+                UserPressesEnter("bg @timer sync");
+                timers.Reset("ogre king");
+                SeesUsAsk(window, ChatChannel.Gangpath);
+                Hears(window, ChatChannel.Gangpath, "Ann");
+                Hears(window, ChatChannel.Gangpath, "Sue", hoursLater: 20.0 / 3600);
+                QuietPasses();
+
+                Assert.Null(timers.KilledAt("ogre king"));
+            }
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasSynced);
+            Assert.False(row.WasAutoMerged);
+            Assert.EndsWith("changed since you asked", row.OursText);
+        }
+    }
+
+    // The same for a window the request's echo opened: it is handed our kill
+    // times as the user pressed Enter, so a kill of ours before the game showed
+    // the telepath sent is a change after asking, and the one player's answer
+    // does not sync over it. Nothing gathered, the log line says nothing of it.
+    [Fact]
+    public void SyncWindow_OpenedByTheEcho_CountsAKillBeforeTheEchoAsAChangeAfterAsking()
+    {
+        DateTimeOffset ownKill = Killed.AddHours(6);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, to: "Bob", heldWhenAsked: Held,
+            killTimesWhenAsked: (bossList, store) => BossTimerSyncViewModel.KillTimesNow(bossList, store, RealmType.ParaMud),
+            beforeOpen: store =>
+            {
+                UserPressesEnter("/bo @timer sync");
+                store.MarkKilled("ogre king", ownKill);
+                GameConfirms("Bob");
+            });
+        using (window)
+        {
+            Hears(window, ChatChannel.TelepathIncoming, "Bob");
+
+            Assert.Equal(ownKill, timers.KilledAt("ogre king"));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.True(row.HasConflict);
+            Assert.False(row.WasSynced);
+            Assert.EndsWith("changed since you asked", row.OursText);
+            Assert.Contains(_syncLog.Snapshot(), e => e.Message.EndsWith("1 to pick, 0 gathered"));
+        }
+    }
+
+    // A typed broadcast request with the broadcast channel switched off starts no
+    // collecting in a window where nothing was asked yet: every answer there
+    // would be passed over.
+    [Fact]
+    public void SyncWindow_ABroadcastRequestTypedWithTheChannelOff_IsNotCollected()
+    {
+        var (window, _) = NewSyncWindow(askedOn: null, broadcastOff: true);
+        using (window)
+        {
+            UserTypes("br @timer sync");
+            SeesUsAsk(window, ChatChannel.Broadcast);
+
+            Assert.False(window.Requested);
+            Assert.Equal("Pick a channel and request timers.", window.Status);
+        }
+    }
+
+    // ----- the merge window: a timer of ours that has run out ------------------
+
+    // A pick is written over a timer of ours that merely ran out while the window
+    // was open: running out is no change of ours. The row is shown holding none.
+    [Fact]
+    public void SyncWindow_APickAgainstATimerOfOursThatRanOutSince_IsWritten()
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            int closes = 0;
+            window.CloseRequested += _ => closes++;
+            timers.MarkKilled("ogre king", Held);   // nineteen hours ago: running on the 24-hour respawn
+            window.Fold(Offers("Mallory", RemoteChannel.Telepath, TimerSyncStanding.NotAsked));
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            Assert.Equal(Held, row.OursKilledAt);
+
+            // Its respawn set to twelve hours: the same kill has run out.
+            BossDef shorter = Boss("ogre king", number: 50, rooms: "1/1");
+            shorter.RespawnHoursOverride = 12;
+            _syncBosses.Save(new List<BossDef> { shorter });
+            Assert.Equal(Held, timers.KilledAt("ogre king"));
+            Assert.Null(timers.StatusFor(Assert.Single(_syncBosses.ResolveForRealm(RealmType.ParaMud)), RealmType.ParaMud));
+            row.Responders[0].AdoptCommand.Execute(null);
+            window.ApplyCommand.Execute(null);
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.Equal(1, closes);
+        }
+    }
+
+    // An expired timer counts as holding none (user, 2026-10-17): the row offers
+    // "Take none" and says ours ran out, and a reply is merged in as for a boss we
+    // hold no timer for: from the one player asked as it arrives, and where
+    // several can answer once every reply agrees. Nothing is listed for a pick.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    public void SyncWindow_AnExpiredTimerOfOurs_CountsAsNone(int button)
+    {
+        var (window, timers) = NewSyncWindow(askedOn: null);
+        using (window)
+        {
+            timers.MarkKilled("ogre king", Killed.AddHours(-30));   // ran out on its 24-hour respawn
+            Requests(window, button, "Bob");
+            if (button == 1) GameConfirms("Bob");
+            Hears(window, button == 1 ? ChatChannel.TelepathIncoming : ChatChannel.Gangpath, "Bob");
+            BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
+            if (button == 0)
+            {
+                Assert.Equal("Take none", row.KeepOursLabel);
+                Assert.Contains("yours ran out", row.OursText);
+                QuietPasses();
+            }
+
+            Assert.Equal(Killed, timers.KilledAt("ogre king"));
+            Assert.True(row.WasAutoMerged);
+            Assert.False(row.WasSynced);
+            Assert.False(row.HasConflict);
+        }
+    }
+
     // The readable report is an ordinary remote command, and with the broadcast
     // channel opened those are read there too: it is answered on the channel, once
     // a minute to each asker like everything said there.
@@ -2734,8 +3093,7 @@ public sealed class BossTimerTests : IDisposable
             rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
         var (_, timers, _) = NewStores();
         timers.SetRoomExpResolver((_, _) => (bossExp, others));
-        return (timers, exp => new MonsterDeathEvent(
-            Array.Empty<MonsterDeathIdentity>(), ExperienceGained: exp, At: DateTimeOffset.UtcNow, IsFallback: true));
+        return (timers, exp => new MonsterDeathEvent(ExperienceGained: exp, At: DateTimeOffset.UtcNow));
     }
 
     // It has four rooms, and the kill counts in any of them; a full party's share
@@ -2866,7 +3224,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(12, 2378), engagedName: "Nahr");
+        timers.OnMonsterDied(Death(), new RoomKey(12, 2378), engagedName: "Nahr");
 
         Assert.NotNull(timers.KilledAt("nahr (spaceghost)"));
         Assert.Null(timers.KilledAt("nahr (spheres)"));
@@ -2925,14 +3283,14 @@ public sealed class BossTimerTests : IDisposable
         var (bosses, timers, cache) = NewStores();
         RoomKey chambers = new(14, 6216);
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "Lord Chisholm");
         DateTimeOffset? atHisDeath = timers.KilledAt("lord chisholm (malformation)");
         Assert.NotNull(atHisDeath);
         Assert.Equal(1, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().Single()));
 
         timers.MarkKilled("lord chisholm (malformation)", DateTimeOffset.UtcNow.AddMinutes(-10));
         DateTimeOffset? before = timers.KilledAt("lord chisholm (malformation)");
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "malformation");
         Assert.Equal(before, timers.KilledAt("lord chisholm (malformation)"));
     }
 
@@ -2959,11 +3317,11 @@ public sealed class BossTimerTests : IDisposable
         var (timers, loot, kills) = ChisholmsChambers();
         RoomKey chambers = new(14, 6216);
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "Lord Chisholm");
         Assert.Equal(new[] { "lord chisholm (malformation)" }, kills);
         Assert.Equal(("lord chisholm (malformation)", "Lord Chisholm", 100), Assert.Single(loot));
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "malformation");
         Assert.Single(kills);
         Assert.Equal(2, loot.Count);
         Assert.Equal(("lord chisholm (malformation)", "malformation", 100), loot[1]);
@@ -2974,7 +3332,7 @@ public sealed class BossTimerTests : IDisposable
     {
         var (timers, loot, _) = ChisholmsChambers();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(14, 1), engagedName: "malformation");
+        timers.OnMonsterDied(Death(), new RoomKey(14, 1), engagedName: "malformation");
 
         Assert.Empty(loot);
     }

@@ -12,7 +12,7 @@ namespace MudPlay.ViewModels.Settings;
 // "PvP" tab — what to do about a player marked Enemy who is in the room or attacks
 // us. Persists as the "Pvp" entry in CharacterProfile.Settings. Nothing here acts
 // unless the realm being played has "PvP is enabled on this realm" ticked
-// (Settings → BBS); a player's own PvP response (Game Data → Players) replaces the
+// (Settings → BBS + Display); a player's own PvP response (Game Data → Players) replaces the
 // general action for that player.
 public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
 {

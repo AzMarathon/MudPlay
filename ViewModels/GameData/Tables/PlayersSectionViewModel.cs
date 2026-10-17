@@ -8,12 +8,13 @@ using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Batch;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Players tab. Surfaces the rows held by PlayerDatabase. Engine-backed;
 // reloads on every CollectionChanged from the database so the grid mirrors live observations.
-// Double-click a row to open PlayerEditDialogViewModel for the behavior toggles + 12-category
+// Double-click a row to open PlayerEditDialogViewModel for the behavior toggles + 16-category
 // remote-control bitmask.
 public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEditableTableSectionViewModel
 {
@@ -274,9 +275,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // Save only the customization slice — observed fields stay
         // observation-only and never get stomped by the dialog. The
         // customization layer is keyed on given name so the user's
-        // toggles follow the player across train-stats renames; the
-        // dialog's OriginalDisplayName carries the given as its first
-        // whitespace-delimited token and EditCustomization extracts it.
+        // toggles follow the player across train-stats renames.
         // The @dupe lock is engine-owned: take it from the LIVE record (a @dupe may have
         // landed while the dialog was open) and clear it only if the user pressed Reset.
         PlayerCustomization live = (_db.Find(record.GivenName) ?? record).ToCustomization();
@@ -286,6 +285,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // slice, so it takes its own write path.
         _db.SetAccountName(record.GivenName, result.Updated.AccountName);
         _db.SetRelationship(record.GivenName, result.Updated.Relationship, result.Updated.PvpResponse);
+        GuideActions.Report(GuideActions.PlayerPermissionsSaved);
         Reload();
     }
 

@@ -1,17 +1,17 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
 // Small modeless dialog for editing a single loop waypoint's per-row action
 // — a free-form Command to send at the waypoint and a Delay (stored in
 // milliseconds, edited as minutes and seconds) before the loop resumes walking.
-// Spawned from the Loop editor's per-row ✎ button.
+// Spawned from a loop-builder row and from a running-loop rail row.
 //
-// The dialog doesn't write to LoopWaypointRowViewModel directly — it bubbles
-// the committed values up via a LairTimerEditDialogResult-shaped result so
-// the Loop editor can decide how to apply them (Command empty = "no command",
+// The dialog doesn't write to the row directly — it returns the committed values
+// so the caller can decide how to apply them (Command empty = "no command",
 // Delay 0 = "move on once the command is answered").
 public sealed partial class WaypointActionEditDialogViewModel : ObservableObject, IDialogViewModel<WaypointActionEditResult?>
 {
@@ -57,6 +57,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
         // delay-without-command would never fire because the loop only
         // pauses around the command step.
         if (trimmed is null) delay = 0;
+        GuideActions.Report(GuideActions.WaypointActionSaved);
         CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest, DoNotAttack, RestHereHp, RestHereMana));
     }
 

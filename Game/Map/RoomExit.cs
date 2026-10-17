@@ -168,6 +168,14 @@ public readonly partial record struct RoomExit(
     // out of a room will trigger a cast on them.
     public bool CastsOnWalk => PreCastSpell > 0 || PostCastSpell > 0;
 
+    // The spell a "(Spell Trap: N)" exit casts on whoever trips it, or 0. Read off
+    // RawHint on demand: walking takes the exit for a trap like any other, and only
+    // the index of who can cast a spell asks for the number.
+    public int TrapSpell =>
+        RawHint is { } raw && raw.StartsWith("Spell Trap", StringComparison.OrdinalIgnoreCase)
+        && NumberAfterColon().Match(raw) is { Success: true } m
+        && int.TryParse(m.Groups[1].ValueSpan, out int spell) ? spell : 0;
+
     // Render a level window as a friendly label: "Level 40+" (floor only),
     // "Level ≤3" (cap only), "Level 10–25" (both). Returns the empty string when
     // neither bound is set.
@@ -446,8 +454,8 @@ public readonly partial record struct RoomExit(
             return;  // hint stays None — movement is still a plain cardinal step
         }
 
-        // Race / Ability / Timed restrictions: walker treats as None for now
-        // (path-time gates are a later concern); RawHint carries the detail forward.
+        // Ability / Timed restrictions are not gated: the walker treats them as
+        // None, and RawHint carries the detail forward.
     }
 
     // Pull "N picklocks" / "N picklocks/strength" out of a modifier string. Used

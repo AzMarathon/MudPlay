@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 using MudPlay.ViewModels.Profile;
 
 namespace MudPlay.ViewModels;
@@ -158,8 +159,8 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private void OnTourActionChanged()
     {
         string? a = AppServices.Current.CurrentTourAction;
-        HighlightAddBbs = a == FirstRunTutorialViewModel.ActionAddBbs;
-        HighlightAddCharacter = a == FirstRunTutorialViewModel.ActionAddCharacter;
+        HighlightAddBbs = a == GuideActions.AddBbs;
+        HighlightAddCharacter = a == GuideActions.AddCharacter;
     }
 
     private void OnProfileChanged(CharacterProfile _) { RefreshCurrentLabel(); ReloadRealms(keep: SelectedRealm); }
@@ -322,7 +323,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     }
 
     // Realm settings (menu commands, death floor, cleanup time, currency name) are
-    // edited in Settings → BBS; open it on this realm.
+    // edited in Settings → BBS + Display; open it on this realm.
     [RelayCommand]
     private void EditRealm()
     {
@@ -367,7 +368,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     [RelayCommand]
     private void AddBbs()
     {
-        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionAddBbs);
+        AppServices.Current.NotifyTourAction?.Invoke(GuideActions.AddBbs);
         string baseName = "New BBS";
         string name = baseName;
         int n = 2;
@@ -451,7 +452,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
     private async Task AddProfileAsync()
     {
         if (SelectedBbs is not { } bbs) return;
-        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionAddCharacter);
+        AppServices.Current.NotifyTourAction?.Invoke(GuideActions.AddCharacter);
         ProfileNameInputDialogViewModel vm = new("character", n => _profile.Exists(bbs, n));
         string? name = await _dialogs.OpenWindowAsync<ProfileNameInputDialogViewModel, string>(vm);
         if (string.IsNullOrWhiteSpace(name)) return;
@@ -476,7 +477,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
             _nameCurrentDraft(added);
             if (SelectedRealm is { } playing) _profile.AssignRealm(added, playing);
             RepinIfLoadedOn(bbs);
-            AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
+            AppServices.Current.NotifyTourAction?.Invoke(GuideActions.CharacterAdded);
             AppServices.Current.Log.Info("Profile",
                 $"Added '{name}' on '{bbs}' from the unnamed profile, which it now is; Profile Management closed.");
             CloseRequested?.Invoke();
@@ -486,7 +487,7 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         _profile.CreateProfile(bbs, name);
         // A new character plays the realm selected in the middle column.
         if (SelectedRealm is { } realm) _profile.AssignRealm(added, realm);
-        AppServices.Current.NotifyTourAction?.Invoke(FirstRunTutorialViewModel.ActionCharacterAdded);
+        AppServices.Current.NotifyTourAction?.Invoke(GuideActions.CharacterAdded);
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
     }

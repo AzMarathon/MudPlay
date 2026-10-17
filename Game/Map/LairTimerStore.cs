@@ -32,7 +32,7 @@ public sealed class LairTimerStore : IDisposable
     private readonly object _arrivalLock = new();   // guards _lastEntered + _lastKilled
 
     // Whole-set longest respawn, computed once per active set (a scan of every
-    // lair room) then cached. The _computed flag distinguishes "no lair in set"
+    // lair room) then cached. _maxRespawnComputed distinguishes "no lair in set"
     // (null result) from "not yet scanned".
     private int? _maxRespawnSec;
     private bool _maxRespawnComputed;
@@ -98,7 +98,7 @@ public sealed class LairTimerStore : IDisposable
     // room, restarted by every kill in it — walking in doesn't touch it — so its
     // last kill is the anchor; a lair entered without a kill seen falls back to
     // the entry. Paradigm keeps timing from the entry until its clock is settled
-    // (issue #839). GAME_MECHANICS "Lair respawn timers".
+    // (GAME_MECHANICS "Lair respawn timers").
     public DateTimeOffset? ClockStart(RoomKey key)
     {
         bool roomClock = _cache.ActiveRealm != RealmType.ParaMud;
@@ -150,17 +150,6 @@ public sealed class LairTimerStore : IDisposable
         _maxRespawnSec = max > 0 ? max : null;
         _maxRespawnComputed = true;
         return _maxRespawnSec;
-    }
-
-    // Force-clear per-room arrival history; used by the scheduler on Start.
-    public void ResetArrivals()
-    {
-        lock (_arrivalLock)
-        {
-            _lastEntered.Clear();
-            _lastKilled.Clear();
-        }
-        _log?.Debug("LairTimerStore", "arrival history cleared.");
     }
 
     // Drop the recorded arrival and kill for the supplied subset of rooms, leaving

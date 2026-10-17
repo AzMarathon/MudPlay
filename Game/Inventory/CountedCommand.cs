@@ -6,7 +6,7 @@ namespace MudPlay.Game.Inventory;
 // ("You hid 35 orc-head."). Stock has no batching, so a count collapses to one
 // "<verb> <item>" line per copy. count <= 0 sends nothing; count == 1 is a single
 // line either way. The name is the singular send name — the same one the reply
-// parsers strip a leading count from (see InventoryManager.SplitLeadingCount).
+// parsers strip a leading count from (SplitLeadingCount, below).
 public static class CountedCommand
 {
     public static void Emit(Action<string> send, string verb, int count, string name, bool paradigm)

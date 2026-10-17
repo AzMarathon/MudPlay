@@ -6,7 +6,7 @@ namespace MudPlay.Services;
 //
 // Info / Warn / Error are always recorded. Debug and Combat are
 // generation-gated — LogService.Debug and LogService.Combat no-op unless the
-// matching per-character diagnostic toggle is on (see LogDiagnosticState).
+// matching diagnostic toggle is on (see LogDiagnosticState).
 public enum LogSeverity
 {
     // Verbose cross-engine diagnostic detail. Generation-gated on the Debug toggle.

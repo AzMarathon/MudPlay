@@ -6,6 +6,7 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Quests;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Tables;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData;
 
@@ -153,6 +154,9 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         }
         if (newValue is Tables.GameDataTableSectionViewModel tab)
             tab.OnActivated();
+        if (newValue is null) return;
+        foreach (string key in GuidePageActions.ForBrowserSection(oldValue?.Id, newValue.Id))
+            GuideActions.Report(key);
     }
 
     private void RebuildVisibleSections()
@@ -168,8 +172,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 s.SearchableLabels.Any(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
             if (!matches) continue;
 
-            // Engine-backed sections live in EngineGroup; MDB-derived JSON tables and
-            // their derived views (Unobtainable / Quest Flags) live in TableGroup — the
+            // Engine-backed sections live in EngineSections; MDB-derived JSON tables and
+            // their derived views (Unobtainable / Quest Flags) live in TableSections — the
             // sidebar renders the two groups with a visual separator between them.
             if (s.ShowInTableGroup) TableSections.Add(s);
             else                    EngineSections.Add(s);
@@ -178,9 +182,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
 
     // Seed the sidebar in the order the user expects: engine-backed tabs (Players →
     // Macros → Triggers → Aliases → Messages) first, then MDB-derived tables (Monsters /
-    // Items / Spells / Rooms / Shops / Races / Classes / TextBlocks). Placeholder
-    // fallbacks kick in for the engine-backed tabs when the corresponding service wasn't
-    // passed to the ctor (e.g. tests).
+    // Items / Spells / Rooms / Shops / Races / Classes / TextBlocks). An engine-backed
+    // tab whose service wasn't passed to the ctor is left out.
     private void SeedSections()
     {
         // ----- Engine-backed (top group) ----------------------------------
@@ -188,35 +191,18 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         if (_players is not null)
             Sections.Add(new PlayersSectionViewModel(_players, _dialogs, _profile,
                 liveSelfName: () => AppServices.Current.Party.LocalCharacterName));
-        else
-            AddPlaceholder("players", "Players", "Phase 5",
-                "In-game `who` observations + manual overrides; per-player remote-command permission flags.");
 
         if (_macros is not null)
             Sections.Add(new MacrosSectionViewModel(_macros, _dialogs, _keybindings));
-        else
-            AddPlaceholder("macros", "Macros", "Phase 5 / Phase 10",
-                "Read-only listing — double-click row opens the Phase 10 Macro editor.");
 
         if (_triggers is not null)
             Sections.Add(new TriggersSectionViewModel(_triggers, _dialogs));
-        else
-            AddPlaceholder("triggers", "Triggers", "Phase 5",
-                "User-defined incoming-text patterns → actions; named session variables shared with Aliases.");
 
         if (_aliases is not null)
             Sections.Add(new AliasesSectionViewModel(_aliases, _dialogs));
-        else
-            AddPlaceholder("aliases", "Aliases", "Phase 5",
-                "User-defined outgoing typed-shortcut → command expansion; positional args + shared variables.");
 
         if (_messages is not null)
             Sections.Add(new MessagesSectionViewModel(_messages, _dialogs, _resolver, _gameData));
-        else
-            AddPlaceholder("messages", "Messages", "Phase 5",
-                "Per-set Messages/Responses catalogue. Seeded from the wcc-derived JSON at " +
-                "Data/Global/Messages.seed.json; per-set edits persist at " +
-                "Data/game data/{set}/messages.json.");
 
         if (_messageCandidates is not null && _messages is not null)
             Sections.Add(new MessageCandidatesSectionViewModel(
@@ -234,18 +220,9 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                     AppServices.CurrentOrNull?.MonsterSpawns,
                     AppServices.CurrentOrNull?.MonsterCatalog,
                     AppServices.CurrentOrNull?.SpellCatalog)));
-        else
-            AddPlaceholder("message-candidates", "Candidates", "Diagnostics",
-                "Wire lines the Messages catalogue doesn't recognize, staged by the Program Log " +
-                "window's \"Capture unrecognized messages\" toggle for review.");
 
         if (_flavorPrefixes is not null)
             Sections.Add(new FlavorPrefixesSectionViewModel(_flavorPrefixes));
-        else
-            AddPlaceholder("flavor-prefixes", "Flavor Prefixes", "Combat",
-                "Per-set vocabulary of monster flavor adjectives (large / nasty / …) the room " +
-                "classifier strips to resolve a prefixed name. Edit for a custom realm; persists " +
-                "at game data/{set}/flavor-prefixes.json.");
 
         // ----- MDB-derived (bottom group) ---------------------------------
 
@@ -270,9 +247,6 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         // browser. Wire LAST so every section is in Sections first.
         foreach (GameDataSectionViewModel section in Sections)
             section.NavigationRequested += OnNavigationRequested;
-
-        void AddPlaceholder(string id, string title, string phase, string description)
-            => Sections.Add(new PlaceholderGameDataSectionViewModel(id, title, phase, description));
     }
 
     // External entry point (e.g. the Item Finder's row double-click) to jump the browser

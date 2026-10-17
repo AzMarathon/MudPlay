@@ -129,11 +129,6 @@ public sealed class RoomGraphManager
             ? list
             : Array.Empty<RemoteLeverRef>();
 
-    // Fires once per name learned via LearnRoomName, with the room and the name
-    // the tracker just adopted. Not raised for a stored name put back by
-    // ApplyStoredNames.
-    public event Action<RoomKey, string>? RoomNameLearned;
-
     // Replace the in-memory Room at key with a copy whose Name is the new value,
     // and reshuffle the _byName / _byNameAndExits indexes so later candidate
     // searches find the updated tuple. No-op (returns null) when the key isn't
@@ -154,7 +149,6 @@ public sealed class RoomGraphManager
 
         _log?.Log(LogSeverity.Info, "RoomGraph",
             $"Learned name '{name}' for {key} (was '{existing.Name}').");
-        RoomNameLearned?.Invoke(key, name);
         if (unnamedInData) LearnedNamesMoved(tellKeptLists: false);
         return replaced;
     }
@@ -171,8 +165,8 @@ public sealed class RoomGraphManager
     // A name the tracker learned this session and the store never took is not this
     // call's to touch; a change of realm takes those off (WithdrawLearnedNames).
     //
-    // The quiet side of LearnRoomName: nothing is learned here, so RoomNameLearned
-    // is not raised and no line is logged per room; the caller says the count.
+    // The quiet side of LearnRoomName: nothing is learned here, so no line is
+    // logged per room; the caller says the count.
     //
     // A room the data names keeps the data's name. Those are handed back for the
     // store to drop. A room not in the graph is skipped.
@@ -1570,7 +1564,7 @@ public sealed class RoomGraphManager
                     // A class-restricted transport (a `class N` directive in the
                     // greet chain) is stamped as the edge's ClassGate so
                     // MovementFilter.IsClassGateBlocked drops it for every class
-                    // but N — the wrong class never routes through it (issue #455).
+                    // but N — the wrong class never routes through it.
                     ClassGate: t.RequiredClass,
                     GatewayTeleport: false,
                     // Every person who asks pays the fare, so MovementFilter

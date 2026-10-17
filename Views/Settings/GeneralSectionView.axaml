@@ -65,6 +65,11 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
@@ -283,7 +288,7 @@
 
                 <CheckBox IsChecked="{Binding AutoSyncQuestFlagsOnLogin, Mode=TwoWay}"
                           Content="Auto-detect completed quests from flags on login"
-                          ToolTip.Tip="When checked, MudPlay reads your live quest-flag values right after login and auto-marks any quest whose flag has reached its complete value (in the Player Workshop → Quest Status tab), then sends the availability announce so freshly-completed quests drop off it. It only ever MARKS complete, never un-marks. Paradigm queries each incomplete quest's flag with `abil`; Stock uses the one-shot `sys god &lt;name&gt; abil`, which needs sys-god powers granted for the BBS (Settings → BBS). Off by default because it sends commands on connect. The complete value the sync looks for is shown (and editable) per quest in the Quest editor."/>
+                          ToolTip.Tip="When checked, MudPlay reads your live quest-flag values right after login and auto-marks any quest whose flag has reached its complete value (in the Player Workshop → Quest Status tab), then sends the availability announce so freshly-completed quests drop off it. It only ever MARKS complete, never un-marks. Paradigm queries each incomplete quest's flag with `abil`; Stock uses the one-shot `sys god &lt;name&gt; abil`, which needs sys-god powers granted for the BBS (Settings → BBS + Display). Off by default because it sends commands on connect. The complete value the sync looks for is shown (and editable) per quest in the Quest editor."/>
 
                 <CheckBox IsChecked="{Binding BackupOnSave, Mode=TwoWay}"
                           Content="Backup profile when making changes"
@@ -312,7 +317,7 @@
                     <CheckBox IsChecked="{Binding AmAutoRest,     Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoRestWired}"
                               Content="Auto-Rest"
-                              ToolTip.Tip="Master switch for resting: stopping to rest or meditate when HP or mana drops below your rest thresholds. Fleeing and the emergency hangup keep working while either Auto-Heal or Auto-Rest is on."/>
+                              ToolTip.Tip="Master switch for resting: stopping to rest or meditate when HP or mana drops below your rest thresholds. Fleeing keeps working while either Auto-Heal or Auto-Rest is on; the emergency hangup needs Auto-Rest."/>
                     <CheckBox IsChecked="{Binding AmAutoBless,    Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoBlessWired}"
                               Content="Auto-Bless"
@@ -320,7 +325,7 @@
                     <CheckBox IsChecked="{Binding AmAutoLight,    Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoLightWired}"
                               Content="Auto-Light"
-                              ToolTip.Tip="Auto-cast a room-light spell when you enter a dark room."/>
+                              ToolTip.Tip="Keep a light ready for dark rooms on your route: ready a carried light, buy one (Auto-Light tab), or cast your room-light spell."/>
                     <CheckBox IsChecked="{Binding AmAutoGetItems, Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoGetItemsWired}"
                               Content="Auto-Get Items"
@@ -344,7 +349,7 @@
                     <CheckBox IsChecked="{Binding AmAutoTrain,    Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoTrainWired}"
                               Content="Auto-Train"
-                              ToolTip.Tip="Detour to a trainer and train when a level-up is available during a loop/auto-lair. Mirrors the master toggle on the Auto-Trainer tab."/>
+                              ToolTip.Tip="Detour to a trainer and train when a level-up is available during a loop/auto-lair. Mirrors the Auto-train toggle on the Player Workshop's CP Allocation tab."/>
                 </StackPanel>
 
                 <!-- Hang-up carve-out for the master switch. With the switch
@@ -485,7 +490,7 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,0"
-                            ToolTip.Tip="How many recently-loaded characters the File → Recent submenu lists (0–10). The client always remembers the last ten; this just controls how many show. Install-wide; applies on Apply.">
+                            ToolTip.Tip="How many recently-loaded characters the File menu lists (0–10). The client always remembers the last ten; this just controls how many show. Install-wide; applies on Apply.">
                     <TextBlock Text="Recent profiles shown in File menu"
                                Foreground="{StaticResource ChromeFgSecBrush}"
                                VerticalAlignment="Center"/>

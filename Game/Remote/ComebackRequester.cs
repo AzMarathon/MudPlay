@@ -14,7 +14,7 @@ namespace MudPlay.Game.Remote;
 // character: it sends that telepath and, on Stock, the `join` that puts a
 // follower still on the leader's list back once the leader is with it (TryJoin).
 //
-// How the client knows it was left behind (GAME_MECHANICS "@comeback (follower →
+// How the client knows it was left behind (GAME_MECHANICS "`@comeback` (follower →
 // leader)"):
 //   - "You are no longer following X." right behind a follow move we couldn't
 //     make: a move refusal just before it, a hold in force, the leader seen

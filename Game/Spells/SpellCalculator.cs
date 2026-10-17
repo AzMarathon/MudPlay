@@ -1,13 +1,12 @@
 namespace MudPlay.Game.Spells;
 
 // MajorMUD's level-scaled spell math: min / max damage, min / max heal,
-// duration, and mana cost. All results are per-ROUND totals: the energy
+// duration, and mana cost. Most results are per-ROUND totals: the energy
 // multiplier folds in how many times the spell fires in one round (1000 energy
 // per round / the spell's EnergyCost).
 //
-// We only ever compute for the player, so the monster path (which skips the
-// energy multiplier and the override clamp) is dropped — players always apply
-// the multiplier.
+// The player getters fold in the per-round energy multiplier; the SingleCast*
+// getters give one discrete cast, as a monster's spell attack or a heal line counts it.
 //
 // spellDamageBonus is the caster's AlterSpDmg % (ability 165); which casts it
 // lifts depends on the realm (GAME_MECHANICS "Spell damage — Stock vs Paradigm",
@@ -16,7 +15,7 @@ public static class SpellCalculator
 {
     // MajorMUD ability codes that carry a damage/heal magnitude.
     public const int AbilDamage = 1;      // direct damage
-    private const int AbilDrain = 8;      // life drain (damage, or heal when bHealsInstead)
+    private const int AbilDrain = 8;      // life drain (damage, or heal when healsInstead)
     private const int AbilDamageMr = 17;  // damage ignoring magic resistance
     private const int AbilHeal = 18;      // healing
     private const int AbilEndCast = 151;  // chained follow-up spell (AbilVal = spell Number)

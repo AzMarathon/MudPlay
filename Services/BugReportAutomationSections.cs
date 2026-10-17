@@ -3,15 +3,17 @@ using MudPlay.Models.GameData;
 
 namespace MudPlay.Services;
 
-// Four small sections of the bug report: what the lesser engines have queued or
+// Five small sections of the bug report: what the lesser engines have queued or
 // are waiting for, the user's own triggers, aliases and macros, who may send the
-// client which remote commands, and the character's deaths.
+// client which remote commands, the character's deaths, and the corpses
+// recovered and not yet handed back.
 public static class BugReportAutomationSections
 {
     public const string PendingHeading = "Pending work";
     public const string AutomationHeading = "Triggers, aliases and macros";
     public const string PermissionsHeading = "Remote-command permissions";
     public const string DeathsHeading = "Death history (oldest first)";
+    public const string CorpseHandoffsHeading = "Corpses to hand back (newest first)";
 
     // How many deaths are listed: the history is kept for the character's life.
     private const int DeathsShown = 25;
@@ -50,6 +52,7 @@ public static class BugReportAutomationSections
         Line("Telepaths", () => svc.Telepaths.Queued + svc.Telepaths.InFlight == 0 && !svc.Telepaths.Held ? null
             : $"{svc.Telepaths.Queued} queued, {svc.Telepaths.InFlight} awaiting the game's acknowledgement"
               + (svc.Telepaths.Held ? "; held until an @suicide has had its password prompt answered" : string.Empty));
+        Line("Corpse handoff", () => svc.CorpseHandoff.DescribePending());
         Line("Relog", () => svc.RelogSignal.DescribePending());
         Line("Cleanup log-off", () => svc.CleanupLogout.DescribePending());
         Line("Game entry", () => svc.MainMenuEntry.DescribePending());
@@ -122,7 +125,17 @@ public static class BugReportAutomationSections
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
         if (without.Count > 0)
             sb.Append("\nParty members with no permission at all: ").Append(string.Join(", ", without)).Append('\n');
+        sb.Append('\n').Append(BroadcastAnswers(svc.RemoteCommands.BroadcastAnswers())).Append('\n');
         return sb.ToString();
+    }
+
+    // Why a command said on the broadcast channel was passed over: the minute's turns
+    // were spent. Names are left out; they are other players'.
+    internal static string BroadcastAnswers(Game.Remote.RemoteCommandManager.BroadcastAnswerCounts counts)
+    {
+        int cap = Game.Remote.BroadcastAnswerBudget.AnswersPerWindow;
+        return $"Broadcast channel, the last minute: {counts.Permitted} of {cap} answers to permitted speakers, "
+            + $"{counts.Refused} of {cap} refusals; {counts.Remembered} speaker(s) remembered (names not shown).";
     }
 
     public static string DeathHistory(IReadOnlyList<Models.Profile.DeathRecord> records)
@@ -144,6 +157,21 @@ public static class BugReportAutomationSections
               .Append(d.UnrecoveredItems is { Count: > 0 } missing ? $"; still missing {missing.Count} item(s)" : string.Empty)
               .Append(d.GameData is { } set ? $"; recorded on game data '{set}'" : "; game data not recorded (taken as the active one's)")
               .Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // Other players' corpses recovered and not yet handed back: names and items,
+    // never the password (the record has none).
+    public static string CorpseHandoffs(IReadOnlyList<Models.Profile.CorpseHandoffRecord> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        if (records.Count == 0) return "_(none)_";
+        StringBuilder sb = new();
+        foreach (Models.Profile.CorpseHandoffRecord r in records)
+        {
+            sb.Append("- ").Append(r.RecoveredText).Append(" in ").Append(r.RoomText).Append(" — ").Append(r.Summary)
+              .Append(r.Note is { Length: > 0 } note ? $" ({note})" : string.Empty).Append('\n');
         }
         return sb.ToString();
     }

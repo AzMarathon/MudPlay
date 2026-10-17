@@ -1,8 +1,8 @@
 namespace MudPlay.Game.GameData;
 
 // One "Room(<command>) <rooms>" entry of an item's "Obtained From" cell: typing any
-// one of Commands in any one of Rooms can give the item. Written by Nightmare Redux
-// for Linux; an export without the entries simply has none.
+// one of Commands in any one of Rooms can give the item. Not every exporter
+// writes these entries; an export without them simply has none.
 //
 // ChancePercent is the chance per use, null when the entry carries none or "(?%)".
 // ChanceUnknown is "(?%)": a random give whose odds the exporter couldn't work out.

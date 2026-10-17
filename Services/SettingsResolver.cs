@@ -185,7 +185,7 @@ public sealed class SettingsResolver
 
     // Resolve a single game-data record (e.g. a Spell or Item) across all four
     // tiers. The Defaults tier for game data is the imported MDB → JSON set
-    // under Data/game data/{set}/; resolver consumers supply that base via
+    // under game data/{set}/; resolver consumers supply that base via
     // defaultsRecord. Higher-tier overrides come from per-set side-files
     // ({table}_overrides.{set}.json).
     public T ResolveGameData<T>(string table, string recordId, T defaultsRecord) where T : class, new()
@@ -259,9 +259,8 @@ public sealed class SettingsResolver
     }
 
     // Which tier owns the highest-priority override for the given record, or
-    // SettingsTier.Defaults when no tier has an override. Used by the Game Data
-    // Browser's "Use" column to label each row with the tier its current values
-    // come from.
+    // SettingsTier.Defaults when no tier has an override — what a record's values
+    // are labelled and edited at.
     public SettingsTier GetGameDataSourceTier(string table, string recordId)
     {
         string? set = _activeSetProvider?.Invoke();
@@ -321,16 +320,18 @@ public sealed class SettingsResolver
     private void OnProfileClosed() => _activeBbs = null;
 
     // The loaded character's realm folder on the active BBS — the scope of the
-    // BBS tier's game-data overrides ("only for this realm"). null with no BBS.
+    // BBS tier's game-data overrides ("only for this realm"). null with no BBS, and
+    // for a realm whose name can't be a folder (AppPaths.UsableRealmFolder): that
+    // realm has no tier of its own, so nothing is read from or written to it.
     private string? ActiveRealmFolder() =>
         _activeBbs is { } bbs && bbs.RealmFor(_profile.Current?.Realm) is { } realm
-            ? _realmFolders.GetOrAdd((bbs.Name, realm.Name), k => AppPaths.RealmFolder(k.Bbs, k.Realm))
+            ? _realmFolders.GetOrAdd((bbs.Name, realm.Name), k => AppPaths.UsableRealmFolder(k.Bbs, k.Realm))
             : null;
 
     // The override files' paths, by what names them. A monster's game-data record is
     // resolved for every combat line, three tiers at a time, and rebuilding the
     // paths each time was a steady stream of throwaway strings.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Bbs, string Realm), string> _realmFolders = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Bbs, string Realm), string?> _realmFolders = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<
         (SettingsTier Tier, string? Scope, string Table, string Set, string? Bbs), string> _overridePaths = new();
 
@@ -352,13 +353,14 @@ public sealed class SettingsResolver
 
     // Whether an override can currently be written at tier without throwing.
     // SettingsTier.Defaults is always read-only (the MDB / seed is the source);
-    // Global is always writable; Bbs needs an active BBS profile; Character
-    // needs a named loaded profile. Lets game-data edit dialogs offer only valid
-    // tiers instead of letting WriteGameDataAt throw from the Save handler.
+    // Global is always writable; Bbs needs a realm folder (an active BBS whose
+    // realm name can be a folder); Character needs a named loaded profile. Lets
+    // game-data edit dialogs offer only valid tiers instead of letting
+    // WriteGameDataAt throw from the Save handler.
     public bool CanWriteAt(SettingsTier tier) => tier switch
     {
         SettingsTier.Global    => true,
-        SettingsTier.Bbs       => _activeBbs is not null,
+        SettingsTier.Bbs       => ActiveRealmFolder() is not null,
         SettingsTier.Character => _profile.CurrentProfileName is not null,
         _                      => false,
     };
@@ -380,7 +382,7 @@ public sealed class SettingsResolver
         SettingsTier.Defaults  => throw new InvalidOperationException("Defaults tier is read-only."),
         SettingsTier.Global    => string.Empty,
         SettingsTier.Bbs       => ActiveRealmFolder() ?? throw new InvalidOperationException(
-                                       "Cannot write to the realm tier: no active BBS."),
+                                       "Cannot write to the realm tier: no active BBS, or its realm name can't be a folder."),
         SettingsTier.Character => _profile.CurrentProfileName ?? throw new InvalidOperationException(
                                        "Cannot write to Character tier: no named profile loaded."),
         _ => throw new ArgumentOutOfRangeException(nameof(tier)),

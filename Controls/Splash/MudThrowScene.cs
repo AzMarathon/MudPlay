@@ -5,8 +5,7 @@ namespace MudPlay.Controls.Splash;
 
 // A figure in our line of sight rises into view, winds up, and hurls a mud ball
 // at the lens like an overhand pitch; it splats across the view, then slides
-// slowly down and off the bottom, leaving a clean lens. (Ported from the original
-// single splash, re-bookended so it starts and ends clear for seamless swapping.)
+// slowly down and off the bottom, leaving a clean lens.
 public sealed class MudThrowScene : SplashScene
 {
     public override int LoopFrames => 132;

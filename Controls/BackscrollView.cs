@@ -20,17 +20,19 @@ namespace MudPlay.Controls;
 // currently in view (O(viewport)) and owns its own (row, col) selection model,
 // so selecting and copying stay flat no matter how deep the scrollback runs.
 //
-// Rendering mirrors TerminalControl: the same aliased CP437 cell grid, the same
-// per-run background fill + per-cell glyph draw, the same AnsiPalette colour
-// resolution — so history looks identical to the live screen. Scrolling is
+// Rendering mirrors TerminalControl: the same CP437 cell grid and per-font
+// antialiasing choice (TerminalControl.ApplyCellRenderMode), the same per-run
+// background fill and one glyph run per colour run (CellRunText), the same
+// AnsiPalette colour resolution — so history looks identical to the live
+// screen. Scrolling is
 // handed to the host ScrollViewer through ILogicalScrollable, which keeps only
 // the visible slice realized (the control reports Extent/Viewport/Offset and
 // interprets the offset itself rather than being translated as one tall bitmap).
 public sealed class BackscrollView : Control, ILogicalScrollable
 {
     // Timestamp gutter: "HH:mm:ss" is 8 chars, drawn left of the transcript in
-    // muted grey and excluded from selection/copy (matches the old sibling
-    // gutter column). GutterGap separates it from the first transcript cell.
+    // muted grey and excluded from selection/copy. GutterGap separates it from
+    // the first transcript cell.
     private const int TimestampChars = 8;
     private const double GutterGap = 12;
 
@@ -114,17 +116,9 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     {
         Focusable = true;
         ClipToBounds = true;
-        // Bitmap-style CP437 face needs aliased text/edges or coloured pixels
-        // fringe at glyph boundaries — same treatment as TerminalControl.
-        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
-        RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
         _typeface = new Typeface(FontFamily);
         RecalculateMetrics();
     }
-
-    // Height of one row in pixels — the window uses it to scroll a Find hit
-    // into view.
-    public double LineHeight => _cellH;
 
     // Top pixel (in content space) of the given row.
     public double RowTop(int row) => row * _cellH;
@@ -144,8 +138,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         InvalidateVisual();
     }
 
-    // Select the [col, col+length) span on row (used by Find-next), leaving the
-    // scroll to the caller.
+    // Select the [col, col+length) span on row, leaving the scroll to the caller.
     public void SelectMatch(int row, int col, int length)
     {
         if ((uint)row >= (uint)_rows.Count) return;
@@ -181,6 +174,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
+        TerminalControl.ApplyCellRenderMode(this, FontFamily);
         // Snap the cell box to whole pixels so adjacent cell fills meet exactly
         // and glyph advances stay grid-aligned (matches TerminalControl).
         FormattedText probe = new("M", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,

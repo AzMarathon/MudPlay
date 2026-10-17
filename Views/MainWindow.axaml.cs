@@ -11,6 +11,7 @@ using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.ViewModels;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.Views;
 
@@ -31,43 +32,43 @@ public partial class MainWindow : Window
     // The close questions (confirm exit, the unnamed profile) are up.
     private bool _askingToClose;
 
-    // The free-floating first-run setup card (shown left of the main window).
-    private FirstRunTutorialWindow? _tutorialWindow;
+    // The free-floating Visual Guide step card (shown left of the main window).
+    private GuideCardWindow? _guideCard;
 
-    // Show / hide the floating tour card as the tour activates / deactivates.
-    private void UpdateTutorialWindow(MainWindowViewModel mvm)
+    // Show / hide the floating step card as a guide activates / deactivates.
+    private void UpdateGuideCard(MainWindowViewModel mvm)
     {
-        if (mvm.Tutorial.IsActive)
+        if (mvm.Guide.IsActive)
         {
-            if (_tutorialWindow is null)
+            if (_guideCard is null)
             {
-                _tutorialWindow = new FirstRunTutorialWindow { DataContext = mvm.Tutorial };
-                _tutorialWindow.Closed += (_, _) => _tutorialWindow = null;
-                _tutorialWindow.Show(this);   // owned by main → closes with it
+                _guideCard = new GuideCardWindow { DataContext = mvm.Guide };
+                _guideCard.Closed += (_, _) => _guideCard = null;
+                _guideCard.Show(this);   // owned by main → closes with it
                 Activate();                   // keep keyboard focus on the terminal
-                Dispatcher.UIThread.Post(PositionTutorialWindow, DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(PositionGuideCard, DispatcherPriority.Background);
             }
             else
             {
-                PositionTutorialWindow();
+                PositionGuideCard();
             }
         }
         else
         {
-            _tutorialWindow?.Close();
-            _tutorialWindow = null;
+            _guideCard?.Close();
+            _guideCard = null;
         }
     }
 
     // Park the card just off the main window's left edge, top-aligned. Physical
     // pixels (Position is screen space), so the fixed 300-DIP width is scaled.
-    private void PositionTutorialWindow()
+    private void PositionGuideCard()
     {
-        if (_tutorialWindow is null) return;
-        double scaling = _tutorialWindow.DesktopScaling;
+        if (_guideCard is null) return;
+        double scaling = _guideCard.DesktopScaling;
         int w = (int)System.Math.Round(300 * scaling);
         int gap = (int)System.Math.Round(8 * scaling);
-        _tutorialWindow.Position = new PixelPoint(Position.X - w - gap, Position.Y);
+        _guideCard.Position = new PixelPoint(Position.X - w - gap, Position.Y);
     }
 
     // The dynamic Game Data → Import .mdb item, tracked so the tour can glow it
@@ -78,7 +79,7 @@ public partial class MainWindow : Window
     private void ApplyImportMdbHighlight(MainWindowViewModel mvm)
     {
         if (_importMdbMenuItem is null) return;
-        bool on = mvm.Tutorial.HighlightImportMdb;
+        bool on = mvm.Guide.HighlightImportMdb;
         if (on && !_importMdbMenuItem.Classes.Contains("tutTarget"))
             _importMdbMenuItem.Classes.Add("tutTarget");
         else if (!on)
@@ -95,8 +96,9 @@ public partial class MainWindow : Window
         // by App.OnFrameworkInitializationCompleted.
         GlobalHotkeys.AttachMain(this);
 
-        // Forward keystrokes captured by the terminal control to whatever
-        // view-model is currently set as DataContext.
+        // Forward what the terminal control sends (whole typed lines, or keys
+        // while a form owns the keyboard) to whatever view-model is the
+        // DataContext.
         Terminal.UserInput += bytes =>
         {
             if (DataContext is MainWindowViewModel vm)
@@ -173,48 +175,47 @@ public partial class MainWindow : Window
             // over Avalonia's default initial focus assignment.
             Dispatcher.UIThread.Post(() => Terminal.Focus());
 
-            // First-run setup tour. The step card is a free-floating window shown
-            // to the LEFT of the main window (never over the terminal); show/hide
-            // it as the tour activates, and keep it glued to our left edge as we
-            // move. Register the force-show hook (Help = real outstanding steps,
-            // Program Log test button = demo), then auto-show when a brand-new
-            // install is still missing a prerequisite and it hasn't been dismissed.
+            // Visual Guides. The step card is a free-floating window shown to the
+            // LEFT of the main window (never over the terminal); show/hide it as a
+            // guide activates, and keep it glued to our left edge as we move.
+            // Register the Program Log's setup-tour demo hook, then auto-show the
+            // setup tour when a brand-new install is still missing a prerequisite
+            // and it hasn't been dismissed.
             if (DataContext is MainWindowViewModel mvm)
             {
-                mvm.Tutorial.PropertyChanged += (_, ev) =>
+                mvm.Guide.PropertyChanged += (_, ev) =>
                 {
-                    if (ev.PropertyName == nameof(FirstRunTutorialViewModel.IsActive))
-                        UpdateTutorialWindow(mvm);
-                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
-                        or nameof(FirstRunTutorialViewModel.HighlightImportMdb))
+                    if (ev.PropertyName == nameof(GuideViewModel.IsActive))
+                        UpdateGuideCard(mvm);
+                    if (ev.PropertyName is nameof(GuideViewModel.IsActive)
+                        or nameof(GuideViewModel.HighlightImportMdb))
                         ApplyImportMdbHighlight(mvm);
-                    // Publish the action the tour wants next so the Profile
-                    // Management / Settings windows can glow the right control.
-                    if (ev.PropertyName is nameof(FirstRunTutorialViewModel.IsActive)
-                        or nameof(FirstRunTutorialViewModel.CurrentActionKey))
+                    // Publish the action the guide wants next so other windows
+                    // can glow the right control.
+                    if (ev.PropertyName is nameof(GuideViewModel.IsActive)
+                        or nameof(GuideViewModel.CurrentActionKey))
                         AppServices.Current.SetCurrentTourAction(
-                            mvm.Tutorial.IsActive ? mvm.Tutorial.CurrentActionKey : null);
+                            mvm.Guide.IsActive ? mvm.Guide.CurrentActionKey : null);
                 };
-                PositionChanged += (_, _) => PositionTutorialWindow();
+                PositionChanged += (_, _) => PositionGuideCard();
 
-                // Let other windows report deep tour steps back to the tour VM.
+                // Let other windows report guide actions back to the runner.
                 AppServices.Current.NotifyTourAction = key =>
-                    Dispatcher.UIThread.Post(() => mvm.Tutorial.NotifyActionDone(key));
+                    Dispatcher.UIThread.Post(() => mvm.Guide.NotifyActionDone(key));
 
-                AppServices.Current.StartFirstRunTutorial = demo =>
+                AppServices.Current.StartSetupTourDemo = () =>
                     Dispatcher.UIThread.Post(() =>
                     {
                         Activate();
-                        if (demo) mvm.Tutorial.StartDemo();
-                        else mvm.Tutorial.Start();
+                        mvm.Guide.StartDemo();
                     });
 
                 bool dismissed = AppServices.Current.Settings.Current.FirstRunTutorialDismissed;
-                bool missing = mvm.Tutorial.AnyPrerequisiteMissing;
+                bool missing = MainWindowViewModel.GuideProbes.AnyPrerequisiteMissing;
                 if (!dismissed && missing)
                 {
                     AppServices.Current.Log.Info("Tutorial", "first-run setup tour: showing (a prerequisite is missing)");
-                    Dispatcher.UIThread.Post(mvm.Tutorial.Start);
+                    Dispatcher.UIThread.Post(mvm.Guide.StartSetup);
                 }
                 else
                 {
@@ -224,16 +225,16 @@ public partial class MainWindow : Window
             }
         };
         // Returning to the main window (e.g. after adding a BBS in Profile
-        // Management) re-checks the tour's steps so a finished one shows its check
-        // and the tour advances on its own.
+        // Management) re-checks the guide's steps so a finished one shows its check
+        // and the guide advances on its own.
         Activated += (_, _) =>
         {
-            if (DataContext is MainWindowViewModel mvm) mvm.Tutorial.Refresh();
+            if (DataContext is MainWindowViewModel mvm) mvm.Guide.Refresh();
         };
 
         // Confirm-exit prompt + auto-save the loaded profile before exit.
         //
-        // When the user has "Confirm exit" turned on in Settings → BBS,
+        // When the user has "Confirm exit" turned on in Settings → BBS + Display,
         // intercept the first Closing fire, cancel it, run the modeless
         // confirm dialog async, then re-issue Close() if the user said
         // yes. The _exitConfirmed latch makes the second Close skip the
@@ -339,13 +340,12 @@ public partial class MainWindow : Window
             Command = vm.OpenHelpWindowCommand,
             [ToolTip.TipProperty] = "Searchable guide to features, how to use the client, and what each setting means.",
         });
-        MenuItem firstRunSetup = new()
+        HelpMenu.Items.Add(new MenuItem
         {
-            Header = "First-time setup…",
-            [ToolTip.TipProperty] = "Replay the guided setup tour: import game data, add a BBS + character, connect.",
-        };
-        firstRunSetup.Click += (_, _) => vm.Tutorial.Start();
-        HelpMenu.Items.Add(firstRunSetup);
+            Header  = "Visual Guides…",
+            Command = vm.OpenVisualGuidesCommand,
+            [ToolTip.TipProperty] = "Step-by-step guides that walk you through the client: first-time setup, loops, macros, settings and more.",
+        });
         HelpMenu.Items.Add(new Separator());
 
         foreach (HelpWebsite link in vm.HelpLinks)
@@ -422,13 +422,11 @@ public partial class MainWindow : Window
     private const double ToolbarPadding = 16;
 
     // ----- Customizable terminal right-click menu -----------------------------
-    // The ContextMenu's first three items (Favorites submenu, Recent submenu, and
-    // their trailing separator) are fixed in XAML so their live bindings keep
-    // working; everything after is rebuilt from AppServices.ContextMenu.Layout.
-    // Each entry resolves through MenuActionCatalogue into a MenuItem — a command,
+    // The whole menu is rebuilt from AppServices.ContextMenu.Layout; nothing is
+    // pinned in XAML. Each entry resolves through MenuActionCatalogue into a
+    // MenuItem — a command,
     // a toggle, a whole-menu submenu, a Workshop-tab link, or a calculator link —
     // reusing the same reflection bridge the toolbar/keybinds use for commands.
-    private const int ContextMenuFixedLeadingItems = 0;
     private bool _ctxRebuildQueued;
     // Walk-flyout (Favorites / Recent) collection subscriptions from the current
     // build, dropped and re-made on each rebuild so they don't accumulate.
@@ -455,9 +453,8 @@ public partial class MainWindow : Window
             src.CollectionChanged -= handler;
         _walkFlyoutSubs.Clear();
         ItemCollection items = TerminalContextMenu.Items;
-        // Drop everything a previous build appended; keep the fixed leaders.
-        while (items.Count > ContextMenuFixedLeadingItems)
-            items.RemoveAt(items.Count - 1);
+        // Drop everything a previous build added.
+        items.Clear();
 
         foreach (ContextMenuEntry entry in vm.ContextMenu.Layout)
             if (BuildLayoutItem(entry, vm) is { } built) items.Add(built);
@@ -640,7 +637,8 @@ public partial class MainWindow : Window
     // Compose the Game Data menu's items: every imported set on top
     // (each as a checkable MenuItem the user can click to activate),
     // a separator, then the static actions (Open Browser / Import .mdb
-    // / Import loops). Avalonia's MenuItem can't mix ItemsSource-bound
+    // / Import loops / Manage Game Data, then the blacklist and
+    // avoid/stash editors). Avalonia's MenuItem can't mix ItemsSource-bound
     // dynamic children with inline static ones, so we assemble the
     // whole list in code on every change.
     private void RebuildGameDataMenu(MainWindowViewModel vm)
@@ -660,12 +658,14 @@ public partial class MainWindow : Window
 
         if (vm.GameDataSets.Count > 0) GameDataMenu.Items.Add(new Separator());
 
-        GameDataMenu.Items.Add(new MenuItem
+        MenuItem openBrowser = new()
         {
-            Header       = "Open Browser…",
-            InputGesture = new KeyGesture(Key.G, KeyModifiers.Control),
-            Command      = vm.OpenGameDataBrowserCommand,
-        });
+            Header  = "Open Browser…",
+            Command = vm.OpenGameDataBrowserCommand,
+        };
+        openBrowser.Bind(MenuItem.InputGestureProperty,
+            new Binding(nameof(MainWindowViewModel.GameDataBrowserGesture)) { Source = vm });
+        GameDataMenu.Items.Add(openBrowser);
         GameDataMenu.Items.Add(new Separator());
         MenuItem importMdb = new()
         {
@@ -699,7 +699,7 @@ public partial class MainWindow : Window
         });
     }
 
-    // Rebuild the Action → Profiles fly-out from the shared CombatProfileItems —
+    // Rebuild the Action → Combat Profiles fly-out from the shared CombatProfileItems —
     // one checkable "N) name" row per profile, the active one checked. Hidden until
     // a profile exists.
     private void RebuildProfilesMenu(MainWindowViewModel vm)

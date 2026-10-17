@@ -10,6 +10,7 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Map.MpFile;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -18,7 +19,7 @@ namespace MudPlay.ViewModels.Navigation;
 // naming / saving / deleting all flow through this dialog instead of
 // crowding the build strip.
 //
-// Loops section: lists every loop on the active BBS. Each row exposes Edit
+// Loops section: lists every loop of the active game-data set. Each row exposes Edit
 // (opens LoopEditorDialogViewModel so rename + notes + per-waypoint command
 // edits all land in one place) and Delete (confirmed via ConfirmService).
 // The dialog stays open across edits — closing it is the user's explicit
@@ -27,9 +28,9 @@ namespace MudPlay.ViewModels.Navigation;
 // Auto-Lair Mode section: lists saved LairSetups stored alongside loops in
 // the shared AppPaths.GameDataSetLoopsFolder (lair files use the .lair.json
 // suffix). Each row exposes Run / Load / Edit / Delete — same row shape as
-// the Loops section. New setups happen via "Save lairs" in the rail's
-// build-mode strip; this dialog is the CRUD surface for already-named
-// setups.
+// the Loops section. New setups come from Save on the chip row in the
+// build-mode strip, or from this dialog's New Lair button (an empty setup
+// to fill in the editor).
 public sealed partial class NavigationManagerDialogViewModel : ObservableObject, IDialogViewModel<bool>
 {
     public event Action<bool>? CloseRequested;
@@ -222,8 +223,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     }
 
     // Rebuild the single combined tree from both backing lists. Lairs are
-    // added before loops so they sort ahead within each folder; the TreeView
-    // picks a leaf DataTemplate by runtime row type.
+    // added before loops so they sort ahead within each folder; the flat row
+    // list picks a leaf template by runtime row type.
     private void RebuildWalkTree()
     {
         string filter = (WalkFilter ?? string.Empty).Trim();
@@ -243,10 +244,9 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && l.Source.Favorite)) rows.Add(l);
         }
 
-        // Collapsed at rest (fast tab-swap); while filtering, build flat so the
-        // tree's VirtualizingStackPanel realises only visible matches instead of
-        // force-expanding every folder (an expanded folder tree defeats
-        // virtualization — see the rail's RebuildNavTree).
+        // Collapsed at rest (fast tab-swap); while filtering, build without
+        // folders so every match is a visible row instead of hiding inside a
+        // collapsed folder.
         Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfWalkRow;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : FolderSeed;
         NavTreeBuilder.Sync<object>(WalkTree, rows, folderOf, folders,
@@ -398,10 +398,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         string? name = await PromptFolderNameAsync(
             "Rename folder", "New name for this folder.", node.Name);
         if (string.IsNullOrEmpty(name)) return;
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _favorites.RenameFolder(node.Path, target);
+        _favorites.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     [RelayCommand]
@@ -414,7 +411,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _favorites.RemoveFolder(node.Path, moveContentsToParent: true);
     }
 
-    // Move a favourite into folder (empty = root). Used by drag-drop + context-menu.
+    // Move a favourite into folder (empty = root).
     public void MoveFavoriteToFolder(FavoriteRowViewModel? row, string? folder)
     {
         if (row is null || _favorites is null) return;
@@ -678,6 +675,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             OwnSettings = running.OwnSettings,
         };
         _loops.Save(snapshot);
+        GuideActions.Report(GuideActions.LoopSaved);
         // Re-stamp the live runner's loop name so subsequent edits
         // / saves identify the same record on disk.
         running.Name = saveName;
@@ -704,6 +702,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     [RelayCommand]
     private async Task ImportMpAsync()
     {
+        GuideActions.Report(GuideActions.MpImportStarted);
         if (_mpImporter is null)
         {
             ImportStatus = "Importer not available — file a bug.";
@@ -870,28 +869,25 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     [RelayCommand]
     private async Task NewFolderAsync(NavFolderNodeViewModel? parent)
     {
-        if (_folders is null) return;
+        if (_folders is not { } folders) return;
         string? name = await PromptFolderNameAsync(
-            "New folder", "Name the new folder (use / to nest).");
+            "New folder", "Name the new folder (use / to nest).",
+            whyNot: n => folders.WhyNotFolder(NavFolders.Combine(parent?.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
         string full = parent is null ? name : NavFolders.Combine(parent.Path, name);
-        _folders.CreateFolder(full);
+        folders.CreateFolder(full);
     }
 
     // Rename a folder (and everything beneath it). No-op if the target name already exists.
     [RelayCommand]
     private async Task RenameFolderAsync(NavFolderNodeViewModel? node)
     {
-        if (_folders is null || node is null) return;
+        if (_folders is not { } folders || node is null) return;
         string? name = await PromptFolderNameAsync(
-            "Rename folder", "New name for this folder.", node.Name);
+            "Rename folder", "New name for this folder.", node.Name,
+            n => folders.WhyNotFolder(NavFolders.RenameTarget(node.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
-        // Rename swaps only the last segment unless the user typed a
-        // path; rebase onto the same parent so a bare name moves in place.
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _folders.RenameFolder(node.Path, target);
+        folders.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     // Delete a folder. Its loops / lairs / sub-folders are re-parented one
@@ -906,7 +902,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _folders.DeleteFolder(node.Path, moveContentsToParent: true);
     }
 
-    // Move a loop into the folder identified by folder (empty = root). Used by drag-drop + context-menu move.
+    // Move a loop into the folder identified by folder (empty = root).
     public void MoveLoopToFolder(ManagerLoopRow? row, string? folder)
     {
         if (row is null) return;
@@ -926,7 +922,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move loop", "Destination folder (blank = root).", row.Source.Folder);
+            "Move loop", "Destination folder (blank = root).", row.Source.Folder,
+            _folders is { } folders ? folders.WhyNotFolder : null);
         if (folder is null) return;
         MoveLoopToFolder(row, folder);
     }
@@ -937,14 +934,16 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move setup", "Destination folder (blank = root).", row.Source.Folder);
+            "Move setup", "Destination folder (blank = root).", row.Source.Folder,
+            _folders is { } folders ? folders.WhyNotFolder : null);
         if (folder is null) return;
         MoveLairToFolder(row, folder);
     }
 
-    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "")
+    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "",
+        Func<string, string?>? whyNot = null)
     {
-        NavFolderNameDialogViewModel vm = new(title, prompt, initial);
+        NavFolderNameDialogViewModel vm = new(title, prompt, initial, whyNot);
         return await _dialogs.OpenWindowAsync<NavFolderNameDialogViewModel, string?>(vm);
     }
 

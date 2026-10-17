@@ -94,6 +94,10 @@ public static class BugReportBuilder
             }
             secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
         }
+        // Other players' corpse passwords typed this session: held in memory only, so
+        // they can be found wherever the terminal or a log caught them.
+        foreach (string password in svc.CorpseHandoff.SessionPasswords)
+            secrets.Add(new(BugReportScrub.CorpsePasswordLabel, password));
         // Only the name the game itself shows is exempt: a profile can be called
         // anything, the login name included.
         return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
@@ -160,6 +164,7 @@ public static class BugReportBuilder
                     scrubber, Censor))),
             new(BugReportAutomationSections.PermissionsHeading, SafeSection(() => BugReportAutomationSections.RemotePermissions(svc))),
             new(BugReportAutomationSections.DeathsHeading, SafeSection(() => BugReportAutomationSections.DeathHistory(svc.DeathRecovery.Records))),
+            new(BugReportAutomationSections.CorpseHandoffsHeading, SafeSection(() => BugReportAutomationSections.CorpseHandoffs(svc.CorpseHandoff.Records))),
             new("Keybindings (changed from the default)", SafeSection(() => BuildKeybindings(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character, newest first)", SafeSection(() => BuildMonsterObservations(svc))),
@@ -210,7 +215,7 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
         Kv(sb, "Account details", scrubber.MaskedValues > 0
-            ? $"the account details saved in MudPlay ({scrubber.MaskedValues} value(s): login name, login password, suicide password) "
+            ? $"the account details saved in MudPlay and the corpse recovery passwords typed this session ({scrubber.MaskedValues} value(s): login name, login password, suicide password, corpse passwords) "
               + $"are written as `{BugReportScrub.Mask}` wherever they appear in this report"
             : "none are saved in MudPlay for this character, so none could be masked: a login typed by hand is not known to the client");
         if (scrubber.UnreadableValues > 0)
@@ -349,7 +354,11 @@ public static class BugReportBuilder
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
+        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
+            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
+            ? "available"
+            : "none (no BBS, or the realm's name can't be a folder)");
         Kv(sb, "Game data: long text damaged by an old import",
             svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
         Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());
@@ -903,11 +912,6 @@ public static class BugReportBuilder
         if (m.Held) yield return "held";
     }
 
-    // In-flight automation FSM state that the log lines only hint at: the @join
-    // nag table (which invitees we're chasing and how far along) and the combat
-    // weapon-swap shadow (what we believe is equipped, without re-parsing `inv`).
-    // These are the exact internals a triager otherwise has to reconstruct from
-    // code + log timestamps.
     // Compact, names over numbers, unset fields left out.
     private static readonly System.Text.Json.JsonSerializerOptions EventDumpJson = new()
     {
@@ -915,6 +919,11 @@ public static class BugReportBuilder
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
+    // In-flight automation state the log lines only hint at: every event and what
+    // the engine makes of it now, the @join nag table (which invitees we're
+    // chasing and how far along), and the combat engine's target and weapon
+    // state. These are the internals a triager otherwise has to reconstruct from
+    // code + log timestamps.
     private static string BuildEngineState(AppServices svc)
     {
         StringBuilder sb = new();
@@ -1222,9 +1231,6 @@ public static class BugReportBuilder
     private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
     private static string ManaSuffix(int? mana) => mana is > 0 ? $" m{mana}" : string.Empty;
 
-    // The last rounds' damage ledgers, oldest first: who the client credited with
-    // what damage, for a report that the round totals or Session Stats' per-round
-    // damage look wrong.
     // Session Stats' Player Statistics as the window shows them, plus the spells whose
     // lines it can recognise — the basis for a "counted as a swing" / "proc missing" report.
     private static string BuildSessionCombat(AppServices svc)
@@ -1273,6 +1279,9 @@ public static class BugReportBuilder
         return rows.Count == 0 ? "_(no monsters tracked in the room)_" : string.Concat(rows.Select(r => $"- {r}\n"));
     }
 
+    // The last rounds' damage ledgers, oldest first: who the client credited with
+    // what damage, for a report that the round totals or Session Stats' per-round
+    // damage look wrong.
     private static string BuildCombatRounds(AppServices svc)
     {
         IReadOnlyList<Game.Combat.RoundSummary> recent = svc.RoundDamage.Recent;
@@ -1685,10 +1694,29 @@ public static class BugReportBuilder
         // What an applied line several spells share is read by: a record none of
         // these can have cast is left out (ConditionTracker.KeepWhatCouldBeCastHere).
         Kv(sb, "Who can cast here", Game.Conditions.CastReach.Describe(svc.CastReach.Now()));
+        AppendCastReachState(sb, svc);
         sb.Append('\n');
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));
         return sb.ToString();
+    }
+
+    // What "Who can cast here" stands on: the who-casts index and the room list. A
+    // shared applied line is read by them only when the index is built for the load
+    // in use and the list is whole, so a condition held or missed is explained here.
+    private static void AppendCastReachState(StringBuilder sb, AppServices svc)
+    {
+        Kv(sb, "Who-casts index", svc.SpellCasters.Describe());
+        string? notWhole = Game.Conditions.CastReach.WhyRosterNotWhole(
+            svc.RoomClassifier.Current, svc.RoomTracker.IsInDarkRoom, svc.RoomTracker.EnteredBlind,
+            svc.Conditions.IsBlinded, svc.RoomClassifier.RosterIsWhole, svc.RoomClassifier.RosterNotWholeBecause,
+            svc.SpellCasters.KnowsMonster);
+        // Both quote a game line, which may be someone's chat: censored as the
+        // program log's copy of them is.
+        Kv(sb, "Room list whole", notWhole is null ? "yes" : "no — " + Censor.CensorLogMessage(notWhole));
+        Kv(sb, "Last line narrowed by who can cast here", svc.Conditions.LastNarrowed is { } n
+            ? Censor.CensorLogMessage($"{n.At.ToLocalTime():HH:mm:ss} '{n.Line}' — cast here: {n.Kept}; left out: {n.LeftOut}")
+            : "none this session");
     }
 
     // Editor statline vs what the game actually prints. A prompt the parser can't
@@ -2319,13 +2347,6 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // The navigation engines the Movement section only summarizes: the
-    // point-to-point walk engine (absent above — Movement covers loops/lairs but
-    // not a plain "go to room X" walk), the obstacle FSMs a walk stalls on
-    // (door / hidden-exit / trap), and the path-item detour routers. A "walker
-    // stuck / took a wrong route / stalled on a door" report needs the walk's
-    // live target + progress + last stop reason and which obstacle handler is
-    // mid-request — the exact internals the log only hints at.
     // Re-plan the last walk-to the user requested — from where they are NOW to
     // where they aimed — so a "blocked" / generic route card in the report can be
     // diagnosed after the fact: what the picker computed, which exit it stopped
@@ -2405,6 +2426,13 @@ public static class BugReportBuilder
         }
     }
 
+    // The navigation engines the Movement section only summarizes: the
+    // point-to-point walk engine (absent above — Movement covers loops/lairs but
+    // not a plain "go to room X" walk), the obstacle FSMs a walk stalls on
+    // (door / hidden-exit / trap), and the path-item detour routers. A "walker
+    // stuck / took a wrong route / stalled on a door" report needs the walk's
+    // live target + progress + last stop reason and which obstacle handler is
+    // mid-request — the exact internals the log only hints at.
     private static string BuildNavigationEngines(AppServices svc)
     {
         StringBuilder sb = new();
@@ -2959,9 +2987,6 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // Resolve one tab-keyed section across the tier hierarchy and emit it as a
-    // labelled JSON block. Isolated per-section so one section failing to
-    // resolve leaves the rest intact.
     // Casting spell profiles: how many exist, which is active, and every profile's
     // FULL held config — each slot (empty shown as —) with its gates, plus the
     // mana-mode / drain-trigger / drains-override knobs, the active one flagged. So
@@ -2996,6 +3021,9 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
+    // Resolve one tab-keyed section across the tier hierarchy and emit it as a
+    // labelled JSON block. Isolated per-section so one section failing to
+    // resolve leaves the rest intact.
     private static void AppendResolved<T>(StringBuilder sb, AppServices svc, string tabKey)
         where T : class, new()
     {

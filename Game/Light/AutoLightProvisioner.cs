@@ -168,12 +168,13 @@ public sealed class AutoLightProvisioner
         switch (plan.Action)
         {
             case AutoLightAction.Ready:
-                // Predictive readying is deliberately suppressed. A light is lit
-                // only when the server reports we can't see (OnDarkRoomObserved),
-                // never ahead of a route whose darkness prediction can
-                // false-positive in a room that renders fine (the over-lit town
-                // report). The Buy / Reorder verdicts below still run — they only
-                // provision the pack, they don't `use` anything.
+                // Route-wide predictive readying is deliberately suppressed: it
+                // readied for the darkest room anywhere on the route and over-lit
+                // the rooms between (the over-lit town report). A light goes on
+                // only for the one room about to be entered (OnApproachingRoom) or
+                // one that reports we can't see (OnDarkRoomObserved). The Buy /
+                // Reorder verdicts below still run — they only provision the pack,
+                // they don't `use` anything.
                 _log?.Debug(LogCategory,
                     $"route-dark ready suppressed (reactive-only policy): {plan.Reason}");
                 break;
@@ -455,8 +456,9 @@ public sealed class AutoLightProvisioner
             _reorderRequestedFor = null;
     }
 
-    // SneakGuard.Holds — `rem` and a cast end a sneak (GAME_MECHANICS "What ends a
-    // sneak"). Lighting with `use` doesn't: it ends one only when the item casts a
+    // SneakGuard.Holds — `rem` and a cast end a sneak (GAME_MECHANICS "Sneaking —
+    // commands, equip order, and the sneak state machine" → "What ends a sneak").
+    // Lighting with `use` doesn't: it ends one only when the item casts a
     // spell, and a light carries an illumination ability, not a spell, so `use
     // <light>` is never held. Held light changes simply re-evaluate on the next room.
     private Func<bool>? _sneakKept;

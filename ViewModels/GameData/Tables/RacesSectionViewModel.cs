@@ -4,8 +4,8 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// Game Data Browser → Races tab. Static MDB race definitions — drives Workshop
-// CharacterPlanner ability-score previews and new-character roll math.
+// Game Data Browser → Races tab. Static MDB race definitions — drives the Workshop's
+// stat calculators (race min/max bounds for CP plans and stat previews).
 //
 // Column names mirror the MajorMUD MDB schema verbatim. m* columns are minimum stat rolls and
 // x* are maximums (the stat distribution range a fresh character of this race can roll into).

@@ -10,9 +10,9 @@ namespace MudPlay.Services;
 // Per-realm room-blacklist store. Loads the active realm's room_blacklist.json
 // whenever the realm changes (profile load / BBS pin / realm assignment) and
 // exposes a read-only set of RoomKeys for the
-// consumers — BfsMapper (skip placement, keep stub edge), NavigationViewModel
-// (filter from room search), and the right-click "Add to blacklist" command on
-// the map.
+// consumers — BfsMapper (skip placement, keep stub edge), RoomSearchService
+// (filter from room search), and the map's right-click "Add this room to
+// Blacklist" command.
 public sealed class RoomBlacklistStore
 {
     private readonly LogService? _log;
@@ -79,9 +79,8 @@ public sealed class RoomBlacklistStore
         return true;
     }
 
-    // Replace the entire blacklist with newEntries and persist. Used by the
-    // Modify-Blacklist dialog on OK — it stages changes locally and commits the
-    // full working copy in one shot so Cancel can discard cleanly.
+    // Replace the entire blacklist with newEntries and persist — one commit of a
+    // staged working copy, so an editor's Cancel can discard cleanly.
     public void ReplaceAll(IEnumerable<BlacklistedRoom> newEntries)
     {
         ArgumentNullException.ThrowIfNull(newEntries);

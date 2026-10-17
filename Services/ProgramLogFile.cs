@@ -8,7 +8,7 @@ namespace MudPlay.Services;
 // appended and flushed to disk immediately (DebugLogWriter runs AutoFlush), so
 // the tail on disk survives even an unclean exit.
 //
-// The file lands under Data/Logs/ as {timestamp}-program.log and is covered by
+// The file lands under Logs/ as {timestamp}-program.log and is covered by
 // the same DebugLogWriter.PruneOldLogs retention sweep as every other .log.
 // One instance per app session — instantiated once in AppServices.
 //
@@ -16,7 +16,7 @@ namespace MudPlay.Services;
 // flag is on. Off (the default) means no file is created at all; flipping the
 // Log-pane "Auto-collect logs" toggle on opens a fresh file, off closes it.
 // The trade-off is deliberate — a default-off collector keeps normal sessions
-// from littering Data/Logs, at the cost of the post-mortem trail unless the
+// from littering Logs, at the cost of the post-mortem trail unless the
 // user opts in.
 public sealed class ProgramLogFile : IAsyncDisposable
 {

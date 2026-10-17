@@ -12,7 +12,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 
 // View-model for the Game Data Browser → Items tab's per-record edit dialog. Surfaces
 // the editable overlay fields (Use-tier, Name, the 11 Options checkboxes, Min/Max carry
-// policy, IfNeededDo action) alongside a read-only MDB info pane on the right.
+// policy, the on-use message) alongside a read-only MDB info pane on the right.
 //
 // The Details section holds only the overlay-editable carry-policy fields (Min/Max);
 // every read-only MDB fact — weight, item type, body slot, and the charm-priced
