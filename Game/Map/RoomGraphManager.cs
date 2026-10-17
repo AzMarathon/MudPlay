@@ -333,27 +333,25 @@ public sealed class RoomGraphManager
     // the tracker does not hold the name it has for one against what is printed.
     public bool IsUnnamedInData(RoomKey key) => _unnamedInData.Contains(key);
 
-    // Whether a room the data names bears this name and has every exit shown: the
-    // display may then be that room's, seen with an exit of its own left out (a
-    // closed door, an unsearched hidden exit), and is not taken for a renamed
-    // room the data leaves unnamed (the tracker asks this of a room that bears a
-    // name, never of one with none). Rooms the data leaves unnamed don't count, whatever
-    // they are called by now: the rooms of one house can share a name, and would
-    // each stand in the way of the next. Unreachable rooms don't either (see
-    // ConfigureUnreachable): the character can't be in one.
-    public bool DataNamesRoomShowing(string name, IReadOnlySet<Direction> exits)
+    // Whether this room, one the data names, could have shown a display of this
+    // name and exits as its own: it bears the name, every exit shown is one of its
+    // exits, and every exit its exits line always prints is shown (an unsearched
+    // hidden exit or a text exit is left off; GAME_MECHANICS "Room display parsing
+    // — the room title is positional, not just bright cyan"). The tracker asks it of the rooms beside the one being left,
+    // whose display could be taken for a room ahead the data leaves unnamed. A
+    // room the data leaves unnamed doesn't count, whatever it is called by now:
+    // the rooms of one house can share a name, and would each stand in the way of
+    // the next. An unreachable room doesn't either (see ConfigureUnreachable): the
+    // character can't be in one.
+    public bool NamedInDataCouldShow(RoomKey key, string name, IReadOnlySet<Direction> exits)
     {
         ArgumentNullException.ThrowIfNull(exits);
-        if (string.IsNullOrEmpty(name) || !_byName.TryGetValue(name, out List<Room>? rooms)) return false;
-        uint observedMask = MaskFromSet(exits);
-        foreach (Room room in rooms)
-        {
-            if (_unnamedInData.Contains(room.Key)) continue;
-            if ((observedMask & room.ExitMask) != observedMask) continue;
-            if (_isUnreachable is { } excluded && excluded(room.Key)) continue;
-            return true;
-        }
-        return false;
+        if (_unnamedInData.Contains(key) || !_rooms.TryGetValue(key, out Room? room)) return false;
+        if (!string.Equals(room.Name, name, StringComparison.OrdinalIgnoreCase)) return false;
+        if (_isUnreachable is { } excluded && excluded(key)) return false;
+        uint shown = MaskFromSet(exits);
+        uint printed = PrintedExitMask(room);
+        return (shown & room.ExitMask) == shown && (printed & shown) == printed;
     }
 
     private Room Rename(Room existing, string name)
@@ -550,10 +548,16 @@ public sealed class RoomGraphManager
         if (shown == other) return false;
         if (!_rooms.TryGetValue(shown, out Room? room) || !_rooms.TryGetValue(other, out Room? twin)) return false;
         if (!string.Equals(room.Name, twin.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        uint printed = PrintedExitMask(room);
+        return (printed & twin.ExitMask) == printed;
+    }
+
+    private static uint PrintedExitMask(Room room)
+    {
         uint printed = 0;
         foreach ((Direction direction, RoomExit exit) in room.Exits)
             if (PrintsOnExitsLine(exit)) printed |= 1u << (int)direction;
-        return (printed & twin.ExitMask) == printed;
+        return printed;
     }
 
     // Whether some room has an exit this line crosses: a text exit (`go path`), or

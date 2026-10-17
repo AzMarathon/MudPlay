@@ -1,5 +1,12 @@
 # Version history
 
+## 3.181.33
+
+- A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
+- With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
+- A gang-house room renamed to a name the game data has elsewhere is re-learned
+- A look into a named room next door no longer names the house room ahead
+
 ## 3.181.29
 
 - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked

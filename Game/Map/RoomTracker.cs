@@ -155,6 +155,16 @@ public sealed class RoomTracker
     // echo actually arrived — the tell for a missed-echo stall.
     public (string Command, DateTimeOffset At)? LastInboundMoveEcho => _lastInboundEcho;
 
+    // Whether the statline has been seen to echo a command this session: the echo
+    // then decides a move's arrival, and timing only when it hasn't.
+    public bool MoveEchoSeen => _everReceivedEcho;
+
+    // The display held as possibly a re-look of the room being left, with no echo
+    // to say otherwise, and the move it was held for (TryTakeHeldArrival).
+    public string? HeldDisplay => _heldDisplay is { } held && _pending.TryPeek(out PendingMove head) && head == held.Head
+        ? $"'{held.Display.Name}' for move {DescribeMove(held.Head)} sent {held.Head.SentAt.ToLocalTime():HH:mm:ss}"
+        : null;
+
     // True while we're standing in a room too dark to display its name or exits
     // ("The room is very dark..." / "The room is pitch black..."). Set by
     // NoteDarkRoomEntered on the dark line, cleared the moment a normal room
@@ -1210,7 +1220,7 @@ public sealed class RoomTracker
                 // display that isn't the pending move's outcome; let a move-related
                 // display through and keep the peek armed for the real peek that
                 // follows it.
-                if (!ObservationLooksLikePendingMoveOutcome(observation))
+                if (!ObservationLooksLikePendingMoveOutcome(observation, when))
                 {
                     _suppressObservationUntil = null;
                     _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -1331,7 +1341,7 @@ public sealed class RoomTracker
     // it were a look-<dir> peek: only a display that is NEITHER — the peeked adjacent
     // room — is the actual peek. Mirrors ReconcileFromPending's Strategy 1 / 1a / 1b
     // match tests without mutating any state.
-    private bool ObservationLooksLikePendingMoveOutcome(RoomObservation observation)
+    private bool ObservationLooksLikePendingMoveOutcome(RoomObservation observation, DateTimeOffset when)
     {
         if (State.Confidence != RoomConfidence.Pending) return false;
         if (State.CurrentRoom is not { } source) return false;
@@ -1352,7 +1362,8 @@ public sealed class RoomTracker
         }
         if (_graph.GetRoom(exit.Target) is not { } expected) return false;
         return MatchesPredicted(expected, observation)
-            || ArrivesInRoomTheDataLeavesUnnamed(expected, observation);
+            || (ArrivesInRoomTheDataLeavesUnnamed(expected, observation)
+                && ReadUnnamedArrival(source, head, expected, observation, when) == UnnamedArrival.Taken);
     }
 
     // The death-message detector saw a post-death lives readout — either "You now
@@ -1804,6 +1815,7 @@ public sealed class RoomTracker
     private void ReconcileFromPending(RoomObservation observation, DateTimeOffset when)
     {
         Room? source = State.CurrentRoom;
+        bool sourceUnderAnotherName = false;
 
         // Try to match against the head pending move first — that's the
         // oldest move the server is most likely to be confirming. The head may
@@ -1813,6 +1825,8 @@ public sealed class RoomTracker
             && source is not null
             && TryResolvePendingExit(source, head, out RoomExit exit))
         {
+            if (TryTakeHeldArrival(head, exit, observation, when)) return;
+
             Room? expected = _graph.GetRoom(exit.Target);
             string moveLabel = DescribeMove(head);
             string confirmed = $"move {moveLabel} confirmed";
@@ -1953,7 +1967,7 @@ public sealed class RoomTracker
                             ? "the move has not been echoed by the server yet"
                             : "no move-echo has been seen this session (statline not echo-readable), holding by timing") +
                         "; treating as a passive re-look and staying Pending.");
-                    State.LastUpdatedAt = when;
+                    HoldDisplay(head, observation, when);
                     return;
                 }
 
@@ -2009,17 +2023,22 @@ public sealed class RoomTracker
             // with a move in flight that predicts the room: the rooms of one house
             // can share a name and exits, and nothing else tells them apart.
             //
-            // One thing more for a room that bears a name: the room being left,
-            // redisplayed before the game has echoed the move (someone walking
-            // in, a re-look), is not the arrival. Its exits can all be exits of
-            // the room ahead, which would then take its name, and with every room
-            // of a house named that could happen on any step, where a nameless
-            // room meets it once. The same test Strategy 1 makes above, so an
-            // echoed arrival in a room that looks like the one left still counts.
-            if (expected is not null && ArrivesInRoomTheDataLeavesUnnamed(expected, observation)
-                && (expected.HasUnknownName || !LooksLikeSourceRelook(source, head, observation, when)))
+            // A display that fits isn't always the arrival: ReadUnnamedArrival
+            // weighs the rooms nearby that could have shown it.
+            UnnamedArrival arrival = expected is not null && ArrivesInRoomTheDataLeavesUnnamed(expected, observation)
+                ? ReadUnnamedArrival(source, head, expected, observation, when)
+                : UnnamedArrival.Declined;
+            if (arrival == UnnamedArrival.NotYet)
             {
-                bool renamed = !expected.HasUnknownName;
+                _log?.Log(LogSeverity.Debug, "RoomTracker",
+                    $"Display '{observation.Name}' fits {expected!.Key} ahead, but a room nearby could have shown it and move {moveLabel} " +
+                    (_everReceivedEcho ? "has not been echoed yet" : "was sent too recently") + "; staying Pending.");
+                HoldDisplay(head, observation, when);
+                return;
+            }
+            if (arrival == UnnamedArrival.Taken)
+            {
+                bool renamed = !expected!.HasUnknownName;
                 string bore = expected.Name;
                 Room? learned = _graph.LearnRoomName(expected.Key, observation.Name);
                 if (learned is not null)
@@ -2066,9 +2085,13 @@ public sealed class RoomTracker
             {
                 _log?.Log(LogSeverity.Debug, "RoomTracker",
                     $"Passive redisplay of source '{source.Name}' while move {moveLabel} pending; ignoring.");
-                State.LastUpdatedAt = when;
+                HoldDisplay(head, observation, when);
                 return;
             }
+
+            sourceUnderAnotherName = !head.IsFollowDrag
+                && !(_everReceivedEcho && HeadMoveEchoed(head))
+                && MayBeSourceUnderAnotherName(source, observation);
         }
 
         // Neither predicted nor refused — fall back to graph search.
@@ -2090,6 +2113,19 @@ public sealed class RoomTracker
         // snaps the map back the moment the player leaves a dark maze for a named
         // room, rather than staying frozen at the last dead-reckoned anchor.
         if (TryReanchorByName(observation, when, "name-unique after Pending miss")) return;
+
+        // The room being left, shown under a name it doesn't bear yet (we came
+        // back into the game in it, renamed while we were away): nothing says
+        // where we are is wrong, and the move's own display is still to come. A
+        // Suspect here lost the house until we walked out of it to a room the map
+        // is sure of.
+        if (sourceUnderAnotherName)
+        {
+            _log?.Log(LogSeverity.Debug, "RoomTracker",
+                $"Display '{observation.Name}' fits the room being left, {source!.Key}, which has not been shown since we came to it and bears '{source.Name}'; staying Pending.");
+            State.LastUpdatedAt = when;
+            return;
+        }
 
         EnterSuspect(when, $"Pending observation didn't match queue head; candidates={candidates.Count}");
     }
@@ -2686,26 +2722,128 @@ public sealed class RoomTracker
         && !string.Equals(target.Name, observation.Name, StringComparison.OrdinalIgnoreCase)
         && ObservedExitsAreOf(target, observation);
 
-    // Whether the display is the arrival in a room the data leaves unnamed, to be
-    // adopted and named from it: a room with no name, or one bearing a learned
-    // name the display doesn't have, whose exits cover the ones shown.
-    //
-    // A room with no name is matched as it always has been, on its exits alone:
-    // its name is the sysop's own text and is often one the data has elsewhere
-    // (a "Kitchen", a "Hallway"), so no name printed there counts against it.
-    //
-    // A room that bears a name is held to more. It is not re-learned when a room
-    // the data names bears the printed name and has those exits: that room's own
-    // display, with an exit of its own left out, fits no exact (name, exits)
-    // search and would otherwise be read here as this room under a new name;
-    // left alone, it is re-anchored by name further down. The cost is a room
-    // renamed to a name the data also has, which keeps its old name, as every
-    // renamed room did before there was a re-learn.
+    // Whether the display fits a room the data leaves unnamed under a name it
+    // doesn't bear: a room with no name, or one bearing a learned name the
+    // display doesn't have, whose exits cover the ones shown. The name shown is
+    // no evidence either way: it is the sysop's own text, often one the data has
+    // elsewhere (a "Kitchen", a "Hallway"). ReadUnnamedArrival says whether the
+    // display is the arrival there.
     private bool ArrivesInRoomTheDataLeavesUnnamed(Room target, RoomObservation observation) =>
         !string.IsNullOrWhiteSpace(observation.Name)
-        && (MatchesPredictedNameless(target, observation)
-            || (MatchesPredictedRenamed(target, observation)
-                && !_graph.DataNamesRoomShowing(observation.Name, observation.Exits)));
+        && (MatchesPredictedNameless(target, observation) || MatchesPredictedRenamed(target, observation));
+
+    private enum UnnamedArrival { Taken, NotYet, Declined }
+
+    // Whether a display that fits the room the head move is heading for, a room
+    // the data leaves unnamed (ArrivesInRoomTheDataLeavesUnnamed), is the arrival
+    // there, to be adopted and named from it. What decides is which other rooms
+    // could have shown it. A room anywhere on the map could, by name and exits,
+    // but the walk rules those out: the room one step along the move just sent is
+    // the one shown. It leaves open the room being left (re-looked: someone walked
+    // in) and that room's other neighbours (a `look <dir>` answered first).
+    //
+    // Where the statline echoes moves, the echo settles it: the game echoes a
+    // move before it shows the room the move reaches, so a display before the
+    // echo that one of those rooms could have shown is that room's (NotYet), and
+    // a display after it is the arrival. A follow drag is only redisplayed on
+    // arrival. With no echo, nothing tells them apart:
+    //   - a room that bears a name is held to the timing test Strategy 1 makes for
+    //     a re-look of the room being left (NotYet);
+    //   - a room the data names beside the room being left, whose own display
+    //     this could be, is taken to be the one shown (Declined), and the name
+    //     re-anchor further down finds it. A `look <dir>` into it is then dropped
+    //     as the look's (ObservationLooksLikePendingMoveOutcome);
+    //   - otherwise the display is the arrival, a room with no name taken on its
+    //     exits alone as it always was.
+    private UnnamedArrival ReadUnnamedArrival(
+        Room source, PendingMove head, Room target, RoomObservation observation, DateTimeOffset when)
+    {
+        if (head.IsFollowDrag) return UnnamedArrival.Taken;
+        if (_everReceivedEcho)
+        {
+            bool anotherRoomCouldShowIt = LooksLikeSourceRelook(source, head, observation, when)
+                || MayBeSourceUnderAnotherName(source, observation)
+                || NamedNeighbourCouldShow(source, target, observation);
+            return HeadMoveEchoed(head) || !anotherRoomCouldShowIt ? UnnamedArrival.Taken : UnnamedArrival.NotYet;
+        }
+        if (!target.HasUnknownName && LooksLikeSourceRelook(source, head, observation, when)) return UnnamedArrival.NotYet;
+        return NamedNeighbourCouldShow(source, target, observation) ? UnnamedArrival.Declined : UnnamedArrival.Taken;
+    }
+
+    // Whether the display could be the room being left under a name it doesn't
+    // bear: a room the data leaves unnamed, not shown since we came to it (we came
+    // back into the game in it, or were put there by hand), whose exits are the
+    // display's. It may have been renamed while we were away, so the name it bears
+    // is no evidence that the display isn't of it.
+    private bool MayBeSourceUnderAnotherName(Room source, RoomObservation observation) =>
+        _graph.IsUnnamedInData(source.Key)
+        && !string.IsNullOrWhiteSpace(observation.Name)
+        && !string.Equals(source.Name, observation.Name, StringComparison.OrdinalIgnoreCase)
+        && ObservedExitsAreOf(source, observation)
+        && !(_lastObservation is { } shown && MatchesPredicted(source, shown));
+
+    // Whether a room the data names, a neighbour of the room being left other than
+    // the room ahead, could have shown this display as its own
+    // (RoomGraphManager.NamedInDataCouldShow).
+    private bool NamedNeighbourCouldShow(Room source, Room target, RoomObservation observation)
+    {
+        foreach (RoomExit exit in source.Exits.Values)
+            if (exit.Target != target.Key && _graph.NamedInDataCouldShow(exit.Target, observation.Name, observation.Exits))
+                return true;
+        return false;
+    }
+
+    // With no echo on the statline: the last display held as possibly a re-look of
+    // the room being left, and the move it was held for (HoldDisplay).
+    private (PendingMove Head, RoomObservation Display)? _heldDisplay;
+
+    private void HoldDisplay(PendingMove head, RoomObservation observation, DateTimeOffset when)
+    {
+        State.LastUpdatedAt = when;
+        _heldDisplay = _everReceivedEcho ? null : (head, observation);
+    }
+
+    // With no echo, a display that looks like the room being left (same name, same
+    // exits, too soon after the move) is held as a re-look of it (HoldDisplay). In
+    // a house whose neighbouring rooms share a name and exits it may have been the
+    // arrival, and the tracker then falls a step behind. When the next display for
+    // the same move fits the room the move after it leads to, the held one was the
+    // arrival: it is taken for the move, and this display for the next. Otherwise
+    // this display would be taken for the room ahead, which would take the name of
+    // the room beyond it. Only for a room the data leaves unnamed; a room the data
+    // names is left to Strategy 1 as it always was.
+    private bool TryTakeHeldArrival(PendingMove head, in RoomExit exit, RoomObservation observation, DateTimeOffset when)
+    {
+        if (_heldDisplay is not { } held || held.Head != head) return false;
+        if (exit.CastLandings is not null || State.CurrentRoom is not { } source
+            || _graph.GetRoom(exit.Target) is not { } target || !_graph.IsUnnamedInData(target.Key)) return false;
+        PendingMove[] queued = _pending.ToArray();
+        if (queued.Length < 2 || !TryResolvePendingExit(target, queued[1], out RoomExit next)
+            || next.CastLandings is not null || _graph.GetRoom(next.Target) is not { } beyond) return false;
+
+        bool heldNamesTarget = !MatchesPredicted(target, held.Display);
+        if (heldNamesTarget
+            && (!ArrivesInRoomTheDataLeavesUnnamed(target, held.Display)
+                || NamedNeighbourCouldShow(source, target, held.Display))) return false;
+        if (!MatchesPredicted(beyond, observation) && !ArrivesInRoomTheDataLeavesUnnamed(beyond, observation)) return false;
+
+        _heldDisplay = null;
+        string moveLabel = DescribeMove(head);
+        if (heldNamesTarget && _graph.LearnRoomName(target.Key, held.Display.Name) is { } learned)
+        {
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Learned name '{held.Display.Name}' for {target.Key} (from the display held for move {moveLabel}; it bore '{target.Name}').");
+            NameLearned?.Invoke(new NameLearnedEvent(target.Key, held.Display.Name));
+            target = learned;
+        }
+        _pending.TryDequeue(out _);
+        State.SuspectStrikes = 0;
+        SetRoom(target, RoomConfidence.Pending, when,
+            $"move {moveLabel} confirmed by the display held for it, the next move's room showing now");
+        MoveConfirmed?.Invoke();
+        ReconcileFromPending(observation, when);
+        return true;
+    }
 
     // Search the source room's cardinal neighbours for a null-name room whose
     // ExitMask covers the observation. If exactly one neighbour qualifies, learn
@@ -2731,6 +2869,10 @@ public sealed class RoomTracker
             match = candidate;
         }
         if (match is null) return false;
+        // With no move to say which way we went, a room the data names beside us
+        // that could have shown this as its own display is as near as the nameless
+        // one, and is not given away: the name re-anchor finds it.
+        if (NamedNeighbourCouldShow(source, match, observation)) return false;
 
         learned = _graph.LearnRoomName(match.Key, observation.Name);
         if (learned is null) return false;

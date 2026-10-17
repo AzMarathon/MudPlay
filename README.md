@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.29**
-> - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
-> - Only a negate line about a cast you sent counts, matched by spell name and member; a resisted cast is not a negate
-> - A resisted attack spell counts toward its cast cap and as a miss, like a negated one
-> - A buff a party member negated or resisted is no longer counted as a miss of yours
+> **Version 3.181.33**
+> - A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
+> - With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
+> - A gang-house room renamed to a name the game data has elsewhere is re-learned
+> - A look into a named room next door no longer names the house room ahead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
