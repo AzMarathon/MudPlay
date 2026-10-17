@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.43**
+> **Version 3.180.46**
 > - Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
 > - Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
 > - Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
