@@ -469,7 +469,7 @@ public sealed class LoopManager
         if (_setName is null) return false;
 
         string root = AppPaths.GameDataSetLoopsFolder(_setName);
-        if (NavFolders.WhyNotFolder(root, loop.Folder) is { } whyNot)
+        if (WhyNotFolder(loop.Folder) is { } whyNot)
         {
             _log?.Warn("Loops", $"loop '{loop.Name}' not saved: {whyNot}");
             return false;
@@ -563,15 +563,35 @@ public sealed class LoopManager
         return false;
     }
 
+    // Why a loop can't be filed in folder, or null when it can (NavFolders.WhyNotFolder).
+    // Null with no set active: nothing is saved then anyway.
+    public string? WhyNotFolder(string? folder) =>
+        _setName is null ? null : NavFolders.WhyNotFolder(AppPaths.GameDataSetLoopsFolder(_setName), folder);
+
+    // Save loop under its new name, then drop the loop saved as oldName. The old one
+    // goes only once the new one is written, so a save that is refused or throws
+    // leaves it as it was. Where both names make one file name ("a/b" and "a_b"),
+    // that file is the new loop's and stays.
+    public bool SaveRenamed(Loop loop, string oldName)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (!Save(loop)) return false;
+        if (!string.Equals(oldName, loop.Name, StringComparison.OrdinalIgnoreCase))
+            Forget(oldName, keep: PathOf(AppPaths.GameDataSetLoopsFolder(_setName!), loop));
+        return true;
+    }
+
     // Delete the loop named name. No-op when not in the catalogue or no set
     // is active.
-    public bool Delete(string name)
+    public bool Delete(string name) => Forget(name, keep: null);
+
+    private bool Forget(string name, string? keep)
     {
         if (_setName is null) return false;
         if (!_loops.Remove(name)) return false;
 
         _stamp.NoteHeldChanged();
-        DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
+        DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name, keep);
         // A deleted loop's name is free for another; that one isn't a favourite,
         // and isn't run the way this one was.
         _setFavorite?.Invoke(name, false);

@@ -447,8 +447,19 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             });
         }
 
+        if (_loops.WhyNotFolder(_original.Folder) is { } badFolder)
+        {
+            SaveError = $"Loop not saved: its folder '{_original.Folder}' can't be used. {badFolder}";
+            return;
+        }
+
         bool renamed = !string.Equals(newName, _original.Name, StringComparison.OrdinalIgnoreCase);
         string oldName = _original.Name;
+        // The catalogue's own object: put back as it was when the save fails.
+        string oldNotes = _original.Notes;
+        bool oldOnlyAttackInLairRooms = _original.OnlyAttackInLairRooms;
+        LairEntryDebuffMode oldLairEntryDebuff = _original.LairEntryDebuff;
+        List<LoopWaypoint> oldWaypoints = _original.Waypoints;
 
         _original.Name                  = newName;
         _original.Notes                 = Notes ?? string.Empty;
@@ -456,13 +467,31 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _original.LairEntryDebuff = LairEntryDebuffModes.From(WaitToDebuffBeforeLairs, LairDebuffWaitChoice);
         _original.Waypoints             = waypoints;
 
-        // Rename → delete the old file (LoopManager keys by Loop.Name
-        // on disk) before saving under the new name. (Skip for a
-        // brand-new loop — there's nothing on disk yet to delete.)
-        // The delete drops the character's two loop settings with the old name;
-        // the save keeps the ones set above under the new one, apart from the file.
-        if (renamed && !_isNew) _loops.Delete(oldName);
-        _loops.Save(_original);
+        // A rename saves under the new name first and drops the old loop (its file,
+        // and the character's two loop settings kept under its name) only once that
+        // is written, so a failed save loses nothing. A brand-new loop has no old one:
+        // its draft name may even be another loop's.
+        string? failed;
+        try
+        {
+            bool saved = renamed && !_isNew ? _loops.SaveRenamed(_original, oldName) : _loops.Save(_original);
+            failed = saved ? null : "the loop's folder can't be used (see the program log).";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            failed = ex.Message;
+        }
+        if (failed is not null)
+        {
+            _original.Name                  = oldName;
+            _original.Notes                 = oldNotes;
+            _original.OnlyAttackInLairRooms = oldOnlyAttackInLairRooms;
+            _original.LairEntryDebuff       = oldLairEntryDebuff;
+            _original.Waypoints             = oldWaypoints;
+            AppServices.CurrentOrNull?.Log.Warn("Loops", $"loop '{oldName}' not saved as '{newName}': {failed}");
+            SaveError = $"Loop not saved: {failed}";
+            return;
+        }
         // The tick box is this character's choice, kept apart from the loop file.
         _loops.SetFavorite(_original.Name, Favorite);
         SaveError = string.Empty;
