@@ -67,6 +67,10 @@ public sealed class AreaRankingStore
 
     public IReadOnlyList<string> DiskNotes => _diskNotes.ToArray();
 
+    // Whether this very ranking is still held in memory: false once it has been
+    // dropped or forgotten, or let go to stay within MaxKept.
+    public bool Holds(AreaRanking ranking) => _kept.Exists(k => ReferenceEquals(k.Ranking, ranking));
+
     // The ranking held in memory for owner, or null. Asking counts as showing it.
     //
     // worldNow is the game data as it is (null: it can't be read, or the caller has

@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.20**
-> - Learned arrival rooms: a file another program holds is retried, not set aside as damaged
-> - Two clients writing learned room names or arrival rooms at once take turns, so neither loses the other's
-> - A temporary file left by a write that never finished is removed when the realm or set loads
-> - A renamed realm keeps its learned room names, saved or not, with or without a names file yet
-> - A room name learned on a walk reaches the trainer, bank and item-giver lists once the walk goes quiet
+> **Version 3.181.23**
+> - Start-up clean-up of saved rankings no longer waits on a ranking file that won't open
+> - A ranked tour on the map is cleared when its ranking is dropped on a game-data reload
+> - Saved rankings ignore a game-data set folder that is a symbolic link
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
