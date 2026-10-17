@@ -11,7 +11,7 @@ using MudPlay.Terminal;
 
 namespace MudPlay.Game.Recovery;
 
-// Death observation aggregator. Composes DeathLineWatcher.PlayerDied and the
+// Death observation aggregator. Composes RoomTracker.PlayerDeathObserved and the
 // per-character CharacterProfile.DeathHistory into a live observable shape that
 // the Workshop DEATH section binds to.
 //
@@ -31,7 +31,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // LogService category — the [DeathRecovery] rows.
     public const string LogCategory = "DeathRecovery";
 
-    private readonly DeathLineWatcher _deathWatcher;
     private readonly ProfileService _profile;
     private readonly RoomTracker _roomTracker;
     private readonly LogService? _log;
@@ -278,16 +277,13 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private readonly Func<DateTimeOffset> _now;
 
     public DeathRecoveryManager(
-        DeathLineWatcher deathWatcher,
         ProfileService profile,
         RoomTracker roomTracker,
         LogService? log = null,
         Func<DateTimeOffset>? now = null)
     {
-        ArgumentNullException.ThrowIfNull(deathWatcher);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(roomTracker);
-        _deathWatcher = deathWatcher;
         _profile = profile;
         _roomTracker = roomTracker;
         _log = log;
@@ -296,7 +292,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // driven here off confirmed room arrivals (OnRoomChanged), not by the sweep.
         _sweep = new DeathGroundSweep(Send, log);
 
-        _deathWatcher.PlayerDied += OnPlayerDied;
         // Re-entering a room that holds one of our deathpiles drives the
         // Active → Partial → Recovered transitions (and the auto-grab).
         _roomTracker.StateChanged += OnRoomChanged;
@@ -321,15 +316,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private void OnMoveBlocked()
     {
         if (_grabOnSurvey && _activeRecovery is not null) _armedAt = _now();
-    }
-
-    private void OnPlayerDied(PlayerDiedEvent evt)
-    {
-        _log?.Info(LogCategory, $"player slain by={evt.Killer}");
-        // The death record is written separately by
-        // DeathDetector → RoomTracker.NoteDeath → profile.DeathHistory.
-        // Nudge the grid so the new record surfaces once that write lands.
-        OnPropertyChanged(nameof(Records));
     }
 
     // Wire the walker used by WalkToDeathRoom / RecoverNow and the spillover
@@ -3052,6 +3038,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _returnedLines.Clear();
             return;
         }
+        // NoteDeath has just appended the record: show it in the grid.
+        OnPropertyChanged(nameof(Records));
         DeathRecord last = list[^1];
         if (tookNothing) _returnedLines.Clear();
         else CaptureSpillFacts(last);
@@ -3174,7 +3162,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _deathWatcher.PlayerDied -= OnPlayerDied;
         _roomTracker.StateChanged -= OnRoomChanged;
         _roomTracker.PlayerDeathObserved -= OnDeathObserved;
         _roomTracker.PlayerDeathInferred -= OnDeathInferred;

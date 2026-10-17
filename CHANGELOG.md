@@ -1,6 +1,6 @@
 # Version history
 
-## 3.183.41
+## 3.184.13
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
@@ -9,6 +9,41 @@
 - Clear all also shows while building an Auto-Lair setup, and clears its lair markers
 - View → Reset layout, which had no panels to reset, is gone from the menu
 - Settings search no longer offers "Bless 1" to "Bless 15"; a search for bless finds the Spells tab note that points to the Buff Watchdog
+
+## 3.184.6
+
+- Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
+- Unsure of your room, a text-exit move (`go path`) still narrows down where you are
+- Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
+- Unsure of your room, moves typed together are each matched to their own room display
+- Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
+- A walk's forward re-locate reads every step's landing in order; a room it, the walk-back or an unsure re-match settles on is never saved as your known room, and a relog lands back on it
+
+## 3.184.0
+
+- Auto-Light: the room-light spell is read by its cast code again, so the Add-buff dialog offers "Only when the room is dark" (re-tick it on a slot the old bug cleared) and the spell counts toward lighting a route
+- Auto-Light: the room-light spell goes first, one room before a dark room; a light item covers only what a buff leaves short, and illuminate's light ball is lit instead of a carried light
+- Auto-Light: a spell found not enough isn't recast for rooms as dark until the dark stretch ends
+- Auto-Light: "Only use my room-light spell" lights only the spell (and a light ball it made) and buys nothing
+- Auto-Light: walks, training walks and loops that cross dark rooms with no light first make a trip to buy the Preferred light
+- Auto-Light: a loop's dwindling light is restocked on a light trip off the loop
+- Auto-Light: bank and training trips stock up at a light shop within 25 steps of the way back
+- Auto-Light: a light lying on the floor is picked up, up to the Carry-hours shortfall, unless its item rules say otherwise
+
+## 3.183.41
+
+- Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
+- Combat: "Attack Not Last" and follow Target Priority never cost a round; unanswered, they attack before the round fires
+- Combat: a party member seen fighting releases those holds, and the followed player's hits set the target
+- bug reports addressed: paradigm-20261017-050150
+
+## 3.183.39
+
+- Your own death is read from `You have been killed!`: the death sound, the death-floor refinement (now only ever lowered) and the round reset now run
+- A party member's death is read from `<Name> is dead.`; the `has been slain by` and `has died` lines were never sent by the game
+- A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited (never without a seen death line, nor after a re-invite)
+- After a party-splitting teleport, a member is sent 3 `@join` nags before the wait for them can end
+- The `@join` nag is no longer stopped by the game's echo of the invite it follows
 
 ## 3.183.34
 

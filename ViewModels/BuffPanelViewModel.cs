@@ -758,8 +758,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
     // True when a cast code resolves to a spell that provides light (offers the "only
     // when dark" condition) / is a mana-regen roll spell (offers the reroll config).
-    private bool IsLightSpell(string? code) =>
-        !string.IsNullOrWhiteSpace(code) && AppServices.Current.RoomLightSpell.IlluForSpell(code!.Trim()) > 0;
+    private static bool IsLightSpell(string? code) => AppServices.Current.RoomLightSpell.IsLightCastCode(code);
 
     private bool IsRollSpell(string? code) =>
         !string.IsNullOrWhiteSpace(code)
@@ -772,7 +771,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AppServices.Current.GameData.ActiveRealm != Game.RealmType.ParaMud;
 
     // Apply the dialog's result onto a slot DTO (shared by add + edit).
-    private void ApplyResult(BuffSlot dto, AddBuffResult r)
+    internal static void ApplyResult(BuffSlot dto, AddBuffResult r)
     {
         // A mark says who negated THIS spell; another spell starts with none.
         if (!string.Equals(dto.Spell?.Trim(), r.Spell?.Trim(), StringComparison.OrdinalIgnoreCase))

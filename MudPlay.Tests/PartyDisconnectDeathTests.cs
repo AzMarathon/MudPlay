@@ -697,30 +697,4 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper just entered the Realm."));
         // No assertion — passes if no exception.
     }
-
-    // ===== Death =====
-
-    [Fact]
-    public void Death_OfPartyMember_RemovesImmediately()
-    {
-        var (router, mgr, _) = Setup();
-        router.Dispatch(Line("Helper started to follow you."));
-        Assert.Single(mgr.State.Members);
-
-        router.Dispatch(Line("Helper has been slain by a giant rat."));
-
-        Assert.Empty(mgr.State.Members);
-        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Death_OfNonMember_IsIgnored()
-    {
-        var (router, mgr, _) = Setup();
-        router.Dispatch(Line("Helper started to follow you."));
-
-        router.Dispatch(Line("Stranger has been slain by a dragon."));
-
-        Assert.Single(mgr.State.Members);
-    }
 }

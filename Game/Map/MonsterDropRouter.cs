@@ -11,7 +11,7 @@ namespace MudPlay.Game.Map;
 public readonly record struct MonsterDropSpawn(
     RoomKey Room, int MonsterId, string MonsterName, int DropPercent);
 
-// Active fulfiller for NeedKind.PathItem needs that no shop can satisfy:
+// Active fulfiller for path-item needs that no shop can satisfy:
 // when a one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item
 // we're not carrying and no shop stocks it, find which monster drops it,
 // and — with the user's confirmation — reroute to the nearest room that
@@ -134,7 +134,6 @@ public sealed class MonsterDropRouter
     // confirmation prompt toward the nearest such spawn. A no-op otherwise.
     public void OnNeedPosted(Need need)
     {
-        if (need.Kind != NeedKind.PathItem) return;
         if (_phase != Phase.Idle) return;
         if (_engineWalkActive()) return;
 

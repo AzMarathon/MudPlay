@@ -13,7 +13,7 @@ namespace MudPlay.Game.Map;
 public readonly record struct SummonSource(
     RoomKey Room, string Command, string MonsterName);
 
-// Active fulfiller for NeedKind.PathItem needs satisfied by summoning a monster
+// Active fulfiller for path-item needs satisfied by summoning a monster
 // that drops the item outright: detour to the summoning room, type the room
 // command, let the fight resolve, then re-survey the floor so the drop is
 // collected, and resume the original walk once it lands.
@@ -189,7 +189,6 @@ public sealed class PathItemSummonRouter : IDisposable
     // on to the destination. A no-op otherwise.
     public void OnNeedPosted(Need need)
     {
-        if (need.Kind != NeedKind.PathItem) return;
         if (_phase != Phase.Idle) return;
         if (_engineWalkActive()) return;
 

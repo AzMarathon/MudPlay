@@ -191,7 +191,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
             afterStop: change =>
             {
                 h.AfterStops.Add((change, h.Idle));
-                if (h.ForgetNeeds && !change.ReadInAgain) h.Needs.Clear(NeedKind.PathItem);
+                if (h.ForgetNeeds && !change.ReadInAgain) h.Needs.Clear();
             });
         cache.ActiveSetChanged += _ =>
         {
@@ -822,16 +822,13 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Harness h = OnAlpha();
         List<string> got = new();
         PathItemFloorCollector pickup = FloorPickup(h, got);
-        h.Needs.Post(NeedKind.PathItem, "42", "test");
-        h.Needs.Post(NeedKind.LightSource, "any", "test");
+        h.Needs.Post("42", "test");
 
         h.SwitchTo("beta");
         pickup.CollectRevealed();
 
         Assert.Empty(got);
-        Assert.Empty(h.Needs.Outstanding(NeedKind.PathItem));
-        // A need that names no record of the game data is still a need.
-        Assert.Single(h.Needs.Outstanding(NeedKind.LightSource));
+        Assert.Empty(h.Needs.Outstanding());
     }
 
     // What forgetting it guards: the need left standing has the other set's item
@@ -843,7 +840,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.ForgetNeeds = false;
         List<string> got = new();
         PathItemFloorCollector pickup = FloorPickup(h, got);
-        h.Needs.Post(NeedKind.PathItem, "42", "test");
+        h.Needs.Post("42", "test");
 
         h.SwitchTo("beta");
         pickup.CollectRevealed();
@@ -858,13 +855,13 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Harness h = OnAlpha();
         List<string> got = new();
         PathItemFloorCollector pickup = FloorPickup(h, got);
-        h.Needs.Post(NeedKind.PathItem, "42", "test");
+        h.Needs.Post("42", "test");
 
         h.ReadInAgain();
         pickup.CollectRevealed();
 
         Assert.Equal(new[] { "get brass key 42" }, got);
-        Assert.Single(h.Needs.Outstanding(NeedKind.PathItem));
+        Assert.Single(h.Needs.Outstanding());
     }
 
     // ----- a profile closed or loaded switches the set too ---------------------------

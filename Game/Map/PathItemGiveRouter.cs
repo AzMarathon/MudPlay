@@ -22,7 +22,7 @@ public readonly record struct GiveSource(
     RoomKey Room, string Command, string GiverName, IReadOnlyList<string>? RefusalLines = null,
     int TakesItemId = 0);
 
-// Active fulfiller for NeedKind.PathItem needs an NPC / room hands over on a
+// Active fulfiller for path-item needs an NPC / room hands over on a
 // keyword: when a one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item
 // we're not carrying and a textblock `giveitem` supplies it (an
 // `ask <npc> <keyword>` dialogue give, or a room-CMD keyword give), detour to
@@ -173,7 +173,6 @@ public sealed class PathItemGiveRouter : IDisposable
     // destination. A no-op otherwise.
     public void OnNeedPosted(Need need)
     {
-        if (need.Kind != NeedKind.PathItem) return;
         if (_phase != Phase.Idle) return;
         if (_engineWalkActive()) return;
 

@@ -3940,7 +3940,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // 2026-09-30; report paradigm-20260930-205208).
         static string Back(DetourResumeKind kind) => kind == DetourResumeKind.Lair ? "Back to Lairs" : "Back to Loop";
         if (_services.AutoDeposit.IsRerouting)
-            trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind) : "Bank Trip", NavChipTone.Trip));
+            trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind)
+                : _services.AutoDeposit.IsLightTrip ? "Light Trip" : "Bank Trip", NavChipTone.Trip));
         if (_services.SellDetour.IsDetouring)
             trips.Add((_services.SellDetour.IsReturning ? Back(_services.SellDetour.ResumePlan.Kind) : "Auto-Selling", NavChipTone.Trip));
         if (_services.StashTransfer.IsBusy) trips.Add((StashTransferChip, NavChipTone.Trip));

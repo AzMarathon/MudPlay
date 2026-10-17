@@ -5,7 +5,7 @@ using MudPlay.Services;
 namespace MudPlay.Game.Map;
 
 // Bridges the walker's planned-route item requirements to the NeedsRegistry as
-// NeedKind.PathItem needs, and resolves them when the required item enters
+// path-item needs, and resolves them when the required item enters
 // inventory. While any PathItem need is outstanding and Auto-Search is on,
 // AutoSearchManager arms itself so every room entry issues a bare "sea",
 // revealing the concealed item that unlocks the route.
@@ -96,7 +96,7 @@ public sealed class PathItemDemandTracker
         get
         {
             if (!_searchEnabled()) return false;
-            IReadOnlyList<Need> outstanding = _needs.Outstanding(NeedKind.PathItem);
+            IReadOnlyList<Need> outstanding = _needs.Outstanding();
             if (outstanding.Count == 0) return false;
             if (_isSearchWorthy is null) return true;
             foreach (Need n in outstanding)
@@ -129,7 +129,7 @@ public sealed class PathItemDemandTracker
         {
             if (id <= 0 || !considered.Add(id)) continue;
             if (_carriedCount(id) >= want) continue;
-            _needs.Post(NeedKind.PathItem, id.ToString(CultureInfo.InvariantCulture), Requester, want);
+            _needs.Post(id.ToString(CultureInfo.InvariantCulture), Requester, want);
             postedAny = true;
         }
 
@@ -139,7 +139,7 @@ public sealed class PathItemDemandTracker
         // over the walk — would never be asked again, and the route would fail at a
         // gate nobody was sent after. This walk is the previous detour's own resume,
         // so the deferring router is free again by now.
-        if (postedAny) _needs.Reoffer(NeedKind.PathItem);
+        if (postedAny) _needs.Reoffer();
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed): resolves
@@ -149,7 +149,7 @@ public sealed class PathItemDemandTracker
     // drops.
     public void OnInventoryChanged()
     {
-        IReadOnlyList<Need> outstanding = _needs.Outstanding(NeedKind.PathItem);
+        IReadOnlyList<Need> outstanding = _needs.Outstanding();
         if (outstanding.Count == 0) return;
         foreach (Need need in outstanding)
         {

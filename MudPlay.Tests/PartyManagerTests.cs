@@ -1275,7 +1275,7 @@ public sealed class PartyManagerTests
         Assert.True(router.TryGetPattern(KnownPatterns.PartyYouFollowing,   out _));
         Assert.True(router.TryGetPattern(KnownPatterns.PartyStopsFollowing, out _));
         Assert.True(router.TryGetPattern(KnownPatterns.PartyHeader,         out _));
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyMemberDeath,    out _));
+        Assert.True(router.TryGetPattern(KnownPatterns.PartyMemberDied,     out _));
     }
 
     // ===== PartyMember.HpRichDisplay / MaRichDisplay =====

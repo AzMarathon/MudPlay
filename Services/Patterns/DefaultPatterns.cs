@@ -300,14 +300,11 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.OtherSwingsAtTarget,
             @"^(?:The )?[\w' -]+? \w+s at [\w' -]+[.!]\s*$");
 
-        // Local-player death. MajorMUD's canonical wording is "You have been
-        // slain by <killer>." — the killer is whatever last hit landed (monster
-        // name OR another player for PvP, even though MudPlay scopes engines
-        // to PvE; we still observe the line so DeathRecoveryManager can fire).
-        // The trailing "." is captured tolerantly: some realms include a
-        // trailing "!" instead.
-        yield return new RegexPattern(KnownPatterns.UserSlain,
-            @"^You have been slain by (?<killer>[\w '-]+?)[.!]\s*$");
+        // Local-player death: the victim's own line for every death by damage,
+        // the last life's included (GAME_MECHANICS "Death lines & the
+        // miracle-save"). It names no killer. A suicide doesn't print it.
+        yield return new RegexPattern(KnownPatterns.UserKilled,
+            @"^You have been killed!\s*$");
 
         // "You don't see <X> here!" — target-gone signal. Trailing punctuation
         // tolerant — "!" canonical but some realms emit ".".
@@ -815,28 +812,15 @@ public static class DefaultPatterns
         // earlier guess). Anchors PartyManager's stateful row parser.
         yield return new RegexPattern(KnownPatterns.PartyHeader,
             @"^The following people are in your travel party:");
-        // Conservative member-death match — "X has been slain by Y" is
-        // the clearest PvP kill line in MajorMUD's vocabulary, with the
-        // victim's name as the load-bearing group. Generic "X has died"
-        // lines aren't matched here because they can fire for non-party
-        // mobs / NPCs in the same room and we don't want false-positive
-        // evictions from PartyState.Members.
-        yield return new RegexPattern(KnownPatterns.PartyMemberDeath,
-            @"^(?<player>\w+) has been slain by ");
-        // "<Name> has died." — the universal third-person death line an observer
-        // sees when any player in the room dies (the counterpart to the
-        // first-person "You have been slain by ..." we match as UserSlain). It is
-        // NOT party-specific, so unlike PartyMemberDeath above it is deliberately
-        // NOT wired to any roster-eviction path — matching it broadly would
-        // false-evict on a same-named mob/NPC. Its sole consumer,
-        // PartyDeathRosterCleanup, bounds every action to a name that is BOTH a
-        // current party member AND shows as an [Invited] par slot, so a stray
-        // "goblin has died." can never trigger a real uninvite. Wording is
-        // user-reported and pending live re-confirmation. The Stock engine's room
-        // line for a player's death is "<Name> is dead."; both are read
-        // (GAME_MECHANICS "Death lines & the miracle-save").
+        // "<Name> is dead." — what everyone else in the room sees when a player
+        // dies, party member or not (GAME_MECHANICS "Death lines & the
+        // miracle-save"). No line names the killer, and no other third-person
+        // death line exists. It is not party-specific, so every consumer scopes it
+        // to a name on our roster; a monster's own death sentence that ends the
+        // same way ("…, and is dead.") has more than one word ahead of it and
+        // isn't read as a name.
         yield return new RegexPattern(KnownPatterns.PartyMemberDied,
-            @"^(?<player>\w+) (?:has died|is dead)\.?\s*$");
+            @"^(?<player>\w+) is dead\.\s*$");
         // "<Name> drops to the ground!" — a player hit 0 HP and is mortally
         // wounded (down, bleeding out, not yet dead). Room/party-side signal;
         // everyone present sees it, the dropper with their own name. Distinct
