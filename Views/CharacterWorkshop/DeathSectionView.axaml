@@ -65,7 +65,7 @@
                   ItemsSource="{Binding Records}"
                   SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
                   DoubleTapped="OnRecordDoubleTapped"
-                  ToolTip.Tip="Double-click a death to centre the map on its map/room."
+                  ToolTip.Tip="Double-click a death to centre the map on its map/room: the room of that number in the game data active now, which is where it died only when that is the death's game data."
                   Background="{StaticResource ChromeBgSunkenBrush}"
                   BorderThickness="1"
                   BorderBrush="{StaticResource ChromeBorderBrush}"
@@ -85,6 +85,8 @@
                 <DataGridTextColumn Header="Map / Room #" Binding="{ReflectionBinding RoomKeyText}" SortMemberPath="RoomKeyText"
                                     Width="110" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <DataGridTextColumn Header="Game data" Binding="{ReflectionBinding GameDataText}" SortMemberPath="GameData"
+                                    Width="120" Foreground="{StaticResource ChromeFgSecBrush}"/>
                 <DataGridTextColumn Header="Died" Binding="{ReflectionBinding DiedText}" SortMemberPath="At"
                                     Width="180" FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>

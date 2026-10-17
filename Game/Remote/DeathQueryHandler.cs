@@ -13,7 +13,9 @@ namespace MudPlay.Game.Remote;
 //   @death        — the single most recent unrecovered death.
 //   @death all    — every unrecovered death, most recent first (capped).
 // One line per death: "death #N <when>: <status> at <room> (map/room), K lives
-// left". ASCII only — the reply rides the BBS wire.
+// left", and the game data it was recorded on when that isn't the one active
+// here, whose room of that number is another room. ASCII only — the reply rides
+// the BBS wire.
 public sealed class DeathQueryHandler : IDisposable
 {
     // Cap on lines for @death all so a long unrecovered history can't flood the
@@ -22,17 +24,21 @@ public sealed class DeathQueryHandler : IDisposable
 
     private readonly RemoteCommandManager _engine;
     private readonly Func<IReadOnlyList<DeathRecord>> _readRecords;
+    private readonly Func<DeathRecord, bool> _ofOtherGameData;
     private bool _disposed;
 
     // readRecords supplies the character's death-recovery log (DeathRecoveryManager
     // .Records). A Func keeps the handler decoupled from the manager and trivially
-    // testable.
-    public DeathQueryHandler(RemoteCommandManager engine, Func<IReadOnlyList<DeathRecord>> readRecords)
+    // testable. ofOtherGameData says a record was made on another game data than the
+    // active one (DeathRecoveryManager.OtherGameDataRefusal); unbound, none is.
+    public DeathQueryHandler(RemoteCommandManager engine, Func<IReadOnlyList<DeathRecord>> readRecords,
+        Func<DeathRecord, bool>? ofOtherGameData = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(readRecords);
         _engine = engine;
         _readRecords = readRecords;
+        _ofOtherGameData = ofOtherGameData ?? (_ => false);
 
         if (!RemoteCommandCatalog.TryGetCategory("@death", out PlayerRemoteControls category))
             throw new InvalidOperationException(
@@ -71,12 +77,13 @@ public sealed class DeathQueryHandler : IDisposable
         if (extra > 0) ctx.Reply($"{extra} more unrecovered deaths");
     }
 
-    private static string Format(DeathRecord r)
+    private string Format(DeathRecord r)
     {
         string where = r.RoomName is { Length: > 0 } name
             ? $"{name} ({r.RoomKeyText})"
             : r.RoomKeyText;
         string status = r.Status.ToString().ToLowerInvariant();
-        return $"death #{r.RecordNumber} {r.DiedText}: {status} at {where}, {r.LivesRemaining} lives left";
+        string gameData = _ofOtherGameData(r) ? $", recorded on game data '{r.GameData}'" : "";
+        return $"death #{r.RecordNumber} {r.DiedText}: {status} at {where}{gameData}, {r.LivesRemaining} lives left";
     }
 }

@@ -223,6 +223,10 @@ public sealed class RoomTracker
     // apply to one.
     public bool LastDeathTookNothing { get; private set; }
 
+    // The game-data set whose rooms the tracker places the character in, the set a
+    // death recorded now is stamped with (DeathRecord.GameData).
+    public string? RoomsGameData => _graph.ActiveSet;
+
     // The exit the one move in flight is crossing: what a refusal of that move is a
     // refusal of. Null with no move in flight, with more than one queued (the one
     // refused isn't then the one out of this room), or when it maps to no exit.
@@ -1384,7 +1388,7 @@ public sealed class RoomTracker
                 coins = snapshot.Currency;
             }
             AppendDeathRecord(_profile, when,
-                died is null ? null : new RoomRef(died.Key.Map, died.Key.Room), died?.Name,
+                died is null ? null : new RoomRef(died.Key.Map, died.Key.Room), died?.Name, RoomsGameData,
                 livesRemaining, messageText, equipped, lost, coins, nothingLost: tookNothing);
         }
 
@@ -1422,8 +1426,12 @@ public sealed class RoomTracker
         ArgumentNullException.ThrowIfNull(death);
         if (_profile is null) return null;
         LastDeathTookNothing = death.NothingLost;
-        string? roomName = death.Room is { } room ? _graph.GetRoom(new RoomKey(room.Map, room.Room))?.Name : null;
-        DeathRecord record = AppendDeathRecord(_profile, death.At, death.Room, roomName,
+        // The room's number is of the set the held list was written on: named from
+        // this graph only when that is the set it holds (or the list didn't say).
+        bool sameSet = death.GameData is null
+            || string.Equals(death.GameData, RoomsGameData, StringComparison.OrdinalIgnoreCase);
+        string? roomName = sameSet && death.Room is { } room ? _graph.GetRoom(new RoomKey(room.Map, room.Room))?.Name : null;
+        DeathRecord record = AppendDeathRecord(_profile, death.At, death.Room, roomName, death.GameData,
             death.LivesRemaining, death.Message,
             death.NothingLost ? null : death.Equipped, death.NothingLost ? null : death.Lost,
             death.NothingLost ? null : death.Coins, nothingLost: death.NothingLost);
@@ -1434,7 +1442,7 @@ public sealed class RoomTracker
 
     // The one place a death becomes a DeathRecord on the profile.
     private DeathRecord AppendDeathRecord(
-        CharacterProfile profile, DateTimeOffset when, RoomRef? room, string? roomName,
+        CharacterProfile profile, DateTimeOffset when, RoomRef? room, string? roomName, string? gameData,
         int livesRemaining, string? messageText,
         List<DeathItem>? equipped, List<DeathItem>? lost, CurrencyHoldings? coins, bool nothingLost = false)
     {
@@ -1443,6 +1451,7 @@ public sealed class RoomTracker
         {
             RecordNumber = profile.DeathHistory.Count + 1,
             RoomName = roomName,
+            GameData = gameData,
             // Recovered, not Active: every reader of the history takes Active and
             // Partial for a pile still out there.
             Status = nothingLost ? DeathRecoveryStatus.Recovered : DeathRecoveryStatus.Active,
