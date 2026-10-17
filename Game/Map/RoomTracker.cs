@@ -19,9 +19,12 @@ namespace MudPlay.Game.Map;
 //   - Lost — replay-from-last-Confirmed failed; user must manually pick or wait
 //     for a confirming observation.
 //
-// Recovery: a single tier — replay the persisted CharacterProfile.RecentSteps
-// from the last Confirmed room through the graph; if the endpoint matches the
-// current observation, we Confirm there. No fuzzy footprint matching.
+// Recovery on the tracker's own side (the engine recovery gate runs its own
+// ladder while an engine drives): replay the persisted CharacterProfile.RecentSteps
+// from the room the trail is anchored at and Confirm where it ends when that fits
+// the display; re-anchor on a name that is unique once hidden exits are allowed
+// for; and, with no engine attached, the passive grid re-localiser, which narrows
+// a same-named area across the moves the player makes (TryPassiveGridLocate).
 //
 // Persistence: CharacterProfile.LastKnownRoom is written ONLY on strict-1-of-1
 // Confirmed transitions (FindCandidates(name, exits).Count == 1) and on the
@@ -47,11 +50,6 @@ public sealed class RoomTracker
     // Strike count at which the next mismatch triggers replay-recovery instead
     // of incrementing further.
     private const int SuspectStrikeLimit = 3;
-
-    // Depth ceiling for the passive grid footprint. Generous — the passive
-    // re-localiser keeps narrowing as long as the player keeps moving; a unique
-    // convergence, not the ceiling, is what ends it.
-    private const int PassiveGridDepthCeiling = 128;
 
     private readonly RoomGraphManager _graph;
     private readonly LogService? _log;
@@ -83,11 +81,14 @@ public sealed class RoomTracker
     // never narrows to one just stays Lost.
     private readonly FootprintMatcher _passiveGrid;
     private bool _passiveGridActive;
-    // The last cardinal move not yet folded into _passiveGrid — set on every cardinal
-    // step, consumed once when the next observation lands. Cleared on seed (the seed
-    // already reflects where we stand). Text-exit (cardinal-less) moves don't advance
-    // the passive footprint.
-    private Direction? _passivePendingMove;
+    // Moves sent while the tracker is unsure of the room (Unknown / Suspect / Lost /
+    // PendingRespawn) that nothing has answered yet, oldest first. The FSM consumes
+    // _pending only while it's sure (Pending), so this is what says which move an
+    // unsure display is the outcome of. Filled on every send while unsure, and from
+    // _pending when a sure tracker turns unsure (CarryPendingIntoUnsure). Each
+    // unsure display, dark line or blind line answers the oldest; a refusal
+    // un-counts the newest; a settled position empties it. Bounded like _pending.
+    private readonly List<PendingMove> _unsureMoves = new();
     // Reports whether a navigation engine is currently attached to the recovery gate.
     // Null in tests / before wiring → treated as "not attached", so the passive path
     // runs. Wired by AppServices to EngineRecoveryGate.HasAttachedEngine.
@@ -311,8 +312,7 @@ public sealed class RoomTracker
         _passiveGrid = new FootprintMatcher(
             probeHop: (from, dir) => GraphFootprintProbes.Hop(_graph, from, dir),
             matchesObservation: (key, obs) => GraphFootprintProbes.Matches(_graph, key, obs),
-            log: log,
-            depthCeiling: PassiveGridDepthCeiling);
+            log: log);
         State.LastUpdatedAt = _now();
     }
 
@@ -419,6 +419,9 @@ public sealed class RoomTracker
         if (profile.RecentSteps is { } steps) _recentSteps.AddRange(steps);
         // The persisted steps project from the room we're hydrating as Confirmed.
         _stepsAnchor = room.Key;
+        // A relog lands sure of the saved room; nothing from an unsure spell before
+        // it may fold into a later footprint.
+        ResetPassiveLocate();
 
         // Set Confirmed without writing back to the profile (we just
         // read from it). Bypass the SetRoom persistence path so we
@@ -460,7 +463,7 @@ public sealed class RoomTracker
     public void OnProfileClosed()
     {
         _profile = null;
-        ClearPassiveGrid();
+        ResetPassiveLocate();
     }
 
     // Bind the live inventory snapshot provider so NoteDeath can capture the
@@ -506,11 +509,12 @@ public sealed class RoomTracker
         }
         LastMoveWasManual = !isEngineAnnouncement && !isFollowDrag;
         SettleUnshownCastDrag(when);
-        EnqueuePending(isFollowDrag
+        PendingMove move = isFollowDrag
             ? PendingMove.FromFollowDrag(direction, when)
-            : PendingMove.FromDirection(direction, when));
+            : PendingMove.FromDirection(direction, when);
+        EnqueuePending(move);
         AppendStep(new DirectionDto(direction));
-        _passivePendingMove = direction;
+        NoteUnsureMove(move);
 
         if (State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending)
         {
@@ -640,13 +644,12 @@ public sealed class RoomTracker
         }
         LastMoveWasManual = !isEngineAnnouncement;
         SettleUnshownCastDrag(when);
-        EnqueuePending(new PendingMove(cardinal, command, when));
+        PendingMove move = new(cardinal, command, when);
+        EnqueuePending(move);
         AppendStep(new DirectionDto(cardinal, command));
-        // Only a cardinal advances the passive footprint. A text-exit ("go path")
-        // carries no direction to hop the candidate set through, so clear the pending
-        // move (null) — the next observation then skips a passive step rather than
-        // folding it under a stale, wrong direction.
-        _passivePendingMove = cardinal;
+        // A text exit with no cardinal is still a move: the passive footprint follows
+        // it through each candidate's own exit of that command (PassiveHop).
+        NoteUnsureMove(move);
 
         if (State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending)
         {
@@ -711,6 +714,15 @@ public sealed class RoomTracker
         IsInDarkRoom = true;
 
         if (TakeCastLandingLine(when, "is too dark to show")) return;
+
+        // Unsure of the room, the dark line still answers the oldest move in flight:
+        // no bonk came, so it was taken. The passive footprint dead-reckons it here,
+        // rather than folding it later under a lit display that isn't its own.
+        if (!IsSure)
+        {
+            FoldUnshownMove(when, "dark line");
+            return;
+        }
 
         // Only a pending move can be confirmed by the dark line. A dark display
         // while Confirmed (a passive re-render, standing still) or with nothing
@@ -794,6 +806,14 @@ public sealed class RoomTracker
         }
 
         if (TakeCastLandingLine(when, "is shown to a blind character")) return;
+
+        // As in the dark: unsure of the room, the line answers the oldest move in
+        // flight, and the passive footprint dead-reckons it.
+        if (!IsSure)
+        {
+            FoldUnshownMove(when, "blind-move line");
+            return;
+        }
 
         // Only a pending move can be advanced by the blind line. A blind echo
         // while Confirmed (a passive re-render, standing still) or with nothing
@@ -1176,7 +1196,7 @@ public sealed class RoomTracker
             target = PredictedLanding(exit);
         while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
-        _passivePendingMove = null;
+        _unsureMoves.Clear();
         _cardinalEchoClaim = null;
 
         bool atSource = source is not null && MatchesPredicted(source, observation);
@@ -1268,12 +1288,15 @@ public sealed class RoomTracker
             // Unsure of the room already: there is no in-flight move to settle, only
             // dead ones to forget before the display is judged.
             if (afterDrop && State.Confidence != RoomConfidence.Pending)
+            {
                 while (_pending.TryDequeue(out _)) { /* drain */ }
+                _unsureMoves.Clear();
+            }
 
             switch (State.Confidence)
             {
                 case RoomConfidence.Unknown:
-                    LandFromCandidateSearch(observation, when);
+                    LandFromCandidateSearch(observation, TakeAnsweredMove(), when);
                     break;
 
                 case RoomConfidence.Confirmed:
@@ -1286,7 +1309,7 @@ public sealed class RoomTracker
                     break;
 
                 case RoomConfidence.Suspect:
-                    ReconcileFromSuspect(observation, when);
+                    ReconcileFromSuspect(observation, TakeAnsweredMove(), when);
                     break;
 
                 case RoomConfidence.Lost:
@@ -1295,7 +1318,7 @@ public sealed class RoomTracker
                     // land via candidate search. PendingRespawn arrives via
                     // the same code path because the recovery semantics are
                     // identical: the next obs is wherever we are now.
-                    LandFromCandidateSearch(observation, when);
+                    LandFromCandidateSearch(observation, TakeAnsweredMove(), when);
                     break;
             }
         }
@@ -1408,7 +1431,7 @@ public sealed class RoomTracker
         while (_pending.TryDequeue(out _)) { /* drain */ }
         _recentSteps.Clear();
         _stepsAnchor = null;
-        ClearPassiveGrid();
+        ResetPassiveLocate();
         PersistSteps();
         IsInDarkRoom = false;
         EnteredBlind = false;
@@ -1497,6 +1520,7 @@ public sealed class RoomTracker
         // Drop the most recent pending move + its persisted step — the
         // server refused, so it never happened.
         DropMostRecentPending();
+        DropNewestUnsureMove("refused");
 
         if (State.Confidence == RoomConfidence.Pending)
         {
@@ -1540,6 +1564,15 @@ public sealed class RoomTracker
     public void NoteCommandDropped(DateTimeOffset? whenUtc = null)
     {
         DateTimeOffset when = whenUtc ?? _now();
+        // Unsure of the room, the same rule holds for the move the passive footprint
+        // is waiting on: counted but never made, it must not be folded.
+        if (!IsSure)
+        {
+            if (_unsureMoves.Count == 0 || when - _unsureMoves[^1].SentAt > DroppedCommandWindow) return;
+            DropMostRecentPending();
+            DropNewestUnsureMove("dropped by the typing-rate limiter");
+            return;
+        }
         if (State.Confidence != RoomConfidence.Pending || _pending.IsEmpty) return;
         if (LastMoveSentAt is not { } sent || when - sent > DroppedCommandWindow) return;
 
@@ -1731,6 +1764,23 @@ public sealed class RoomTracker
 
         ClearPendingAndSteps();
         SetRoom(room, RoomConfidence.Confirmed, when, "manual locate", isStrictAnchor: true);
+    }
+
+    // A room worked out from a walked footprint (the recovery gate's tier-2 forward
+    // localiser). It lands Confirmed like SetLocated, but as a deduction it doesn't
+    // become the persisted LastKnownRoom: a footprint can converge on the wrong twin,
+    // and the saved anchor must stay something we knew.
+    public void LocateDeduced(RoomKey key, string reason, DateTimeOffset? whenUtc = null)
+    {
+        DateTimeOffset when = whenUtc ?? _now();
+        if (_graph.GetRoom(key) is not { } room)
+        {
+            _log?.Log(LogSeverity.Warn, "RoomTracker",
+                $"Deduced locate refused: room key {key} not present in active graph.");
+            return;
+        }
+        ClearPendingAndSteps();
+        SetRoom(room, RoomConfidence.Confirmed, when, reason, isStrictAnchor: false);
     }
 
     // Subscribed by AppServices to RoomGraphManager.GraphReloaded. The active set
@@ -2133,7 +2183,9 @@ public sealed class RoomTracker
         EnterSuspect(when, $"Pending observation didn't match queue head; candidates={candidates.Count}");
     }
 
-    private void ReconcileFromSuspect(RoomObservation observation, DateTimeOffset when)
+    // answered: the oldest unsure move this display is the outcome of, or null when
+    // nothing was in flight (TakeAnsweredMove).
+    private void ReconcileFromSuspect(RoomObservation observation, PendingMove? answered, DateTimeOffset when)
     {
         // A stationary player in an ambiguous room (identical "Main Road" rooms,
         // "Darkwood Forest" {SW} with dozens of candidates) can't be resolved by
@@ -2144,7 +2196,7 @@ public sealed class RoomTracker
         // player is declared Lost (marker vanishes) despite never having moved.
         // Only a redisplay that follows an actual move can carry new information,
         // so a repeat with no move since we last processed it is a no-op.
-        if (IsRepeatRedisplayWithoutMove(observation))
+        if (IsRepeatRedisplayWithoutMove(observation, answered))
         {
             State.LastUpdatedAt = when;
             return;
@@ -2178,7 +2230,7 @@ public sealed class RoomTracker
         // making by hand before escalating; a convergence re-anchors us here. Runs
         // on every ambiguous Suspect observation so the footprint keeps closing in
         // during the wander, not only once the strike limit trips.
-        if (TryPassiveGridLocate(observation, when)) return;
+        if (TryPassiveGridLocate(observation, answered, when)) return;
 
         // Still mismatched. Either escalate or replay.
         if (State.SuspectStrikes + 1 >= SuspectStrikeLimit)
@@ -2194,23 +2246,25 @@ public sealed class RoomTracker
     }
 
     // True when the incoming observation is identical to the last one we fully
-    // processed AND no move command has gone out since then — i.e. the player is
-    // standing still and the server just redisplayed the same room. Such a
-    // redisplay carries no new position signal, so the caller skips the Suspect
-    // strike that would otherwise march a parked-in-ambiguity player to Lost.
-    private bool IsRepeatRedisplayWithoutMove(RoomObservation observation)
+    // processed AND no move is waiting on it — i.e. the player is standing still
+    // and the server just redisplayed the same room. Such a redisplay carries no
+    // new position signal, so the caller skips the Suspect strike that would
+    // otherwise march a parked-in-ambiguity player to Lost. "No move waiting" is
+    // the unsure-move queue, not the last send's time: a move the game refused or
+    // dropped was un-counted from it, and a following `look` must not read as that
+    // move's landing.
+    private bool IsRepeatRedisplayWithoutMove(RoomObservation observation, PendingMove? answered)
     {
+        if (answered is not null) return false;
         if (_lastObservation is not { } prev) return false;
-        if (!SameObservation(prev, observation)) return false;
-        if (LastMoveSentAt is { } sent && sent > _lastObservationAt) return false;
-        return true;
+        return SameObservation(prev, observation);
     }
 
     private static bool SameObservation(RoomObservation a, RoomObservation b) =>
         string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)
         && a.Exits.SetEquals(b.Exits);
 
-    private void LandFromCandidateSearch(RoomObservation observation, DateTimeOffset when)
+    private void LandFromCandidateSearch(RoomObservation observation, PendingMove? answered, DateTimeOffset when)
     {
         IReadOnlyList<RoomKey> candidates = _graph.FindCandidates(observation.Name, observation.Exits);
 
@@ -2230,6 +2284,11 @@ public sealed class RoomTracker
             case 0:
                 if (TryReplayRecover(observation, when)) return;
                 if (TryReanchorByName(observation, when, "no exact candidate")) return;
+                // The display still answered a move: fold it, so a footprint already
+                // narrowing doesn't carry a set from before it into the next fold.
+                // The fold matches exits as a subset, so a room no exact search finds
+                // (a hidden exit showing) can still keep candidates, or converge.
+                if (TryPassiveGridLocate(observation, answered, when)) return;
                 SetRoom(room: null, RoomConfidence.Lost, when, "no graph candidate; replay + name re-anchor failed");
                 break;
 
@@ -2237,7 +2296,7 @@ public sealed class RoomTracker
                 // Ambiguous from Unknown / Lost — no single graph room fits this
                 // display. With no engine driving, narrow across the moves we're
                 // making by hand before giving up; a convergence re-anchors us.
-                if (TryPassiveGridLocate(observation, when)) return;
+                if (TryPassiveGridLocate(observation, answered, when)) return;
                 // Still ambiguous — drop into Suspect with no anchor room (we never
                 // had one). Counter stays distinct so the next observation can
                 // either resolve or trip Lost on its own merits.
@@ -2350,17 +2409,18 @@ public sealed class RoomTracker
     }
 
     // Engine-independent recovery for a same-name grid with nobody driving. Called
-    // from the ambiguous (>1 candidate) Suspect / Lost paths, where the single-endpoint
-    // replay + 1-of-1 + name-covering deductions have all missed. Seeds the SLAM
-    // footprint from the current ambiguous observation's candidate set, then folds one
-    // (move, observation) pair per subsequent call; a convergence to a single room
-    // re-anchors us with NO command sent. Returns true only when it re-anchored — the
-    // caller then returns; otherwise it falls through to its normal Suspect / Lost path
-    // while the footprint keeps narrowing across the wander.
+    // from the unsure (Unknown / Suspect / Lost) paths once the single-endpoint replay
+    // + 1-of-1 + name-covering deductions have all missed. Seeds the SLAM footprint
+    // from an ambiguous observation's candidate set, then folds each later display
+    // with the move it answered (answered, the oldest unsure move, FIFO so a burst of
+    // moves folds in order); a convergence to a single room re-anchors us with NO
+    // command sent. Returns true only when it re-anchored — the caller then returns;
+    // otherwise it falls through to its normal Suspect / Lost path while the
+    // footprint keeps narrowing across the wander.
     //
     // Stands fully down whenever an engine is attached: the gate's own tier-2 forward
     // localiser owns recovery then, and two localisers must never both re-anchor.
-    private bool TryPassiveGridLocate(RoomObservation observation, DateTimeOffset when)
+    private bool TryPassiveGridLocate(RoomObservation observation, PendingMove? answered, DateTimeOffset when)
     {
         if (_isEngineAttached?.Invoke() == true)
         {
@@ -2372,24 +2432,63 @@ public sealed class RoomTracker
         {
             // Seed from the ambiguous observation. A unique (or empty) candidate set
             // isn't ours — the caller's 1-of-1 / name-covering paths handle those.
+            // The display answered the move it was taken for already; any later move
+            // still in flight folds on its own display.
             IReadOnlyList<RoomKey> seeds = _graph.FindCandidates(observation.Name, observation.Exits);
             if (seeds.Count <= 1) return false;
             _passiveGrid.Reset(seeds);
             _passiveGridActive = true;
-            _passivePendingMove = null;   // the seed already reflects where we stand now
             _log?.Log(LogSeverity.Info, "RoomTracker",
-                $"Passive grid locate seeded: {seeds.Count} candidates from '{observation.Name}' (no engine attached — narrowing by hand-walked moves, no commands sent).");
+                $"Passive grid locate seeded: {seeds.Count} candidates from '{observation.Name}' (no engine attached — narrowing by hand-walked moves, no commands sent)"
+                + (_unsureMoves.Count > 0 ? $"; {_unsureMoves.Count} move(s) still in flight." : "."));
             return false;
         }
 
         // Fold the move that carried us to THIS observation. A redisplay with no move
-        // since the last fold carries no new spatial constraint, so skip it.
-        if (_passivePendingMove is not { } move) return false;
-        _passivePendingMove = null;
-        _passiveGrid.Step(move, observation);
+        // waiting on it carries no new spatial constraint, so skip it.
+        if (answered is not { } move) return false;
+        _passiveGrid.Step(DescribeMove(move), PassiveHop(move), observation);
+        return SettlePassiveFold(when);
+    }
 
+    // A move whose landing showed nothing (a dark room, a blind character) while
+    // unsure of the room: it still answers the oldest move in flight, so the
+    // footprint dead-reckons it, keeping every candidate the move can be made from.
+    private void FoldUnshownMove(DateTimeOffset when, string what)
+    {
+        if (TakeAnsweredMove() is not { } move)
+        {
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"{char.ToUpperInvariant(what[0])}{what[1..]} seen while {State.Confidence} with no move in flight — holding position.");
+            return;
+        }
+        if (!_passiveGridActive || _isEngineAttached?.Invoke() == true)
+        {
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"{char.ToUpperInvariant(what[0])}{what[1..]} answered move {DescribeMove(move)} while {State.Confidence}; no passive footprint to step.");
+            return;
+        }
+        _passiveGrid.StepBlind(DescribeMove(move), PassiveHop(move));
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Passive grid locate: {what} answered move {DescribeMove(move)}; dead-reckoned the footprint to {_passiveGrid.Candidates.Count} candidate(s).");
+        SettlePassiveFold(when);
+    }
+
+    // After a passive fold: re-anchor on a single survivor, drop an exhausted
+    // footprint. A survivor found while later moves are still in flight waits for
+    // them: re-anchoring now would forget those moves, and their displays would then
+    // be read from the wrong room. The set can't grow, so waiting loses nothing.
+    private bool SettlePassiveFold(DateTimeOffset when)
+    {
         if (_passiveGrid.IsConverged && _graph.GetRoom(_passiveGrid.Candidates.Single()) is { } room)
         {
+            if (_unsureMoves.Count > 0)
+            {
+                _log?.Log(LogSeverity.Info, "RoomTracker",
+                    $"Passive grid locate down to {room.Name} {room.Key} after {_passiveGrid.Depth} moves; "
+                    + $"waiting for {_unsureMoves.Count} move(s) still in flight before re-anchoring.");
+                return false;
+            }
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Passive grid locate converged → {room.Name} {room.Key} after {_passiveGrid.Depth} moves; re-anchoring (no command sent).");
             ClearPendingAndSteps();   // also retires the passive footprint
@@ -2410,20 +2509,97 @@ public sealed class RoomTracker
         return false;
     }
 
+    // How a move hops one candidate: a cardinal through that direction's exit, a
+    // text exit through whichever exit of the candidate answers to its command.
+    private Func<RoomKey, HopOutcome> PassiveHop(PendingMove move)
+    {
+        if (move.Cardinal is { } dir) return from => GraphFootprintProbes.Hop(_graph, from, dir);
+        string? command = move.Command;
+        return from => command is not null && _graph.GetRoom(from) is { } room
+            && TryResolveTextExit(room, command, out RoomExit exit)
+                ? GraphFootprintProbes.Through(exit)
+                : HopOutcome.NoExit();
+    }
+
+    private bool IsSure => State.Confidence is RoomConfidence.Confirmed or RoomConfidence.Pending;
+
+    // Moves still waiting on a display: the pending queue while the tracker is sure
+    // of the room, the unsure-move queue otherwise (the pending queue isn't answered
+    // then). The recovery gate reads it to tell which of its executed steps have
+    // landed.
+    public int MovesInFlight => IsSure ? _pending.Count : _unsureMoves.Count;
+
+    // A move is out with no answer yet, so a refusal line now refuses it: Pending
+    // while sure, a queued unsure move otherwise.
+    public bool MoveAwaitingAnswer => State.Confidence == RoomConfidence.Pending
+        || (!IsSure && _unsureMoves.Count > 0);
+
+    private void NoteUnsureMove(PendingMove move)
+    {
+        if (IsSure) return;
+        _unsureMoves.Add(move);
+        if (_unsureMoves.Count > PendingQueueCap) _unsureMoves.RemoveAt(0);
+    }
+
+    // The oldest unsure move, which the display (or dark / blind line) now being read
+    // is the outcome of; null when none is in flight.
+    private PendingMove? TakeAnsweredMove()
+    {
+        if (_unsureMoves.Count == 0) return null;
+        PendingMove oldest = _unsureMoves[0];
+        _unsureMoves.RemoveAt(0);
+        return oldest;
+    }
+
+    private void DropNewestUnsureMove(string why)
+    {
+        if (_unsureMoves.Count == 0) return;
+        PendingMove newest = _unsureMoves[^1];
+        _unsureMoves.RemoveAt(_unsureMoves.Count - 1);
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Move {DescribeMove(newest)} {why} while {State.Confidence}; not counted as a move.");
+    }
+
+    // A sure tracker turning unsure: the moves still in flight become the unsure
+    // moves. Only a move sent since the last display was read can be in flight: an
+    // older one had a display to answer it, even one the tracker held as a re-look of
+    // the room being left (in a corridor of rooms that read alike, the pending queue
+    // grows that way). When a display brought the change, it answers the oldest.
+    private void CarryPendingIntoUnsure()
+    {
+        ResetPassiveLocate();
+        bool skipOldest = _reconcilingDisplay;
+        foreach (PendingMove move in _pending)
+        {
+            if (move.SentAt <= _lastObservationAt) continue;
+            if (skipOldest) { skipOldest = false; continue; }
+            _unsureMoves.Add(move);
+        }
+    }
+
     private void ClearPassiveGrid()
     {
-        _passivePendingMove = null;
         if (!_passiveGridActive) return;
         _passiveGrid.Clear();
         _passiveGridActive = false;
     }
 
+    // A new episode: no footprint and no unsure moves.
+    private void ResetPassiveLocate()
+    {
+        ClearPassiveGrid();
+        _unsureMoves.Clear();
+    }
+
     // Diagnostics for the bug report: whether the passive grid re-localiser is mid-narrow
-    // and how far it has closed in, or idle. A "stuck Lost with automation off" report
+    // and how far it has closed in, or idle, and how many moves made while unsure of the
+    // room are still waiting on a display. A "stuck Lost with automation off" report
     // shows here whether the passive path was even running and how ambiguous it still is.
-    public string PassiveGridStatus => _passiveGridActive
-        ? $"active — {_passiveGrid.Candidates.Count} candidates, depth {_passiveGrid.Depth}"
-        : "idle";
+    public string PassiveGridStatus =>
+        (_passiveGridActive
+            ? $"active — {_passiveGrid.Candidates.Count} candidates, depth {_passiveGrid.Depth}"
+            : "idle")
+        + (_unsureMoves.Count > 0 ? $"; {_unsureMoves.Count} unsure move(s) awaiting a display" : string.Empty);
 
     private void EnterSuspect(DateTimeOffset when, string reason)
     {
@@ -2431,6 +2607,7 @@ public sealed class RoomTracker
         State.SuspectStrikes = strikes;
         Room? prevRoom = State.CurrentRoom;
         RoomConfidence prev = State.Confidence;
+        if (IsSure) CarryPendingIntoUnsure();
         State.Confidence = RoomConfidence.Suspect;
         State.LastUpdatedAt = when;
         _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -2922,6 +3099,8 @@ public sealed class RoomTracker
         // — report paradigm-20260921-145800.)
         State.ObservedExitDirections = null;
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
+        // Sure of the room again: the pending queue tracks every move from here.
+        if (IsSure) ResetPassiveLocate();
 
         if (confidence == RoomConfidence.Confirmed && room is not null)
         {
@@ -2954,6 +3133,7 @@ public sealed class RoomTracker
         State.Confidence = confidence;
         State.LastUpdatedAt = when;
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
+        if (IsSure) ResetPassiveLocate();
 
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"{prev} → {confidence} ({reason}).");
@@ -3047,7 +3227,7 @@ public sealed class RoomTracker
         // Position resolved by any means — retire any in-flight passive grid
         // narrowing so a fresh episode starts clean rather than folding stale
         // candidates. Cheap no-op when it wasn't running.
-        ClearPassiveGrid();
+        ResetPassiveLocate();
         while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
         _stepsAnchor = null;

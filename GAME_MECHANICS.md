@@ -4843,8 +4843,19 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **On Paradigm `rm` wins each site (realm-gated); on a stock realm with the power `sys st` fills in.**
 - **`sys st` reports the room you're standing in as `Room N  Map: M`**, the same map and room number `rm` gives on Paradigm; see *Sysop commands → `SYSOP STATUS` — forms and arguments* for the full dump and its syntax.
 - **Maze-solve stays `rm`-only** — the solver drives its own relocalization.
+- **Client policy** (user, 2026-10-17): **the tier-3 walk-back sends at most 64 reverse moves**
+  (`EngineRecoveryGate.Tier3DepthCeiling`). The executed history it reverses has no cap (a long walk through
+  rooms that read alike never refreshes the anchor). At the cap the gate takes the same give-up ladder as a
+  walk-back that ran out of history: the terminal `rm`, then `sys st`, then Lost and the RecoveryFailed
+  dialog. It logs `Tier3.cap:` with the candidates left.
 - **Client use:**
   - Both share the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers.
+  - The cap is counted in `EngineRecoveryGate.AdvanceReverseWalk` and ends through `FailTier3`.
+  - The tier-2 forward localiser folds each step with what its landing showed
+    (`FoldTier2ForwardLanding`, oldest unfolded step first, the steps landed being those executed less
+    `RoomTracker.MovesInFlight`). A landing it can't place is dropped rather than folded under the wrong step,
+    and a room it settles on is located as a deduction (`RoomTracker.LocateDeduced`), never as the persisted
+    strict anchor.
 
 ### Dark rooms — no name, no exits, traversal inferred from no bonk
 *Status: CONFIRMED*
@@ -6872,6 +6883,20 @@ Among protectable hazards, a further split governs whether the navigator may off
     (`NoteMoveSent` / `NoteFollowMove`) and the room displays, re-anchoring (`SetRoom`) the instant the
     walked sequence fits exactly one graph room.
   - It stands down whenever an engine is attached (gated on `EngineRecoveryGate.HasAttachedEngine`).
+  - Each display read while unsure answers the oldest move sent while unsure (`RoomTracker._unsureMoves`,
+    `TakeAnsweredMove`), so moves typed together fold in order. A sure tracker turning unsure carries over
+    only the moves sent since the last display was read (`CarryPendingIntoUnsure`): in a corridor of rooms
+    that read alike the pending queue also holds moves whose displays were held as re-looks.
+  - A text exit folds through each candidate's own exit of that command (`PassiveHop`). A dark line or a
+    blind-move line answers a move too and dead-reckons it (`FoldUnshownMove`, `StepBlind`), per *Dark rooms
+    — no name, no exits, traversal inferred from no bonk* and *Moving while blind*. A Lost display no room
+    matches exactly still folds, by the subset match.
+  - A refusal while unsure un-counts the newest unsure move (`NoteMoveBlocked`, and `NoteCommandDropped`
+    within its 3 s window; the exit-gate and hold refusals through `MoveAwaitingAnswer`), and a redisplay with
+    no move waiting is a repeat, not a fold (`IsRepeatRedisplayWithoutMove`).
+- **Client policy** (2026-10-17): a footprint that comes down to one room while a later move is still in
+  flight waits for that move's display before re-anchoring (`SettlePassiveFold`; the gate's forward
+  localiser does the same). The set can only shrink, so waiting never loses the room.
 
 ### Great Pyramid puzzle climb
 *Status: CONFIRMED 2026-07-29 (user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace); undead-priest holds CONFIRMED 2026-07-30 (user + game-data trace) · Realm: Paradigm (1.9.1); stock noted where it differs*
