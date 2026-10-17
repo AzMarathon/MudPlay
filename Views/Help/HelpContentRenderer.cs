@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
+using MudPlay.Controls;
 using MudPlay.Services;
 
 namespace MudPlay.Views.Help;
@@ -36,13 +37,6 @@ public static class HelpContentRenderer
     private static readonly IBrush WarningBackground = new SolidColorBrush(Color.Parse("#22E0A030"));
     private static readonly IBrush WarningBorderBrush = new SolidColorBrush(Color.Parse("#80E0A030"));
 
-    // Search-box matches inside the body — the tree's amber, but solid, with dark text
-    // on it: a match inside a coloured run (teal code, blue field label) would
-    // otherwise sit coloured-on-amber and be hard to read. The run keeps its weight,
-    // slant and font; only the colours change.
-    private static readonly IBrush MatchBackground = new SolidColorBrush(Color.Parse("#E0B040"));
-    private static readonly IBrush MatchForeground = new SolidColorBrush(Color.Parse("#141414"));
-
     // One render's search text, and the first block holding a match (what the pane
     // scrolls to) — threaded through the block builders.
     private sealed class RenderContext(string? highlight)
@@ -53,7 +47,7 @@ public static class HelpContentRenderer
 
     public static Control Render(string? body, string? highlight, out Control? firstMatch)
     {
-        RenderContext ctx = new(string.IsNullOrWhiteSpace(highlight) ? null : highlight.Trim());
+        RenderContext ctx = new(SearchMatch.IsBlank(highlight) ? null : highlight!.Trim());
         StackPanel panel = new() { Spacing = ParagraphGap };
         if (!string.IsNullOrWhiteSpace(body))
         {
@@ -207,7 +201,7 @@ public static class HelpContentRenderer
             bool label = first && seg.Style == HelpInlineStyle.Bold && seg.Text.TrimEnd().EndsWith(':');
             // Each styled segment is split again around the search matches, so a hit
             // inside bold or code text keeps its styling and gains the highlight.
-            foreach ((string text, bool match) in HelpMarkup.SplitMatches(seg.Text, ctx.Highlight))
+            foreach ((string text, bool match) in SearchMatch.Split(seg.Text, ctx.Highlight))
             {
                 Run run = new(text);
                 switch (seg.Style)
@@ -223,8 +217,7 @@ public static class HelpContentRenderer
                 if (headerBold) run.FontWeight = FontWeight.Bold;
                 if (match)
                 {
-                    run.Background = MatchBackground;
-                    run.Foreground = MatchForeground;
+                    SearchHighlight.MarkHit(run);
                     ctx.FirstMatch ??= owner;
                 }
                 inlines.Add(run);

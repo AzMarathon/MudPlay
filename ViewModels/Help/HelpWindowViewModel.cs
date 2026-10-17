@@ -25,7 +25,7 @@ public sealed partial class HelpWindowViewModel : ObservableObject
 
     public string StatusText =>
         Topics.Count == 0 ? "Help content unavailable"
-        : string.IsNullOrWhiteSpace(SearchText) ? $"{TopicCount(Topics):N0} topics"
+        : SearchMatch.IsBlank(SearchText) ?$"{TopicCount(Topics):N0} topics"
         : MatchSummary(Topics.Sum(t => t.MatchCount()));
 
     private static string MatchSummary(int n) =>

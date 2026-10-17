@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using MudPlay.ViewModels.Settings;
 
 namespace MudPlay.Views.Settings;
@@ -19,6 +20,21 @@ public partial class SettingsWindow : Window
         // Re-subscribe whenever the view-model is swapped; first attach happens
         // after construction when the host assigns DataContext.
         DataContextChanged += (_, _) => HookCloseRequested();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is SettingsWindowViewModel vm)
+                vm.UseShownText(s => SettingsSearch.ShownText(s.View));
+        };
+
+        // The search reads every section's on-screen text, which builds each
+        // section's view — most of a second for all of them. Build them one by one
+        // while the window sits idle, so the first keystroke doesn't stall on it.
+        Opened += (_, _) =>
+        {
+            if (DataContext is not SettingsWindowViewModel vm) return;
+            foreach (SettingsSectionViewModel s in vm.Sections)
+                Dispatcher.UIThread.Post(() => { if (IsVisible) _ = s.View; }, DispatcherPriority.Background);
+        };
 
         // Title-bar X / Alt-F4 on this window: treat as Cancel (discard pending
         // edits) so the window can't sneak past the user's explicit commit
@@ -89,6 +105,9 @@ public partial class SettingsWindow : Window
         }
         if (textBox is null) return;
         if (textBox.AcceptsReturn) return;
+        // The search box is a live search, not a field to commit: like Help's, Enter
+        // leaves it focused so the user can keep refining the query.
+        if (textBox == SearchBox) return;
 
         ClearFocusGlobal();
         e.Handled = true;

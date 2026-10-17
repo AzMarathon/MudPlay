@@ -30,10 +30,9 @@ public sealed partial class HelpNodeViewModel : ObservableObject
         Children = topic.Children.Select(c => new HelpNodeViewModel(c)).ToList();
     }
 
-    // The node's own title or body contains the query (case-insensitive).
+    // The node's own title or body contains the query.
     public bool SelfMatches(string query) =>
-        Title.Contains(query, System.StringComparison.OrdinalIgnoreCase)
-        || Body.Contains(query, System.StringComparison.OrdinalIgnoreCase);
+        SearchMatch.Matches(Title, query) || SearchMatch.Matches(Body, query);
 
     // Apply the search to this subtree. Returns true when this node or any
     // descendant matches. Marks IsMatch on the node's own hit and expands branches
@@ -41,7 +40,7 @@ public sealed partial class HelpNodeViewModel : ObservableObject
     // tree stays put. A blank query clears every mark and collapses the subtree.
     public bool ApplySearch(string query)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        if (SearchMatch.IsBlank(query))
         {
             foreach (HelpNodeViewModel c in Children) c.ApplySearch(query);
             IsMatch = false;

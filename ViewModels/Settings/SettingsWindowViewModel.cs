@@ -6,7 +6,7 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.Settings;
 
 // Shell view-model for the Settings window. Owns the section catalog, the
-// search-box filter, and the OK / Apply / Cancel commit lifecycle. Every
+// search box, and the OK / Apply / Cancel commit lifecycle. Every
 // settings tab persists on the loaded character profile — there is no scope
 // picker in this window. The Defaults / Global / BBS / Char hierarchy is
 // reserved for game-data record overrides.
@@ -23,7 +23,11 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     private readonly ProfileService _profile;
     private readonly LogService _log;
     private readonly Func<string, Task<bool>>? _sendText;
-    private bool _suppressSelectionSideEffects;
+
+    // Reads the text a section's settings show (labels, tooltips) off its View; set
+    // by the host window, since walking controls is view work. Null until then, and
+    // in tests, where the search falls back to SearchableLabels alone.
+    private Func<SettingsSectionViewModel, IEnumerable<string>>? _shownText;
 
     // Shared staged combat-profile list edited by BOTH the Combat and Health section
     // VMs (a combat profile spans both tabs). Lives for this window's lifetime.
@@ -32,22 +36,31 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     // Raised when the shell wants the host window to close.
     public event Action? CloseRequested;
 
-    // Full section catalog — drives the search filter and the sidebar order.
+    // Full section catalog, in sidebar order. The search box highlights sections
+    // (SettingsSectionViewModel.IsMatch) and never hides one — the Help window's
+    // search, applied to the sidebar.
     public ObservableCollection<SettingsSectionViewModel> Sections { get; } = new();
-
-    // Filtered view the sidebar binds against. Recomputed on search-text change.
-    public ObservableCollection<SettingsSectionViewModel> VisibleSections { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
     private SettingsSectionViewModel? _selectedSection;
 
+    // Live search — highlights the matching sections, and the matching settings in
+    // the open one. It stays put while the user moves between sections.
     [ObservableProperty] private string _searchText = string.Empty;
 
     // Footer status line — shows the active section name.
     public string StatusText => SelectedSection is null
         ? "Pick a section from the sidebar."
         : SelectedSection.Title;
+
+    // Under the sidebar, worded as the Help window's topic count.
+    public string SearchStatusText => SearchMatch.IsBlank(SearchText)
+        ? $"{Sections.Count:N0} sections"
+        : MatchSummary(Sections.Count(s => s.IsMatch));
+
+    internal static string MatchSummary(int n) =>
+        n == 0 ? "No sections match" : $"{n:N0} matching section{(n == 1 ? "" : "s")}";
 
     public SettingsWindowViewModel(
         ProfileService profile,
@@ -56,15 +69,9 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         string? initialSectionId = null,
         string? initialBbsName = null,
         string? initialRealmName = null)
+        : this(profile, log, sendText)
     {
-        ArgumentNullException.ThrowIfNull(profile);
-        ArgumentNullException.ThrowIfNull(log);
-        _profile = profile;
-        _log = log;
-        _sendText = sendText;
-
         SeedSections();
-        RebuildVisibleSections();
 
         SelectedSection = initialSectionId is not null
             ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))
@@ -72,6 +79,31 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             : Sections.FirstOrDefault();
 
         if (initialBbsName is not null) SelectBbs(initialBbsName, initialRealmName);
+    }
+
+    // Testable ctor — takes the sections instead of building the real catalog.
+    internal SettingsWindowViewModel(ProfileService profile, LogService log, IEnumerable<SettingsSectionViewModel> sections)
+        : this(profile, log, sendText: null)
+    {
+        foreach (SettingsSectionViewModel s in sections) Sections.Add(s);
+        SelectedSection = Sections.FirstOrDefault();
+    }
+
+    private SettingsWindowViewModel(ProfileService profile, LogService log, Func<string, Task<bool>>? sendText)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(log);
+        _profile = profile;
+        _log = log;
+        _sendText = sendText;
+    }
+
+    // The host window hands over how to read a section's on-screen text; a search
+    // already typed is re-run against it.
+    public void UseShownText(Func<SettingsSectionViewModel, IEnumerable<string>> shownText)
+    {
+        _shownText = shownText;
+        ApplySearch();
     }
 
     // Deep-link target for "edit THIS BBS" (and optionally one of its realms) —
@@ -224,63 +256,13 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         IsCommitted = true;
     }
 
-    partial void OnSearchTextChanged(string value) => RebuildVisibleSections();
+    partial void OnSearchTextChanged(string value) => ApplySearch();
 
-    // Clear the search box whenever the user lands on a section so the filter
-    // doesn't persist after the click that resolved it. Setting SearchText here
-    // triggers OnSearchTextChanged which rebuilds the sidebar back to the full
-    // list. Suppressed during RebuildVisibleSections because the Clear / Add
-    // cycle briefly empties the ListBox, which nulls the bound SelectedItem and
-    // would otherwise wipe the filter the user just typed.
-    partial void OnSelectedSectionChanged(SettingsSectionViewModel? value)
+    private void ApplySearch()
     {
-        if (_suppressSelectionSideEffects) return;
-        if (!string.IsNullOrEmpty(SearchText)) SearchText = string.Empty;
-    }
-
-    private void RebuildVisibleSections()
-    {
-        SettingsSectionViewModel? previouslySelected = SelectedSection;
-
-        // Suppress the OnSelectedSectionChanged side-effect for the duration
-        // of the rebuild — the ListBox nulls its bound SelectedItem the
-        // moment we Clear() the ItemsSource, which would otherwise wipe
-        // SearchText (and the filter the user just typed) before we get
-        // a chance to restore the selection at the end.
-        _suppressSelectionSideEffects = true;
-        try
-        {
-            VisibleSections.Clear();
-            string needle = SearchText.Trim();
-
-            foreach (SettingsSectionViewModel s in Sections)
-            {
-                // Always include the active section even when the filter
-                // would hide it — otherwise the sidebar selection vanishes
-                // while the content pane keeps rendering the same tab.
-                bool keepBecauseSelected = ReferenceEquals(s, previouslySelected);
-                if (!string.IsNullOrEmpty(needle) && !MatchesSearch(s, needle) && !keepBecauseSelected) continue;
-                VisibleSections.Add(s);
-            }
-
-            if (previouslySelected is not null && VisibleSections.Contains(previouslySelected))
-            {
-                SelectedSection = previouslySelected;
-            }
-        }
-        finally
-        {
-            _suppressSelectionSideEffects = false;
-        }
-    }
-
-    private static bool MatchesSearch(SettingsSectionViewModel section, string needle)
-    {
-        foreach (string label in section.SearchableLabels)
-        {
-            if (label.Contains(needle, StringComparison.OrdinalIgnoreCase)) return true;
-        }
-        return false;
+        foreach (SettingsSectionViewModel s in Sections)
+            s.ApplySearch(SearchText, _shownText);
+        OnPropertyChanged(nameof(SearchStatusText));
     }
 
     // Populate the sidebar with a section VM per tab, in UI-design-spec order.

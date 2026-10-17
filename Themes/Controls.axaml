@@ -40,6 +40,23 @@
         <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
     </Style>
 
+    <!-- ============ Search matches ============
+         A Help topic or Settings section whose text holds the search box's text
+         (Border.SearchMatch around its sidebar entry), and a setting in the open
+         Settings section that matched without its label holding the text, e.g.
+         through its tooltip (TextBlock.SearchMatch on the label). The solid amber of
+         a hit inside text is Controls/SearchHighlight. -->
+    <Style Selector="Border.SearchMatch">
+        <Setter Property="Background" Value="#55E0B040"/>
+    </Style>
+    <Style Selector="Border.SearchMatch TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.SearchMatch">
+        <Setter Property="Background" Value="#55E0B040"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
     <!-- ============ Window root ============ -->
     <Style Selector="Window">
         <Setter Property="Background" Value="{StaticResource ChromeBgBrush}"/>

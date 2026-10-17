@@ -1,5 +1,12 @@
 # Version history
 
+## 3.181.1
+
+- Settings search highlights matching tabs like Help's search, and no longer hides the rest
+- It searches what each tab shows, tooltips included, with a match count under the tab list
+- The open tab highlights its matching settings and scrolls to the first
+- The search stays while you move between tabs
+
 ## 3.181.0
 
 - Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks

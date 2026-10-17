@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Settings"
+        xmlns:settings="using:MudPlay.Views.Settings"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1120" d:DesignHeight="600"
@@ -40,9 +41,9 @@
                 BorderThickness="0,0,0,1"
                 Padding="10,6">
             <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <TextBox Grid.Column="1" Classes="clearable" MinWidth="240"
+                <TextBox x:Name="SearchBox" Grid.Column="1" Classes="clearable" MinWidth="240"
                          PlaceholderText="Search settings…"
-                         Text="{Binding SearchText, Mode=TwoWay}"/>
+                         Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
             </Grid>
         </Border>
 
@@ -74,21 +75,29 @@
                     Background="{StaticResource ChromeBgBrush}"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                     BorderThickness="0,0,1,0">
-                <ListBox Classes="SidebarSections"
-                         ItemsSource="{Binding VisibleSections}"
-                         SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate DataType="vm:SettingsSectionViewModel">
-                            <TextBlock Text="{Binding Title}"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="17,6,8,8" Opacity="0.6"
+                               Text="{Binding SearchStatusText}"/>
+                    <ListBox Classes="SidebarSections"
+                             ItemsSource="{Binding Sections}"
+                             SelectedItem="{Binding SelectedSection, Mode=TwoWay}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="vm:SettingsSectionViewModel">
+                                <!-- SearchMatch: the section holds the search text. -->
+                                <Border Classes.SearchMatch="{Binding IsMatch}" CornerRadius="3" Padding="3,0">
+                                    <TextBlock Text="{Binding Title}"/>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
             </Border>
 
-            <!-- Content pane -->
+            <!-- Content pane — the open section's matches are highlighted too. -->
             <Border Grid.Column="1"
                     Background="{StaticResource ChromeBgSunkenBrush}">
-                <ContentControl Content="{Binding SelectedSection.View}"/>
+                <ContentControl Content="{Binding SelectedSection.View}"
+                                settings:SettingsSearch.Highlight="{Binding SearchText}"/>
             </Border>
         </Grid>
 
