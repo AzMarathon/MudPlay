@@ -89,6 +89,9 @@ internal static partial class QuestTextFormatter
         gameData.FindNameByNumber(table, number)
         ?? string.Create(CultureInfo.InvariantCulture, $"#{number}");
 
+    // Room links named on one kill line for a monster that spawns in many rooms.
+    private const int MaxDropperRooms = 3;
+
     // One followable step drafted in the hand-written guide's own shape:
     //   (map/room) `command` (item note)
     // The Called-From location's rooms become clickable (map/room) links (all of
@@ -100,9 +103,8 @@ internal static partial class QuestTextFormatter
     // captured nothing followable (see StepOrNull) — kept for any caller that wants
     // a label for every step; the auto-draft (StepLines) drops those steps instead.
     public static string Step(GameDataCache gameData, QuestStep s,
-        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
-        ItemSourceIndex? itemSources = null)
-        => StepOrNull(gameData, s, monsterRooms, itemSources)
+        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null)
+        => StepOrNull(gameData, s, monsterRooms)
            ?? string.Create(CultureInfo.InvariantCulture, $"Step {s.Order}");
 
     // The step's followable body — room links, command, kill/obtain narration and
@@ -119,12 +121,29 @@ internal static partial class QuestTextFormatter
     // doesn't leave the step with nowhere to go.
     public static string? StepOrNull(GameDataCache gameData, QuestStep s,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
-        ItemSourceIndex? itemSources = null,
         IEnumerable<QuestStep>? sameStep = null)
     {
         var segments = new List<string>();
 
         string granted = string.Join(", ", s.GrantedItems.Select(id => ItemName(gameData, id)));
+
+        // A gather step for a dropped item: the rooms its droppers stand in, any room
+        // command that brings the dropper, then the kill.
+        if (s.Droppers is { Count: > 0 } droppers)
+        {
+            string where = string.Join(" ", droppers
+                .SelectMany(m => monsterRooms is not null && monsterRooms.TryGetValue(m, out IReadOnlyList<RoomKey>? keys)
+                    ? keys : Array.Empty<RoomKey>())
+                .Distinct()
+                .Take(MaxDropperRooms)
+                .Select(k => string.Create(CultureInfo.InvariantCulture, $"({k.Map}/{k.Room})")));
+            if (where.Length == 0) where = RoomLinks(s.Location);
+            if (where.Length > 0) segments.Add(where);
+            if (!string.IsNullOrWhiteSpace(s.Command)) segments.Add($"`{s.Command.Trim()}`");
+            string names = string.Join(" or ", droppers.Select(m => MonsterName(gameData, m)).Distinct());
+            segments.Add(granted.Length > 0 ? $"kill {names} ({granted})" : $"kill {names}");
+            return string.Join(" ", segments);
+        }
 
         int monster = 0;
         bool monsterLoc = TryMonsterRef(s.Location, out monster);
@@ -166,43 +185,17 @@ internal static partial class QuestTextFormatter
         }
 
         if (s.TurnInItems.Count > 0)
-            segments.Add("(turn in " + string.Join(", ",
-                s.TurnInItems.Select(id => ItemName(gameData, id) + SourceSuffix(itemSources, monsterRooms, id))) + ")");
+            segments.Add("(turn in " + string.Join(", ", s.TurnInItems.Select(id => ItemName(gameData, id))) + ")");
 
         // A required item the step also turns in is already named by the turn-in note
         // (a checkitem + takeitem of the same id), so it isn't repeated as "required".
         var required = s.RequiredItems.Where(id => !s.TurnInItems.Contains(id)).ToList();
         if (required.Count > 0)
-            segments.Add("(" + string.Join(", ",
-                required.Select(id => ItemName(gameData, id) + SourceSuffix(itemSources, monsterRooms, id))) + " required)");
+            segments.Add("(" + string.Join(", ", required.Select(id => ItemName(gameData, id))) + " required)");
+
+        if (!string.IsNullOrWhiteSpace(s.Note)) segments.Add($"({s.Note})");
 
         return segments.Count > 0 ? string.Join(" ", segments) : null;
-    }
-
-    // Where the player acquires an item the step needs, appended as ", from <source>"
-    // so a turn-in / prerequisite step points at the chest, NPC, or room that yields
-    // the item — the reverse acquisition index the item-detail pane uses. Empty when
-    // no index is threaded in or nothing in the set yields the item. A monster giver
-    // trails its placement room link (resolved through the same map the kill steps
-    // use); a room-CMD reward trails the room; a chest names the container.
-    private static string SourceSuffix(ItemSourceIndex? sources,
-        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, int itemId)
-    {
-        if (sources is null) return string.Empty;
-
-        foreach (ItemGiver g in sources.GiversOf(itemId))
-        {
-            if (g.Kind == ItemGiverKind.Room && g.Map > 0 && g.Room > 0)
-                return string.Create(CultureInfo.InvariantCulture, $", from ({g.Map}/{g.Room})");
-            if (g.Kind == ItemGiverKind.Monster)
-            {
-                string where = MonsterRoomLinks(g.Number, monsterRooms);
-                return where.Length > 0 ? $", from {g.Name} {where}" : $", from {g.Name}";
-            }
-        }
-
-        IReadOnlyList<ItemSource> chests = sources.ContainersOf(itemId);
-        return chests.Count > 0 ? $", from {chests[0].ContainerName}" : string.Empty;
     }
 
     // The Called-From location's room coordinates as space-joined (map/room) link
@@ -268,19 +261,24 @@ internal static partial class QuestTextFormatter
     // only the give-steps inside the band's StepRangeStart..StepRangeEnd span are
     // emitted; a single-part quest (range 0/0) emits every step. Empty when the flag
     // drafts no steps.
+    //
+    // itemSources / itemDrops let the draft add a line for fetching an item a step needs
+    // that no earlier step hands over (QuestItemGathering); without them those items are
+    // only named on the step.
     public static IReadOnlyList<string> StepLines(GameDataCache gameData, CrawledQuest q,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
-        ItemSourceIndex? itemSources = null)
-        => StepEntries(gameData, q, monsterRooms, itemSources).Select(e => e.Line).ToList();
+        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
+        => StepEntries(gameData, q, monsterRooms, itemSources, itemDrops).Select(e => e.Line).ToList();
 
     // StepLines with each line's give-step Order alongside — the flag value that step
-    // sets, so a live flag read can say which checklist lines it proves done.
+    // sets, so a live flag read can say which checklist lines it proves done. A gather
+    // line carries the Order of the step it fetches for: that step done, it was too.
     public static IReadOnlyList<(int Order, string Line)> StepEntries(GameDataCache gameData, CrawledQuest q,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
-        ItemSourceIndex? itemSources = null)
+        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
     {
         var lines = new List<(int Order, string Line)>();
-        foreach ((int order, string? body, _) in DraftSteps(gameData, q, monsterRooms, itemSources))
+        foreach ((int order, string? body, _, _) in DraftSteps(gameData, q, monsterRooms, itemSources, itemDrops))
         {
             // A pure flag-advance (no room, command, kill or item) carries nothing the
             // player can act on, so it's dropped from the draft rather than listed as an
@@ -292,22 +290,21 @@ internal static partial class QuestTextFormatter
     }
 
     // Every step the draft considers for a quest, in checklist order: its body (null
-    // when it has nothing followable) and whether the draft had a line for it before
-    // kill steps were read off the death-spell chain.
-    private static IEnumerable<(int Order, string? Body, bool HadLineBefore)> DraftSteps(GameDataCache gameData,
-        CrawledQuest q, IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, ItemSourceIndex? itemSources)
+    // when it has nothing followable), whether the draft had a line for it before kill
+    // steps were read off the death-spell chain, and whether it is a gather line (the
+    // draft had none of those before them either).
+    private static IEnumerable<(int Order, string? Body, bool HadLineBefore, bool Gathers)> DraftSteps(
+        GameDataCache gameData, CrawledQuest q, IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms,
+        ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
     {
         IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue);
-        var seenOrders = new HashSet<int>();
-        foreach (QuestStep s in steps)
+        foreach (QuestStep s in QuestItemGathering.Draft(steps, q.ProgressByValue, itemSources, itemDrops))
         {
-            // Value-laddered bands legitimately carry several distinct steps that all
-            // land on the same ability value, so the give-step-order dedup (which folds
-            // one give-step echoed from many rooms) only applies on the give-step axis.
-            if (!q.ProgressByValue && !seenOrders.Add(s.Order)) continue;
             if (q.StepRangeEnd > 0 && (s.Order < q.StepRangeStart || s.Order > q.StepRangeEnd)) continue;
-            IEnumerable<QuestStep>? sameStep = q.ProgressByValue ? null : steps.Where(o => o.Order == s.Order);
-            yield return (s.Order, StepOrNull(gameData, s, monsterRooms, itemSources, sameStep), HadLineBeforeKillSteps(s));
+            IEnumerable<QuestStep>? sameStep = q.ProgressByValue || s.Gathers
+                ? null : steps.Where(o => !o.Gathers && o.Order == s.Order);
+            yield return (s.Order, StepOrNull(gameData, s, monsterRooms, sameStep),
+                !s.Gathers && HadLineBeforeKillSteps(s), s.Gathers);
         }
     }
 
@@ -323,15 +320,28 @@ internal static partial class QuestTextFormatter
     // For step ticks saved before then: where each checkbox of that draft sits in
     // today's — the entry at an old checkbox number is its number now, or -1 when the
     // step no longer has a line. A quest whose draft didn't change maps each number to
-    // itself.
-    public static IReadOnlyList<int> CheckboxesSinceKillSteps(GameDataCache gameData, CrawledQuest q)
+    // itself. The gather lines count in today's numbering whatever indexes were at
+    // hand, so the caller passes the ones the Quest tab drafts with.
+    public static IReadOnlyList<int> CheckboxesSinceKillSteps(GameDataCache gameData, CrawledQuest q,
+        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
+        => CheckboxMap(gameData, q, itemSources, itemDrops, e => e.HadLineBefore);
+
+    // The same for ticks saved after kill steps but before the gather lines: every line
+    // of that draft is in today's, which only adds gather lines between them.
+    public static IReadOnlyList<int> CheckboxesSinceGatherSteps(GameDataCache gameData, CrawledQuest q,
+        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
+        => CheckboxMap(gameData, q, itemSources, itemDrops, e => !e.Gathers && e.Body is not null);
+
+    private static List<int> CheckboxMap(GameDataCache gameData, CrawledQuest q,
+        ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops,
+        Func<(int Order, string? Body, bool HadLineBefore, bool Gathers), bool> wasLine)
     {
         var map = new List<int>();
         int now = 0;
-        foreach ((_, string? body, bool hadLineBefore) in DraftSteps(gameData, q, null, null))
+        foreach ((int Order, string? Body, bool HadLineBefore, bool Gathers) e in DraftSteps(gameData, q, null, itemSources, itemDrops))
         {
-            if (hadLineBefore) map.Add(body is null ? -1 : now);
-            if (body is not null) now++;
+            if (wasLine(e)) map.Add(e.Body is null ? -1 : now);
+            if (e.Body is not null) now++;
         }
         return map;
     }
@@ -362,12 +372,16 @@ internal static partial class QuestTextFormatter
 
     // Split a step label into render segments, isolating the two clickable token
     // kinds so the view can wrap each in a link: a (map/room) coordinate (e.g.
-    // (5/297)) carries the parsed RoomKey for a walk-to link; a single-quoted
-    // 'command' (e.g. 'ask jorah transport') carries the unquoted command text for
-    // a send-to-game link. Surrounding prose stays as plain segments (both null). A
-    // coordinate whose numbers don't fit a positive int, or an empty quote, is left
-    // folded into the prose. Returns a single plain segment when the label holds no
-    // token, and an empty list for empty input.
+    // (5/297)) carries the parsed RoomKey for a walk-to link; a quoted command
+    // carries the unquoted command text for a send-to-game link. Backticks
+    // (`ask jorah transport`) are the guides' and the draft's own mark; a
+    // single-quoted 'ask jorah transport' is the older one, still in many saved
+    // guides; and a write-up pasted from elsewhere quotes with "…" or “…”, which
+    // count only for two words or more that don't end a sentence, so a quoted word
+    // or a quoted reply stays prose. Surrounding prose stays as plain segments (both
+    // null). A coordinate whose numbers don't fit a positive int, or an empty quote,
+    // is left folded into the prose. Returns a single plain segment when the label
+    // holds no token, and an empty list for empty input.
     public static IReadOnlyList<(string Text, RoomKey? Room, string? Command)> SplitStepLinks(string text)
     {
         var segments = new List<(string Text, RoomKey? Room, string? Command)>();
@@ -389,7 +403,7 @@ internal static partial class QuestTextFormatter
                 segments.Add((m.Value, new RoomKey(map, room), null));
                 pos = m.Index + m.Length;
             }
-            else // a 'command' quote
+            else // a quoted command
             {
                 string command = m.Groups["cmd"].Value.Trim();
                 if (command.Length == 0) continue;   // empty quote — leave in prose
@@ -403,13 +417,17 @@ internal static partial class QuestTextFormatter
         return segments;
     }
 
-    // A clickable quest-step token: either a (map/room) coordinate (walk link) or a
-    // single-quoted 'command' (send-to-game link). The command arm requires the
-    // quotes to sit on non-letter boundaries so a prose apostrophe (don't, they're,
-    // Jorah's) never opens a bogus quoted run — only a deliberately quoted command
-    // is isolated. Content is any non-apostrophe run, so an internal apostrophe ends
-    // the token (commands rarely carry one).
-    [GeneratedRegex(@"\((?<map>\d+)/(?<room>\d+)\)|(?<![A-Za-z])'(?<cmd>[^']+?)'(?![A-Za-z])")]
+    // A clickable quest-step token: a (map/room) coordinate (walk link) or a quoted
+    // command (send-to-game link). A backtick run is taken whole, apostrophes and all.
+    // The single-quote arm requires the quotes to sit on non-letter boundaries so a
+    // prose apostrophe (don't, they're, Jorah's) never opens a bogus quoted run, and
+    // an internal apostrophe ends the token. The double-quote arms want a space inside
+    // and no trailing . ! ? or comma (see SplitStepLinks).
+    [GeneratedRegex(@"\((?<map>\d+)/(?<room>\d+)\)"
+        + @"|`(?<cmd>[^`]+)`"
+        + @"|(?<![A-Za-z])'(?<cmd>[^']+?)'(?![A-Za-z])"
+        + "|\"(?<cmd>[^\"\\s][^\"]*\\s[^\"]*[^\".!?,\\s])\""
+        + "|\u201C(?<cmd>[^\u201D\\s][^\u201D]*\\s[^\u201D]*[^\u201D.!?,\\s])\u201D")]
     private static partial Regex StepLink();
 
     // "Room 9/1259" inside a Called-From string — a location's room reference.

@@ -1,5 +1,13 @@
 # Version history
 
+## 3.180.45
+
+- Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks
+- Drafted quest checklists add a line to fetch each item a step turns in: the kill, the NPC to ask, the monsters that drop it, or the chest
+- Drafted checklists no longer offer a roll-table number as a command to type
+- A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest, Tarl, Luca Prodigio)
+- bug reports addressed: paradigm-20261011-230844
+
 ## 3.180.42
 
 - Logon steps run without a saved username or password: that step is left for you to type, the menu steps after it still go

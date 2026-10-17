@@ -99,6 +99,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms =
             AppServices.Current?.RoomSearch?.QuestKillRooms();
         ItemSourceIndex? itemSources = AppServices.Current?.ItemSources;
+        MonsterDropIndex? itemDrops = AppServices.Current?.MonsterDrops;
 
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {
@@ -108,7 +109,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             Quests.Add(new QuestEditRowViewModel(
                 q.Flag, q.Step,
                 QuestTextFormatter.FallbackTitle(q),
-                string.Join("\n", QuestTextFormatter.StepLines(gameData, q, monsterRooms, itemSources)),
+                string.Join("\n", QuestTextFormatter.StepLines(gameData, q, monsterRooms, itemSources, itemDrops)),
                 QuestTextFormatter.Awards(gameData, q),
                 QuestTextFormatter.Bonuses(q.Bonuses),
                 QuestTextFormatter.Level(q.RequiredLevel),

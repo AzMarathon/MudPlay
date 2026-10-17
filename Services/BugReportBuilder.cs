@@ -1845,6 +1845,14 @@ public static class BugReportBuilder
         var quests = profile.QuestLog;
         sb.Append("\n**Quest log (QuestLog)** (").Append(quests?.Count ?? 0).Append(")\n\n");
         sb.Append(quests is { Count: > 0 } ? Json(quests) : "_(none)_\n");
+        // Which shape of drafted checklist the step ticks above count against, so a
+        // "my ticks moved" report shows whether they were carried onto today's draft.
+        sb.Append("\n- **Quest step ticks made against draft revision**: ")
+          .Append(profile.QuestDraftRevision.ToString(System.Globalization.CultureInfo.InvariantCulture))
+          .Append(" (current ")
+          .Append(ViewModels.CharacterWorkshop.QuestTickMigration.CurrentDraftRevision.ToString(System.Globalization.CultureInfo.InvariantCulture))
+          .Append(profile.QuestTicksPredateKillSteps ? "; ticks predate the kill lines" : string.Empty)
+          .Append(")\n");
 
         // Count only — the Players Seen log can hold many rows; a count tells an
         // "empty / not recording" report apart from a working one without bloating

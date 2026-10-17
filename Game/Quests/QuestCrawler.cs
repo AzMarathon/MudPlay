@@ -149,9 +149,17 @@ public static class QuestCrawler
     // wrongly unrestricts a class-locked quest: Smash's lone continuation node did exactly
     // that, making it visible to every class. Only chains that do real quest work — an
     // explicit guard, an item exchange, a level gate, or a stat reward — vote on openness.
+    //
+    // Nor does a chain that can only run for a character who already holds the flag (a
+    // turn-in gated `checkability <flag> 1` / `testability <flag> 1` ahead of its grant):
+    // the flag got onto the character through an entry chain, so the entries alone say
+    // who can take the quest. Conquest1's open turn-in (`testability 208 1:…:giveability
+    // 208 2`, no class guard) made the quest every class's although only classes 1–4 can
+    // start it (report paradigm-20261011-230844).
     private static (IReadOnlyList<int>?, IReadOnlyList<int>?) ResolveRestrictions(List<ParsedChain> chains)
     {
-        List<ParsedChain> real = chains.Where(IsRealGrant).ToList();
+        List<ParsedChain> real = chains.Where(c => IsRealGrant(c) && !c.RequiresFlag).ToList();
+        if (real.Count == 0) real = chains.Where(IsRealGrant).ToList(); // no real entry: every real grant
         if (real.Count == 0) real = chains; // all bare: nothing better to judge from
 
         IReadOnlyList<int>? classes = real.Any(c => c.ClassIds.Count == 0)
@@ -812,6 +820,9 @@ public static class QuestCrawler
         var giveItems = new List<int>();
         var takeItems = new List<int>();
         int exp = 0;
+        // Abilities this line asks to be held, before it changes them itself.
+        var heldGates = new HashSet<int>();
+        var changed = new HashSet<int>();
 
         foreach (string segment in raw.Split(':'))
         {
@@ -825,10 +836,26 @@ public static class QuestCrawler
                 case "giveability" when p.Length >= 3
                     && int.TryParse(p[1], out int gf) && int.TryParse(p[2], out int gs):
                     flag = gf; giveStep = gs;
+                    changed.Add(gf);
+                    break;
+                case "removeability" when p.Length >= 2 && int.TryParse(p[1], out int rf):
+                    changed.Add(rf);
+                    break;
+                // `checkability <a> N` passes at a value of N or more, `testability <a> N` at
+                // N or less and never without the ability when N >= 0 (GAME_MECHANICS "NPC
+                // keyword hand-over detection"), so either, at those values, needs it held.
+                case "checkability" when p.Length >= 3 && int.TryParse(p[1], out int ca)
+                    && int.TryParse(p[2], out int cv) && cv >= 1 && !changed.Contains(ca):
+                    heldGates.Add(ca);
+                    break;
+                case "testability" when p.Length >= 3 && int.TryParse(p[1], out int ta)
+                    && int.TryParse(p[2], out int tv) && tv >= 0 && !changed.Contains(ta):
+                    heldGates.Add(ta);
                     break;
                 case "addability" when p.Length >= 3
                     && int.TryParse(p[1], out int af) && int.TryParse(p[2], out int av):
                     if (!grantedFlags.Contains(af)) bonuses.Add(new QuestBonus(af, av));
+                    changed.Add(af);
                     break;
                 case "class" when p.Length >= 2 && int.TryParse(p[1], out int cid):
                     classIds.Add(cid);
@@ -852,7 +879,8 @@ public static class QuestCrawler
         }
 
         if (flag is null) return null;
-        return new ParsedChain(flag.Value, giveStep, minLevel, classIds, raceIds, bonuses, giveItems, takeItems, exp);
+        return new ParsedChain(flag.Value, giveStep, minLevel, classIds, raceIds, bonuses, giveItems, takeItems, exp,
+            RequiresFlag: heldGates.Contains(flag.Value));
     }
 
     // The level a chain with more than one `minlevel` asks for: the highest of them.
@@ -864,7 +892,9 @@ public static class QuestCrawler
     // GAME_MECHANICS "Quest level gates".
     internal static int HighestGate(int? soFar, int gate) => soFar is int g && g > gate ? g : gate;
 
-    // Scratch record for one parsed chain; never escapes the crawl.
+    // Scratch record for one parsed chain; never escapes the crawl. RequiresFlag: the
+    // line runs only for a character already holding its own flag (see
+    // ResolveRestrictions).
     private sealed record ParsedChain(
         int Flag,
         int GiveStep,
@@ -874,5 +904,6 @@ public static class QuestCrawler
         List<QuestBonus> Bonuses,
         List<int> GiveItems,
         List<int> TakeItems,
-        int Exp);
+        int Exp,
+        bool RequiresFlag = false);
 }

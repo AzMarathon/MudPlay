@@ -146,13 +146,21 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             QuestAlignGood = _profile.Current?.QuestAlignGood ?? false;
             QuestAlignNeutral = _profile.Current?.QuestAlignNeutral ?? false;
             QuestAlignEvil = _profile.Current?.QuestAlignEvil ?? false;
-            // Ticks saved before the drafts gained their kill lines are put back on their
+            // Item-acquisition indexes, so the draft can add a line fetching an item a
+            // step turns in or needs (an NPC or room that gives it, a monster that drops
+            // it, a chest) when no earlier step of the quest hands it over.
+            ItemSourceIndex? itemSources = AppServices.CurrentOrNull?.ItemSources;
+            MonsterDropIndex? itemDrops = AppServices.CurrentOrNull?.MonsterDrops;
+
+            // Ticks saved against an older shape of the drafts are put back on their
             // steps before anything reads them.
-            if (_profile.Current is { } loaded && QuestTickMigration.Apply(loaded, _gameData, _quests.Resolve))
+            if (_profile.Current is { } loaded
+                && QuestTickMigration.Apply(loaded, _gameData, _quests.Resolve, out int moved, itemSources, itemDrops))
             {
                 _profile.Save();
-                AppServices.CurrentOrNull?.Log.Info("Quests",
-                    "Quest step ticks saved before kill steps were drafted have been moved onto their steps.");
+                if (moved > 0)
+                    AppServices.CurrentOrNull?.Log.Info("Quests",
+                        $"Quest step ticks on {moved} drafted checklist(s) moved onto their steps, after the drafts gained lines.");
             }
             _allCards.Clear();
             _bonusesByCard.Clear();
@@ -164,10 +172,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             // so a step can link to the room the quest places its target / NPC in.
             IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms =
                 AppServices.Current?.RoomSearch?.QuestKillRooms();
-
-            // Reverse item-acquisition index so a prerequisite / turn-in step can point
-            // at where its item comes from (chest, NPC, or room CMD reward).
-            ItemSourceIndex? itemSources = AppServices.Current?.ItemSources;
 
             int? classId = ResolveClassId();
             int? raceId = ResolveRaceId();
@@ -230,7 +234,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
 
                 // Every quest carries a followable checklist (multi-part bands too,
                 // filtered to the band's give-step range by the crawl + StepLines).
-                PopulateSteps(card, q, def, prog, monsterRooms, itemSources);
+                PopulateSteps(card, q, def, prog, monsterRooms, itemSources, itemDrops);
 
                 _allCards.Add(card);
             }
@@ -288,7 +292,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     // whose give-step order it has reached — the game says those are done. A user-edited
     // checklist has no step orders to match, so it keeps only its own ticks.
     private void PopulateSteps(QuestCardViewModel card, CrawledQuest q, QuestDefinition def, QuestProgress prog,
-        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, ItemSourceIndex? itemSources)
+        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
     {
         if (!string.IsNullOrWhiteSpace(def.Steps))
         {
@@ -296,7 +300,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             return;
         }
         IReadOnlyList<(int Order, string Line)> entries =
-            QuestTextFormatter.StepEntries(_gameData, q, monsterRooms, itemSources);
+            QuestTextFormatter.StepEntries(_gameData, q, monsterRooms, itemSources, itemDrops);
         // Each auto-draft line is one checkbox, so its index is the CheckedSteps key.
         HashSet<int>? provenDone = prog.FlagValue is int value
             ? entries.Select((e, i) => (e.Order, i)).Where(x => x.Order <= value).Select(x => x.i).ToHashSet()
@@ -353,7 +357,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
     }
 
     // Split a step label into render runs, wrapping each `(map/room)` coordinate in
-    // a walk-there command and each single-quoted `'command'` in a send-to-game
+    // a walk-there command and each quoted command (QuestTextFormatter.SplitStepLinks) in a send-to-game
     // command. Plain runs carry no command; only the tokens are clickable.
     private static IReadOnlyList<QuestStepSegmentViewModel> BuildSegments(string display)
     {
@@ -386,7 +390,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         await Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
     }
 
-    // Type a quest-step's `'command'` at the game exactly as if the user typed it in
+    // Type a quest-step's quoted command at the game exactly as if the user typed it in
     // the terminal — macro/alias expansion and the outbound observers all run — so a
     // guide's quoted command is indistinguishable from a keystroke.
     private static void SendStepCommand(string command)

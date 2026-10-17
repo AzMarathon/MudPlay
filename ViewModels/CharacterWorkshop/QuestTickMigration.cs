@@ -6,28 +6,38 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// Moves a character's saved quest-step ticks onto the steps they were made on, once, after
-// the drafted checklists gained their kill lines. A tick is kept as the number of its
-// checkbox, and a kill line drafted ahead of a ticked step pushes that step down one; left
-// alone, every later tick would sit one step too early and the last would fall off.
+// Moves a character's saved quest-step ticks onto the steps they were made on, once each
+// time the drafted checklists gained lines: first their kill lines, then their gather
+// lines (fetching an item a later step needs). A tick is kept as the number of its
+// checkbox, and a line drafted ahead of a ticked step pushes that step down; left alone,
+// every later tick would sit too early and the last would fall off.
 //
-// The profile's schema upgrade marks a profile that holds ticks
-// (CharacterProfile.QuestTicksPredateKillSteps); this clears the mark when it has run, so it
-// runs once per character and a second call does nothing.
+// The profile's schema upgrade marks a profile whose ticks predate the kill lines
+// (CharacterProfile.QuestTicksPredateKillSteps); CharacterProfile.QuestDraftRevision
+// records the draft the ticks were last made against. Both are brought up to date when
+// this has run, so it runs once per character per change and a second call does nothing.
 internal static class QuestTickMigration
 {
-    // resolve gives a quest's definition by flag and step. True when the ticks were gone
-    // through and the mark cleared, so the caller saves the profile.
+    // The drafted checklists' current shape: 1 = with gather lines.
+    public const int CurrentDraftRevision = 1;
+
+    // resolve gives a quest's definition by flag and step; itemSources / itemDrops are
+    // the indexes the Quest tab drafts with, so the gather lines are numbered as it shows
+    // them. True when the ticks were gone through and the marks brought up to date, so
+    // the caller saves the profile; moved counts the quests whose ticks changed.
     public static bool Apply(CharacterProfile profile, GameDataCache gameData,
-        System.Func<int, int, QuestDefinition> resolve)
+        System.Func<int, int, QuestDefinition> resolve, out int moved,
+        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
     {
         System.ArgumentNullException.ThrowIfNull(profile);
         System.ArgumentNullException.ThrowIfNull(gameData);
         System.ArgumentNullException.ThrowIfNull(resolve);
-        if (!profile.QuestTicksPredateKillSteps) return false;
+        moved = 0;
+        bool beforeKillSteps = profile.QuestTicksPredateKillSteps;
+        if (!beforeKillSteps && profile.QuestDraftRevision >= CurrentDraftRevision) return false;
 
         // Where the new lines fall is read from the game data; with no set loaded there
-        // is no draft to place the ticks on, so the mark stays for the next time.
+        // is no draft to place the ticks on, so the marks stay for the next time.
         IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(gameData, null);
         if (crawled.Count == 0) return false;
 
@@ -39,19 +49,25 @@ internal static class QuestTickMigration
             // A checklist the user wrote counts its own lines, which did not change.
             if (!string.IsNullOrWhiteSpace(resolve(progress.Flag, progress.Step).Steps)) continue;
 
-            IReadOnlyList<int> now = QuestTextFormatter.CheckboxesSinceKillSteps(gameData, quest);
-            List<int> moved = new();
+            // Ticks from before the kill lines map straight onto today's draft.
+            IReadOnlyList<int> now = beforeKillSteps
+                ? QuestTextFormatter.CheckboxesSinceKillSteps(gameData, quest, itemSources, itemDrops)
+                : QuestTextFormatter.CheckboxesSinceGatherSteps(gameData, quest, itemSources, itemDrops);
+            List<int> placed = new();
             foreach (int tick in ticks)
             {
                 // A number past the end of the old draft was not made against it; it is
                 // kept as it is rather than guessed at.
                 int target = tick >= 0 && tick < now.Count ? now[tick] : tick;
-                if (target >= 0 && !moved.Contains(target)) moved.Add(target);
+                if (target >= 0 && !placed.Contains(target)) placed.Add(target);
             }
-            if (!moved.SequenceEqual(ticks)) progress.CheckedSteps = moved.Count == 0 ? null : moved;
+            if (placed.SequenceEqual(ticks)) continue;
+            progress.CheckedSteps = placed.Count == 0 ? null : placed;
+            moved++;
         }
 
         profile.QuestTicksPredateKillSteps = false;
+        profile.QuestDraftRevision = CurrentDraftRevision;
         return true;
     }
 }

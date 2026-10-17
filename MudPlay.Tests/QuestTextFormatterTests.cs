@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using MudPlay.Game.Map;
 using MudPlay.Game.Quests;
 using MudPlay.Services;
@@ -150,6 +151,70 @@ public sealed class QuestTextFormatterTests
         var seg = Assert.Single(QuestTextFormatter.SplitStepLinks("nothing here ''"));
         Assert.Null(seg.Command);
         Assert.Equal("nothing here ''", seg.Text);
+    }
+
+    // ----- the other ways guides mark a command ------------------------------
+    //
+    // Report paradigm-20261011-230844: the drafted steps write `ask renfry hands` in
+    // backticks and pasted write-ups use "…" / “…”, and none of those were links.
+
+    [Fact]
+    public void SplitStepLinks_BacktickCommand_IsALink_ApostrophesAndAll()
+    {
+        var segs = QuestTextFormatter.SplitStepLinks("(14/247) `ask renfry hands` (turn in X)").ToList();
+        Assert.Equal(new RoomKey(14, 247), segs[0].Room);
+        Assert.Equal(("`ask renfry hands`", (RoomKey?)null, (string?)"ask renfry hands"), segs[2]);
+        Assert.Equal(" (turn in X)", segs[3].Text);
+
+        Assert.Equal("ask spirit of draka's ghost",
+            QuestTextFormatter.SplitStepLinks("`ask spirit of draka's ghost`").Single().Command);
+    }
+
+    [Theory]
+    [InlineData("Talk with him and say “ask Demon Imp return”, and he will", "ask Demon Imp return")]
+    [InlineData("you can \"ask Demon Imp back\" and you will be teleported", "ask Demon Imp back")]
+    [InlineData("Travel W and “say nightfall” to see a flash of light.", "say nightfall")]
+    public void SplitStepLinks_DoubleQuotedCommand_IsALink(string line, string command)
+    {
+        Assert.Equal(command, Assert.Single(QuestTextFormatter.SplitStepLinks(line), s => s.Command is not null).Command);
+    }
+
+    [Theory]
+    [InlineData("Equip and \"use\" the Multicoloured Staff.")]
+    [InlineData("This part is to finish \"Rune-ing\" your character")]
+    [InlineData("He says \"This is not what I want.\" and walks off")]
+    public void SplitStepLinks_DoubleQuotedWordOrSentence_StaysProse(string line)
+    {
+        Assert.Null(Assert.Single(QuestTextFormatter.SplitStepLinks(line)).Command);
+    }
+
+    [Fact]
+    public void SeedGuides_MarkEveryAskWithBackticks()
+    {
+        // The shipped guides use the one mark: no ask is left in single or double quotes.
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-questseed-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            using JsonDocument seed = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "QuestDefs.seed.json")));
+            int commands = 0;
+            foreach (JsonElement quest in seed.RootElement.EnumerateArray())
+            {
+                string steps = quest.GetProperty("Steps").GetString() ?? string.Empty;
+                foreach (string line in steps.Split('\n'))
+                    foreach (var seg in QuestTextFormatter.SplitStepLinks(line))
+                        if (seg.Command is not null)
+                        {
+                            Assert.StartsWith("`", seg.Text, StringComparison.Ordinal);
+                            commands++;
+                        }
+            }
+            Assert.True(commands > 100);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
+        }
     }
 
     // ----- Step: seed-style auto-draft rendering -----------------------------
