@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.7**
-> - A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
-> - A profile whose game data set's name can't be used says so on the terminal, not only in the log
-> - A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
-> - A renamed loop is saved under its new name before the old one goes, so a failed save loses nothing
+> **Version 3.183.9**
+> - Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+> - Yellow fungus's paralysis now holds and stops attacks instead of confusing, on both realms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

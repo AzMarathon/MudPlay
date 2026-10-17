@@ -10397,8 +10397,8 @@
   {
     "Id": "96a7f595b8a7e815",
     "Name": "yellow fungus",
-    "Flags": "Confused",
-    "RawFlagsHex": 2,
+    "Flags": "MovementPrevented, AttackPrevented",
+    "RawFlagsHex": 48,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
     "WitnessMessage": "{null}",
