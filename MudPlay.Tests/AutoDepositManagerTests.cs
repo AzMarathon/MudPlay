@@ -1072,6 +1072,29 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Single(h.BuyLines());
     }
 
+    // The loop's Started event says whether the user pressed Start: a light trip's
+    // own resume of the loop doesn't, so it can't wipe the trip's back-off.
+    [Fact]
+    public void LoopStarted_SaysUserStarted_OnlyForTheUsersStart_NotTheTripsResume()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        EnableLightDetour(h);
+        List<bool> starts = new();
+        h.Loop.Event += e => { if (e.Kind == LoopEventKind.Started) starts.Add(e.UserStarted); };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }), userStarted: true));
+
+        Assert.Equal(LightRestockOutcome.Started, h.AutoDeposit.StartLightRestock(
+            new Game.Light.AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "reorder"));
+        Arrive(h, new RoomKey(1, 4));
+        GiveTorch(h);
+        Arrive(h, new RoomKey(1, 1));
+        h.Loop.Stop("test");
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 3) })));   // an event's or a task's start
+
+        Assert.Equal(new[] { true, false, false }, starts);
+    }
+
     [Fact]
     public void LightRestockTrip_NoShopSellsTheLight_LoopKeepsRunning()
     {

@@ -69,8 +69,10 @@ public sealed class AutoLightProvisioner
     public static readonly TimeSpan MadeItemWait = TimeSpan.FromSeconds(6);
 
     // How long a light trip off a loop that couldn't buy is held back before the
-    // same loop is tried again.
+    // same loop is tried again: EngineTripRetry after the first failure, doubling
+    // with each one after, up to EngineTripRetryCap.
     public static readonly TimeSpan EngineTripRetry = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan EngineTripRetryCap = TimeSpan.FromHours(2);
 
     private readonly Func<bool> _isEnabled;
     private readonly Func<InventorySnapshot> _snapshot;
@@ -104,11 +106,15 @@ public sealed class AutoLightProvisioner
     private Action<Action> _defer = static a => a();
 
     // A light trip already tried for the engine's route: which route (its rooms'
-    // count and first room), how many lights were carried, the wealth carried and
-    // when. A trip that couldn't buy is not tried again for that route until the
-    // lights carried change, wealth rises, EngineTripRetry passes, or the user
-    // starts a run.
-    private (string Route, int Lights, long Wealth, DateTimeOffset At)? _engineBuyTried;
+    // count and first room), how many lights were carried, the wealth carried, when,
+    // and how many tries in a row have come to nothing. Not tried again for that
+    // route until the lights carried change, the purse grows to the price of one
+    // copy (when it was short of it), the back-off passes, or the user starts a run;
+    // a circuit that no longer needs a light clears it.
+    private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTried;
+
+    // What one copy of a light costs at the cheapest shop selling it (null: not known).
+    private Func<int, long?> _lightPrice = static _ => null;
 
     // The light we last asked to ready, and the snapshot it was decided against.
     // Guards a re-send of `use` before the readied light shows up in a later `i`
@@ -221,9 +227,11 @@ public sealed class AutoLightProvisioner
     // (AutoDepositManager.StartLightRestock), what says one is running, and the
     // running loop's circuit (LoopRunner.ResolveLoopRoomKeys).
     public void SetLoopRestock(Func<bool> engineRunning, Func<AutoLightBuyRequest, LightRestockOutcome> restock,
-        Func<IReadOnlyList<RoomKey>>? engineRooms = null, Action<Action>? defer = null)
+        Func<IReadOnlyList<RoomKey>>? engineRooms = null, Action<Action>? defer = null,
+        Func<int, long?>? lightPrice = null)
     {
         if (defer is not null) _defer = defer;
+        if (lightPrice is not null) _lightPrice = lightPrice;
         ArgumentNullException.ThrowIfNull(engineRunning);
         ArgumentNullException.ThrowIfNull(restock);
         _engineRunning = engineRunning;
@@ -310,7 +318,7 @@ public sealed class AutoLightProvisioner
         return $"lit {lit}; auto-readied {_autoReadiedName ?? "none"}; pending use {_pendingReadyName ?? "none"}; "
             + $"spell {spellText}; spell latched short: {shortText}; "
             + $"awaiting made item {(_madeItem is { } a ? $"{a.Name} ({(a.ReadSent ? "inventory read sent" : "awaiting the cast line")})" : "none")}; "
-            + $"engine light trip tried {(_engineBuyTried is { } t ? $"for {t.Route} at {t.At.ToLocalTime():HH:mm:ss}" : "no")}; "
+            + $"engine light trip tried {(_engineBuyTried is { } t ? $"for {t.Route} at {t.At.ToLocalTime():HH:mm:ss}, {t.Failures} in a row" : "no")}; "
             + $"reorder latched {(_reorderRequestedFor is { } ro ? ro.Name : "no")}; "
             + $"last planned buy {_lastPlannedBuy ?? "none"}";
     }
@@ -453,6 +461,14 @@ public sealed class AutoLightProvisioner
 
     private bool EngineRunning => _loopRestock is not null && _engineRunning?.Invoke() == true;
 
+    // EngineTripRetry doubled for each try after the first, capped.
+    private static TimeSpan EngineTripBackoff(int failures)
+    {
+        TimeSpan wait = EngineTripRetry;
+        for (int i = 1; i < failures && wait < EngineTripRetryCap; i++) wait += wait;
+        return wait < EngineTripRetryCap ? wait : EngineTripRetryCap;
+    }
+
     // A loop or Auto-Lair run started: check its circuit for dark rooms. A run the
     // user started (not a trip's own resume) gets a fresh try at a light trip that
     // couldn't buy before.
@@ -483,16 +499,29 @@ public sealed class AutoLightProvisioner
 
         InventorySnapshot snap = _snapshot();
         AutoLightPlan plan = PlanFor(rooms, snap, out IReadOnlyList<LightItem> catalogue);
-        if (plan.Action != AutoLightAction.Buy) return;
+        if (plan.Action != AutoLightAction.Buy)
+        {
+            // Lit now (a buy landed, a light was found): the back-off starts over.
+            if (plan.Action is AutoLightAction.None or AutoLightAction.Ready) _engineBuyTried = null;
+            return;
+        }
+        if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
 
         string route = circuit.Count == 0 ? "the lair run" : $"the loop at {circuit[0]} ({circuit.Count} rooms)";
         int lights = CarriedLights(snap.CarriedItems, catalogue).Count + (snap.ReadiedLight is null ? 0 : 1);
         long wealth = snap.Currency.TotalCopperValue;
         DateTimeOffset now = _now();
-        if (_engineBuyTried is { } tried && tried.Route == route && tried.Lights == lights
-            && wealth <= tried.Wealth && now - tried.At < EngineTripRetry)
-            return;
-        if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
+        int failures = 0;
+        if (_engineBuyTried is { } tried && tried.Route == route)
+        {
+            failures = tried.Failures;
+            // Coin matters only when it was short of one copy and now isn't: a kill's
+            // few coppers don't send the loop shopping again.
+            bool canNowPay = _lightPrice(req.ItemId) is { } price && tried.Wealth < price && wealth >= price;
+            if (tried.Lights == lights && !canNowPay && now - tried.At < EngineTripBackoff(tried.Failures)) return;
+        }
+
+
 
         LightRestockOutcome outcome = restock(req);
         if (outcome == LightRestockOutcome.Busy)
@@ -500,7 +529,7 @@ public sealed class AutoLightProvisioner
             _log?.Debug(LogCategory, $"light trip for {route} waits — another trip has the walker ({plan.Reason})");
             return;
         }
-        _engineBuyTried = (route, lights, wealth, now);
+        _engineBuyTried = (route, lights, wealth, now, failures + 1);
         if (outcome == LightRestockOutcome.Started)
         {
             NotePlannedBuy($"{req.LightName} x{req.Count} on a light trip off {route} ({plan.Reason})");
@@ -653,27 +682,37 @@ public sealed class AutoLightProvisioner
     // can't leave the character in the dark.
     private bool MakerCastUnconfirmed() => MadeItemAwaited() && _madeItem is { ReadSent: false };
 
-    // Whether a light-making cast is still waited on. The wait ends after
-    // MadeItemWait, and — while the caster line is still awaited — at a dump newer
-    // than the cast (the line didn't come before it) or a room change.
+    // Whether a light-making cast is still waited on. Its caster line not come
+    // after MadeItemWait, the inventory is read once anyway (the Messages data's
+    // line may not be the one the game prints, and the item may have come), and
+    // that read is waited on as long again; then the wait ends. Any dump newer than
+    // the cast ends it too (TakeMadeItem).
     private bool MadeItemAwaited()
     {
         if (_madeItem is not { } m) return false;
-        bool over = _now() - m.CastAt > MadeItemWait
-            || (!m.ReadSent && _snapshot().LastUpdated > m.Stamp);
-        if (!over) return true;
+        if (_now() - m.CastAt <= MadeItemWait) return true;
+        if (!m.ReadSent)
+        {
+            ReadForMadeItem(m, "its cast line didn't come in time");
+            return true;
+        }
         _madeItem = null;
         _log?.Info(LogCategory, $"no word of the {m.Name} from {m.Spell} — lighting goes on without it");
         return false;
     }
 
     // A room change (dark or not): a light-making cast whose caster line hasn't come
-    // by now isn't coming.
+    // by now isn't coming as matched, so the inventory is read for the item.
     public void OnRoomChanged()
     {
-        if (_madeItem is not { ReadSent: false } m) return;
-        _madeItem = null;
-        _log?.Info(LogCategory, $"{m.Spell}'s cast line didn't come before the room changed — lighting goes on without it");
+        if (_madeItem is { ReadSent: false } m) ReadForMadeItem(m, "the room changed before its cast line came");
+    }
+
+    private void ReadForMadeItem((string Name, string Spell, CasterMessageMatcher? Line, DateTimeOffset Stamp, bool ReadSent, bool ForDarkAhead, DateTimeOffset CastAt) m, string why)
+    {
+        _madeItem = m with { ReadSent = true, CastAt = _now() };
+        _log?.Info(LogCategory, $"{m.Spell}: {why} — reading the inventory for the {m.Name}");
+        _wire.Send("i");
     }
 
     // Stepping into a room the graph knows the light level of — one the game showed,
@@ -766,12 +805,12 @@ public sealed class AutoLightProvisioner
         return true;
     }
 
-    // The first dump newer than a light-making cast's inventory read: the item is
+    // The first dump newer than a light-making cast (ours or any other): the item is
     // there (lit at once when we stand in the dark, or when it was made for the dark
     // room ahead) or the cast didn't take (a later cast may retry).
     private void TakeMadeItem(InventorySnapshot snap)
     {
-        if (_madeItem is not { ReadSent: true } awaited || snap.LastUpdated <= awaited.Stamp) return;
+        if (_madeItem is not { } awaited || snap.LastUpdated <= awaited.Stamp) return;
         _madeItem = null;
         IReadOnlyList<LightItem> carried = CarriedLights(snap.CarriedItems, _catalogue());
         if (carried.FirstOrDefault(l => string.Equals(l.Name, awaited.Name, StringComparison.OrdinalIgnoreCase))

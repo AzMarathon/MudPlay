@@ -1070,11 +1070,53 @@ public sealed class AutoLightProvisionerTests
         h.Dark();
         Assert.Single(h.CastSpells);
 
-        if (how == "timeout") h.Now += AutoLightProvisioner.MadeItemWait + TimeSpan.FromSeconds(1);
+        // A wait whose cast line didn't come reads the inventory once; the dump
+        // (without a ball) or that read's own wait running out ends it.
+        if (how == "timeout")
+        {
+            h.Now += AutoLightProvisioner.MadeItemWait + TimeSpan.FromSeconds(1);
+            h.Dark();
+            Assert.Contains("i", h.Sent);
+            Assert.Single(h.CastSpells);
+            h.Now += AutoLightProvisioner.MadeItemWait + TimeSpan.FromSeconds(1);
+        }
         if (how == "dump") { h.Snapshot = Snap(stamp: 9); h.Poll(); }
-        if (how == "room") h.Engine.OnRoomChanged();
+        if (how == "room")
+        {
+            h.Engine.OnRoomChanged();
+            Assert.Contains("i", h.Sent);
+            h.Snapshot = Snap(stamp: 9);
+            h.Poll();
+        }
         h.Dark();
         Assert.Equal(2, h.CastSpells.Count);
+    }
+
+    // The probe: the Messages data's caster line isn't what the game printed, and
+    // the walk moves on room after room. The first room change reads the
+    // inventory, the ball turns up in that dump and is lit; illuminate is cast once.
+    [Fact]
+    public void LightMakingCast_LineNeverMatches_TheRoomChangeReadsTheInventory_NoRecast()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Spell = Illuminate,
+            CastLine = "You conjure {spellname}!",
+            Snapshot = Snap(stamp: 1),
+        };
+        h.Approach(DarkAhead);
+        h.Feed("You cast illuminate!");      // not the template's line
+        h.Engine.OnRoomChanged();
+        h.Approach(DarkAhead);
+        h.Engine.OnRoomChanged();
+        h.Approach(DarkAhead);
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
+        Assert.Equal(new[] { "i" }, h.Sent);
+
+        h.Snapshot = Snap(carried: new[] { "light ball" }, stamp: 2);
+        h.Poll();
+        Assert.Equal(new[] { "i", "use light ball" }, h.Sent);
     }
 
     // The latch holds for the dark stretch it was found in: a room shown ends it,
@@ -1371,7 +1413,7 @@ public sealed class AutoLightProvisionerTests
         Harness h = new();
         int asks = 0;
         h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
-            engineRooms: () => new[] { A });
+            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
         h.Engine.OnEngineStarted(userStarted: false);
         h.Engine.OnEngineStarted(userStarted: false);   // a trip's resume: held back
         Assert.Equal(1, asks);
@@ -1388,6 +1430,63 @@ public sealed class AutoLightProvisionerTests
             h.Poll();
         }
         Assert.Equal(2, asks);
+    }
+
+    // A few coppers picked up after the try don't send the loop shopping again;
+    // reaching the price of one copy (when it was short of it) does, and a purse
+    // that could already pay never does.
+    [Fact]
+    public void Loop_TripThatCouldNotBuy_WealthCountsOnlyWhenItNowPaysForOne()
+    {
+        Harness h = new();
+        int asks = 0;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
+            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
+        h.Engine.OnEngineStarted(userStarted: false);
+        h.Snapshot = h.Snapshot with { Currency = new CurrencyHoldings(12, 0, 0, 0, 0, 12) };
+        h.Poll();
+        Assert.Equal(1, asks);
+        h.Snapshot = h.Snapshot with { Currency = new CurrencyHoldings(0, 0, 10, 0, 0, 1000) };
+        h.Poll();
+        Assert.Equal(2, asks);
+        h.Snapshot = h.Snapshot with { Currency = new CurrencyHoldings(0, 0, 90, 0, 0, 9000) };
+        h.Poll();
+        Assert.Equal(2, asks);           // it could pay last time: coin wasn't the trouble
+    }
+
+    // Failure after failure the wait doubles from 10 minutes up to 2 hours; a
+    // circuit that comes up lit starts it over.
+    [Fact]
+    public void Loop_TripThatKeepsFailing_BacksOffDoubling_AndALitCircuitResetsIt()
+    {
+        Harness h = new();
+        int asks = 0;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
+            engineRooms: () => new[] { A });
+        h.Engine.OnEngineStarted(userStarted: false);                 // try 1
+        h.Now += TimeSpan.FromMinutes(11);
+        h.Poll();                                                     // try 2 (after 10 min)
+        h.Now += TimeSpan.FromMinutes(15);
+        h.Poll();                                                     // 15 of 20: held
+        Assert.Equal(2, asks);
+        h.Now += TimeSpan.FromMinutes(6);
+        h.Poll();                                                     // try 3 (after 20 min)
+        Assert.Equal(3, asks);
+        for (int i = 0; i < 6; i++)
+        {
+            h.Now += AutoLightProvisioner.EngineTripRetryCap + TimeSpan.FromSeconds(1);
+            h.Poll();
+        }
+        Assert.Equal(9, asks);                                        // capped at 2 hours
+        h.Now += TimeSpan.FromMinutes(100);
+        h.Poll();
+        Assert.Equal(9, asks);
+
+        h.Snapshot = Snap(readied: new ReadiedLight("lantern", 240)); // lit: the trouble is over
+        h.Poll();
+        h.Snapshot = Snap();
+        h.Poll();
+        Assert.Equal(10, asks);                                       // asked at once again
     }
 
     [Fact]

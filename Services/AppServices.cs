@@ -10026,15 +10026,18 @@ public sealed class AppServices
         // down while they run, so the buy is a trip of its own off the engine, back
         // to it once bought. Posted, since a check can be raised from inside the
         // walker's route announcement.
+        // A Roomba sweep drives its own LoopRunner circuit; it is not a run to stop
+        // for a light trip.
         AutoLightProvisioner.SetLoopRestock(
-            engineRunning: () => LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive,
+            engineRunning: () => (LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive) && !GhSweep.IsActive,
             restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
             engineRooms: LoopRunner.ResolveLoopRoomKeys,
-            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            lightPrice: CheapestPrice);
         LoopRunner.Event += e =>
         {
             if (e.Kind == Game.Map.LoopEventKind.Started)
-                AutoLightProvisioner.OnEngineStarted(userStarted: !AutoDeposit.ResumingEngine);
+                AutoLightProvisioner.OnEngineStarted(userStarted: e.UserStarted);
         };
         // A split-teleport reform waits for the leader to leave the room it started in.
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
@@ -14709,6 +14712,17 @@ public sealed class AppServices
     // (the game charges whole copper). Null when the room hosts no shop, the shop
     // doesn't stock the item, or the set can't be read — the router then heads
     // straight to the shop and buys with cash on hand.
+    // One copy of an item at the cheapest shop selling it, or null when no shop
+    // prices it.
+    private long? CheapestPrice(int itemId)
+    {
+        long? best = null;
+        foreach (Game.Map.RoomKey shop in ShopRoomsSellingItem(itemId))
+            if (PathItemBuyCost(itemId, shop) is { } price && (best is null || price < best))
+                best = price;
+        return best;
+    }
+
     private long? PathItemBuyCost(int itemId, Game.Map.RoomKey shopRoom)
     {
         if (RoomGraph.GetRoom(shopRoom) is not { Shop: > 0 } room) return null;
