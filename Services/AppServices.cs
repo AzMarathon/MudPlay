@@ -4016,8 +4016,10 @@ public sealed class AppServices
         // The lists that label rooms from the Rooms table (item, spell and quest
         // records, the trainer and bank lists, item givers) ask the map for a room
         // the table leaves unnamed, and the ones that keep the answer are told when
-        // a realm's names go on or come off. Both are set before the store is
-        // built, so its first apply already reaches them; ItemSources exists above.
+        // a realm's names go on or come off, and once a walk that learned names goes
+        // quiet (RoomGraph.TellKeptListsWhenQuiet, on the heartbeat). Both are set
+        // before the store is built, so its first apply already reaches them;
+        // ItemSources exists above.
         GameData.RoomNameWhenDataHasNone = (map, room) =>
             RoomGraph.LearnedNames.GetValueOrDefault(new Game.Map.RoomKey(map, room));
         RoomGraph.LearnedNamesChanged += () =>
@@ -4036,12 +4038,16 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
         Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
         Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
-        // A BBS renamed from Profile Management raises no pin: the realm's folder
-        // moved under the new name, and the store goes with it.
+        // A BBS or realm renamed: the realm's folder moved under the new name, and
+        // the store goes with it (a BBS renamed from Profile Management raises no
+        // pin at all).
         Profile.BbsRenamed += (from, to) =>
             LearnedRoomNames.OnFolderRenamed(AppPaths.BbsFolder(from), AppPaths.BbsFolder(to));
+        Profile.RealmRenamed += (bbs, from, to) =>
+            LearnedRoomNames.OnFolderRenamed(AppPaths.RealmFolder(bbs, from), AppPaths.RealmFolder(bbs, to));
         LearnedRoomNames.OnRealmChanged();
         Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
+        Tick.HeartbeatElapsed += RoomGraph.TellKeptListsWhenQuiet;
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).

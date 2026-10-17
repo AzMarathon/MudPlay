@@ -1,5 +1,13 @@
 # Version history
 
+## 3.181.20
+
+- Learned arrival rooms: a file another program holds is retried, not set aside as damaged
+- Two clients writing learned room names or arrival rooms at once take turns, so neither loses the other's
+- A temporary file left by a write that never finished is removed when the realm or set loads
+- A renamed realm keeps its learned room names, saved or not, with or without a names file yet
+- A room name learned on a walk reaches the trainer, bank and item-giver lists once the walk goes quiet
+
 ## 3.181.15
 
 - A telepath the game refused on every try, or whose letters fit two players, is let go at once

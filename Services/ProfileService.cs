@@ -187,11 +187,16 @@ public sealed class ProfileService
     //                       not, is now under the new name (raised after
     //                       ProfileRenamed for the loaded one)
     //   BbsDeleted          a BBS was removed, and every profile under it
+    //   RealmRenamed        a realm of a BBS was renamed (BBS, old name, new name):
+    //                       its data folder has moved to the new name. Raised
+    //                       before its characters are re-pointed and saved, and
+    //                       before the realm's new name may be saved with its BBS
     // A copy of a profile raises nothing: the copy is another character.
     public event Action<ProfileRef, ProfileRef>? StoredProfileMoved;
     public event Action<ProfileRef>? ProfileDeleted;
     public event Action<string, string>? BbsRenamed;
     public event Action<string>? BbsDeleted;
+    public event Action<string, string, string>? RealmRenamed;
 
     // Raise BbsDeleted. The BBS folder is BbsProfileStore's to remove; whoever
     // removes one says so here, as a rename is told through RenameBbs.
@@ -663,6 +668,9 @@ public sealed class ProfileService
     {
         if (string.IsNullOrWhiteSpace(bbs) || string.IsNullOrWhiteSpace(oldRealm)) return;
         if (!BbsUsable("Re-pointing a realm's characters", bbs)) return;
+        // First, so what is kept in the realm's folder follows it before a save
+        // below can re-pin the loaded character on the new name.
+        if (!string.IsNullOrWhiteSpace(newRealm)) RealmRenamed?.Invoke(bbs, oldRealm, newRealm);
         bool Assigned(CharacterProfile p) =>
             string.Equals(p.Realm, oldRealm, StringComparison.OrdinalIgnoreCase);
         bool currentOnBbs = string.Equals(CurrentBbsName, bbs, StringComparison.OrdinalIgnoreCase);
