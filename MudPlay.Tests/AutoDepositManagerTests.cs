@@ -1003,6 +1003,36 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
     }
 
+    // A stash trip whose way back runs dark: the light is planned before the hide and
+    // the hide leaves its price in hand (one gold of the fifty), then the light is
+    // bought in town and the trip walks back.
+    [Fact]
+    public void StashReturnLegRunsDark_HideLeavesTheLightsPrice_ThenBuysInTown()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        // A loop off the stash room, so the trip is a detour, not a pass-through.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 49 gold crown", Assert.Single(h.StashLines()));
+
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
     // The connection drops while the bank run buys its light: the run ends as a
     // stopped one, and the shop isn't held back for the buy that never got its
     // answer.

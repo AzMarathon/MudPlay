@@ -111,7 +111,9 @@ public sealed class StashRoomManager : IDisposable
     // leaving the fewest coins on hand). Guarded by the cash master toggle and a
     // defensive stash-room membership check (the caller only routes here for
     // stash destinations, but the guard keeps the contract local).
-    public void ExecuteStash(RoomKey enteredRoom)
+    // holdBackCopper: coin the trip still has to spend (the light it buys on the way
+    // back), left in hand on top of what the cutoff keeps.
+    public void ExecuteStash(RoomKey enteredRoom, long holdBackCopper = 0)
     {
         if (!_isEnabled()) return;
         if (_profile.Current is not { } profile) return;
@@ -142,9 +144,13 @@ public sealed class StashRoomManager : IDisposable
         // keeps everything above it — the keep-on-hand floor is a banking rule, so
         // the stash plan passes a zero floor. Everything ⇒ no cap.
         long maxUnit = CurrencyHoldings.MaxUnitFor(cash.StashCoinCutoff);
+        // Coin above the cutoff stays in hand anyway; only the rest of what is held
+        // back comes off the hide.
+        long floor = Math.Max(0, holdBackCopper - CopperAbove(held, maxUnit));
+        if (floor > 0) _log?.Info(LogCategory, $"keeping {floor} copper of the stash in hand for the trip back");
 
         List<(string Currency, long Amount)> dispatched = new();
-        foreach ((string denom, long count) in held.PlanOffloadAboveKeep(0, maxUnit))
+        foreach ((string denom, long count) in held.PlanOffloadAboveKeep(floor, maxUnit))
         {
             // Hide names the coins by their full two-word noun, same as the
             // get / drop paths — a bare denomination adjective binds
@@ -194,6 +200,20 @@ public sealed class StashRoomManager : IDisposable
                 + $"currencies={dispatched.Count} items={hiddenItems.Count}");
             StashExecuted?.Invoke(new StashDispatch(enteredRoom, dispatched, hiddenItems));
         }
+    }
+
+    // The copper value of the coins above the stash cutoff (they aren't hidden).
+    private static long CopperAbove(CurrencyHoldings held, long maxUnit)
+    {
+        long above = 0;
+        foreach ((CoinDenomination denom, int count) in new[]
+                 {
+                     (CoinDenomination.Copper, held.Copper), (CoinDenomination.Silver, held.Silver),
+                     (CoinDenomination.Gold, held.Gold), (CoinDenomination.Platinum, held.Platinum),
+                     (CoinDenomination.Runic, held.Runic),
+                 })
+            if (CurrencyHoldings.CopperUnit(denom) > maxUnit) above += count * CurrencyHoldings.CopperUnit(denom);
+        return above;
     }
 
     // How many copies one carried-list entry stands for. Paradigm lists a stack as

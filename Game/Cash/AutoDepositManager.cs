@@ -650,8 +650,11 @@ public sealed class AutoDepositManager : IDisposable
             // is invoked, not autonomous, so it only fires here on an
             // auto-deposit reroute (never on a manual walk-through).
             _log?.Info(LogCategory, "arrived at stash room — executing stash");
-            _stash.ExecuteStash(_destination);
-            BeginReturnLeg(_eventTrip ? null : PlanReturnLight(keepCopper: 0));
+            // As at a bank: the walk back's light is planned on the purse before
+            // the hide, and the hide leaves its price in hand.
+            ReturnLight? light = _eventTrip ? null : PlanReturnLight(keepCopper: 0);
+            _stash.ExecuteStash(_destination, holdBackCopper: light?.Cost ?? 0);
+            BeginReturnLeg(light);
             return;
         }
 
