@@ -80,9 +80,6 @@ public sealed class AutoPartyManager : IDisposable
     // every invited row is an invite.
     public Func<string, bool>? LeftBehindOnOurList { get; set; }
 
-    // Test seam — most recent bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // Per-given-name TTL map suppressing rapid re-invites.
     private readonly Dictionary<string, DateTime> _recentlyInvited =
         new(StringComparer.OrdinalIgnoreCase);
@@ -496,8 +493,7 @@ public sealed class AutoPartyManager : IDisposable
     // Bind the wire-sender — same shape as
     // Remote.PartyEssentialHandlers.SetWireSender. The main-window VM supplies
     // SendUserInput; pre-binding, the engine still processes events but produces
-    // no wire output (so tests can inspect LastSentForTests without configuring
-    // a real sender).
+    // no wire output.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
     public void Dispose()

@@ -887,9 +887,6 @@ public sealed class LoopRunner : IRecoverableEngine
         return keys;
     }
 
-    // Bytes sent by the runner — captured for tests when no wire is bound.
-    public IReadOnlyList<byte[]> LastSentForTests => _sent;
-    private readonly List<byte[]> _sent = new();
 
     public event Action<LoopEvent>? Event;
 
@@ -3012,7 +3009,6 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void Write(byte[] bytes, string reason)
     {
-        _sent.Add(bytes);
         if (_wireSender is null)
             _log?.Warn("LoopRunner", $"wire not bound; suppressed: {reason}");
         else

@@ -18,7 +18,10 @@ public sealed class DepositAllBankCheckTests
 {
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, List<string> game) Setup(bool? inBank)
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
+    private (RemoteCommandManager engine, List<string> game) Setup(bool? inBank)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -28,6 +31,7 @@ public sealed class DepositAllBankCheckTests
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Leader", new PlayerCustomization(RemoteControls: PlayerRemoteControls.ExecuteCommands));
         RemoteCommandManager engine = new(new ChatRouter(router), party, players);
+        engine.SetWireSender(_replies.Add);
         InventoryManager inventory = new(log: null, itemWeightResolver: null, slotResolver: null);
         inventory.AttachLineExtractor(new LineExtractor(new TerminalEmulator(80, 24)));
         CashSettings cash = new();
@@ -44,8 +48,8 @@ public sealed class DepositAllBankCheckTests
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Leader", msg, $"Leader telepaths: {msg}");
 
-    private static string Only(RemoteCommandManager engine) =>
-        Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests));
+    private string Only() =>
+        Encoding.Latin1.GetString(Assert.Single(_replies));
 
     [Fact]
     public void OutsideABank_NothingIsSent_AndTheAnswerSaysSo()
@@ -54,7 +58,7 @@ public sealed class DepositAllBankCheckTests
 
         engine.DispatchForTests(Telepath("@deposit-all"));
 
-        Assert.Equal("/Leader {not in a bank - nothing deposited}\r", Only(engine));
+        Assert.Equal("/Leader {not in a bank - nothing deposited}\r", Only());
         Assert.Empty(game);
     }
 
@@ -68,7 +72,7 @@ public sealed class DepositAllBankCheckTests
 
         engine.DispatchForTests(Telepath("@deposit-all"));
 
-        Assert.StartsWith("/Leader {not in a bank", Only(engine));
+        Assert.StartsWith("/Leader {not in a bank", Only());
     }
 
     // In a bank, or in a room the client can't place, the command is worked as
@@ -82,6 +86,6 @@ public sealed class DepositAllBankCheckTests
 
         engine.DispatchForTests(Telepath("@deposit-all"));
 
-        Assert.StartsWith("/Leader {wealth unknown", Only(engine));
+        Assert.StartsWith("/Leader {wealth unknown", Only());
     }
 }

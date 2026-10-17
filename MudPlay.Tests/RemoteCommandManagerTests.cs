@@ -12,12 +12,13 @@ public sealed class RemoteCommandManagerTests
 {
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// Build a self-contained remote-command engine + the minimum
-    /// surrounding state. The test PlayerDatabase starts empty —
-    /// individual tests seed it via RecordObservation / EditCustomization.
-    /// </summary>
-    private static (RemoteCommandManager engine, PartyState party, PlayerDatabase players) Setup()
+    // What the engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _sent = new();
+
+    // Build a self-contained remote-command engine + the minimum
+    // surrounding state. The test PlayerDatabase starts empty —
+    // individual tests seed it via RecordObservation / EditCustomization.
+    private (RemoteCommandManager engine, PartyState party, PlayerDatabase players) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -25,6 +26,7 @@ public sealed class RemoteCommandManagerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_sent.Add);
         return (engine, party, players);
     }
 
@@ -73,7 +75,7 @@ public sealed class RemoteCommandManagerTests
         // failure-message reply path.
         engine.WarnOnDenial = false;
         engine.DispatchForTests(Telepath("Stranger", "@health"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -165,7 +167,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Friend", "@equip-"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -233,7 +235,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@equip-reroll"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -577,7 +579,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Buddy", "@party suicide"));
 
         Assert.True(fired);
-        Assert.Empty(engine.LastSentForTests);  // no redirect, no denial
+        Assert.Empty(_sent);  // no redirect, no denial
     }
 
     [Fact]
@@ -598,7 +600,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@do suicide"));
 
         Assert.False(fired);
-        string reply = Encoding.Latin1.GetString(engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(_sent[^1]);
         Assert.Contains("@do suicide is not allowed, use @suicide", reply);
     }
 
@@ -615,7 +617,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@do suicide"));
 
         Assert.False(fired);
-        string reply = Encoding.Latin1.GetString(engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(_sent[^1]);
         Assert.Contains("@do suicide is not allowed, use @suicide", reply);
     }
 
@@ -636,7 +638,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@do suicide"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -655,7 +657,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@do par suicide"));
 
         Assert.False(fired);
-        string reply = Encoding.Latin1.GetString(engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(_sent[^1]);
         Assert.Contains("@do suicide is not allowed", reply);
     }
 
@@ -694,7 +696,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
         Assert.False(fired);
-        string reply = Encoding.Latin1.GetString(engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(_sent[^1]);
         Assert.Contains("suicide blocked", reply);
         Assert.DoesNotContain("use @suicide", reply);
     }
@@ -713,7 +715,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@do reroll"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);  // no reply, ever
+        Assert.Empty(_sent);  // no reply, ever
     }
 
     [Fact]
@@ -728,7 +730,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Buddy", "@party reroll"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     // ===== Channel routing + Reply =====
@@ -750,10 +752,10 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Gangpath("Friend",  "@health"));
         engine.DispatchForTests(Local("Friend",     "@health"));
 
-        Assert.Equal(3, engine.LastSentForTests.Count);
-        Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[0]));
-        Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(engine.LastSentForTests[1]));
-        Assert.Equal(">Friend {plain}\r", Encoding.Latin1.GetString(engine.LastSentForTests[2]));
+        Assert.Equal(3, _sent.Count);
+        Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(_sent[0]));
+        Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(_sent[1]));
+        Assert.Equal(">Friend {plain}\r", Encoding.Latin1.GetString(_sent[2]));
     }
 
     [Fact]
@@ -766,7 +768,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Friend", "@health"));
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         string wire = Encoding.Latin1.GetString(sent);
         // Engine wraps every reply in { } at SendReply time — per user
         // direction every remote response carries the curly-brace
@@ -784,7 +786,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Gangpath("Friend", "@health"));
 
-        string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
+        string wire = Encoding.Latin1.GetString(_sent[0]);
         Assert.Equal("bg {hi}\r", wire);
     }
 
@@ -798,7 +800,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Local("Friend", "@health"));
 
-        string wire = Encoding.Latin1.GetString(engine.LastSentForTests[0]);
+        string wire = Encoding.Latin1.GetString(_sent[0]);
         // Say is room-wide, so a say-channel @-command is answered with a DIRECTED
         // say (`>Name <msg>`) aimed at the sender, not an undirected `.<msg>`.
         Assert.Equal(">Friend {hi}\r", wire);
@@ -825,7 +827,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Gossip("Friend", "@health"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -840,7 +842,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Yell("Friend", "@health"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     // The real yell lines from other players, fed through the pattern catalog and
@@ -861,6 +863,7 @@ public sealed class RemoteCommandManagerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_sent.Add);
         SeedPlayer(players, "Alder", PlayerRemoteControls.QueryHealthStatus);
         SeedPlayer(players, "Someone", PlayerRemoteControls.QueryHealthStatus);
         int fired = 0;
@@ -876,12 +879,12 @@ public sealed class RemoteCommandManagerTests
 
         Assert.Equal(ChatChannel.Yell, Assert.Single(heard).Channel);
         Assert.Equal(0, fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
 
         Hear("Alder says \"@health\"");
 
         Assert.Equal(1, fired);
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -964,7 +967,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Buddy", "@poisoned"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -977,7 +980,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Buddy", "@POISONED"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1019,7 +1022,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Friend", "@health"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1070,7 +1073,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Chatter", "@because it was funny"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1085,7 +1088,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@health"));
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal("/Stranger {denied}\r", Encoding.Latin1.GetString(sent));
     }
 
@@ -1099,7 +1102,7 @@ public sealed class RemoteCommandManagerTests
         // Stranger isn't in the party → party-whitelist denial path.
         engine.DispatchForTests(Telepath("Stranger", "@party rest"));
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal("/Stranger {denied}\r", Encoding.Latin1.GetString(sent));
     }
 
@@ -1118,7 +1121,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Trusted", "@do reroll"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1137,7 +1140,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal(
             "/Trusted {suicide blocked, 4 lives <= threshold 5}\r",
             Encoding.Latin1.GetString(sent));
@@ -1159,7 +1162,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
         Assert.False(handlerFired);   // gate stopped it
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal(
             "/Trusted {suicide blocked, 5 lives <= threshold 5}\r",
             Encoding.Latin1.GetString(sent));
@@ -1181,7 +1184,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
         Assert.False(handlerFired);
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal(
             "/Trusted {suicide blocked, lives unknown to client}\r",
             Encoding.Latin1.GetString(sent));
@@ -1203,7 +1206,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
         Assert.True(handlerFired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1221,7 +1224,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Trusted", "@suicide"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1240,7 +1243,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Buddy", "@party set suicide hunter2"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1253,7 +1256,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@unknown"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1264,7 +1267,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@unknown"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1277,7 +1280,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@unknown"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     // ===== Public-channel self-echo =====
@@ -1297,7 +1300,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Gangpath("Raijin", "@timer sync"));
 
         Assert.False(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1317,8 +1320,8 @@ public sealed class RemoteCommandManagerTests
 
     // ===== &@ relay-back =====
 
-    private static List<string> Sent(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private List<string> Sent() =>
+        _sent.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     [Fact]
     public void RelayBack_Granted_EchoesTheCommandToTheSenderBare()
@@ -1330,7 +1333,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Leader", "&@invite"));
 
-        Assert.Equal(new[] { "/Leader @invite\r" }, Sent(engine));
+        Assert.Equal(new[] { "/Leader @invite\r" }, Sent());
         Assert.False(ranHere);   // relayed, not run on this client
     }
 
@@ -1344,7 +1347,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Gangpath("Leader", "&@where now"));
         engine.DispatchForTests(Local("Leader", "&@where"));
 
-        Assert.Equal(new[] { "bg @where now\r", ">Leader @where\r" }, Sent(engine));
+        Assert.Equal(new[] { "bg @where now\r", ">Leader @where\r" }, Sent());
     }
 
     [Fact]
@@ -1357,7 +1360,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Leader", "&@invite"));
 
-        Assert.Equal(new[] { "/Leader {command invalid or not allowed}\r" }, Sent(engine));
+        Assert.Equal(new[] { "/Leader {command invalid or not allowed}\r" }, Sent());
     }
 
     [Fact]
@@ -1369,7 +1372,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Stranger", "&@invite"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1382,7 +1385,7 @@ public sealed class RemoteCommandManagerTests
         engine.DispatchForTests(Telepath("Leader", "&@&@invite"));
         engine.DispatchForTests(Telepath("Leader", "&@"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1394,7 +1397,7 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Leader", "&@do reroll"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -1407,6 +1410,6 @@ public sealed class RemoteCommandManagerTests
 
         engine.DispatchForTests(Telepath("Leader", "&@invite"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 }

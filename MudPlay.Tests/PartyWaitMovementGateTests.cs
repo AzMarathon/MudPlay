@@ -14,9 +14,12 @@ namespace MudPlay.Tests;
 // engine holds until every waiting member sends @ok.
 public sealed class PartyWaitMovementGateTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, PartyEssentialHandlers handlers,
+    private (RemoteCommandManager engine, PartyEssentialHandlers handlers,
                     PartyState party, MovementCoordinator coord, PartyWaitMovementGate gate) Setup()
     {
         MessageRouter router = new();
@@ -26,6 +29,7 @@ public sealed class PartyWaitMovementGateTests
         PlayerDatabase players = new();
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         PartyEssentialHandlers handlers = new(engine, player, party);
         MovementCoordinator coord = new();
         PartyWaitMovementGate gate = new(handlers, coord);
@@ -80,7 +84,7 @@ public sealed class PartyWaitMovementGateTests
 
         Assert.Contains("Follower", handlers.WaitingMembers);
         Assert.False(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
 
         SwitchOn(engine, coord, gate);
         Assert.True(coord.IsGateAsserted(MovementCoordinator.PartyWaitGate));
@@ -113,7 +117,7 @@ public sealed class PartyWaitMovementGateTests
         engine.DispatchForTests(Telepath("Stranger", "@wait"));
 
         Assert.Empty(handlers.WaitingMembers);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // The leader's wait limit counts from the switch coming back on, so a

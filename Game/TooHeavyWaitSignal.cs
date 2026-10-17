@@ -43,8 +43,6 @@ public sealed class TooHeavyWaitSignal : IDisposable
 
     public bool IsTooHeavy => _tooHeavy;
 
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     public TooHeavyWaitSignal(
         MessageRouter router, InventoryManager inventory, PartyRestSync restSync,
         MovementCoordinator coordinator, LogService? log = null)

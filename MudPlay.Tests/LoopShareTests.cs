@@ -787,20 +787,25 @@ public sealed class LoopShareTests : IDisposable
         Assert.Empty(loops.Loops);
     }
 
-    private static RemoteCommandManager Engine(bool masterSwitchOff = false, bool warn = true, bool stealthed = false)
+    // Each engine's own wire, captured through the sender the client binds.
+    private readonly Dictionary<RemoteCommandManager, List<byte[]>> _wire = new();
+
+    private RemoteCommandManager Engine(bool masterSwitchOff = false, bool warn = true, bool stealthed = false)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        return new RemoteCommandManager(new ChatRouter(router), new PartyState(), new PlayerDatabase())
+        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase())
         {
             BlockedByMasterSwitch = _ => masterSwitchOff,
             WarnOnDenial = warn,
             StealthedProvider = () => stealthed,
         };
+        engine.SetWireSender((_wire[engine] = new()).Add);
+        return engine;
     }
 
-    private static string[] Wire(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+    private string[] Wire(RemoteCommandManager engine) =>
+        _wire[engine].Select(b => Encoding.Latin1.GetString(b)).ToArray();
 
     // The answer leaves as every remote reply does, braced and to the sender's given
     // name, and by telepath: a loop goes by telepath only, and so does what is said
@@ -855,7 +860,7 @@ public sealed class LoopShareTests : IDisposable
 
         engine.DispatchForTests(Tele("Raijin", line));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_wire[engine]);
         Assert.False(PartyProbeManager.TryParseVersion(line, out _));
     }
 
@@ -910,12 +915,13 @@ public sealed class LoopShareTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), new PlayerDatabase(), log) { WarnOnDenial = true };
+        engine.SetWireSender((_wire[engine] = new()).Add);
         engine.RegisterIgnored(LoopShareHandler.DataToken);
         engine.RegisterIgnored(LoopShareHandler.ResultToken);
 
         engine.DispatchForTests(Tele("Raijin", line));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_wire[engine]);
         // Swallowed as a reserved token, ahead of the unknown-command and blocked-word paths.
         Assert.Empty(log.Snapshot());
     }

@@ -22,6 +22,8 @@ public sealed class MasterSwitchRemoteCommandTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // What Engine put on the wire, through the sender the client binds.
+        public List<byte[]> Sent { get; } = new();
         public AutoModeRemoteHandler Handler { get; }
         public AutoModeController Controller { get; }
         public ProfileService Profile { get; }
@@ -47,6 +49,7 @@ public sealed class MasterSwitchRemoteCommandTests
                 // Lives known and plentiful, so @suicide-shaped commands reach a handler.
                 LivesProvider = () => 9,
             };
+            Engine.SetWireSender(Sent.Add);
 
             // A recording handler for every catalog command; the real @auto-* /
             // @settings handlers then replace theirs.
@@ -67,7 +70,7 @@ public sealed class MasterSwitchRemoteCommandTests
                 ? JsonSerializer.Deserialize<GeneralSettings>(json.GetRawText())!.AutoMode
                 : new AutoActionDefaults();
 
-        public string LastReply => Encoding.Latin1.GetString(Engine.LastSentForTests[^1]);
+        public string LastReply => Encoding.Latin1.GetString(Sent[^1]);
 
         public void Dispose() => Handler.Dispose();
     }
@@ -104,7 +107,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.DispatchForTests(Telepath(command));
 
         Assert.Empty(s.Invoked);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
         Assert.True(before.SameAs(s.Mode));
         Assert.True(s.Controller.KillSwitchEngaged);
         Assert.Equal(1, s.Controller.SkippedSinceOff["Remote commands"]);
@@ -120,7 +123,7 @@ public sealed class MasterSwitchRemoteCommandTests
 
         // Handled: it reached a handler (the recorder, or the real @auto-* /
         // @settings one, which answers) and nothing was counted as skipped.
-        Assert.True(s.Invoked.Contains(command) || s.Engine.LastSentForTests.Count > 0,
+        Assert.True(s.Invoked.Contains(command) || s.Sent.Count > 0,
             $"{command} was not handled with the switch on");
         Assert.Empty(s.Controller.SkippedSinceOff);
     }
@@ -134,7 +137,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.DispatchForTests(Telepath("&@invite"));
         s.Engine.DispatchForTests(Telepath("&@auto-all on"));
 
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
         Assert.True(s.Controller.KillSwitchEngaged);
     }
 
@@ -147,7 +150,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.DispatchForTests(Telepath("@because I said so"));
 
         Assert.Empty(s.Controller.SkippedSinceOff);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     [Fact]
@@ -213,7 +216,7 @@ public sealed class MasterSwitchRemoteCommandTests
         Assert.True(s.Controller.KillSwitchEngaged);
         // And unanswered: a denial would make @auto-all the one command that tells
         // a stranger the client is there.
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     [Fact]
@@ -226,7 +229,7 @@ public sealed class MasterSwitchRemoteCommandTests
         s.Engine.DispatchForTests(stranger);
 
         Assert.False(s.Controller.KillSwitchEngaged);
-        Assert.Single(s.Engine.LastSentForTests);
+        Assert.Single(s.Sent);
     }
 
     // ----- A @comeback kept for the switch --------------------------------
@@ -267,7 +270,7 @@ public sealed class MasterSwitchRemoteCommandTests
         SwitchBackOn(s);
 
         Assert.Empty(s.Invoked);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     [Fact]
@@ -281,7 +284,7 @@ public sealed class MasterSwitchRemoteCommandTests
         SwitchBackOn(s);
 
         Assert.Empty(s.Invoked);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     // A profile load and a dropped connection both end the stay the ask was made
@@ -299,7 +302,7 @@ public sealed class MasterSwitchRemoteCommandTests
         SwitchBackOn(s);
 
         Assert.Empty(s.Invoked);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     // Older than "If leading, accept @comeback for": the party has moved on.
@@ -317,6 +320,6 @@ public sealed class MasterSwitchRemoteCommandTests
         SwitchBackOn(s);
 
         Assert.Empty(s.Invoked);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 }

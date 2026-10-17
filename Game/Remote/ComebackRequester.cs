@@ -163,9 +163,6 @@ public sealed partial class ComebackRequester : IDisposable
     // tab's "If leading, accept @comeback for", past which a leader has moved on.
     public TimeSpan RetryWindow { get; set; } = TimeSpan.FromMinutes(2);
 
-    // Test-visible record of every wire payload sent.
-    internal List<byte[]> LastSentForTests { get; } = new();
-
     // For the bug report: the last left-behind incident, with what was done about
     // it and what the leader answered.
     public string LastIncidentSummary
@@ -297,7 +294,6 @@ public sealed partial class ComebackRequester : IDisposable
             && now - _joinSentAt < JoinRetryGap)
             return;
         byte[] bytes = Encoding.Latin1.GetBytes($"join {leader}\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
         _joinedLeader = leader;
         _joinSentAt = now;
@@ -811,7 +807,6 @@ public sealed partial class ComebackRequester : IDisposable
         // wrong place. A bare @comeback has them backtrack the way they came.
         string payload = ConfirmedRoom() is { } room ? $"@comeback {room.Key}" : "@comeback";
         byte[] bytes = Encoding.Latin1.GetBytes($"/{leader} {payload}\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
         _askedLeader = leader;
         _askedBack = (leader, now);

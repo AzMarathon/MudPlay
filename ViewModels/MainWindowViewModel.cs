@@ -3577,6 +3577,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.DefaultTaskRunner.NotifyDisconnected();
                 // Stop statline reconciliation until the next connect re-arms.
                 AppServices.Current.StatlineReconcile.Disarm();
+                // A prompt the link cut off part-way must not be completed by the
+                // next connection's first bytes.
+                AppServices.Current.PromptScanner.Reset();
                 // Pause Time Analysis accrual: we're no longer in-game, so
                 // the offline span doesn't count. Totals freeze and resume
                 // on the next in-game prompt after reconnect.

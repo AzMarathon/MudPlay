@@ -10,16 +10,16 @@ namespace MudPlay.Tests;
 
 public sealed class PartyEssentialHandlersTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// Build a self-contained engine + handlers + the state they read from.
-    /// Tests dispatch via <see cref="RemoteCommandManager.DispatchForTests"/>
-    /// and inspect <see cref="RemoteCommandManager.LastSentForTests"/> for
-    /// replies. <see cref="PartyEssentialHandlers"/>' own wire-sender is
-    /// captured separately so we can assert on the @party-relay path.
-    /// </summary>
-    private static (RemoteCommandManager engine, PartyEssentialHandlers handlers, PlayerState player, PartyState party, PlayerDatabase players, List<byte[]> partyRelay) Setup(
+    // Build a self-contained engine + handlers + the state they read from.
+    // Tests dispatch via RemoteCommandManager.DispatchForTests and read the
+    // replies from _replies. PartyEssentialHandlers' own wire-sender is
+    // captured separately so we can assert on the @party-relay path.
+    private (RemoteCommandManager engine, PartyEssentialHandlers handlers, PlayerState player, PartyState party, PlayerDatabase players, List<byte[]> partyRelay) Setup(
         MudPlay.Game.Map.Room? currentRoom = null,
         IReadOnlyList<MudPlay.Game.Combat.RoomEntity>? roomEntities = null,
         MovementStatus? movement = null,
@@ -37,6 +37,7 @@ public sealed class PartyEssentialHandlersTests
         PlayerDatabase players = new();
         PlayerState player = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         PartyEssentialHandlers handlers = new(engine, player, party,
             readCurrentRoom: readCurrentRoom ?? (() => currentRoom),
             readRoomEntities: () => roomEntities,
@@ -67,8 +68,8 @@ public sealed class PartyEssentialHandlersTests
         p.IsInParty = true;
     }
 
-    private static string LastReply(RemoteCommandManager e) =>
-        Encoding.Latin1.GetString(e.LastSentForTests[^1]);
+    private string LastReply() =>
+        Encoding.Latin1.GetString(_replies[^1]);
 
     // ===== Registration shape =====
 
@@ -98,7 +99,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryVersion);
         engine.DispatchForTests(Telepath("Friend", "@version"));
 
-        Assert.Contains("MudPlay", LastReply(engine));
+        Assert.Contains("MudPlay", LastReply());
     }
 
     [Fact]
@@ -113,7 +114,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryVersion);
         engine.DispatchForTests(Telepath("Friend", "@version"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains($"{{MudPlay {Services.AppInfo.Version}}}", reply);
         // Sanity: the version actually loaded (not the "unknown" fallback).
         Assert.NotEqual("unknown", Services.AppInfo.Version);
@@ -126,7 +127,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.DispatchForTests(Telepath("Friend", "@health"));
 
-        Assert.Contains("HP unknown", LastReply(engine));
+        Assert.Contains("HP unknown", LastReply());
     }
 
     [Fact]
@@ -144,7 +145,7 @@ public sealed class PartyEssentialHandlersTests
 
         // Full wire: /<given> {<payload>}\r. The reply body is
         // brace-wrapped at SendReply per the remote-command convention.
-        Assert.Equal("/Friend {HP=100/150,MA=75/85, Resting}\r", LastReply(engine));
+        Assert.Equal("/Friend {HP=100/150,MA=75/85, Resting}\r", LastReply());
     }
 
     [Fact]
@@ -162,7 +163,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@health"));
-        Assert.Equal("/Friend {HP=100/150,MA=75/85}\r", LastReply(engine));
+        Assert.Equal("/Friend {HP=100/150,MA=75/85}\r", LastReply());
     }
 
     [Fact]
@@ -177,7 +178,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@health"));
-        Assert.Equal("/Friend {HP=100/150,MA=75/85, Meditating}\r", LastReply(engine));
+        Assert.Equal("/Friend {HP=100/150,MA=75/85, Meditating}\r", LastReply());
     }
 
     [Fact]
@@ -191,7 +192,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@health"));
-        Assert.Equal("/Friend {HP=500/500,KAI=150/150}\r", LastReply(engine));
+        Assert.Equal("/Friend {HP=500/500,KAI=150/150}\r", LastReply());
     }
 
     [Fact]
@@ -206,7 +207,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@health"));
-        Assert.Equal("/Friend {HP=200/200}\r", LastReply(engine));
+        Assert.Equal("/Friend {HP=200/200}\r", LastReply());
     }
 
     [Fact]
@@ -220,7 +221,7 @@ public sealed class PartyEssentialHandlersTests
         engine.DispatchForTests(Telepath("Friend", "@status"));
         // Not moving + meditating → "meditating"; room unknown (no tracker fix);
         // no ETA clause (not walking); ailment clause. No boat/steps ETA present.
-        Assert.Equal("/Friend {meditating; location unknown; no ailments}\r", LastReply(engine));
+        Assert.Equal("/Friend {meditating; location unknown; no ailments}\r", LastReply());
     }
 
     [Fact]
@@ -239,7 +240,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("walking to 5/1141", reply);
         Assert.Contains("Market Road (map 5, room 1000)", reply);
         // 4 total - 1 sent = 3 steps left (the ETA proxy for land walks).
@@ -258,7 +259,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("paused en route to 5/1141", reply);
         Assert.DoesNotContain("walking to", reply);
     }
@@ -279,7 +280,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("resting (low HP) on loop 'Newhaven Sewers'", reply);
         Assert.DoesNotContain("running loop", reply);
         // The move phrase already says "resting (low HP)"; the bare "resting" condition
@@ -309,7 +310,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("sailing to tal'kiran", reply);
         Assert.Contains("The Ship's Hold (map 2, room 500)", reply);
         Assert.Contains("ETA ~", reply);
@@ -329,7 +330,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@path"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("not moving", reply);
         Assert.Contains("last ran loop 'Orc Cave 1'", reply);
     }
@@ -344,7 +345,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@path"));
-        Assert.Contains("last ran auto-lair 'Dragon Lair'", LastReply(engine));
+        Assert.Contains("last ran auto-lair 'Dragon Lair'", LastReply());
     }
 
     [Fact]
@@ -356,7 +357,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@path"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("not moving", reply);
         Assert.DoesNotContain("last ran", reply);
     }
@@ -371,7 +372,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        Assert.Contains("fighting", LastReply(engine));
+        Assert.Contains("fighting", LastReply());
     }
 
     [Fact]
@@ -386,7 +387,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("fleeing", reply);
         Assert.DoesNotContain("fighting", reply);
     }
@@ -402,7 +403,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
         // Table order is poison, blind, confused, diseased.
-        Assert.Contains("ailments: poisoned, blind", LastReply(engine));
+        Assert.Contains("ailments: poisoned, blind", LastReply());
     }
 
     [Fact]
@@ -417,7 +418,7 @@ public sealed class PartyEssentialHandlersTests
         player.HasPromptData = true;
 
         engine.DispatchForTests(Telepath("Friend", "@status"));
-        Assert.Contains("no ailments", LastReply(engine));
+        Assert.Contains("no ailments", LastReply());
     }
 
     [Fact]
@@ -427,7 +428,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
         engine.DispatchForTests(Telepath("Friend", "@party"));
 
-        Assert.Contains("no active party", LastReply(engine));
+        Assert.Contains("no active party", LastReply());
     }
 
     [Fact]
@@ -445,7 +446,7 @@ public sealed class PartyEssentialHandlersTests
 
         // Given name only — family is stripped (the @-command layer
         // never addresses players by family name).
-        Assert.Contains("{I'm following MudPlay}", LastReply(engine));
+        Assert.Contains("{I'm following MudPlay}", LastReply());
     }
 
     [Fact]
@@ -464,7 +465,7 @@ public sealed class PartyEssentialHandlersTests
 
         // Family-stripped given names, comma-separated, roster order,
         // excluding self + leader.
-        Assert.Contains("{I'm leading: Raijin, Helper}", LastReply(engine));
+        Assert.Contains("{I'm leading: Raijin, Helper}", LastReply());
     }
 
     [Fact]
@@ -482,7 +483,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Helper", "@party rest"));
 
-        Assert.Contains("{I'm leading: Helper}", LastReply(engine));
+        Assert.Contains("{I'm leading: Helper}", LastReply());
         // No sub-command dispatched.
         Assert.Empty(relay);
     }
@@ -505,7 +506,7 @@ public sealed class PartyEssentialHandlersTests
 
         // We're "leading" Leader (the only member) — leader path with
         // no followers other than self.
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.True(
             reply.Contains("I'm leading") || reply.Contains("I'm following") || reply.Contains("no active party"),
             $"Unexpected reply: {reply}");
@@ -533,7 +534,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        Assert.Contains("Location unknown", LastReply(engine));
+        Assert.Contains("Location unknown", LastReply());
     }
 
     [Fact]
@@ -555,7 +556,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Town Square", reply);
         Assert.Contains("map 5", reply);
         Assert.Contains("room 1141", reply);
@@ -593,7 +594,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Training Grounds", reply);
         Assert.Contains("map 1", reply);
         Assert.Contains("room 2155", reply);
@@ -615,7 +616,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("map 1", reply);
         Assert.Contains("room 2155", reply);
         Assert.Contains("not in map data", reply);
@@ -631,7 +632,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        Assert.Contains("Location unknown", LastReply(engine));
+        Assert.Contains("Location unknown", LastReply());
     }
 
     [Fact]
@@ -644,7 +645,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@where"));
 
-        Assert.Contains("Location unknown", LastReply(engine));
+        Assert.Contains("Location unknown", LastReply());
     }
 
     [Fact]
@@ -654,7 +655,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@who"));
 
-        Assert.Contains("no one", LastReply(engine));
+        Assert.Contains("no one", LastReply());
     }
 
     [Fact]
@@ -670,7 +671,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@who"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Raijin", reply);
         Assert.Contains("Susanoo", reply);
         Assert.Contains("giant rat", reply);
@@ -685,7 +686,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@path"));
 
-        Assert.Contains("not moving", LastReply(engine));
+        Assert.Contains("not moving", LastReply());
     }
 
     [Fact]
@@ -702,7 +703,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@path"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Sewer farm", reply);
         Assert.Contains("Sewer Tunnel", reply);
         Assert.Contains("map 9", reply);
@@ -719,7 +720,7 @@ public sealed class PartyEssentialHandlersTests
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
         engine.DispatchForTests(Telepath("Friend", "@path"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("walking to 5/1141", reply);
         Assert.Contains("step 1/4", reply);
     }
@@ -1169,7 +1170,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Friend", "@lives"));
 
-        Assert.Contains("lives unknown", LastReply(engine));
+        Assert.Contains("lives unknown", LastReply());
     }
 
     [Fact]
@@ -1181,7 +1182,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Friend", "@lives"));
 
-        Assert.Contains("lives unknown", LastReply(engine));
+        Assert.Contains("lives unknown", LastReply());
     }
 
     [Fact]
@@ -1193,7 +1194,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Friend", "@lives"));
 
-        Assert.Contains("4 lives remaining", LastReply(engine));
+        Assert.Contains("4 lives remaining", LastReply());
     }
 
     [Fact]
@@ -1205,7 +1206,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Friend", "@lives"));
 
-        Assert.Contains("1 life remaining", LastReply(engine));
+        Assert.Contains("1 life remaining", LastReply());
     }
 
     // ===== @invite =====
@@ -1234,7 +1235,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
-        Assert.Contains("{I'm following MudPlay; denied.}", LastReply(engine));
+        Assert.Contains("{I'm following MudPlay; denied.}", LastReply());
         Assert.Empty(relay);
     }
 
@@ -1252,7 +1253,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
         Assert.Empty(relay);
     }
 
@@ -1275,7 +1276,7 @@ public sealed class PartyEssentialHandlersTests
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
         // Comma-joined given names of the 5 followers (skipping self).
-        Assert.Contains("{My party is full: Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply(engine));
+        Assert.Contains("{My party is full: Helper, Buddy, Lou, Sam, Pal are following me.}", LastReply());
         Assert.Empty(relay);
     }
 
@@ -1321,7 +1322,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
-        Assert.Contains("{I'm following MudPlay; denied.}", LastReply(engine));
+        Assert.Contains("{I'm following MudPlay; denied.}", LastReply());
         Assert.Empty(relay);
     }
 
@@ -1375,7 +1376,7 @@ public sealed class PartyEssentialHandlersTests
 
         Assert.Empty(relay);
         Assert.Empty(announced);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // ===== @invite / @join while mortally wounded =====
@@ -1400,7 +1401,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Can't join", reply);
         Assert.Contains("mortally wounded", reply);
         Assert.Contains("nobody is dragging me", reply);
@@ -1416,7 +1417,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@invite"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("Can't invite", reply);
         Assert.Contains("mortally wounded", reply);
         Assert.Empty(relay);
@@ -1432,7 +1433,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
-        Assert.Contains("being dragged by MudPlay", LastReply(engine));
+        Assert.Contains("being dragged by MudPlay", LastReply());
         Assert.Empty(relay);
     }
 
@@ -1448,7 +1449,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
         Assert.Empty(relay);
     }
 
@@ -1462,7 +1463,7 @@ public sealed class PartyEssentialHandlersTests
 
         engine.DispatchForTests(Telepath("Raijin", "@join"));
 
-        Assert.Contains("Can't join", LastReply(engine));
+        Assert.Contains("Can't join", LastReply());
         Assert.Empty(relay);
     }
 }

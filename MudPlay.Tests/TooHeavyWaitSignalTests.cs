@@ -25,8 +25,10 @@ public sealed class TooHeavyWaitSignalTests
         public LineExtractor Lines { get; } = new(new TerminalEmulator(80, 24));
         public MovementCoordinator Coordinator { get; } = new();
         public TooHeavyWaitSignal Signal { get; }
+        // What Signal put on the wire, through the sender the client binds.
+        public List<byte[]> SignalWire { get; } = new();
         public bool Held => Coordinator.AssertedGates.Contains(MovementCoordinator.TooHeavyGate);
-        public int InventoryReads => Signal.LastSentForTests.Count(b => Encoding.Latin1.GetString(b) == "i\r");
+        public int InventoryReads => SignalWire.Count(b => Encoding.Latin1.GetString(b) == "i\r");
         public List<string> RestWire { get; } = new();
 
         public Harness()
@@ -36,7 +38,7 @@ public sealed class TooHeavyWaitSignalTests
             Rest = new PartyRestSync(Party);
             Rest.SetWireSender(b => RestWire.Add(Encoding.Latin1.GetString(b)));
             Signal = new TooHeavyWaitSignal(Router, Inv, Rest, Coordinator);
-            Signal.SetWireSender(_ => { });
+            Signal.SetWireSender(SignalWire.Add);
             Party.IsInParty = true;
             Party.LeaderName = "Boss";
         }
@@ -74,7 +76,7 @@ public sealed class TooHeavyWaitSignalTests
 
         Assert.Equal("/Boss @wait (too heavy to move)\r", h.RestWire[^1]);
         Assert.True(h.Signal.IsTooHeavy);
-        Assert.Contains(h.Signal.LastSentForTests, b => Encoding.Latin1.GetString(b) == "i\r");
+        Assert.Contains(h.SignalWire, b => Encoding.Latin1.GetString(b) == "i\r");
     }
 
     [Fact]

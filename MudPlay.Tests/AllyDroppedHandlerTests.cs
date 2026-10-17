@@ -29,6 +29,7 @@ public sealed class AllyDroppedHandlerTests
         public PartySettings Cfg { get; } = new() { MinorPartyHealSpell = "mihe" };
         public AllyDroppedHandler Handler { get; }
         public List<byte[]> Wire { get; } = new();
+        public List<byte[]> ManagerWire { get; } = new();
 
         public bool Enabled { get; set; } = true;
         public int DeathFloor { get; set; } = -10;   // worst case: 10 ticks = 300 s
@@ -38,6 +39,7 @@ public sealed class AllyDroppedHandlerTests
         {
             DefaultPatterns.Seed(Router);
             Manager = new PartyManager(Router, Party) { LocalCharacterName = selfName };
+            Manager.SetWireSender(ManagerWire.Add);
             Chat = new ChatRouter(Router);
             Handler = new AllyDroppedHandler(
                 Router, Party, Manager, Chat, Coordinator,
@@ -68,7 +70,7 @@ public sealed class AllyDroppedHandlerTests
 
         public bool ManagerSent(string command)
         {
-            foreach (byte[] b in Manager.LastSentForTests)
+            foreach (byte[] b in ManagerWire)
                 if (Encoding.Latin1.GetString(b) == command) return true;
             return false;
         }

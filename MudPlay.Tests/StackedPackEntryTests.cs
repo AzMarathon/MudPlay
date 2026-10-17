@@ -86,16 +86,21 @@ public sealed class StackedPackEntryTests
     private static EquipmentSet Set(EquipTriggerType trigger, params EquipmentSlotEntry[] slots)
         => new() { Trigger = trigger, Enabled = true, Name = trigger.ToString(), Slots = slots.ToList() };
 
-    private static EquipmentManager Gear(LivePack pack, params EquipmentSet[] sets)
+    // What the equipment manager put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _sent = new();
+
+    private EquipmentManager Gear(LivePack pack, params EquipmentSet[] sets)
     {
         EquipmentSettings settings = new();
         settings.Sets.AddRange(sets);
-        return new EquipmentManager(
+        EquipmentManager gear = new(
             readEquipment: () => settings,
             getSnapshot: () => pack.Snapshot,
             readCombat: () => new CombatSettings(),
             writeCombat: _ => { },
             resolveItemSlot: name => name.Contains("helm", StringComparison.Ordinal) ? EquipmentSlot.Head : null);
+        gear.SetWireSender(_sent.Add);
+        return gear;
     }
 
     [Theory]
@@ -109,7 +114,7 @@ public sealed class StackedPackEntryTests
 
         gear.SwapWeapon("silver dagger", null);
 
-        Assert.Equal(new[] { "eq silver dagger" }, Text(gear.LastSentForTests));
+        Assert.Equal(new[] { "eq silver dagger" }, Text(_sent));
     }
 
     [Fact]
@@ -121,7 +126,7 @@ public sealed class StackedPackEntryTests
 
         gear.SwapWeapon("longsword", "buckler");
 
-        Assert.Equal(new[] { "eq buckler" }, Text(gear.LastSentForTests));
+        Assert.Equal(new[] { "eq buckler" }, Text(_sent));
     }
 
     [Fact]
@@ -133,7 +138,7 @@ public sealed class StackedPackEntryTests
 
         gear.SwapWeapon("silver dagger", null);
 
-        Assert.Empty(gear.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Theory]
@@ -149,7 +154,7 @@ public sealed class StackedPackEntryTests
         EquipmentManager gear = Gear(pack, resting);
 
         Assert.Equal(EquipResult.Applied, gear.ApplyBySetId(resting.Id));
-        Assert.Equal(new[] { "wear padded helm" }, Text(gear.LastSentForTests));
+        Assert.Equal(new[] { "wear padded helm" }, Text(_sent));
     }
 
     [Fact]
@@ -161,7 +166,7 @@ public sealed class StackedPackEntryTests
             Set(EquipTriggerType.Backstab, new EquipmentSlotEntry(EquipmentSlot.Head, "padded helm")));
 
         Assert.Equal(EquipResult.Applied, gear.ApplyBackstabArmor());
-        Assert.Equal(new[] { "wear padded helm" }, Text(gear.LastSentForTests));
+        Assert.Equal(new[] { "wear padded helm" }, Text(_sent));
     }
 
     [Fact]
@@ -172,6 +177,6 @@ public sealed class StackedPackEntryTests
         EquipmentManager gear = Gear(pack);
 
         Assert.True(gear.SetSlotOverride("padded helm"));
-        Assert.Equal(new[] { "wear padded helm" }, Text(gear.LastSentForTests));
+        Assert.Equal(new[] { "wear padded helm" }, Text(_sent));
     }
 }

@@ -73,6 +73,8 @@ public sealed class ComebackRequesterTests : IDisposable
 
         // Everything the requester (and whatever else a test binds) put on the wire.
         public List<string> Wire { get; } = new();
+        // The requester's own part of it.
+        public List<string> RequesterWire { get; } = new();
 
         private DateTimeOffset _clock = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
 
@@ -81,11 +83,9 @@ public sealed class ComebackRequesterTests : IDisposable
 
         public DateTimeOffset Now => _clock;
 
-        public int Sent => Requester.LastSentForTests.Count;
+        public int Sent => RequesterWire.Count;
 
-        public string? LastWire => Requester.LastSentForTests.Count == 0
-            ? null
-            : Encoding.Latin1.GetString(Requester.LastSentForTests[^1]).TrimEnd('\r');
+        public string? LastWire => RequesterWire.Count == 0 ? null : RequesterWire[^1];
 
         // The router first and the refusal detector after it, the order the app
         // hands a line on in.
@@ -143,7 +143,12 @@ public sealed class ComebackRequesterTests : IDisposable
         };
         requester.NowProvider = () => h.Now;
         requester.MasterSwitchOff = () => !h.MasterSwitchOn;
-        requester.SetWireSender(b => h.Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        requester.SetWireSender(b =>
+        {
+            string line = Encoding.Latin1.GetString(b).TrimEnd('\r');
+            h.RequesterWire.Add(line);
+            h.Wire.Add(line);
+        });
         return h;
     }
 
@@ -1068,10 +1073,10 @@ public sealed class ComebackRequesterTests : IDisposable
         h.Feed("You are no longer following MudPlay.");
         Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
 
-        int sentCount = h.Requester.LastSentForTests.Count;
+        int sentCount = h.Sent;
         // A later, unrelated unfollow must not reuse the consumed failure.
         h.Feed("You are no longer following Raijin.");
-        Assert.Equal(sentCount, h.Requester.LastSentForTests.Count);
+        Assert.Equal(sentCount, h.Sent);
     }
 
     [Fact]

@@ -17,6 +17,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class AutoEquipCoordinatorTests
 {
+    // What the equipment manager put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _sent = new();
+
     // ===== ClassifyRest =====
 
     [Fact]
@@ -1182,6 +1185,7 @@ public sealed class AutoEquipCoordinatorTests
             getSnapshot: () => worn,
             readCombat: () => new CombatSettings(),
             writeCombat: _ => { });
+        equipment.SetWireSender(_sent.Add);
         AutoEquipCoordinator? hooked = null;
         // The swap-finished hook as the app wires it.
         equipment.ApplyingChanged += applying =>
@@ -1202,13 +1206,13 @@ public sealed class AutoEquipCoordinatorTests
         player.Position = PlayerPosition.Meditating;
 
         Assert.Equal(new[] { "wear wizard hat" },
-            equipment.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')));
+            _sent.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')));
         Assert.Equal("mana-set", equipment.CurrentSetId);
     }
 
     // ===== a gear swap never strips the room's protection =====
 
-    private static (EquipmentManager Equipment, EquipmentSettings Config) HazardRig(
+    private (EquipmentManager Equipment, EquipmentSettings Config) HazardRig(
         IReadOnlyCollection<string> wornCounters, params EquippedItem[] worn)
     {
         EquipmentSettings cfg = Config(
@@ -1233,11 +1237,12 @@ public sealed class AutoEquipCoordinatorTests
             readCombat: () => new CombatSettings(),
             writeCombat: _ => { });
         equipment.SetRoomProtectionProbe(() => wornCounters);
+        equipment.SetWireSender(_sent.Add);
         return (equipment, cfg);
     }
 
-    private static string[] Sent(EquipmentManager equipment) =>
-        equipment.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToArray();
+    private string[] Sent() =>
+        _sent.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToArray();
 
     // In a lava room the phoenix feather on the neck is what stops the burning. The
     // Default set names another neck piece; applying it there dresses every other
@@ -1250,7 +1255,7 @@ public sealed class AutoEquipCoordinatorTests
 
         equipment.ApplyBySetId("default-set");
 
-        string[] sent = Sent(equipment);
+        string[] sent = Sent();
         Assert.Contains("wear turban", sent);
         Assert.DoesNotContain("wear stone", sent);
         Assert.DoesNotContain(sent, c => c.Contains("phoenix feather"));
@@ -1265,7 +1270,7 @@ public sealed class AutoEquipCoordinatorTests
 
         equipment.ApplyBySetId("default-set");
 
-        Assert.Contains("wear stone", Sent(equipment));
+        Assert.Contains("wear stone", Sent());
     }
 
     // A counter that is only carried isn't protecting anything, so nothing is held for it.
@@ -1277,7 +1282,7 @@ public sealed class AutoEquipCoordinatorTests
 
         equipment.ApplyBySetId("default-set");
 
-        Assert.Contains("wear stone", Sent(equipment));
+        Assert.Contains("wear stone", Sent());
     }
 
     // A counter on one of a pair (a ring, a wristband) holds both: putting a ring on
@@ -1291,7 +1296,7 @@ public sealed class AutoEquipCoordinatorTests
 
         equipment.ApplyBySetId("default-set");
 
-        string[] sent = Sent(equipment);
+        string[] sent = Sent();
         Assert.Contains("wear turban", sent);
         Assert.DoesNotContain(sent, c => c.Contains("ring"));
     }

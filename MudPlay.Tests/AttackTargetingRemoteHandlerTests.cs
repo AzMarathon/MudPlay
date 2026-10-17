@@ -25,6 +25,8 @@ public sealed class AttackTargetingRemoteHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // What the engine put on the wire, through the sender the client binds.
+        public List<byte[]> Sent { get; } = new();
         public AttackTargetingRemoteHandler Handler { get; }
         public ProfileService Profile { get; }
         public PlayerDatabase Players { get; }
@@ -37,6 +39,7 @@ public sealed class AttackTargetingRemoteHandlerTests
             PartyState party = new();
             Players = new PlayerDatabase();
             Engine = new RemoteCommandManager(chat, party, Players);
+            Engine.SetWireSender(Sent.Add);
             Profile = new ProfileService();
             Profile.LoadBlank();
             Handler = new AttackTargetingRemoteHandler(Engine, Profile);
@@ -62,7 +65,7 @@ public sealed class AttackTargetingRemoteHandlerTests
     }
 
     private static string LastReply(Setup s) =>
-        Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        Encoding.Latin1.GetString(s.Sent[^1]);
 
     // ----- @atkprio -------------------------------------------------------
 

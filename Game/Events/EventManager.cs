@@ -195,9 +195,6 @@ public sealed class EventManager : IDisposable
     // SendUserInput.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    // Test seam — bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // ----- CRUD ------------------------------------------------------
 
     // Append a new event and persist. No duplicate check.

@@ -445,8 +445,7 @@ public sealed partial class PartyManager : IDisposable
     // Send `uninvite X` on the wire — drops X's pending invite (or, on a member
     // who already joined, kicks them from the party); PartyDeathRosterCleanup uses
     // it for a member who died mid-route. Safe to call for any roster row. No-op when no
-    // wire-sender is bound (pre-connect / tests inspect LastSentForTests
-    // directly).
+    // wire-sender is bound (pre-connect).
     //
     // We do NOT pre-emptively remove the row from PartyState.Members — the
     // server-side echo ("X has been removed from your followers.") goes through
@@ -463,7 +462,6 @@ public sealed partial class PartyManager : IDisposable
         string given = GivenNameOf(playerGiven);
         if (string.IsNullOrEmpty(given)) return;
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes($"uninvite {given}\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
     }
 
@@ -482,7 +480,6 @@ public sealed partial class PartyManager : IDisposable
         string given = GivenNameOf(name);
         if (string.IsNullOrEmpty(given)) return;
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes($"invite {given}\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
     }
 
@@ -507,9 +504,6 @@ public sealed partial class PartyManager : IDisposable
             _returnedAfterDrop.Remove(key);
         RemoveMember(given);
     }
-
-    // Test seam — most recent bytes the manager asked to write to the wire.
-    internal List<byte[]> LastSentForTests { get; } = new();
 
     // Bind the live PlayerState so the local character's PartyMember row stays
     // in sync with every prompt (PromptParser writes HP/MA on every status

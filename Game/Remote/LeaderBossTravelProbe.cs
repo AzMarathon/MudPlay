@@ -49,9 +49,6 @@ public sealed class LeaderBossTravelProbe : IDisposable
     // The last question's outcome, for the bug report.
     public string LastOutcome { get; private set; } = "(never asked)";
 
-    // Test-visible record of every wire payload sent.
-    internal List<byte[]> LastSentForTests { get; } = new();
-
     // leaderGivenName: the leader we're following, or null when we lead / are solo.
     // headsToBoss: whether a leader's @path report describes a trip to a boss room.
     // stillNeeded: the gear is still being kept on, so an answer still matters.
@@ -99,7 +96,6 @@ public sealed class LeaderBossTravelProbe : IDisposable
         if (_awaiting) return true;
         _awaiting = true;
         byte[] bytes = Encoding.Latin1.GetBytes($"/{leader} @path\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
         _log?.Info(LogCategory, $"asked {leader} where the party is heading (@path)");
         Arm(ReplyTimeout, OnTimeout);

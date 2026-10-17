@@ -2778,7 +2778,7 @@ public sealed class AutoWalkManagerTests : IDisposable
     // ----- unbound wire sender --------------------------------------
 
     [Fact]
-    public void NoWireSender_RecordsButSuppressesSend()
+    public void NoWireSender_SuppressesTheSendAndLogsIt()
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), LineGraphJson);
@@ -2789,14 +2789,14 @@ public sealed class AutoWalkManagerTests : IDisposable
         BfsMapper bfs = new(graph);
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
-        AutoWalkManager walker = new(graph, bfs, tracker, coord);
+        LogService log = new();
+        AutoWalkManager walker = new(graph, bfs, tracker, coord, log: log);
 
         tracker.SetLocated(new RoomKey(1, 1));
         walker.WalkTo(new RoomKey(1, 3));
 
-        // LastSentForTests captures bytes even with no wire bound, so
-        // tests can validate the wire payload without a network.
-        Assert.Single(walker.LastSentForTests);
+        Assert.Contains(log.Snapshot(), e => e.Severity == LogSeverity.Warn
+            && e.Source == "Walker" && e.Message.StartsWith("wire sender not bound; suppressed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -2914,6 +2914,9 @@ public sealed class AutoWalkManagerTests : IDisposable
         ]
         """;
 
+    // What the hazard-line walker put on the wire.
+    private readonly List<byte[]> _hazardWalkerSent = new();
+
     private (AutoWalkManager Walker, List<WalkEvent> Events, MovementFilter Filter) NewHazardLineWalker()
     {
         string set = Path.Combine(_root, "alpha");
@@ -2937,7 +2940,7 @@ public sealed class AutoWalkManagerTests : IDisposable
             RoomEntrySpellProbe = key => graph.GetRoom(key)?.Spell ?? 0,
         };
         AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter);
-        walker.SetWireSender(_ => { });
+        walker.SetWireSender(_hazardWalkerSent.Add);
         var events = new List<WalkEvent>();
         walker.Event += events.Add;
         tracker.SetLocated(new RoomKey(1, 1));
@@ -2954,7 +2957,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.False(walker.WalkTo(new RoomKey(1, 3), planThroughAcquirableGates: true));
 
         Assert.Contains(events, e => e.Kind == WalkEventKind.Failed);
-        Assert.Empty(walker.LastSentForTests);
+        Assert.Empty(_hazardWalkerSent);
     }
 
     [Fact]

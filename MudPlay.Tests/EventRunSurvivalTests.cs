@@ -18,7 +18,7 @@ namespace MudPlay.Tests;
 // waiting. Each of these either stranded the queue or dropped it.
 public sealed class EventRunSurvivalTests : IDisposable
 {
-    private const string TestBbs = "test-event-survival";
+    private const string TestLoopSet = "test-event-survival";
 
     private readonly string _root;
 
@@ -32,7 +32,7 @@ public sealed class EventRunSurvivalTests : IDisposable
     {
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort */ }
-        try { Directory.Delete(AppPaths.BbsFolder(TestBbs), recursive: true); }
+        try { Directory.Delete(AppPaths.GameDataSetDir(TestLoopSet), recursive: true); }
         catch { /* best-effort */ }
     }
 
@@ -40,7 +40,7 @@ public sealed class EventRunSurvivalTests : IDisposable
     private static readonly RoomKey B = new(1, 2);
     private static readonly RoomKey C = new(1, 3);
 
-    private Harness NewHarness(bool deferPosts = false) => Harness.Create(_root, TestBbs, deferPosts: deferPosts);
+    private Harness NewHarness(bool deferPosts = false) => Harness.Create(_root, TestLoopSet, deferPosts: deferPosts);
 
     private static ScheduledEvent Add(Harness h, ScheduledEvent e)
     {

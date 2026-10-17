@@ -18,6 +18,9 @@ namespace MudPlay.Tests;
 // item — gated solely on the per-player QueryItemLocation ("Query Roomba") grant.
 public sealed class RoombaQueryHandlerTests : IDisposable
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
     private readonly string _scratchBbs = "roomba-query-test-" + Path.GetRandomFileName();
     private readonly string _gameDataRoot = Path.Combine(
@@ -44,6 +47,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
 
         ProfileService profile = new();
         profile.LoadBlank();
@@ -68,14 +72,14 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static IReadOnlyList<string> Replies(RemoteCommandManager e) =>
-        e.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private IReadOnlyList<string> Replies() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     // Decode every "bg {@roombadata <blob>}" gangpath reply line on its own and
     // flatten — mirrors RoombaSyncReceiver, which merges each self-contained line
     // as it arrives (no cross-line reassembly).
-    private static IReadOnlyList<GhItemSyncRecord> DecodeSyncReplies(RemoteCommandManager e)
-        => Replies(e)
+    private IReadOnlyList<GhItemSyncRecord> DecodeSyncReplies()
+        => Replies()
             .Where(r => r.Contains(RoombaQueryHandler.SyncResponseToken))
             .Select(r =>
             {
@@ -108,6 +112,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
 
         ProfileService profile = new();
         profile.LoadBlank();
@@ -131,7 +136,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        Assert.Contains(Replies(engine), r => r.Contains("long sword") && r.Contains("1/100"));
+        Assert.Contains(Replies(), r => r.Contains("long sword") && r.Contains("1/100"));
     }
 
     // A gang house can stock the same item in more than one room — the reply
@@ -147,7 +152,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Contains("6x long sword", reply);   // 4 + 2 summed
         Assert.Contains("1/100", reply);
         Assert.Contains("1/200", reply);
@@ -168,7 +173,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Contains("6x long sword", reply);
         Assert.Contains("1/100 (4)", reply);
         Assert.Contains("1/200 (2)", reply);
@@ -188,7 +193,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Contains(
             $"last scanned {before:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(before)}", reply);
     }
@@ -206,7 +211,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba long sword"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Contains("12x long sword", reply);
         Assert.Contains("+2 more", reply);
     }
@@ -226,7 +231,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba severed head"));
 
-        var replies = Replies(engine);
+        var replies = Replies();
         Assert.Equal(2, replies.Count);
         Assert.Contains(replies, r => r.Contains("severed head of goru-nezar") && r.Contains("1/100"));
         Assert.Contains(replies, r => r.Contains("severed head of darksong") && r.Contains("1/200"));
@@ -244,7 +249,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba severed"));
 
-        var replies = Replies(engine);
+        var replies = Replies();
         Assert.Equal(6, replies.Count);   // 5 item lines + one overflow line
         Assert.Contains(replies, r => r.Contains("2 more matching item"));
     }
@@ -257,7 +262,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba nonexistent item"));
 
-        Assert.Contains(Replies(engine), r => r.Contains("no record"));
+        Assert.Contains(Replies(), r => r.Contains("no record"));
     }
 
     [Fact]
@@ -269,7 +274,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Stranger", "@roomba long sword"));
 
-        Assert.DoesNotContain(Replies(engine), r => r.Contains("long sword"));
+        Assert.DoesNotContain(Replies(), r => r.Contains("long sword"));
     }
 
     [Fact]
@@ -281,7 +286,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
 
-        IReadOnlyList<GhItemSyncRecord> decoded = DecodeSyncReplies(engine);
+        IReadOnlyList<GhItemSyncRecord> decoded = DecodeSyncReplies();
         GhItemSyncRecord r = Assert.Single(decoded);
         Assert.Equal(1, r.Map);
         Assert.Equal(100, r.Room);
@@ -297,7 +302,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
 
-        Assert.Empty(DecodeSyncReplies(engine));
+        Assert.Empty(DecodeSyncReplies());
     }
 
     [Fact]
@@ -309,7 +314,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
 
-        string last = Replies(engine).Last(r => r.Contains(RoombaQueryHandler.SyncResponseToken));
+        string last = Replies().Last(r => r.Contains(RoombaQueryHandler.SyncResponseToken));
         Assert.Contains(RoombaQueryHandler.SyncCompleteMarker, last);
     }
 
@@ -330,8 +335,8 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Heard(channel, "Friend", "@roomba sync"));
 
-        Assert.Single(DecodeSyncReplies(engine));
-        Assert.All(Replies(engine), r => Assert.StartsWith(opening + RoombaQueryHandler.SyncResponseToken, r));
+        Assert.Single(DecodeSyncReplies());
+        Assert.All(Replies(), r => Assert.StartsWith(opening + RoombaQueryHandler.SyncResponseToken, r));
     }
 
     // Said aloud or on the broadcast channel it is refused, with where it does work,
@@ -348,7 +353,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Heard(channel, "Friend", "@roomba sync"));
 
-        Assert.Equal(expected, Replies(engine).Single());
+        Assert.Equal(expected, Replies().Single());
     }
 
     [Fact]
@@ -358,13 +363,13 @@ public sealed class RoombaQueryHandlerTests : IDisposable
         SeedPlayer(quietPlayers, "Friend", PlayerRemoteControls.QueryItemLocation);
         quiet.WarnOnDenial = false;
         quiet.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba sync"));
-        Assert.Empty(Replies(quiet));
+        Assert.Empty(Replies());
 
         var (sneaking, sneakingPlayers, _) = SetupWithItems();
         SeedPlayer(sneakingPlayers, "Friend", PlayerRemoteControls.QueryItemLocation);
         sneaking.StealthedProvider = () => true;
         sneaking.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba sync"));
-        Assert.Equal("/Friend {@roomba sync works by telepath or gangpath only}\r", Replies(sneaking).Single());
+        Assert.Equal("/Friend {@roomba sync works by telepath or gangpath only}\r", Replies().Single());
     }
 
     // Only the sync is held to those channels: asking where an item is still works
@@ -378,7 +383,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Heard(ChatChannel.Local, "Friend", "@roomba torch"));
 
-        Assert.Contains("total: 3x torch", Replies(engine).Single());
+        Assert.Contains("total: 3x torch", Replies().Single());
     }
 
     // A channel switched off on the Talk tab stays off though the sync may use it.
@@ -392,7 +397,7 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Friend", "@roomba sync"));
 
-        Assert.Empty(Replies(engine));
+        Assert.Empty(Replies());
     }
 
     [Fact]
@@ -404,6 +409,6 @@ public sealed class RoombaQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Gangpath("Stranger", "@roomba sync"));
 
-        Assert.DoesNotContain(Replies(engine), r => r.Contains(RoombaQueryHandler.SyncResponseToken));
+        Assert.DoesNotContain(Replies(), r => r.Contains(RoombaQueryHandler.SyncResponseToken));
     }
 }

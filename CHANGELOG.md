@@ -1,5 +1,10 @@
 # Version history
 
+## 3.183.36
+
+- Commands the client sends are no longer kept in memory for the whole session
+- A prompt cut off by a dropped connection is no longer completed by the next connection's first text
+
 ## 3.183.34
 
 - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)

@@ -22,6 +22,8 @@ public sealed class AutoModeRemoteHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // What the engine put on the wire, through the sender the client binds.
+        public List<byte[]> Sent { get; } = new();
         public AutoModeRemoteHandler Handler { get; }
         public ProfileService Profile { get; }
         public PlayerDatabase Players { get; }
@@ -34,6 +36,7 @@ public sealed class AutoModeRemoteHandlerTests
             PartyState party = new();
             Players = new PlayerDatabase();
             Engine = new RemoteCommandManager(chat, party, Players);
+            Engine.SetWireSender(Sent.Add);
             Profile = new ProfileService();
             Profile.LoadBlank();
             AutoModeController controller = new(Profile);
@@ -87,7 +90,7 @@ public sealed class AutoModeRemoteHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@auto-combat"));
 
         Assert.False(ReadMode(s.Profile.Current!).AutoCombat);
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains("@auto-combat", reply);
         Assert.Contains("off", reply);    // toggled from default on
     }
@@ -167,7 +170,7 @@ public sealed class AutoModeRemoteHandlerTests
 
         s.Engine.DispatchForTests(Telepath("Tank", "@auto-combat maybe"));
 
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains("?", reply);
     }
 
@@ -189,7 +192,7 @@ public sealed class AutoModeRemoteHandlerTests
 
         s.Engine.DispatchForTests(Telepath("Tank", "@settings"));
 
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains("Auto-Combat: On", reply);     // default on
         Assert.Contains("Auto-Light: Off", reply);      // default off
         Assert.Contains("Auto-Heal: On", reply);
@@ -205,7 +208,7 @@ public sealed class AutoModeRemoteHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@auto-combat off"));
         s.Engine.DispatchForTests(Telepath("Tank", "@settings"));
 
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains("Auto-Combat: Off", reply);
     }
 }

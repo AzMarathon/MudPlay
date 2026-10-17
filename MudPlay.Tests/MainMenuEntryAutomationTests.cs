@@ -18,7 +18,10 @@ public sealed class MainMenuEntryAutomationTests
 {
     private static readonly DateTime Now = new(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);
 
-    private static (MainMenuEntryAutomation engine, MessageRouter router, GameCommands commands, HangupSignal signal) Setup()
+    // What the engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _sent = new();
+
+    private (MainMenuEntryAutomation engine, MessageRouter router, GameCommands commands, HangupSignal signal) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -28,7 +31,7 @@ public sealed class MainMenuEntryAutomationTests
         {
             NowProvider = () => Now,
         };
-        engine.SetWireSender(_ => { });
+        engine.SetWireSender(_sent.Add);
         return (engine, router, commands, signal);
     }
 
@@ -63,7 +66,7 @@ public sealed class MainMenuEntryAutomationTests
         // room description matching the pattern. Must not fire.
         var (engine, router, _, _) = Setup();
         DispatchMenuLine(router);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -74,7 +77,7 @@ public sealed class MainMenuEntryAutomationTests
 
         DispatchMenuLine(router);
 
-        byte[] sent = Assert.Single(engine.LastSentForTests);
+        byte[] sent = Assert.Single(_sent);
         Assert.Equal("E\r", Encoding.Latin1.GetString(sent));
     }
 
@@ -90,7 +93,7 @@ public sealed class MainMenuEntryAutomationTests
         DispatchMenuLine(router);
         DispatchMenuLine(router);
 
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -109,7 +112,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.NowProvider = () => t0.AddSeconds(16);
         DispatchMenuLine(router);
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -125,7 +128,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.NowProvider = () => t0.AddSeconds(10);
         DispatchMenuLine(router);
 
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -137,7 +140,7 @@ public sealed class MainMenuEntryAutomationTests
 
         DispatchMenuLine(router);
 
-        Assert.Equal("enter\r", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+        Assert.Equal("enter\r", Encoding.Latin1.GetString(Assert.Single(_sent)));
     }
 
     [Fact]
@@ -151,7 +154,7 @@ public sealed class MainMenuEntryAutomationTests
 
         DispatchMenuLine(router);
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -183,7 +186,7 @@ public sealed class MainMenuEntryAutomationTests
             IsPromptLine: false);
         router.Dispatch(line);
 
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -195,7 +198,7 @@ public sealed class MainMenuEntryAutomationTests
 
         DispatchMenuLine(router);
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     // ===== Hangup-signal suppression =====================================
@@ -215,7 +218,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.Arm();
         DispatchMenuLine(router);
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
         Assert.False(engine.IsArmed);
     }
 
@@ -232,12 +235,12 @@ public sealed class MainMenuEntryAutomationTests
         // First Arm — suppressed.
         engine.Arm();
         DispatchMenuLine(router);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
 
         // Second Arm — normal behaviour.
         engine.Arm();
         DispatchMenuLine(router);
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -248,7 +251,7 @@ public sealed class MainMenuEntryAutomationTests
         var (engine, router, _, _) = Setup();
         engine.Arm();
         DispatchMenuLine(router);
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     // ===== KeepArmed — arm-at-login-start + refresh-on-progress ==========
@@ -273,7 +276,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.NowProvider = () => t0.AddSeconds(20);  // past the ORIGINAL t0+15
         DispatchMenuLine(router);
 
-        Assert.Single(engine.LastSentForTests);        // still fires thanks to the refresh
+        Assert.Single(_sent);        // still fires thanks to the refresh
     }
 
     [Fact]
@@ -290,7 +293,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.KeepArmed();
         DispatchMenuLine(router);
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
         Assert.False(engine.IsArmed);
     }
 
@@ -302,7 +305,7 @@ public sealed class MainMenuEntryAutomationTests
         var (engine, router, _, _) = Setup();
         engine.KeepArmed();
         DispatchMenuLine(router);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -314,11 +317,11 @@ public sealed class MainMenuEntryAutomationTests
         var (engine, router, _, _) = Setup();
         engine.Arm();
         DispatchMenuLine(router);
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
 
         engine.KeepArmed();          // post-entry step progress
         DispatchMenuLine(router);
-        Assert.Single(engine.LastSentForTests);   // still just one
+        Assert.Single(_sent);   // still just one
     }
 
     // ===== Realm-entry move suppression =================================
@@ -338,7 +341,7 @@ public sealed class MainMenuEntryAutomationTests
         engine.SetMoveSuppressor(() =>
         {
             suppressCalls++;
-            sentAtSuppress = engine.LastSentForTests.Count;
+            sentAtSuppress = _sent.Count;
         });
         engine.Arm();
 
@@ -346,7 +349,7 @@ public sealed class MainMenuEntryAutomationTests
 
         Assert.Equal(1, suppressCalls);
         Assert.Equal(0, sentAtSuppress);
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -379,10 +382,10 @@ public sealed class MainMenuEntryAutomationTests
         engine.Arm();
         DispatchMenuLine(router);
         // Only the entry command on the wire so far.
-        Assert.Equal("E\r", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+        Assert.Equal("E\r", Encoding.Latin1.GetString(Assert.Single(_sent)));
 
         engine.TickStartupSequenceForTests();   // no room yet → nothing
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -398,10 +401,10 @@ public sealed class MainMenuEntryAutomationTests
             engine.TickStartupSequenceForTests();
 
         // First slot is the entry command, then the 2 startup steps.
-        Assert.Equal(3, engine.LastSentForTests.Count);
-        Assert.Equal("E\r",    Encoding.Latin1.GetString(engine.LastSentForTests[0]));
-        Assert.Equal("stat\r", Encoding.Latin1.GetString(engine.LastSentForTests[1]));
-        Assert.Equal("i\r",    Encoding.Latin1.GetString(engine.LastSentForTests[2]));
+        Assert.Equal(3, _sent.Count);
+        Assert.Equal("E\r",    Encoding.Latin1.GetString(_sent[0]));
+        Assert.Equal("stat\r", Encoding.Latin1.GetString(_sent[1]));
+        Assert.Equal("i\r",    Encoding.Latin1.GetString(_sent[2]));
     }
 
     [Fact]
@@ -413,7 +416,7 @@ public sealed class MainMenuEntryAutomationTests
         DispatchRoomLine(router);
         engine.TickStartupSequenceForTests();
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -427,13 +430,13 @@ public sealed class MainMenuEntryAutomationTests
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count; i++)
             engine.TickStartupSequenceForTests();
-        Assert.Equal(3, engine.LastSentForTests.Count);   // E + stat/i
+        Assert.Equal(3, _sent.Count);   // E + stat/i
 
         // A second room display must not queue another refresh.
         DispatchRoomLine(router);
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count; i++)
             engine.TickStartupSequenceForTests();
-        Assert.Equal(3, engine.LastSentForTests.Count);
+        Assert.Equal(3, _sent.Count);
     }
 
     [Fact]
@@ -449,7 +452,7 @@ public sealed class MainMenuEntryAutomationTests
             engine.TickStartupSequenceForTests();
 
         // Entry + 2 startup steps, no more.
-        Assert.Equal(3, engine.LastSentForTests.Count);
+        Assert.Equal(3, _sent.Count);
     }
 
     [Fact]
@@ -467,7 +470,7 @@ public sealed class MainMenuEntryAutomationTests
         for (int i = 0; i < MainMenuEntryAutomation.StartupSequence.Count + 1; i++)
             engine.TickStartupSequenceForTests();
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -480,13 +483,13 @@ public sealed class MainMenuEntryAutomationTests
         var (engine, router, _, _) = Setup();
         engine.Arm();
         DispatchMenuLine(router);   // entry fired, awaiting room
-        Assert.Single(engine.LastSentForTests);
+        Assert.Single(_sent);
 
         engine.Arm();               // fresh login resets the gate
 
         DispatchRoomLine(router);   // stale room line — must be ignored
         engine.TickStartupSequenceForTests();
-        Assert.Single(engine.LastSentForTests);   // still just the entry
+        Assert.Single(_sent);   // still just the entry
     }
 
     [Fact]

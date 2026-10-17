@@ -104,9 +104,6 @@ public sealed class MainMenuEntryAutomation : IDisposable
     // Test seam — override the clock so unit tests don't have to sleep.
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
 
-    // Test seam — most recent bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // True when armed AND inside the window.
     public bool IsArmed => NowProvider() < _armedUntilUtc;
 

@@ -222,9 +222,6 @@ public sealed class EquipmentManager
     // Wired post-construction to break the manager ↔ combat-engine build cycle.
     public void SetCombatWeaponOwnershipProbe(Func<bool> probe) => _combatOwnsWeaponSlot = probe;
 
-    // Every buffer the engine has pushed to the wire, for tests.
-    internal IReadOnlyList<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // ----- @equip <set> ----------------------------------------------------
 
     // Someone asked for a set by hand (Equip menu, Workshop Equip Now, @equip): raised

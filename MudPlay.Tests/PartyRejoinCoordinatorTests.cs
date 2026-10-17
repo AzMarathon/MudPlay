@@ -57,6 +57,8 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         public required RoomTracker Tracker { get; init; }
         public required WirePromptScanner Scanner { get; init; }
         public required PartyRejoinCoordinator Coord { get; init; }
+        // What Coord put on the wire, through the sender the client binds.
+        public required List<byte[]> CoordWire { get; init; }
         // Every value handed to PersistLeader, in order — mirrors the disk
         // write-through the crash-survivable memory relies on.
         public required List<string?> Persisted { get; init; }
@@ -71,7 +73,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         // Outbound wire buffers decoded back to strings (Latin1 + trailing \r).
         public IEnumerable<string> Sent() =>
-            Coord.LastSentForTests.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'));
+            CoordWire.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'));
 
         public string? LastPersisted => Persisted.Count == 0 ? null : Persisted[^1];
     }
@@ -93,11 +95,13 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         PartyRejoinCoordinator coord = new(scanner, state, tracker, isAutoEnabled);
         List<string?> persisted = new();
         coord.PersistLeader = leader => persisted.Add(leader);
+        List<byte[]> coordWire = new();
+        coord.SetWireSender(coordWire.Add);
 
         return new Fixture
         {
             Router = router, Manager = mgr, Tracker = tracker,
-            Scanner = scanner, Coord = coord, Persisted = persisted,
+            Scanner = scanner, Coord = coord, CoordWire = coordWire, Persisted = persisted,
         };
     }
 
@@ -157,7 +161,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
         f.EnterGame();
 
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
     }
 
     [Fact]
@@ -168,7 +172,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.EnterGame();
-        Assert.Empty(f.Coord.LastSentForTests);   // waiting for our room
+        Assert.Empty(f.CoordWire);   // waiting for our room
 
         f.Coord.FireRoomWaitForTests();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
@@ -189,7 +193,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
         f.Coord.FireRoomWaitForTests();
-        Assert.Single(f.Coord.LastSentForTests);   // the wait was cancelled
+        Assert.Single(f.CoordWire);   // the wait was cancelled
     }
 
     [Fact]
@@ -216,7 +220,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.Arm();
 
         f.EnterGame();
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
 
         f.Coord.FireRoomWaitForTests();
         Assert.Equal("/MudPlay @comeback", f.Sent().Single());
@@ -240,7 +244,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         // A light finally reveals the room; the latch is already spent.
         f.Router.Dispatch(Line("Obvious exits: north, south"));
-        Assert.Single(f.Coord.LastSentForTests);
+        Assert.Single(f.CoordWire);
     }
 
     // Offline longer than the @comeback window: the party has moved on, so
@@ -259,7 +263,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.EnterGame();
         f.Coord.FireRoomWaitForTests();
 
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
     }
 
     [Fact]
@@ -289,7 +293,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         f.EnterGame();
 
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
     }
 
     [Fact]
@@ -304,7 +308,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.Coord.FireRoomWaitForTests();
         f.Coord.FireRoomWaitForTests();
 
-        Assert.Single(f.Coord.LastSentForTests); // latch consumed on first prompt
+        Assert.Single(f.CoordWire); // latch consumed on first prompt
     }
 
     [Fact]
@@ -316,7 +320,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
 
         f.EnterGame();
 
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
     }
 
     // ----- Remembered-leader force-accept predicate ---------------------
@@ -382,7 +386,7 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.EnterGame();
 
         Assert.Equal("Helper", f.Coord.RememberedLeader);
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
         // No write-through — the value came straight off disk.
         Assert.Empty(f.Persisted);
     }
@@ -398,6 +402,6 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         f.EnterGame();
         f.Router.Dispatch(Line("You are now following Helper."));
 
-        Assert.Empty(f.Coord.LastSentForTests);
+        Assert.Empty(f.CoordWire);
     }
 }

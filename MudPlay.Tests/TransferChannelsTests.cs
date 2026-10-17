@@ -329,6 +329,8 @@ public sealed class TransferChannelsTests
     private sealed class Engine
     {
         public RemoteCommandManager Commands { get; }
+        // What Commands put on the wire, through the sender the client binds.
+        public List<byte[]> CommandsWire { get; } = new();
         public List<string> Ran { get; } = new();
         public LogService Log { get; } = new();
 
@@ -353,6 +355,7 @@ public sealed class TransferChannelsTests
                 SelfNameProvider = () => "Us",
                 DisableBroadcastChannel = !broadcastOpen,
             };
+            Commands.SetWireSender(CommandsWire.Add);
             Commands.Now = () => Clock;
             // Stand-ins that answer as the real handlers do for a channel they use,
             // and refuse as they do for one they don't.
@@ -388,7 +391,7 @@ public sealed class TransferChannelsTests
                 else ctx.Refuse(TransferChannels.Refusal(transfer));
             });
 
-        public string[] Wire => Commands.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+        public string[] Wire => CommandsWire.Select(b => Encoding.Latin1.GetString(b)).ToArray();
 
         // The party we are in: empty unless a test adds a member.
         public PartyState Party { get; } = new();
@@ -874,7 +877,7 @@ public sealed class TransferChannelsTests
         foreach (string tail in tails)
         foreach (string line in new[] { word + tail, word + "!" + tail, "&" + word + tail })
         {
-            e.Commands.LastSentForTests.Clear();
+            e.CommandsWire.Clear();
             e.Ran.Clear();
             // Each line in a minute of its own: what is said there in one minute is
             // bounded, and that bound has its own tests.

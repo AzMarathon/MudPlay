@@ -90,7 +90,10 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     private Func<bool>? _autoLogoutEnabled;
     private Action? _disconnect;
 
-    private Avalonia.Threading.DispatcherTimer? _tick;
+    // Arms one safe-poll tick after the delay. A tick from a poll since stopped
+    // finds _pollGeneration moved on and does nothing.
+    private readonly Action<TimeSpan, Action> _schedulePoll;
+    private int _pollGeneration;
     private DateTime _exitSentUtc;
     private bool _exitRetried;
 
@@ -127,26 +130,26 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     // safe check can't see it and trying again would only repeat the cycle.
     public int MaxInterruptions { get; set; } = 3;
 
-    // The command that exits the realm to the main menu. The user's MajorMUD
-    // exits with a bare `x`.
-    public string ExitCommand { get; set; } = "x";
+    // The command that exits the realm to the main menu: the in-game `x`, so the
+    // character is saved on the way out ("Your character has been saved.").
+    private const string ExitCommand = "x";
 
     // Test seam — override the clock so unit tests don't sleep.
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
 
-    // Test seam — bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     public CleanupLogoutOrchestrator(
         CleanupWarningWatcher cleanup,
         MessageRouter router,
-        LogService? log = null)
+        LogService? log = null,
+        Action<TimeSpan, Action>? schedulePoll = null)
     {
         ArgumentNullException.ThrowIfNull(cleanup);
         ArgumentNullException.ThrowIfNull(router);
         _cleanup = cleanup;
         _router = router;
         _log = log;
+        _schedulePoll = schedulePoll ?? ((delay, tick) =>
+            Avalonia.Threading.DispatcherTimer.RunOnce(tick, delay, Avalonia.Threading.DispatcherPriority.Background));
         _cleanup.WarningObserved += OnWarningObserved;
         _menuSub = _router.Subscribe(KnownPatterns.MainMenuEnterRealm, OnMainMenuLine);
         _savedSub = _router.Subscribe(KnownPatterns.RealmExitSaved, OnRealmExitSaved);
@@ -369,21 +372,21 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     private void StartTimer()
     {
         StopTimer();
-        _tick = new Avalonia.Threading.DispatcherTimer(
-            interval: SafePollInterval,
-            priority: Avalonia.Threading.DispatcherPriority.Background,
-            callback: (_, _) => Evaluate());
-        _tick.Start();
+        ArmPoll();
     }
 
-    private void StopTimer()
+    private void ArmPoll()
     {
-        _tick?.Stop();
-        _tick = null;
+        int generation = _pollGeneration;
+        _schedulePoll(SafePollInterval, () =>
+        {
+            if (generation != _pollGeneration) return;
+            Evaluate();
+            if (generation == _pollGeneration) ArmPoll();
+        });
     }
 
-    // Test seam — run one FSM step without a real timer tick.
-    internal void EvaluateForTests() => Evaluate();
+    private void StopTimer() => _pollGeneration++;
 }
 
 // Phases of the cleanup-driven log-off sequence.

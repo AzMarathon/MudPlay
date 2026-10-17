@@ -169,9 +169,6 @@ public sealed class PathItemSummonRouter : IDisposable
     // Bind the wire sink used to issue the summon command and the re-survey.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    // Every buffer this router pushed to the wire, in order (test seam).
-    internal IReadOnlyList<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // True while a summon detour is walking, fighting, or collecting.
     public bool DetourActive => _phase != Phase.Idle;
 

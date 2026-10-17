@@ -18,6 +18,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class HealCommandHandlerTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc);
 
     private sealed class Harness
@@ -29,7 +32,7 @@ public sealed class HealCommandHandlerTests
         public required HealCommandHandler Handler { get; init; }
     }
 
-    private static Harness Setup()
+    private Harness Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -37,6 +40,7 @@ public sealed class HealCommandHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         PartySettings settings = new();
         List<byte[]> wire = new();
         HealCommandHandler handler = new(engine, () => settings);
@@ -60,8 +64,8 @@ public sealed class HealCommandHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests
+    private List<string> Replies() =>
+        _replies
             .Select(b => Encoding.Latin1.GetString(b))
             .Select(StripWire)
             .ToList();
@@ -87,7 +91,7 @@ public sealed class HealCommandHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
 
         Assert.Equal(new[] { "par" }, Wire(h));
-        Assert.Equal("healing", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("healing", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -101,7 +105,7 @@ public sealed class HealCommandHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
 
         Assert.Equal(new[] { "par" }, Wire(h));
-        Assert.Equal("healing", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("healing", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -114,7 +118,7 @@ public sealed class HealCommandHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
 
         Assert.Empty(Wire(h));
-        Assert.Empty(Replies(h.Engine));
+        Assert.Empty(Replies());
     }
 
     [Fact]
@@ -131,7 +135,7 @@ public sealed class HealCommandHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@heal"));
 
         Assert.Empty(Wire(h));
-        Assert.Empty(Replies(h.Engine));
+        Assert.Empty(Replies());
     }
 
     [Fact]
@@ -146,7 +150,7 @@ public sealed class HealCommandHandlerTests
         h.Engine.DispatchForTests(Telepath("Stranger", "@heal"));
 
         Assert.Empty(Wire(h));
-        Assert.Empty(Replies(h.Engine));
+        Assert.Empty(Replies());
     }
 
     [Fact]
@@ -158,6 +162,7 @@ public sealed class HealCommandHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         PartySettings settings = new() { MinorPartyHealSpell = "mheal" };
         List<byte[]> wire = new();
         HealCommandHandler handler = new(engine, () => settings);

@@ -65,6 +65,8 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     private sealed class Rig : IDisposable
     {
         public required RemoteCommandManager Engine { get; init; }
+        // What Engine put on the wire, through the sender the client binds.
+        public List<byte[]> Replies { get; } = new();
         public required RoomTracker Tracker { get; init; }
         public required MovementController Controller { get; init; }
         public required AutoLairManager AutoLair { get; init; }
@@ -150,18 +152,20 @@ public sealed class RemoteReplyPolicyTests : IDisposable
             limitCollection: _ => { }, surveyedCopper: () => 0, collectSurveyed: _ => { },
             forceAutoGetCash: _ => { }, collectionInUse: () => true);
 
-        return new Rig
+        Rig rig = new()
         {
             Engine = engine, Tracker = tracker, Controller = controller,
             AutoLair = autoLair, Timers = timers, Game = game,
         };
+        engine.SetWireSender(rig.Replies.Add);
+        return rig;
     }
 
     private static ChatLogEntry On(ChatChannel channel, string msg) =>
         new(Now, channel, Sender, msg, $"{Sender}: {msg}");
 
-    private static List<string> Sent(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private static List<string> Sent(Rig r) =>
+        r.Replies.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     // Each line is a command the fresh character of Build can't carry out.
     public static TheoryData<string> Failures => new()
@@ -215,7 +219,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
 
-        Assert.Empty(Sent(r.Engine));
+        Assert.Empty(Sent(r));
     }
 
     [Theory]
@@ -233,7 +237,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
             r.Engine.DispatchForTests(On(channel, command));
 
-            List<string> sent = Sent(r.Engine);
+            List<string> sent = Sent(r);
             Assert.NotEmpty(sent);
             Assert.All(sent, line => Assert.StartsWith(prefix, line));
             // And in ASCII: a long dash can't be encoded on the wire at all.
@@ -248,12 +252,12 @@ public sealed class RemoteReplyPolicyTests : IDisposable
     {
         using Rig r = Build();
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
-        r.Engine.LastSentForTests.Clear();
+        r.Replies.Clear();
         r.Engine.WarnOnDenial = false;
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@stop"));
 
-        Assert.Equal($"/{Sender} {{already @stopped}}\r", Assert.Single(Sent(r.Engine)));
+        Assert.Equal($"/{Sender} {{already @stopped}}\r", Assert.Single(Sent(r)));
     }
 
     // A disarm asked of a character with no Traps skill needs a state the fresh
@@ -266,7 +270,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@trap n"));
 
-        Assert.Empty(Sent(r.Engine));
+        Assert.Empty(Sent(r));
         Assert.Empty(r.Game);
     }
 
@@ -296,7 +300,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
 
-        Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r.Engine)));
+        Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r)));
     }
 
     // An answer that is the result of a query that was carried out is not a
@@ -313,7 +317,7 @@ public sealed class RemoteReplyPolicyTests : IDisposable
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, command));
 
-        Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r.Engine)));
+        Assert.StartsWith($"/{Sender} {{{opening}", Assert.Single(Sent(r)));
     }
 
     // The helper itself: a null reason is the configured failure message.
@@ -325,12 +329,12 @@ public sealed class RemoteReplyPolicyTests : IDisposable
         r.Engine.RegisterHandler("@probe", PlayerRemoteControls.QueryVersion, ctx => ctx.Refuse());
 
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@probe"));
-        Assert.Equal($"/{Sender} {{not for you}}\r", Assert.Single(Sent(r.Engine)));
+        Assert.Equal($"/{Sender} {{not for you}}\r", Assert.Single(Sent(r)));
 
-        r.Engine.LastSentForTests.Clear();
+        r.Replies.Clear();
         r.Engine.WarnOnDenial = false;
         r.Engine.DispatchForTests(On(ChatChannel.TelepathIncoming, "@probe"));
-        Assert.Empty(Sent(r.Engine));
+        Assert.Empty(Sent(r));
     }
 
     // A caller on the machine itself is told why, whatever the Warn setting says

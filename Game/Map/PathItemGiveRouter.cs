@@ -150,9 +150,6 @@ public sealed class PathItemGiveRouter : IDisposable
     // Bind the wire sink used to issue the give command.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    // Every buffer this router pushed to the wire, in order (test seam).
-    internal IReadOnlyList<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // True while a give detour is walking to the giver or waiting for the item.
     public bool DetourActive => _phase != Phase.Idle;
 

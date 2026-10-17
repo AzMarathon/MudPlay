@@ -13,9 +13,12 @@ namespace MudPlay.Tests;
 // the dispatcher and the local API now do too.
 public sealed class RemoteCommandEmphasisTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, List<RemoteCommandContext> seen) Engine()
+    private (RemoteCommandManager engine, List<RemoteCommandContext> seen) Engine()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -24,6 +27,7 @@ public sealed class RemoteCommandEmphasisTests
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Leader", new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players);
+        engine.SetWireSender(_replies.Add);
         List<RemoteCommandContext> seen = new();
         engine.RegisterHandler("@stop", PlayerRemoteControls.MovePlayer, seen.Add);
         return (engine, seen);
@@ -53,7 +57,7 @@ public sealed class RemoteCommandEmphasisTests
         engine.DispatchForTests(Telepath("@!"));
 
         Assert.Empty(seen);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -63,7 +67,7 @@ public sealed class RemoteCommandEmphasisTests
 
         engine.DispatchForTests(Telepath("&@stop!"));
 
-        Assert.Equal("/Leader @stop!\r", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+        Assert.Equal("/Leader @stop!\r", Encoding.Latin1.GetString(Assert.Single(_replies)));
     }
 
     [Fact]

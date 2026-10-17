@@ -285,11 +285,8 @@ public sealed class AutoHazardCounterProvisioner
     }
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
-    // MainWindowViewModel. Until bound, a `use` is recorded for tests only.
+    // MainWindowViewModel. Until bound, a `use` goes nowhere.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
-
-    // Test seam — bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     // Bind the gate the step is held on, and the one-shot timer its caps run on.
     public void SetStepHold(MovementCoordinator coordinator, Action<TimeSpan, Action> schedule)

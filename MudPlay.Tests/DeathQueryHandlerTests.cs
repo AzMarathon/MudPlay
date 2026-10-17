@@ -18,7 +18,10 @@ public sealed class DeathQueryHandlerTests
 {
     private static readonly System.DateTime Now = new(2026, 6, 20, 0, 0, 0, System.DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, PlayerDatabase players) Setup(
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
+    private (RemoteCommandManager engine, PlayerDatabase players) Setup(
         IReadOnlyList<DeathRecord> records, string? activeGameData = null)
     {
         MessageRouter router = new();
@@ -27,6 +30,7 @@ public sealed class DeathQueryHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         _ = new DeathQueryHandler(engine, () => records,
             r => r.GameData is { } set && !string.Equals(set, activeGameData, System.StringComparison.OrdinalIgnoreCase));
         return (engine, players);
@@ -41,11 +45,11 @@ public sealed class DeathQueryHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static string LastReply(RemoteCommandManager e) =>
-        Encoding.Latin1.GetString(e.LastSentForTests[^1]);
+    private string LastReply() =>
+        Encoding.Latin1.GetString(_replies[^1]);
 
-    private static IReadOnlyList<string> Replies(RemoteCommandManager e) =>
-        e.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private IReadOnlyList<string> Replies() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     private static DeathRecord Death(int number, int daysAgo, DeathRecoveryStatus status,
         string? roomName = "Crypt", int lives = 5) => new()
@@ -74,7 +78,7 @@ public sealed class DeathQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Friend", "@death"));
 
-        string reply = LastReply(engine);
+        string reply = LastReply();
         Assert.Contains("death #3", reply);
         Assert.Contains("active", reply);
         Assert.DoesNotContain("death #2", reply);
@@ -95,7 +99,7 @@ public sealed class DeathQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Friend", "@death all"));
 
-        var replies = Replies(engine);
+        var replies = Replies();
         Assert.Contains(replies, r => r.Contains("death #3"));
         Assert.Contains(replies, r => r.Contains("death #1"));
         Assert.DoesNotContain(replies, r => r.Contains("death #2"));  // the Recovered one
@@ -110,7 +114,7 @@ public sealed class DeathQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Friend", "@death"));
 
-        Assert.Contains("no unrecovered deaths", LastReply(engine));
+        Assert.Contains("no unrecovered deaths", LastReply());
     }
 
     // The asker reads the room number on the map: a death of another game data than
@@ -127,7 +131,7 @@ public sealed class DeathQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Friend", "@death all"));
 
-        var replies = Replies(engine);
+        var replies = Replies();
         Assert.Contains(replies, r => r.Contains("death #2") && r.Contains("(1/102), recorded on game data 'alpha', 5 lives left"));
         Assert.Contains(replies, r => r.Contains("death #1") && r.Contains("(1/101), 5 lives left"));
     }
@@ -143,6 +147,6 @@ public sealed class DeathQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@death"));
 
-        Assert.DoesNotContain(Replies(engine), r => r.Contains("death #"));
+        Assert.DoesNotContain(Replies(), r => r.Contains("death #"));
     }
 }

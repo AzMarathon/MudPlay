@@ -78,7 +78,7 @@ internal sealed class EventEngineHarness : IDisposable
     // rooms walks to them (and that walk can be refused). Off, a loop started
     // anywhere begins at once.
     public static EventEngineHarness Create(
-        string root, string bbs, string graphJson = StripGraphJson, string? tbinfoJson = null,
+        string root, string loopSet, string graphJson = StripGraphJson, string? tbinfoJson = null,
         bool loopWalksItself = false, bool deferPosts = false)
     {
         Directory.CreateDirectory(Path.Combine(root, "alpha"));
@@ -101,11 +101,11 @@ internal sealed class EventEngineHarness : IDisposable
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers);
         LoopManager loops = new(bfs, graph);
-        // LoopManager.Save no-ops unless a BBS context is set. LoadAll binds the
-        // catalogue to the test BBS (no folder yet, so it seeds an empty
-        // collection); a test that saves a loop writes it under
-        // AppPaths.BbsFolder(bbs), which the test class reclaims.
-        loops.LoadAll(bbs);
+        // LoopManager.Save no-ops until LoadAll binds the catalogue to a game-data
+        // set (no folder yet, so it seeds an empty collection); a test that saves a
+        // loop writes it under AppPaths.GameDataSetLoopsFolder(loopSet), which the
+        // test class reclaims.
+        loops.LoadAll(loopSet);
         LairManager lairs = new();
 
         ProfileService profile = new();

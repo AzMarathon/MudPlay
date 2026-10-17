@@ -23,7 +23,10 @@ public sealed class RemoteReplyWordingTests
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Friend", msg, $"Friend telepaths: {msg}");
 
-    private static (RemoteCommandManager engine, MessageRouter router, PartyState party) Engine()
+    // Each engine's own wire, captured through the sender the client binds.
+    private readonly Dictionary<RemoteCommandManager, List<byte[]>> _wire = new();
+
+    private (RemoteCommandManager engine, MessageRouter router, PartyState party) Engine()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -32,11 +35,13 @@ public sealed class RemoteReplyWordingTests
         players.RecordObservation("Friend", @class: null, race: null, alignment: null,
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Friend", new PlayerCustomization(RemoteControls: PlayerRemoteControls.All));
-        return (new RemoteCommandManager(new ChatRouter(router), party, players), router, party);
+        RemoteCommandManager engine = new(new ChatRouter(router), party, players);
+        engine.SetWireSender((_wire[engine] = new()).Add);
+        return (engine, router, party);
     }
 
-    private static string Only(RemoteCommandManager engine) =>
-        Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests));
+    private string Only(RemoteCommandManager engine) =>
+        Encoding.Latin1.GetString(Assert.Single(_wire[engine]));
 
     // The extractor's line event, raised the way a line from the game raises it.
     private static void Feed(LineExtractor lines, string text)

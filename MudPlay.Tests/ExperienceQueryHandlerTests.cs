@@ -18,6 +18,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class ExperienceQueryHandlerTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 20, 0, 0, 0, DateTimeKind.Utc);
 
     private sealed class Clock
@@ -26,7 +29,7 @@ public sealed class ExperienceQueryHandlerTests
         public void Advance(double minutes) => NowUtc += TimeSpan.FromMinutes(minutes);
     }
 
-    private static (RemoteCommandManager engine, PlayerStats stats, SessionActivityTracker activity, Clock clock, PlayerDatabase players)
+    private (RemoteCommandManager engine, PlayerStats stats, SessionActivityTracker activity, Clock clock, PlayerDatabase players)
         Setup()
     {
         MessageRouter router = new();
@@ -35,6 +38,7 @@ public sealed class ExperienceQueryHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         PlayerStats stats = new();
         Clock clock = new();
         SessionActivityTracker activity = new(() => clock.NowUtc);
@@ -57,8 +61,8 @@ public sealed class ExperienceQueryHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests
+    private List<string> Replies() =>
+        _replies
             .Select(b => Encoding.Latin1.GetString(b))
             .Select(StripWire)
             .ToList();
@@ -81,7 +85,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@level"));
 
-        Assert.Contains("parse a stat screen", string.Join(" ", Replies(engine)));
+        Assert.Contains("parse a stat screen", string.Join(" ", Replies()));
     }
 
     [Fact]
@@ -96,7 +100,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@level"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal("Level 12, 1,500,000 exp, 120,000 to next level", reply);
     }
 
@@ -111,7 +115,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@level"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal("Level 12, 1,500,000 exp, exp-to-next unknown (type exp)", reply);
     }
 
@@ -126,7 +130,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal("Made: 0  Rate: unknown (type exp for needed + time to level)", reply);
     }
 
@@ -143,7 +147,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal("Made: 16,200  Needed: 32,400 (L13, +0.00 lvls)  Rate: 32,400/hr  Will level in: 60m", reply);
     }
 
@@ -158,7 +162,7 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal("Made: 6,000  Rate: 12,000/hr (type exp for needed + time to level)", reply);
     }
 
@@ -176,7 +180,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         Assert.Equal("Made: 6,000  Needed: 0 (L13, +0.00 lvls)  Rate: 12,000/hr  Will level in: ready to level",
-            Assert.Single(Replies(engine)));
+            Assert.Single(Replies()));
     }
 
     // The full MegaMUD-style line: session Made + Needed (with the level being
@@ -195,7 +199,7 @@ public sealed class ExperienceQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@exp"));
 
         Assert.Equal("Made: 30,000,000  Needed: 60,000,000 (L72, +0.00 lvls)  Rate: 30 m/hr  Will level in: 2h 0m",
-            Assert.Single(Replies(engine)));
+            Assert.Single(Replies()));
     }
 
     // ----- @exp rate abbreviation --------------------------------------
@@ -229,6 +233,6 @@ public sealed class ExperienceQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@exp"));
 
-        Assert.Empty(Replies(engine));
+        Assert.Empty(Replies());
     }
 }

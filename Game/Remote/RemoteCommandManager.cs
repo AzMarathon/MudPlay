@@ -92,9 +92,6 @@ public sealed class RemoteCommandManager : IDisposable
     private readonly HashSet<string> _ignored
         = new(StringComparer.OrdinalIgnoreCase);
     private Action<byte[]>? _wireSender;
-    // Test seam — last bytes the engine asked to write to the wire. Inspected by
-    // tests when no real sender is bound.
-    internal List<byte[]> LastSentForTests { get; } = new();
     private bool _disposed;
 
     // Live lives provider. Returns the current Lives count from the most recent
@@ -1301,7 +1298,6 @@ public sealed class RemoteCommandManager : IDisposable
             _                      => payload,
         };
         byte[] bytes = Encoding.Latin1.GetBytes(wire + "\r");
-        LastSentForTests.Add(bytes);
         _wireSender?.Invoke(bytes);
     }
 

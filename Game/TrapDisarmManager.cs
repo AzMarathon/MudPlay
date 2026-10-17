@@ -211,9 +211,6 @@ public sealed class TrapDisarmManager : IDisposable
     // The room the player stands in, which keys the remembered disarms.
     public void SetCurrentRoom(Func<RoomKey?> room) => _currentRoom = room;
 
-    // Test seam — bytes the manager asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     public void Dispose()
     {
         if (_disposed) return;

@@ -32,6 +32,8 @@ public sealed class SessionResetHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // What Engine put on the wire, through the sender the client binds.
+        public List<byte[]> Sent { get; } = new();
         public SessionResetHandler Handler { get; }
         public PlayerDatabase Players { get; }
         public CombatSessionTracker Combat { get; }
@@ -48,6 +50,7 @@ public sealed class SessionResetHandlerTests
             PartyState party = new();
             Players = new PlayerDatabase();
             Engine = new RemoteCommandManager(chat, party, Players);
+            Engine.SetWireSender(Sent.Add);
             Combat = new CombatSessionTracker(router, new RoundDamageTracker(router, new PlayerState()));
             Time = new TimeAnalysisTracker(() => Clock.Now);
             Activity = new SessionActivityTracker(() => Clock.Now);
@@ -121,8 +124,8 @@ public sealed class SessionResetHandlerTests
 
         s.Engine.DispatchForTests(Telepath("Leader", "@reset"));
 
-        Assert.NotEmpty(s.Engine.LastSentForTests);
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        Assert.NotEmpty(s.Sent);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains("reset", reply);
     }
 

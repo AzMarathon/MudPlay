@@ -16,7 +16,10 @@ public sealed class TokenQueryHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 21, 0, 0, 0, DateTimeKind.Utc);
 
-    private static RemoteCommandManager Engine(bool warn)
+    // Each engine's own wire, captured through the sender the client binds.
+    private readonly Dictionary<RemoteCommandManager, List<byte[]>> _wire = new();
+
+    private RemoteCommandManager Engine(bool warn)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -25,6 +28,7 @@ public sealed class TokenQueryHandlerTests
             title: null, gang: null, role: null, nowUtc: Now);
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryInventory));
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players) { WarnOnDenial = warn };
+        engine.SetWireSender((_wire[engine] = new()).Add);
         TokenTracker tokens = new(
             send: _ => { }, carried: () => Array.Empty<string>(), onParadigm: () => true,
             matchSelfUse: _ => null, matchMemberDeparted: _ => null, schedule: (_, _) => { });
@@ -35,8 +39,8 @@ public sealed class TokenQueryHandlerTests
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
 
-    private static List<string> Sent(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private List<string> Sent(RemoteCommandManager engine) =>
+        _wire[engine].Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     [Theory]
     [InlineData(true)]

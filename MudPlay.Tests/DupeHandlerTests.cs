@@ -28,7 +28,10 @@ public sealed class DupeHandlerTests
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    private static (MessageRouter router, RemoteCommandManager engine, PlayerDatabase players) Setup(
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
+    private (MessageRouter router, RemoteCommandManager engine, PlayerDatabase players) Setup(
         string? localCharacter = null, LogService? log = null)
     {
         MessageRouter router = new();
@@ -36,6 +39,7 @@ public sealed class DupeHandlerTests
         ChatRouter chat = new(router);
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, new PartyState(), players);
+        engine.SetWireSender(_replies.Add);
         _ = new DupeHandler(engine, players, () => localCharacter, log);
         return (router, engine, players);
     }
@@ -59,8 +63,8 @@ public sealed class DupeHandlerTests
         db.EditCustomization(name, live.KeepDupeLockFrom(live, reset: true));
     }
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
+    private List<string> Replies() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
 
     private static string Payload(string wire)
     {
@@ -81,7 +85,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Moron"));
 
         Assert.Equal(Shareable, Controls(players, "Moron"));
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.StartsWith("/Reveal ", reply);
         Assert.Equal("Moron now has your query, roomba, and quest permissions", Payload(reply));
     }
@@ -96,7 +100,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal gangpaths: @dupe Moron"));
 
         Assert.Equal(Shareable, Controls(players, "Moron"));
-        Assert.StartsWith("bg ", Assert.Single(Replies(engine)));
+        Assert.StartsWith("bg ", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -142,7 +146,7 @@ public sealed class DupeHandlerTests
 
         Assert.Equal(PlayerRemoteControls.All, Controls(players, "Moron"));
         Assert.Equal("Moron already has all your query, roomba, and quest permissions",
-            Payload(Assert.Single(Replies(engine))));
+            Payload(Assert.Single(Replies())));
         Assert.False(Spent(players, "Reveal"));
     }
 
@@ -207,7 +211,7 @@ public sealed class DupeHandlerTests
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
         Assert.Equal("you have no query, roomba, or quest permissions to copy",
-            Payload(Assert.Single(Replies(engine))));
+            Payload(Assert.Single(Replies())));
         Assert.False(Spent(players, "Reveal"));
     }
 
@@ -241,7 +245,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Third"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Third"));
-        Assert.Equal("your @dupe has already been used", Payload(Replies(engine)[^1]));
+        Assert.Equal("your @dupe has already been used", Payload(Replies()[^1]));
 
         ResetInTheClient(players, "Reveal");
         router.Dispatch(Line("Reveal telepaths: @dupe Third"));
@@ -394,7 +398,7 @@ public sealed class DupeHandlerTests
             Now, ChatChannel.Local, "Reveal", "@dupe Moron", "Reveal says: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
         Assert.False(Spent(players, "Reveal"));
     }
 
@@ -408,7 +412,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal gossips: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -422,7 +426,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal auctions: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -436,7 +440,7 @@ public sealed class DupeHandlerTests
             Now, ChatChannel.Broadcast, "Reveal", "@dupe Moron", "BROADCAST: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -450,7 +454,7 @@ public sealed class DupeHandlerTests
             Now, ChatChannel.Yell, "Reveal", "@dupe Moron", "Reveal yells: @dupe Moron"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -536,7 +540,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Nobody"));
 
         Assert.Null(players.Find("Nobody"));
-        Assert.Equal("unknown player Nobody", Payload(Assert.Single(Replies(engine))));
+        Assert.Equal("unknown player Nobody", Payload(Assert.Single(Replies())));
     }
 
     [Fact]
@@ -549,7 +553,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line("Reveal telepaths: @dupe Kyau"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Kyau"));
-        Assert.Equal("can't change my own permissions", Payload(Assert.Single(Replies(engine))));
+        Assert.Equal("can't change my own permissions", Payload(Assert.Single(Replies())));
     }
 
     [Fact]
@@ -560,7 +564,7 @@ public sealed class DupeHandlerTests
 
         router.Dispatch(Line("Reveal telepaths: @dupe Reveal"));
 
-        Assert.Equal("you already have your own permissions", Payload(Assert.Single(Replies(engine))));
+        Assert.Equal("you already have your own permissions", Payload(Assert.Single(Replies())));
     }
 
     [Theory]
@@ -575,7 +579,7 @@ public sealed class DupeHandlerTests
         router.Dispatch(Line($"Reveal telepaths: {message}"));
 
         Assert.Equal(PlayerRemoteControls.None, Controls(players, "Moron"));
-        Assert.Equal("usage: @dupe <player>", Payload(Assert.Single(Replies(engine))));
+        Assert.Equal("usage: @dupe <player>", Payload(Assert.Single(Replies())));
     }
 
     [Fact]
@@ -587,6 +591,6 @@ public sealed class DupeHandlerTests
 
         router.Dispatch(Line("Reveal telepaths: @dupe Nobody"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 }

@@ -217,8 +217,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // ask didn't go out (the resolver's throttle may only have been in the way).
     private bool _stallWatchdogRearmed;
 
-    public IReadOnlyList<byte[]> LastSentForTests => _sentForTests;
-    private readonly List<byte[]> _sentForTests = new();
 
     public WalkState State { get; private set; } = WalkState.Idle;
 
@@ -503,8 +501,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         ArgumentNullException.ThrowIfNull(sender);
         _wireSender = sender;
     }
-
-    internal void SetWireSenderForTests(Action<byte[]> sender) => SetWireSender(sender);
 
     // Bind the random-teleport-maze solver. When a WalkTo targets a room inside a
     // teleport-maze pocket that normal routing can't reach (no known source, or
@@ -3321,7 +3317,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void WriteBytes(byte[] bytes, string reasonForLog)
     {
-        _sentForTests.Add(bytes);
         if (_wireSender is null)
             _log?.Warn("Walker", $"wire sender not bound; suppressed: {reasonForLog}");
         else

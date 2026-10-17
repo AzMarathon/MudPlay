@@ -19,7 +19,10 @@ public sealed class DoHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, DoHandler handler, PlayerDatabase players, List<byte[]> wire) Setup()
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
+    private (RemoteCommandManager engine, DoHandler handler, PlayerDatabase players, List<byte[]> wire) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -27,6 +30,7 @@ public sealed class DoHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         DoHandler handler = new(engine);
         List<byte[]> wire = new();
         handler.SetWireSender(wire.Add);
@@ -103,7 +107,7 @@ public sealed class DoHandlerTests
         // Engine wraps the reply payload in { } at SendReply time and
         // routes via telepath: `/Trusted {ok}\r`.
         Assert.Equal("/Trusted {ok}\r",
-            Encoding.Latin1.GetString(engine.LastSentForTests[^1]));
+            Encoding.Latin1.GetString(_replies[^1]));
     }
 
     [Fact]
@@ -115,7 +119,7 @@ public sealed class DoHandlerTests
 
         engine.DispatchForTests(Telepath("Trusted", "@do"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -167,7 +171,7 @@ public sealed class DoHandlerTests
 
         Assert.Empty(wire);
         Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r",
-            Encoding.Latin1.GetString(engine.LastSentForTests[^1]));
+            Encoding.Latin1.GetString(_replies[^1]));
     }
 
     [Fact]

@@ -21,6 +21,8 @@ public sealed class KillHandlerTests
     private sealed class Setup : IDisposable
     {
         public RemoteCommandManager Engine { get; }
+        // What Engine put on the wire, through the sender the client binds.
+        public List<byte[]> Sent { get; } = new();
         public KillHandler Handler { get; }
         public PlayerDatabase Players { get; }
         public List<string> Retargets { get; } = new();
@@ -36,6 +38,7 @@ public sealed class KillHandlerTests
             PartyState party = new();
             Players = new PlayerDatabase();
             Engine = new RemoteCommandManager(chat, party, Players);
+            Engine.SetWireSender(Sent.Add);
             Handler = new KillHandler(Engine, name => { Retargets.Add(name); return Refusal; });
         }
 
@@ -81,7 +84,7 @@ public sealed class KillHandlerTests
 
         s.Engine.DispatchForTests(Telepath("Tank", "@kill kobold"));
 
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     [Fact]
@@ -94,7 +97,7 @@ public sealed class KillHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@kill"));
 
         Assert.Empty(s.Retargets);
-        string reply = Encoding.Latin1.GetString(s.Engine.LastSentForTests[^1]);
+        string reply = Encoding.Latin1.GetString(s.Sent[^1]);
         Assert.Contains(s.Engine.FailureMessage, reply);
     }
 
@@ -108,7 +111,7 @@ public sealed class KillHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@kill"));
 
         Assert.Empty(s.Retargets);
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     // An order that wasn't taken (a player we won't fight) is refused with the
@@ -122,7 +125,7 @@ public sealed class KillHandlerTests
         s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
 
         Assert.Equal("/Tank {not attacking Bob: PvP is off}\r",
-            Encoding.Latin1.GetString(Assert.Single(s.Engine.LastSentForTests)));
+            Encoding.Latin1.GetString(Assert.Single(s.Sent)));
     }
 
     [Fact]
@@ -134,7 +137,7 @@ public sealed class KillHandlerTests
 
         s.Engine.DispatchForTests(Telepath("Tank", "@kill Bob"));
 
-        Assert.Empty(s.Engine.LastSentForTests);
+        Assert.Empty(s.Sent);
     }
 
     [Fact]

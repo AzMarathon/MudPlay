@@ -17,7 +17,7 @@ namespace MudPlay.Tests;
 // says when the way back is refused (report paradigm-20261009-220128).
 public sealed class EventQueueTests : IDisposable
 {
-    private const string TestBbs = "test-event-queue";
+    private const string TestLoopSet = "test-event-queue";
 
     private readonly string _root;
 
@@ -31,11 +31,11 @@ public sealed class EventQueueTests : IDisposable
     {
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort */ }
-        try { Directory.Delete(AppPaths.BbsFolder(TestBbs), recursive: true); }
+        try { Directory.Delete(AppPaths.GameDataSetDir(TestLoopSet), recursive: true); }
         catch { /* best-effort */ }
     }
 
-    private Harness NewHarness() => Harness.Create(_root, TestBbs);
+    private Harness NewHarness() => Harness.Create(_root, TestLoopSet);
 
     private static readonly RoomKey A = new(1, 1);
     private static readonly RoomKey B = new(1, 2);
@@ -1302,7 +1302,7 @@ public sealed class EventQueueTests : IDisposable
     // The user starts the loop in the study; the boss event walks out to the city.
     private Harness StudyHarness(params (RoomKey From, RoomKey To)[] allowedTeleports)
     {
-        Harness h = Harness.Create(_root, TestBbs, StudyGraphJson, StudyTbinfoJson, loopWalksItself: true);
+        Harness h = Harness.Create(_root, TestLoopSet, StudyGraphJson, StudyTbinfoJson, loopWalksItself: true);
         h.Walker.SetTeleportResolver((_, _) => "pull book");
         HashSet<(RoomKey From, RoomKey To)> allowed = new(allowedTeleports);
         h.Walker.SetAutomaticWalkTeleports(() => allowed);

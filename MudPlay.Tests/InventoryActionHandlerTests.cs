@@ -23,6 +23,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class InventoryActionHandlerTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 22, 0, 0, 0, DateTimeKind.Utc);
 
     private sealed class Harness
@@ -38,7 +41,7 @@ public sealed class InventoryActionHandlerTests
         public required List<byte[]> WireSent { get; init; }
     }
 
-    private static Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null,
+    private Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null,
         Func<string, bool>? isCursed = null)
     {
         MessageRouter router = new();
@@ -47,6 +50,7 @@ public sealed class InventoryActionHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         InventoryManager inv = new(log: null, itemWeightResolver: null, slotResolver: null);
         LineExtractor lines = new(new TerminalEmulator(80, 24));
         inv.AttachLineExtractor(lines);
@@ -114,8 +118,8 @@ public sealed class InventoryActionHandlerTests
         party.IsInParty = true;
     }
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests
+    private List<string> Replies() =>
+        _replies
             .Select(b => Encoding.Latin1.GetString(b))
             .Select(StripWire)
             .ToList();
@@ -143,7 +147,7 @@ public sealed class InventoryActionHandlerTests
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
 
         h.Engine.DispatchForTests(Telepath("Bob", "@get-all"));
-        Assert.Equal("re-surveying the floor for get-all", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("re-surveying the floor for get-all", Assert.Single(Replies()));
         Assert.Equal(new[] { "" }, Wire(h));   // the bare CR (trailing \r trimmed)
 
         // The fresh survey lands with loot → it's grabbed.
@@ -164,7 +168,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@get-all"));
 
         Assert.Equal(new[] { "get rusty dagger" }, Wire(h));
-        Assert.Equal("getting 1 ground item (leaving 1 cursed: cursed ring)", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("getting 1 ground item (leaving 1 cursed: cursed ring)", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -194,7 +198,7 @@ public sealed class InventoryActionHandlerTests
         Assert.Equal(
             new[] { "get rusty dagger", "get iron helm", "get healing potion" },
             Wire(h));
-        Assert.Equal("getting 3 ground items", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("getting 3 ground items", Assert.Single(Replies()));
     }
 
     // ----- @drop-all ---------------------------------------------------
@@ -207,7 +211,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Bob", "@drop-all"));
 
-        Assert.Contains("inventory not parsed yet", Assert.Single(Replies(h.Engine)));
+        Assert.Contains("inventory not parsed yet", Assert.Single(Replies()));
         Assert.Empty(Wire(h));
     }
 
@@ -220,7 +224,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Bob", "@drop-all"));
 
-        Assert.Equal("nothing to drop", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("nothing to drop", Assert.Single(Replies()));
         Assert.Empty(Wire(h));
     }
 
@@ -239,7 +243,7 @@ public sealed class InventoryActionHandlerTests
         Assert.Equal(
             new[] { "drop rusty dagger", "drop healing potion", "drop jagged dagger" },
             Wire(h));
-        Assert.Equal("dropping 3 carried items", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("dropping 3 carried items", Assert.Single(Replies()));
     }
 
     // A stacked pack entry: Stock has no item batching, so one `drop` per copy;
@@ -282,7 +286,7 @@ public sealed class InventoryActionHandlerTests
         Assert.DoesNotContain("drop token of Silvermere", sent);
         Assert.DoesNotContain("drop cursed ring", sent);
         Assert.EndsWith("(keeping 2 that can't be dropped: token of Silvermere, cursed ring)",
-            Assert.Single(Replies(h.Engine)));
+            Assert.Single(Replies()));
     }
 
     [Fact]
@@ -306,7 +310,7 @@ public sealed class InventoryActionHandlerTests
         Assert.Contains("drop gate key", sent);
         Assert.Contains("drop 94 gold crown", sent);
         Assert.Contains("drop 2 runic coin", sent);
-        Assert.StartsWith("dropping everything:", Assert.Single(Replies(h.Engine)));
+        Assert.StartsWith("dropping everything:", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -334,7 +338,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@drop-all keys"));
 
         Assert.Equal(new[] { "drop black star key", "drop black star key", "drop gate key" }, Wire(h));
-        Assert.Equal("dropping 3 keys", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("dropping 3 keys", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -347,7 +351,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Bob", "@drop-all everything"));
 
-        Assert.StartsWith("usage: @drop-all", Assert.Single(Replies(h.Engine)));
+        Assert.StartsWith("usage: @drop-all", Assert.Single(Replies()));
         Assert.Empty(Wire(h));
     }
 
@@ -371,7 +375,7 @@ public sealed class InventoryActionHandlerTests
         Assert.Contains("hide 3 black star key", sent);     // batched on Paradigm
         Assert.Contains("hide 94 gold crown", sent);
         Assert.DoesNotContain("hide", sent);                // a bare hide hides the player
-        Assert.StartsWith("hiding everything:", Assert.Single(Replies(h.Engine)));
+        Assert.StartsWith("hiding everything:", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -385,7 +389,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@hide-all"));
 
         Assert.Equal(new[] { "hide black diamond", "hide black diamond" }, Wire(h));
-        Assert.Equal("hiding 2 carried items", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("hiding 2 carried items", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -399,7 +403,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@hide-all everything"));
 
         Assert.Empty(Wire(h));
-        Assert.StartsWith("usage: @hide-all", Assert.Single(Replies(h.Engine)));
+        Assert.StartsWith("usage: @hide-all", Assert.Single(Replies()));
     }
 
     // ----- @deposit-all ------------------------------------------------
@@ -412,7 +416,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Bob", "@deposit-all"));
 
-        Assert.Contains("parse inventory first", Assert.Single(Replies(h.Engine)));
+        Assert.Contains("parse inventory first", Assert.Single(Replies()));
         Assert.Empty(Wire(h));
     }
 
@@ -426,7 +430,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@deposit-all"));
 
         Assert.Equal(new[] { "dep 2069425" }, Wire(h));
-        Assert.Equal("depositing 2,069,425 copper (keeping 0)", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("depositing 2,069,425 copper (keeping 0)", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -441,7 +445,7 @@ public sealed class InventoryActionHandlerTests
 
         Assert.Equal(new[] { "with 930575" }, Wire(h));
         Assert.Equal("withdrawing 930,575 copper (up to 3,000,000 on hand)",
-            Assert.Single(Replies(h.Engine)));
+            Assert.Single(Replies()));
     }
 
     [Fact]
@@ -456,7 +460,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@deposit-all"));
 
         Assert.Empty(Wire(h));
-        Assert.Equal("already at keep-on-hand (2,069,425 copper)", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("already at keep-on-hand (2,069,425 copper)", Assert.Single(Replies()));
     }
 
     // ----- @share ------------------------------------------------------
@@ -469,7 +473,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Bob", "@share"));
 
-        Assert.Contains("parse inventory first", Assert.Single(Replies(h.Engine)));
+        Assert.Contains("parse inventory first", Assert.Single(Replies()));
         Assert.Empty(Wire(h));
     }
 
@@ -493,7 +497,7 @@ public sealed class InventoryActionHandlerTests
                 "give 2 platinum to Bob", "give 2 platinum to Carol",
             },
             Wire(h));
-        Assert.Equal("sharing coins among 3 party members", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("sharing coins among 3 party members", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -509,7 +513,7 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@share"));
 
         Assert.Empty(Wire(h)); // every denom < 5, so per-head share is 0
-        Assert.Equal("nothing to share (too few coins to split)", Assert.Single(Replies(h.Engine)));
+        Assert.Equal("nothing to share (too few coins to split)", Assert.Single(Replies()));
     }
 
     // ----- gating ------------------------------------------------------
@@ -524,7 +528,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Stranger", "@share"));
 
-        Assert.Empty(Replies(h.Engine));
+        Assert.Empty(Replies());
         Assert.Empty(Wire(h));
     }
 
@@ -540,7 +544,7 @@ public sealed class InventoryActionHandlerTests
 
         h.Engine.DispatchForTests(Telepath("Stranger", "@drop-all"));
 
-        Assert.Empty(Replies(h.Engine));
+        Assert.Empty(Replies());
         Assert.Empty(Wire(h));
     }
 }

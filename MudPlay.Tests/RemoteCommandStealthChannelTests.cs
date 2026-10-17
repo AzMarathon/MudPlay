@@ -15,7 +15,10 @@ public sealed class RemoteCommandStealthChannelTests
 {
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static RemoteCommandManager Engine(bool stealthed)
+    // Each engine's own wire, captured through the sender the client binds.
+    private readonly Dictionary<RemoteCommandManager, List<byte[]>> _wire = new();
+
+    private RemoteCommandManager Engine(bool stealthed)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -27,6 +30,7 @@ public sealed class RemoteCommandStealthChannelTests
         {
             StealthedProvider = () => stealthed,
         };
+        engine.SetWireSender((_wire[engine] = new()).Add);
         engine.RegisterHandler("@invite", PlayerRemoteControls.RequestInvite, ctx => ctx.Reply("on my way"));
         return engine;
     }
@@ -34,8 +38,8 @@ public sealed class RemoteCommandStealthChannelTests
     private static ChatLogEntry Say(string msg) =>
         new(Now, ChatChannel.Local, "Leader", msg, $"Leader says: {msg}");
 
-    private static string Only(RemoteCommandManager engine) =>
-        Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests));
+    private string Only(RemoteCommandManager engine) =>
+        Encoding.Latin1.GetString(Assert.Single(_wire[engine]));
 
     [Fact]
     public void RelayOnSay_WhileSneaking_GoesByTelepath()

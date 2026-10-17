@@ -20,6 +20,9 @@ namespace MudPlay.Tests;
 // named back. Runs on a Paradigm set (look-derived counts).
 public sealed class ItemUsesQueryHandlerTests : IDisposable
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private const string ItemsJson = """
         [
           { "Number": 10, "Name": "gnarled wand",  "UseCount": 10, "Retain After Uses": 0 },
@@ -94,6 +97,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         _ = new ItemUsesQueryHandler(engine, _readout);
         return (engine, players);
     }
@@ -104,8 +108,8 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryInventory));
     }
 
-    private static string Reply(RemoteCommandManager engine)
-        => StripWire(Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+    private string Reply()
+        => StripWire(Encoding.Latin1.GetString(Assert.Single(_replies)));
 
     private static string StripWire(string wire)
     {
@@ -129,7 +133,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses gnarl"));   // shorthand best-match
 
-        Assert.Equal("gnarled wand: 6 use(s) remaining", Reply(engine));
+        Assert.Equal("gnarled wand: 6 use(s) remaining", Reply());
     }
 
     [Fact]
@@ -141,7 +145,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses cloak"));
 
-        Assert.Equal("peasant cloak: charges not read yet", Reply(engine));
+        Assert.Equal("peasant cloak: charges not read yet", Reply());
     }
 
     [Fact]
@@ -153,7 +157,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses nexus"));
 
-        Assert.Equal("nexus spear isn't a limited-use item", Reply(engine));
+        Assert.Equal("nexus spear isn't a limited-use item", Reply());
     }
 
     [Fact]
@@ -171,7 +175,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
         var (engine, players) = Engine();
         Seed(players, "Bob");
         engine.DispatchForTests(Telepath("Bob", "@uses nexus"));
-        Assert.Equal("nexus spear isn't a limited-use item", Reply(engine));
+        Assert.Equal("nexus spear isn't a limited-use item", Reply());
     }
 
     [Fact]
@@ -183,7 +187,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses potion"));
 
-        Assert.Equal("healing potion isn't a limited-use item", Reply(engine));
+        Assert.Equal("healing potion isn't a limited-use item", Reply());
     }
 
     [Fact]
@@ -195,7 +199,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses longsword"));
 
-        Assert.Equal("no carried item matches 'longsword'", Reply(engine));
+        Assert.Equal("no carried item matches 'longsword'", Reply());
     }
 
     // ----- bare @uses -----------------------------------------------------
@@ -213,7 +217,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses"));
 
-        Assert.Equal("item uses - gnarled wand: 6, peasant cloak: ?", Reply(engine));
+        Assert.Equal("item uses - gnarled wand: 6, peasant cloak: ?", Reply());
     }
 
     [Fact]
@@ -226,7 +230,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses"));
 
-        Assert.Equal("no limited-use items carried", Reply(engine));
+        Assert.Equal("no limited-use items carried", Reply());
     }
 
     // Holding none is a result, not a failure: it is answered with denials
@@ -240,7 +244,7 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Bob", "@uses"));
 
-        Assert.Equal("no limited-use items carried", Reply(engine));
+        Assert.Equal("no limited-use items carried", Reply());
     }
 
     // ----- readout best-match ---------------------------------------------
@@ -267,6 +271,6 @@ public sealed class ItemUsesQueryHandlerTests : IDisposable
 
         engine.DispatchForTests(Telepath("Stranger", "@uses"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 }

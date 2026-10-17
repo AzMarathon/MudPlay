@@ -70,9 +70,6 @@ public sealed class StatlineReconciler : IDisposable
     // Test seam — override the clock so tests don't have to sleep.
     public Func<DateTime> NowProvider { get; set; } = static () => DateTime.UtcNow;
 
-    // Test seam — every buffer the engine has asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // Raised when IsFlagged flips either way. Fires on the prompt scanner's
     // thread, from inside its Append.
     public event Action? FlagChanged;

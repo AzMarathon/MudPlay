@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.34**
-> - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
-> - Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+> **Version 3.183.36**
+> - Commands the client sends are no longer kept in memory for the whole session
+> - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

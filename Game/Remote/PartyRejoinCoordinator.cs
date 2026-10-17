@@ -100,9 +100,6 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // The leader we're about to @comeback, while we wait for our room to confirm.
     public string? WaitingForRoomToRejoin => _pendingLeader;
 
-    // Test seam — every outbound wire buffer, in order.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     public PartyRejoinCoordinator(
         WirePromptScanner scanner,
         PartyState party,

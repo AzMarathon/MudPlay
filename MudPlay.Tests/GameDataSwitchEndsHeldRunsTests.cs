@@ -21,7 +21,7 @@ namespace MudPlay.Tests;
 // GameDataSwitchStopsMovementTests.) The wiring here is the one AppServices makes.
 public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
 {
-    private const string TestBbs = "test-setswitch-held";
+    private const string TestLoopSet = "test-setswitch-held";
     private const string Reason = "game data changed from 'alpha' to 'beta'";
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "mudplay-setswitch-held-" + Path.GetRandomFileName());
@@ -32,7 +32,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
         foreach (IDisposable d in _dispose) d.Dispose();
         try { Directory.Delete(_root, recursive: true); }
         catch { /* best-effort temp cleanup */ }
-        try { Directory.Delete(AppPaths.BbsFolder(TestBbs), recursive: true); }
+        try { Directory.Delete(AppPaths.GameDataSetDir(TestLoopSet), recursive: true); }
         catch { /* best-effort temp cleanup */ }
     }
 
@@ -61,7 +61,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
     [InlineData("lair")]
     public void AnEventWaitingAtTheSwitch_IsEnded_AndDoesNotGoBackToTheOldRun(string kind)
     {
-        using EventEngineHarness h = EventEngineHarness.Create(Path.Combine(_root, kind), TestBbs);
+        using EventEngineHarness h = EventEngineHarness.Create(Path.Combine(_root, kind), TestLoopSet);
         MovementController controller = ControllerOver(h);
         DateTimeOffset now = new(2026, 10, 11, 20, 0, 0, TimeSpan.Zero);
         h.Events.Now = () => now;
@@ -99,7 +99,7 @@ public sealed class GameDataSwitchEndsHeldRunsTests : IDisposable
     [Fact]
     public void TheUsersStop_StillEndsAWaitingEventAsStoppedByTheUser()
     {
-        using EventEngineHarness h = EventEngineHarness.Create(Path.Combine(_root, "user"), TestBbs);
+        using EventEngineHarness h = EventEngineHarness.Create(Path.Combine(_root, "user"), TestLoopSet);
         MovementController controller = ControllerOver(h);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));

@@ -143,9 +143,6 @@ public sealed class AutoSearchManager : IDisposable
     // MainWindowViewModel.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    // Test seam — bytes the manager asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     private bool ShouldSearch() => _isEnabled() || _isDemandActive();
 
     // Whether anything will collect what the search reveals: a get engine

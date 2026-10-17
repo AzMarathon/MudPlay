@@ -231,7 +231,6 @@ public sealed class TrainerWalkManager : IDisposable
     public Func<bool>? CanStartRun { get; set; }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     // Wires the prompt shown when Train Now finds no banked level to train but the
     // current level has an unapplied, affordable CP plan raise (the stuck-at-level-N

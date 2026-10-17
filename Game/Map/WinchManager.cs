@@ -114,8 +114,6 @@ public sealed class WinchManager : IDisposable
         SendPull();
     }
 
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // Whether an exit's prerequisite is a winch this FSM handles — a same-room
     // MultiActionHidden whose (only) action command is a `pull <something> winch`.
     // Cross-room remote-action exits are pre-linearised elsewhere and never a winch.

@@ -21,6 +21,8 @@ public sealed class GetStashHandlerTests
     private sealed class Harness
     {
         public RemoteCommandManager Engine = null!;
+        // What Engine put on the wire, through the sender the client binds.
+        public readonly List<byte[]> EngineWire = new();
         public PlayerDatabase Players = new();
         public List<string> Sent = new();
         public List<long?> Limits = new();
@@ -43,6 +45,7 @@ public sealed class GetStashHandlerTests
             MessageRouter router = new();
             DefaultPatterns.Seed(router);
             Engine = new RemoteCommandManager(new ChatRouter(router), new PartyState(), Players);
+            Engine.SetWireSender(EngineWire.Add);
             _ = new GetStashHandler(Engine,
                 onHandCopper: () => Purse,
                 send: Sent.Add,
@@ -59,7 +62,7 @@ public sealed class GetStashHandlerTests
         public void Ask() => Engine.DispatchForTests(
             new ChatLogEntry(Now, ChatChannel.TelepathIncoming, "Bob", "@get-stash", "Bob telepaths: @get-stash"));
 
-        public List<string> Replies() => Engine.LastSentForTests
+        public List<string> Replies() => EngineWire
             .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
             .Select(w => w[(w.IndexOf('{') + 1)..w.LastIndexOf('}')])
             .ToList();

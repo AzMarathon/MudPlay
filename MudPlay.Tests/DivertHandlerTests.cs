@@ -25,7 +25,10 @@ public sealed class DivertHandlerTests
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    private static (MessageRouter router, DivertHandler handler, PlayerDatabase players, List<byte[]> forwardWire, RemoteCommandManager engine) Setup()
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
+    private (MessageRouter router, DivertHandler handler, PlayerDatabase players, List<byte[]> forwardWire, RemoteCommandManager engine) Setup()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -33,6 +36,7 @@ public sealed class DivertHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         DivertHandler handler = new(engine, chat);
         List<byte[]> forwardWire = new();
         handler.SetWireSender(forwardWire.Add);
@@ -60,7 +64,7 @@ public sealed class DivertHandlerTests
         Assert.Equal("Raijin", handler.TargetForTests);
         // Engine reply routes back to the sender on the telepath channel.
         Assert.Equal("/Bob {Now diverting telepaths to: Raijin}\r",
-            Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+            Encoding.Latin1.GetString(Assert.Single(_replies)));
     }
 
     [Fact]
@@ -70,12 +74,12 @@ public sealed class DivertHandlerTests
         SeedPlayer(players, "Bob", PlayerRemoteControls.DivertConversations);
 
         Telepath(router, "Bob", "@divert Raijin");
-        engine.LastSentForTests.Clear();
+        _replies.Clear();
         Telepath(router, "Bob", "@divert");
 
         Assert.Null(handler.TargetForTests);
         Assert.Equal("/Bob {No longer diverting telepaths}\r",
-            Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+            Encoding.Latin1.GetString(Assert.Single(_replies)));
     }
 
     [Fact]

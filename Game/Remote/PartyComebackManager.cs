@@ -222,9 +222,6 @@ public sealed class PartyComebackManager : IDisposable
     // is waiting on that walk. AppServices wires it; null in tests.
     public Action<string, string>? ReleaseHolds { get; set; }
 
-    // Test seam — every outbound wire buffer, in order.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // True on a Stock realm. Stock ends the follow of a member whose follow move
     // an exit refused and leaves them on our member list: nothing is printed to
     // us, and a `join` of theirs works with no fresh invite (GAME_MECHANICS "A

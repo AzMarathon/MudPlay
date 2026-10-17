@@ -82,9 +82,13 @@ public sealed class PartyComebackManagerTests : IDisposable
         public required AutoLairManager Lair { get; init; }
         public required LairTimerStore Timers { get; init; }
         public required PartyComebackManager Comeback { get; init; }
+        // What Engine, Party and Comeback each put on the wire.
+        public List<byte[]> EngineWire { get; } = new();
+        public List<byte[]> PartyWire { get; } = new();
+        public List<byte[]> ComebackWire { get; } = new();
         public required MovementCoordinator Coordinator { get; init; }
 
-        public string LastReply => Encoding.Latin1.GetString(Engine.LastSentForTests[^1]);
+        public string LastReply => Encoding.Latin1.GetString(EngineWire[^1]);
 
         public void Dispose()
         {
@@ -150,7 +154,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         PartyComebackManager comeback =
             new(engine, party, tracker, classifier, walker, loop, lair, router, bfs);
 
-        return new Harness
+        Harness h = new()
         {
             Router = router,
             PartyState = partyState,
@@ -165,6 +169,10 @@ public sealed class PartyComebackManagerTests : IDisposable
             Comeback = comeback,
             Coordinator = coord,
         };
+        engine.SetWireSender(h.EngineWire.Add);
+        party.SetWireSender(h.PartyWire.Add);
+        comeback.SetWireSender(h.ComebackWire.Add);
+        return h;
     }
 
     private static ChatLogEntry Telepath(string sender, string msg) =>
@@ -204,7 +212,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     }
 
     private static bool Sent(Harness h, string fragment) =>
-        h.Comeback.LastSentForTests.Exists(b => Encoding.Latin1.GetString(b).Contains(fragment));
+        h.ComebackWire.Exists(b => Encoding.Latin1.GetString(b).Contains(fragment));
 
     // ----- idle / busy guards ----------------------------------------
 
@@ -261,7 +269,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_WithDenialsSilenced_SaysNothing()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Engine.WarnOnDenial = false;
         h.Comeback.TrainTripRunning = () => true;
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -269,11 +276,11 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Tank started to follow you."));
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Router.Dispatch(Line("Tank is no longer following you."));
-        int sentBefore = h.Engine.LastSentForTests.Count;
+        int sentBefore = h.EngineWire.Count;
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
 
-        Assert.Equal(sentBefore, h.Engine.LastSentForTests.Count);
+        Assert.Equal(sentBefore, h.EngineWire.Count);
     }
 
     [Fact]
@@ -451,7 +458,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
 
         Assert.Contains("invite Tank\r",
-            Encoding.Latin1.GetString(h.Party.LastSentForTests[^1]));
+            Encoding.Latin1.GetString(h.PartyWire[^1]));
         Assert.Contains("re-inviting Tank", h.LastReply);
         Assert.False(h.Lair.IsActive);   // still busy — awaiting the follow confirmation
     }
@@ -594,7 +601,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void RoomComebackDuringBacktrack_WalksToTheirRoom()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -617,7 +623,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_WhileEngineRuns_BacktracksForThem()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));   // where Tank is left
         StartLair(h);                               // we've moved on to 1/1
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -639,7 +644,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void Backtrack_IsCappedByReturnDistance(int reach, int rooms)
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.ReturnDistanceRooms = reach;
         h.Tracker.SetLocated(new RoomKey(1, 3));
         h.Tracker.SetLocated(new RoomKey(1, 2));
@@ -659,7 +663,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_UserStartsANewWalk_CallsTheRecoveryOff()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -680,7 +683,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_RightAfterOurOwnToken_DoesNotBacktrack()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -700,7 +702,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void StopsFollowing_LongAfterOurLastMove_IsNotLeftBehind()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -721,7 +722,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_RejoinsWhileWeStillWalk_EndsTheRecovery()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 3));
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);                               // 1/1, with 1/2 and 1/3 behind us
@@ -770,7 +770,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_ByAMoveTypedByHand_IsLeftToThem()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -823,7 +822,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_ByAnEngineStepAsAPauseLands_IsStillGoneBackFor()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);                                               // the engine's step is on the wire
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -841,7 +839,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_RejoinsWhileWeStillWalk_PutsTheLoopBack()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         int loopStarts = 0;
         h.Loop.Event += e => { if (e.Kind == LoopEventKind.ReachedFirstWaypoint) loopStarts++; };
         h.Tracker.SetLocated(new RoomKey(1, 2));
@@ -866,7 +863,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_RightAfterTheirOk_RejoinsWhileWeStillWalk_TheirOkCounts()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         List<(string, bool)> held = new();
         h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
         h.Comeback.OkedWithin = (_, _) => true;
@@ -887,7 +883,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void Cancel_DropsTheRecoveryAndParkedResume()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -903,7 +898,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_Rejoins_HoldsForTheirOk_AndTellsThem()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         List<string> held = new();
         h.Comeback.LeftBehindRejoined = (g, _) => held.Add(g);
         h.Tracker.SetLocated(new RoomKey(1, 2));   // where Tank is left
@@ -929,7 +923,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_RightAfterTheirOk_WaitsTheFullWindow()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         List<(string, bool)> held = new();
         h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
         h.Comeback.OkedWithin = (_, _) => true;
@@ -968,7 +961,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_NoEngineRunning_StaysSilent()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Router.Dispatch(Line("Tank started to follow you."));
 
@@ -982,7 +974,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_ReInviteOff_KeepsGoing()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Party.AutoInviteEnabled = false;
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
@@ -1000,7 +991,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void MemberReturns_LeaderProbesWhere()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });   // path B needs a bound wire
         StartLair(h);
 
         // Tank followed us, dropped, and re-enters the realm inside the grace
@@ -1022,7 +1012,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void MemberReturns_RejoinsAfterCr_NoWhereProbe()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         StartLair(h);
 
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1043,7 +1032,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void MemberReturns_ProbeAnswered_RecoveryWalksToThem()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         StartLair(h);
 
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1156,7 +1144,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void AllFollowersGated_PartyDisbanded_BothAreFetchedInTurn()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));   // where they are left
         StartLair(h);                               // we've moved on to 1/1
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1196,7 +1183,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void OneOfTwoFollowersGated_PartyStays_TheirComebackIsHonoured()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1220,7 +1206,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_FollowerDroppedThere_IsRefused_AndTheLoopCarriesOn()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
         StepThroughTheGate(h);
@@ -1244,17 +1229,16 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_WithDenialsSilenced_RefusesWithoutAReply()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Engine.WarnOnDenial = false;
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
         StepThroughTheGate(h);
         h.Router.Dispatch(Line("Tank is no longer following you."));
-        int sentBefore = h.Engine.LastSentForTests.Count;
+        int sentBefore = h.EngineWire.Count;
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
 
-        Assert.Equal(sentBefore, h.Engine.LastSentForTests.Count);
+        Assert.Equal(sentBefore, h.EngineWire.Count);
         Assert.NotEqual(LoopState.Idle, h.Loop.State);
     }
 
@@ -1313,7 +1297,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void GateCrossedBeforeTheLoop_NotOnItsCircuit_MemberIsGoneBackFor()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 4));
         h.Tracker.SetLocated(new RoomKey(1, 1));   // through the item exit, not on any loop
         h.Party.ExpectComebackFrom("Tank");
@@ -1331,7 +1314,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_MemberWhoSignalledAHold_IsGoneBackFor()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.MemberSignalledHold = name => name == "Tank";
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1353,7 +1335,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_WhatIsKnownOfTheMemberDecides(bool? canPass, bool goneBackFor)
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.MemberCanPass = (_, exit) => exit.AdmitsOnlySome ? canPass : true;
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1383,7 +1364,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void WalkToThroughAGate_FollowerDroppedThere_IsGoneBackFor_AndReInvited()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -1411,7 +1391,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void QueuedFollower_BackBeforeTheirTurn_IsNotFetched()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1430,7 +1409,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void QueuedFollower_WhoSendsForget_IsTakenOffTheQueue()
     {
         using Harness h = NewHarness();
-        h.Comeback.SetWireSender(_ => { });
         h.Engine.ForgetEligibility = h.Party.WasRecentlyPartied;   // as the app wires it
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
@@ -1454,7 +1432,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_FetchedOnce_DroppedThereAgain_IsRefusedFromThenOn()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         DateTimeOffset now = DateTimeOffset.UtcNow;
         h.Comeback.NowProvider = () => now;
         h.Comeback.MemberCanPass = (_, _) => true;
@@ -1482,9 +1459,9 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
 
         now += h.Comeback.ComebackWindow + TimeSpan.FromMinutes(5);
-        int sent = h.Engine.LastSentForTests.Count;
+        int sent = h.EngineWire.Count;
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
-        Assert.Equal(sent + 1, h.Engine.LastSentForTests.Count);
+        Assert.Equal(sent + 1, h.EngineWire.Count);
         Assert.Contains(PartyComebackManager.LoopGateRefusal, h.LastReply);
         Assert.Null(h.Comeback.RecoveringMember);
     }
@@ -1495,7 +1472,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopRestartedByTheUser_AMemberProvenGated_IsJudgedAfresh()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         DateTimeOffset now = DateTimeOffset.UtcNow;
         h.Comeback.NowProvider = () => now;
         h.Comeback.MemberCanPass = (_, _) => true;
@@ -1530,7 +1506,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LeftBehind_TheMembersWaitIsReadBeforeItIsLetGo()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         HashSet<string> waiting = new() { "Tank" };
         h.Comeback.MemberSignalledHold = waiting.Contains;
         h.Comeback.ReleaseMemberWait = name => waiting.Remove(name);
@@ -1550,7 +1525,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void LoopThroughAGate_AnOkAMomentBefore_ReadsAsAHold()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.OkedWithin = (name, window) => name == "Tank" && window == TimeSpan.FromSeconds(5);
         StartLoopAtTheGate(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -1612,7 +1586,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void WalkToThroughAGate_DroppedThereAgainAfterThePickup_EndsTheWalk_WithANotice()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1640,7 +1613,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void WalkToThroughAGate_ADifferentExitLater_GetsItsOwnPickup()
     {
         using Harness h = NewHarness(TwoGatesGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1664,7 +1636,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void WalkToThroughAGate_NoLineFromTheGame_TheSecondRequestEndsTheWalk()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1702,7 +1673,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void AutoLairThroughAGate_CarriesOn_AnswersOnce_AndInvitesOnSight()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -1720,9 +1690,9 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
         Assert.Contains(PartyComebackManager.LairGateReply, h.LastReply);
-        int sent = h.Engine.LastSentForTests.Count;
+        int sent = h.EngineWire.Count;
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/4"));
-        Assert.Equal(sent, h.Engine.LastSentForTests.Count);     // said once
+        Assert.Equal(sent, h.EngineWire.Count);     // said once
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.True(h.Lair.IsActive);
         Assert.DoesNotContain("invite Tank", partyWire);
@@ -1741,7 +1711,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void AutoLairThroughAGate_AMemberWhoSignalledAHold_IsGoneBackFor()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.MemberSignalledHold = name => name == "Tank";
         h.Tracker.SetLocated(new RoomKey(1, 4));
         h.Lair.Mark(new RoomKey(1, 1));
@@ -1764,7 +1733,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_FollowerDroppedOnTheWay_DoesNotStopTheTripsWalk()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         bool tripOn = true;
         h.Comeback.TrainTripRunning = () => tripOn;
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -1787,7 +1755,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_ComebackDuringTheTrip_IsAnsweredOnce_AndKept()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.TrainTripRunning = () => true;
         h.Tracker.SetLocated(new RoomKey(1, 4));
         Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
@@ -1797,10 +1764,10 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
         Assert.Contains(PartyComebackManager.TrainTripReply, h.LastReply);
-        int replies = h.Engine.LastSentForTests.Count;
+        int replies = h.EngineWire.Count;
         h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/2"));
 
-        Assert.Equal(replies, h.Engine.LastSentForTests.Count);
+        Assert.Equal(replies, h.EngineWire.Count);
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.Equal(WalkState.Walking, h.Walker.State);
         Assert.Equal(new[] { "Tank at 1/2" }, h.Comeback.LeftOnTrainTrip);
@@ -1812,7 +1779,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Over_EveryoneItLeftIsFetchedInTurn()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         bool tripOn = true;
@@ -1853,7 +1819,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Over_WithNoEngineToReturnTo_StillFetches()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         bool tripOn = true;
         h.Comeback.TrainTripRunning = () => tripOn;
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -1877,7 +1842,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void OwnTrainRun_WithNoRoll_KeepsWhomItLeft_AndFetchesAtItsEnd()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         bool runOn = true;
         h.Comeback.TrainTripRunning = () => runOn;
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -1904,7 +1868,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_TakenOver_NobodyIsFetched_TheyAreNamedOnce_AndStayMembers()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> notices = new();
         h.Comeback.Notice = notices.Add;
         bool tripOn = true;
@@ -1985,7 +1948,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Over_AMemberTheGameNeverReported_IsFetchedOnTheirRequest_EvenIdle()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         h.Comeback.ReturnDistanceRooms = 1;
         bool tripOn = true;
         h.Comeback.TrainTripRunning = () => tripOn;
@@ -2014,7 +1976,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Over_ARequestLongAfter_IsAnOrdinaryOne()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         DateTimeOffset now = DateTimeOffset.UtcNow;
         h.Comeback.NowProvider = () => now;
         SeatFollower(h, "Tank");
@@ -2034,7 +1995,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Fetch_ARoomWeGuessed_IsCheckedOnArrival()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         bool tripOn = true;
@@ -2068,7 +2028,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Fetch_TheMemberNamesAnotherRoomOnTheWay_WeGoThere()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         bool tripOn = true;
@@ -2102,7 +2061,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_OverWithTheMasterSwitchOff_FetchesWhenItIsBackOn_IfStillFresh(int secondsOff, bool fetched)
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         DateTimeOffset now = DateTimeOffset.UtcNow;
         h.Comeback.NowProvider = () => now;
         bool tripOn = true, masterOff = false;
@@ -2133,7 +2091,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void TrainTrip_Over_AMemberBackWithUs_IsNotFetched()
     {
         using Harness h = NewHarness(GatedGraphJson);
-        h.Comeback.SetWireSender(_ => { });
         bool tripOn = true;
         h.Comeback.TrainTripRunning = () => tripOn;
         h.Tracker.SetLocated(new RoomKey(1, 4));
@@ -2448,7 +2405,6 @@ public sealed class PartyComebackManagerTests : IDisposable
     // is how we know. They still have a row on our roster.
     private static List<string> LeftAtAnExitByAutoLair_NoLineFromTheGame(Harness h)
     {
-        h.Comeback.SetWireSender(_ => { });
         List<string> partyWire = new();
         h.Party.SetWireSender(b => partyWire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -2480,7 +2436,7 @@ public sealed class PartyComebackManagerTests : IDisposable
     }
 
     private static int JoinsAsked(Harness h, string given) =>
-        h.Comeback.LastSentForTests.Count(b => Encoding.Latin1.GetString(b).Contains($"/{given} @join"));
+        h.ComebackWire.Count(b => Encoding.Latin1.GetString(b).Contains($"/{given} @join"));
 
     // On Stock the row never left, so it can't mean they are back: the pass that
     // finds them tells them to join, as it promised.

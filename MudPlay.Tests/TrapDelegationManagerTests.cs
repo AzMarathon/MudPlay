@@ -74,12 +74,19 @@ public sealed class TrapDelegationManagerTests : IDisposable
         return (router, party, players, gameData);
     }
 
-    private static TrapDelegationManager NewManager(
-        (MessageRouter router, PartyManager party, PlayerDatabase players, GameDataCache gameData) h)
-        => new(h.party, h.players, h.gameData, h.router);
+    // What the manager put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _sent = new();
 
-    private static string Sent(TrapDelegationManager mgr, int index) =>
-        Encoding.Latin1.GetString(mgr.LastSentForTests[index]);
+    private TrapDelegationManager NewManager(
+        (MessageRouter router, PartyManager party, PlayerDatabase players, GameDataCache gameData) h)
+    {
+        TrapDelegationManager mgr = new(h.party, h.players, h.gameData, h.router);
+        mgr.SetWireSender(_sent.Add);
+        return mgr;
+    }
+
+    private string Sent(int index) =>
+        Encoding.Latin1.GetString(_sent[index]);
 
     // ===== Capability — class main gate ==================================
 
@@ -156,7 +163,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         h.router.Dispatch(Line("Helper started to follow you."));
 
-        Assert.Equal("look Helper\r", Sent(mgr, 0));
+        Assert.Equal("look Helper\r", Sent(0));
     }
 
     [Fact]
@@ -168,7 +175,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         h.router.Dispatch(Line("Helper started to follow you."));
 
-        Assert.Empty(mgr.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -187,7 +194,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         h.router.Dispatch(Line("Helper started to follow you."));
 
-        Assert.Empty(mgr.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -202,7 +209,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         h.router.Dispatch(Line("Helper started to follow you."));
 
-        Assert.Empty(mgr.LastSentForTests);
+        Assert.Empty(_sent);
     }
 
     [Fact]
@@ -215,7 +222,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         h.router.Dispatch(Line("Helper started to follow you."));
 
-        Assert.Equal("look Helper\r", Sent(mgr, 0));
+        Assert.Equal("look Helper\r", Sent(0));
     }
 
     // ===== Delegation broadcast ==========================================
@@ -228,7 +235,7 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         mgr.Delegate("north", _ => { });
 
-        Assert.Equal(".@trap north\r", Sent(mgr, mgr.LastSentForTests.Count - 1));
+        Assert.Equal(".@trap north\r", Sent(_sent.Count - 1));
     }
 
     // ===== Resume watch ==================================================

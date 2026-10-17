@@ -112,9 +112,6 @@ public sealed class ItemCastSequencer
     // Bind the wire sink (the wrapped engine sender).
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    // Test seam — every buffer sent, in order.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // Run the equip → use → restore sequence for the cast item named by the token.
     // Returns true only when the lines were sent: the wire must be bound, the token
     // must resolve to an unlimited-use cast item. The weapon restore is skipped when

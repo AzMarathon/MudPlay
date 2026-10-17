@@ -22,9 +22,12 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class InventoryQueryHandlerTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 21, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, InventoryManager inv, LineExtractor lines,
+    private (RemoteCommandManager engine, InventoryManager inv, LineExtractor lines,
         PlayerDatabase players, MessageRouter router, GroundItemTracker ground)
         Setup()
     {
@@ -34,6 +37,7 @@ public sealed class InventoryQueryHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         InventoryManager inv = new(log: null, itemWeightResolver: null, slotResolver: null);
         LineExtractor lines = new(new TerminalEmulator(80, 24));
         inv.AttachLineExtractor(lines);
@@ -80,8 +84,8 @@ public sealed class InventoryQueryHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests
+    private List<string> Replies() =>
+        _replies
             .Select(b => Encoding.Latin1.GetString(b))
             .Select(StripWire)
             .ToList();
@@ -104,7 +108,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@wealth"));
 
-        Assert.Contains("parse inventory first", Assert.Single(Replies(engine)));
+        Assert.Contains("parse inventory first", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -116,7 +120,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@wealth"));
 
-        string reply = Assert.Single(Replies(engine));
+        string reply = Assert.Single(Replies());
         Assert.Equal(
             "2 runic, 6 platinum, 94 gold, 2 silver, 5 copper (= 2,069,425 copper)",
             reply);
@@ -132,7 +136,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@enc"));
 
-        Assert.Contains("parse inventory first", Assert.Single(Replies(engine)));
+        Assert.Contains("parse inventory first", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -144,7 +148,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@enc"));
 
-        Assert.Equal("Encumbrance 36/2880 (1%) - Light", Assert.Single(Replies(engine)));
+        Assert.Equal("Encumbrance 36/2880 (1%) - Light", Assert.Single(Replies()));
     }
 
     // ----- @have -------------------------------------------------------
@@ -158,7 +162,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have"));
 
-        Assert.Equal("usage: @have <item name>", Assert.Single(Replies(engine)));
+        Assert.Equal("usage: @have <item name>", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -169,7 +173,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have dagger"));
 
-        Assert.Contains("inventory not parsed yet", Assert.Single(Replies(engine)));
+        Assert.Contains("inventory not parsed yet", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -183,7 +187,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have DAGGER"));
 
-        Assert.Equal("yes - 2x 'DAGGER'", Assert.Single(Replies(engine)));
+        Assert.Equal("yes - 2x 'DAGGER'", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -199,7 +203,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have black diamond"));
 
-        Assert.Equal("yes - 25x 'black diamond'", Assert.Single(Replies(engine)));
+        Assert.Equal("yes - 25x 'black diamond'", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -212,7 +216,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have longsword"));
 
-        Assert.Equal("no - nothing matching 'longsword'", Assert.Single(Replies(engine)));
+        Assert.Equal("no - nothing matching 'longsword'", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -229,7 +233,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have black star key"));
 
-        Assert.Equal("yes - 1x 'black star key'", Assert.Single(Replies(engine)));
+        Assert.Equal("yes - 1x 'black star key'", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -245,7 +249,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@have iron key"));
 
-        Assert.Equal("yes - 3x 'iron key'", Assert.Single(Replies(engine)));
+        Assert.Equal("yes - 3x 'iron key'", Assert.Single(Replies()));
     }
 
     // ----- @inv --------------------------------------------------------
@@ -258,7 +262,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
-        Assert.Contains("inventory not parsed yet", Assert.Single(Replies(engine)));
+        Assert.Contains("inventory not parsed yet", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -275,7 +279,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
-        Assert.Equal("carrying: a rusty dagger, a healing potion", Assert.Single(Replies(engine)));
+        Assert.Equal("carrying: a rusty dagger, a healing potion", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -290,7 +294,7 @@ public sealed class InventoryQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
         Assert.Equal("carrying: a brass lantern; keys: black star key, brass key",
-            Assert.Single(Replies(engine)));
+            Assert.Single(Replies()));
     }
 
     [Fact]
@@ -304,7 +308,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
-        Assert.Equal("carrying nothing", Assert.Single(Replies(engine)));
+        Assert.Equal("carrying nothing", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -320,7 +324,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@inv"));
 
-        List<string> replies = Replies(engine);
+        List<string> replies = Replies();
         Assert.True(replies.Count > 1, "a long pack should split across multiple replies");
         // No truncation summary anywhere.
         Assert.DoesNotContain(replies, r => r.Contains("more, type i)"));
@@ -344,7 +348,7 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Bob", "@what"));
 
-        Assert.Equal("nothing on the ground here", Assert.Single(Replies(engine)));
+        Assert.Equal("nothing on the ground here", Assert.Single(Replies()));
     }
 
     [Fact]
@@ -358,7 +362,7 @@ public sealed class InventoryQueryHandlerTests
         engine.DispatchForTests(Telepath("Bob", "@what"));
 
         Assert.Equal("on the ground: a rusty dagger, a healing potion",
-            Assert.Single(Replies(engine)));
+            Assert.Single(Replies()));
     }
 
     // ----- gating ------------------------------------------------------
@@ -374,6 +378,6 @@ public sealed class InventoryQueryHandlerTests
 
         engine.DispatchForTests(Telepath("Stranger", "@wealth"));
 
-        Assert.Empty(Replies(engine));
+        Assert.Empty(Replies());
     }
 }

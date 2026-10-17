@@ -484,6 +484,7 @@ public sealed class BossTimerTests : IDisposable
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         players.RecordObservation("Bob", null, null, null, null, null, null, Now);
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.QueryBossTimers));
         // The broadcast channel opened, as with its Talk-tab box unticked.
@@ -493,17 +494,20 @@ public sealed class BossTimerTests : IDisposable
         return (engine, timers);
     }
 
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     // The engine's clock: it bounds what it says on the broadcast channel by the minute.
     private DateTimeOffset _engineNow = new(2026, 8, 4, 0, 0, 0, TimeSpan.Zero);
 
     private static ChatLogEntry Telepath(string msg) =>
         new(Now, ChatChannel.TelepathIncoming, "Bob", msg, $"Bob telepaths: {msg}");
 
-    private static string Reply(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).Single();
+    private string Reply() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).Single();
 
-    private static List<string> Replies(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).ToList();
+    private List<string> Replies() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b)).Select(StripWire).ToList();
 
     private static string StripWire(string wire)
     {
@@ -528,10 +532,10 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(new ChatLogEntry(Now, channel, "Bob", "@timer sync", "raw"));
 
-        string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+        string[] wire = _replies.Select(b => Encoding.Latin1.GetString(b)).ToArray();
         Assert.NotEmpty(wire);
         Assert.All(wire, line => Assert.StartsWith(opening, line));
-        string blob = string.Concat(Replies(engine).Select(r => r.Split(' ', 3)[2]));
+        string blob = string.Concat(Replies().Select(r => r.Split(' ', 3)[2]));
         Assert.Equal(50, Assert.Single(BossTimerSyncCodec.Decode(blob)).MonsterNumber);
     }
 
@@ -547,7 +551,7 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Local, "Bob", "@timer sync", "raw"));
 
-        Assert.All(engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)),
+        Assert.All(_replies.Select(b => Encoding.Latin1.GetString(b)),
             line => Assert.StartsWith("/Bob {@timerdata ", line));
     }
 
@@ -566,8 +570,8 @@ public sealed class BossTimerTests : IDisposable
             new(Now, channel, who, "@timer sync", "raw");
         string[] Sent()
         {
-            string[] wire = engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToArray();
-            engine.LastSentForTests.Clear();
+            string[] wire = _replies.Select(b => Encoding.Latin1.GetString(b)).ToArray();
+            _replies.Clear();
             return wire;
         }
 
@@ -622,7 +626,7 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer sync", "raw"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // ----- the merge window: what is written without a pick -----------------
@@ -2692,11 +2696,11 @@ public sealed class BossTimerTests : IDisposable
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
 
-        Assert.StartsWith("br {ogre king - ", Encoding.Latin1.GetString(Assert.Single(engine.LastSentForTests)));
+        Assert.StartsWith("br {ogre king - ", Encoding.Latin1.GetString(Assert.Single(_replies)));
 
         _engineNow += BroadcastAnswerBudget.Window;
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer ogre", "raw"));
-        Assert.Equal(2, engine.LastSentForTests.Count);
+        Assert.Equal(2, _replies.Count);
     }
 
     // With the box ticked the report is not read there, like everything else.
@@ -2709,7 +2713,7 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.Broadcast, "Bob", "@timer", "raw"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -2717,7 +2721,7 @@ public sealed class BossTimerTests : IDisposable
     {
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("ogre king", 50, 24));
         engine.DispatchForTests(Telepath("@timer"));
-        Assert.Equal("no boss timers active", Reply(engine));
+        Assert.Equal("no boss timers active", Reply());
     }
 
     [Fact]
@@ -2727,7 +2731,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("ogre king");
         engine.DispatchForTests(Telepath("@timer"));
 
-        string reply = Reply(engine);
+        string reply = Reply();
         Assert.Contains("ogre king", reply);
         Assert.Contains("full", reply);
         Assert.Contains("-20%", reply);   // freshly killed → earliest paradigm window
@@ -2741,7 +2745,7 @@ public sealed class BossTimerTests : IDisposable
         timers.MarkKilled("ogre king");
 
         engine.DispatchForTests(Telepath("@timer crimson"));
-        string reply = Reply(engine);
+        string reply = Reply();
         Assert.Contains("crimson mist", reply);
         Assert.DoesNotContain("ogre king", reply);
     }
@@ -2751,7 +2755,7 @@ public sealed class BossTimerTests : IDisposable
     {
         var (engine, _) = SetupHandler(RealmType.ParaMud, ("crimson mist", 10, 12));
         engine.DispatchForTests(Telepath("@timer crimson"));
-        Assert.Equal("expired", Reply(engine));
+        Assert.Equal("expired", Reply());
     }
 
     [Fact]
@@ -2765,7 +2769,7 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(Telepath("@timer dragon"));
 
-        List<string> replies = Replies(engine);
+        List<string> replies = Replies();
         Assert.Equal(2, replies.Count);   // two dragons, two lines — ogre king excluded
         Assert.Contains(replies, r => r.Contains("great green dragon"));
         Assert.Contains(replies, r => r.Contains("huge black dragon"));
@@ -2783,7 +2787,7 @@ public sealed class BossTimerTests : IDisposable
 
         engine.DispatchForTests(Telepath("@timer dragon"));
 
-        List<string> replies = Replies(engine);
+        List<string> replies = Replies();
         Assert.Equal(6, replies.Count);   // 5 timer lines + 1 overflow line
         Assert.Contains("1 more timers matching 'dragon'", replies.Last());
     }

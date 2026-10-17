@@ -22,6 +22,7 @@ public sealed class BbsRenameCascadeTests : IDisposable
 
     public BbsRenameCascadeTests()
     {
+        ScratchRoot.Require();
         string tag = Path.GetRandomFileName();
         _oldBbs = "rename-test-old-" + tag;
         _newBbs = "rename-test-new-" + tag;

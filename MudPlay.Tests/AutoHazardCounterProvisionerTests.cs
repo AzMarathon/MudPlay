@@ -61,6 +61,7 @@ public sealed class AutoHazardCounterProvisionerTests
         public bool Following = false;   // in a party, not the leader
         public string? Halted;    // reason from the halt callback, null until halted
         public AutoHazardCounterProvisioner Engine { get; }
+        private readonly List<byte[]> _wire = new();
         public AutoModeController Controller { get; }
 
         public Harness(RoomHazardIndex.RoomHazard? hazard = null, Room? room = null)
@@ -85,7 +86,7 @@ public sealed class AutoHazardCounterProvisionerTests
                 haltWalk:       reason => Halted = reason,
                 now:            () => Now,
                 followingLeader: () => Following);
-            Engine.SetWireSender(_ => { });
+            Engine.SetWireSender(_wire.Add);
             ProfileService profile = new();
             profile.LoadBlank();
             Controller = new AutoModeController(profile);
@@ -94,7 +95,7 @@ public sealed class AutoHazardCounterProvisionerTests
 
         public void Advance(int seconds) => Now = Now.AddSeconds(seconds);
 
-        public IReadOnlyList<string> Sent => Engine.LastSentForTests
+        public IReadOnlyList<string> Sent => _wire
             .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
             .ToList();
 

@@ -13,14 +13,18 @@ namespace MudPlay.Tests;
 // failure; and the suicide rules match the exact command words.
 public sealed class RemoteCommandCheckOrderTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private static (RemoteCommandManager engine, PlayerDatabase players) Engine()
+    private (RemoteCommandManager engine, PlayerDatabase players) Engine()
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players);
+        engine.SetWireSender(_replies.Add);
         return (engine, players);
     }
 
@@ -34,8 +38,8 @@ public sealed class RemoteCommandCheckOrderTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static List<string> Sent(RemoteCommandManager engine) =>
-        engine.LastSentForTests.Select(b => Encoding.Latin1.GetString(b)).ToList();
+    private List<string> Sent() =>
+        _replies.Select(b => Encoding.Latin1.GetString(b)).ToList();
 
     [Fact]
     public void Suicide_FromASenderWithoutThePermission_GetsOnlyTheGenericFailure()
@@ -48,7 +52,7 @@ public sealed class RemoteCommandCheckOrderTests
 
         engine.DispatchForTests(Telepath("Stranger", "@suicide"));
 
-        Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent(engine)));
+        Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent()));
     }
 
     [Fact]
@@ -60,7 +64,7 @@ public sealed class RemoteCommandCheckOrderTests
 
         engine.DispatchForTests(Telepath("Nobody", "@suicide"));
 
-        string reply = Assert.Single(Sent(engine));
+        string reply = Assert.Single(Sent());
         Assert.DoesNotContain("lives", reply);
         Assert.DoesNotContain("2", reply);
     }
@@ -75,7 +79,7 @@ public sealed class RemoteCommandCheckOrderTests
 
         engine.DispatchForTests(Telepath("Nobody", "@suicide"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -89,7 +93,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.DispatchForTests(Telepath("Stranger", "@do suicide"));
 
         Assert.False(fired);
-        Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent(engine)));
+        Assert.Equal("/Stranger {command invalid or not allowed}\r", Assert.Single(Sent()));
     }
 
     // "@suicidal" in gang chat is a word, not a command: it is neither answered
@@ -106,7 +110,7 @@ public sealed class RemoteCommandCheckOrderTests
 
         engine.DispatchForTests(Telepath("Trusted", message));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // The lives rule is @suicide's own: another command is not refused for having
@@ -124,7 +128,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.DispatchForTests(Telepath("Trusted", "@have suicide note"));
 
         Assert.Equal(new[] { "suicide", "note" }, got);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // @do sends its words to the game, so only the game's own word is refused: a
@@ -143,7 +147,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.DispatchForTests(Telepath("Trusted", message));
 
         Assert.True(fired);
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // Punctuation and quotes around the word don't hide it.
@@ -165,7 +169,7 @@ public sealed class RemoteCommandCheckOrderTests
         engine.DispatchForTests(Telepath("Trusted", message));
 
         Assert.False(fired);
-        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent(engine)));
+        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent()));
     }
 
     [Fact]
@@ -179,6 +183,6 @@ public sealed class RemoteCommandCheckOrderTests
         engine.DispatchForTests(Telepath("Trusted", "@do SUICIDE"));
 
         Assert.False(fired);
-        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent(engine)));
+        Assert.Equal("/Trusted {@do suicide is not allowed, use @suicide}\r", Assert.Single(Sent()));
     }
 }

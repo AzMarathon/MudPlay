@@ -17,6 +17,9 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class TrapHandlerTests
 {
+    // What the remote-command engine put on the wire, through the sender the client binds.
+    private readonly List<byte[]> _replies = new();
+
     private static readonly DateTime Now = new(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
 
     // Isolated empty game-data root — no SwitchSet, so CanDisarm is driven
@@ -25,7 +28,7 @@ public sealed class TrapHandlerTests
     private static readonly string GameDataRoot =
         Path.Combine(Path.GetTempPath(), "mudplay-traphandler-tests");
 
-    private static (RemoteCommandManager engine, TrapHandler handler, TrapDisarmManager mgr, PlayerDatabase players, List<byte[]> wire) Setup(int traps = 50)
+    private (RemoteCommandManager engine, TrapHandler handler, TrapDisarmManager mgr, PlayerDatabase players, List<byte[]> wire) Setup(int traps = 50)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -34,6 +37,7 @@ public sealed class TrapHandlerTests
         PlayerDatabase players = new();
         PlayerStats stats = new() { Traps = traps };
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         TrapDisarmManager mgr = new(router, stats, new GameDataCache(GameDataRoot));
         TrapHandler handler = new(engine, mgr);
         List<byte[]> wire = new();
@@ -53,8 +57,8 @@ public sealed class TrapHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    private static string LastReply(RemoteCommandManager e) =>
-        Encoding.Latin1.GetString(e.LastSentForTests[^1]);
+    private string LastReply() =>
+        Encoding.Latin1.GetString(_replies[^1]);
 
     // ===== Happy path =====
 
@@ -80,7 +84,7 @@ public sealed class TrapHandlerTests
         engine.DispatchForTests(Telepath("Raijin", "@trap n"));
 
         Assert.Equal("/Raijin {Attempting to disarm trap n.}\r",
-            Encoding.Latin1.GetString(engine.LastSentForTests[0]));
+            Encoding.Latin1.GetString(_replies[0]));
     }
 
     [Fact]
@@ -104,7 +108,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap"));
 
-        Assert.Contains("missing direction", LastReply(engine));
+        Assert.Contains("missing direction", LastReply());
     }
 
     [Fact]
@@ -115,7 +119,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap middle"));
 
-        Assert.Contains("unknown direction", LastReply(engine));
+        Assert.Contains("unknown direction", LastReply());
     }
 
     [Fact]
@@ -127,7 +131,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // ===== Skill gate (channel-aware) =====
@@ -140,7 +144,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap n"));
 
-        Assert.Contains("can't disarm", LastReply(engine));
+        Assert.Contains("can't disarm", LastReply());
     }
 
     [Fact]
@@ -154,7 +158,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Say("Raijin", "@trap n"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     [Fact]
@@ -166,7 +170,7 @@ public sealed class TrapHandlerTests
 
         engine.DispatchForTests(Telepath("Raijin", "@trap n"));
 
-        Assert.Empty(engine.LastSentForTests);
+        Assert.Empty(_replies);
     }
 
     // ===== @trap stop =====
@@ -177,12 +181,12 @@ public sealed class TrapHandlerTests
         var (engine, _, mgr, players, _) = Setup();
         SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
         engine.DispatchForTests(Telepath("Raijin", "@trap n"));
-        engine.LastSentForTests.Clear();
+        _replies.Clear();
 
         engine.DispatchForTests(Telepath("Raijin", "@trap stop"));
 
         // ok ack on telepath wire: `/Raijin {ok}\r`
-        Assert.Equal("/Raijin {ok}\r", LastReply(engine));
+        Assert.Equal("/Raijin {ok}\r", LastReply());
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
     }
 

@@ -377,8 +377,6 @@ public sealed class HangupItemRecheck
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
-
     // ----- the list on disk ---------------------------------------------
 
     // ProfileService.ProfileSaving: write what is held now. Only for the character
