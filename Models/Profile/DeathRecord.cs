@@ -174,7 +174,7 @@ public sealed class DeathRecord
     // CurrencyNaming (reserved for the Game/ layer), and the record is a frozen
     // historical snapshot, so the board word isn't threaded in here. The other
     // four denominations are never renameable, so only this one rung is affected.
-    private static IEnumerable<string> DescribeCoins(CurrencyHoldings? coins)
+    internal static IEnumerable<string> DescribeCoins(CurrencyHoldings? coins)
     {
         if (coins is not { } c) yield break;
         if (c.Runic > 0)    yield return Coin(c.Runic,    "runic coin");

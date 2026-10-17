@@ -1,5 +1,12 @@
 # Version history
 
+## 3.182.0
+
+- Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
+- Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
+- The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
+- Recovering a friend's corpse no longer marks your own open pile recovered
+
 ## 3.181.32
 
 - Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
