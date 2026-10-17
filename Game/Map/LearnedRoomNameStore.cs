@@ -23,8 +23,9 @@ namespace MudPlay.Game.Map;
 // Every client on the realm shares the file. Another client's names are taken in
 // the way the realm's other shared files are followed (SharedFileStamp, on the
 // heartbeat and before a change), and a write is this client's changes made to
-// what is on file, never a copy of what it happened to hold. So a name in the
-// file is text someone else supplied, and is checked before it is used (Usable).
+// what is on file at that moment, under a hold on the file (SharedFileWrite), never
+// a copy of what it happened to hold. So a name in the file is text someone else
+// supplied, and is checked before it is used (Usable).
 public sealed class LearnedRoomNameStore
 {
     public const string LogCategory = "LearnedRoomNames";
@@ -72,6 +73,9 @@ public sealed class LearnedRoomNameStore
     // client's: it is neither read nor written over.
     private const int FileVersion = 1;
 
+    // A wait for another client's hold longer than this is logged.
+    private static readonly TimeSpan SlowHold = TimeSpan.FromMilliseconds(50);
+
     private static readonly IReadOnlyDictionary<RoomKey, string> NoNames = new Dictionary<RoomKey, string>();
 
     private readonly RoomGraphManager _graph;
@@ -93,6 +97,16 @@ public sealed class LearnedRoomNameStore
     //   _newer      — a later client's format: neither read nor written.
     //   _unwritable — the last write failed.
     private bool _unparsed, _unread, _newer, _unwritable;
+    // A write re-read the file and may have taken in another client's names,
+    // which are not on the map until the next Apply.
+    private bool _applyOwed;
+    // Each realm folder this store was carried away from by a rename, and where
+    // to: a name seen before the rename and saved after it was seen here.
+    private readonly Dictionary<string, string> _renamedTo = new(StringComparer.Ordinal);
+    // The folders the realm held was renamed from, until the realm in play reads
+    // as the new one: until then, the realm in play reading as one of them is the
+    // rename not yet saved with its BBS, not a change of realm.
+    private readonly HashSet<string> _oldNamesUntilPinned = new(StringComparer.Ordinal);
 
     //   activeRealmFolder — the realm being played (AppServices.ActiveRealmFolder),
     //                       asked each time rather than handed over, so a room map
@@ -152,21 +166,50 @@ public sealed class LearnedRoomNameStore
     // A profile was loaded or closed, or a BBS pinned: the realm may be another.
     public void OnRealmChanged() => Apply(announce: FollowRealm());
 
-    // Profile.BbsRenamed: a folder above the realm's was renamed. Under it, the
-    // realm is the same one at another path: its file went with the folder, and
-    // what is held and still to be written goes on to the new path. Without this
-    // the next heartbeat finds no file where the folder was and takes the names
-    // off the map.
+    // Profile.BbsRenamed, Profile.RealmRenamed: the realm's folder, or the BBS
+    // folder above it, was renamed. The realm is the same one at another path,
+    // with or without a names file in it yet: what is held, still to be written,
+    // or learned this session and not saved goes on to the new path. Without this
+    // the next look finds no file where the folder was, and takes the names off
+    // the map as another realm's.
+    //
+    // Only the folder is followed here; the realm in play is not asked for. A
+    // rename is told before the new name is saved with the BBS (Settings saves
+    // the BBS after it moves the folders), so until the re-pin that follows, the
+    // realm in play can read as another. Read under its old name meanwhile, it is
+    // not taken for a change of realm.
     public void OnFolderRenamed(string from, string to)
     {
         ArgumentNullException.ThrowIfNull(from);
         ArgumentNullException.ThrowIfNull(to);
-        if (_realmFolder is { } held && held.Length > from.Length
-            && held.StartsWith(from, StringComparison.Ordinal)
-            && held[from.Length] is char next
-            && (next == Path.DirectorySeparatorChar || next == Path.AltDirectorySeparatorChar))
-            _realmFolder = to + held[from.Length..];
-        OnRealmChanged();
+        if (_realmFolder is not { } held || Moved(held, from, to) is not { } moved) return;
+        _realmFolder = moved;
+        // A BBS and its realm renamed in one OK: the realm's old name under the
+        // BBS's new one is an old name too.
+        foreach (string old in _oldNamesUntilPinned.ToList())
+            if (Moved(old, from, to) is { } alsoOld) _oldNamesUntilPinned.Add(alsoOld);
+        _oldNamesUntilPinned.Add(held);
+        foreach (string earlier in _renamedTo.Keys.ToList())
+            if (string.Equals(_renamedTo[earlier], held, StringComparison.Ordinal)) _renamedTo[earlier] = moved;
+        _renamedTo[held] = moved;
+        foreach ((string realm, string set, RoomKey room, string name) in _asked.ToList())
+            if (string.Equals(realm, held, StringComparison.Ordinal))
+            {
+                _asked.Remove((realm, set, room, name));
+                _asked.Add((moved, set, room, name));
+            }
+        _log?.Info(LogCategory, $"the realm's folder moved to '{moved}': its names, kept and unsaved, go with it");
+    }
+
+    // path with folder from renamed to, or null when path is neither from nor
+    // inside it.
+    private static string? Moved(string path, string from, string to)
+    {
+        if (string.Equals(path, from, StringComparison.Ordinal)) return to;
+        bool inside = path.Length > from.Length
+            && path.StartsWith(from, StringComparison.Ordinal)
+            && (path[from.Length] == Path.DirectorySeparatorChar || path[from.Length] == Path.AltDirectorySeparatorChar);
+        return inside ? to + path[from.Length..] : null;
     }
 
     // Re-read the file when another client on the realm has written it, and write
@@ -179,6 +222,7 @@ public sealed class LearnedRoomNameStore
         bool changed = RereadIfChangedOutside();
         if (changed) Apply(announce: false);
         TryWrite();
+        if (_applyOwed) Apply(announce: false);
         return changed;
     }
 
@@ -208,6 +252,7 @@ public sealed class LearnedRoomNameStore
         // The text is not echoed where it is refused: it may be what is wrong with it.
         if (!Usable(name, out string clean)) return KeepResult.NotARoomName;
         if (_realmFolder is null || _graph.ActiveSet is not { Length: > 0 } set) return KeepResult.NoRealmOrSet;
+        if (seenOnRealm is not null && _renamedTo.TryGetValue(seenOnRealm, out string? since)) seenOnRealm = since;
         if (!string.Equals(seenOnRealm, _realmFolder, StringComparison.Ordinal)) return KeepResult.OtherRealm;
         if (!string.Equals(seenOnSet, set, StringComparison.OrdinalIgnoreCase)) return KeepResult.OtherSet;
         if (_graph.GetRoom(room) is not { } onMap || !string.Equals(onMap.Name, name, StringComparison.Ordinal))
@@ -220,6 +265,7 @@ public sealed class LearnedRoomNameStore
         // lays this name over what it finds.
         Apply(announce: false);
         TryWrite();
+        if (_applyOwed) Apply(announce: false);
         KeepResult result = _unwritten.Count == 0 ? KeepResult.Stored
             : _newer ? KeepResult.HeldLaterFormat
             : _unread ? KeepResult.HeldUnread
@@ -254,53 +300,33 @@ public sealed class LearnedRoomNameStore
     {
         string? folder = _activeRealmFolder();
         if (string.IsNullOrWhiteSpace(folder)) folder = null;
-        if (string.Equals(folder, _realmFolder, StringComparison.Ordinal)) return false;
-
-        if (folder is not null && _realmFolder is not null && IsTheSameRealmRenamed(_realmFolder, folder))
+        if (string.Equals(folder, _realmFolder, StringComparison.Ordinal))
         {
-            _realmFolder = folder;
+            _oldNamesUntilPinned.Clear();
             return false;
         }
+        if (folder is not null && _oldNamesUntilPinned.Contains(folder)) return false;
 
+        // A folder told of by no rename is another realm: the store doesn't guess
+        // at a rename from what the folders hold.
+        //
         // What the realm being left is still owed, laid over its file as it is
-        // now. Not when its folder is gone (removed, or renamed with no word of
-        // it): writing would make the folder again under the old name.
-        if (_unwritten.Count > 0 && _realmFolder is not null && Directory.Exists(_realmFolder))
-        {
-            RereadIfChangedOutside();
-            TryWrite();
-        }
+        // now (TryWrite reads it again first). Not when its folder is gone
+        // (removed, or renamed with no word of it): writing would make the folder
+        // again under the old name.
+        if (_unwritten.Count > 0 && _realmFolder is not null && Directory.Exists(_realmFolder)) TryWrite();
+        _oldNamesUntilPinned.Clear();
         _realmFolder = folder;
         _bySet.Clear();
         _unwritten.Clear();
-        _unparsed = _unread = _newer = _unwritable = false;
+        _unparsed = _unread = _newer = _unwritable = _applyOwed = false;
         // What the tracker learned on the board being left is not this board's.
         _graph.WithdrawLearnedNames();
-        if (folder is not null && TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)) Take(onFile);
+        if (folder is null) return true;
+        foreach (string temp in SharedFileWrite.RemoveStaleTemps(AppPaths.RealmLearnedRoomNamesFile(folder)))
+            _log?.Info(LogCategory, $"removed '{temp}', left by a write that never finished");
+        if (TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)) Take(onFile);
         return true;
-    }
-
-    // A realm renamed arrives as a BBS pin with another folder and no word that
-    // it is the same realm. It is taken for one only when all of this holds: the
-    // new folder is beside the old (the same BBS), the old one is gone, and the
-    // new one holds a names file with the very write time of the one last read or
-    // written here, which a folder moved whole keeps and another realm's file
-    // would not have. Then what is held, what is still to be written and the
-    // session's names stay, as for a BBS rename. A realm with no names file yet
-    // can't be told from a realm removed, and is treated as a change.
-    private bool IsTheSameRealmRenamed(string old, string folder)
-    {
-        if (!string.Equals(Path.GetDirectoryName(old), Path.GetDirectoryName(folder), StringComparison.Ordinal))
-            return false;
-        string moved = AppPaths.RealmLearnedRoomNamesFile(folder);
-        try
-        {
-            return !Directory.Exists(old) && File.Exists(moved) && !_stamp.ChangedOutside(moved);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
     }
 
     // Put what is held for the map's set on the map, and drop what the data has
@@ -308,6 +334,7 @@ public sealed class LearnedRoomNameStore
     //   announce — say the count: the map was rebuilt or the realm changed.
     private void Apply(bool announce)
     {
+        _applyOwed = false;
         RereadIfChangedOutside();
         string? set = _graph.ActiveSet;
         Dictionary<RoomKey, string>? held = HeldForActiveSet();
@@ -349,7 +376,19 @@ public sealed class LearnedRoomNameStore
         if (_realmFolder is null) return false;
         if (!_unread && !_stamp.ChangedOutside(AppPaths.RealmLearnedRoomNamesFile(_realmFolder))) return false;
         if (!TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile)) return false;
+        TakeWithUnwritten(onFile);
+        _log?.Debug(LogCategory, "re-read: the realm's file changed, or could be opened again");
+        return true;
+    }
 
+    private void Take(Dictionary<string, Dictionary<RoomKey, string>> onFile)
+    {
+        foreach ((string set, Dictionary<RoomKey, string> names) in onFile) _bySet[set] = names;
+    }
+
+    // Hold what is on file, with this client's unwritten changes laid over it.
+    private void TakeWithUnwritten(Dictionary<string, Dictionary<RoomKey, string>> onFile)
+    {
         _bySet.Clear();
         Take(onFile);
         foreach ((string set, RoomKey room, string? name) in _unwritten)
@@ -362,21 +401,13 @@ public sealed class LearnedRoomNameStore
             if (!_bySet.TryGetValue(set, out Dictionary<RoomKey, string>? into)) _bySet[set] = into = new();
             into[room] = name;
         }
-        _log?.Debug(LogCategory, "re-read: the realm's file changed, or could be opened again");
-        return true;
-    }
-
-    private void Take(Dictionary<string, Dictionary<RoomKey, string>> onFile)
-    {
-        foreach ((string set, Dictionary<RoomKey, string> names) in onFile) _bySet[set] = names;
     }
 
     // ----- the file ------------------------------------------------------
     //
     // TryRead, TryWrite and the flags follow LearnedArrivalRoomStore's. They are a
-    // copy and not a shared helper because the two differ where it matters: this
-    // one holds a file it couldn't open back from being written at all (that one
-    // sets it aside), and each reads its own shape entry by entry.
+    // copy and not a shared helper because each reads its own shape entry by
+    // entry, and lays its own kind of unwritten change over what it read.
 
     // Every member can come back null from a file put together by hand.
     private sealed class FileShape
@@ -495,6 +526,11 @@ public sealed class LearnedRoomNameStore
     // Write what is held, when there is something the disk doesn't have. A failure
     // is said once and tried again on the next change or heartbeat; the names stay
     // in memory meanwhile.
+    //
+    // The file is read again and written under one hold, so no other client
+    // writes in between: this client's changes go over everything on file, a
+    // write made within the file clock's step of this client's last read too,
+    // which the stamp can't tell from that read.
     private void TryWrite()
     {
         if (_realmFolder is null || _unwritten.Count == 0 || _newer || _unread) return;
@@ -502,6 +538,15 @@ public sealed class LearnedRoomNameStore
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using IDisposable hold = SharedFileWrite.Hold(path, out TimeSpan waited);
+            if (waited > SlowHold)
+                _log?.Debug(LogCategory, $"waited {waited.TotalMilliseconds:0} ms for another client's write of '{path}'");
+            if (TryRead(out Dictionary<string, Dictionary<RoomKey, string>> onFile))
+            {
+                TakeWithUnwritten(onFile);
+                _applyOwed = true;
+            }
+            else if (_newer || _unread) return;
             // A file that doesn't parse may hold every name kept so far, one slip
             // of a hand edit away from reading again. It is moved aside, under a
             // name nothing else has, before anything is written in its place.
@@ -534,7 +579,7 @@ public sealed class LearnedRoomNameStore
             };
             // Written beside the file and moved over it, so another client reading
             // at this moment sees the old list or the new, never half of one.
-            string temp = $"{path}.{Environment.ProcessId}.tmp";
+            string temp = SharedFileWrite.TempFor(path);
             File.WriteAllText(temp, JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true }));
             File.Move(temp, path, overwrite: true);
             _stamp.Mark(path);

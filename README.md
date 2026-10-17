@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.1**
-> - Settings search highlights matching tabs like Help's search, and no longer hides the rest
-> - It searches what each tab shows, tooltips included, with a match count under the tab list
-> - The open tab highlights its matching settings and scrolls to the first
-> - The search stays while you move between tabs
+> **Version 3.181.6**
+> - Learned arrival rooms: a file another program holds is retried, not set aside as damaged
+> - Two clients writing learned room names or arrival rooms at once take turns, so neither loses the other's
+> - A temporary file left by a write that never finished is removed when the realm or set loads
+> - A renamed realm keeps its learned room names, saved or not, with or without a names file yet
+> - A room name learned on a walk reaches the trainer, bank and item-giver lists once the walk goes quiet
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
