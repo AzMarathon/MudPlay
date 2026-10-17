@@ -396,8 +396,7 @@ public sealed partial class PartyManager : IDisposable
         // disconnected" / "X just entered the Realm" line because a party
         // member who drops while we're looking has to leave the roster
         // immediately, but if they re-connect within the grace window and we're
-        // the leader we auto-invite them back. PartyMemberDeath is the
-        // conservative PvP-kill match.
+        // the leader we auto-invite them back.
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerDisconnects,        OnPlayerDisconnects));
         // "X just hung up!!!" — clean logoff via in-game hangup. Same
         // remove-and-grace-window treatment as a connection drop; the
@@ -413,9 +412,8 @@ public sealed partial class PartyManager : IDisposable
         // re-invites them, and fall through to full dissolution on a leader's.
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerExits,              OnPlayerDisconnects));
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerEnters,             OnPlayerEnters));
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberDeath,         OnMemberDeath));
         // Dissolution signals — the per-row evictions we already had
-        // (StopsFollowing / MemberDeath / Disconnect) handle individual
+        // (StopsFollowing / Disconnect) handle individual
         // departures; these cover the uninvite + leader-removal + total-
         // dissolve cases the screenshot-reported bug exposed.
         _subs.Add(_router.Subscribe(KnownPatterns.PartyFollowerRemoved,      OnFollowerRemoved));
@@ -1115,24 +1113,6 @@ public sealed partial class PartyManager : IDisposable
         // family. "invite Raijin", not "invite Raijin WuzHere".
         byte[] bytes = System.Text.Encoding.Latin1.GetBytes($"invite {GivenNameOf(name)}\r");
         _wireSender(bytes);
-    }
-
-    // "X has been slain by Y." — if X is in our roster, remove them immediately.
-    // No grace window for death (death isn't recoverable the way a disconnect is
-    // — the leader doesn't auto-invite a corpse).
-    private void OnMemberDeath(MatchResult result)
-    {
-        if (result.Groups.Count == 0) return;
-        string name = result.Groups[0];
-        if (string.IsNullOrEmpty(name)) return;
-        foreach (PartyMember m in State.Members)
-        {
-            if (m.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveMember(name);
-                return;
-            }
-        }
     }
 
     // Test seam — read-only view of the disconnect grace window.

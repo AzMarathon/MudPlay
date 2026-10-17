@@ -1014,6 +1014,15 @@ With party heal spells configured (Settings → Party), members watch each other
 
 **A partymate who drops to the ground** is aided at once, and movement holds so the party doesn't walk off (or drag them into a lair) while they're down. Aid only stops the bleeding: they climb back 1 HP every 30 s and can't act until their HP is positive. So the hold lasts as long as that climb can take — worked out from their HP if their client answers, otherwise from the realm's death floor (Settings → BBS + Display) as the worst case. Your downed-ally heal speeds it up. Once they should be up, MudPlay checks their health; when they answer standing, a leader re-invites them, and the hold releases once they're back to the party-heal bar.
 
+**A partymate who dies** in your room (*Raijin is dead.*) is checked against the party list. MudPlay sends one `par` and reads the reply; it sends none when a `par` it sent is still unanswered, or when the `par` timer (Settings → Party → *Send `par`*) sends its next within 5 seconds, since that reply answers just as soon. Like the poll, it waits for you to be in the game and out of the trainer menu, and nothing goes out with the **Auto-All** master switch off; the next `par` read then answers it, your own included.
+
+- **Not on the list any more** (Stock takes a dead member off it): they leave your Party window.
+- **Listed as Invited** (Paradigm keeps a dead member's slot): when you lead, MudPlay uninvites them once the fight in the room is over, whether or not a loop is running, so a loop doesn't wait for them as if they were an invite. As a follower you can't uninvite, and the row stays.
+
+**Only a death MudPlay saw does this.** A member shown as Invited with no *is dead.* line for them, as after a teleport that splits the party, is never uninvited or taken off the list for it. And if you, or MudPlay's auto-invite, invite the dead member again before the fight is over, or they follow you again, they are not uninvited. MudPlay's own uninvite of a dead member doesn't count as you turning them away: auto-invite still invites them when it next sees them.
+
+Your leader's death needs no check: the game ends your follow itself. A follower is always in the leader's room, so a member's death is always seen there. Each step is in the program log under **Party**, and the bug report's party section shows the last one.
+
 ## Remote @-commands
 
 A remote command is a line of chat that starts with `@`. Another player sends it to your character; MudPlay reads it, checks that this player may ask for it, does it, and answers on the channel it came in on. It is how a leader steers followers, how a party asks its healer for a heal, and how two MudPlay clients hand each other loops, boss timers and Roomba logs.
@@ -5102,12 +5111,12 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 
 **Default:** `-25`
 **What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
-**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
+**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from the HP you survive and lowers this automatically; it never raises it.
 
 ### Auto-refine the floor from slow deaths
 
 **Default:** On
-**What it does:** Lets MudPlay learn this realm's real death floor from deaths where you bled out slowly (they land right at the floor) and update **Player dies at (HP)** to match. A single big overkill hit blows past the floor and is ignored. Turn it off to keep the value you typed.
+**What it does:** Lets MudPlay learn this realm's real death floor from the negative HP you are seen to survive, and update **Player dies at (HP)** to match. Each such HP proves the floor is below it: one you bled on from, and the last HP shown before a death where you bled out slowly. MudPlay only ever **lowers** the value, to one below the deepest HP survived; a death never raises it, since a floor set too shallow would stop the emergency hang-up short. A death by a single big overkill hit is ignored. Turn it off to keep the value you typed.
 
 ### PvP is enabled on this realm
 
@@ -5894,6 +5903,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 **What it does:** After inviting someone, MudPlay follows up with reminder nags if they haven't joined yet, on a repeating cadence, until they join, decline, or the attempt window runs out.
 **On each realm:** on Paradigm it governs only those nags after an invite. On Stock it also governs the `@join` a leader sends in an invite's place to a member an exit left behind (see **How they come back differs by realm** under *If leading, wait only (s)*): with this off no `@join` is sent there either, and the member is invited at once, as on Paradigm.
 **Important notes:** Only a typed reply counts as declining. Their client's automatic traffic doesn't: replies in `{…}` or `@`-commands such as the `@where` a follower sends when its party breaks. If someone flagged *Invite to party if seen* is left sitting in an `[Invited]` slot with no nag running (a follow that broke, a nag they cut off), seeing them again re-sends the invite and starts a fresh nag.
+**After a teleport that splits the party:** each member is invited as they land and sent up to **3** nags at this cadence. The wait for them (*If leading, wait only (s)*) doesn't run out until the third nag has gone one resend interval unanswered; after that, if they still haven't joined, MudPlay does what it always does when the wait ends (it uninvites them and goes on). Joining at any point ends the wait and the nags. The **Max attempt window** below doesn't cut these three short, so a long resend interval, or Auto-All switched off for a while between nags, still gets all three and a full interval after the last. A member who answers `{Ok}` gets no more nags, and the wait ends when it always did. A member who is never seen to land, or a nag you've turned off here, ends with the wait as before.
 
 ### First nag after (seconds) / Resend frequency (seconds) / Max attempt window (seconds)
 
@@ -6960,7 +6970,7 @@ The two timer cues are checked every 30 seconds while you're in the game, and ea
 
 **Danger**
 
-- **You died**.
+- **You died** — the game says *You have been killed!*: any death by damage, your last life's included. A `suicide` makes no sound.
 - **Mortally wounded** — you drop to the ground.
 - **Fleeing** — a flee starts: low HP or mana, a hit-and-run or failed-backstab retreat, a PvP flee back along your route, or a monster set to **Flee** seen in the room.
 - **Navigation stopped** — a walk or loop fails, or the client loses track of the room.

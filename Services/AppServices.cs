@@ -1697,10 +1697,9 @@ public sealed class AppServices
         return Math.Max(0, Inventory.Snapshot.Currency.TotalCopperValue - Math.Max(0, keep));
     }
 
-    // Observes the "You have been slain by..."
-    // line and emits Game.Combat.DeathLineWatcher.PlayerDied.
-    // DeathRecoveryManager is the primary consumer; other
-    // engines subscribe for their own death-clean-up paths.
+    // Raises PlayerDied on "You have been killed!", ahead of the lives readout
+    // RoomTracker.PlayerDeathObserved rides: the round ledger, the death-floor
+    // tracer and the death sound take it.
     public Game.Combat.DeathLineWatcher DeathWatcher { get; private set; } = null!;
 
     // Refines the active realm's negative-HP death floor
@@ -2724,12 +2723,10 @@ public sealed class AppServices
     // rejoin, death, logoff, or timeout.
     public Game.AllyDroppedHandler AllyDropped { get; private set; } = null!;
 
-    // Party-death roster-cleanup bridge — when we're leading an automated route
-    // and an active member dies (turning into a phantom [Invited] par slot),
-    // uninvites that slot once the room clears so the loop doesn't stall on the
-    // PartyInviteGate waiting for a corpse to "join". Needs MovementControl for
-    // the movement-active gate, so it's constructed later than the other party
-    // bridges.
+    // Party-death roster cleanup — when an active member dies in our room, asks
+    // `par` whether they are still on the list; a dead member it lists [Invited]
+    // is uninvited (when we lead) once the room clears, so the loop doesn't stall
+    // on the PartyInviteGate waiting for a corpse to "join".
     public Game.PartyDeathRosterCleanup PartyDeathCleanup { get; private set; } = null!;
 
     // Leader-rest bridge — nudges Health to re-evaluate when
@@ -4644,29 +4641,28 @@ public sealed class AppServices
         // CombatSessionTracker is constructed after Inventory (its
         // proc recogniser reads the worn-weapon snapshot) — see below.
 
-        // Local-death observation. Pure subscriber;
-        // DeathRecoveryManager consumes the PlayerDied event
-        // for its corpse-recovery flow. Reset the in-flight round
-        // accumulator on death so a partial round doesn't get
-        // attributed to the next combat.
+        // Local-death observation. Reset the in-flight round accumulator on
+        // death so a partial round doesn't get attributed to the next combat.
         DeathWatcher = new Game.Combat.DeathLineWatcher(Router, Log);
-        DeathWatcher.PlayerDied += _ => RoundDamage.MarkCombatEnded();
+        DeathWatcher.PlayerDied += () => RoundDamage.MarkCombatEnded();
 
         // Death-floor tracer. Watches the HP descent into each death and, on a
         // clean slow death (bled gradually to the floor, not overkilled), refines
         // the active BBS's PlayerDiesAtHp to the measured value — the seed is only
         // a guess. Reads / persists the realm profile through the same
-        // ResolveActiveBbs / Bbs.Save path the settings UI uses.
+        // ResolveActiveBbs / Bbs.Save path the settings UI uses. On the death
+        // line, not the lives readout: the last HP read is still the one died at,
+        // and a death on the last life prints no readout.
         DeathFloorTracer = new Game.Health.DeathFloorTracer(
             PlayerState, ResolveActiveRealm, Bbs.Save, Log);
-        DeathWatcher.PlayerDied += _ => DeathFloorTracer.RecordDeath();
+        DeathWatcher.PlayerDied += () => DeathFloorTracer.RecordDeath();
 
         // Death-halt bridge. On our death, stops every movement engine (via
         // UserGate) so we stay in the graveyard we respawn into until the player
         // manually resumes — no loop / walk-to / auto-lair marches us back out
-        // before we've recovered. Rides RoomTracker.PlayerDeathObserved (fires on
-        // BOTH death phrasings) rather than DeathLineWatcher's "slain by"-only line
-        // so a miracle-save death halts too.
+        // before we've recovered. Rides RoomTracker.PlayerDeathObserved, the
+        // lives readout every death that leaves a character prints, a suicide's
+        // included.
         PlayerDeathHalt = new Game.PlayerDeathMovementHalt(RoomTracker, MovementCoordinator, Log);
 
         // Dropped / mortally-wounded bridge. While HP is at or below 0 the
@@ -6184,14 +6180,13 @@ public sealed class AppServices
         AutoLight = new Game.Light.AutoLightManager(Router, Needs, Log);
         AutoLight.SetEnabledToggle(() => ReadAutoModeFlag(d => d.AutoLight));
 
-        // DeathRecoveryManager. Aggregates the
-        // DeathLineWatcher.PlayerDied event + the profile's
+        // DeathRecoveryManager. Aggregates the profile's
         // DeathHistory list (written by DeathDetector ->
         // RoomTracker.NoteDeath) into observables the Workshop
         // DEATH section binds to. (@comeback is a separate party-pickup
         // flow owned by PartyComebackManager, wired after the engines.)
         DeathRecovery = new Game.Recovery.DeathRecoveryManager(
-            DeathWatcher, Profile, RoomTracker, Log);
+            Profile, RoomTracker, Log);
 
         // InventoryManager. Parses the full `i` dump into a
         // currency + numeric-encumbrance snapshot and patches it on
@@ -9539,8 +9534,8 @@ public sealed class AppServices
         // Our death wipes only OUR buffs — clear the self timers; party members stayed
         // alive, so their buff timers we hold are kept (don't re-bless them because we
         // died). A party MEMBER's death wipes THEIR buffs — clear the timers we hold on
-        // that name ("<Name> has died." also fires for mobs, but that's a no-op since we
-        // hold no timer for them).
+        // that name ("<Name> is dead." names any player in the room; one we hold no
+        // timer on is a no-op).
         RoomTracker.PlayerDeathObserved += () => CastDirector.ClearSelfBuffTracking();
         Router.Subscribe(Services.Patterns.KnownPatterns.PartyMemberDied, r =>
         {
@@ -9555,14 +9550,13 @@ public sealed class AppServices
         // "I'm following someone; denied." (report: died via suicide, still following).
         RoomTracker.PlayerDeathObserved += () => Party.NoteSelfDropped();
 
-        // Party-death roster-cleanup bridge. Leader-side: when an active party
-        // member dies mid-route it lingers as an [Invited] par slot; we uninvite
-        // that phantom once combat clears so the loop / walk-to doesn't stall on
-        // the PartyInviteGate. Gated on a movement engine actually running so
-        // hands-on party management is left to the user.
+        // A party member's death in our room: one `par` shows whether they are still
+        // on the list. Not listed, the roster drops them; listed [Invited], a leader
+        // uninvites them once combat clears.
         PartyDeathCleanup = new Game.PartyDeathRosterCleanup(
-            Router, PartyState, Party, MovementCoordinator,
-            isMovementActive: () => MovementControl.IsActive, log: Log);
+            Router, PartyState, Party, MovementCoordinator, PartyPoller, Log);
+        // That uninvite is the client's, not the user turning the player away.
+        AutoParty.UninvitedForDeath = given => PartyDeathCleanup.UninvitedForDeath(given);
 
         // Shared room-search resolver — backs the Nav rail search
         // box AND the @goto handler. Subscribes to ActiveSetChanged
@@ -11177,7 +11171,7 @@ public sealed class AppServices
         AllyDropped.AllyDown += _ => Sounds.Fire(Game.Sounds.SoundCues.PartyMemberDown);
 
         // Danger.
-        DeathWatcher.PlayerDied += _ => Sounds.Fire(Game.Sounds.SoundCues.Death);
+        DeathWatcher.PlayerDied += () => Sounds.Fire(Game.Sounds.SoundCues.Death);
         bool down = false;
         PlayerState.PropertyChanged += (_, e) =>
         {
