@@ -21,6 +21,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     private readonly ProfileService _profile;
     private readonly LogDiagnosticState _diagnostics;
     private readonly Game.Map.RoomGraphManager _graph;
+    private readonly CorpseHandoffManager _handoff;
     private Control? _view;
 
     public override string Id => "death";
@@ -36,6 +37,29 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(HowDidIDieCommand))]
     private DeathRecord? _selectedRecord;
 
+    // Other players' corpses recovered for them and not yet handed back.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHandoffs))]
+    private IReadOnlyList<CorpseHandoffRecord> _handoffs = Array.Empty<CorpseHandoffRecord>();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CorpseHandoffCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearHandoffCommand))]
+    private CorpseHandoffRecord? _selectedHandoff;
+
+    // Who the handoff gives to: the corpse's owner unless the user types another name.
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CorpseHandoffCommand))]
+    private string _handoffRecipient = string.Empty;
+
+    // Why a handoff couldn't start, or how the selected record's last one went.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHandoffStatus))]
+    private string _handoffStatus = string.Empty;
+
+    public bool HasHandoffs => Handoffs.Count > 0;
+    public bool HasHandoffStatus => HandoffStatus.Length > 0;
+
     public DeathSectionViewModel(DeathRecoveryManager recovery, ProfileService profile)
     {
         ArgumentNullException.ThrowIfNull(recovery);
@@ -49,8 +73,42 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         // Which records Recover Now may go for turns on the game data the map holds.
         _graph = AppServices.Current.RoomGraph;
         _graph.GraphReloaded += OnGraphReloaded;
+        _handoff = AppServices.Current.CorpseHandoff;
+        _handoff.Changed += OnHandoffChanged;
         Refresh();
+        RefreshHandoffs();
     }
+
+    private void OnHandoffChanged() => Dispatcher.UIThread.Post(RefreshHandoffs);
+
+    private void RefreshHandoffs()
+    {
+        CorpseHandoffRecord? prev = SelectedHandoff;
+        Handoffs = _handoff.Records;
+        SelectedHandoff = prev is not null && Handoffs.Contains(prev) ? prev : Handoffs.FirstOrDefault();
+        HandoffStatus = SelectedHandoff?.Note ?? string.Empty;
+        CorpseHandoffCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedHandoffChanged(CorpseHandoffRecord? value)
+    {
+        HandoffRecipient = value is null ? string.Empty : CorpseRecoveryLines.GivenName(value.Owner);
+        HandoffStatus = value?.Note ?? string.Empty;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanHandOff))]
+    private void CorpseHandoff()
+    {
+        if (SelectedHandoff is not { } r) return;
+        if (_handoff.StartHandoff(r, HandoffRecipient) is { } refusal) HandoffStatus = refusal;
+    }
+
+    [RelayCommand(CanExecute = nameof(HasHandoffSelection))]
+    private void ClearHandoff() { if (SelectedHandoff is { } r) _handoff.Clear(r); }
+
+    private bool CanHandOff() => SelectedHandoff is not null && !_handoff.HandoffActive
+        && !string.IsNullOrWhiteSpace(HandoffRecipient);
+    private bool HasHandoffSelection() => SelectedHandoff is not null;
 
     private void OnGraphReloaded() => Dispatcher.UIThread.Post(Refresh);
 
@@ -200,5 +258,6 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         _profile.ProfileLoaded -= OnProfileChanged;
         _diagnostics.Changed -= OnDiagnosticsChanged;
         _graph.GraphReloaded -= OnGraphReloaded;
+        _handoff.Changed -= OnHandoffChanged;
     }
 }

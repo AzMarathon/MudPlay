@@ -27,7 +27,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Margin="22" RowDefinitions="Auto,Auto,*,Auto,Auto">
 
         <!-- Header: recovery toggles (current lives live on the Character Info tab). -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -105,10 +105,56 @@
             </DataGrid.Columns>
         </DataGrid>
 
+        <!-- Other players' corpses recovered with `recover corpse <name> <password>`
+             and not yet handed back. Only shown once there is one. -->
+        <Border Grid.Row="3" Margin="0,10,0,0" Padding="12"
+                IsVisible="{Binding HasHandoffs}"
+                Background="{StaticResource ChromeBgElevBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}"
+                BorderThickness="1" CornerRadius="4">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="SectionHeader" Text="Corpses to hand back" Margin="0"/>
+                <ListBox ItemsSource="{Binding Handoffs}"
+                         SelectedItem="{Binding SelectedHandoff, Mode=TwoWay}"
+                         MaxHeight="120"
+                         Background="{StaticResource ChromeBgSunkenBrush}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="profile:CorpseHandoffRecord">
+                            <StackPanel Spacing="2">
+                                <TextBlock Classes="FieldValue" FontWeight="Normal" TextWrapping="Wrap"
+                                           Text="{Binding Summary}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Classes="FieldLabel" Text="{Binding RoomText}"/>
+                                    <TextBlock Classes="FieldLabel" FontFamily="{StaticResource FontMono}"
+                                               Text="{Binding RecoveredText}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <WrapPanel Orientation="Horizontal">
+                    <TextBlock Classes="FieldLabel" Text="Hand to:" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                    <TextBox Width="180" Margin="0,0,6,6"
+                             Text="{Binding HandoffRecipient, Mode=TwoWay}"
+                             PlaceholderText="player name"
+                             ToolTip.Tip="The player to give everything to. Filled with the corpse's owner when you pick a corpse."/>
+                    <Button Content="Corpse handoff" Margin="0,0,6,6"
+                            Command="{Binding CorpseHandoffCommand}"
+                            ToolTip.Tip="Give that player every item and coin recovered from this corpse, one give at a time. Each one the game confirms comes off the list; anything refused or not answered stays listed."/>
+                    <Button Content="Clear" Margin="0,0,6,6"
+                            Command="{Binding ClearHandoffCommand}"
+                            ToolTip.Tip="Take this corpse off the list without giving anything."/>
+                </WrapPanel>
+                <TextBlock Classes="FieldLabel" TextWrapping="Wrap"
+                           IsVisible="{Binding HasHandoffStatus}"
+                           Text="{Binding HandoffStatus}"/>
+            </StackPanel>
+        </Border>
+
         <!-- Detail panel — always visible, reflecting the selected grid
              row. Bounded height + scroll so long item lists don't stretch
              the section. -->
-        <Border Grid.Row="3" Margin="0,10,0,0" Padding="12"
+        <Border Grid.Row="4" Margin="0,10,0,0" Padding="12"
                 Background="{StaticResource ChromeBgElevBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="1" CornerRadius="4">

@@ -88,7 +88,7 @@ public sealed class DoHandler : IDisposable
         try { _wireSender(bytes); }
         finally { SendingFor = null; }
         _log?.Log(LogSeverity.Info, "RemoteCmd",
-            $"@do from {ctx.Sender}: '{command}'");
+            $"@do from {ctx.Sender}: '{Recovery.CorpseRecoveryLines.Redact(command)}'");
         // Acknowledge the request — sender gets {ok} on the same
         // channel they used, mirroring the existing curly-brace
         // meta-line convention every other handler reply uses. Lets

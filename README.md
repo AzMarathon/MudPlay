@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.34**
+> **Version 3.182.2**
 > - `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?`, as in every reply
 > - The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
 >
