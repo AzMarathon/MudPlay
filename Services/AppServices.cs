@@ -6288,7 +6288,7 @@ public sealed class AppServices
         // the boundaries that move them: connect / char switch (ProfileLoaded, which
         // also zeroes the session in lockstep with RoundDamage), a Combat-tab edit
         // (ProfileMutated), a game-data set swap, and a spellbook change.
-        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers, IsPartyMemberName);
+        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers, IsPartyMemberOrSelfName);
         RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell, CombatSession.MatchesOwnRoomSpell);
         RoundDamage.SetOwnSpellRepeating(() => Combat.IsRepeatingSpell);
         Combat.BackstabResolved += CombatSession.OnBackstabResolved;
@@ -7577,7 +7577,7 @@ public sealed class AppServices
         // combat-line patterns CombatSessionTracker does, attributed per
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
-            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log, isPartyMember: IsPartyMemberName);
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log, isPartyMember: IsPartyMemberOrSelfName);
         // One judge of what was a swing: a miss the session figures take back as a
         // spell's cast line comes off the monster's record too.
         CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();
@@ -14167,6 +14167,19 @@ public sealed class AppServices
     // name a current party member? Party names can be one or two words and the wire
     // line often uses just the first, so match the full name or its first token.
     // Backs the pyramid solver's party-member hold detection.
+    // A party member's name, or our own in game (party or solo): our cast at either is
+    // a buff, never a swing at a monster, so the combat stats skip its negate / resist.
+    private bool IsPartyMemberOrSelfName(string name) =>
+        IsPartyMemberOrSelfName(name, IsPartyMemberName, PlayerStats.Name);
+
+    internal static bool IsPartyMemberOrSelfName(string name, Func<string, bool> isPartyMember, string selfName)
+    {
+        if (isPartyMember(name)) return true;
+        static string First(string n) => n.Trim().Split(' ')[0];
+        return selfName.Trim().Length > 0 && name.Trim().Length > 0
+            && string.Equals(First(name), First(selfName), StringComparison.OrdinalIgnoreCase);
+    }
+
     private bool IsPartyMemberName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;

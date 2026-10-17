@@ -225,6 +225,30 @@ public sealed class CombatSessionTrackerTests
         Assert.Equal(misses, h.Stats.Misses);
     }
 
+    // Solo, a cast at our own name is never a swing at a monster: the wiring counts
+    // our own in-game name alongside the party roster.
+    [Theory]
+    [InlineData("Fujin", true)]
+    [InlineData("fujin", true)]
+    [InlineData("Batu", false)]
+    [InlineData("kobold", false)]
+    public void PartyMemberOrSelf_SoloCountsOurOwnName(string name, bool expected)
+        => Assert.Equal(expected, AppServices.IsPartyMemberOrSelfName(name, _ => false, "Fujin Windcaller"));
+
+    [Fact]
+    public void PartyMemberOrSelf_NoNameYet_IsNobody()
+        => Assert.False(AppServices.IsPartyMemberOrSelfName("Fujin", _ => false, string.Empty));
+
+    [Fact]
+    public void OwnCastAtOurselvesResisted_Solo_IsNotAMiss()
+    {
+        using Harness h = new(isPartyMember: n => AppServices.IsPartyMemberOrSelfName(n, _ => false, "Fujin"));
+        h.Feed("*Combat Engaged*");
+        h.Feed("You attempt to cast bless at Fujin, but the spell is resisted.");
+        h.Feed("You attempt to cast bless at Fujin, but it's negated!");
+        Assert.Equal(0, h.Stats.Misses);
+    }
+
     [Fact]
     public void PhysicalExtent_SpansAllLandedCategories()
     {
