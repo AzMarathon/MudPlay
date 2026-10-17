@@ -380,6 +380,10 @@ public sealed class CharacterProfile
     // deaths yet (the lucky case).
     public List<DeathRecord>? DeathHistory { get; set; }
 
+    // Other players' corpses this character recovered and has not handed back yet
+    // (Game.Recovery.CorpseHandoffManager). null / empty when there are none.
+    public List<CorpseHandoffRecord>? CorpseHandoffs { get; set; }
+
     // Per-character log of players this character has seen — one aggregated row
     // per player (given name), each carrying the last-seen time, the last room
     // they were seen in, and the running total sighting count. Written by

@@ -19,6 +19,7 @@ using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
 using MudPlay.Views.CharacterWorkshop;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -970,6 +971,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     {
         List<TrialFindFilter> chain = BuildChain();
         if (chain.Count == 0) return;
+        GuideActions.Report(GuideActions.GearFinderRun);
 
         var current = TrialSlots.ToDictionary(r => r.Slot, r => r.ItemName);
         var targets = TrialSlots.Select(r => r.Slot).ToList();

@@ -433,7 +433,57 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         public required List<string> Orders { get; init; }
         // The timers the trip armed and has not been given: each wait's own.
         public required List<(TimeSpan After, Action Fire)> Timers { get; init; }
+        public required Pump Pump { get; init; }
         public Task Running = Task.CompletedTask;
+
+        // Lets the trip go on from whatever ended its wait, as far as it gets.
+        public void GoesOn() => Pump.Drain();
+    }
+
+    // Where the trip goes on after each of its waits. Left to the thread pool, how
+    // soon it went on was up to how busy the machine was; here each await posts its
+    // continuation to this context, and the test runs them on its own thread, in
+    // order, when it calls Drain.
+    private sealed class Pump : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _posted = new();
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_posted) _posted.Enqueue((d, state));
+        }
+
+        public override void Send(SendOrPostCallback d, object? state) =>
+            throw new NotSupportedException("the trip only posts");
+
+        public override SynchronizationContext CreateCopy() => this;
+
+        // Starts the trip under this context, so its first await is posted here.
+        public T Run<T>(Func<T> start)
+        {
+            SynchronizationContext? prior = Current;
+            SetSynchronizationContext(this);
+            try { return start(); }
+            finally { SetSynchronizationContext(prior); }
+        }
+
+        // Everything posted, and everything that posts in turn, until nothing is left.
+        public void Drain()
+        {
+            SynchronizationContext? prior = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                while (TryTake(out (SendOrPostCallback Callback, object? State) next))
+                    next.Callback(next.State);
+            }
+            finally { SetSynchronizationContext(prior); }
+        }
+
+        private bool TryTake(out (SendOrPostCallback Callback, object? State) next)
+        {
+            lock (_posted) return _posted.TryDequeue(out next);
+        }
     }
 
     // A leader with two members to train, each at a trainer of its own: one in the
@@ -495,7 +545,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             selfTimeToLevel: () => null,
             telepathsPending: () => false,
             log: w.Log);
-        Trip trip = new() { Coordinator = coordinator, Trainer = trainer, Orders = orders, Timers = timers };
+        Trip trip = new() { Coordinator = coordinator, Trainer = trainer, Orders = orders, Timers = timers, Pump = new Pump() };
         w.Walker.Event += e => coordinator.OnWalkEvent(e.Kind);
         if (offByTheErrand)
             w.Controller.EndingForGameDataChange += (reason, _) => coordinator.CallOffTrip(reason);
@@ -519,14 +569,14 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             new(PartyTrainReadiness.Ready, Level: 5, ClassNumber: classNumber, LevelsToTrain: 1,
                 CostCopper: 0, CashCopper: 0, SpareCopper: 0, BankCopper: 0, BankName: null, EtaSeconds: 0);
         trip.Timers.Clear();   // the coordinator's own ticks, not the trip's
-        trip.Running = coordinator.RunTripForTests(
+        trip.Running = trip.Pump.Run(() => coordinator.RunTripForTests(
             new PartyTrainDecision(PartyTrainVerdict.Fire, new[] { "Bob", "Cid" }, Array.Empty<string>(), Array.Empty<string>(), "test"),
             new List<PartyTrainParticipant>
             {
                 new("Lead", IsLeader: true, new PartyTrainStatus(PartyTrainReadiness.Waiting, 10, 1, 0, 0, 0, 0, 0, null, 0)),
                 new("Bob", IsLeader: false, Ready(classNumber: 1)),
                 new("Cid", IsLeader: false, Ready(classNumber: 2)),
-            });
+            }));
 
         // Standing at the first trainer, its member told to train there, the trip
         // waiting for that train (its limit is the one timer armed).
@@ -538,20 +588,19 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         return trip;
     }
 
-    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task APartyTrainingTripInAWait_IsCalledOff_AndWalksToNoFurtherStop(bool reimport)
+    public void APartyTrainingTripInAWait_IsCalledOff_AndWalksToNoFurtherStop(bool reimport)
     {
         World w = Build();
         Trip trip = TripWaitingAtItsFirstStop(w);
         int orders = trip.Orders.Count;
 
         string? said = w.Change(reimport);
-        await trip.Running.WaitAsync(Limit);
+        trip.GoesOn();
 
+        Assert.True(trip.Running.IsCompletedSuccessfully);
         Assert.Equal($"[The party training trip stopped: {Why(reimport)}]", said);
         Assert.False(trip.Coordinator.TripRunning);
         Assert.False(trip.Trainer.PartyTripActive);
@@ -560,7 +609,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
 
         // The wait's own limit running out afterwards hands the trip nothing.
         foreach ((_, Action fire) in trip.Timers.ToArray()) fire();
-        await Task.Delay(100);
+        trip.GoesOn();
 
         Assert.True(w.Idle);
         Assert.Empty(w.Sent);
@@ -570,51 +619,56 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
 
     // Called off already by the errand's end in the same stop, it is named all the same.
     [Fact]
-    public async Task ATripCalledOffByTheErrandsEnd_IsStillNamed()
+    public void ATripCalledOffByTheErrandsEnd_IsStillNamed()
     {
         World w = Build();
         Trip trip = TripWaitingAtItsFirstStop(w, offByTheErrand: true);
 
         string? said = w.Change(reimport: false);
-        await trip.Running.WaitAsync(Limit);
+        trip.GoesOn();
 
+        Assert.True(trip.Running.IsCompletedSuccessfully);
         Assert.Equal($"[The party training trip stopped: {Why(false)}]", said);
         // Named once: the same reason again finds nothing of this trip to name.
         Assert.False(trip.Coordinator.TakeCalledOffFor("game data changed from 'alpha' to 'beta'"));
     }
 
     [Fact]
-    public async Task WithNoChangeOfGameData_TheTripWalksOnToItsNextStop()
+    public void WithNoChangeOfGameData_TheTripWalksOnToItsNextStop()
     {
         World w = Build();
         Trip trip = TripWaitingAtItsFirstStop(w);
 
         w.Cache.SwitchSet("ALPHA");
         foreach ((_, Action fire) in trip.Timers.ToArray()) fire();
+        trip.GoesOn();
 
-        Assert.True(SpinWait.SpinUntil(() => w.Walker.State == WalkState.Walking, Limit));
+        Assert.Equal(WalkState.Walking, w.Walker.State);
         Assert.Equal(new RoomKey(1, 3), w.Walker.Destination);
+        Assert.Equal(new[] { "n" }, w.Sent);
         Assert.True(trip.Coordinator.TripRunning);
         w.Walker.Stop("test over");
-        await trip.Running.WaitAsync(Limit);
+        trip.GoesOn();
+        Assert.True(trip.Running.IsCompletedSuccessfully);
     }
 
     // What calling it off guards: the stop ends nothing of a trip in a wait, and when
     // the wait is over the trip walks to the trainer it planned on the old data.
     [Fact]
-    public async Task WithoutThat_TheTripWalksOnAfterTheChange_ByTheOldDatasRoomNumber()
+    public void WithoutThat_TheTripWalksOnAfterTheChange_ByTheOldDatasRoomNumber()
     {
         World w = Build();
         Trip trip = TripWaitingAtItsFirstStop(w, calledOff: false);
 
         Assert.Null(w.Change(reimport: false));
         foreach ((_, Action fire) in trip.Timers.ToArray()) fire();
+        trip.GoesOn();
 
-        // The trip goes on from its wait on another thread: until the step is out.
-        Assert.True(SpinWait.SpinUntil(() => w.Walker.State == WalkState.Walking && w.Sent.Count > 0, Limit));
+        Assert.Equal(WalkState.Walking, w.Walker.State);
         Assert.Equal(new RoomKey(1, 3), w.Walker.Destination);
         Assert.Equal(new[] { "e" }, w.Sent);
         w.Walker.Stop("test over");
-        await trip.Running.WaitAsync(Limit);
+        trip.GoesOn();
+        Assert.True(trip.Running.IsCompletedSuccessfully);
     }
 }
