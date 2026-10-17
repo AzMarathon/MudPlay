@@ -143,6 +143,66 @@ public sealed class SplitReformJoinNagTests
         Assert.True(h.Uninvited);
     }
 
+    // A long resend interval: the nag's own total time (55 s) doesn't cut the
+    // three nags short; the third goes at 55 s and the fallback a full interval on.
+    [Fact]
+    public void LongResendInterval_ThreeNagsThenAFullInterval()
+    {
+        using Harness h = new();
+        h.AutoParty.JoinNagFrequency = TimeSpan.FromSeconds(25);
+        h.Split();
+        for (int t = 5; t <= 75; t += 5) h.TickAt(t);
+        Assert.Equal(AutoPartyManager.SplitReformJoinNags, h.Nags);   // at 5, 30, 55
+        Assert.False(h.Uninvited);
+
+        h.TickAt(80);
+        Assert.True(h.Uninvited);
+        Assert.Equal(AutoPartyManager.SplitReformJoinNags, h.Nags);
+    }
+
+    // The master switch off between nags: they resume when it's back on, all three
+    // go out, and the fallback still waits a full interval after the third.
+    [Fact]
+    public void MasterSwitchOffMidway_ThreeNagsThenAFullInterval()
+    {
+        using Harness h = new();
+        bool off = false;
+        h.AutoParty.MasterSwitchOff = () => off;
+        h.Split();
+        h.TickAt(5);                                   // nag 1
+        off = true;
+        for (int t = 15; t <= 40; t += 5) h.TickAt(t);
+        off = false;
+        h.TickAt(41);                                  // nag 2
+        h.TickAt(51);                                  // nag 3
+        for (int t = 52; t <= 60; t++) h.TickAt(t);    // past the nag's 55 s total
+        Assert.Equal(AutoPartyManager.SplitReformJoinNags, h.Nags);
+        Assert.False(h.Uninvited);
+
+        h.TickAt(61);
+        Assert.True(h.Uninvited);
+    }
+
+    // {Ok} stops the nags short of three; the wait then ends at its window, as it
+    // did before, instead of holding for good.
+    [Fact]
+    public void OkReply_TheWaitStillEndsAtItsWindow()
+    {
+        using Harness h = new();
+        h.AutoParty.InviteWaitWindow = TimeSpan.FromSeconds(30);
+        h.Split();
+        h.TickAt(5);
+        h.Line("Raijin telepaths: {Ok}");
+        h.TickAt(15);
+        h.TickAt(25);
+        Assert.Equal(1, h.Nags);
+        Assert.False(h.Uninvited);
+
+        h.TickAt(30);
+        Assert.True(h.Uninvited);
+        Assert.False(h.Held);
+    }
+
     // With the @join nag turned off there are no nags to wait out: the wait ends
     // as it always did.
     [Fact]

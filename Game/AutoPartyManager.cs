@@ -953,7 +953,12 @@ public sealed class AutoPartyManager : IDisposable
             if (!_activeNags.TryGetValue(given, out NagState? s)) continue;
 
             // Hard cap from the original invite — give up regardless of state.
-            if (now - s.InvitedAt >= JoinNagMaxTotal)
+            // Not a teleport-split member's while their wait is on: the three
+            // sends bound that nag, and a cap counted from the invite would cut it
+            // short under a long resend interval or a master switch turned off
+            // between sends.
+            bool capped = s.MaxSends is null || !_inviteWaits.ContainsKey(given);
+            if (capped && now - s.InvitedAt >= JoinNagMaxTotal)
             {
                 CancelNag(given, reason: $"window of {JoinNagMaxTotal.TotalSeconds:0}s expired");
                 continue;
@@ -1326,14 +1331,18 @@ public sealed class AutoPartyManager : IDisposable
             if (!_inviteWaits.TryGetValue(given, out DateTime invitedAt)) continue;
             if (now - invitedAt < InviteWaitWindow) continue;
             // A teleport-split member invited on landing: not before the last of
-            // their nags has gone a nag's interval unanswered. A member never seen
-            // to land (no invite, so no nag) and a nag the user turned off, or that
-            // ran out its own total time, end as before.
+            // their nags has gone a nag's interval unanswered. One who answered
+            // {Ok} is sent no more nags, so their wait ends at its window as before
+            // and can't hold for good. A member never seen to land (no invite, so
+            // no nag) and a nag the user turned off end as before too.
             if (_splitReform.Contains(given)
                 && _activeNags.TryGetValue(given, out NagState? nag) && nag.MaxSends is int max)
             {
-                if (nag.JoinSends < max || nag.LastJoinAt is not { } last || now - last < JoinNagFrequency) continue;
-                CancelNag(given, reason: $"{max} @join nags after the party-splitting teleport went unanswered");
+                bool unanswered = nag.JoinSends >= max && nag.LastJoinAt is { } last && now - last >= JoinNagFrequency;
+                if (!nag.Acknowledged && !unanswered) continue;
+                CancelNag(given, reason: nag.Acknowledged
+                    ? "answered {Ok} after the party-splitting teleport but didn't join in the wait"
+                    : $"{max} @join nags after the party-splitting teleport went unanswered");
             }
             if (LeftBehindOnOurList?.Invoke(given) == true)
             {
