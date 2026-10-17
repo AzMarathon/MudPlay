@@ -9,12 +9,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the passive observer for the in-game `set suicide` /
-/// `suicide` password flows. The state machine is the load-bearing
-/// piece — both the engine-gate locking and the encrypted-blob
-/// commit / wipe behaviours hang off it.
-/// </summary>
+// Pins the passive observer for the in-game `set suicide` /
+// `suicide` password flows. The state machine is the load-bearing
+// piece — both the engine-gate locking and the encrypted-blob
+// commit / wipe behaviours hang off it.
 public sealed class SuicidePasswordTrackerTests
 {
     private static (

@@ -8,12 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// FSM coverage for <see cref="DoorOpenManager"/>. Drives the manager
-/// through every transition by injecting fabricated server lines via
-/// <see cref="MessageRouter.Dispatch"/> and inspecting the wire bytes
-/// + terminal callback result.
-/// </summary>
+// FSM coverage for DoorOpenManager. Drives the manager
+// through every transition by injecting fabricated server lines via
+// MessageRouter.Dispatch and inspecting the wire bytes
+// + terminal callback result.
 public sealed class DoorOpenManagerTests
 {
     // ----- harness ---------------------------------------------------

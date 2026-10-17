@@ -192,8 +192,6 @@ Dragging the **main window** then carries the whole snapped cluster with it, kee
 
 **Your profile remembers your windows.** Saving a profile, which it also does when you close the client, records where each window is and **which ones are open**. Loading that profile reopens them in the same spots: Buff Watchdog, Navigation, Party, Spell Book, Settings, Player Workshop, Game Data Browser and the rest. Loading a *different* profile closes the windows it didn't have open and opens the ones it did, so each character comes back to its own layout. Windows reopen fresh; changes you had made in the Settings window but not yet saved are saved as the client closes (see *Does MudPlay save automatically?*). Profile Management, the two Roomba windows (they open from the Player Workshop's Roomba section), Stat Breakpoints, the map Simulator and the record edit dialogs aren't reopened on their own.
 
-If a panel ever drifts off-screen or the layout gets untidy, **View → Reset layout** returns every window to its default position and size.
-
 ## Keeping MudPlay up to date
 
 MudPlay can update itself from its GitHub releases — but only when you ask it to. Nothing is ever downloaded or installed in the background.

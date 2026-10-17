@@ -9,13 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the receive side of <see cref="HealCommandHandler"/>: an inbound
-/// <c>@heal</c> makes a configured party-healer poll <c>par</c> (so
-/// CastingDirector re-evaluates against fresh party HP) and acknowledge;
-/// a member with no party-heal spell configured stays silent, and an
-/// unauthorised sender is denied before the handler runs.
-/// </summary>
+// Pins the receive side of HealCommandHandler: an inbound
+// @heal makes a configured party-healer poll par (so
+// CastingDirector re-evaluates against fresh party HP) and acknowledge;
+// a member with no party-heal spell configured stays silent, and an
+// unauthorised sender is denied before the handler runs.
 public sealed class HealCommandHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.

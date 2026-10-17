@@ -119,18 +119,18 @@ public sealed class RoomDisplayParserTests : IDisposable
     public void MultipleExits_ParsedAsSet()
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+        List<RoomObservation> parsed = new();
+        parser.RoomParsed += parsed.Add;
 
-        // North Square (1/2) has just S; verify the multi-exit parse
-        // by faking a room with all four cardinals.
         _feed.Rows(new[]
         {
             "Town Gates",
             "Obvious exits: north, south, east and west."
         });
 
-        // Town Gates has only N in the graph — so the (Name, ExitMask)
-        // tuple won't match a 1-of-1; parser still emits the
-        // observation but the tracker lands Lost (no candidate).
+        RoomObservation obs = Assert.Single(parsed);
+        Assert.True(obs.Exits.SetEquals(new[] { Direction.N, Direction.S, Direction.E, Direction.W }));
+        // Town Gates has only N in the graph, so no candidate matches the exits.
         Assert.NotEqual(RoomConfidence.Confirmed, tracker.State.Confidence);
     }
 
@@ -243,20 +243,17 @@ public sealed class RoomDisplayParserTests : IDisposable
     public void ExitListParses_VariousFormats(string list, Direction[] expected)
     {
         (RoomTracker tracker, RoomDisplayParser parser) = NewParser();
+        List<RoomObservation> parsed = new();
+        parser.RoomParsed += parsed.Add;
         _feed.Rows(new[]
         {
             "Some Room Name",
             $"Obvious exits: {list}."
         });
 
-        // The room "Some Room Name" isn't in the graph → Lost. But the
-        // observation itself must have been dispatched with the right
-        // exit set; we infer this from the fact the tracker moved from
-        // Unknown to Lost (Unknown stays Unknown if no observation fires).
+        Assert.True(Assert.Single(parsed).Exits.SetEquals(expected));
+        // The room isn't in the graph → Lost.
         Assert.Equal(RoomConfidence.Lost, tracker.State.Confidence);
-        // (Direct exit-set assertion would require more wiring; the
-        // tracker landing in Lost rather than Unknown is the proxy.)
-        _ = expected;                                       // suppress unused warning
     }
 
     // ----- command-echo filter (the original bug) ------------------

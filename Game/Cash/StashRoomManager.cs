@@ -76,10 +76,10 @@ public sealed class StashRoomManager : IDisposable
         _getSnapshot = getSnapshot;
         _resolveAutoStashItem = resolveAutoStashItem;
         _isEnabled = isEnabled;
-        // Unbound (tests) → Stock behaviour: one `hide` per item, never batched.
+        // Unbound → Stock behaviour: one `hide` per item, never batched.
         _isParadigm = isParadigm ?? (static () => false);
         _log = log;
-        // Resolves the per-realm runic word; unbound (tests) falls back to stock
+        // Resolves the per-realm runic word; unbound, it falls back to stock
         // "runic" so the stable-realm behaviour is unchanged.
         _naming = naming ?? new CurrencyNaming();
     }

@@ -1362,9 +1362,8 @@ public sealed class BfsMapper
     // places the same number with FEWER stubs. Coverage dominates because
     // a dropped room disappears from the map entirely (strictly worse than
     // a bent connector); stub count only breaks ties between equal-
-    // coverage layouts. Extracted + internal so the ordering is
-    // unit-testable without standing up a full graph — optimising on stubs
-    // alone silently prefers layouts that drop whole clusters.
+    // coverage layouts. Optimising on stubs alone silently prefers
+    // layouts that drop whole clusters.
     internal static bool RetryImproves(
         int candidatePlaced, int candidateStubs,
         int bestPlaced, int bestStubs)

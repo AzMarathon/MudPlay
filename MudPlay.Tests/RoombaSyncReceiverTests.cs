@@ -192,12 +192,16 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     {
         var (router, chat, locations, labels) = Setup();
         RoombaSyncReceiver receiver = new(chat, locations, labels);
+        receiver.NoteSyncRequested();
 
         Exception? ex = Record.Exception(() =>
             ChatLines.Hear(router, Gangpath("Buddy", SyncLine("!!!not-valid-base64url!!!"))));
 
         Assert.Null(ex);
         Assert.Empty(locations.FindSightings("torch"));
+        // The bad line cost only itself: a good one after it still merges.
+        ChatLines.Hear(router, Gangpath("Buddy", SyncLine(OneLine())));
+        Assert.Single(locations.FindSightings("torch"));
     }
 
     [Fact]
@@ -205,6 +209,7 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     {
         var (router, chat, locations, labels) = Setup();
         RoombaSyncReceiver receiver = new(chat, locations, labels);
+        receiver.NoteSyncRequested();
 
         ChatLines.Hear(router, Gangpath("Buddy", "just chatting about the weather"));
 
@@ -216,16 +221,23 @@ public sealed class RoombaSyncReceiverTests : IDisposable
     {
         var (router, chat, locations, labels) = Setup();
         RoombaSyncReceiver receiver = new(chat, locations, labels);
-        receiver.Dispose();
+        receiver.NoteSyncRequested();
+        IReadOnlyList<string> lines = TwoRoomLines();
+        Assert.True(lines.Count >= 2);
 
-        // Drive through the real MessageRouter → ChatRouter path (not the
-        // internal Ingest seam) on the SAME router/chat the receiver was
-        // subscribed to, so this actually exercises whether Dispose's -=
-        // took effect — a still-subscribed receiver would merge this in.
-        string wire = $"Buddy gangpaths: {SyncLine(OneLine())}";
+        // Drive through the real MessageRouter → ChatRouter path on the SAME
+        // router/chat the receiver subscribed to: the first room merges while
+        // subscribed, the second doesn't once Dispose has taken the handler off.
+        Dispatch(router, $"Buddy gangpaths: {SyncLine(lines[0])}");
+        Assert.Single(locations.FindSightings("torch"));
+
+        receiver.Dispose();
+        Dispatch(router, $"Buddy gangpaths: {SyncLine(lines[1])}");
+
+        Assert.Single(locations.FindSightings("torch"));
+    }
+
+    private static void Dispatch(MessageRouter router, string wire) =>
         router.Dispatch(new LineExtractor.EmittedLine(
             wire, new CellAttributes[wire.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
-
-        Assert.Empty(locations.FindSightings("torch"));
-    }
 }

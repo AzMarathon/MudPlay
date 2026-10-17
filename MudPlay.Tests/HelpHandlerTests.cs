@@ -9,12 +9,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the @help handler: an authorised sender telepathing <c>@help</c>
-/// receives a flat list of the catalog commands their per-player
-/// permission grant allows. Party-whitelist (None-category) commands are
-/// never listed; long lists split across multiple telepaths.
-/// </summary>
+// Pins the @help handler: an authorised sender telepathing @help
+// receives a flat list of the catalog commands their per-player
+// permission grant allows. Party-whitelist (None-category) commands are
+// never listed; long lists split across multiple telepaths.
 public sealed class HelpHandlerTests
 {
     // What the remote-command engine put on the wire, through the sender the client binds.
@@ -47,7 +45,7 @@ public sealed class HelpHandlerTests
         db.EditCustomization(name, new PlayerCustomization(RemoteControls: controls));
     }
 
-    /// <summary>Bare payload text of every reply, in send order (braces + prefix stripped).</summary>
+    // Bare payload text of every reply, in send order (braces + prefix stripped).
     private List<string> Replies() =>
         _replies
             .Select(b => Encoding.Latin1.GetString(b))
@@ -130,16 +128,16 @@ public sealed class HelpHandlerTests
     [Fact]
     public void Help_FromUnauthorisedSender_DoesNotReply()
     {
-        // Stranger lacks QueryVersion → @help itself denies; the engine's
-        // generic denial may fire, but no command list is produced.
+        // Stranger lacks QueryVersion → @help denies; with denial warnings off
+        // nothing at all goes back.
         var (router, _, players, engine) = Setup();
+        engine.WarnOnDenial = false;
         SeedPlayer(players, "Stranger",
             PlayerRemoteControls.All & ~PlayerRemoteControls.QueryVersion);
 
         Telepath(router, "Stranger", "@help");
 
-        string joined = string.Join(" ", Replies());
-        Assert.DoesNotContain("@version", joined);
+        Assert.Empty(Replies());
     }
 
     [Fact]

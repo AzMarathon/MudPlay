@@ -271,12 +271,12 @@ public sealed class SuicideHandler : IDisposable
 
     private const string GateHold = "SuicideCommand";
 
-    // The send gate, held from `suicide` going out until the wait ends. Null in
-    // tests that don't model it.
+    // The send gate, held from `suicide` going out until the wait ends. Null when
+    // unwired.
     public EngineSendGate? SendGate { get; set; }
 
     // The telepath pacer, held over the same stretch (TelepathPacer.Hold). Null
-    // in tests that don't model it.
+    // when unwired.
     public TelepathPacer? Telepaths { get; set; }
 
     private bool _sendingOwn;

@@ -676,7 +676,7 @@ public sealed class MessageCandidateWatcher : IDisposable
             $"un-staged a monster death message (it precedes the experience line): '{Truncate(p.Text, 80)}'");
     }
 
-    // Test-only counter so each SimulateCapture() call injects a distinct
+    // Counter so each SimulateCapture() call injects a distinct
     // never-before-seen line (staging a fresh candidate rather than bumping one).
     private int _simCounter;
 

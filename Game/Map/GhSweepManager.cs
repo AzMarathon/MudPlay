@@ -525,8 +525,7 @@ public sealed class GhSweepManager : IDisposable
         _inventory = inventory;
         _itemLocations = itemLocations;
         // Which labeled rooms THIS character sweeps (per-character; labels are shared
-        // per-BBS). Defaults to "all managed" when unwired so tests that only label
-        // rooms sweep them exactly as before.
+        // per-BBS). Defaults to "all managed" when unwired.
         _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
         _promptScanner = promptScanner;
         _suspendedStore = suspendedStore;

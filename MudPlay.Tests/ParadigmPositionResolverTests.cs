@@ -6,12 +6,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Covers <see cref="ParadigmPositionResolver"/>'s realm gating, the `rm`
-/// request/reply loop, throttling, and the timeout fallback. Uses an isolated
-/// temp game-data root per test and the no-timer test ctor so nothing depends
-/// on a real Avalonia dispatcher.
-/// </summary>
+// Covers ParadigmPositionResolver's realm gating, the `rm`
+// request/reply loop, throttling, and the timeout fallback. Uses an isolated
+// temp game-data root per test and the no-timer test ctor so nothing depends
+// on a real Avalonia dispatcher.
 public sealed class ParadigmPositionResolverTests : IDisposable
 {
     private readonly string _root;

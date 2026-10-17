@@ -7,7 +7,7 @@ namespace MudPlay.Game.Map;
 
 // The minimal surface the walker needs to hand a maze destination off to the
 // solver. Kept tiny so AutoWalkManager doesn't take a hard dependency on the
-// solver's internals (and so its own tests can inject a fake).
+// solver's internals.
 public interface IMazeSolver
 {
     // True when this destination is a teleport-maze room the solver can drive
@@ -86,8 +86,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     // Defers the initial Start() (and the walker delegation) off the current
     // call stack so TryBegin, invoked from INSIDE the walker's own WalkTo, never
-    // re-enters the walker synchronously. Production posts to the UI dispatcher;
-    // tests run it inline.
+    // re-enters the walker synchronously. AppServices posts to the UI dispatcher.
     private readonly Action<Action> _post;
 
     // Settings → Other master toggle (default on). Gates CanSolve via Enabled.
@@ -126,7 +125,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // current room's closed-barrier exits at sweep start; _peekDoorsTried caps the
     // open attempt to once per direction per sweep; _awaitingPeekDoor suppresses
     // stray renders while the door-open is in flight. _openDoor delegates to the
-    // shared door FSM (null in tests / when no door opener is wired → the closed
+    // shared door FSM (null when no door opener is wired → the closed
     // neighbour is simply skipped, same as a failed open).
     private readonly Action<Direction, Action<bool>>? _openDoor;
     // The door FSM's stop: it goes on at a door until it opens or the room changes,
@@ -265,8 +264,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     }
 
     // Fed every parsed room display (RoomDisplayParser.RoomParsed, which fires
-    // BEFORE the tracker's look-suppression drops the peek). Public so tests can
-    // drive the look / settle sequence.
+    // BEFORE the tracker's look-suppression drops the peek).
     public void OnRoomObserved(RoomObservation obs)
     {
         _lastObserved = obs;   // always freshest — the Lost-start relocalize reads it
@@ -621,7 +619,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         // is opened (the server refuses `look <dir>` at a shut door). Open it first
         // — asylum barriers are plain-bashable, so the shared door FSM bashes/picks
         // it — then look from the callback. Once per direction per sweep; if no door
-        // opener is wired (tests), fall through to the plain look.
+        // opener is wired, fall through to the plain look.
         if (_openDoor is not null
             && _ownClosedDoors.Contains(_currentLookDir)
             && _peekDoorsTried.Add(_currentLookDir))

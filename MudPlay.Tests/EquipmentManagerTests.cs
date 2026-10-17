@@ -7,15 +7,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the gear-set apply core: the pure <see cref="EquipmentManager.BuildWearCommands"/>
-/// / <see cref="EquipmentManager.ApplyVirtualSlots"/> diff logic and the
-/// non-timer <see cref="EquipmentManager.ApplyByKeyword"/> resolution paths.
-/// The paced wire-send (DispatcherTimer) is UI plumbing the headless test
-/// harness doesn't pump, so the tests deliberately exercise only the apply
-/// outcomes that resolve without enqueuing a physical wear sequence
-/// (NotFound / NoChange / virtual-only Applied).
-/// </summary>
+// Pins the gear-set apply core: the BuildWearCommands / ApplyVirtualSlots diff
+// logic, the ApplyByKeyword / ApplyBySetId resolution paths and the wear burst they
+// send, and the SwapWeapon combat fast path.
 public sealed class EquipmentManagerTests
 {
     // What the managers built here put on the wire, through the sender the client binds.
@@ -499,10 +493,8 @@ public sealed class EquipmentManagerTests
         Assert.Equal(2, fired);
     }
 
-    // A physical-slot apply now streams its wear burst synchronously (the paced
-    // DispatcherTimer is gone — report paradigm-20260827-082305 / equip-delay
-    // removal), so the whole delta lands on the wire in one call and the test can
-    // assert it directly (before, the unpumped timer meant nothing was sent).
+    // A physical-slot apply streams its wear burst synchronously (report
+    // paradigm-20260827-082305), so the whole delta lands on the wire in one call.
     [Fact]
     public void ApplyByKeyword_PhysicalSet_StreamsWearBurstSynchronously()
     {
@@ -617,10 +609,7 @@ public sealed class EquipmentManagerTests
         // the weapon flap. With the combat-weapon-ownership probe returning true,
         // the auto-fire defers the held slots to combat: the set's only diff is the
         // weapon, so nothing is left to apply and ApplyBySetId reports NoChange
-        // instead of re-wearing over the swap. (The un-deferred path that DOES
-        // issue the weapon wear is pinned by BuildWearCommands_ArmorOnly / null-
-        // availability tests; it starts the paced DispatcherTimer the headless
-        // harness doesn't pump, so it isn't exercised end-to-end here.)
+        // instead of re-wearing over the swap.
         EquipmentSettings settings = new()
         {
             Sets = { SetWithId("set-1", "Default",
@@ -634,8 +623,6 @@ public sealed class EquipmentManagerTests
     }
 
     // ===== SwapWeapon (immediate combat fast path) =====
-    // Unlike the paced apply, this bypasses the DispatcherTimer and writes the
-    // wire synchronously, so the tests can assert directly on what was sent.
 
     [Theory]
     [InlineData("")]

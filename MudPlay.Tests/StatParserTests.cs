@@ -5,11 +5,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for the in-game `stat` screen parser. Real screen layout
-/// has multiple labels per row separated by 2+ spaces — every regex
-/// runs against every emitted line; this pins the all-fields capture.
-/// </summary>
+// Coverage for the in-game `stat` screen parser. Real screen layout
+// has multiple labels per row separated by 2+ spaces — every regex
+// runs against every emitted line; this pins the all-fields capture.
 public sealed class StatParserTests
 {
     // The parser's idle settle-close timer.

@@ -3,13 +3,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Phase 11 — <see cref="SessionActivityTracker"/> kill / exp counters and the
-/// kills/hour running-average series. An injected clock makes the time arithmetic
-/// deterministic: kills and exp are pushed via the <c>Note*</c> forwarders and
-/// time advanced by hand, so each test pins exactly how a counter or the running
-/// sparkline rate is derived.
-/// </summary>
+// SessionActivityTracker kill / exp counters and the
+// kills/hour running-average series. An injected clock makes the time arithmetic
+// deterministic: kills and exp are pushed via the Note* forwarders and
+// time advanced by hand, so each test pins exactly how a counter or the running
+// sparkline rate is derived.
 public sealed class SessionActivityTrackerTests
 {
     private sealed class Clock

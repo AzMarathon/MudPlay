@@ -296,7 +296,7 @@ public sealed partial class EmoteStore
 
     // Copy an image into EmotesDir as baseName, downscaled to <= MaxEmotePx (preserving
     // aspect) via Avalonia's decoder. Falls back to a raw copy when decoding isn't
-    // available (e.g. unit tests with stand-in bytes). Returns the stored file name.
+    // available (bytes that aren't a decodable image). Returns the stored file name.
     private string CopyScaledImage(string src, string baseName)
     {
         try
@@ -329,7 +329,7 @@ public sealed partial class EmoteStore
     }
 
     // Bridge to ConversationMessageInlines.EmoteImages.Invalidate — set by AppServices so
-    // a replaced image drops its cached bitmap. Left null in tests.
+    // a replaced image drops its cached bitmap.
     public System.Action<string>? ConversationImageInvalidate { get; set; }
 
     private void Republish()

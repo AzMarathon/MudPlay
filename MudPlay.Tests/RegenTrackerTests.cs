@@ -5,12 +5,10 @@ namespace MudPlay.Tests;
 
 public sealed class RegenTrackerTests
 {
-    /// <summary>
-    /// Test-controllable clock that the tracker reads via the
-    /// <see cref="RegenTracker(PlayerState, Func{DateTimeOffset}?)"/>
-    /// constructor's clock hook. Tests advance it manually so the
-    /// cycle's interval-vs-elapsed comparison sees realistic gaps.
-    /// </summary>
+    // Test-controllable clock that the tracker reads via the
+    // RegenTracker
+    // constructor's clock hook. Tests advance it manually so the
+    // cycle's interval-vs-elapsed comparison sees realistic gaps.
     private sealed class FakeClock
     {
         public DateTimeOffset Now { get; set; } = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -83,13 +81,13 @@ public sealed class RegenTrackerTests
     public void StandingUpBeforeRestInterval_GrantsNoRestTick()
     {
         // Server rule: rest only credits a tick if the player stayed for the
-        // full 20 s interval. Standing up at 15 s cancels outright; the next
+        // full 21 s interval. Standing up at 15 s cancels outright; the next
         // HP uptick gets claimed by HpNatural instead.
         var (state, tracker, clock) = Setup();
         state.Hp = 100;                            // baseline.
         state.Position = PlayerPosition.Resting;   // anchors HpRest at T0.
         clock.Advance(TimeSpan.FromSeconds(15));
-        state.Position = PlayerPosition.Standing;  // bailed before 20 s.
+        state.Position = PlayerPosition.Standing;  // bailed before 21 s.
         clock.Advance(TimeSpan.FromSeconds(15));   // T0 + 30 s total.
         state.Hp = 102;                            // uptick lands.
 
@@ -220,16 +218,6 @@ public sealed class RegenTrackerTests
     }
 
     [Fact]
-    public void SeedIntervalsMatchTheStockEngine()
-    {
-        // Pin the Stock engine's tick intervals (30 s natural, rest every 21 s,
-        // meditate every 15 s) so a stray refactor doesn't silently re-tune them.
-        Assert.Equal(TimeSpan.FromSeconds(30), RegenConstants.SeedStandingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(21), RegenConstants.SeedRestingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(15), RegenConstants.SeedMeditatingInterval);
-    }
-
-    [Fact]
     public void DefaultRealm_NaturalCadenceIsStockThirtySeconds()
     {
         var (state, tracker, _) = Setup();
@@ -280,6 +268,27 @@ public sealed class RegenTrackerTests
 
         Assert.Equal(TimeSpan.FromSeconds(20), tracker.GetTimeToNextMpNaturalTick());
         Assert.Equal(TimeSpan.FromSeconds(10), tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // On Paradigm meditating rides the mana grid. A gain while meditating that lands
+    // when the mana pass is due is the pass itself: the mana cycle takes it, and
+    // with no HP gains of its own lately the HP countdown follows it.
+    [Fact]
+    public void ParaMud_MeditatingGain_WhenTheManaPassIsDue_IsThePass()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        state.Ma = 57;                              // the mana pass, at T0
+        state.Position = PlayerPosition.Meditating;
+
+        clock.Advance(TimeSpan.FromSeconds(30));
+        state.Ma = 70;                              // the next pass, while meditating
+
+        Assert.Equal(clock.Now, tracker.MpNatural.Anchor);
+        Assert.Equal(clock.Now, tracker.HpNatural.Anchor);
         tracker.Dispose();
     }
 

@@ -11,12 +11,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for the @suicide remote-command consumer. The interesting
-/// behaviours: sends both commands when a password is stored, replies
-/// to the original sender on invalid response, and ignores invalid
-/// lines that don't belong to one of our pending invocations.
-/// </summary>
+// Coverage for the @suicide remote-command consumer. The interesting
+// behaviours: sends both commands when a password is stored, replies
+// to the original sender on invalid response, and ignores invalid
+// lines that don't belong to one of our pending invocations.
 public sealed class SuicideHandlerTests
 {
     private sealed class Harness : IDisposable

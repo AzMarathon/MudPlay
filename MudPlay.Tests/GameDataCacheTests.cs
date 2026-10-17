@@ -7,10 +7,8 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="GameDataCache"/> uses an isolated temp root per test so
-/// the suite doesn't leak fixtures into the user's real Data folder.
-/// </summary>
+// GameDataCache uses an isolated temp root per test so
+// the suite doesn't leak fixtures into the user's real Data folder.
 public sealed class GameDataCacheTests : IDisposable
 {
     private readonly string _root;
@@ -483,12 +481,12 @@ public sealed class GameDataCacheTests : IDisposable
         Assert.Equal("Orc", FirstName(cache.GetTable("Monsters")));
     }
 
-    // ----- ActiveRealm (Info.Legit derivation, MMUD Explorer parity) -------
+    // ----- ActiveRealm (Info.Legit derivation) ------------------------------
 
     [Fact]
     public void ActiveRealm_Legit2_IsParaMud()
     {
-        // MMUD Explorer: tabInfo.Fields("Legit") = 2 → bGreaterMUD = True.
+        // Info.Legit = 2 marks a Paradigm (GreaterMUD) data set.
         SeedSet("para", ("Info", "[{\"Legit\":2}]"));
         GameDataCache cache = NewCache();
         cache.SwitchSet("para");

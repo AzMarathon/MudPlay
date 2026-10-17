@@ -7,14 +7,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the proactive log-off FSM: warning → wait-for-safe → send the
-/// exit command → confirm out of the realm (character-saved line, or the
-/// main-menu row, or a timeout) → drop the carrier. The engine
-/// is opt-in (gated on the active BBS's ReconnectAfterCleanup), latched
-/// to one logout per cleanup cycle, and must never log off while the
-/// room is unsafe or after the wire has dropped.
-/// </summary>
+// Pins the proactive log-off FSM: warning → wait-for-safe → send the
+// exit command → confirm out of the realm (character-saved line, or the
+// main-menu row, or a timeout) → drop the carrier. The engine
+// is opt-in (gated on the active BBS's ReconnectAfterCleanup), latched
+// to one logout per cleanup cycle, and must never log off while the
+// room is unsafe or after the wire has dropped.
 public sealed class CleanupLogoutOrchestratorTests
 {
     private static readonly DateTime Now = new(2026, 6, 2, 12, 0, 0, DateTimeKind.Utc);

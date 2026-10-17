@@ -23,7 +23,7 @@ namespace MudPlay.Game.Map;
 //      palette, so we anchor on POSITION — the title is the last bright-cyan
 //      line before "Obvious exits:" (the room display is one contiguous block,
 //      so async broadcasts land before it, not between the title and exits).
-//   2. Text fallback: when colour data is absent (tests, replays without
+//   2. Text fallback: when colour data is absent (replays without
 //      attributes) or the realm renders names without bright cyan, return the
 //      first non-blank line that doesn't look like a command echo (single
 //      letters, "look n", "sea sword", bare direction words, etc.).

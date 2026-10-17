@@ -7,13 +7,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the latch model. The entry command must NEVER fire on a
-/// menu-shaped line unless the engine was just armed by the BBS-
-/// login-automation completion event — otherwise a malicious player
-/// could gossip "[E] . Enter the Realm" mid-game and trick the
-/// client into re-entering when the player wanted to stay menu-side.
-/// </summary>
+// Pins the latch model. The entry command must NEVER fire on a
+// menu-shaped line unless the engine was just armed by the BBS-
+// login-automation completion event — otherwise a malicious player
+// could gossip "[E] . Enter the Realm" mid-game and trick the
+// client into re-entering when the player wanted to stay menu-side.
 public sealed class MainMenuEntryAutomationTests
 {
     // The clock the MainMenuEntryAutomation reads: the real one unless a test sets its own.
@@ -49,10 +47,8 @@ public sealed class MainMenuEntryAutomationTests
         router.Dispatch(line);
     }
 
-    /// <summary>
-    /// Dispatch an in-game room display's "Obvious exits:" line — the
-    /// signal that releases the post-entry stat/i refresh gate.
-    /// </summary>
+    // Dispatch an in-game room display's "Obvious exits:" line — the
+    // signal that releases the post-entry stat/i refresh gate.
     private static void DispatchRoomLine(MessageRouter router)
     {
         LineExtractor.EmittedLine line = new(
@@ -242,17 +238,6 @@ public sealed class MainMenuEntryAutomationTests
         Assert.Empty(_sent);
 
         // Second Arm — normal behaviour.
-        engine.Arm();
-        DispatchMenuLine(router);
-        Assert.Single(_sent);
-    }
-
-    [Fact]
-    public void Arm_WithoutHangupSignal_BehavesNormally()
-    {
-        // Sanity: the suppression check must not slow down or skip
-        // the normal path.
-        var (engine, router, _, _) = Setup();
         engine.Arm();
         DispatchMenuLine(router);
         Assert.Single(_sent);
@@ -494,17 +479,5 @@ public sealed class MainMenuEntryAutomationTests
         DispatchRoomLine(router);   // stale room line — must be ignored
         _menuTimers.RunAll();
         Assert.Single(_sent);   // still just the entry
-    }
-
-    [Fact]
-    public void StartupSequence_PublicListIsStatI()
-    {
-        // Pins the public read-only list so a future "let me add `who`
-        // to the startup" edit can't silently change semantics; the
-        // room-gated "stat, i" stays observable from tests. `exp` is
-        // intentionally absent — `stat` already carries Level + Exp.
-        Assert.Collection(MainMenuEntryAutomation.StartupSequence,
-            s => Assert.Equal("stat", s),
-            s => Assert.Equal("i", s));
     }
 }

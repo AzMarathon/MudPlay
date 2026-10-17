@@ -208,8 +208,7 @@ public sealed partial class GameDataCache
 
     // Optional log sink — when set (production wires AppServices.Log after
     // construction), every SwitchSet emits an Info entry naming the outgoing +
-    // incoming set so the user can verify swap success in the program log. Tests
-    // leave it null.
+    // incoming set so the user can verify swap success in the program log.
     public LogService? Log { get; set; }
     // Times table parses for the performance log; set once by AppServices.
     public PerformanceMonitor? Performance { get; set; }
@@ -581,8 +580,7 @@ public sealed partial class GameDataCache
     // there instead of duplicating that handling on a background thread nobody's
     // watching.
     //
-    // Returns the aggregate Task so tests can await completion deterministically;
-    // production startup fires this and discards it (`_ = ...`) — nothing blocks on it.
+    // Returns the aggregate Task; startup fires this and discards it (`_ = ...`) — nothing blocks on it.
     public Task PrewarmAsync(string setName, IReadOnlyList<string> tableNames)
     {
         ArgumentNullException.ThrowIfNull(setName);

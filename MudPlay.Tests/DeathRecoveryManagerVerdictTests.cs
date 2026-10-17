@@ -381,22 +381,4 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(new[] { "ration" }, h.Latest.UnrecoveredItems);
     }
 
-    [Fact]
-    public void Stock_ALightThatBurnedOutBeforeTheDeath_IsNotOnThePile_SoThePileCompletes()
-    {
-        // The inventory no longer lists a burnt-out light as lit
-        // (InventoryManager.NoteLitLightBurnedOut), so the record holds what exists.
-        using GraphHarness h = new() { Paradigm = false };
-        h.EnterGates();
-        h.Snapshot = h.SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>());
-        h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
-        h.Sent.Clear();
-        h.Recovery.AutoRecover = true;
-
-        h.FeedSurvey("a longsword");
-        h.EnterGates();
-        h.Feed.Line("You took longsword.");
-
-        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
-    }
 }

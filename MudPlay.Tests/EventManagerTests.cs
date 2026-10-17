@@ -5,19 +5,15 @@ using System.Text.Json;
 using MudPlay.Game.Events;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Unit coverage for <see cref="EventManager"/> + its
-/// <see cref="ScheduledEvent"/> DTO. Focused on the surfaces PR 8.1
-/// ships end-to-end: DTO round-trip, command-splitter contract, CRUD
-/// on the in-memory list, and the Command-action wire path (the only
-/// action dispatchable without a real movement-engine stack).
-/// Loop / AutoLair / reconciliation tests land in PR 8.2 alongside the
-/// trigger-source wiring + a richer test fixture.
-/// </summary>
+// Unit coverage for EventManager + its
+// ScheduledEvent DTO: DTO round-trip, command-splitter contract, CRUD
+// on the in-memory list, and the Command-action wire path (the only
+// action dispatchable without a real movement-engine stack).
 public sealed class EventManagerTests
 {
     // ----- DTO round-trip ------------------------------------------
@@ -35,8 +31,8 @@ public sealed class EventManagerTests
             CommandText = "stat",
             Disabled = true,
         };
-        string json = JsonSerializer.Serialize(original);
-        ScheduledEvent? round = JsonSerializer.Deserialize<ScheduledEvent>(json);
+        string json = JsonSerializer.Serialize(original, JsonStore.Options);
+        ScheduledEvent? round = JsonSerializer.Deserialize<ScheduledEvent>(json, JsonStore.Options);
 
         Assert.NotNull(round);
         Assert.Equal("stat refresh", round!.Name);
@@ -276,8 +272,8 @@ public sealed class EventManagerTests
                         ActionType = EventActionType.Command, CommandText = "who" },
             },
         };
-        string json = JsonSerializer.Serialize(original);
-        CharacterProfile? round = JsonSerializer.Deserialize<CharacterProfile>(json);
+        string json = JsonSerializer.Serialize(original, JsonStore.Options);
+        CharacterProfile? round = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options);
 
         Assert.NotNull(round);
         Assert.NotNull(round!.Events);

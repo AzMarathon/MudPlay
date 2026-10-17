@@ -33,7 +33,7 @@ public sealed class KeybindingStore
     // inert until the user manually rebinds.
     public event Action? BindingsReloaded;
 
-    // Parameterless ctor for tests / in-memory scenarios. Seeds defaults.
+    // In-memory store with no file behind it. Seeds defaults.
     public KeybindingStore()
     {
         SeedDefaults();

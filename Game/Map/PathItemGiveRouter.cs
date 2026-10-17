@@ -67,9 +67,7 @@ public readonly record struct GiveSource(
 // own lifecycle (post / resolve) stays owned by PathItemDemandTracker; this
 // router only reacts.
 //
-// Inventory / graph / walker are reached through delegates so the FSM stays
-// unit-testable without a live line stream, room graph, and dispatcher. Each
-// delegate has exactly one production binding in AppServices.
+// Inventory / graph / walker are reached through delegates. Each delegate has exactly one production binding in AppServices.
 public sealed class PathItemGiveRouter : IDisposable
 {
     private const string LogCategory = "AutoSearch";
@@ -348,7 +346,7 @@ public sealed class PathItemGiveRouter : IDisposable
 
     // Pick the give source minimising dist(cur,giver)+dist(giver,dest) among the
     // candidates reachable both ways. Ties break on the nearer giver, then
-    // room-key order — deterministic for testability. Static + internal so the
+    // room-key order, so the pick is deterministic. Static + internal so the
     // route picker can name the very giver this router would detour to without
     // duplicating the selection rule.
     internal static bool TrySelectGiver(

@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Auth + channel-aware-denial coverage for TrapHandler. The
-/// search → disarm state machine is in TrapDisarmManagerTests; these
-/// tests drive the handler via the engine's chat-entry pipeline and
-/// verify the right replies / wire-sends fire for the various
-/// permission + skill + channel combos.
-/// </summary>
+// Auth + channel-aware-denial coverage for TrapHandler. The
+// search → disarm state machine is in TrapDisarmManagerTests; these
+// tests drive the handler via the engine's chat-entry pipeline and
+// verify the right replies / wire-sends fire for the various
+// permission + skill + channel combos.
 public sealed class TrapHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.

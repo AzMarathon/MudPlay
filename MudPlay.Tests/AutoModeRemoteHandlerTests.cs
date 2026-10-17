@@ -10,11 +10,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Cluster 5d — <see cref="AutoModeRemoteHandler"/> reads / writes
-/// <see cref="AutoActionDefaults"/> on the loaded profile in response
-/// to <c>@auto-*</c> remote commands.
-/// </summary>
+// AutoModeRemoteHandler reads / writes
+// AutoActionDefaults on the loaded profile in response
+// to @auto-* remote commands.
 public sealed class AutoModeRemoteHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 3, 0, 0, 0, DateTimeKind.Utc);
@@ -71,7 +69,6 @@ public sealed class AutoModeRemoteHandlerTests
     {
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);
-        // Force default off to make the off→on flip observable.
         s.Profile.Current!.Settings = new();
         AutoActionDefaults pre = ReadMode(s.Profile.Current!);
         Assert.True(pre.AutoCombat);    // default true
@@ -134,7 +131,7 @@ public sealed class AutoModeRemoteHandlerTests
     }
 
     [Fact]
-    public void AutoAll_On_FlipsEveryFlag()
+    public void AutoAll_Off_ClearsEveryFlag()
     {
         using Setup s = new();
         SeedPlayer(s.Players, "Tank", PlayerRemoteControls.AlterSettings);

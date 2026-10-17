@@ -29,10 +29,10 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     private readonly Action _persist;
     // Fires only when Self transitions OFF → ON (never on → off), so the panel can
     // deactivate a conflicting row's Self box without looping back on itself. Null
-    // in tests that don't exercise the cross-row exclusion.
+    // when no panel wires the cross-row exclusion.
     private readonly Action<BuffSlotRowViewModel> _onSelfActivated;
-    // Whether the character has actually learned this row's spell. Null in tests
-    // that don't care — IsLearned then defaults true (every listed row is normally
+    // Whether the character has actually learned this row's spell. Null →
+    // IsLearned defaults true (every listed row is normally
     // something the player has).
     private readonly Func<string?, bool> _resolveLearned;
     private bool _suppress;

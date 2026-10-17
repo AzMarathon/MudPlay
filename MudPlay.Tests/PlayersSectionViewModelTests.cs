@@ -6,14 +6,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Players-tab self-filter: the loaded character's own row is hidden
-/// from the table (granting yourself permissions is nonsense). Filter
-/// matches on given name (first whitespace-delimited token) so it
-/// still catches the row whether the BBS rendered it with or without
-/// the family suffix this session. Drafts (no profile loaded) show
-/// every row.
-/// </summary>
+// Players-tab self-filter: the loaded character's own row is hidden
+// from the table (granting yourself permissions is nonsense). Filter
+// matches on given name (first whitespace-delimited token) so it
+// still catches the row whether the BBS rendered it with or without
+// the family suffix this session. Drafts (no profile loaded) show
+// every row.
 public sealed class PlayersSectionViewModelTests
 {
     private static readonly DateTime Now = new(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc);

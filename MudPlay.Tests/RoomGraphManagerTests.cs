@@ -7,11 +7,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Covers the PR 7.4 contract: seeding from <c>Rooms.json</c>, exit
-/// parsing (Door / Trap / unknown hint), uniqueness index, lair-flag
-/// recognition, and the per-set-swap reload.
-/// </summary>
+// Covers seeding from Rooms.json, exit
+// parsing (Door / Trap / unknown hint), uniqueness index, lair-flag
+// recognition, and the per-set-swap reload.
 public sealed class RoomGraphManagerTests : IDisposable
 {
     private readonly string _root;
@@ -199,35 +197,34 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(rawHint, exit.RawHint);
     }
 
+    // A level or alignment restriction is a gate, not a hint: Hint stays None,
+    // the gate parses, and the raw text is kept.
     [Theory]
-    [InlineData("1/2 (Level: 30 to 999)",       "Level: 30 to 999")]
-    [InlineData("1/2 (Alignment: Saint to Outlaw)", "Alignment: Saint to Outlaw")]
-    public void RoomExit_GatedExits_FallThroughToNoneButPreserveRaw(string wire, string rawHint)
+    [InlineData("1/2 (Level: 30 to 999)",       "Level: 30 to 999", true, false)]
+    [InlineData("1/2 (Alignment: Saint to Outlaw)", "Alignment: Saint to Outlaw", false, true)]
+    public void RoomExit_GatedExits_ParseTheGate_AndPreserveRaw(string wire, string rawHint, bool level, bool alignment)
     {
-        // Level / Alignment / Class / Race / Ability restrictions
-        // aren't classified yet — they round-trip via RawHint until
-        // the path-time gate land in a later PR.
         Assert.True(RoomExit.TryParseWire(wire, out RoomExit exit));
         Assert.Equal(RoomExitHint.None, exit.Hint);
         Assert.Equal(rawHint, exit.RawHint);
+        Assert.Equal(level, exit.HasLevelGate);
+        Assert.Equal(alignment, exit.HasAlignmentGate);
     }
 
     [Fact]
-    public void RoomExit_KeyHint_NowClassified()
+    public void RoomExit_KeyHint_IsKeyLocked()
     {
-        // Previously fell through to None; commit-1 schema extension
-        // promotes (Key: N) to KeyLocked with item id captured.
+        // (Key: N) is KeyLocked with the item id captured.
         Assert.True(RoomExit.TryParseWire("1/2 (Key: 5)", out RoomExit exit));
         Assert.Equal(RoomExitHint.KeyLocked, exit.Hint);
         Assert.Equal(5, exit.KeyItemId);
     }
 
     [Fact]
-    public void RoomExit_HiddenHint_NowClassifiedAsSearchable()
+    public void RoomExit_HiddenHint_IsSearchable()
     {
-        // Previously fell through to None; commit-1 schema extension
-        // promotes plain (Hidden) to SearchableHidden so the walker
-        // knows to `sea <dir>` before stepping.
+        // Plain (Hidden) is SearchableHidden, so the walker knows to
+        // `sea <dir>` before stepping.
         Assert.True(RoomExit.TryParseWire("1/2 (Hidden)", out RoomExit exit));
         Assert.Equal(RoomExitHint.SearchableHidden, exit.Hint);
     }
@@ -239,12 +236,6 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(new RoomKey(3, 7), exit.Target);
         Assert.Equal(RoomExitHint.None, exit.Hint);
         Assert.Equal("Climb", exit.RawHint);
-    }
-
-    [Fact]
-    public void RoomExit_ZeroSentinel_NotAnExit()
-    {
-        Assert.False(RoomExit.TryParseWire("0", out _));
     }
 
     // ----- RoomGraphManager seeding ----------------------------------

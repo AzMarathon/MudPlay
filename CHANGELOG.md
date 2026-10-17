@@ -1,12 +1,13 @@
 # Version history
 
-## 3.183.39
+## 3.183.40
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
 - A loop held for a re-invited party member now resumes when the wait runs out, even after that member's @join reminder has stopped
 - The Navigation window's Stop now stops what the toolbar's Stop stops: it holds an errand first, and drops a queued run or a paused walk
 - Clear all also shows while building an Auto-Lair setup, and clears its lair markers
+- View → Reset layout, which had no panels to reset, is gone from the menu
 
 ## 3.183.34
 

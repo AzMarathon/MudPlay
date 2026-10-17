@@ -132,8 +132,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // the CombatDiagnostics toggle is the live umbrella for combat-related
     // verbose tracing (consumed by Game.Combat.RoundDamageTracker). Without
     // the binding, the pane is purely a viewer and the toggle is local to
-    // this window — fine for tests, but the running app should always pass
-    // AppServices.LogDiagnostics.
+    // this window; the running app passes AppServices.LogDiagnostics.
     public LogPaneViewModel(LogService log, Application app, LogDiagnosticState? diagnostics)
     {
         _log = log;

@@ -69,9 +69,7 @@ public readonly record struct SummonSource(
 // and only the deadline (or a foreign Finished) releases us. A single armed window
 // also means no stale callback from a previous phase can fire against a later one.
 //
-// Inventory / graph / walker / wire are reached through delegates so the FSM stays
-// unit-testable without a live line stream, room graph, and dispatcher. Each
-// delegate has exactly one production binding in AppServices.
+// Inventory / graph / walker / wire are reached through delegates. Each delegate has exactly one production binding in AppServices.
 public sealed class PathItemSummonRouter : IDisposable
 {
     private const string LogCategory = "AutoSearch";

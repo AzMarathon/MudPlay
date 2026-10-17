@@ -220,7 +220,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
     // The Toggles column: a compact summary of the auto-* / carry flags this character
     // has turned on for the item, resolved from the same 4-tier overlay the engines read.
-    // Null (blank cell) when the item has no overlay layer (headless tests) or no flags set.
+    // Null (blank cell) when the item has no overlay layer or no flags set.
     protected override IReadOnlyDictionary<string, string?>? ComputeRowCells(GameRow element)
     {
         if (_resolverRef is null) return null;
@@ -308,8 +308,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
         // On-use / proc message editing — item-claimed message records live with
         // the item now (hidden from the Messages tab), so the dialog opens their
-        // editor via the shared ItemMessageDialogService. Null in a headless test
-        // (no AppServices) — the Message section then hides itself.
+        // editor via the shared ItemMessageDialogService. Null without
+        // AppServices — the Message section then hides itself.
         ItemMessageDialogService? itemMsg = AppServices.Current?.ItemMessage;
         Func<Task<string?>>? editMsg = (itemMsg is not null && itemNum > 0)
             ? () => itemMsg.OpenAsync(itemNum)

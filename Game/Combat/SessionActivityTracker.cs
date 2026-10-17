@@ -13,7 +13,7 @@ namespace MudPlay.Game.Combat;
 // items from InventoryManager, sneak entries from StealthManager and steps from
 // RoomTracker — so inputs are pushed in via the Note* forwarders and AppServices
 // wires the sources. This mirrors TimeAnalysisTracker and keeps the tracker
-// dependency-free behind an injectable clock for unit tests. Every Note* call
+// dependency-free behind an injectable clock. Every Note* call
 // and Snapshot runs on the marshalled dispatch thread (the sources all fire
 // there), so the counters are lock-free.
 //

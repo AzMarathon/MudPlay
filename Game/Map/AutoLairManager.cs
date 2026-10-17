@@ -151,7 +151,6 @@ public sealed class AutoLairManager : IDisposable
     private readonly Dictionary<RoomKey, NoRouteVerdict> _noRoute = new();
     private static readonly TimeSpan NoRouteRecheck = TimeSpan.FromSeconds(30);
     private readonly record struct NoRouteVerdict(RoomKey From, int DoorsVersion, int RuleStamp, DateTimeOffset At);
-    internal int NoRouteSearchesForTests { get; private set; }
 
     // A failed walk into a lair is retried on a timer, starting at RetryBase and
     // doubling for each further failed entry to the same lair up to RetryCap, so a
@@ -811,7 +810,7 @@ public sealed class AutoLairManager : IDisposable
         IReadOnlyList<Direction>? path = _bfs.FindPath(current, lair, filter);
         if (path is null || path.Count == 0)
         {
-            NoRouteSearchesForTests++;
+            _log?.Debug("AutoLair", $"searched the map for a route from {current} to lair {lair}: none");
             return (null, null);
         }
 

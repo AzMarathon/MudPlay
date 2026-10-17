@@ -302,23 +302,6 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
-    public void WrapsAtEnd_AndFiresRepeatStarted()
-    {
-        // Complete one full lap (N + S back to 1/1) — wrap fires
-        // RepeatStarted.
-        Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Runner.Start(AbCycle());
-
-        h.Tracker.NoteRoomObserved(new RoomObservation("B",
-            new HashSet<Direction> { Direction.N, Direction.S }));
-        h.Tracker.NoteRoomObserved(new RoomObservation("A",
-            new HashSet<Direction> { Direction.N }));
-
-        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
-    }
-
-    [Fact]
     public void ExpectedMoveTarget_TracksTheInFlightMovesDestination()
     {
         // Combat-suppression reads ExpectedMoveTarget to judge a room-entry engage against
@@ -3125,21 +3108,23 @@ public sealed class LoopRunnerTests : IDisposable
     public void LapTime_RecordsOnWrap()
     {
         // Complete one full lap N + S returning to 1/1 — wrap fires
-        // RepeatStarted and pushes a duration into LapHistory.
-        Harness h = NewHarness();
+        // RepeatStarted and pushes the lap's duration into LapHistory.
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
 
         Assert.Empty(h.Runner.LapHistory);
 
+        clock.Advance(TimeSpan.FromSeconds(4));
         h.Tracker.NoteRoomObserved(new RoomObservation("B",
             new HashSet<Direction> { Direction.N, Direction.S }));
+        clock.Advance(TimeSpan.FromSeconds(3));
         h.Tracker.NoteRoomObserved(new RoomObservation("A",
             new HashSet<Direction> { Direction.N }));
 
-        Assert.Single(h.Runner.LapHistory);
+        Assert.Equal(TimeSpan.FromSeconds(7), Assert.Single(h.Runner.LapHistory));
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
-        Assert.True(h.Runner.LapHistory[0] >= TimeSpan.Zero);
     }
 
     // ----- PR D: avoid-list re-expand ---------------------------------

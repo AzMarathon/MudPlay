@@ -9,12 +9,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="SelfHeldResponder"/> — our own knockdown / held (MovementPrevented)
-/// lights the self party chip and asserts the HeldGate so the loop holds instead
-/// of hammering the server with moves that bonk "flat on your back"; both release
-/// on "You get back on your feet.". There is no opt-out — a knockdown always holds.
-/// </summary>
+// SelfHeldResponder — our own knockdown / held (MovementPrevented)
+// lights the self party chip and asserts the HeldGate so the loop holds instead
+// of hammering the server with moves that bonk "flat on your back"; both release
+// on "You get back on your feet.". There is no opt-out — a knockdown always holds.
 public sealed class SelfHeldResponderTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

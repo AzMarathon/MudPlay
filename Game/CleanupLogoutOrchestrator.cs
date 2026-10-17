@@ -105,7 +105,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
           + (_exitSentUtc != default ? $", exit sent {_exitSentUtc.ToLocalTime():HH:mm:ss}{(_exitRetried ? " (retried)" : string.Empty)}" : string.Empty);
     private bool _disposed;
 
-    // Where in the log-off sequence we are. Public so the host (and tests) can
+    // Where in the log-off sequence we are. Public so the host can
     // observe the FSM without driving it.
     public CleanupLogoutPhase Phase { get; private set; } = CleanupLogoutPhase.Idle;
 

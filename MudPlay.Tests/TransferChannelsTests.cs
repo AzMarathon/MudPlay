@@ -359,8 +359,10 @@ public sealed class TransferChannelsTests
                 DisableBroadcastChannel = !broadcastOpen,
             };
             Commands.SetWireSender(CommandsWire.Add);
-            // Stand-ins that answer as the real handlers do for a channel they use,
-            // and refuse as they do for one they don't.
+            // Stand-ins that answer for a channel the transfer uses and refuse for one
+            // it doesn't, so these tests pin how the engine routes an answer or a
+            // refusal back. The real handlers' own channel checks are pinned in
+            // RoombaQueryHandlerTests and LoopShareTests.
             Register("@timer", PlayerRemoteControls.QueryBossTimers, Transfer.TimerSync);
             Register("@roomba", PlayerRemoteControls.QueryItemLocation, Transfer.RoombaSync);
             Register("@loop", PlayerRemoteControls.MovePlayer, Transfer.LoopSend);
@@ -793,7 +795,7 @@ public sealed class TransferChannelsTests
     [InlineData("@roomba sync", "br {@roomba sync works by telepath or gangpath only}\r")]
     [InlineData("@loop send kings road", "br {@loop send works by telepath only}\r")]
     [InlineData("@loop send yes", "br {@loop send works by telepath only}\r")]
-    public void ATransferThatDoesNotUseTheBroadcastChannel_IsRefusedThere(string line, string expected)
+    public void ARefusalOfARequestHeardOnTheBroadcastChannel_GoesBackThere(string line, string expected)
     {
         Engine e = new();
         ChatLines.Hear(e.Router, Broadcast("Friend", line));
@@ -1370,7 +1372,7 @@ public sealed class TransferChannelsTests
     [InlineData("@timer sync", RemoteChannel.Gangpath, "bg {data}\r")]
     [InlineData("@timer sync", RemoteChannel.Local, ">Friend {data}\r")]
     [InlineData("@timer sync", RemoteChannel.Broadcast, "br {data}\r")]
-    public void EachTransferOnEachChannel_IsAnsweredOrRefusedOnThatChannel(string line, RemoteChannel channel, string expected)
+    public void AHandlersAnswerOrRefusal_GoesBackOnTheChannelTheRequestCameBy(string line, RemoteChannel channel, string expected)
     {
         Engine e = new();
 

@@ -7,14 +7,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the blanket train-stats automation lockout: while the trainer / creation
-/// form owns the keyboard, <see cref="TrainerScreenGate"/> raises an
-/// <see cref="EngineSendGate"/> hold that no-ops every wrapped engine — even on a
-/// cursor-positioned realm whose "Point Cost Chart" marker never confirms — and
-/// releases it when the form closes. A raw (un-wrapped) sender still pierces the
-/// hold, mirroring how the auto-trainer's CP replay + user input stay live.
-/// </summary>
+// Pins the blanket train-stats automation lockout: while the trainer / creation
+// form owns the keyboard, TrainerScreenGate raises an
+// EngineSendGate hold that no-ops every wrapped engine — even on a
+// cursor-positioned realm whose "Point Cost Chart" marker never confirms — and
+// releases it when the form closes. A raw (un-wrapped) sender still pierces the
+// hold, mirroring how the auto-trainer's CP replay + user input stay live.
 public sealed class TrainerScreenGateTests
 {
     private static readonly DateTime Now = new(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc);

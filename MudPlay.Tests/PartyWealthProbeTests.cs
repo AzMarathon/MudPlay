@@ -9,15 +9,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Mirrors <see cref="PartyLevelProbeTests"/>: the probe is wired to a real
-/// <see cref="ChatRouter"/> so replies flow through the same classification
-/// path production uses, a <see cref="PartyBroadcaster"/> whose wire is
-/// captured, and a captured <c>armWindow</c> seam so tests fire the reply
-/// window deterministically. The three @wealth reply shapes
-/// (<see cref="InventoryQueryHandler"/>.OnWealth) are exercised: a loaded
-/// wallet with coins, a real empty purse, and "wealth unknown".
-/// </summary>
+// Mirrors PartyLevelProbeTests: the probe is wired to a real
+// ChatRouter so replies flow through the same classification
+// path production uses, a PartyBroadcaster whose wire is
+// captured, and a captured armWindow seam so tests fire the reply
+// window deterministically. The three @wealth reply shapes
+// (InventoryQueryHandler.OnWealth) are exercised: a loaded
+// wallet with coins, a real empty purse, and "wealth unknown".
 public sealed class PartyWealthProbeTests
 {
     private sealed class Harness

@@ -216,13 +216,13 @@ public sealed class PartyComebackManager : IDisposable
     // Invoked with a leader's given name when a @forget teardown involves someone
     // we were following, so the follower-side rejoin memory
     // (PartyRejoinCoordinator.ForgetRememberedLeader) clears too. AppServices wires
-    // it; null in tests.
+    // it.
     public Action<string>? ForgetLeaderCallback { get; set; }
 
     // Invoked with a member's given name and why, once we commit to walking to them
     // or decline them: whatever still holds our movement for that member (their
     // reconnect hold, a pending @wait) would park the pickup walk, and the member
-    // is waiting on that walk. AppServices wires it; null in tests.
+    // is waiting on that walk. AppServices wires it.
     public Action<string, string>? ReleaseHolds { get; set; }
 
     // True on a Stock realm. Stock ends the follow of a member whose follow move

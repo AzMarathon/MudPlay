@@ -352,18 +352,6 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
-    public void AllExpansionsClose_SinceLoopsAreCircular()
-    {
-        // No CloseLoop toggle anymore — every saved loop closes by
-        // definition (schema v2). 1 → 3 click sequence produces
-        // N + N (1→2→3) plus closing S + S (3→2→1) = 4 steps.
-        (LoopBuilderSessionViewModel s, _) = NewSession();
-        s.AddClick(new RoomKey(1, 1));
-        s.AddClick(new RoomKey(1, 3));
-        Assert.Equal(4, s.ExpandedStepCount);
-    }
-
-    [Fact]
     public void UnreachableSegment_SurfacedAndBlocksSave()
     {
         // Two disconnected components: 1/1 ↔ 1/2 and 9/1 (isolated).

@@ -193,14 +193,15 @@ public sealed class RoombaQueryHandlerTests : IDisposable
     {
         var (engine, players, _, locations) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryItemLocation);
-        DateTimeOffset before = DateTimeOffset.Now;
         locations.RecordRoom(new RoomKey(1, 100), new[] { "long sword" });
+        // The stamp the sighting took, read back so a minute rolling over can't split it.
+        DateTimeOffset seen = Assert.Single(locations.FindSightings("long sword")).SeenAt;
 
         ChatLines.Hear(_routers[engine], Gangpath("Friend", "@roomba long sword"));
 
         string reply = Assert.Single(Replies());
         Assert.Contains(
-            $"last scanned {before:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(before)}", reply);
+            $"last scanned {seen:yyyy-MM-dd HH:mm} {TimeZoneAbbreviation.For(seen)}", reply);
     }
 
     // Beyond MaxRoomsShown, the room list folds into a "+N more" tail instead

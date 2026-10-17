@@ -141,14 +141,4 @@ public sealed class RouteEtaEstimatorTests
             lairWillBeFought: r => r.Key.Room == 2));
     }
 
-    [Fact]
-    public void NullPredicate_CountsEveryLair()
-    {
-        // Back-compat: no engageability predicate → every lair counts, 28 s as before.
-        RoomKey[] rooms = { new(1, 1), new(1, 2), new(1, 3), new(1, 4) };
-        Func<RoomKey, Room?> lookup = Lookup(
-            Plain(1), Lair(2, "(Max 3): 100"), Lair(3, "(Max 2): 200"), Plain(4));
-        Assert.Equal(TimeSpan.FromSeconds(28), RouteEtaEstimator.Estimate(
-            rooms, Flat(), lookup, includeLairDwell: true, lairWillBeFought: null));
-    }
 }

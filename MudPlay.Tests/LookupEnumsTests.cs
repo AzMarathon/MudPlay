@@ -3,12 +3,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Spot-check tests for <see cref="LookupEnums"/>: every formatter accepts
-/// a raw string from the game-data JSON, parses it, and returns the
-/// MMUD-Explorer-compatible label. Unknown codes surface as
-/// <c>Unknown(N)</c> so missing entries are visible rather than silent.
-/// </summary>
+// Spot-check tests for LookupEnums: every formatter accepts
+// a raw string from the game-data JSON, parses it, and returns the
+// game-data label. Unknown codes surface as
+// Unknown(N) so missing entries are visible rather than silent.
 public sealed class LookupEnumsTests
 {
     [Theory]

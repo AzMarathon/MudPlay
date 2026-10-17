@@ -11,14 +11,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="QuestTextFormatter"/>'s data-independent logic: the multi-part band
-/// title ("Good 1" from the GoodQuest flag), the checkbox-markdown parser that
-/// classifies a step line as a tickable checkbox or a plain context label, and the
-/// <c>(map/room)</c> coordinate splitter that isolates clickable walk-to links from
-/// surrounding prose. The cache-dependent <see cref="QuestTextFormatter.StepLines"/>
-/// is covered by the crawler's step-range tests; here we pin the pure string behaviour.
-/// </summary>
+// QuestTextFormatter's data-independent logic: the multi-part band
+// title ("Good 1" from the GoodQuest flag), the checkbox-markdown parser that
+// classifies a step line as a tickable checkbox or a plain context label, and the
+// (map/room) coordinate splitter that isolates clickable walk-to links from
+// surrounding prose. The cache-dependent QuestTextFormatter.StepLines is covered by
+// QuestItemGatheringTests and QuestTickMigrationTests; here we pin the pure string
+// behaviour.
 public sealed class QuestTextFormatterTests
 {
     [Fact]

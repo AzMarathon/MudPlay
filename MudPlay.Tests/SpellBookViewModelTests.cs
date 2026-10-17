@@ -10,11 +10,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="SpellBookViewModel"/> — the projection of
-/// <see cref="SpellbookState"/> into rendered, filtered rows. Reuses the
-/// synthetic Mage / Warrior class + spell rows from the other spellbook tests.
-/// </summary>
+// Pins SpellBookViewModel — the projection of
+// SpellbookState into rendered, filtered rows. Reuses the
+// synthetic Mage / Warrior class + spell rows from the other spellbook tests.
 public sealed class SpellBookViewModelTests : IDisposable
 {
     private readonly string _root;
@@ -587,7 +585,7 @@ public sealed class SpellBookViewModelTests : IDisposable
     public void CastItems_UnlimitedSentinel_TreatsZeroAndNegativeAsUnlimited()
     {
         // MajorMUD stores -1 for an unlimited item and (rarely) 0; both mean
-        // unlimited — matching MMUD Explorer's "If uses <= 0 Then uses = -1". Only a
+        // unlimited. Only a
         // positive count is a real charge count.
         object[] items =
         [

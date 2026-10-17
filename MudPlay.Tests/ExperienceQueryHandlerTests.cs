@@ -9,13 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the read-only <see cref="ExperienceQueryHandler"/> replies
-/// (<c>@exp</c> / <c>@level</c>): progression numbers come from the
-/// <see cref="PlayerStats"/> snapshot, the session rate + earned total
-/// from a clock-driven <see cref="SessionActivityTracker"/>. Both gate on
-/// "not parsed yet" and reply on the sender's channel — never touch the wire.
-/// </summary>
+// Pins the read-only ExperienceQueryHandler replies
+// (@exp / @level): progression numbers come from the
+// PlayerStats snapshot, the session rate + earned total
+// from a clock-driven SessionActivityTracker. Both gate on
+// "not parsed yet" and reply on the sender's channel — never touch the wire.
 public sealed class ExperienceQueryHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.

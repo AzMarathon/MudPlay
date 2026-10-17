@@ -111,7 +111,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // Spell typeahead for the three spell-override pickers — the character's castable
     // spells (SpellbookState.AvailablePicks, the Settings → Combat source) that fit the
     // slot: debuffs for the debuff box, attack spells for the two attack boxes
-    // (Game.Combat.OverrideSpellFit). Unfiltered when no spell lookup was given (tests).
+    // (Game.Combat.OverrideSpellFit). Unfiltered when no spell lookup was given.
     // The box commits the pick's Short cast-code.
     public IReadOnlyList<SpellPick> DebuffSuggestions { get; }
     public IReadOnlyList<SpellPick> AttackSuggestions { get; }
@@ -178,7 +178,7 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     // Resolves a typed cast-code (e.g. "turn") to its Spells.Number, or null
     // when the text doesn't match a known spell — see ResolveSpellOverride.
     // Optional so the dialog still works (falling back to numeric-only
-    // detection) wherever game data isn't wired, e.g. tests.
+    // detection) wherever game data isn't wired.
     private readonly Func<string, int?>? _resolveSpellShort;
 
     // The inverse: a stored Spells.Number back to its cast-code, so re-opening

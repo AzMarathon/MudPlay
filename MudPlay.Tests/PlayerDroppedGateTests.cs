@@ -7,12 +7,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="PlayerDroppedGate"/> — HP falling to or below 0 (mortally
-/// wounded) holds the <see cref="EngineSendGate"/>, asserts the
-/// MortallyWoundedGate, and clears the stale party roster; all three release on
-/// recovery.
-/// </summary>
+// PlayerDroppedGate — HP falling to or below 0 (mortally
+// wounded) holds the EngineSendGate, asserts the
+// MortallyWoundedGate, and clears the stale party roster; all three release on
+// recovery.
 public sealed class PlayerDroppedGateTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

@@ -6246,10 +6246,6 @@ public partial class MainWindowViewModel : ObservableObject
 
     // ----- Polish commands -----------------------------------------------
 
-    // View → Reset layout. Restores every panel to docked default.
-    [RelayCommand]
-    private void ResetLayout() => AppServices.Current.Panels.ResetToDefault();
-
     // Tools → Open Logs folder…
     [RelayCommand]
     private void OpenLogsFolder()

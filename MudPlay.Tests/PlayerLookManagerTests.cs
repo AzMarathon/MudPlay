@@ -9,13 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="PlayerLookManager"/> — reactive `look &lt;player&gt;` automation.
-/// Covers the end-to-end look-back pattern (validates the PlayerLooksAtYou
-/// regex + subscription), the arrival hook's Player/Monster gating, and the
-/// per-behaviour decision seams (enable gate, self/party skip, given-name
-/// targeting).
-/// </summary>
+// PlayerLookManager — reactive `look <player>` automation.
+// Covers the end-to-end look-back pattern (validates the PlayerLooksAtYou
+// regex + subscription), the arrival hook's Player/Monster gating, and the
+// per-behaviour decision seams (enable gate, self/party skip, given-name
+// targeting).
 public sealed class PlayerLookManagerTests
 {
     private sealed class Harness : IDisposable

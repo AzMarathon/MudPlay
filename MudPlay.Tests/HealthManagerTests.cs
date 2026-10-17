@@ -8,11 +8,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.B — <see cref="HealthManager"/> threshold-driven gate
-/// assertions + rest / stand pacing + InCombat respect + pre-/post-rest
-/// chained commands.
-/// </summary>
+// HealthManager threshold-driven gate
+// assertions + rest / stand pacing + InCombat respect + pre-/post-rest
+// chained commands.
 public sealed class HealthManagerTests
 {
     // Reacted to the run trigger this fight and waiting for it to end, as the bug
@@ -42,102 +40,102 @@ public sealed class HealthManagerTests
         public bool MasterSwitchOff { get; set; }
         public List<string?> HeldByMasterSwitch { get; } = new();
 
-        /// <summary>Char-tier General settings. Default instance has
-        /// AllowHangupInAllOffMode=false, so the all-off carve-out stays
-        /// dormant unless a test opts in.</summary>
+        // Char-tier General settings. Default instance has
+        // AllowHangupInAllOffMode=false, so the all-off carve-out stays
+        // dormant unless a test opts in.
         public Models.Profile.GeneralSettings General { get; set; } = new();
 
-        /// <summary>User-configured hangup command (Settings → BBS →
-        /// Game-menu commands). Default <c>=x</c> matches the default
-        /// value shipped on <c>BbsProfile.GameExitCommand</c>. Set to
-        /// null to test the "not configured" branch.</summary>
+        // User-configured hangup command (Settings → BBS →
+        // Game-menu commands). Default =x matches the default
+        // value shipped on BbsProfile.GameExitCommand. Set to
+        // null to test the "not configured" branch.
         public string? HangupCommand { get; set; } = "=x";
 
-        /// <summary>What the wimpy-goto escape delegate returns — true = it
-        /// dispatched a jump (so the hangup is skipped), false = couldn't (falls
-        /// back to hangup). Default false.</summary>
+        // What the wimpy-goto escape delegate returns — true = it
+        // dispatched a jump (so the hangup is skipped), false = couldn't (falls
+        // back to hangup). Default false.
         public bool WimpyFireResult { get; set; }
 
-        /// <summary>The location the wimpy-goto delegate was last invoked with,
-        /// or null if never called this run.</summary>
+        // The location the wimpy-goto delegate was last invoked with,
+        // or null if never called this run.
         public string? WimpyFiredWith { get; private set; }
 
-        /// <summary>When true, HealthManager's rest-out branch skips —
-        /// mirrors CombatStateTracker.HasEngageableHostiles in app code.
-        /// Defaults false (room clear) so existing tests don't need to
-        /// touch it.</summary>
+        // When true, HealthManager's rest-out branch skips —
+        // mirrors CombatStateTracker.HasEngageableHostiles in app code.
+        // Defaults false (room clear) so existing tests don't need to
+        // touch it.
         public bool HostilesPresent { get; set; }
 
-        /// <summary>When true, a gear-set swap is streaming its wear/rem commands —
-        /// HealthManager holds its rest re-issue so it doesn't thrash the swap.
-        /// Mirrors EquipmentManager.IsApplyingSet. Defaults false.</summary>
+        // When true, a gear-set swap is streaming its wear/rem commands —
+        // HealthManager holds its rest re-issue so it doesn't thrash the swap.
+        // Mirrors EquipmentManager.IsApplyingSet. Defaults false.
         public bool EquipmentApplying { get; set; }
 
-        /// <summary>Live Auto-Combat toggle for the engage-to-clear-a-rest-blocker
-        /// override. Defaults TRUE (combat on) so existing tests never trigger the
-        /// force-clear — it only fires with Auto-Combat OFF.</summary>
+        // Live Auto-Combat toggle for the engage-to-clear-a-rest-blocker
+        // override. Defaults TRUE (combat on) so existing tests never trigger the
+        // force-clear — it only fires with Auto-Combat OFF.
         public bool AutoCombatEnabled { get; set; } = true;
 
-        /// <summary>Increments each time HealthManager pokes CombatManager to engage a
-        /// rest-blocker. AppServices wires this to CombatManager.RequestRestClearEngage.</summary>
+        // Increments each time HealthManager pokes CombatManager to engage a
+        // rest-blocker. AppServices wires this to CombatManager.RequestRestClearEngage.
         public int RestClearEngageCount { get; private set; }
 
-        /// <summary>Hostile-in-room signal gating the emergency hangup —
-        /// mirrors CombatStateTracker.HasHostileMonster (auto-attack
-        /// independent). Defaults true so the existing hangup tests, which
-        /// predate the gate, keep firing exactly as before.</summary>
+        // Hostile-in-room signal gating the emergency hangup —
+        // mirrors CombatStateTracker.HasHostileMonster (auto-attack
+        // independent). Defaults true so the existing hangup tests, which
+        // predate the gate, keep firing exactly as before.
         public bool HostileInRoom { get; set; } = true;
 
-        /// <summary>Per-BBS negative-HP death floor (BbsProfile.PlayerDiesAtHp).
-        /// Default -25 matches the seeded value. The emergency hangup fires
-        /// anywhere in the bleeding-out window down to — but not past — this.</summary>
+        // Per-BBS negative-HP death floor (BbsProfile.PlayerDiesAtHp).
+        // Default -25 matches the seeded value. The emergency hangup fires
+        // anywhere in the bleeding-out window down to — but not past — this.
         public int DeathFloor { get; set; } = -25;
 
-        /// <summary>Simulates a loop's "do not rest in this room" flag — when true,
-        /// HealthManager suppresses the rest hold (the loop would advance instead of
-        /// resting). Defaults false so existing tests rest normally. AppServices
-        /// wires this to the running loop's current-room DoNotRest waypoint.</summary>
+        // Simulates a loop's "do not rest in this room" flag — when true,
+        // HealthManager suppresses the rest hold (the loop would advance instead of
+        // resting). Defaults false so existing tests rest normally. AppServices
+        // wires this to the running loop's current-room DoNotRest waypoint.
         public bool SkipRestHere { get; set; }
 
         // A loop's "rest up here" flags for the room we're in.
         public (bool Hp, bool Mana) RestHere { get; set; }
 
-        /// <summary>Local character poisoned — AppServices wires this to
-        /// ConditionTracker.IsPoisoned. Poison prevents a rest from taking.</summary>
+        // Local character poisoned — AppServices wires this to
+        // ConditionTracker.IsPoisoned. Poison prevents a rest from taking.
         public bool Poisoned { get; set; }
 
-        /// <summary>The hangup-intent signal wired into the emergency-hangup
-        /// path. Tests peek it (non-consuming) to assert an intentional drop was
-        /// flagged, so the reactive-reconnect path stands down.</summary>
+        // The hangup-intent signal wired into the emergency-hangup
+        // path. Tests peek it (non-consuming) to assert an intentional drop was
+        // flagged, so the reactive-reconnect path stands down.
         public HangupSignal Hangup { get; } = new();
 
-        /// <summary>ShadowRest predicates (AppServices wires these to the class
-        /// ability, StealthManager.IsStealthed, and !PartyState.IsInParty). All
-        /// default to the "engaged" side so a test only sets the one it's probing;
-        /// the UtilizeShadowRest setting still has to be on for it to fire.</summary>
+        // ShadowRest predicates (AppServices wires these to the class
+        // ability, StealthManager.IsStealthed, and !PartyState.IsInParty). All
+        // default to the "engaged" side so a test only sets the one it's probing;
+        // the UtilizeShadowRest setting still has to be on for it to fire.
         public bool ShadowRestClass { get; set; } = true;
         public bool Stealthed { get; set; } = true;
         public bool Solo { get; set; } = true;
 
-        /// <summary>Increments each time HealthManager fires the ShadowRest resume
-        /// callback (recovery topped off to rest-max). AppServices wires this to
-        /// CombatManager.ResumeAfterShadowRest.</summary>
+        // Increments each time HealthManager fires the ShadowRest resume
+        // callback (recovery topped off to rest-max). AppServices wires this to
+        // CombatManager.ResumeAfterShadowRest.
         public int ShadowRestResumeCount { get; private set; }
 
-        /// <summary>Increments each time the emergency hangup asks the client to
-        /// close the carrier after sending the exit command. AppServices wires
-        /// this to MainWindowViewModel.RequestHangupDisconnect.</summary>
+        // Increments each time the emergency hangup asks the client to
+        // close the carrier after sending the exit command. AppServices wires
+        // this to MainWindowViewModel.RequestHangupDisconnect.
         public int HangupDisconnectCount { get; private set; }
 
-        /// <summary>Controllable clock for the reconfirm-hold timeout backstop.
-        /// Advance it to simulate the window elapsing with no room re-display.</summary>
+        // Controllable clock for the reconfirm-hold timeout backstop.
+        // Advance it to simulate the window elapsing with no room re-display.
         public DateTimeOffset Clock = DateTimeOffset.UtcNow;
 
-        /// <summary>When true, a deferred HealthManager reaction (ConfirmHpGate /
-        /// ConfirmMaGate — see _post) is queued into Posted instead of running
-        /// inline, so a test can simulate the tick between a gate's initial assert
-        /// and its one-tick re-check. Default false keeps every existing test's
-        /// gate-assert synchronous (immediately confirmed on unchanged state).</summary>
+        // When true, a deferred HealthManager reaction (ConfirmHpGate /
+        // ConfirmMaGate — see _post) is queued into Posted instead of running
+        // inline, so a test can simulate the tick between a gate's initial assert
+        // and its one-tick re-check. Default false keeps every existing test's
+        // gate-assert synchronous (immediately confirmed on unchanged state).
         public bool DeferPost { get; set; }
         public Queue<Action> Posted { get; } = new();
         public void DrainPost() { while (Posted.Count > 0) Posted.Dequeue()(); }
@@ -153,14 +151,14 @@ public sealed class HealthManagerTests
             foreach (Action a in due) a();
         }
 
-        /// <summary>Char-tier Party settings — drives the @panic send gate
-        /// (UsePanicWhileLeading) read by HealthManager. Default instance has
-        /// both panic flags off.</summary>
+        // Char-tier Party settings — drives the @panic send gate
+        // (UsePanicWhileLeading) read by HealthManager. Default instance has
+        // both panic flags off.
         public PartySettings Party { get; set; } = new();
 
-        /// <summary>Whether HealthManager believes we're leading a party — the
-        /// @panic broadcast only fires while leading. AppServices wires this to
-        /// PartyState.IsInParty &amp;&amp; PartyState.SelfIsLeader. Default false.</summary>
+        // Whether HealthManager believes we're leading a party — the
+        // @panic broadcast only fires while leading. AppServices wires this to
+        // PartyState.IsInParty && PartyState.SelfIsLeader. Default false.
         public bool SelfIsLeader { get; set; }
 
         public Harness(HealthSettings? settings = null)
@@ -208,12 +206,10 @@ public sealed class HealthManagerTests
                 requestEngage: () => RestClearEngageCount++);
         }
 
-        /// <summary>
-        /// Mirror <see cref="PromptParser"/>'s write order: values
-        /// first, HasPromptData last. Anything else and the engine
-        /// sees Hp=0 with HasPromptData=true and asserts spuriously
-        /// — same race a sloppy producer would hit in production.
-        /// </summary>
+        // Mirror PromptParser's write order: values
+        // first, HasPromptData last. Anything else and the engine
+        // sees Hp=0 with HasPromptData=true and asserts spuriously
+        // — same race a sloppy producer would hit in production.
         public void SetPrompt(int hp, int maxHp, int ma = 0, int maxMa = 0)
         {
             State.Hp = hp;
@@ -1618,28 +1614,6 @@ public sealed class HealthManagerTests
 
     // ----- run-if-below (flee) ---------------------------------------
 
-    [Fact]
-    public void HpBelowRunTrigger_InCombat_SendsFleeOnce()
-    {
-        // Default RunIfBelowHp=20% — set HP to 30 against MaxHp=200
-        // (15%) while in combat. Run-threshold detection latches
-        // _fledThisCombat=true; the wire emit is currently log-only
-        // because MajorMUD has no `flee` command and the right
-        // replacement (walker-driven retreat) ships with Cluster 5b.
-        using Harness h = new();
-        h.State.MaxHp = 200;
-        h.State.InCombat = true;
-        h.State.HasPromptData = true;
-        h.State.Hp = 30;
-
-        Assert.DoesNotContain("flee", h.SentLines);   // engine never sent the bogus command
-        Assert.True(Fled(h.Health));
-
-        // Drop further → still no spam.
-        h.State.Hp = 25;
-        Assert.DoesNotContain("flee", h.SentLines);
-    }
-
     // ----- engage-to-clear a rest-blocker (Auto-Combat OFF) ----------
     // report paradigm-20260901-093301: a hostile blocking a needed rest with
     // Auto-Combat off deadlocks (can't rest, won't fight, HP above the flee
@@ -1734,7 +1708,6 @@ public sealed class HealthManagerTests
         h.State.HasPromptData = true;
         h.State.Hp = 30;            // 15% — below run threshold
 
-        Assert.DoesNotContain("flee", h.SentLines);
         Assert.False(Fled(h.Health));
     }
 
@@ -1898,31 +1871,6 @@ public sealed class HealthManagerTests
 
         Assert.Equal(0, healRequested);
         Assert.True(Fled(h.Health));
-        Assert.DoesNotContain("flee", h.SentLines);
-    }
-
-    [Fact]
-    public void Follower_WithoutHealCallbackWired_LatchesTheDecisionAndSendsNothing()
-    {
-        // isPartyFollower true but no requestPartyHeal callback wired: there is no
-        // heal to ask for, and a follower never flees, so the run trigger is held
-        // with nothing sent. This harness has no walk or loop, so it shows only
-        // the decision latch and the empty wire; the follower tests further down,
-        // which have one, show that no run starts.
-        using Harness h = new();
-        h.Health.SetPartyRoleSync(
-            isPartyFollower: () => true,
-            requestPartyWait: () => { },
-            requestPartyOk: () => { });   // requestPartyHeal omitted (null)
-        h.State.MaxHp = 200;
-        h.State.InCombat = true;
-        h.State.HasPromptData = true;
-        h.State.Hp = 30;
-
-        // Flee path taken (still a no-op on the wire without an engine), and
-        // the single-shot latch is set.
-        Assert.True(Fled(h.Health));
-        Assert.DoesNotContain("flee", h.SentLines);
     }
 
     // ----- party @wait / @ok recovery ceiling (report 222618) -------
@@ -2075,10 +2023,10 @@ public sealed class HealthManagerTests
         Assert.Equal(1, oks);
     }
 
-    // ----- Multi-step flee + auto-resume (Cluster 5b foundation) ----
+    // ----- Multi-step flee + auto-resume ----------------------------
 
-    /// <summary>Fake engine for testing the flee dispatch — captures
-    /// every call instead of touching real walker plumbing.</summary>
+    // Fake engine for testing the flee dispatch — captures
+    // every call instead of touching real walker plumbing.
     private sealed class FakeFleeEngine : Game.Map.IRecoverableEngine
     {
         public string Name => "FakeWalker";
@@ -2359,6 +2307,26 @@ public sealed class HealthManagerTests
     }
 
     // Same report: the flee landed on a monster and fought it at run-trigger HP.
+    // One run per fight: a further HP drop in the same room sends no second step.
+    [Fact]
+    public void Flee_FurtherHpDropInTheSameRoom_SendsNoSecondStep()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 1;
+        h.LastSent = Game.Map.Direction.N;
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+
+        h.State.Hp = 25;
+
+        Assert.Single(h.Engine.SentBacktrackMoves);
+    }
+
     [Fact]
     public void Flee_LandsOnAHostile_StillUnderTrigger_FleesAgain()
     {
@@ -2847,18 +2815,6 @@ public sealed class HealthManagerTests
             requestPartyOk: () => { },
             requestPartyHeal: requestHeal);
         return h;
-    }
-
-    [Fact]
-    public void Follower_LowHp_WithNoHealToAskFor_StillDoesNotRun()
-    {
-        using FleeHarness h = FollowerWithAnEngine();
-        h.State.InCombat = true;
-
-        h.State.Hp = 30;                 // 15%, under the run trigger
-
-        Assert.Empty(h.Engine!.SentBacktrackMoves);
-        Assert.False(h.Health.IsFleeInFlight);
     }
 
     [Fact]
@@ -3759,7 +3715,7 @@ public sealed class HealthManagerTests
         // We rested; server confirmed (Resting). Then a monster enters
         // and swings — server boots us back to (Standing). HP still
         // below rest-target → on the next Evaluate tick we re-send
-        // `rest` (mirrors MudProxy's OnRestingStateChanged).
+        // `rest`.
         using Harness h = new();
         h.State.MaxHp = 200;
         h.State.HasPromptData = true;
@@ -3847,7 +3803,7 @@ public sealed class HealthManagerTests
         Assert.Equal(2, h.SentLines.Count(l => l == "rest"));
     }
 
-    // ----- Meditate vs Rest (Cluster 5c) -----------------------------
+    // ----- Meditate vs Rest ------------------------------------------
 
     [Fact]
     public void Meditate_OnlyMaGated_PrefersMeditate()
@@ -4039,7 +3995,7 @@ public sealed class HealthManagerTests
         Assert.True(h.Health.RestInFlight);
     }
 
-    // ----- Hangup-on-emergency (Cluster 5c) -------------------------
+    // ----- Hangup-on-emergency --------------------------------------
 
     [Fact]
     public void Hangup_HpBelowTrigger_SendsDisconnect()
@@ -5230,7 +5186,7 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("=x", h.SentLines);
     }
 
-    // ----- party-role-aware recovery (PR 9.B role fix) ---------------
+    // ----- party-role-aware recovery ---------------------------------
 
     [Fact]
     public void Follower_RecoversToFloorPlusOne_NotRestMax()
@@ -5501,21 +5457,6 @@ public sealed class HealthManagerTests
         Assert.Equal(1, oks);        // leader released, not left hanging
     }
 
-    [Fact]
-    public void NoRoleSync_RecoversToRestMax_NoSignals()
-    {
-        // Backward-compat: without SetPartyRoleSync the engine behaves as
-        // solo/leader — rest-max target, no party signals.
-        using Harness h = new();
-        h.State.MaxHp = 200;
-        h.State.HasPromptData = true;
-        h.State.Hp = 50;
-        h.State.Hp = 121;            // above floor but below rest-max
-        Assert.True(h.HealthGateHeld);
-        h.State.Hp = 190;
-        Assert.False(h.HealthGateHeld);
-    }
-
     // ----- opportunistic follower rest (leader resting) ------------
 
     [Fact]
@@ -5551,21 +5492,6 @@ public sealed class HealthManagerTests
 
         Assert.DoesNotContain("rest", h.SentLines);
         Assert.DoesNotContain("meditate", h.SentLines);
-    }
-
-    [Fact]
-    public void Opportunistic_NoLeaderRestSelector_DoesNotRest()
-    {
-        // Backward-compat: the 3-arg SetPartyRoleSync leaves isLeaderResting
-        // null, so opportunistic top-off never engages even as a follower.
-        using Harness h = new();
-        h.Health.SetPartyRoleSync(
-            isPartyFollower: () => true,
-            requestPartyWait: () => { },
-            requestPartyOk: () => { });
-        h.SetPrompt(hp: 150, maxHp: 200);
-
-        Assert.DoesNotContain("rest", h.SentLines);
     }
 
     [Fact]
@@ -5764,21 +5690,6 @@ public sealed class HealthManagerTests
             requestPartyOk: () => { },
             isLeaderWaited: () => false,
             isSelfPoisoned: () => false);
-        h.SetPrompt(hp: 150, maxHp: 200);
-
-        Assert.DoesNotContain("rest", h.SentLines);
-    }
-
-    [Fact]
-    public void LeaderWaited_NoWaitSelector_DoesNotRest()
-    {
-        // Backward-compat: without isLeaderWaited wired, a leader never rests
-        // just because it's paused.
-        using Harness h = new();
-        h.Health.SetPartyRoleSync(
-            isPartyFollower: () => false,
-            requestPartyWait: () => { },
-            requestPartyOk: () => { });
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);

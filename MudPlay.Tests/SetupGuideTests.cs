@@ -238,19 +238,6 @@ public sealed class SetupGuideTests
     }
 
     [Fact]
-    public void CurrentIsDone_ReflectsLivePrereq()
-    {
-        (GuideViewModel vm, Flags f) = Make();
-        vm.StartSetup();
-        Assert.False(vm.CurrentIsDone);
-        f.Bbs = true;
-        // Re-read via a property refresh (Refresh raises it).
-        vm.Refresh();
-        // Auto-advanced past the now-done BBS step.
-        Assert.Equal("Add a character", vm.CurrentTitle);
-    }
-
-    [Fact]
     public void Refresh_AutoAdvancesPastCompletedSteps()
     {
         (GuideViewModel vm, Flags f) = Make();

@@ -11,15 +11,13 @@ using Harness = MudPlay.Tests.EventEngineHarness;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for the walk-to auto-resume flow in
-/// <see cref="EventManager"/> — snapshot precedence, the OnResume
-/// walker-event handler's three outcomes (Finished / Failed /
-/// Stopped), and the cascade case where one event-walk fires while
-/// another's still in flight. Uses a real engine fixture (graph +
-/// BFS + tracker + walker + loop runner + auto-lair) because the
-/// resume contract spans all of them.
-/// </summary>
+// Coverage for the walk-to auto-resume flow in
+// EventManager — snapshot precedence, the OnResume
+// walker-event handler's three outcomes (Finished / Failed /
+// Stopped), and the cascade case where one event-walk fires while
+// another's still in flight. Uses a real engine fixture (graph +
+// BFS + tracker + walker + loop runner + auto-lair) because the
+// resume contract spans all of them.
 public sealed class EventManagerResumeTests : IDisposable
 {
     // The game-data set LoopManager.Save writes loops under, in the data root's

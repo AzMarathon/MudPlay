@@ -551,11 +551,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Bind the voyage scheduler — a one-shot wall-clock timer the boat step uses
     // to time the sail from boarding to landing (see the _boatTimer field). It's
     // injected rather than a raw timer so the Game/Map layer stays UI-free:
-    // production wires a UI-thread one-shot (DispatcherTimer), tests a fake clock
-    // they fire by hand. The callback must land on the same thread the walker runs
+    // AppServices wires a UI-thread one-shot (DispatcherTimer). The callback must land on the same thread the walker runs
     // on (the UI thread in production). Left unset on realms with no docks — a
-    // voyage then relies purely on the arrival observation, which is fine for the
-    // tests that never sail without wiring a scheduler.
+    // voyage then relies purely on the arrival observation.
     public void SetVoyageScheduler(Func<TimeSpan, Action, IDisposable> scheduler)
     {
         ArgumentNullException.ThrowIfNull(scheduler);
@@ -588,7 +586,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     // Bind the trap-disarm enqueuer. Production wires this to
     // TrapDisarmManager.Enqueue, which disarms directly before the move goes out.
-    // Tests pass a capture-and-fire delegate.
     //
     // Signature: (direction, sender, reply). The walker passes the
     // lowercase direction word, the literal string "walker", and a reply
@@ -1083,7 +1080,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // walk nobody chose a route for states none, and used to take whichever vortex
     // was on the shortest route with nobody asked. Read as each such walk starts and
     // kept for the whole walk, so a change of the setting reaches the next walk and
-    // never a route under way. Unwired (tests, tooling) nothing is refused.
+    // never a route under way. Unwired, nothing is refused.
     private Func<IReadOnlySet<(RoomKey From, RoomKey To)>?>? _automaticWalkTeleports;
 
     // Wired by AppServices from Settings → Teleports (TeleportSettings.AutomaticWalkTeleports).
@@ -2302,7 +2299,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Combat cleared. Don't resume instantly — the monster we abandoned may be
         // one step behind; hold the settle so its follow-arrival can re-assert
         // Combat before the loop sprints on (report stock-20260731-010401). No
-        // scheduler wired (unit tests) → release immediately (legacy behaviour).
+        // scheduler wired → release immediately.
         if (_abandonSettle is not null) return;   // settle already pending
         if (_scheduleDelay is null) { ReleaseAbandonHold(); return; }
         _abandonSettle = _scheduleDelay(AbandonSettleWindow, ReleaseAbandonHold);
@@ -2899,7 +2896,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
 
         // Inform the tracker before the bytes go out so a synchronous
-        // wire path or test harness sees Pending before any landing
+        // wire path sees Pending before any landing
         // observation arrives.
         _tracker.NoteMoveSent(step.Direction);
                 _recovery?.NoteEngineStepSent(step.Direction);
@@ -3441,7 +3438,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (_recovery is not null)
                 _recovery.NoteSuspectedMismatch($"tracker {transition.NewConfidence} mid-step {_index + 1}");
             else
-                TryReplanOrFail(transition.NewConfidence);   // legacy path when no gate is bound (tests)
+                TryReplanOrFail(transition.NewConfidence);   // no gate bound
             return;
         }
 

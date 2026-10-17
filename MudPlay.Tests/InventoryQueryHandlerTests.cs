@@ -11,14 +11,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the read-only <see cref="InventoryQueryHandler"/> replies
-/// (<c>@wealth</c> / <c>@enc</c> / <c>@have</c> / <c>@what</c>): the
-/// wealth / carry / have trio read the immutable
-/// <see cref="InventoryManager.Snapshot"/> and gate on "parse inventory
-/// first" until the first full <c>i</c> dump lands; <c>@what</c> reads the
-/// <see cref="GroundItemTracker"/>'s last "You notice" survey.
-/// </summary>
+// Pins the read-only InventoryQueryHandler replies
+// (@wealth / @enc / @have / @what): the
+// wealth / carry / have trio read the immutable
+// InventoryManager.Snapshot and gate on "parse inventory
+// first" until the first full i dump lands; @what reads the
+// GroundItemTracker's last "You notice" survey.
 public sealed class InventoryQueryHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.

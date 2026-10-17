@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="TrainLearnParser"/> — the collector that marks powers
-/// obtained the moment training lists them ("You learn the following Kai
-/// abilities:"). Incremental (never snapshots), so it mirrors the learn-scroll
-/// path. Harness reuses the synthetic class + spell rows from
-/// <see cref="SpellListParserTests"/>.
-/// </summary>
+// Pins TrainLearnParser — the collector that marks powers
+// obtained the moment training lists them ("You learn the following Kai
+// abilities:"). Incremental (never snapshots), so it mirrors the learn-scroll
+// path. Harness reuses the synthetic class + spell rows from
+// SpellListParserTests.
 public sealed class TrainLearnParserTests : IDisposable
 {
     // The game's output, fed the way the client receives it.

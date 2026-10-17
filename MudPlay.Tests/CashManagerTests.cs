@@ -708,10 +708,14 @@ public sealed class CashManagerTests
     {
         using Harness h = new() { AutoGetCashEnabled = false };
         h.Settings.CopperPolicy = CashPolicy.Discard;
-        // Tally adjusted via test seam — pick-up doesn't fire because
-        // the master is off.
-        h.Feed("You picked up 50 copper pieces.");
+        h.Snapshot = Wealth(50, copper: 50);
+
+        h.Cash.OnInventoryChanged();
         Assert.Empty(h.Sent);
+
+        h.AutoGetCashEnabled = true;               // the switch is the only difference
+        h.Cash.OnInventoryChanged();
+        Assert.Equal(new[] { "drop 50 copper farthing" }, h.AllSent);
     }
 
     // ----- settings-changed reapply ----------------------------------
@@ -1319,9 +1323,9 @@ public sealed class CashManagerTests
 
     // ----- encumbrance gate + cascade --------------------------------
 
-    /// <summary>Build a snapshot with given per-coin counts + a numeric
-    /// encumbrance reading; TotalCopperValue is irrelevant to the gate so
-    /// it's left zero.</summary>
+    // Build a snapshot with given per-coin counts + a numeric
+    // encumbrance reading; TotalCopperValue is irrelevant to the gate so
+    // it's left zero.
     private static InventorySnapshot Snap(
         int copper, int silver, int gold, int platinum, int runic,
         int currentWeight, int maxWeight)
@@ -1334,10 +1338,10 @@ public sealed class CashManagerTests
             DateTimeOffset.UtcNow);
     }
 
-    /// <summary>Build a holdings snapshot for the auto-deposit gates:
-    /// <paramref name="wealthValue"/> is the game's Wealth: figure
-    /// (TotalCopperValue); the coin counts drive TotalCoinCount. Encumbrance
-    /// is irrelevant to the gates so it's left empty.</summary>
+    // Build a holdings snapshot for the auto-deposit gates:
+    // wealthValue is the game's Wealth: figure
+    // (TotalCopperValue); the coin counts drive TotalCoinCount. Encumbrance
+    // is irrelevant to the gates so it's left empty.
     private static InventorySnapshot Wealth(
         long wealthValue,
         int copper = 0, int silver = 0, int gold = 0, int platinum = 0, int runic = 0)

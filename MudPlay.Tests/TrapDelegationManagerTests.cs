@@ -9,14 +9,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for <see cref="TrapDelegationManager"/> — the party-member
-/// trap-delegation path. Verifies capability resolution (class main gate /
-/// race secondary, excluding self + invitees), race-capture-on-join via
-/// <c>look</c>, the <c>.@trap</c> say broadcast, and resume-watch on a
-/// party member's say reply. Each test seeds an isolated game-data set so
-/// the suite never touches the user's real Data folder.
-/// </summary>
+// Coverage for TrapDelegationManager — the party-member
+// trap-delegation path. Verifies capability resolution (class main gate /
+// race secondary, excluding self + invitees), race-capture-on-join via
+// look, the .@trap say broadcast, and resume-watch on a
+// party member's say reply. Each test seeds an isolated game-data set so
+// the suite never touches the user's real Data folder.
 public sealed class TrapDelegationManagerTests : IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 6, 12, 0, 0, 0, TimeSpan.Zero);
@@ -37,10 +35,8 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
     // ----- Fixtures -------------------------------------------------------
 
-    /// <summary>
-    /// Seed a game-data set: "Ninja" class + "Gnome" race grant traps
-    /// (codes 40 / 1002); "Mage" + "Human" don't. Returns an active cache.
-    /// </summary>
+    // Seed a game-data set: "Ninja" class + "Gnome" race grant traps
+    // (codes 40 / 1002); "Mage" + "Human" don't. Returns an active cache.
     private GameDataCache SeededCache()
     {
         string dir = Path.Combine(_root, "set");
@@ -57,12 +53,10 @@ public sealed class TrapDelegationManagerTests : IDisposable
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], Now, IsPromptLine: false);
 
-    /// <summary>
-    /// Build router (with default patterns) + party + players + game data.
-    /// The manager is constructed by the caller so tests control whether
-    /// <see cref="PartyManager.MemberFollowConfirmed"/> fires before or
-    /// after construction.
-    /// </summary>
+    // Build router (with default patterns) + party + players + game data.
+    // The manager is constructed by the caller so tests control whether
+    // PartyManager.MemberFollowConfirmed fires before or
+    // after construction.
     private (MessageRouter router, PartyManager party, PlayerDatabase players, GameDataCache gameData) Harness(
         string localName = "Forged")
     {
@@ -497,8 +491,9 @@ public sealed class TrapDelegationManagerTests : IDisposable
         TrapDelegationManager mgr = NewManager(h);
 
         h.router.Dispatch(Line("Helper says \"Trap to the n disarmed.\""));
-        // No assertion beyond "didn't throw" — the pending callback is null.
-        Assert.True(true);
+
+        Assert.Equal("idle", mgr.Describe());
+        Assert.Empty(_sent);
     }
 
     [Fact]

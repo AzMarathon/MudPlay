@@ -132,7 +132,7 @@ public sealed class QuestFlagsSectionViewModel : GameDataTableSectionViewModel, 
         _                          => rel.ToString(),
     };
 
-    // No-op in design-time and tests (no DialogService → no live app).
+    // No-op without a DialogService (design-time).
     private async Task OpenStepsAsync(GameDataRow? row)
     {
         if (row is null || _dialogs is null) return;

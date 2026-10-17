@@ -249,7 +249,7 @@ public sealed class WindowSnapManager
         p.Window.Position = pos;
     }
 
-    // ----- Pure geometry (unit-tested via internals) -----------------------
+    // ----- Pure geometry -----------------------------------------------------
 
     // The single closest edge snap for c against others, or (0, 0) when nothing is
     // within threshold. axis 1 = adjust X, 2 = adjust Y; shift is the signed delta.

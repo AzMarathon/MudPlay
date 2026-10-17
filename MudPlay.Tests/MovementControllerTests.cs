@@ -6,15 +6,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coalesced run-state + Pause / Resume / Stop routing for
-/// <see cref="MovementController"/>. Headless: drives the graph +
-/// tracker directly, no Telnet socket. State-machine progression past
-/// the initial dispatch needs DispatcherTimer ticks (not pumped under
-/// xUnit), so these pin the synchronous facts: idle detection, walker
-/// pause/resume via the shared gate, Auto-Lair pause routing through the
-/// manager's own Pause, full Stop, and StateChanged fan-out.
-/// </summary>
+// Coalesced run-state + Pause / Resume / Stop routing for
+// MovementController. Headless: drives the graph +
+// tracker directly, no Telnet socket. State-machine progression past
+// the initial dispatch needs DispatcherTimer ticks (not pumped under
+// xUnit), so these pin the synchronous facts: idle detection, walker
+// pause/resume via the shared gate, Auto-Lair pause routing through the
+// manager's own Pause, full Stop, and StateChanged fan-out.
 public sealed class MovementControllerTests : IDisposable
 {
     private readonly string _root;

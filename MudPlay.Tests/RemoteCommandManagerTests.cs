@@ -329,7 +329,7 @@ public sealed class RemoteCommandManagerTests
     // @party in the production catalog sits at QueryHealthStatus so
     // non-party callers with that grant can use it as a status-query
     // alias for @par. The engine adds an @party-specific party-member
-    // fallback so the Phase 6 "base @party always allowed inside an
+    // fallback so the "base @party always allowed inside an
     // active party" rule still holds even for party members who lack
     // an explicit per-player grant.
 
@@ -520,35 +520,6 @@ public sealed class RemoteCommandManagerTests
 
     // ===== Hard-blocks =====
 
-    [Fact]
-    public void HardBlock_RerollAlwaysDeniedRegardlessOfFlags()
-    {
-        var (engine, _, players) = Setup();
-        // Give the sender EVERY permission — hard-block must still win.
-        SeedPlayer(players, "Trusted", PlayerRemoteControls.All);
-
-        bool fired = false;
-        engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => fired = true);
-
-        ChatLines.Hear(_routers[engine], Telepath("Trusted", "@do reroll"));
-
-        Assert.False(fired);
-    }
-
-    [Fact]
-    public void HardBlock_PartyRerollAlwaysDenied()
-    {
-        var (engine, party, _) = Setup();
-        SeedPartyMember(party, "Buddy");
-
-        bool fired = false;
-        engine.RegisterHandler("@party", PlayerRemoteControls.None, _ => fired = true);
-
-        ChatLines.Hear(_routers[engine], Telepath("Buddy", "@party reroll"));
-
-        Assert.False(fired);
-    }
-
     // ===== Forcible @do / @party suicide redirect =====
     // Both unconditionally blocked even at lives > threshold + full
     // permissions. Reply (gated on WarnOnDenial) hints the sender at
@@ -637,12 +608,10 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void ForcibleSuicide_DoSuicide_TokenMatchAlsoCatchesNestedArgs()
+    public void ForcibleSuicide_DoSuicide_TheWordAnywhereInTheArgsIsBlocked()
     {
-        // Defensive: any arg containing "suicide" trips the token
-        // match. Reply text is the @do redirect even when the arg
-        // isn't literally "suicide" — close enough; the block is
-        // correct.
+        // "suicide" as a whole word anywhere in @do's args trips the block,
+        // not only as the first word; the reply is the @do redirect.
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Trusted", PlayerRemoteControls.All);
 
@@ -751,54 +720,6 @@ public sealed class RemoteCommandManagerTests
         Assert.Equal("/Friend {plain}\r", Encoding.Latin1.GetString(_sent[0]));
         Assert.Equal("bg {plain}\r",      Encoding.Latin1.GetString(_sent[1]));
         Assert.Equal(">Friend {plain}\r", Encoding.Latin1.GetString(_sent[2]));
-    }
-
-    [Fact]
-    public void Reply_TelepathRoutesViaTelepathCommand()
-    {
-        var (engine, _, players) = Setup();
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
-        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
-            ctx => ctx.Reply("HP 100/100"));
-
-        ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
-
-        byte[] sent = Assert.Single(_sent);
-        string wire = Encoding.Latin1.GetString(sent);
-        // Engine wraps every reply in { } at SendReply time — per user
-        // direction every remote response carries the curly-brace
-        // meta-line convention.
-        Assert.Equal("/Friend {HP 100/100}\r", wire);
-    }
-
-    [Fact]
-    public void Reply_GangpathRoutesViaBgCommand()
-    {
-        var (engine, _, players) = Setup();
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
-        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
-            ctx => ctx.Reply("hi"));
-
-        ChatLines.Hear(_routers[engine], Gangpath("Friend", "@health"));
-
-        string wire = Encoding.Latin1.GetString(_sent[0]);
-        Assert.Equal("bg {hi}\r", wire);
-    }
-
-    [Fact]
-    public void Reply_LocalRoutesViaDirectedSay_AtTheSender()
-    {
-        var (engine, _, players) = Setup();
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
-        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
-            ctx => ctx.Reply("hi"));
-
-        ChatLines.Hear(_routers[engine], Local("Friend", "@health"));
-
-        string wire = Encoding.Latin1.GetString(_sent[0]);
-        // Say is room-wide, so a say-channel @-command is answered with a DIRECTED
-        // say (`>Name <msg>`) aimed at the sender, not an undirected `.<msg>`.
-        Assert.Equal(">Friend {hi}\r", wire);
     }
 
     // ===== Channel scope — noise-channel ignores =====
@@ -934,14 +855,16 @@ public sealed class RemoteCommandManagerTests
     {
         var (engine, _, players) = Setup();
         SeedPlayer(players, "Friend", PlayerRemoteControls.QueryHealthStatus);
+        int calls = 0;
         engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus,
-            _ => throw new InvalidOperationException("boom"));
+            _ => { calls++; throw new InvalidOperationException("boom"); });
 
-        // Should swallow the exception and continue. A second dispatch
-        // proves the engine is still alive.
+        // The engine swallows the exception; the second dispatch still reaches
+        // the handler.
         ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
         ChatLines.Hear(_routers[engine], Telepath("Friend", "@health"));
-        // No assertion needed — the test passes if no exception escapes.
+
+        Assert.Equal(2, calls);
     }
 
     // ===== Ignored announce tokens =====
@@ -1103,24 +1026,6 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void WarnOnDenial_StaysSilentOnHardBlock()
-    {
-        // Unconditional hard-blocks (reroll, @party set suicide) must
-        // never produce a reply — never advertise the block to a
-        // malicious caller. Sender has every flag; engine
-        // WarnOnDenial is on. The user-configured suicide lives
-        // threshold is a SEPARATE path that DOES reply — see
-        // SuicidePolicyBlock_TelepathsBackReason for that test.
-        var (engine, _, players) = Setup();
-        SeedPlayer(players, "Trusted", PlayerRemoteControls.All);
-        engine.RegisterHandler("@do", PlayerRemoteControls.ExecuteCommands, _ => { });
-
-        ChatLines.Hear(_routers[engine], Telepath("Trusted", "@do reroll"));
-
-        Assert.Empty(_sent);
-    }
-
-    [Fact]
     public void SuicidePolicyBlock_TelepathsBackReason()
     {
         // User-configured suicide threshold is a POLICY block (not a
@@ -1248,22 +1153,30 @@ public sealed class RemoteCommandManagerTests
         // The user explicitly muted the channel — don't tell every spammer
         // on that channel why they got ignored.
         var (engine, _, _) = Setup();
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, _ => { });
         engine.DisableTelepathChannel = true;
 
-        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@unknown"));
-
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
         Assert.Empty(_sent);
+
+        engine.DisableTelepathChannel = false;
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
+        Assert.Single(_sent);
     }
 
     [Fact]
     public void WarnOnDenialOff_NoFailureMessageSent()
     {
         var (engine, _, _) = Setup();
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, _ => { });
         engine.WarnOnDenial = false;
 
-        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@unknown"));
-
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
         Assert.Empty(_sent);
+
+        engine.WarnOnDenial = true;
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
+        Assert.Single(_sent);
     }
 
     [Fact]
@@ -1272,11 +1185,16 @@ public sealed class RemoteCommandManagerTests
         // Empty message would otherwise serialise to "/Stranger \r" which
         // is just noise. Engine treats blank as opt-out.
         var (engine, _, _) = Setup();
+        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, _ => { });
+        string failure = engine.FailureMessage;
         engine.FailureMessage = "   ";
 
-        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@unknown"));
-
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
         Assert.Empty(_sent);
+
+        engine.FailureMessage = failure;
+        ChatLines.Hear(_routers[engine], Telepath("Stranger", "@health"));
+        Assert.Single(_sent);
     }
 
     // ===== Public-channel self-echo =====

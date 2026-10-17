@@ -74,7 +74,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // moment the room clears. _pendingEquip holds the ordered pieces still to go
     // on; _equipRoom pins the room they belong to (abandon if we leave it). All
     // delegates are wired by AppServices after the combat engine exists; unbound
-    // (tests / no hostile), ReequipAllWorn sends everything at once as before.
+    // (no hostile), ReequipAllWorn sends everything at once as before.
     private readonly Queue<DeathItem> _pendingEquip = new();
 
     // The master switch (the Auto-All kill switch): with automation silenced, a
@@ -500,7 +500,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // `stat`/`par` screens) so corpse matching identifies "self" by the in-game name
     // rather than CharacterProfile.Name, which a copied profile can leave stale. The
     // live name wins; Current.Name is the fallback only when it is blank. Optional —
-    // unbound (tests) it reads Current.Name.
+    // unbound, it reads Current.Name.
     public void AttachLiveSelfName(Func<string?> provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -719,7 +719,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (record.Room is not { } r) return false;
         RoomKey room = new(r.Map, r.Room);
         // Only Recover Now reaches here: the user asked for this walk, so it goes
-        // through the route cards like any walk-to. Without them (tests) it takes
+        // through the route cards like any walk-to. Without them it takes
         // the shortest route.
         if (_demandedWalk is { } ask) return ask(room);
         return _walker is not null && _walker.WalkTo(room, preferTeleportFree: false);
@@ -741,7 +741,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return refusal is not null && GameDataInstalled(set) ? refusal : null;
     }
 
-    // Whether the named game-data set is still installed. Unbound (tests), every set is.
+    // Whether the named game-data set is still installed. Unbound, every set is.
     public bool GameDataInstalled(string set) => _gameDataInstalled?.Invoke(set) ?? true;
 
     private Func<string, bool>? _gameDataInstalled;
@@ -2594,7 +2594,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // (weakest last). Weapon Hand precedes Off-Hand; armour AC is the item's
     // game-data ArmourClass (0 when the lookup is unbound or the item's unknown,
     // which sorts it last). Stable ordering keeps same-AC pieces in captured order.
-    // internal + static so a test can pin the order without a live manager.
     internal static List<DeathItem> OrderForReequip(
         IReadOnlyList<DeathItem> worn, Func<string, int>? armourClass)
     {
@@ -3115,7 +3114,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     // Snapshot the transcript tail to a per-character death-log file and pin its
     // name on the record. No-op without a bound transcript provider or a named
-    // profile (drafts / tests have nowhere to write). Best-effort: a capture
+    // profile (a draft has nowhere to write). Best-effort: a capture
     // failure must never break the death-record write it rides on.
     private void CaptureDeathLog(DeathRecord record)
     {

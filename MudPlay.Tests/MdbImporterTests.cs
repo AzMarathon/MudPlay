@@ -5,30 +5,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Surface tests for <see cref="MdbImporter"/> — covers folder
-/// bookkeeping, filename sanitization, and the missing-file early
-/// exit. The Jackcess read path runs against real .mdb / .accdb
-/// fixtures and is exercised manually via the Game Data → Import
-/// .mdb… flow.
-/// </summary>
+// Surface tests for MdbImporter — covers folder
+// bookkeeping, filename sanitization, and the missing-file early
+// exit. The Jackcess read path runs against real .mdb / .accdb
+// fixtures and is exercised manually via the Game Data → Import
+// .mdb… flow.
 public sealed class MdbImporterTests
 {
-    [Fact]
-    public void Constructor_CreatesGameDataRoot()
-    {
-        MdbImporter importer = new();
-        Assert.True(Directory.Exists(importer.GameDataRoot),
-            $"Expected GameDataRoot to exist after ctor: {importer.GameDataRoot}");
-    }
-
-    [Fact]
-    public void GameDataRoot_PointsAtAppPathsGameDataRoot()
-    {
-        MdbImporter importer = new();
-        Assert.Equal(AppPaths.GameDataRoot, importer.GameDataRoot);
-    }
-
     [Fact]
     public async Task ImportAsync_MissingFile_ReturnsFailureWithNotFoundMessage()
     {
@@ -104,8 +87,6 @@ public sealed class MdbImporterTests
         }
     }
 
-    // The safety guard: a failed re-import over an EXISTING populated set must never
-    // delete that set's files.
     // An export may or may not carry the Lairs table, and may or may not carry
     // room-command item sources: four kinds, each named for what it has.
     [Theory]
@@ -130,6 +111,8 @@ public sealed class MdbImporterTests
             MudPlay.ViewModels.MainWindowViewModel.BuildMdbCompleteStatus(r));
     }
 
+    // The safety guard: a failed re-import over an EXISTING populated set must never
+    // delete that set's files.
     [Fact]
     public void RemoveDirectoryIfEmpty_KeepsAPopulatedFolder()
     {

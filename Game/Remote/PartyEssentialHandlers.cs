@@ -22,8 +22,8 @@ namespace MudPlay.Game.Remote;
 //     leader's nudge back: it's holding for our @ok.
 //
 // Lifetime: registered once at AppServices construction after the engine ships.
-// Disposal unregisters every command so repeated AppServices builds in tests
-// don't leak handler entries.
+// Disposal unregisters every command so a rebuilt AppServices doesn't leak
+// handler entries.
 public sealed class PartyEssentialHandlers : IDisposable
 {
     // Commands this consumer registers, so Dispose can unregister them all.
@@ -53,7 +53,7 @@ public sealed class PartyEssentialHandlers : IDisposable
     // re-fix can't be started (stock realm / no wire / throttled). Lets @where
     // ask the game for our true position instead of replying "Location unknown"
     // when the heuristic tracker is lost but the game can tell us exactly where
-    // we are. Null on stock realms and in tests that don't wire it.
+    // we are. Null on stock realms.
     private Func<string, Action<RoomKey>, Action, bool>? _requestPositionRefix;
 
     private bool _disposed;

@@ -42,8 +42,7 @@ public sealed class LogService
     public event Action<LogEntry>? EntryAdded;
 
     // Session diagnostic state gating generation of the Debug and Combat
-    // channels. Null in unit tests that don't exercise gating — treated as
-    // "all diagnostics off" so Debug / Combat no-op. The running app wires
+    // channels. Null is treated as "all diagnostics off" so Debug / Combat no-op. The running app wires
     // AppServices.LogDiagnostics here so the Log pane toggles (saved globally)
     // gate emission at the source, not just at display.
     public LogDiagnosticState? Diagnostics { get; set; }

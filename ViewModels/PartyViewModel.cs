@@ -70,7 +70,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
     {
     }
 
-    // Full-control constructor. Pass profile as null from tests to skip the
+    // Full-control constructor. A null profile skips the
     // ProfileService.ProfileLoaded / ProfileMutated subscriptions — LocalRank
     // then stays at its PartyRank.Mid default. Production code uses the
     // two-arg overload above; that path grabs the live AppServices.Profile.

@@ -261,7 +261,6 @@ public static class AppPaths
 
     // Recursively copy every file under src that dst doesn't already have; files
     // already in dst are left untouched. Returns how many files were copied.
-    // internal so the migration's non-destructive contract can be unit-tested.
     internal static int CopyMissing(string src, string dst)
     {
         Directory.CreateDirectory(dst);
@@ -881,6 +880,6 @@ public enum DataRootSource
     // User-relocated; AppPaths.PointerFile points here.
     PointerFile,
 
-    // MUDPLAY_DATA_ROOT env var override (tests / CI).
+    // MUDPLAY_DATA_ROOT env var override (CI).
     EnvironmentVariable,
 }

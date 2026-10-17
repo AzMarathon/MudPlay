@@ -7,12 +7,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="GroundItemTracker"/>: the "You notice &lt;list&gt; here."
-/// survey becomes a per-room, cash-filtered snapshot of floor loot. A fresh
-/// survey supersedes the prior list, a wrapped survey stitches across two
-/// rows, and a room change clears the snapshot.
-/// </summary>
+// Pins GroundItemTracker: the "You notice <list> here."
+// survey becomes a per-room, cash-filtered snapshot of floor loot. A fresh
+// survey supersedes the prior list, a wrapped survey stitches across two
+// rows, and a room change clears the snapshot.
 public sealed class GroundItemTrackerTests
 {
     private static (GroundItemTracker ground, MessageRouter router, ServerFeed feed) Setup(

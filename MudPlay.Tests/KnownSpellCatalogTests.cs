@@ -9,14 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="KnownSpellCatalog"/> against the MMUD Explorer
-/// <c>SpellIsUsable</c> rules it ports: magery match, MageryLVL gate,
-/// explicit class-token AND, level gate, the Kai-autolearn learnable
-/// special, and the empty list for non-magery classes. Synthetic
-/// <c>Spells.json</c> + <c>Classes.json</c> are seeded into an isolated
-/// <see cref="GameDataCache"/> per test.
-/// </summary>
+// Pins KnownSpellCatalog's spell-usability rules: magery match, MageryLVL gate,
+// explicit class-token AND, level gate, the Kai-autolearn learnable
+// special, and the empty list for non-magery classes. Synthetic
+// Spells.json + Classes.json are seeded into an isolated
+// GameDataCache per test.
 public sealed class KnownSpellCatalogTests : IDisposable
 {
     private readonly string _root;

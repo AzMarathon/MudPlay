@@ -8,14 +8,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the @relog handler's wire behaviour: only fires for a sender
-/// with the HangupDisconnect permission, sends the configured
-/// GameCommands.ExitCommand verbatim + CR (graceful main-menu logoff),
-/// and arms RelogSignal so MainWindowVM forces a reconnect-and-login.
-/// Sibling of HangupHandler — same wire shape, opposite reconnect
-/// intent (relog does NOT suppress the entry automation).
-/// </summary>
+// Pins the @relog handler's wire behaviour: only fires for a sender
+// with the HangupDisconnect permission, sends the configured
+// GameCommands.ExitCommand verbatim + CR (graceful main-menu logoff),
+// and arms RelogSignal so MainWindowVM forces a reconnect-and-login.
+// Sibling of HangupHandler — same wire shape, opposite reconnect
+// intent (relog does NOT suppress the entry automation).
 public sealed class RelogHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.
@@ -23,7 +21,7 @@ public sealed class RelogHandlerTests
 
     private static readonly DateTime Now = new(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc);
 
-    private (RemoteCommandManager engine, RelogHandler handler, PlayerDatabase players, List<byte[]> wire, GameCommands commands, RelogSignal signal) Setup()
+    private (RemoteCommandManager engine, RelogHandler handler, PlayerDatabase players, List<byte[]> wire, GameCommands commands, RelogSignal signal) Setup(bool bindWire = true)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -36,7 +34,7 @@ public sealed class RelogHandlerTests
         _routers[engine] = router;
         RelogHandler handler = new(engine, commands, signal);
         List<byte[]> wire = new();
-        handler.SetWireSender(wire.Add);
+        if (bindWire) handler.SetWireSender(wire.Add);
         return (engine, handler, players, wire, commands, signal);
     }
 
@@ -173,13 +171,12 @@ public sealed class RelogHandlerTests
     [Fact]
     public void Relog_SignalRaisedEvenWithoutWireSender()
     {
-        // Pre-binding (or in tests where the wire-sender intentionally
-        // isn't bound), the intent should still be recorded so a racing
-        // Disconnected event still classifies correctly.
-        var (engine, handler, players, _, _, signal) = Setup();
-        handler.SetWireSender(_ => { });   // bind once...
+        // Before the wire-sender binds, the intent is still recorded so a
+        // racing Disconnected event classifies the drop correctly.
+        var (engine, _, players, wire, _, signal) = Setup(bindWire: false);
         SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@relog"));
+        Assert.Empty(wire);
         Assert.True(signal.ConsumeRelogIntent());
     }
 }

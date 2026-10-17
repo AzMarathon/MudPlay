@@ -12,14 +12,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the write-side <see cref="InventoryActionHandler"/> commands
-/// (<c>@drop-all</c> / <c>@deposit-all</c> / <c>@share</c>): each reads the
-/// immutable <see cref="InventoryManager.Snapshot"/>, gates on "parse
-/// inventory first" until a full <c>i</c> dump lands, and emits its wire verb
-/// (<c>drop</c> / <c>dep</c> / <c>with</c> / <c>give</c>) on the bound sender
-/// while replying a friendly summary on the sender's channel.
-/// </summary>
+// Pins the write-side InventoryActionHandler commands
+// (@drop-all / @deposit-all / @share): each reads the
+// immutable InventoryManager.Snapshot, gates on "parse
+// inventory first" until a full i dump lands, and emits its wire verb
+// (drop / dep / with / give) on the bound sender
+// while replying a friendly summary on the sender's channel.
 public sealed class InventoryActionHandlerTests
 {
     // What the remote-command engine put on the wire, through the sender the client binds.

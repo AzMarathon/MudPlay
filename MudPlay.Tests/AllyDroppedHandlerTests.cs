@@ -9,14 +9,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for <see cref="AllyDroppedHandler"/> — the party reaction to another
-/// member dropping to the ground. Pins the recognition logic (live member,
-/// recently-partied follower, and the off-roster former-leader gap the bug report
-/// exposed), the aid / re-invite / recovery decisions, that aid fires without a
-/// party-heal loadout (a non-healer still rescues), and the
-/// <see cref="MovementCoordinator.AllyDownGate"/> lifecycle.
-/// </summary>
+// Coverage for AllyDroppedHandler — the party reaction to another
+// member dropping to the ground. Pins the recognition logic (live member,
+// recently-partied follower, and the off-roster former-leader gap the bug report
+// exposed), the aid / re-invite / recovery decisions, that aid fires without a
+// party-heal loadout (a non-healer still rescues), and the
+// MovementCoordinator.AllyDownGate lifecycle.
 public sealed class AllyDroppedHandlerTests
 {
     private sealed class Harness : IDisposable

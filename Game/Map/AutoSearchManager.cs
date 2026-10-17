@@ -118,8 +118,8 @@ public sealed class AutoSearchManager : IDisposable
         _isEnabled = isEnabled;
         _isDemandActive = isDemandActive ?? (static () => false);
         _hasEngageableHostiles = hasEngageableHostiles ?? (static () => false);
-        // Default true so an unwired manager (tests) keeps the original defer-on-
-        // hostile behaviour; production wires the auto-attack-aware flag.
+        // Default true so an unwired manager keeps the defer-on-hostile
+        // behaviour; AppServices wires the auto-attack-aware flag.
         _isCombatEngaging = isCombatEngaging ?? (static () => true);
         _hasGetEngineArmed = hasGetEngineArmed ?? (static () => false);
         _hasQueuedMoves = hasQueuedMoves ?? (static () => false);

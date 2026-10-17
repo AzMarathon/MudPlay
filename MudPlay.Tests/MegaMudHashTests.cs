@@ -15,20 +15,14 @@ public sealed class MegaMudHashTests
     public void ComputeNameHash_EmptyOrNull_ReturnsFFF(string? name, string expected)
         => Assert.Equal(expected, MegaMudHash.ComputeNameHash(name));
 
-    [Fact]
-    public void ComputeNameHash_Deterministic_SameInputSameHash()
-    {
-        // Anchor: the JS reference algorithm is sum(pos * charCode) → low 12 bits → 3-hex.
-        // Compute the expected by mirroring the JS:
-        string name = "Stone Street";
-        int n = 0;
-        for (int i = 0; i < name.Length; i++) n = unchecked(n + (i + 1) * name[i]);
-        uint u = unchecked((uint)n);
-        string hex = u.ToString("X");
-        string expected = (hex.Length >= 3 ? hex[^3..] : hex.PadLeft(3, '0')).ToUpperInvariant();
-
-        Assert.Equal(expected, MegaMudHash.ComputeNameHash(name));
-    }
+    // sum(position × char code), low 12 bits as three hex digits: "Stone Street"
+    // sums to 7833 = 0x1E99.
+    [Theory]
+    [InlineData("Stone Street", "E99")]
+    [InlineData("Start", "66A")]
+    [InlineData("Town Square", "9D4")]
+    public void ComputeNameHash_IsTheLow12BitsOfThePositionWeightedSum(string name, string expected)
+        => Assert.Equal(expected, MegaMudHash.ComputeNameHash(name));
 
     // ----- exits code ------------------------------------------------
 

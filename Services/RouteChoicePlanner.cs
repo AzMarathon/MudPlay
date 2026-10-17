@@ -6,7 +6,7 @@ namespace MudPlay.Services;
 
 // The kind of acquirable gate a direct route crosses. Drives the requirement
 // phrasing in the route picker (a raft to carry, a ticket, a door key, a hazard
-// counter item) and lets the planner's tests assert classification.
+// counter item).
 public enum RouteRequirementKind
 {
     CarryItem,          // (Item: N) — a raft / held item that must be in hand.
@@ -219,7 +219,7 @@ public static class RouteChoicePlanner
         // Optional memoized provider for the plain default route (gates + avoids on,
         // teleports allowed). Several forks compute the SAME route; the caller passes
         // one memoized closure so the full-graph BFS runs once instead of per fork.
-        // Null → compute it here (tests / standalone callers).
+        // Null → compute it here (standalone callers).
         Func<IReadOnlyList<Direction>?>? baseRoute = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);

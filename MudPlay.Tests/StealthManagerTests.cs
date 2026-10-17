@@ -7,10 +7,8 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.F — <see cref="StealthManager"/> line-driven FSM, silent-
-/// loss detection on room change, and hide-via-explicit-mark API.
-/// </summary>
+// StealthManager line-driven FSM, silent-
+// loss detection on room change, and hide-via-explicit-mark API.
 public sealed class StealthManagerTests
 {
     private sealed class Harness : IDisposable
@@ -328,7 +326,7 @@ public sealed class StealthManagerTests
         Assert.Single(h.Transitions);
     }
 
-    // ----- Auto-sneak / auto-hide engines (Cluster 3) ----------------
+    // ----- Auto-sneak / auto-hide engines ----------------------------
 
     private sealed class AutoHarness : IDisposable
     {
@@ -1047,7 +1045,7 @@ public sealed class StealthManagerTests
         Assert.Empty(h.Sent);
     }
 
-    // ----- pre-move stealth hook (PR 4.b) ----------------------------
+    // ----- pre-move stealth hook -------------------------------------
 
     [Fact]
     public void RequestPreMoveStealth_FromIdle_SendsSneak()

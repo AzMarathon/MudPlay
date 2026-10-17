@@ -52,7 +52,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private string _questBonusSig = " ";   // impossible initial sig → first read resolves
 
     // Live read of the character's configured buff plan (Profile.Current.PartyBuffs)
-    // so the projected AC / DR assumes those buffs are up. Null in tests.
+    // so the projected AC / DR assumes those buffs are up.
     private readonly System.Func<Models.Profile.BuffSettings?>? _buffProvider;
     private readonly ItemMagicIndex? _itemMagic;
     private readonly MonsterObservationTracker? _observations;

@@ -56,7 +56,7 @@ public sealed class AutoSearchManagerTests
     }
 
     [Fact]
-    public void ClearRoom_OncePerRoom()
+    public void ClearRoom_SearchesOnEveryEntry()
     {
         var mgr = new AutoSearchManager(isEnabled: () => true, schedule: _searchTimers.Arm);
         mgr.SetWireSender(_sent.Add);
@@ -384,7 +384,7 @@ public sealed class AutoSearchManagerTests
 
         mgr.OnRoomChanged(Key());     // arm + assert the Search gate
         mgr.OnRoomObserved();         // hostile seen but not engaging → must NOT defer
-        Assert.False(_sent.Count > 1);
+        Assert.Empty(_sent);          // nothing yet: the classify timer sends it
         _searchTimers.RunDue(AutoSearchManager.ClassifyDelay);      // classify fires the search
         Assert.Single(_sent);
         Assert.Equal("sea", Decode(_sent[0]));

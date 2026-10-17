@@ -37,7 +37,6 @@ public sealed class AbilBreakdownParserTests
 
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(145, b.Code);
-        Assert.Equal("ManaRegen", b.Label);
         Assert.Equal(5, b.From("granted"));
         Assert.Equal(185, b.From("worn"));
         Assert.Equal(11, b.Spells);
@@ -89,7 +88,6 @@ public sealed class AbilBreakdownParserTests
         _feed.Prompt();
 
         AbilBreakdown b = Assert.Single(captured);
-        Assert.Equal(16, b.ReportedTotal);
         Assert.Equal(16, b.Total);            // 5 + 11, total row excluded from the sum
         Assert.Equal(2, b.Contributions.Count);
     }

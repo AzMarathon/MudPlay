@@ -18,23 +18,14 @@ public sealed class LookParserTests
         return new LookParser(lines: _feed.Lines, db: db);
     }
 
-    /// <summary>
-    /// Verbatim "look mudplay" against Playpen BBS — equipped variant
-    /// from the user's session. Exercises: bracketed name header,
-    /// wrapped description sentence, race/class detection via the
-    /// longest-match token list (Dark-Elf beats Elf), the
-    /// `<item>   (<slot>)` row shape, and block termination on prompt.
-    /// </summary>
-    /// <summary>
-    /// The header does not always end at the "]". Stock LOOK appends an
-    /// optional red " -- Immortal !" and an optional " (&lt;gang&gt;)", and the
-    /// header pattern used to anchor straight to end-of-line — so a gang
-    /// member's look block was skipped entirely and RecordLook never fired.
-    /// On a realm where everyone is in a gang that meant NOBODY was ever
-    /// recorded, and TrapDelegationManager (which probes an unknown member's
-    /// race with `look &lt;member&gt;` and waits for this pipeline) re-probed on
-    /// every join — the "it keeps looking" loop.
-    /// </summary>
+    // The header does not always end at the "]". Stock LOOK appends an
+    // optional red " -- Immortal !" and an optional " (<gang>)", and the
+    // header pattern used to anchor straight to end-of-line — so a gang
+    // member's look block was skipped entirely and RecordLook never fired.
+    // On a realm where everyone is in a gang that meant NOBODY was ever
+    // recorded, and TrapDelegationManager (which probes an unknown member's
+    // race with `look <member>` and waits for this pipeline) re-probed on
+    // every join — the "it keeps looking" loop.
     [Theory]
     [InlineData("[ MudPlay WuzHere ]",                          null)]
     [InlineData("[ MudPlay WuzHere ] (Knights of Chaos)",       "Knights of Chaos")]
@@ -82,10 +73,8 @@ public sealed class LookParserTests
         Assert.Empty(db.Players);
     }
 
-    /// <summary>
-    /// A look that carries no gang must not erase one a WHO row already
-    /// taught us — the suffix being absent means "not seen", not "none".
-    /// </summary>
+    // A look that carries no gang must not erase one a WHO row already
+    // taught us — the suffix being absent means "not seen", not "none".
     [Fact]
     public void LookWithoutGang_LeavesAKnownGangAlone()
     {
@@ -110,10 +99,8 @@ public sealed class LookParserTests
         Assert.Equal("Dark-Elf", r.Race);
     }
 
-    /// <summary>
-    /// The strictness that keeps unrelated bracketed lines (chat tags, status
-    /// codes) from false-triggering has to survive the new optional suffixes.
-    /// </summary>
+    // The strictness that keeps unrelated bracketed lines (chat tags, status
+    // codes) from false-triggering has to survive the new optional suffixes.
     [Theory]
     [InlineData("[ Global ] Someone says hello")]
     [InlineData("[ MudPlay ] extra words")]
@@ -135,6 +122,11 @@ public sealed class LookParserTests
         Assert.Empty(db.Players);
     }
 
+    // Verbatim "look mudplay" against Playpen BBS — equipped variant
+    // from the user's session. Exercises: bracketed name header,
+    // wrapped description sentence, race/class detection via the
+    // longest-match token list (Dark-Elf beats Elf), the
+    // `   (<slot>)` row shape, and block termination on prompt.
     [Fact]
     public void ParsesEquippedLook_RecordsRaceClassAndAllSlots()
     {
@@ -174,11 +166,9 @@ public sealed class LookParserTests
         Assert.Contains(r.Equipment, e => e.SlotLabel == "Weapon Hand"  && e.ItemName == "quarterstaff");
     }
 
-    /// <summary>
-    /// Empty-loadout case: explicit "Nothing" line means the player
-    /// was equipped with nothing. Equipment list should be empty
-    /// (not null) so the dialog can show "(none)" rather than "—".
-    /// </summary>
+    // Empty-loadout case: explicit "Nothing" line means the player
+    // was equipped with nothing. Equipment list should be empty
+    // (not null) so the dialog can show "(none)" rather than "—".
     [Fact]
     public void ParsesEmptyLoadout_RecordsExplicitNothing()
     {

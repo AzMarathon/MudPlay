@@ -19,8 +19,7 @@ namespace MudPlay.Game.Map;
 // means no hostile to fight, so the room is settled immediately, the get finds
 // nothing, and the live-filter walk falls back to the long route with no waiting.
 //
-// Delegate-injected (walker / combat / inventory / send / scheduler) so the FSM is
-// unit-testable without a live line stream. Each delegate has one binding in
+// Delegate-injected (walker / combat / inventory / send / scheduler). Each delegate has one binding in
 // AppServices.
 public sealed class ShortcutSourceCoordinator
 {

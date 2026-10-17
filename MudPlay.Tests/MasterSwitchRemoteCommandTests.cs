@@ -123,6 +123,8 @@ public sealed class MasterSwitchRemoteCommandTests
     public void SwitchOn_CommandIsHandledAsBefore(string command)
     {
         using Setup s = new();
+        // A refusal then sends nothing, so a reply can only be a handler's.
+        s.Engine.WarnOnDenial = false;
 
         ChatLines.Hear(s.Router, Telepath(command));
 

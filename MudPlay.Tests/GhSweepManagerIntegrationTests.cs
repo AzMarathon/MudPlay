@@ -27,10 +27,10 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
     private readonly string _root = Path.Combine(
         Path.GetTempPath(), "mudplay-ghsweep-manager-" + Path.GetRandomFileName());
-    // GhRoomLabelStore is BBS-tier now — each test pins this scratch BBS name
-    // so its labels/settings persist somewhere real but isolated (cleaned up
-    // in Dispose alongside _root).
-    private readonly string _scratchBbs = "ghsweep-test-" + Path.GetRandomFileName();
+    // GhRoomLabelStore is realm-tier — each test points it at this scratch realm
+    // folder so its labels/settings persist somewhere real but isolated (cleaned
+    // up in Dispose alongside _root).
+    private readonly string _realm = Path.Combine(Path.GetTempPath(), "ghsweep-test-" + Path.GetRandomFileName());
 
     public GhSweepManagerIntegrationTests() => Directory.CreateDirectory(_root);
 
@@ -40,8 +40,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         catch { /* best effort */ }
         try
         {
-            string bbsFolder = AppPaths.BbsFolder(_scratchBbs);
-            if (Directory.Exists(bbsFolder)) Directory.Delete(bbsFolder, recursive: true);
+            if (Directory.Exists(_realm)) Directory.Delete(_realm, recursive: true);
         }
         catch { /* best effort */ }
     }
@@ -78,7 +77,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -264,7 +263,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         // SearchForHidden left at its default (off) — the point of this test.
@@ -318,12 +317,13 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
             DateTimeOffset.UtcNow.AddSeconds(4));
 
-        // The whole recon lap ran without a single search.
+        // The whole recon lap ran without a single search, and the sort is under
+        // way with only the visible war hammer to move: the hidden mace was never
+        // revealed.
         Assert.DoesNotContain("sea", sent);
-        // The hidden mace was never revealed, so it's not even in the work queue —
-        // only the visible war hammer is pending. And it stays search-free.
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
+        Assert.Equal(1, sweep.PendingMoveCount);
         Assert.DoesNotContain("get mace", sent);
-        Assert.DoesNotContain("sea", sent);
 
         sweep.Dispose();
         ground.Dispose();
@@ -361,7 +361,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         labels.SetSearchesPerRoom(1);
@@ -472,7 +472,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         labels.SetSearchesPerRoom(1);
@@ -601,7 +601,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -738,7 +738,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -858,7 +858,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -966,7 +966,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1),
             new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2),
@@ -1046,7 +1046,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // Re-walking a 120-room circuit to rediscover a survey we already have is
         // most of the cost of a sweep, and an abort doesn't make what it found
         // wrong. Resume picks the queue back up and goes straight to sorting.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1096,7 +1096,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         // A live 'i' read still shows the carried mace — Resume verifies carried
         // entries against the pack, so it must be present to be re-adopted.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, carriedInventory: "mace, mace");
+        SweepHarness h = NewSweepHarness(_root, _realm, store, carriedInventory: "mace, mace");
 
         Assert.True(h.Sweep.CanResume);
         Assert.Equal(2, h.Sweep.ResumableMoveCount);
@@ -1131,7 +1131,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         });
 
         // The pack no longer holds the mace.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, carriedInventory: "nothing");
+        SweepHarness h = NewSweepHarness(_root, _realm, store, carriedInventory: "nothing");
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Resume());
@@ -1150,7 +1150,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // that dip, 800-weight hauberks were permanently written off as "too heavy
         // to ever carry" despite fitting comfortably at the sweep's own opening
         // budget. 56 items went that way in one run.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, currentWeight: 3513, maxWeight: 5280);
+        SweepHarness h = NewSweepHarness(_root, _realm, currentWeight: 3513, maxWeight: 5280);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1190,7 +1190,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     {
         // The guard must not become a rubber stamp: something heavier than the
         // pack could ever hold is still dropped, or the sweep retries it forever.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, currentWeight: 4900, maxWeight: 5280);
+        SweepHarness h = NewSweepHarness(_root, _realm, currentWeight: 4900, maxWeight: 5280);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1218,7 +1218,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // fruitless lap is only a warning — a verification pass — and a second
         // fruitless lap finishes: the move is surfaced as CouldNotComplete and the
         // sweep leaves Sorting rather than retrying forever.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1257,7 +1257,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // take by that name failed silently and was requeued every lap: one
         // capture shows `get piece of amber` sent 42 times, with the sweep pinned
         // ping-ponging between the two rooms holding those items.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1289,7 +1289,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     [Fact]
     public void GetRefusedByAStrangeForce_IsLeftInPlace_NotRetried()
     {
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1321,7 +1321,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     {
         // Keep the documented bracket form working — the realms may differ, and
         // the cost of missing either is an item retried until someone notices.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1352,7 +1352,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // holding ~20 items the sweep had collected and forgotten, six of them
         // copies of the same gloves.
         // Stock: no bulk verb, so a 2x move is sent as two separate commands.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, paradigm: false);
+        SweepHarness h = NewSweepHarness(_root, _realm, paradigm: false);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1401,7 +1401,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // the game answers with a SINGLE count-prefixed line. Counting replies (a raw
         // ++) left that move stuck at 1/2 forever — the sweep never finished; the fix
         // adds the line's own count.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, paradigm: true);
+        SweepHarness h = NewSweepHarness(_root, _realm, paradigm: true);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1449,7 +1449,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         // Pack reads 3000 of 5280, and 800 of that is the hauberk we just re-adopted
         // — which a live 'i' read must show for Resume to re-adopt it.
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store,
+        SweepHarness h = NewSweepHarness(_root, _realm, store,
             currentWeight: 3000, maxWeight: 5280, carriedInventory: "adamantite hauberk");
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -1465,7 +1465,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     [Fact]
     public void CleanlyFinishedSweep_HasNothingToResume()
     {
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1486,7 +1486,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     [Fact]
     public void TheReport_TellsAFinishedSweepFromOneStoppedEarly()
     {
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        SweepHarness h = NewSweepHarness(_root, _realm);
         List<GhSweepReport> reports = new();
         h.Sweep.SweepCompleted += reports.Add;
 
@@ -1513,7 +1513,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
     public void Resume_IsRefused_UnderAnotherGameDataSet()
     {
         string set = "alpha";
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, activeGameData: () => set);
+        SweepHarness h = NewSweepHarness(_root, _realm, activeGameData: () => set);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
         h.Feed("You notice a war hammer here.");
@@ -1546,7 +1546,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "mace", 1, carried: true, hidden: false) }, "alpha");
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
+        SweepHarness h = NewSweepHarness(_root, _realm, store, activeGameData: () => "beta");
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Sweep.Start());
@@ -1569,7 +1569,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         profile.LoadDefaultProfile();
         GhSuspendedSweepStore store = new(profile);
         store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "war hammer", 1, carried: false, hidden: false) }, "alpha");
-        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
+        SweepHarness h = NewSweepHarness(_root, _realm, store, activeGameData: () => "beta");
         h.Tracker.SetLocated(new RoomKey(1, 1));
 
         Assert.False(h.Sweep.Resume());
@@ -1615,7 +1615,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         // Two rooms labeled for the SAME category: A is the primary (first
         // labeled), B is its backup purely by also matching. No other config.
         labels.SetLabel(new RoomKey(1, 1),
@@ -1738,7 +1738,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         }
     }
 
-    private SweepHarness NewSweepHarness(string root, string scratchBbs,
+    private SweepHarness NewSweepHarness(string root, string realm,
         GhSuspendedSweepStore? suspended = null, int currentWeight = 1, int maxWeight = 100,
         bool paradigm = true, string carriedInventory = "nothing", Func<string?>? activeGameData = null)
     {
@@ -1770,7 +1770,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(scratchBbs));
+        labels.OnRealmChanged(realm);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
         labels.SetSearchesPerRoom(1);
@@ -1887,14 +1887,14 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         // Both rooms labeled as sortable destinations — proves InventoryOnly
         // still refuses to act on them, not just that it has nowhere to sort to.
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
 
         GhItemLocationStore locations = new(names);
-        locations.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        locations.OnRealmChanged(_realm);
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -2005,7 +2005,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         GhRoomLabelStore labels = new(profile);
-        labels.OnRealmChanged(AppPaths.BbsFolder(_scratchBbs));
+        labels.OnRealmChanged(_realm);
         labels.SetLabel(new RoomKey(1, 1), new[] { GhCategoryRule.ForItemType(1) }, isCatchAll: false);
         labels.SetLabel(new RoomKey(1, 2), new[] { GhCategoryRule.ForItemType(0) }, isCatchAll: false);
 

@@ -96,16 +96,6 @@ public sealed class PartyEssentialHandlersTests
     // ===== Query handlers =====
 
     [Fact]
-    public void Version_RepliesWithDisplayName()
-    {
-        var (engine, _, _, _, players, _) = Setup();
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryVersion);
-        ChatLines.Hear(_routers[engine], Telepath("Friend", "@version"));
-
-        Assert.Contains("MudPlay", LastReply());
-    }
-
-    [Fact]
     public void Version_RepliesWithNameAndVersion_MatchingOtherClientShape()
     {
         // Matches the format other clients use (e.g. MegaMUD replies
@@ -494,36 +484,16 @@ public sealed class PartyEssentialHandlersTests
     [Fact]
     public void Party_FromSay_NoArgs_ReturnsStatusReply()
     {
-        // Solo case — sender is themselves in our (non-existent) party
-        // only by virtue of the engine's party-whitelist gate accepting
-        // ALL senders when IsInParty=false... actually no: the engine
-        // denies when not in a party. So this scenario requires the
-        // sender to be in the party. Reflect the realistic case: party
-        // member says "@party" in the room with no args.
+        // A party member says "@party" in the room with no args: the status reply
+        // comes back. Leader leads the party, so we're following them.
         var (engine, _, _, party, _, _) = Setup();
         SeedPartyMember(party, "Leader", isLeader: true);
+        party.LeaderName = "Leader Smith";
 
         ChatLine say = new(ChatChannel.Local, "Leader", "@party");
         ChatLines.Hear(_routers[engine], say);
 
-        // We're "leading" Leader (the only member) — leader path with
-        // no followers other than self.
-        string reply = LastReply();
-        Assert.True(
-            reply.Contains("I'm leading") || reply.Contains("I'm following") || reply.Contains("no active party"),
-            $"Unexpected reply: {reply}");
-    }
-
-    [Fact]
-    public void Party_FromSay_WithArgs_DispatchesWhenPartyMember()
-    {
-        var (engine, _, _, party, _, relay) = Setup();
-        SeedPartyMember(party, "Leader", isLeader: true);
-
-        ChatLine say = new(ChatChannel.Local, "Leader", "@party rest");
-        ChatLines.Hear(_routers[engine], say);
-
-        Assert.Equal("rest\r", Encoding.Latin1.GetString(relay[0]));
+        Assert.Equal(">Leader {I'm following Leader}\r", LastReply());
     }
 
     [Fact]
@@ -678,16 +648,6 @@ public sealed class PartyEssentialHandlersTests
         Assert.Contains("giant rat", reply);
         // Resolved (canonical) name, not the flavour-prefixed raw form.
         Assert.DoesNotContain("nasty", reply);
-    }
-
-    [Fact]
-    public void Path_WhenIdle_RepliesNotMoving()
-    {
-        var (engine, _, _, _, players, _) = Setup();
-        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryLocation);
-        ChatLines.Hear(_routers[engine], Telepath("Friend", "@path"));
-
-        Assert.Contains("not moving", LastReply());
     }
 
     [Fact]
@@ -1381,10 +1341,8 @@ public sealed class PartyEssentialHandlersTests
 
     // ===== @invite / @join while mortally wounded =====
 
-    /// <summary>
-    /// Drive the character mortally wounded — negative HP with real prompt
-    /// data behind it, so PlayerState.IsMortallyWounded reads true.
-    /// </summary>
+    // Drive the character mortally wounded — negative HP with real prompt
+    // data behind it, so PlayerState.IsMortallyWounded reads true.
     private static void DropPlayer(PlayerState p)
     {
         p.MaxHp = 150;
@@ -1453,17 +1411,4 @@ public sealed class PartyEssentialHandlersTests
         Assert.Empty(relay);
     }
 
-    [Fact]
-    public void Join_WhileMortallyWounded_RepliesWhenWarnDenialOn()
-    {
-        var (engine, _, player, _, players, relay) = Setup();
-        SeedPlayer(players, "Raijin", PlayerRemoteControls.RequestInvite);
-        DropPlayer(player);
-        engine.WarnOnDenial = true;
-
-        ChatLines.Hear(_routers[engine], Telepath("Raijin", "@join"));
-
-        Assert.Contains("Can't join", LastReply());
-        Assert.Empty(relay);
-    }
 }

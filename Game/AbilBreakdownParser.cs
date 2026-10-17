@@ -20,12 +20,10 @@ public readonly record struct AbilContribution(string Source, int Value);
 // the reroll threshold.
 public sealed record AbilBreakdown(
     int Code,
-    string Label,
-    IReadOnlyList<AbilContribution> Contributions,
-    int? ReportedTotal)
+    IReadOnlyList<AbilContribution> Contributions)
 {
-    // Sum of every per-source contribution. When the server printed a `total:`
-    // line this equals ReportedTotal; otherwise it is the client's own roll-up.
+    // Sum of every per-source contribution, the same figure as the server's
+    // `total:` line when it prints one.
     public int Total
     {
         get
@@ -70,16 +68,15 @@ public sealed record AbilBreakdown(
 // The source label text (ManaRegen) is the server's spelling and can differ
 // from GameData.AbilityNames' canonical name (ManaRgn for 145), so the ability
 // is keyed off the numeric (code) in each row, never the name text. A `total:`
-// row is kept out of Contributions and surfaced as ReportedTotal so the summed
-// contributions stay a clean granted+worn+spells+race roll-up.
+// row is kept out of Contributions so the summed contributions stay a clean
+// granted+worn+spells+race roll-up.
 public sealed partial class AbilBreakdownParser : IDisposable
 {
     private LineExtractor? _lines;
     private readonly LogService? _log;
 
     private int _pendingCode = -1;
-    private string _pendingLabel = string.Empty;
-    private int? _pendingTotal;
+    private bool _pendingTotal;
     private readonly List<AbilContribution> _pending = new();
 
     // Fires once per completed `abil` block.
@@ -130,32 +127,26 @@ public sealed partial class AbilBreakdownParser : IDisposable
         if (_pending.Count > 0 && code != _pendingCode) Flush();
 
         _pendingCode = code;
-        _pendingLabel = m.Groups["name"].Value.Trim();
         int value = int.Parse(m.Groups["val"].Value, CultureInfo.InvariantCulture);
         string source = m.Groups["src"].Value.ToLowerInvariant();
 
-        // The total row is a summary, not a source — hold it aside so the
+        // The total row is a summary, not a source — keep it out so the
         // contribution sum stays granted+worn+spells+race.
         if (source == "total")
-            _pendingTotal = value;
+            _pendingTotal = true;
         else
             _pending.Add(new AbilContribution(source, value));
     }
 
     private void Flush()
     {
-        if (_pending.Count == 0 && _pendingTotal is null) return;
+        if (_pending.Count == 0 && !_pendingTotal) return;
 
-        AbilBreakdown breakdown = new(
-            _pendingCode,
-            _pendingLabel,
-            _pending.ToArray(),
-            _pendingTotal);
+        AbilBreakdown breakdown = new(_pendingCode, _pending.ToArray());
 
         _pending.Clear();
-        _pendingTotal = null;
+        _pendingTotal = false;
         _pendingCode = -1;
-        _pendingLabel = string.Empty;
 
         _log?.Debug("AbilParser",
             $"abil {breakdown.Code} → total {breakdown.Total} (spells {breakdown.Spells})");

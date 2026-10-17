@@ -52,8 +52,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // Opens the item's on-use / proc message record editor and returns the
     // refreshed one-line summary. Wired by the caller (browser Items tab / Item
     // Finder) to ItemMessageDialogService; null when no message surface is
-    // available (e.g. a unit test builds the VM with no dialog service), which
-    // hides the Message section.
+    // available, which hides the Message section.
     private readonly Func<Task<string?>>? _editAttachedMessage;
 
     [ObservableProperty] private string _name = string.Empty;

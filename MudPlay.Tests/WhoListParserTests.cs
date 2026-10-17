@@ -12,12 +12,10 @@ public sealed class WhoListParserTests
 
     private static readonly DateTime Now = new(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    /// <summary>
-    /// The real "Newhaven, Marrow Road" sample from the user's screenshot —
-    /// keeps the test honest about leading whitespace, double-spaces
-    /// between fields, and the family-name-touching-marker case
-    /// (Lenneth BoxOfRocksDumb-).
-    /// </summary>
+    // The real "Newhaven, Marrow Road" sample from the user's screenshot —
+    // keeps the test honest about leading whitespace, double-spaces
+    // between fields, and the family-name-touching-marker case
+    // (Lenneth BoxOfRocksDumb-).
     private static readonly string[] HavenSample =
     {
         "                 Current Adventurers",
@@ -293,14 +291,12 @@ public sealed class WhoListParserTests
         throw new InvalidOperationException($"No player with given name '{given}' in database.");
     }
 
-    /// <summary>
-    /// Verbatim live-server output (Newhaven, Narrow Road dump). Differs
-    /// from the earlier <see cref="HavenSample"/> in three ways the parser
-    /// must tolerate: (a) a blank line between the ============ separator
-    /// and the first row, (b) a blank line between the last row and the
-    /// trailing prompt, (c) <c>  -  </c> (two-space dash two-space) marker
-    /// rather than <c>-</c>.
-    /// </summary>
+    // Verbatim live-server output (Newhaven, Narrow Road dump). Differs
+    // from the earlier HavenSample in three ways the parser
+    // must tolerate: (a) a blank line between the ============ separator
+    // and the first row, (b) a blank line between the last row and the
+    // trailing prompt, (c)   -   (two-space dash two-space) marker
+    // rather than -.
     [Fact]
     public void ParsesNewhavenLiveDump_Including_BlankLines_AndTwoSpaceMarker()
     {
@@ -368,15 +364,13 @@ public sealed class WhoListParserTests
         Assert.Equal(later, db.Players[0].LastSeenUtc);
     }
 
-    /// <summary>
-    /// Real Paradigm "who" output. Differs from the stock/Newhaven format in two
-    /// ways the parser must tolerate: (a) NO alignment column, and (b) freeform,
-    /// player-chosen guild names that carry punctuation and digits —
-    /// "harsh.beast", "MakingTheLogosGay!", "Fuck Commies", "House of Rage".
-    /// Before the gang class was widened, the first punctuation guild
-    /// ("harsh.beast") failed to match and aborted the block, so only the three
-    /// rows above it were recorded.
-    /// </summary>
+    // Real Paradigm "who" output. Differs from the stock/Newhaven format in two
+    // ways the parser must tolerate: (a) NO alignment column, and (b) freeform,
+    // player-chosen guild names that carry punctuation and digits —
+    // "harsh.beast", "MakingTheLogosGay!", "Fuck Commies", "House of Rage".
+    // Before the gang class was widened, the first punctuation guild
+    // ("harsh.beast") failed to match and aborted the block, so only the three
+    // rows above it were recorded.
     [Fact]
     public void ParsesParadigmSample_FreeformGuilds_NoAlignmentColumn()
     {

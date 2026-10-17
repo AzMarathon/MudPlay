@@ -74,7 +74,7 @@ public sealed class ScrollbackBuffer
     }
 
     // Indexer with 0 = oldest row, Count - 1 = newest. Throws when out of
-    // range so subtle off-by-one errors surface in tests.
+    // range so subtle off-by-one errors surface.
     public Row this[int index]
     {
         get

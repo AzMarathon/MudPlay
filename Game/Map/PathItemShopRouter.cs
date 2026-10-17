@@ -53,9 +53,7 @@ namespace MudPlay.Game.Map;
 // rest. The need's own lifecycle (post / resolve) stays owned by
 // PathItemDemandTracker; this router only reacts.
 //
-// Inventory / graph / walker are reached through delegates so the FSM stays
-// unit-testable without a live line stream, room graph, and dispatcher. Each
-// delegate has exactly one production binding in AppServices.
+// Inventory / graph / walker are reached through delegates. Each delegate has exactly one production binding in AppServices.
 public sealed class PathItemShopRouter : IDisposable
 {
     private const string LogCategory = "AutoSearch";
@@ -494,7 +492,7 @@ public sealed class PathItemShopRouter : IDisposable
 
     // Pick the shop room minimising dist(cur,shop)+dist(shop,dest) among the
     // given candidate rooms reachable both ways. Ties break on the nearer shop,
-    // then room-key order — deterministic for testability. Static so the route
+    // then room-key order, so the pick is deterministic. Static so the route
     // picker can name the very shop this router would detour to, without
     // duplicating the selection rule.
     internal static bool TrySelectShop(

@@ -24,8 +24,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // (a Combat gate clearing on a room re-display); a LATER line in the SAME
     // burst can assert another gate — a party @wait — that must re-pause us
     // before the next move leaves. Posting past the burst lets that @wait land
-    // first (see DeferResumeDispatch). Defaults to Dispatcher.UIThread.Post;
-    // tests inject a synchronous or manually-drained variant.
+    // first (see DeferResumeDispatch). Defaults to Dispatcher.UIThread.Post.
     private readonly Action<Action> _postToUi;
     private readonly EngineRecoveryGate? _recovery;
     private readonly BfsMapper? _bfs;
@@ -1341,7 +1340,7 @@ public sealed class LoopRunner : IRecoverableEngine
         //     pick the closest waypoint, walker drives the approach,
         //     loop steps are rotated + expanded UP FRONT so the
         //     approach-preview overlay can render the upcoming cycle.
-        //   - Walker missing (unit tests) or no graph → expand from
+        //   - Walker missing or no graph → expand from
         //     waypoint 0 and let the runner fail-or-recover.
 
         // Started is raised AFTER each branch commits its state +
@@ -1721,7 +1720,6 @@ public sealed class LoopRunner : IRecoverableEngine
         _gatedApproachFetch = fetch;
     }
 
-    // Internal so a test can hand it a walker event directly.
     internal void OnWalkerEvent(WalkEvent e)
     {
         // The runner cares about walker events during two shapes of "approach in
@@ -3177,8 +3175,8 @@ public sealed class LoopRunner : IRecoverableEngine
     }
 
     // Reports whether a leader's party reform is still waiting for the first room
-    // display after a reconnect (PartyReformCoordinator.PendingReform). Unset in
-    // tests / before wiring → no reform, so the restarted loop steps at once.
+    // display after a reconnect (PartyReformCoordinator.PendingReform). Unset
+    // before wiring → no reform, so the restarted loop steps at once.
     private Func<bool>? _reformAwaitsRoom;
 
     public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom)

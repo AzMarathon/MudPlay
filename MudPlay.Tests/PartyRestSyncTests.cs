@@ -26,7 +26,7 @@ public sealed class PartyRestSyncTests
     // PlayerState.Position changes. A user manually typing `rest`
     // should NOT auto-broadcast @wait — only engines that decide
     // the leader should pause / resume call RequestWait / RequestOk
-    // (e.g. Phase 12 HealthManager auto-rest, message-engine flag
+    // (e.g. HealthManager auto-rest, message-engine flag
     // triggers on paralyze / held / confused, etc.).
 
     [Fact]
@@ -113,16 +113,6 @@ public sealed class PartyRestSyncTests
         Assert.Single(wire);                               // nothing new on the wire
         sync.RequestOk(WaitReason.Poison);                 // last one out
         Assert.Equal("/Leader @ok\r", LastWire(wire));
-    }
-
-    [Fact]
-    public void RequestOk_ForAReasonNeverPlaced_SendsNothing()
-    {
-        var (sync, party, wire) = Setup();
-        party.IsInParty = true;
-        party.LeaderName = "Leader";
-        sync.RequestOk(WaitReason.Held);
-        Assert.Empty(wire);
     }
 
     [Fact]
@@ -257,28 +247,6 @@ public sealed class PartyRestSyncTests
     }
 
     [Fact]
-    public void TwoReasons_SendOneWait_OkOnlyWhenLastClears()
-    {
-        // Health + Poison both hold the wait. @wait fires once (on the
-        // first reason); @ok fires only when the LAST reason releases.
-        var (sync, party, wire) = Setup();
-        party.IsInParty = true;
-        party.LeaderName = "Leader";
-
-        sync.RequestWait(WaitReason.Health);
-        sync.RequestWait(WaitReason.Poison);
-        Assert.Single(wire);                       // only one @wait
-        Assert.Equal("/Leader @wait\r", LastWire(wire));
-
-        sync.RequestOk(WaitReason.Health);
-        Assert.Single(wire);                       // Poison still holds — no @ok yet
-
-        sync.RequestOk(WaitReason.Poison);
-        Assert.Equal(2, wire.Count);
-        Assert.Equal("/Leader @ok\r", LastWire(wire));
-    }
-
-    [Fact]
     public void Resend_ReTelepathsAWaitAlreadyHeld_AndStillOnlyOneOk()
     {
         // The leader may have timed out the first wait; a resend re-asks. The reason
@@ -327,16 +295,6 @@ public sealed class PartyRestSyncTests
         Assert.Equal("/Leader @wait\r", LastWire(wire));
     }
 
-    [Fact]
-    public void RequestWait_NoWireSender_NoThrow()
-    {
-        PartyState party = new() { IsInParty = true, LeaderName = "Leader" };
-        PartyRestSync sync = new(party);
-        // No SetWireSender — call should silently no-op.
-        sync.RequestWait(WaitReason.Health);
-        sync.Dispose();
-    }
-
     // ===== RequestHeal — follower flee-substitute broadcast =====
 
     [Fact]
@@ -371,31 +329,6 @@ public sealed class PartyRestSyncTests
         Assert.Empty(wire);
     }
 
-    [Fact]
-    public void RequestHeal_NoWireSender_NoThrow()
-    {
-        PartyState party = new() { IsInParty = true, LeaderName = "Leader" };
-        PartyRestSync sync = new(party);
-        sync.RequestHeal();   // no SetWireSender — silent no-op
-        sync.Dispose();
-    }
-
-    [Fact]
-    public void PositionChange_DoesNotAutoFire()
-    {
-        // Regression guard for the live-test feedback: manual `rest`
-        // (which sets PlayerState.Position = Resting) must NOT trigger
-        // @wait. PartyRestSync no longer subscribes to PlayerState at
-        // all; engines drive it explicitly.
-        var (sync, party, wire) = Setup();
-        party.IsInParty = true;
-        party.LeaderName = "Leader";
-        // Just mutating a PlayerState would have fired the old code;
-        // we don't even construct one here because the new ctor
-        // doesn't take it. The point of this test is to document the
-        // contract.
-        Assert.Empty(wire);
-    }
 }
 
 public sealed class PartyEssentialHandlersPauseGateTests

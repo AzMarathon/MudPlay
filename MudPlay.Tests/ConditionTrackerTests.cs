@@ -6,12 +6,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.D — <see cref="ConditionTracker"/> matches lines against the
-/// active <see cref="MessageStore"/> records' AppliedMessage /
-/// AppliedEndsWith pairs and surfaces the aggregated
-/// <see cref="MessageFlags"/>.
-/// </summary>
+// ConditionTracker matches lines against the
+// active MessageStore records' AppliedMessage /
+// AppliedEndsWith pairs and surfaces the aggregated
+// MessageFlags.
 public sealed class ConditionTrackerTests
 {
     private sealed class Harness : IDisposable

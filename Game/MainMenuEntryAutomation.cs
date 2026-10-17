@@ -85,8 +85,6 @@ public sealed class MainMenuEntryAutomation : IDisposable
     // Startup refresh sent once the first in-game room display confirms we
     // entered the realm. `stat` populates PlayerStats (Level + current Exp
     // included); `i` emits inventory text the InventoryManager parser consumes.
-    // Read-only so tests + settings UI can introspect the canonical sequence
-    // without rebuilding it.
     public static readonly IReadOnlyList<string> StartupSequence =
         new[] { "stat", "i" };
 

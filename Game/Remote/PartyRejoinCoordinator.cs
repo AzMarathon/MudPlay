@@ -80,8 +80,8 @@ public sealed class PartyRejoinCoordinator : IDisposable
     public static readonly TimeSpan RoomWait = TimeSpan.FromSeconds(5);
 
     // Write-through sink for the crash-survivable memory. AppServices wires this
-    // to stamp the loaded profile + Save() so a crash retains the value. Null in
-    // tests (the in-memory _rememberedLeader is enough there).
+    // to stamp the loaded profile + Save() so a crash retains the value. Null keeps
+    // only the in-memory _rememberedLeader.
     public Action<string?>? PersistLeader { get; set; }
 
     // The leader we'd try to rejoin on the next reconnect, or null when there's
@@ -120,7 +120,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
         _tracker = tracker;
         // Master auto-responses gate — when it returns false (kill switch
         // engaged) the rejoin stays silent, same as MainMenuEntryAutomation.
-        // Defaults to always-on so tests behave without wiring it.
+        // Defaults to always-on when unwired.
         _isAutoEnabled = isAutoEnabled ?? (() => true);
         _log = log;
 

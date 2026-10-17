@@ -9,13 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="DarkRoomCombatWatcher"/> — engages a monster that shares a dark
-/// room with us, revealed only by its dark-cyan attack line (no "Also here:"
-/// ever lists it). Covers the inject-on-attack path, the dark-room gate, the
-/// unknown-attacker skip, per-round dedupe, and the "Your command had no
-/// effect." retraction.
-/// </summary>
+// DarkRoomCombatWatcher — engages a monster that shares a dark
+// room with us, revealed only by its dark-cyan attack line (no "Also here:"
+// ever lists it). Covers the inject-on-attack path, the dark-room gate, the
+// unknown-attacker skip, per-round dedupe, and the "Your command had no
+// effect." retraction.
 public sealed class DarkRoomCombatWatcherTests
 {
     private sealed class Harness : IDisposable

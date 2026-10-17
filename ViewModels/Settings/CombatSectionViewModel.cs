@@ -526,7 +526,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private static MudPlay.Game.Inventory.EquipmentManager? TryGetEquipment()
     {
         try { return AppServices.Current.Equipment; }
-        catch (NullReferenceException) { return null; }   // design-time / tests: no services
+        catch (NullReferenceException) { return null; }   // design-time: no services
     }
 
     private void LoadWeaponBoxesFromActive()

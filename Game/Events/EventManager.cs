@@ -613,7 +613,7 @@ public sealed class EventManager : IDisposable
         SettleQueueChoice(Array.Empty<ScheduledEvent>(), unanswered: why);
     }
 
-    // The wording for an X-close, shared by the opener and the tests.
+    // The wording for an X-close.
     public const string PromptClosedUnanswered = "the Waiting Events window was closed without an answer";
 
     // unanswered: why nobody chose (every listed event is then dropped, with that
@@ -741,8 +741,7 @@ public sealed class EventManager : IDisposable
         if (e.Disabled) return false;
         // Master switch — Settings → Events "Disable all events" gate.
         // Per-character; checked here so the scheduler doesn't have to
-        // worry about it and tests using the parameterless ctor (no
-        // profile) keep firing.
+        // worry about it. With no profile loaded, events keep firing.
         if (_profile.Current?.EventsGloballyDisabled == true) return false;
         // Events are the user's own automation: with the master switch off this
         // firing is skipped, not put off and not queued (user, 2026-10-09). Every
@@ -1816,7 +1815,7 @@ public sealed class EventManager : IDisposable
     private void StartTicker()
     {
         if (_ticker is not null) return;
-        // No UI dispatcher (unit tests): tests call Tick themselves.
+        // No UI dispatcher: nothing to pump, callers tick by hand.
         if (Avalonia.Application.Current is null) return;
         _ticker = new Avalonia.Threading.DispatcherTimer { Interval = RunTickInterval };
         _ticker.Tick += (_, _) => Tick();
@@ -1830,8 +1829,7 @@ public sealed class EventManager : IDisposable
     }
 
     // A Command action's text split into the lines it sends, by the same rule macros,
-    // triggers and aliases use. Internal so tests can assert the contract without
-    // firing a real event end-to-end.
+    // triggers and aliases use.
     internal static IEnumerable<string> SplitCommand(string text) =>
         MacroStore.SplitCommandSteps(text);
 
@@ -2042,8 +2040,7 @@ public sealed class EventManager : IDisposable
     }
 
     // What was running when an event took over — the Resume target. Discriminated
-    // across the three engine types SnapshotCurrentActivity distinguishes. Internal
-    // so tests can pattern-match the snapshot.
+    // across the three engine types SnapshotCurrentActivity distinguishes.
     internal abstract record EventResumePlan
     {
         public abstract string Describe();

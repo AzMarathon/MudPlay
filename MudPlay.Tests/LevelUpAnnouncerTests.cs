@@ -12,13 +12,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 10.8 — <see cref="LevelUpAnnouncer"/>: broadcasts "I can now train to
-/// level: N" when a live "You gain N experience." line pushes a Level-Projection
-/// row's "Exp to level" to 0. Verifies the anti-login-spam baseline (pre-banked
-/// levels stay silent), the multi-level burst, the enable gate, and the
-/// channel→wire-verb mapping.
-/// </summary>
+// LevelUpAnnouncer: broadcasts "I can now train to
+// level: N" when a live "You gain N experience." line pushes a Level-Projection
+// row's "Exp to level" to 0. Verifies the anti-login-spam baseline (pre-banked
+// levels stay silent), the multi-level burst, the enable gate, and the
+// channel→wire-verb mapping.
 public sealed class LevelUpAnnouncerTests
 {
     // ExpTable 100 (class) + 0 (race) → CalcExpChart(100,0) = 200, which spreads the
@@ -67,7 +65,7 @@ public sealed class LevelUpAnnouncerTests
             Announcer.SetWireSender(Wire.Add);
         }
 
-        /// <summary>Feed a combat exp-gain line through the parser's always-on accrual path.</summary>
+        // Feed a combat exp-gain line through the parser's always-on accrual path.
         public void Gain(long amount) => Feed.Line($"You gain {amount} experience.");
 
         public IReadOnlyList<string> Sent =>
@@ -141,8 +139,15 @@ public sealed class LevelUpAnnouncerTests
         using var h = new Harness(level: 5, exp: Threshold(6) - 1, announce: false);
 
         h.Gain(Threshold(7) - (Threshold(6) - 1));   // crosses 6 and 7 while disabled
-
         Assert.Empty(h.Sent);
+
+        // Switched back on, the next level up announces only itself: 6 and 7 went
+        // into the baseline while the toggle was off.
+        h.Profile.Current!.Settings!["AutoTrainer"] = JsonSerializer.SerializeToElement(
+            new AutoTrainerSettings { AnnounceLevelUps = true });
+        h.Gain(Threshold(8) - Threshold(7));
+
+        Assert.Equal(new[] { "bg I can now train to level: 8" }, h.Sent);
     }
 
     [Fact]

@@ -81,16 +81,6 @@ public sealed class PartyPollerTests
         Assert.Equal("par\r", LastWire(wire));
     }
 
-    [Fact]
-    public void ParPoll_NoWireSender_NoThrow()
-    {
-        var (poller, _, state, _, _, _) = Setup();
-        state.IsInParty = true;
-        poller.SetWireSender(_ => { }); // bind something to satisfy null-guard then no-op
-        _pollerTimers.RunDue(poller.ParCadence);
-        // No assertion — test passes by not throwing.
-    }
-
     // ===== a `par` asked for to check who is in the party =====
 
     // It is a question about the roster, not a health read: auto-heal off and
@@ -155,19 +145,6 @@ public sealed class PartyPollerTests
         _pollerTimers.RunDue(poller.ParCadence);
 
         Assert.Empty(wire);
-    }
-
-    [Fact]
-    public void ParPoll_GateReturnsTrue_SendsPar()
-    {
-        var (poller, _, state, _, _, wire) = Setup();
-        state.Members.Add(new PartyMember { Name = "Forged" });
-        state.IsInParty = true;
-        poller.IsParPollEnabled = () => true;
-
-        _pollerTimers.RunDue(poller.ParCadence);
-
-        Assert.Equal("par\r", LastWire(wire));
     }
 
     // ===== trainer-menu suppression =====
@@ -535,10 +512,15 @@ public sealed class PartyPollerTests
         // negative cur value in that range. Pre-fix the `\d+` cur
         // regex silently failed to match, BaselineHp stayed 0, and
         // the nag retried until max-total instead of cancelling.
-        var (_, _, state, _, router, _) = Setup();
+        var (_, _, state, _, router, wire, _, advance) = SetupWithClock();
         state.Members.Add(new PartyMember { Name = "Raijin" });
+        wire.Clear();   // the on-join @health
 
         DispatchTelepath(router, "Raijin", "{HP=-5/40,MA=10/34}");
+        advance(TimeSpan.FromSeconds(6));
+        _pollerTimers.RunDue(PartyPoller.HealthNagTick);
+
+        Assert.Empty(wire);   // the reply cancelled the nag: no retry
 
         PartyMember m = state.Members[0];
         // Baseline = max half (always positive).

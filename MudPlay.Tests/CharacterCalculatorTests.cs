@@ -4,11 +4,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Realm-branch coverage for <see cref="CharacterCalculator"/> — the formulas
-/// compile-time checking can't validate. Asserts the Stock vs ParaMUD
-/// divergences (CP-cost cap, regen divisors) plus the shared CP/HP/mana math.
-/// </summary>
+// Realm-branch coverage for CharacterCalculator — the formulas
+// compile-time checking can't validate. Asserts the Stock vs ParaMUD
+// divergences (CP-cost cap, regen divisors) plus the shared CP/HP/mana math.
 public sealed class CharacterCalculatorTests
 {
     // ----- CP --------------------------------------------------------------

@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the @hangup handler's wire behaviour: only fires for a sender
-/// with the HangupDisconnect permission, sends the configured
-/// GameCommands.ExitCommand verbatim + CR. The default exit command
-/// is "=x" (MajorMUD main-menu logoff). Full cleanup-warning + first-
-/// session-login automation flows ship separately.
-/// </summary>
+// Pins the @hangup handler's wire behaviour: only fires for a sender
+// with the HangupDisconnect permission, sends the configured
+// GameCommands.ExitCommand verbatim + CR. The default exit command
+// is "=x" (MajorMUD main-menu logoff). Full cleanup-warning + first-
+// session-login automation flows ship separately.
 public sealed class HangupHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.
@@ -22,7 +20,7 @@ public sealed class HangupHandlerTests
 
     private static readonly DateTime Now = new(2026, 6, 2, 0, 0, 0, DateTimeKind.Utc);
 
-    private (RemoteCommandManager engine, HangupHandler handler, PlayerDatabase players, List<byte[]> wire, GameCommands commands, HangupSignal signal) Setup()
+    private (RemoteCommandManager engine, HangupHandler handler, PlayerDatabase players, List<byte[]> wire, GameCommands commands, HangupSignal signal) Setup(bool bindWire = true)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -35,7 +33,7 @@ public sealed class HangupHandlerTests
         _routers[engine] = router;
         HangupHandler handler = new(engine, commands, signal);
         List<byte[]> wire = new();
-        handler.SetWireSender(wire.Add);
+        if (bindWire) handler.SetWireSender(wire.Add);
         return (engine, handler, players, wire, commands, signal);
     }
 
@@ -182,15 +180,14 @@ public sealed class HangupHandlerTests
     [Fact]
     public void Hangup_SignalRaisedEvenWithoutWireSender()
     {
-        // Pre-binding (or in tests where the wire-sender intentionally
-        // isn't bound), the intent should still be recorded so a
-        // racing Disconnected event still classifies correctly.
-        var (engine, handler, players, _, _, signal) = Setup();
-        handler.SetWireSender(_ => { });   // bind once...
+        // Before the wire-sender binds, the intent is still recorded so a
+        // racing Disconnected event classifies the drop correctly.
+        var (engine, _, players, wire, _, signal) = Setup(bindWire: false);
         SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@hangup"));
         bool disc = signal.ConsumeDisconnectIntent();
         bool supp = signal.ConsumeSuppressEntry();
+        Assert.Empty(wire);
         Assert.True(disc);
         Assert.True(supp);
     }

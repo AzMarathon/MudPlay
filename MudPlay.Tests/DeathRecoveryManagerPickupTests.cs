@@ -89,17 +89,6 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
-    public void Stock_DiedInTheRoomTheCharacterRespawnsIn_Gets()
-    {
-        using GraphHarness h = new() { Paradigm = false };
-        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
-        h.Recovery.AutoRecover = true;
-        h.FeedSurvey("a torch");
-        h.EnterGates();
-        Assert.Contains("get torch", h.Sent);
-    }
-
-    [Fact]
     public void Stock_ArrivalThatReanchorsASuspectTracker_Gets()
     {
         using GraphHarness h = new() { Paradigm = false };

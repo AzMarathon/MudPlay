@@ -9,7 +9,7 @@ namespace MudPlay.Game.Map;
 
 // The minimal surface the walker needs to hand a pyramid-climb destination off to
 // the solver. Parallel to IMazeSolver — kept tiny so AutoWalkManager takes no hard
-// dependency on the solver internals (and its tests can inject a fake).
+// dependency on the solver internals.
 public interface IPyramidSolver
 {
     // True when this destination is a Great Pyramid room the solver can climb to

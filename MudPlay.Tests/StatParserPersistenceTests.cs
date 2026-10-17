@@ -5,13 +5,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the persist-and-rehydrate path: each successful capture
-/// window snapshots the live PlayerStats into a LastKnownStats DTO
-/// (consumed by AppServices to write onto the loaded profile), and
-/// the Hydrate path reverses it so a freshly-loaded profile lands
-/// with the user's last-observed values instead of zeros.
-/// </summary>
+// Pins the persist-and-rehydrate path: each successful capture
+// window snapshots the live PlayerStats into a LastKnownStats DTO
+// (consumed by AppServices to write onto the loaded profile), and
+// the Hydrate path reverses it so a freshly-loaded profile lands
+// with the user's last-observed values instead of zeros.
 public sealed class StatParserPersistenceTests
 {
     // The game's output, fed the way the client receives it.

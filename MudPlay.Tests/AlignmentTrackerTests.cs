@@ -8,12 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Alignment staleness. <see cref="AlignmentTracker"/> flags the local
-/// character's alignment stale on "A dark cloud passes over you" and clears it
-/// once our own row is re-observed by a <c>who</c> (matched on given name,
-/// case-insensitively); another player's row leaves the flag set.
-/// </summary>
+// Alignment staleness. AlignmentTracker flags the local
+// character's alignment stale on "A dark cloud passes over you" and clears it
+// once our own row is re-observed by a who (matched on given name,
+// case-insensitively); another player's row leaves the flag set.
 public sealed class AlignmentTrackerTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

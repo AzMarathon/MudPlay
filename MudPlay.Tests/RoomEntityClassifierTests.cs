@@ -10,12 +10,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.0b sub-B — <see cref="RoomEntityClassifier"/> Also-Here parsing,
-/// prefix-strip resolution against MonsterMessageStore, player lookup
-/// against PlayerDatabase, and the Unknown-entity Warn path with
-/// raw-line Context payload.
-/// </summary>
+// RoomEntityClassifier Also-Here parsing,
+// prefix-strip resolution against MonsterMessageStore, player lookup
+// against PlayerDatabase, and the Unknown-entity Warn path with
+// raw-line Context payload.
 public sealed class RoomEntityClassifierTests
 {
     private sealed class Harness : IDisposable
@@ -622,9 +620,8 @@ public sealed class RoomEntityClassifierTests
     public void MonsterBeforePlayer_WhenBothNamesCollide()
     {
         // Edge case: a player and a monster happen to share a name.
-        // The classifier checks Monsters first (the design assumes
-        // shopkeepers / quest-givers can collide with real names, and
-        // the Phase 9 plan resolves monster first).
+        // The classifier checks Monsters first: shopkeepers / quest-givers
+        // can collide with real names, and monster wins.
         using Harness h = new();
         h.AddMonster(99, "Bob");
         h.AddPlayer("Bob");
@@ -780,9 +777,8 @@ public sealed class RoomEntityClassifierTests
     [Fact]
     public void RemoveDepartedEntity_LeavesPlayer_Untouched()
     {
-        // A departing player holds no combat gate, so a player's entry in Current is
-        // harmless — RemoveDepartedEntity is monster-kind only and must not drop the
-        // player, which would spuriously re-fire the observation.
+        // RemoveDepartedEntity is monster-kind only: a departed player is taken out
+        // by RemoveDepartedPlayer, so this call leaves Bob and fires nothing.
         using Harness h = new();
         h.AddPlayer("Bob");
         h.Feed("Also here: Bob.");
@@ -857,12 +853,10 @@ public sealed class RoomEntityClassifierTests
 
     // ----- Multi-line wrap (80-col server boundary) ------------------
 
-    /// <summary>
-    /// MajorMUD wraps occupant lists at the 80-col boundary mid-token,
-    /// so an Also Here line can span N rows until a period closes it.
-    /// The classifier buffers continuation rows via the LineExtractor
-    /// subscription and parses the joined text on close.
-    /// </summary>
+    // MajorMUD wraps occupant lists at the 80-col boundary mid-token,
+    // so an Also Here line can span N rows until a period closes it.
+    // The classifier buffers continuation rows via the LineExtractor
+    // subscription and parses the joined text on close.
     [Fact]
     public void Wrap_AcrossTwoLines_ParsesAllOccupants()
     {

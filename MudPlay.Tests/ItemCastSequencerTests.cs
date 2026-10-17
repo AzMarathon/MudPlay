@@ -8,12 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="ItemCastSequencer"/> — the equip → use → re-equip wire
-/// sequence that casts a spell from an item. Only unlimited-use items are
-/// eligible; the displaced weapon is read from the inventory snapshot and
-/// re-wielded afterward.
-/// </summary>
+// Pins ItemCastSequencer — the equip → use → re-equip wire
+// sequence that casts a spell from an item. Only unlimited-use items are
+// eligible; the displaced weapon is read from the inventory snapshot and
+// re-wielded afterward.
 public sealed class ItemCastSequencerTests
 {
     private static readonly IReadOnlyList<ClassCastItem> Items = new[]

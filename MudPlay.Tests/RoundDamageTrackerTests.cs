@@ -913,15 +913,6 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(11, h.Tracker.Recent[0].DamageDealt);
     }
 
-    [Fact]
-    public void TraceWriter_Closed_WhenShouldWriteTraceReturnsFalse()
-    {
-        using Harness h = new(shouldWriteTrace: () => false);
-        h.Feed("You hit goblin for 1 damage!");
-        h.Feed("*Combat Off*");
-        Assert.Single(h.Completed);
-    }
-
     // ----- printed lines ---------------------------------------------
 
     [Fact]

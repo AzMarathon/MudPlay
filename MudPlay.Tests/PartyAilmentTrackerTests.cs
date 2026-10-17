@@ -10,14 +10,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR B inbound ailment-sync: a party member's <c>.@poisoned</c> /
-/// <c>.@blind</c> / <c>.@confused</c> / <c>.@diseased</c> / <c>.@held</c>
-/// announce on say sets their <see cref="PartyMember"/> chip; observing OUR
-/// cure spell land on the member clears it. <c>.@held</c> additionally pauses
-/// the leader via <see cref="PartyEssentialHandlers.NotePause"/> (same gate an
-/// explicit <c>@wait</c> uses), released by the held member's own <c>@ok</c>.
-/// </summary>
+// PR B inbound ailment-sync: a party member's .@poisoned /
+// .@blind / .@confused / .@diseased / .@held
+// announce on say sets their PartyMember chip; observing OUR
+// cure spell land on the member clears it. .@held additionally pauses
+// the leader via PartyEssentialHandlers.NotePause (same gate an
+// explicit @wait uses), released by the held member's own @ok.
 public sealed class PartyAilmentTrackerTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>
@@ -63,14 +61,14 @@ public sealed class PartyAilmentTrackerTests
             Tracker.AttachLineExtractor(Server.Lines);
         }
 
-        /// <summary>Add a party member by replaying the follow signal.</summary>
+        // Add a party member by replaying the follow signal.
         public PartyMember AddMember(string name)
         {
             Router.Dispatch(Line($"{name} started to follow you."));
             return State.Members.First(m => m.Name == name);
         }
 
-        /// <summary>Dispatch a server line so ChatRouter classifies it.</summary>
+        // Dispatch a server line so ChatRouter classifies it.
         public void Say(string line) => Router.Dispatch(Line(line));
 
         // A server line through the extractor the tracker's clear path reads.

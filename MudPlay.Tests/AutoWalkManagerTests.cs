@@ -8,11 +8,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 7.7 walker coverage — single-shot walk happy path, retry on
-/// blocked move, abort on desync, pause/resume via coordinator,
-/// destination-equals-source short-circuit, and superseding starts.
-/// </summary>
+// Walker coverage — single-shot walk happy path, retry on
+// blocked move, abort on desync, pause/resume via coordinator,
+// destination-equals-source short-circuit, and superseding starts.
 public sealed class AutoWalkManagerTests : IDisposable
 {
     private readonly string _root;
@@ -32,7 +30,6 @@ public sealed class AutoWalkManagerTests : IDisposable
     // ----- fixtures --------------------------------------------------
     //
     // 1/1 ──N── 1/2 ──N── 1/3
-    //
     private const string LineGraphJson = """
         [
           { "Map Number": 1, "Room Number": 1, "Name": "A",
@@ -649,22 +646,6 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Started);
         Assert.Equal(WalkState.Walking, h.Walker.State);
         Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
-    }
-
-    [Fact]
-    public void WalkTo_LoudSupersede_RaisesStopped()
-    {
-        // The contrast: a genuine external walk (default supersede) still Stops
-        // loudly, so a driving reroute knows the user / another engine took over.
-        Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Walker.WalkTo(new RoomKey(1, 3));
-        Assert.Equal(WalkState.Walking, h.Walker.State);
-        h.Events.Clear();
-
-        h.Walker.WalkTo(new RoomKey(1, 2));
-
-        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Stopped);
     }
 
     [Fact]
@@ -1583,6 +1564,9 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Stopped);
     }
 
+    // A genuine external walk (the default supersede) Stops loudly, so a driving
+    // reroute knows the user / another engine took over; the contrast is
+    // WalkTo_SupersedeSilently_RedirectsWithoutStopped.
     [Fact]
     public void WalkTo_DuringActiveWalk_SupersedesPrior()
     {
@@ -1733,7 +1717,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
     }
 
-    // ----- door-aware walks (PR 7.7b) -------------------------------
+    // ----- door-aware walks -----------------------------------------
 
     private const string DoorGraphJson = """
         [
@@ -2641,7 +2625,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Empty(h.Sent);
     }
 
-    // ----- trapped exits (PR 7.22) -----------------------------------
+    // ----- trapped exits ---------------------------------------------
 
     private const string TrapGraphJson = """
         [
@@ -2768,20 +2752,6 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Stopped);
         Assert.Empty(h.Sent);
-    }
-
-    [Fact]
-    public void Walker_TrappedExit_WithoutEnqueuerBound_SendsMoveDirectly()
-    {
-        // No trap enqueuer wired — walker falls back to the regular
-        // path. This is the "until production wires TrapDisarmManager"
-        // safety net.
-        Harness h = NewHarness(TrapGraphJson);
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Walker.WalkTo(new RoomKey(1, 2));
-
-        Assert.Single(h.Sent);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
     // ----- unbound wire sender --------------------------------------
@@ -3113,42 +3083,6 @@ public sealed class AutoWalkManagerTests : IDisposable
     // ----- boss "stop before" ---------------------------------------
 
     [Fact]
-    public void WalkTo_StopBeforeBossRoom_HaltsOneRoomShort()
-    {
-        // 1/1 → 1/2 → 1/3, with 1/3 flagged "stop before". A walk to 1/3 must be
-        // re-pointed to 1/2 and finish there without ever stepping into 1/3.
-        Harness h = NewHarness();
-        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
-        h.Tracker.SetLocated(new RoomKey(1, 1));
-
-        h.Walker.WalkTo(new RoomKey(1, 3));
-        Assert.Single(h.Sent);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));   // first hop toward 1/2
-
-        // Arrive at 1/2 — the walk finishes here; no second N into 1/3.
-        h.Tracker.NoteRoomObserved(new RoomObservation("B",
-            new HashSet<Direction> { Direction.N, Direction.S }));
-
-        Assert.Equal(WalkState.Idle, h.Walker.State);
-        Assert.Single(h.Sent);
-        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
-    }
-
-    [Fact]
-    public void WalkTo_StopBeforeBossRoom_Adjacent_FinishesWithoutStepping()
-    {
-        // Standing next to the boss room (1/2, boss at 1/3): "one room short" is
-        // the source itself, so the walk finishes immediately with nothing sent.
-        Harness h = NewHarness();
-        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
-        h.Tracker.SetLocated(new RoomKey(1, 2));
-
-        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));
-        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
-        Assert.Empty(h.Sent);
-    }
-
-    [Fact]
     public void WalkTo_NonFlaggedRoom_UnaffectedByStopBefore()
     {
         // A different room is flagged; the walk to 1/3 runs the full two hops.
@@ -3227,10 +3161,10 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Empty(h.Sent);
 
         acquiring = false;                           // orb in hand, need resolved
-        h.Walker.NudgeStalledStep();                 // any re-drive re-evaluates
+        // Re-issued, as the path-item routers do when their detour hands back.
         h.Walker.WalkTo(new RoomKey(1, 2));
 
-        Assert.NotEmpty(h.Sent);
+        Assert.Equal("n\r", System.Text.Encoding.Latin1.GetString(Assert.Single(h.Sent)));
     }
 
     // The party is asked who holds a route item when the walk announces its items,

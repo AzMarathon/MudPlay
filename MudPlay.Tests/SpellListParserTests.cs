@@ -8,13 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="SpellListParser"/> — the state machine that folds
-/// <c>spells</c> / <c>pow</c> output into <see cref="SpellbookState"/>'s
-/// obtained set. Format + matching are a faithful port of MMUD Explorer's
-/// <c>PasteSpells</c>; the harness reuses the synthetic Mage class + spell
-/// rows from <see cref="SpellbookStateTests"/>.
-/// </summary>
+// Pins SpellListParser — the state machine that folds
+// spells / pow output into SpellbookState's
+// obtained set. The harness reuses the synthetic Mage class + spell
+// rows from SpellbookStateTests.
 public sealed class SpellListParserTests : IDisposable
 {
     // The game's output, fed the way the client receives it.

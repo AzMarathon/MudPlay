@@ -10,11 +10,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Spells tab dialog behaviour: the default-selected tab (player-castable
-/// spells open on User Definitions; room/item/monster spells open on Game
-/// Data) and the plain-English "Effect" summary row.
-/// </summary>
+// Spells tab dialog behaviour: the default-selected tab (player-castable
+// spells open on User Definitions; room/item/monster spells open on Game
+// Data) and the plain-English "Effect" summary row.
 public sealed class SpellsGameDataTabTests : IDisposable
 {
     private readonly string _root;

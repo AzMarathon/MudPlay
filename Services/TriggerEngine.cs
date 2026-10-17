@@ -47,7 +47,7 @@ public sealed class TriggerEngine
     private readonly LogService? _log;
 
     // Plays a trigger's sound file. Bound by AppServices to the sound engine's
-    // trigger cue; unbound (tests), a trigger's sound is only logged.
+    // trigger cue; unbound, a trigger's sound is only logged.
     public Action<string>? PlaySound { get; set; }
     private LineExtractor? _lines;
     private Action<byte[]>? _sender;
@@ -399,7 +399,7 @@ public sealed class TriggerEngine
     // into the equivalent .NET regex. Greedy spans so an end-of-pattern {name}
     // captures the rest of the line (non-greedy would settle for one character);
     // multi-capture patterns still resolve correctly because the regex engine
-    // backtracks against the intervening literals. Internal for test visibility.
+    // backtracks against the intervening literals.
     internal static string LiteralToRegex(string literal)
     {
         StringBuilder sb = new(literal.Length + 16);

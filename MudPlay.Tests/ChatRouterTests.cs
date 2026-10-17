@@ -12,11 +12,9 @@ public sealed class ChatRouterTests
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
-    /// <summary>
-    /// Build a router with the default catalog seeded and a ChatRouter
-    /// wired to it; collect every EntryClassified event into a list for
-    /// assertions.
-    /// </summary>
+    // Build a router with the default catalog seeded and a ChatRouter
+    // wired to it; collect every EntryClassified event into a list for
+    // assertions.
     private static (MessageRouter router, ChatRouter chat, List<ChatLogEntry> entries) Setup(
         Func<bool>? isParadigmRealm = null, LogService? log = null, Func<DateTimeOffset>? clock = null)
     {
@@ -1137,18 +1135,6 @@ public sealed class ChatRouterTests
         router.Dispatch(Line("Server PvP Message: Balgor just killed Fizznod!"));
 
         Assert.Empty(entries);
-    }
-
-    [Fact]
-    public void ServerPvp_NullGate_ClassifiesAsServer()
-    {
-        // Default Setup passes no gate (null) — the channel is open so bare-router
-        // tests still see the entry.
-        var (router, _, entries) = Setup();
-        router.Dispatch(Line("Server PvP Message: Balgor just killed Fizznod!"));
-
-        ChatLogEntry e = Assert.Single(entries);
-        Assert.Equal(ChatChannel.Server, e.Channel);
     }
 
     [Fact]

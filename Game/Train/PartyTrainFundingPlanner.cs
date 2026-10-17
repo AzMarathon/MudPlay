@@ -41,7 +41,7 @@ public readonly record struct PartyTrainFundingOutcome(
 // its largest single branch; a member whose money is at a different branch than the
 // stop can't draw there and falls through to sharing.
 //
-// Pure — no wire, no map — so the whole table is unit-testable.
+// Pure — no wire, no map.
 public static class PartyTrainFundingPlanner
 {
     public static PartyTrainFundingOutcome Plan(IReadOnlyList<PartyTrainFunder> party)

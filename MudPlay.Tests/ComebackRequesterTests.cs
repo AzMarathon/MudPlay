@@ -117,7 +117,7 @@ public sealed class ComebackRequesterTests : IDisposable
 
         private DateTimeOffset _clock = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
 
-        /// <summary>Advance the deterministic clock the requester reads.</summary>
+        // Advance the deterministic clock the requester reads.
         public void Advance(TimeSpan by) => _clock += by;
 
         public DateTimeOffset Now => _clock;

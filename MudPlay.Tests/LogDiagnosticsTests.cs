@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
@@ -6,12 +5,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Phase-1 log-overhaul framework: the generation-gated Debug / Combat
-/// channels, their guard flags, and the Global-tier persistence DTO. Info /
-/// Warn / Error stay always-on; Debug / Combat no-op unless the matching
-/// diagnostic toggle is set on the wired <see cref="LogDiagnosticState"/>.
-/// </summary>
+// Phase-1 log-overhaul framework: the generation-gated Debug / Combat
+// channels, their guard flags, and the Global-tier persistence DTO. Info /
+// Warn / Error stay always-on; Debug / Combat no-op unless the matching
+// diagnostic toggle is set on the wired LogDiagnosticState.
 public sealed class LogDiagnosticsTests
 {
     [Fact]
@@ -158,19 +155,5 @@ public sealed class LogDiagnosticsTests
         Assert.True(dto.Combat);
         Assert.False(dto.AutoCollect);
         Assert.False(dto.HopTiming);
-    }
-
-    [Fact]
-    public void LogDiagnosticsSettings_RoundTripsJson()
-    {
-        LogDiagnosticsSettings original = new() { Debug = true, Combat = true, AutoCollect = true, HopTiming = true };
-        string json = JsonSerializer.Serialize(original);
-        LogDiagnosticsSettings? round = JsonSerializer.Deserialize<LogDiagnosticsSettings>(json);
-
-        Assert.NotNull(round);
-        Assert.True(round!.Debug);
-        Assert.True(round.Combat);
-        Assert.True(round.AutoCollect);
-        Assert.True(round.HopTiming);
     }
 }

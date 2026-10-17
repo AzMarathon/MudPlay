@@ -91,7 +91,7 @@ public sealed class RecentLogFile : IAsyncDisposable
     private readonly record struct Item(LogEntry? Entry, TaskCompletionSource? Barrier);
 
     // pathA / pathB: the two files. header: the lines each file opens with.
-    // open: how a file is opened for writing from empty (a seam for tests).
+    // open: how a file is opened for writing from empty.
     public RecentLogFile(
         LogService log,
         LogDiagnosticState diagnostics,

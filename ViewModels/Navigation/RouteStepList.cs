@@ -24,8 +24,7 @@ public sealed record RouteStepRow(
 
 // Turns an expanded WalkStep sequence into the numbered "N> map/room name < command"
 // rows shown by the route picker's Show-steps panel — the full start-to-finish
-// command sequence, detours included. Pure: the room name lookup is injected, so
-// it's unit-tested without a live graph. The per-step room is
+// command sequence, detours included. Pure: the room name lookup is injected. The per-step room is
 // reconstructed by walking the sequence (a MoveStep advances to its ExpectedTarget;
 // a CommandStep — lever/door/winch — stays put), which is exactly the room the
 // walker is standing in when it sends that command.

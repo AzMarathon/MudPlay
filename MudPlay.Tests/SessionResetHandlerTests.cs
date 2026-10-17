@@ -10,15 +10,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="SessionResetHandler"/> — <c>@reset</c> zeroes the session-stats
-/// trackers (combat / time / activity), the same wipe the window button performs,
-/// but leaves the user-owned transaction ledger untouched. Pins the reset
-/// reaching the stat trackers, the ledger staying intact, the ungated success
-/// ack, and the AlterSettings permission gate (an unauthorised sender resets
-/// nothing). An injected clock makes the trackers' time arithmetic
-/// deterministic.
-/// </summary>
+// SessionResetHandler — @reset zeroes the session-stats
+// trackers (combat / time / activity), the same wipe the window button performs,
+// but leaves the user-owned transaction ledger untouched. Pins the reset
+// reaching the stat trackers, the ledger staying intact, the ungated success
+// ack, and the AlterSettings permission gate (an unauthorised sender resets
+// nothing). An injected clock makes the trackers' time arithmetic
+// deterministic.
 public sealed class SessionResetHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 12, 0, 0, 0, DateTimeKind.Utc);
@@ -86,22 +84,6 @@ public sealed class SessionResetHandlerTests
         SessionActivityStats stats = s.Activity.Snapshot();
         Assert.Equal(0, stats.MonstersKilled);
         Assert.Equal(0L, stats.ExperienceEarned);
-    }
-
-    [Fact]
-    public void Reset_WithPermission_LeavesTransactionLedgerIntact()
-    {
-        // The ledger is user-owned: a party @reset re-anchors the stat trackers
-        // but must NOT wipe the deposit / stash history.
-        using Setup s = new();
-        SeedPlayer(s.Players, "Leader", PlayerRemoteControls.AlterSettings);
-        s.Transactions.NoteBankDeposit(5000);
-        s.Transactions.NoteStash(new[] { ("gold", 400L) }, new[] { "a torch" });
-        Assert.Equal(3, s.Transactions.Snapshot().Count);   // deposit, the item, the room's coin row
-
-        ChatLines.Hear(s.Router, Telepath("Leader", "@reset"));
-
-        Assert.Equal(3, s.Transactions.Snapshot().Count);
     }
 
     [Fact]

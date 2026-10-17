@@ -5,14 +5,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Phase 9 PR 9.1 (cash slice) — <see cref="InventoryManager"/> parses the
-/// full <c>i</c> dump into a currency + numeric-encumbrance snapshot and
-/// patches it incrementally on coin pickups / drops / bank deposits /
-/// withdrawals. Currency ratios are MajorMUD-faithful (1 silver = 10 copper,
-/// 1 gold = 100, 1 platinum = 10000, 1 runic = 1000000) and coin weight
-/// follows the 3-coins-per-encumbrance-unit rule.
-/// </summary>
+// InventoryManager parses the
+// full i dump into a currency + numeric-encumbrance snapshot and
+// patches it incrementally on coin pickups / drops / bank deposits /
+// withdrawals. Currency ratios are MajorMUD-faithful (1 silver = 10 copper,
+// 1 gold = 100, 1 platinum = 10000, 1 runic = 1000000) and coin weight
+// follows the 3-coins-per-encumbrance-unit rule.
 public sealed class InventoryManagerTests
 {
     private sealed class Harness : IDisposable

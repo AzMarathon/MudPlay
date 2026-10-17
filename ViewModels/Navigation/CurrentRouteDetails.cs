@@ -15,8 +15,7 @@ namespace MudPlay.ViewModels.Navigation;
 // room-entry hazard and/or an item-gated exit).
 //
 // Pure aside from the injected lookups (per-room monster links, the
-// per-room hazard, the item-link factory), so it's unit-testable without a live
-// game-data cache or the record-opener commands.
+// per-room hazard, the item-link factory).
 public static class CurrentRouteDetails
 {
     public static IReadOnlyList<RouteDetailRow> Build(

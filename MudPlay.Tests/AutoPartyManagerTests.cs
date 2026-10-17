@@ -170,6 +170,8 @@ public sealed class AutoPartyManagerTests
     {
         var (engine, router, players, party) = Setup();
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        // We lead and Raijin is already a joined member: no invite.
+        party.SelfIsLeader = true;
         party.Members.Add(new PartyMember { Name = "Raijin" });
         party.IsInParty = true;
 
@@ -945,8 +947,11 @@ public sealed class AutoPartyManagerTests
         Dispatch(router, "Also here: Raijin.");
         Assert.True(coord.IsPaused);
 
-        // Whole-party wipe releases any pending loop hold.
+        // Leading a party, the hold stands; the whole party going releases it.
+        party.SelfIsLeader = true;
         party.IsInParty = true;
+        Assert.True(coord.IsPaused);
+
         party.IsInParty = false;
 
         Assert.False(coord.IsPaused);
@@ -1184,15 +1189,6 @@ public sealed class AutoPartyManagerTests
 
         Dispatch(router, "Also here: Raijin.");
 
-        Assert.Empty(_sent);
-    }
-
-    [Fact]
-    public void LeaderReconnectReform_EmptyList_NoOp()
-    {
-        var (engine, router, _, _) = Setup();
-        engine.NoteLeaderReconnectReform(System.Array.Empty<string>());
-        Dispatch(router, "Also here: Raijin.");
         Assert.Empty(_sent);
     }
 
@@ -1634,7 +1630,9 @@ public sealed class AutoPartyManagerTests
         Assert.Single(_sent, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
         _sent.Clear();
 
-        // Server echo arrives — handler is idempotent.
+        // Server echo arrives a few seconds on — handler is idempotent. A nag
+        // re-armed by the echo would start at t0+3 and not fire until t0+8.
+        _partyNow = () => t0.AddSeconds(3);
         Dispatch(router, "You have invited Raijin to follow you.");
 
         // Advance past the initial delay and tick — only ONE @join

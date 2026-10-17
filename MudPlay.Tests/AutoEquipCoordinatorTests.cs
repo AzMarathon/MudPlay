@@ -8,13 +8,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins the pure decision halves of <see cref="AutoEquipCoordinator"/> — which
-/// trigger a posture change implies (<see cref="AutoEquipCoordinator.ClassifyRest"/>)
-/// and which set (if any) a moment should apply given the live config
-/// (<see cref="AutoEquipCoordinator.ResolveTarget"/>). The subscription plumbing is
-/// UI glue smoke-tested via the live app.
-/// </summary>
+// AutoEquipCoordinator: the pure decision halves (ClassifyRest, which trigger a
+// posture change implies; ResolveTarget, which set a moment applies), and the
+// wiring that drives them — position and combat changes, movement start/stop,
+// room changes, held sets and the re-apply once items come back — through the
+// gear burst the equipment manager sends. The hazard-room cases (the HazardRig
+// section) pin how EquipmentManager dresses a slot a worn counter holds.
 public sealed class AutoEquipCoordinatorTests
 {
     // What the equipment manager put on the wire, through the sender the client binds.

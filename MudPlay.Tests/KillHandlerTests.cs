@@ -8,12 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="KillHandler"/> — <c>@kill &lt;target&gt;</c> retargets our combat
-/// engine to a named monster. Pins the retarget call (single + multi-word
-/// names), silent-on-success, the WarnOnDenial-gated missing-target failure,
-/// and ExecuteCommands permission gating.
-/// </summary>
+// KillHandler — @kill <target> retargets our combat
+// engine to a named monster. Pins the retarget call (single + multi-word
+// names), silent-on-success, the WarnOnDenial-gated missing-target failure,
+// and ExecuteCommands permission gating.
 public sealed class KillHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 12, 0, 0, 0, DateTimeKind.Utc);

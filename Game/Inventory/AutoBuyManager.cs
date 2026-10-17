@@ -124,7 +124,7 @@ public sealed class AutoBuyManager : IDisposable
         _resolve = resolve;
         _countCarried = countCarried;
         _isEnabled = isEnabled;
-        // Unbound (tests) → Stock behaviour: one `buy` per copy, wait for each.
+        // Unbound → Stock behaviour: one `buy` per copy, wait for each.
         _isParadigm = isParadigm ?? (static () => false);
         _log = log;
 

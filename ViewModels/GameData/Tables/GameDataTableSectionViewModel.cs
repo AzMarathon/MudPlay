@@ -393,8 +393,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // Async variant of Reload: row-build runs on a worker thread, then bulk-replace AllRows
     // back on the UI thread once the parse is done. Keeps the UI responsive on big tables
     // (Rooms reaches 27k+ rows in MajorMUD v1.11p, more on custom-edit realms).
-    // JsonTableSectionViewModel.OnActivated fires this through the dispatcher post; tests can
-    // await it directly for deterministic completion.
+    // JsonTableSectionViewModel.OnActivated fires this through the dispatcher post.
     internal async Task LoadAsync()
     {
         List<GameDataRow> rows = await Task.Run(() =>
@@ -405,7 +404,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         });
         // Task.Run resumes the continuation on the captured
         // SynchronizationContext (Avalonia dispatcher in app context,
-        // none in tests — either way the property writes happen on a
+        // none outside it — either way the property writes happen on a
         // single thread per call).
         SelectedRow = null;
         AllRows = new ObservableCollection<GameDataRow>(rows);

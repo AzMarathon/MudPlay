@@ -101,7 +101,6 @@ public sealed class PlayerDroppedGate : IDisposable
     }
 
     // Recompute the dropped state and fire the transition once on each edge.
-    // Public so tests can drive it deterministically without a PropertyChanged.
     public void Evaluate()
     {
         bool dropped = _state.IsMortallyWounded;

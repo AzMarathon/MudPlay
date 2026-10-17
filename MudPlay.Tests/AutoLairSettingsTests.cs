@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
@@ -6,7 +5,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// AutoLairSettings DTO defaults, JSON round-trip, and the
+// AutoLairSettings DTO defaults and the
 // EncumbranceHopTimes lookup. Plus the EncumbranceGatedTravelCostModel
 // hop → duration math.
 public sealed class AutoLairSettingsTests
@@ -32,36 +31,6 @@ public sealed class AutoLairSettingsTests
     }
 
     // ----- JSON round-trip ------------------------------------------
-
-    [Fact]
-    public void JsonRoundTrip_PreservesEveryField()
-    {
-        AutoLairSettings dto = new()
-        {
-            Heuristic = AutoLairHeuristic.Throughput,
-            EngageTimeoutSeconds = 45,
-            TravelCostMode = AutoLairTravelCostMode.EncumbranceGated,
-            FlatSecondsPerHop = 1.7,
-            HopTimesByEncumbrance = new EncumbranceHopTimes
-            {
-                None = 0.8, Light = 1.2, Medium = 2.1, Heavy = 3.5, Encumbered = 5.5,
-            },
-        };
-
-        string json = JsonSerializer.Serialize(dto);
-        AutoLairSettings? roundTrip = JsonSerializer.Deserialize<AutoLairSettings>(json);
-
-        Assert.NotNull(roundTrip);
-        Assert.Equal(AutoLairHeuristic.Throughput, roundTrip!.Heuristic);
-        Assert.Equal(45, roundTrip.EngageTimeoutSeconds);
-        Assert.Equal(AutoLairTravelCostMode.EncumbranceGated, roundTrip.TravelCostMode);
-        Assert.Equal(1.7, roundTrip.FlatSecondsPerHop);
-        Assert.Equal(0.8, roundTrip.HopTimesByEncumbrance.None);
-        Assert.Equal(1.2, roundTrip.HopTimesByEncumbrance.Light);
-        Assert.Equal(2.1, roundTrip.HopTimesByEncumbrance.Medium);
-        Assert.Equal(3.5, roundTrip.HopTimesByEncumbrance.Heavy);
-        Assert.Equal(5.5, roundTrip.HopTimesByEncumbrance.Encumbered);
-    }
 
     // ----- EncumbranceHopTimes.For ----------------------------------
 

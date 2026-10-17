@@ -57,7 +57,7 @@ public sealed class CashManager : IDisposable
     private readonly Func<bool> _isPeekSuppressed;
     // Defers an action one dispatch tick. Used so a room-survey ("You notice ...")
     // collect decision is made AFTER the room's later "Also here:" line has been
-    // parsed and the combat gate is current. Default runs synchronously (tests).
+    // parsed and the combat gate is current. Default runs synchronously.
     private readonly Action<Action> _post;
     private readonly LogService? _log;
     private readonly CurrencyNaming _naming;
@@ -186,7 +186,7 @@ public sealed class CashManager : IDisposable
     // release the deferred-hold if the re-displayed room turned out to hold no cash;
     // a successful collect re-arms the gate's own settle window before this elapses.
     private DispatcherTimer? _resurveyReleaseTimer;
-    // Look round-trip hold. Overridable in tests; production waits long enough for
+    // Look round-trip hold. Long enough for
     // the room re-display to arrive and drive the collect.
     private const int ResurveyReleaseMs = 1500;
 
@@ -203,7 +203,7 @@ public sealed class CashManager : IDisposable
     // auto-collect is suppressed there so a search's "You notice …" survey can't
     // re-expose and re-grab the pile the pass-through stash just hid (report
     // paradigm-20260819-121516). Wired by AppServices to AutoDeposit; defaults to
-    // never-suppress so tests and non-looping play are unaffected.
+    // never-suppress.
     internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
 
     // A ceiling on the coin VALUE the collect funnel may still take, in copper, for an
@@ -346,21 +346,21 @@ public sealed class CashManager : IDisposable
         _collectAfterCombatFinished = collectAfterCombatFinished;
         _hasEngageableHostiles = hasEngageableHostiles;
         _isEnabled = isEnabled;
-        // Resolves the per-realm runic word; unbound (tests) falls back to stock
+        // Resolves the per-realm runic word; unbound, it falls back to stock
         // "runic" so the stable-realm behaviour is unchanged.
         _naming = naming ?? new CurrencyNaming();
         // No snapshot bound (or before an `i` parse) → the encumbrance gate
         // is inert and collection runs the full-pickup path.
         _getSnapshot = getSnapshot ?? (static () => InventorySnapshot.Empty);
-        // Null when unbound (tests) → never a peek. A `look <dir>` peek renders
+        // Null when unbound → never a peek. A `look <dir>` peek renders
         // a full room display, so gate the "You notice" collect path on it.
         _isPeekSuppressed = isPeekSuppressed ?? (static () => false);
         // Resolves a survey entry against the active item table (true when it's a
         // real Items.json record). Injected so TryParseCashEntry can settle the
-        // "2 gold key" ambiguity; null (tests / no game data) leaves the
+        // "2 gold key" ambiguity; null (no game data) leaves the
         // count+denomination heuristic standing alone.
         _isKnownItem = isKnownItem;
-        // Unbound (tests) runs inline; production wires Dispatcher.UIThread.Post so
+        // Unbound runs inline; AppServices wires Dispatcher.UIThread.Post so
         // the room-survey collect decision lands after the room-display batch settles.
         _post = post ?? (a => a());
         _log = log;
@@ -398,7 +398,7 @@ public sealed class CashManager : IDisposable
 
     // Bind the shared room-redisplay coordinator so the combat-clear re-display
     // coalesces with the item engine's post-kill re-look (one Enter, not two).
-    // Optional — unbound (tests) the engine sends its own Enter as before.
+    // Optional — unbound, the engine sends its own Enter.
     public void SetRoomRedisplay(Game.Inventory.RoomRedisplayCoordinator coordinator)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
@@ -1221,7 +1221,7 @@ public sealed class CashManager : IDisposable
     // crowns"). The item-table tiebreaker settles it (shared with
     // GroundItemTracker.IsCashEntry, the same fix): an entry that resolves to a
     // real Items.json record is never cash. Currency isn't in the item table, so a
-    // true coin pile won't resolve. Unwired (tests) the heuristic stands alone.
+    // true coin pile won't resolve. Unwired, the heuristic stands alone.
     private bool TryParseCashEntry(string raw, out string? currency, out int count)
     {
         currency = null;

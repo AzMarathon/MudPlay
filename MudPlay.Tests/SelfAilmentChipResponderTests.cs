@@ -8,12 +8,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="SelfAilmentChipResponder"/> — our own poison / blindness / disease
-/// must light the SELF party-window chip. PartyAilmentTracker only mirrors OTHER
-/// members' announced ailments; our own state is owned by ConditionTracker, so
-/// without this responder the self row never showed poison (the reported bug).
-/// </summary>
+// SelfAilmentChipResponder — our own poison / blindness / disease
+// must light the SELF party-window chip. PartyAilmentTracker only mirrors OTHER
+// members' announced ailments; our own state is owned by ConditionTracker, so
+// without this responder the self row never showed poison (the reported bug).
 public sealed class SelfAilmentChipResponderTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

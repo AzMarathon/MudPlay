@@ -1010,6 +1010,7 @@ public sealed class HazardBuffRefreshTests : IDisposable
     {
         Field f = new();
         f.Engine.OnApproachingRoom(Dunes);
+        Assert.Equal(new[] { "use waterskin" }, f.Wire);
         Assert.Equal(0, f.SneakSpent);
     }
 

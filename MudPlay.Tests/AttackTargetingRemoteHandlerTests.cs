@@ -10,14 +10,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AttackTargetingRemoteHandler"/> reads / writes
-/// <see cref="CombatSettings.TargetPriority"/> (<c>@atkprio</c>) and
-/// <see cref="CombatSettings.AttackTiming"/> (<c>@atkorder</c>) on the loaded
-/// profile in response to the two numbered-option remote commands. Pins the
-/// bare-query reply, each numeric set, the name-requiring options, and the
-/// "command failed" syntax-error path.
-/// </summary>
+// AttackTargetingRemoteHandler reads / writes
+// CombatSettings.TargetPriority (@atkprio) and
+// CombatSettings.AttackTiming (@atkorder) on the loaded
+// profile in response to the two numbered-option remote commands. Pins the
+// bare-query reply, each numeric set, the name-requiring options, and the
+// "command failed" syntax-error path.
 public sealed class AttackTargetingRemoteHandlerTests
 {
     private static readonly DateTime Now = new(2026, 6, 12, 0, 0, 0, DateTimeKind.Utc);

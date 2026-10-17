@@ -9,12 +9,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="GreetManager"/> — once-per-local-day greet+look on first
-/// sighting of a non-party player. Covers the end-to-end classifier hook
-/// plus the <see cref="GreetManager.TryGreet"/> decision seam (enable gate,
-/// day-boundary dedup, self/party skip).
-/// </summary>
+// GreetManager — once-per-local-day greet+look on first
+// sighting of a non-party player. Covers the end-to-end classifier hook
+// plus the GreetManager.TryGreet decision seam (enable gate,
+// day-boundary dedup, self/party skip).
 public sealed class GreetManagerTests
 {
     private sealed class Harness : IDisposable

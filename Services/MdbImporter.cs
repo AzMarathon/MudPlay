@@ -307,7 +307,7 @@ public sealed class MdbImporter
     }
 
     // Round-trip check for a just-written table file: true when it re-parses as
-    // JSON. Internal so a test can exercise it without a real MDB.
+    // JSON.
     internal static bool TableJsonParses(string filePath)
     {
         try

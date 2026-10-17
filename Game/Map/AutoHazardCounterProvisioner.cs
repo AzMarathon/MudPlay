@@ -76,7 +76,7 @@ namespace MudPlay.Game.Map;
 public sealed class AutoHazardCounterProvisioner
 {
     // True (and counted) while the master switch is off; asked right before
-    // anything is sent. Null in tests that don't exercise the switch.
+    // anything is sent. Null = never off.
     public Func<bool>? MasterSwitchOff { get; set; }
 
     // LogService category — [HazardCounter] rows per decision.
@@ -183,7 +183,7 @@ public sealed class AutoHazardCounterProvisioner
     private static readonly TimeSpan StepAnswerCap = TimeSpan.FromSeconds(3);
 
     // The step into a countered room waits on MovementCoordinator.HazardBuffGate for
-    // the answer to its `use`. Unbound (tests of the clock alone), nothing is held.
+    // the answer to its `use`. Unbound, nothing is held.
     private MovementCoordinator? _coordinator;
     private Action<TimeSpan, Action>? _schedule;
     private bool _holdingStep;

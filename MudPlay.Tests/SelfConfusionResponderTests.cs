@@ -10,13 +10,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="SelfConfusionResponder"/> — the local side of our own confusion
-/// (the leader / solo case whose @wait is eaten). On confusion onset it lights
-/// the self party chip and, unless Ignore Confusion is set, asserts the
-/// ConfusionGate; both release on clear. <see cref="SelfConfusionResponder.Reevaluate"/>
-/// reconciles a mid-confusion Ignore Confusion toggle.
-/// </summary>
+// SelfConfusionResponder — the local side of our own confusion
+// (the leader / solo case whose @wait is eaten). On confusion onset it lights
+// the self party chip and, unless Ignore Confusion is set, asserts the
+// ConfusionGate; both release on clear. SelfConfusionResponder.Reevaluate
+// reconciles a mid-confusion Ignore Confusion toggle.
 public sealed class SelfConfusionResponderTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

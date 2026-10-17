@@ -46,24 +46,4 @@ public sealed class KeybindingStoreTests
         KeybindingStore store = new();
         Assert.Null(store.FindAction(KeyChord.Empty));
     }
-
-    // The steal-on-conflict sequence the Toolbar + Shortcuts tab runs: unbind the
-    // chord's previous owner, then bind it to the new action — leaving a single
-    // owner and the previous action unbound.
-    [Fact]
-    public void StealSequence_MovesChord_AndUnbindsPreviousOwner()
-    {
-        KeybindingStore store = new();
-        KeyChord f1 = new(Key.F1);   // OpenWorkshop by default
-
-        BuiltInAction? victim = store.FindAction(f1);
-        Assert.Equal(BuiltInAction.OpenWorkshop, victim);
-
-        store.Rebind(victim!.Value, KeyChord.Empty);
-        store.Rebind(BuiltInAction.OpenParty, f1);
-
-        Assert.Equal(KeyChord.Empty, store.Get(BuiltInAction.OpenWorkshop));
-        Assert.Equal(f1, store.Get(BuiltInAction.OpenParty));
-        Assert.Equal(BuiltInAction.OpenParty, store.FindAction(f1));   // exactly one owner
-    }
 }

@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// @do is the highest-trust verb in the @-command catalogue —
-/// passthrough that ships the sender's args on the wire as if the
-/// local user had typed them. Engine-level hard-blocks (reroll,
-/// suicide-lives) gate destructive verbs before this handler runs,
-/// per-player ExecuteCommands grant gates everything else.
-/// </summary>
+// @do is the highest-trust verb in the @-command catalogue —
+// passthrough that ships the sender's args on the wire as if the
+// local user had typed them. Engine-level hard-blocks (reroll,
+// suicide-lives) gate destructive verbs before this handler runs,
+// per-player ExecuteCommands grant gates everything else.
 public sealed class DoHandlerTests
 {
     // The router each engine reads, which a test's chat lines go through.

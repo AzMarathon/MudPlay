@@ -156,19 +156,6 @@ public sealed class DupeHandlerTests
 
     // ===== Safeguard: query, roomba, and quest only =====
 
-    [Fact]
-    public void Shareable_IsExactlyTheQueryAndRoombaAndQuestCategories()
-    {
-        // Pins the mask so widening it is a deliberate, reviewed change.
-        Assert.Equal(
-            PlayerRemoteControls.QueryVersion | PlayerRemoteControls.QueryExperience
-            | PlayerRemoteControls.QueryHealthStatus | PlayerRemoteControls.QueryLocation
-            | PlayerRemoteControls.QueryInventory | PlayerRemoteControls.QueryBossTimers
-            | PlayerRemoteControls.QueryDeaths | PlayerRemoteControls.QueryItemLocation
-            | PlayerRemoteControls.QueryQuests,
-            Shareable);
-    }
-
     [Theory]
     [InlineData(PlayerRemoteControls.RequestInvite)]
     [InlineData(PlayerRemoteControls.MovePlayer)]

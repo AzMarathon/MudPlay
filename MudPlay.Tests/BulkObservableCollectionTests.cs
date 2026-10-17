@@ -5,9 +5,7 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pins the invariant the O(n²) startup fix depends on: a bulk ReplaceAll raises
-// exactly one Reset (so an index-rebuilding subscriber rebuilds once), while a
-// per-item Add keeps its normal per-op notification (editor upserts stay
-// synchronously fresh for downstream rebuilders).
+// exactly one Reset, so an index-rebuilding subscriber rebuilds once.
 public sealed class BulkObservableCollectionTests
 {
     [Fact]
@@ -38,18 +36,4 @@ public sealed class BulkObservableCollectionTests
         Assert.Empty(col);
     }
 
-    [Fact]
-    public void Add_KeepsPerItemNotification()
-    {
-        BulkObservableCollection<int> col = new();
-        List<NotifyCollectionChangedAction> actions = new();
-        col.CollectionChanged += (_, e) => actions.Add(e.Action);
-
-        col.Add(1);
-        col.Add(2);
-
-        Assert.Equal(
-            new[] { NotifyCollectionChangedAction.Add, NotifyCollectionChangedAction.Add },
-            actions);
-    }
 }

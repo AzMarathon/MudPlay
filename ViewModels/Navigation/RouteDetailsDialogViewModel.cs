@@ -23,7 +23,7 @@ namespace MudPlay.ViewModels.Navigation;
 // through the persist callback the launcher supplies.
 public sealed partial class RouteDetailsDialogViewModel : ObservableObject, IDialogViewModel<bool?>
 {
-    // (enabled, greenMax%, yellowMax%) → write the Global-tier delta. Null in tests.
+    // (enabled, greenMax%, yellowMax%) → write the Global-tier delta.
     private readonly Action<bool, int, int>? _persist;
     private bool _suppressPersist;
 

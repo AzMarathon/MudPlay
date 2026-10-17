@@ -12,14 +12,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// End-to-end: a monster revealed only in a dark room (by its own attack line
-/// or a party member's "moves to attack" announce) is injected by
-/// <see cref="DarkRoomCombatWatcher"/> into the shared entity observation, then
-/// engaged by <see cref="CombatManager"/> through the SAME hostility filter and
-/// Target Order ranking a lit-room "Also here:" monster gets. Pins the contract
-/// that dark-room combat honors Settings → Combat, and only spins up on hostiles.
-/// </summary>
+// End-to-end: a monster revealed only in a dark room (by its own attack line
+// or a party member's "moves to attack" announce) is injected by
+// DarkRoomCombatWatcher into the shared entity observation, then
+// engaged by CombatManager through the SAME hostility filter and
+// Target Order ranking a lit-room "Also here:" monster gets. Pins the contract
+// that dark-room combat honors Settings → Combat, and only spins up on hostiles.
 public sealed class DarkRoomCombatIntegrationTests
 {
     private sealed class Harness : IDisposable
