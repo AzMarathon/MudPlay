@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
 using MudPlay.Views.GameData.Tables;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -500,6 +501,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private void ApplySearch()
     {
         ApplyFilter();
+        GuideActions.Report(GuideActions.BrowserFiltered);
         OnPropertyChanged(nameof(StatusText));
     }
 

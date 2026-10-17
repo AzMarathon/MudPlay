@@ -10,7 +10,21 @@ On a brand-new install — no BBS, no character, or no game data imported yet �
 2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**. On a new install you are on the unnamed default profile, so the character you add **is loaded** and Profile Management **closes**: what you set up from here is kept on it.
 3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from. If Profile Management is still open, the import closes it first: with it open the import's file picker could end up out of reach, and the client looked frozen.
 
-Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → First-time setup…**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
+Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → Visual Guides… → First-time setup**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
+
+## Visual Guides
+
+**Help → Visual Guides…** lists step-by-step guides to the rest of the client, grouped by area. Each shows how far you got: **✓ Done**, **Step N of M**, or how many steps it has. Click **Open** and the guide runs in the same floating card as the setup tour: each step is a short checklist, a line **ticks (☑)** as you really do that thing (open the window, click Save, start the loop…), and the guide moves on by itself once a step's checklist is done. Lines marked **•** are explanations; read them and press **Next**. The menu a step starts from glows on the main window.
+
+- **Close — your place is kept** puts the card away; **Open** brings you back to the same step. **Restart** in the list starts a guide over from step 1.
+- Pressing **Help → Visual Guides…** again while the list is in front closes it.
+- The guides:
+  - **Getting started** — First-time setup.
+  - **Navigation** — build, save and run a loop; run Auto-Lair; walk to a room; loop settings (Entire Loop Settings and each room's command, delay, rest and attack options); import MegaMUD loops.
+  - **Automation** — macros, aliases, triggers, scheduled events.
+  - **Character & game data** — Monster Intel, a Player Workshop tour, Item Finder, the Game Data Browser, player permissions for @-commands, the Buff Watchdog, gear sets and combat profiles.
+  - **Settings & help** — the Settings window, and sending a bug report.
+- Progress is kept for the whole install, not per character.
 
 ## What MudPlay is
 
@@ -334,7 +348,7 @@ It sends nothing to the game to do this — it's pure inference from what you're
 
 The status line is also **colour-coded**: **amber** while a queued route is held for a reason (Auto-All off…) or Auto-Lair is retrying an approach, and **red** when a nav action fails or the tracker loses your position — so a problem is glaring rather than buried in grey.
 
-A row of action chips — **Save**, **Go**, **Loop mode**, **Lair mode** — sits just above the map.
+A row of action chips — **Save**, **Go**, **Loop mode**, **Lair mode** — sits just above the map. It shows while the side panels are out; if they are collapsed, click **◀** at the top right (*Expand the side panels*).
 
 **Go, Run and Sprint.** **Go** starts what's queued: a walk-to, the loop you built, or the lairs you marked. Whenever Go would start something new, a small **▾** beside it offers two other ways to set out:
 - **Run** — Go with **Auto-Combat off** for the trip.
@@ -351,7 +365,7 @@ To send your character to a room:
 - **Search** — type a room name or a map/room key (e.g. `1/297`) in the top search box, pick the match, then click the green **Go** chip (or **▾ → Run / Sprint**).
 - **Ctrl+click a room** on the map — with nothing running, or while you're building a loop, it's queued just as if you'd searched for it: click **Go** (or **▾ → Run / Sprint**) to walk there. In the loop builder the click queues the walk instead of adding a waypoint, and your sketch is kept.
 - **Right-click a room** on the map → **Walk here**.
-- **Favourites** — save rooms you visit often (right-click a room → **Add to favorites**, or the Management dialog's **Go To** tab), then click one in the **GOTO** rail to walk there. In the Management dialog's **Go To** tab each saved room is listed as its label followed by its **(map/room)** number, so identically-named rooms are easy to tell apart. **Right-click a Go To** in the rail for **Walk here**, **Edit…**, **Move to folder…**, an **Add to / Remove from favourites** toggle (stars it — the ★ that promotes it to the terminal's right-click **Favorites** flyout — without deleting it), and **Delete this Go To** (removes the saved location entirely).
+- **Favourites** — save rooms you visit often (right-click a room → **Save as Go To**, or the Navigation Management dialog's **Go To** tab), then click one in the **GOTO** rail to queue it and click **Go** to walk there. In the Management dialog's **Go To** tab each saved room is listed as its label followed by its **(map/room)** number, so identically-named rooms are easy to tell apart. **Right-click a Go To** in the rail for **Walk here** (queues it, like a click — then **Go**), **Edit…**, **Move to folder…**, an **Add to / Remove from favourites** toggle (stars it — the ★ that promotes it to the terminal's right-click **Favorites** flyout — without deleting it), and **Delete this Go To** (removes the saved location entirely).
 Type **"favourite"** (or any 3+ character part of the word) into the GOTO or loop filter box to surface your starred Go Tos and favourited loops.
 
 MudPlay plots the shortest route and walks it, opening doors, disarming traps, and revealing hidden exits along the way. Click the red **Stop** chip to stop, or the **Pause / Resume** chip to hold and continue.
@@ -376,7 +390,7 @@ A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and
 
 1. Click the **Loop mode** chip (it changes to **Building**). If you've run a loop this session, it's **pre-loaded** into the builder — with **all its settings intact** (per-room command / delay / no-rest / no-attack **and** the loop-wide Only-attack-in-lair flag), so you can **Go** straight away or re-**Save** it — handy when a stop / `@stop` dropped you off one, or you ran an ad-hoc loop you never saved. Hit **Clear all** to wipe it and build a fresh one instead. (Turn the pre-load off under **Settings → General → "Load last ran loop"** if you'd rather always start empty.)
 2. **Left-click the rooms on the map, in order** — each becomes a waypoint. **Alt+click** a room to take it back out (a room you've added more than once loses its most recent click). To **move** a waypoint, press on its numbered chip and **drag it onto another room**. It keeps its number, command and flags, and the line re-plans through the new room. A drop on empty map, or on a room the loop can't reach, puts it back. Room tooltips stay hidden while you're holding a chip. Reorder or remove them in the **CURRENT NAV** rail too.
-3. Click **Go** to start it, or **Save** to keep it without running.
+3. Click **Go** to run it as it stands (Go does not save it), or **Save** to keep it.
 
 **Starting a loop from somewhere else.** If you aren't standing on the loop when you start it, MudPlay first walks you to the nearest room on it. That walk is an ordinary walk-to: you get the same route cards a walk-to shows (walk or teleport, traps, avoided rooms, a gate that needs an item), and the Navigation window shows a walk until you arrive. The moment you reach the loop, the loop takes over and starts lapping. If you close the cards without picking, press Stop, or pick a route that ends somewhere else (running up to a blocked room, a stop at a shop), the loop doesn't start. While that walk is under way the map shows both: the walk's route line and the loop's ring it is heading for (with the **Loop lines** chip on), and the status reads *Walking to … then looping `<loop>`*.
 
@@ -419,7 +433,7 @@ While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** r
 
 ### Importing a MegaMUD loop
 
-**Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** in Manage Loops) opens a `.mp` file in the **import review** window. Nothing is saved until you accept. The review window stays open through a switch of game data, but will not **Accept**, **Verify**, load a Rooms.md or translate from another start room until the game data it was opened on is active again, and says so. A start room you pick meanwhile waits: the first **Verify** or **Accept** after you switch back rebuilds the rows from it (with any rooms you typed since) and stops there without verifying or saving, saying how many steps lost a command, delay or tick, so you check the rows and press it again.
+**Game Data → Import loops (MegaMUD .mp)…** (or **Import .mp** on the **Loops & Auto-Lairs** tab of **Navigation Management**) opens a `.mp` file in the **import review** window. Nothing is saved until you accept. The review window stays open through a switch of game data, but will not **Accept**, **Verify**, load a Rooms.md or translate from another start room until the game data it was opened on is active again, and says so. A start room you pick meanwhile waits: the first **Verify** or **Accept** after you switch back rebuilds the rows from it (with any rooms you typed since) and stops there without verifying or saving, saying how many steps lost a command, delay or tick, so you check the rows and press it again.
 
 - **Left — what the file says.**
   - The loop's name and author.
@@ -4512,7 +4526,7 @@ MudPlay is a Telnet terminal client for MajorMUD / MegaMUD-style BBS door games.
 
 **What these settings control.** Broadly: how your character fights, heals, casts spells, and buffs; how the client walks you around the map and loops between monster spawns; how it handles party coordination, chat, and remote `@`-commands from other players; how it manages coin and item pickup; how the terminal looks and behaves; and various connection/reconnection behaviors for the BBS itself.
 
-**Where to find them.** Almost everything lives in one place: the **Settings window** (opened from the toolbar, the View menu, or its keybind — default varies by build). It's organized into tabs down the left side: General, Toolbar + Shortcuts, BBS + Display, Health, Spells, Combat, Party, Cash, Statline, Talk, Auto-Light, Auto-Lair, Auto-Trainer, Other, Events, and Sounds.
+**Where to find them.** Almost everything lives in one place: the **Settings window** (opened from the toolbar, the View menu, or its keybind — default varies by build). It's organized into tabs down the left side: General, Toolbar + Shortcuts, BBS + Display, Health, Spells + Ailments, Combat, Party, PvP, Cash + Items, Statline, Talk, Auto-Light, Auto-Lair, Auto-Trainer, Teleports, Periodic Damage Room Spells, Other, Events, and Sounds.
 
 **Searching settings.** The **Search settings…** box at the top works like the Help window's: it doesn't hide anything. Every tab stays in the list, and the ones holding what you typed are **highlighted in amber** — it searches the text each tab shows: setting names, check box and button text, and the tooltips you get by hovering. The count under the tab list says how many tabs match. Open a tab and every occurrence in its labels is highlighted too, with the tab scrolled to the first; a setting that matched only through its tooltip has its name shaded amber instead. The search stays while you click from tab to tab; clear the box (the ✕) to drop the highlights. Like Help's, the text is matched as one phrase, ignoring case: `rest if` finds "Rest if below", `rest below` doesn't.
 

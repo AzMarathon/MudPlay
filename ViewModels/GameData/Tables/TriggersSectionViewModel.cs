@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -117,6 +118,7 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
         Trigger? created = await _dialogs.OpenWindowAsync<TriggerEditDialogViewModel, Trigger>(vm);
         if (created is null) return;
         _engine.Add(created);
+        GuideActions.Report(GuideActions.TriggerAdded);
     }
 
     private async Task RemoveSelectedAsync()

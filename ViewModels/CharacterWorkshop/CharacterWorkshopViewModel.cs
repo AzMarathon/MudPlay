@@ -5,6 +5,7 @@ using MudPlay.Game.Inventory;
 using MudPlay.Game.Recovery;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -27,6 +28,14 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
 
     // The section on screen: the selected tab, or its selected sub-tab.
     public WorkshopSectionViewModel? ActiveSection => SelectedSection?.Leaf;
+
+    // A group tab opens on its first sub-tab without a sub-tab change, so the page
+    // a guide waits for is reported from here as well as from the group.
+    partial void OnSelectedSectionChanged(WorkshopSectionViewModel? value)
+    {
+        if (value is not null && GuidePageActions.ForWorkshopPage(value.Leaf.Id) is { } key)
+            GuideActions.Report(key);
+    }
 
     // The tab on screen changed what it shows (a sub-tab switch) or the window
     // size it asks for. A switch of the main tab isn't reported here; the window

@@ -1,17 +1,31 @@
-using MudPlay.ViewModels;
+using MudPlay.Models.Settings;
+using MudPlay.ViewModels.Guides;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// Pins the first-run setup tour's step engine: which steps are built from the
-// missing prerequisites, Prev/Next navigation, live done-detection + auto-advance
-// on Refresh, and the dismiss persistence.
-public sealed class FirstRunTutorialViewModelTests
+// Pins the first-run setup tour, now one Visual Guide among many: which steps are
+// built from the missing prerequisites, Prev/Next navigation, live done-detection
+// + auto-advance on Refresh, and the dismiss persistence.
+public sealed class SetupGuideTests
 {
-    private sealed class Flags
+    internal sealed class Flags
     {
-        public bool GameData, Bbs, Character, Connected, Dismissed, Loaded;
+        public bool GameData, Bbs, Character, Connected, Dismissed;
+        // Unset: a character counts as loaded once one exists.
+        public bool? Loaded;
+        public GuideProgress Progress = new();
     }
+
+    internal static GuideProbes Probes(Flags f) => new(
+        HasGameData: () => f.GameData,
+        HasBbs: () => f.Bbs,
+        HasCharacter: () => f.Character,
+        CharacterLoaded: () => f.Loaded ?? f.Character,
+        IsConnected: () => f.Connected);
+
+    internal static GuideViewModel Make(Flags f) =>
+        new(GuideCatalogue.Build(Probes(f)), () => f.Progress, () => { }, () => f.Dismissed = true);
 
     // The step used to end at the add, and a new player went on playing the unnamed
     // default profile with Profile Management still open (user, 2026-10-14). It
@@ -19,21 +33,15 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void AddACharacter_EndsWhenTheCharacterIsLoaded_NotWhenItIsAdded()
     {
-        Flags f = new() { Bbs = true };
-        FirstRunTutorialViewModel vm = new(
-            hasGameData: () => f.GameData,
-            hasBbs: () => f.Bbs,
-            hasCharacter: () => f.Character,
-            isConnected: () => f.Connected,
-            persistDismiss: () => f.Dismissed = true,
-            characterLoaded: () => f.Loaded);
-        vm.Start();
+        Flags f = new() { Bbs = true, Loaded = false };
+        GuideViewModel vm = Make(f);
+        vm.StartSetup();
         Assert.Equal("Add a character", vm.CurrentTitle);
 
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionAddCharacter);
+        vm.NotifyActionDone(GuideActions.ProfileManagement);
+        vm.NotifyActionDone(GuideActions.AddCharacter);
         f.Character = true;                                  // added, not loaded
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionCharacterAdded);
+        vm.NotifyActionDone(GuideActions.CharacterAdded);
         Assert.Equal("Add a character", vm.CurrentTitle);       // every line ticked, but nothing loaded yet
 
         f.Loaded = true;
@@ -41,23 +49,17 @@ public sealed class FirstRunTutorialViewModelTests
         Assert.Equal("Import game data", vm.CurrentTitle);
     }
 
-    private static (FirstRunTutorialViewModel vm, Flags f) Make()
+    private static (GuideViewModel vm, Flags f) Make()
     {
         Flags f = new();
-        FirstRunTutorialViewModel vm = new(
-            hasGameData: () => f.GameData,
-            hasBbs: () => f.Bbs,
-            hasCharacter: () => f.Character,
-            isConnected: () => f.Connected,
-            persistDismiss: () => f.Dismissed = true);
-        return (vm, f);
+        return (Make(f), f);
     }
 
     [Fact]
     public void Start_AllMissing_BuildsFourStepsFromMissingPlusConnect()
     {
-        (FirstRunTutorialViewModel vm, _) = Make();
-        vm.Start();
+        (GuideViewModel vm, _) = Make();
+        vm.StartSetup();
         Assert.True(vm.IsActive);
         Assert.Equal("Add a BBS", vm.CurrentTitle);
         Assert.Equal("Step 1 of 4", vm.StepCounterText);
@@ -67,10 +69,10 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Start_OnlyGameDataMissing_SkipsSatisfiedPrereqSteps()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.Bbs = true;
         f.Character = true;
-        vm.Start();
+        vm.StartSetup();
         // Game data step + Connect finish only.
         Assert.Equal("Import game data", vm.CurrentTitle);
         Assert.Equal("Step 1 of 2", vm.StepCounterText);
@@ -79,10 +81,10 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Start_OnlyBbsMissing_StartsAtBbs()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = true;
         f.Character = true;
-        vm.Start();
+        vm.StartSetup();
         Assert.Equal("Add a BBS", vm.CurrentTitle);
         Assert.Equal("Step 1 of 2", vm.StepCounterText);
     }
@@ -90,10 +92,10 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Start_NothingMissing_ShowsOnlyConnect()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;
-        Assert.False(vm.AnyPrerequisiteMissing);
-        vm.Start();
+        Assert.False(SetupGuideTests.Probes(f).AnyPrerequisiteMissing);
+        vm.StartSetup();
         Assert.Equal("Connect", vm.CurrentTitle);
         Assert.Equal("Step 1 of 1", vm.StepCounterText);
         Assert.True(vm.IsLastStep);
@@ -103,8 +105,8 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void NextAndPrev_WalkTheSteps()
     {
-        (FirstRunTutorialViewModel vm, _) = Make();
-        vm.Start();
+        (GuideViewModel vm, _) = Make();
+        vm.StartSetup();
         Assert.Equal("Add a BBS", vm.CurrentTitle);
         vm.NextCommand.Execute(null);
         Assert.Equal("Add a character", vm.CurrentTitle);
@@ -116,9 +118,9 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Next_OnLastStep_FinishesAndDismisses()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;   // only Connect
-        vm.Start();
+        vm.StartSetup();
         Assert.True(vm.IsLastStep);
         vm.NextCommand.Execute(null);
         Assert.False(vm.IsActive);
@@ -128,7 +130,7 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void StartDemo_ShowsAllStepsEvenWhenFullyConfigured()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = f.Connected = true;   // nothing missing
         vm.StartDemo();
         Assert.True(vm.IsActive);
@@ -140,7 +142,7 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void StartDemo_OpensAtFirstMissingSetupStep()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.Bbs = true;   // has a BBS, missing character + game data
         vm.StartDemo();
         Assert.Equal("Add a character", vm.CurrentTitle);   // opens at what's missing
@@ -149,7 +151,7 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void StartDemo_NothingMissing_OpensAtBbs()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.Bbs = f.Character = f.GameData = true;
         vm.StartDemo();
         Assert.Equal("Add a BBS", vm.CurrentTitle);   // lack nothing → walk from start
@@ -158,10 +160,10 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void StartDemo_FinishDoesNotPersistDismiss()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;
         vm.StartDemo();
-        vm.SkipCommand.Execute(null);
+        vm.CloseCommand.Execute(null);
         Assert.False(vm.IsActive);
         Assert.False(f.Dismissed);   // a demo run must not suppress the real tour
     }
@@ -169,16 +171,16 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void NotifyActionDone_TicksActionLine_AndAdvancesHighlight()
     {
-        (FirstRunTutorialViewModel vm, _) = Make();   // all missing → starts at Add a BBS
-        vm.Start();
-        var before = vm.CurrentSubs;
+        (GuideViewModel vm, _) = Make();   // all missing → starts at Add a BBS
+        vm.StartSetup();
+        var before = vm.CurrentLines;
         Assert.False(before[0].IsDone);
         Assert.True(before[0].IsCurrent);             // first line highlighted
         Assert.True(vm.HighlightProfileManagement);   // and the menu item glows
 
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
+        vm.NotifyActionDone(GuideActions.ProfileManagement);
 
-        var after = vm.CurrentSubs;
+        var after = vm.CurrentLines;
         Assert.True(after[0].IsDone);                 // "File → Profile Management" ticked
         Assert.False(after[0].IsCurrent);
         Assert.True(after[1].IsCurrent);              // highlight moved to the next line
@@ -188,49 +190,49 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Demo_ActionClick_StillTicksChecklist()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;   // fully configured — demo still walks
         vm.StartDemo();
-        Assert.False(vm.CurrentSubs[0].IsDone);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
-        Assert.True(vm.CurrentSubs[0].IsDone);      // action line ticks even in demo
-        Assert.True(vm.CurrentSubs[1].IsCurrent);   // highlight advances
+        Assert.False(vm.CurrentLines[0].IsDone);
+        vm.NotifyActionDone(GuideActions.ProfileManagement);
+        Assert.True(vm.CurrentLines[0].IsDone);      // action line ticks even in demo
+        Assert.True(vm.CurrentLines[1].IsCurrent);   // highlight advances
     }
 
     [Fact]
     public void Demo_WalkingAllBbsActions_AutoAdvancesToCharacter()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;   // demo on a configured install
         vm.StartDemo();
         Assert.Equal("Add a BBS", vm.CurrentTitle);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionProfileManagement);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionAddBbs);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionBbsHostPort);
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionBbsSaved);
+        vm.NotifyActionDone(GuideActions.ProfileManagement);
+        vm.NotifyActionDone(GuideActions.AddBbs);
+        vm.NotifyActionDone(GuideActions.BbsHostPort);
+        vm.NotifyActionDone(GuideActions.BbsSaved);
         // All four BBS lines done → step complete → tour advances on its own.
         Assert.Equal("Add a character", vm.CurrentTitle);
         // Profile Management already clicked → that line pre-ticked, highlight on Add.
-        Assert.True(vm.CurrentSubs[0].IsDone);
-        Assert.True(vm.CurrentSubs[1].IsCurrent);
+        Assert.True(vm.CurrentLines[0].IsDone);
+        Assert.True(vm.CurrentLines[1].IsCurrent);
     }
 
     [Fact]
     public void NotifyActionDone_Ignored_ForUnrelatedAction()
     {
-        (FirstRunTutorialViewModel vm, _) = Make();
-        vm.Start();                                   // Add a BBS (line 1 = Profile Management)
-        vm.NotifyActionDone(FirstRunTutorialViewModel.ActionImportMdb);
-        Assert.False(vm.CurrentSubs[0].IsDone);       // unrelated action doesn't tick it
-        Assert.True(vm.CurrentSubs[0].IsCurrent);
+        (GuideViewModel vm, _) = Make();
+        vm.StartSetup();                                   // Add a BBS (line 1 = Profile Management)
+        vm.NotifyActionDone(GuideActions.ImportMdb);
+        Assert.False(vm.CurrentLines[0].IsDone);       // unrelated action doesn't tick it
+        Assert.True(vm.CurrentLines[0].IsCurrent);
     }
 
     [Fact]
     public void Skip_DismissesPermanently()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
-        vm.Start();
-        vm.SkipCommand.Execute(null);
+        (GuideViewModel vm, Flags f) = Make();
+        vm.StartSetup();
+        vm.CloseCommand.Execute(null);
         Assert.False(vm.IsActive);
         Assert.True(f.Dismissed);
     }
@@ -238,8 +240,8 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void CurrentIsDone_ReflectsLivePrereq()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
-        vm.Start();
+        (GuideViewModel vm, Flags f) = Make();
+        vm.StartSetup();
         Assert.False(vm.CurrentIsDone);
         f.Bbs = true;
         // Re-read via a property refresh (Refresh raises it).
@@ -251,8 +253,8 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Refresh_AutoAdvancesPastCompletedSteps()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
-        vm.Start();                       // at Add a BBS (step 1 of 4)
+        (GuideViewModel vm, Flags f) = Make();
+        vm.StartSetup();                       // at Add a BBS (step 1 of 4)
         f.Bbs = true;
         f.Character = true;
         vm.Refresh();
@@ -263,9 +265,9 @@ public sealed class FirstRunTutorialViewModelTests
     [Fact]
     public void Refresh_StopsAtLastStepEvenIfDone()
     {
-        (FirstRunTutorialViewModel vm, Flags f) = Make();
+        (GuideViewModel vm, Flags f) = Make();
         f.GameData = f.Bbs = f.Character = true;
-        vm.Start();                       // only Connect
+        vm.StartSetup();                       // only Connect
         f.Connected = true;
         vm.Refresh();
         Assert.True(vm.IsLastStep);

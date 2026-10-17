@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.182.0**
-> - Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
-> - Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
-> - The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
-> - Recovering a friend's corpse no longer marks your own open pile recovered
+> **Version 3.183.0**
+> - Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
+> - Each guide ticks its steps as you really do them, keeps your place, and can be restarted
+> - The first-time setup tour is one of them and still opens on its own on a new install
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
@@ -27,7 +26,7 @@ Linux is the primary platform; Windows and macOS are supported through Avalonia.
 - **Game Data** — import MajorMUD `.mdb` sets; browse, filter and override every monster, item, spell and room; **Monster Intel** answers "can I fight this?".
 - **Automation** — macros, aliases, triggers, scheduled events, per-engine toggles, and a one-press kill switch.
 - **Chat** — a conversation window with channel filters, search and history.
-- **Help & diagnostics** — a built-in Help guide, first-run setup tour, update checker, scrollback search, program log, session stats, wire inspector, and a one-click **bug reporter**.
+- **Help & diagnostics** — a built-in Help guide, step-by-step Visual Guides (the first-run setup tour among them), update checker, scrollback search, program log, session stats, wire inspector, and a one-click **bug reporter**.
 - **Your layout** — editable toolbar, rebindable keys, a custom right-click menu, and windows that snap together.
 
 ## Getting started
@@ -55,7 +54,7 @@ If local state ever gets weird, `dotnet clean` and rebuild.
 4. **Connect.** **Alt+H**, or File → Connect. You're in.
 5. **Want the automation?** Open **Game Data** → **Import .mdb** and pick a MajorMUD database. That fills the monster/item/spell/room tables the engines read from. The terminal works fine without it — the robots don't.
 
-On a fresh install a **setup tour** walks you through these steps. **Help → Help topics…** explains every feature and setting.
+On a fresh install a **setup tour** walks you through these steps; **Help → Visual Guides…** has step-by-step guides to the rest. **Help → Help topics…** explains every feature and setting.
 
 ### Where your data lives
 

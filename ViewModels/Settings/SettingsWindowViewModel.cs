@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Settings;
 
@@ -209,6 +210,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     {
         (List<string> applied, _) = ApplyDirty(Sections, holdFlagged: false);
         LogApplied(applied);
+        GuideActions.Report(GuideActions.SettingsApplied);
     }
 
     private void LogApplied(List<string> applied)
@@ -256,7 +258,21 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         IsCommitted = true;
     }
 
-    partial void OnSearchTextChanged(string value) => ApplySearch();
+    partial void OnSearchTextChanged(string value)
+    {
+        ApplySearch();
+        if (!string.IsNullOrWhiteSpace(value)) GuideActions.Report(GuideActions.SettingsSearched);
+    }
+
+    // A section picked by the user, not the one the window opened on, ticks the
+    // Settings guide's "pick a section" line; the Events / Combat pages tick theirs
+    // however they were reached.
+    partial void OnSelectedSectionChanged(SettingsSectionViewModel? oldValue, SettingsSectionViewModel? newValue)
+    {
+        if (oldValue is not null && newValue is not null) GuideActions.Report(GuideActions.SettingsSectionPicked);
+        if (newValue?.Id == "events") GuideActions.Report(GuideActions.EventsShown);
+        else if (newValue?.Id == "combat") GuideActions.Report(GuideActions.CombatSectionShown);
+    }
 
     private void ApplySearch()
     {
