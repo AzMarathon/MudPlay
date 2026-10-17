@@ -4798,8 +4798,8 @@ public sealed class AppServices
         // Temp death-spell recovery: when a monster whose DeathSpell is a silent "…temp"
         // spell dies, those spells stall the game engine, so send that spell's message
         // CastResponse (seeded "^M^M" = two carriage returns) to unstick it. Subscribes
-        // BEFORE the roster-resync below so Combat.CurrentTarget — its fallback identity
-        // when the death carried no candidates — is still set.
+        // BEFORE the roster-resync below so Combat.CurrentTarget — the death's identity,
+        // since the event names no monster — is still set.
         _tempDeathBurst = new Game.Combat.TempDeathBurst(n => TempDeathSpellOf(n) is not null);
         RoomClassifier.EntitiesObserved += _tempDeathBurst.NoteRoomListed;
         MonsterDeath.MonsterDied += FireTempDeathResponse;
@@ -13173,11 +13173,12 @@ public sealed class AppServices
         timer.Start();
     }
 
-    // The Monsters-table Numbers a death could belong to: the monster we were
-    // fighting, or for a room spell's kill every kind the room listed. That one is read off the room roster first,
-    // which knows the Number behind a flavoured name ("fierce kobold thief") and
-    // which same-named record lives in this room; the name lookup is the fallback.
-    // Only valid before the roster resync drops the dead entity.
+    // The Monsters-table Numbers a death could belong to: for a room spell's kill,
+    // every kind the room listed; otherwise the monster we were fighting. The fought
+    // monster is read off the room roster first, which knows the Number behind a
+    // flavoured name ("fierce kobold thief") and which same-named record lives in this
+    // room; the name lookup is the fallback. Only valid before the roster resync drops
+    // the dead entity.
     private HashSet<int> DyingMonsterNumbers(Game.Combat.MonsterDeathEvent evt)
     {
         HashSet<int> numbers = new();
@@ -13226,8 +13227,9 @@ public sealed class AppServices
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
     // wire line but stall the game engine, so send the temp spell's MessageRecord.CastResponse
     // (seeded "^M^M" = two carriage returns) to nudge the engine past the stall. Identity is
-    // best-effort — the event's Candidates plus the engaged target (the exp-only death path
-    // carries no candidates); a stray extra CR is harmless. Fires at most one response per death.
+    // best-effort, since the event names no monster: the engaged target, or for a room
+    // spell's kill the kinds the room listed; a stray extra CR is harmless. Fires at most
+    // one response per death.
     private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
     {
         if (_engineWireSend is null) return;

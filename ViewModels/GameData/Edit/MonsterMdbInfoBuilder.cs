@@ -32,9 +32,10 @@ public sealed class MonsterMdbInfoBuilder
     private readonly TBInfoStore _tb;
     private readonly DialogService? _dialogs;
 
-    // Interval the HP row quotes for a monster's HPRegen: the engine's 30 s slow tick on
-    // both realms (GAME_MECHANICS "Monster HP regen"), the cycle MonsterHpTracker uses.
-    private const int RegenIntervalSeconds = 30;
+    // Interval the HP row quotes for a monster's HPRegen: the cycle MonsterHpTracker
+    // runs on (GAME_MECHANICS "Monster HP regen").
+    private static readonly int RegenIntervalSeconds =
+        (int)Game.Combat.MonsterHpTracker.RegenInterval.TotalSeconds;
 
     public MonsterMdbInfoBuilder(
         GameDataCache cache, RoomGraphManager? roomGraph, TBInfoStore tb, DialogService? dialogs = null)

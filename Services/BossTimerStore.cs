@@ -238,12 +238,6 @@ public sealed class BossTimerStore
         return active.OrderBy(a => a.Item2.FullRemaining).ToList();
     }
 
-    // Auto-start on a boss death. Attribution is by NAME: the monster we were
-    // engaged with (engagedName = CombatManager.CurrentTarget, read live — this is
-    // what a fallback exp+Off death is, a death of whatever we were fighting),
-    // matched against a boss whose rooms include the current room. key/engagedName
-    // are read live at the death (the event itself carries neither location nor
-    // the engaged name).
     // Fires when a death is attributed to a tracked boss in the current room — the
     // matched BossDef (whichever respawn type). Fires for EVERY matched boss. Kept
     // separate from the timer marking so a cleanup boss (no timer) still notifies.
@@ -265,11 +259,16 @@ public sealed class BossTimerStore
         _deathSummons = deathSummons;
     }
 
+    // Auto-start on a boss death. Attribution is by NAME: the monster we were
+    // engaged with (engagedName = CombatManager.CurrentTarget, read live — an
+    // exp + *Combat Off* death is a death of whatever we were fighting), matched
+    // against a boss whose rooms include the current room. key/engagedName are read
+    // live at the death (the event itself carries neither location nor a name).
     //
     // recentFoes are the monsters named by the fight's damage lines. They matter only
     // when nothing else names the dead monster: no engaged target (a room too dark to
-    // list anyone). A boss of this room those lines named
-    // is known to be here, and the unnamed death is its own when (user, 2026-10-07):
+    // list anyone). A boss of this room those lines named is known to be here, and
+    // the unnamed death is its own when (user, 2026-10-07):
     //   - the exp gained is a share the boss could have paid and no other monster of
     //     the room could have (UnnamedDeathIsTheBosss); or
     //   - exp can't tell them apart, and the boss is the only monster the lines named.

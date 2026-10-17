@@ -394,9 +394,8 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         await Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
     }
 
-    // Type a quest-step's quoted command at the game exactly as if the user typed it in
-    // the terminal — macro/alias expansion and the outbound observers all run — so a
-    // guide's quoted command is indistinguishable from a keystroke.
+    // Send a quest-step's quoted command as the user's own typed line (SendTypedInput):
+    // macro separators split it, aliases expand, and the outbound observers all run.
     private static void SendStepCommand(string command)
         => AppServices.Current.SendTypedInput(command);
 

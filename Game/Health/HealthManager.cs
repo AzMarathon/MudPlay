@@ -582,9 +582,10 @@ public sealed class HealthManager : IDisposable
     public bool HpRestDeferredByRoomSpell { get; private set; }
 
     // Wire the Auto-Rest switch. The engine switch (isEnabled) turns the whole
-    // manager off; this one turns off only the resting — the recovery holds and the
-    // rest / meditate sends — and leaves the flee and the emergency hangup running,
-    // so a character healing by spell alone still runs and hangs up when it must.
+    // manager off; this one turns off the resting — the recovery holds and the
+    // rest / meditate sends — and the low-HP emergency hangup with it
+    // (LowHpHangupHeld), but leaves the flee running, so a character healing by
+    // spell alone still runs when it must.
     public void SetRestEnabledGate(Func<bool> isRestEnabled)
     {
         ArgumentNullException.ThrowIfNull(isRestEnabled);

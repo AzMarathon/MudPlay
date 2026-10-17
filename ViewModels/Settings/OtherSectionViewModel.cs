@@ -67,6 +67,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             yield return "Feathered mask";
             yield return "Only auto-invite while navigation is running";
             yield return "Auto-invite";
+            yield return "Cleanup Player Database";
         }
     }
 

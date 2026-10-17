@@ -51,16 +51,14 @@ public sealed class ConfirmService
             ? PromptAsync("Disconnect", "Are you sure you want to disconnect from the BBS?", "Disconnect")
             : Task.FromResult(true);
 
-    // Prompt before a settings save (Settings → OK / Apply, GameData browser
-    // saves, anywhere user state is about to be written to a JSON file).
+    // Prompt before the Settings window's OK / Apply writes the changes.
     public Task<bool> ConfirmSaveAsync()
         => Settings.ConfirmSaveSettings
             ? PromptAsync("Save settings", "Save your changes?", "Save")
             : Task.FromResult(true);
 
     // Prompt before a destructive delete. what names the thing being removed so
-    // the dialog reads naturally ("Are you sure you want to delete the toolbar
-    // row 'Connect'?").
+    // the dialog reads naturally ("Are you sure you want to delete loop "Arena"?").
     public Task<bool> ConfirmDeleteAsync(string what)
         => Settings.ConfirmDeletes
             ? PromptAsync("Delete", $"Are you sure you want to delete {what}?", "Delete")

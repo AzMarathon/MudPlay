@@ -62,8 +62,8 @@ public sealed class NeedsRegistry
     private readonly LogService? _log;
 
     // Fires after a genuinely new need is posted (not on a deduped re-post).
-    // Lets a fulfilling engine act on it at once instead of polling. Fired on the posting thread after the internal lock is
-    // released.
+    // Lets a fulfilling engine act on it at once instead of polling. Fired on
+    // the posting thread after the internal lock is released.
     public event Action<Need>? NeedPosted;
 
     public NeedsRegistry(LogService? log = null)
@@ -152,8 +152,8 @@ public sealed class NeedsRegistry
         return removed;
     }
 
-    // Snapshot of every outstanding need of kind, oldest first. Lets a requester check whether its need is still pending without
-    // re-posting.
+    // Snapshot of every outstanding need of kind, oldest first. Lets a requester
+    // check whether its need is still pending without re-posting.
     public IReadOnlyList<Need> Outstanding(NeedKind kind)
     {
         lock (_gate)

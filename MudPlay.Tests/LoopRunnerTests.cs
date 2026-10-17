@@ -836,32 +836,28 @@ public sealed class LoopRunnerTests : IDisposable
     {
         // A live delay edit on the running-loop rail keeps the command count, so it's
         // applied in place — without a re-expand and without moving the runner's
-        // position — and the command waits the new delay the next time it runs.
+        // position — and this lap's next visit to the command's room already waits
+        // the new delay, not the old one.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Loop loop = new("cmd", new[]
         {
-            new LoopWaypoint(new RoomKey(1, 1), "dep 100", 500),
-            new LoopWaypoint(new RoomKey(1, 2)),
+            new LoopWaypoint(new RoomKey(1, 1)),
+            new LoopWaypoint(new RoomKey(1, 2), "dep 100", 500),
         });
         h.Runner.Start(loop);
-        Assert.Contains(h.Sent, b => Encoding.Latin1.GetString(b) == "dep 100\r");
-        Assert.True(h.Runner.CommandDelayRemaining <= TimeSpan.FromMilliseconds(500));
+        Assert.DoesNotContain(h.Sent, b => Encoding.Latin1.GetString(b) == "dep 100\r");
         int indexBefore = h.Runner.CurrentIndex;
 
         loop.Waypoints.First(w => w.Command == "dep 100").DelayMs = 1200;
         h.Runner.ReconcileExpandedSteps();
         Assert.Equal(indexBefore, h.Runner.CurrentIndex);
 
-        // Finish this delay and close a lap (B, then back to A): the command runs again
-        // with the new delay.
-        h.Runner.FireDelayForTests();
+        // This lap reaches B: the command goes out and waits the new delay.
         h.Tracker.NoteRoomObserved(new RoomObservation("B",
             new HashSet<Direction> { Direction.N, Direction.S }));
-        h.Tracker.NoteRoomObserved(new RoomObservation("A",
-            new HashSet<Direction> { Direction.N }));
 
-        Assert.Equal(2, h.Sent.Count(b => Encoding.Latin1.GetString(b) == "dep 100\r"));
+        Assert.Single(h.Sent, b => Encoding.Latin1.GetString(b) == "dep 100\r");
         Assert.True(h.Runner.CommandDelayRemaining > TimeSpan.FromMilliseconds(1000));
     }
 

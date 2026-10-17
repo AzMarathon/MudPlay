@@ -120,7 +120,7 @@ With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you i
 
 ## Playing, and turning on automation
 
-In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (shortcuts expanded when typed in the Conversation window's input box — a line typed in the terminal goes to the game as typed). The startup splash plays until you connect.
+In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (shortcuts expanded on lines the client's own windows send, such as the Conversation window's input box — a line typed in the terminal goes to the game as typed). The startup splash plays until you connect.
 
 **The first time you enter the game on a new profile**, MudPlay reads your character on its own: `stat` for your stats, `i` for your inventory, and `sp` (`pow` for a kai class) for the spells you've learned. Nearly everything automated leans on those three — the **Buff Watchdog** can't offer a buff until it knows you've learned it, for one. If a window says it has nothing to work with, typing `stat`, `i` or `sp`/`pow` in the game is the first thing to try.
 
@@ -3686,7 +3686,7 @@ Beyond the engines, you can script your own automation. All three editors live i
 Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
 
 - **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. (A `;` at the start of a word, as in `;o`, is part of the command and is sent as typed.) Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
-- **Aliases** expand a **typed word into a longer command** — a shorthand you invent, so `cast heal bob` can send `c 'heal' bob`. They expand in lines sent from the Conversation window's input, the Local control API and the Player Workshop's Quest tab buttons; a line typed in the terminal is sent as typed. See **Writing an alias** just below for a full walkthrough.
+- **Aliases** expand a **typed word into a longer command** — a shorthand you invent, so `cast heal bob` can send `c 'heal' bob`. They expand on lines the client's own windows send (the Conversation window's input, the Player Workshop's quest-step commands and the like) and through the Local control API; a line typed in the terminal is sent as typed. See **Writing an alias** just below for a full walkthrough.
 - **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
   - Every trigger belongs to the **character** it was made on, like macros and aliases. (Triggers could once be saved "to the game data" and shared by every character on it. Each character from then took its own copy of those the first time it loaded under this version; a new character starts with the default triggers.)
   - **Scope** — which incoming lines it watches: *Game messages* (the default), a single chat channel (*Say / Yell / Gossip / Telepath / Gangpath / Broadcast*), *Chat (any)*, or the *System log*.
@@ -3723,7 +3723,7 @@ An **alias** is a typed shortcut: the **first word** you type is the alias *name
 - Name `gt`, expansion `gossip Heading to {0} - come along!` → `gt the docks` sends `gossip Heading to the docks - come along!`.
 - Name `bs`, expansion `sneak;backstab {1}` → `bs orc` sends `sneak` then `backstab orc`.
 
-**Where aliases expand:** in a line you send with **Enter in the Conversation window's input box**, in a line sent through the **Local control API**, and in the commands the Player Workshop's **Quest** tab sends from its buttons. The main terminal holds what you type and sends the whole line when you press Enter, but it sends that line **as typed**: aliases don't expand there, so use the Conversation input for them. Aliases and macros are separate: a **macro** binds a *key* to a command (it fires in the terminal and in the Conversation input); an **alias** rewrites a *typed word*. (Alias slots are also unrelated to trigger wildcards — see the note under *Writing a match pattern*.)
+**Where aliases expand:** on lines the client's own windows send — a line you send with **Enter in the Conversation window's input box**, the commands the Player Workshop's **Quest** tab sends from its buttons, and the like — and on a line sent through the **Local control API**. The main terminal holds what you type and sends the whole line when you press Enter, but it sends that line **as typed**: aliases don't expand there, so use the Conversation input for them. Aliases and macros are separate: a **macro** binds a *key* to a command (it fires in the terminal and in the Conversation input); an **alias** rewrites a *typed word*. (Alias slots are also unrelated to trigger wildcards — see the note under *Writing a match pattern*.)
 
 ### Writing a match pattern
 
@@ -4937,7 +4937,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 ### What an alias is
 
 **Default:** none.
-**What it does:** A typed-command shortcut — you type a short name and MudPlay expands it into a longer command before sending, matched on the first word of the line (case-insensitive). Aliases expand in a line sent from the **Conversation** window's input box, through the Local control API, or by the Player Workshop's Quest tab buttons. A line you type in the main terminal is sent as typed when you press Enter, so aliases don't expand there.
+**What it does:** A typed-command shortcut — you type a short name and MudPlay expands it into a longer command before sending, matched on the first word of the line (case-insensitive). Aliases expand on lines the client's own windows send (the **Conversation** window's input box, the Player Workshop's quest-step commands and the like) and on a line sent through the Local control API. A line you type in the main terminal is sent as typed when you press Enter, so aliases don't expand there.
 **How it works:** The rest of the line after the alias name fills positional placeholders in the expansion: `{0}` is the entire rest of the line, and `{1}`, `{2}`, … are the individual whitespace-separated words. So an alias `cast` → `c '{1}' {2}` turns `cast heal bob` into `c 'heal' bob`.
 **Important notes:** An alias name that would collide with a MajorMUD chat-channel command is rejected in the editor, so an alias can't hijack your chat. Aliases are separate from macros (key → command) and from triggers (auto-responses to game text).
 
@@ -5303,7 +5303,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 - If neither attack can hurt it, your attack spells are tried instead; with none that can land, the monster is skipped. The Program Log says why on a `skip un-actionable` line, with the level the monster needs and what each attack lands with.
 - The game has the last word: a `Your weapon has no effect…`, `Your fists have no effect…` or `Your feet have no effect…` line writes that monster off for that attack for the rest of the room.
 
-### Weapons & attack commands (Normal weapon / Off-hand / Alternate weapon / Alt off-hand)
+### Weapons (Normal weapon / Off-hand / Alternate weapon / Alt off-hand)
 
 **Default:** empty (bare hands / none)
 **What it does:** The weapons this combat profile fights with. Each box suggests your realm's weapons (off-hand boxes suggest shields and off-hand items). These boxes *are* the Workshop → Equipment Manager **Default** gear set's Weapon, Off-Hand, Alt-Weapon and Alt-Off-Hand rows: editing either place edits the same loadout, and switching combat profiles swaps them. Your **backstab** weapon isn't here. It stays on the Workshop's **Backstab** gear set and doesn't change with the profile.
@@ -7215,7 +7215,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Check for updates automatically | `true` | bool | `GlobalSettings.AutoCheckForUpdates` | Models/Settings/GlobalSettings.cs |
 | Snap windows together | `true` | bool (Global) | `GlobalSettings.SnapWindows` | Models/Settings/GlobalSettings.cs |
 | Recent profiles shown in File menu | `5` | 0–10 (Global) | `GlobalSettings.RecentProfilesShown` | Models/Settings/GlobalSettings.cs |
-| Navigation map: other floors — floors up and down / overlap limit / route lines | `10` / `50` / `true` | 1–99 / 0–100% / bool (Global) | `GlobalSettings.MapOtherFloorsLevels` / `MapOtherFloorsMaxOverlapPercent` / `MapRouteLinesOnOtherFloors` | Models/Settings/GlobalSettings.cs |
+| Navigation map: other floors — which are drawn (the map's Overlays chip) / floors up and down / overlap limit / route lines | `Both` / `10` / `50` / `true` | Both / Up / Down / Off; 1–99 / 0–100% / bool (Global) | `GlobalSettings.MapOtherFloors` / `MapOtherFloorsLevels` / `MapOtherFloorsMaxOverlapPercent` / `MapRouteLinesOnOtherFloors` | Models/Settings/GlobalSettings.cs |
 | Visual impairment: terminal colours | `null` (Default) | Default / Deuteranopia / Protanopia / Tritanopia / Custom (Global) | `GlobalSettings.TerminalColors` | Models/Settings/GlobalSettings.cs |
 | Local control API / port / allow destructive commands | `false` / `6683` / `false` | bool / 1024–65535 / bool (Global) | `GlobalSettings.LocalApiEnabled` / `LocalApiPort` / `LocalApiAllowDestructive` | Models/Settings/GlobalSettings.cs |
 | Player cleanup days (edited on Other tab) | `90` | int, 0–3650 | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |

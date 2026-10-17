@@ -561,7 +561,7 @@ public sealed class CombatManagerTests
     }
 
     [Fact]
-    public void GuardBlock_SurvivesGuardDeath_ClearsOnlyOnPriorityDeath()
+    public void GuardBlock_SurvivesAKill()
     {
         using Harness h = new();
         h.AddMonster(1, "brigand chief", killable: true);
@@ -571,10 +571,11 @@ public sealed class CombatManagerTests
         h.Feed("large brigand moves to protect brigand chief");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        // A GUARD dying must not drop the block — the chief is still shielded /
-        // pending until it itself dies.
-        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
-        // the death event AppServices routes to NoteUnattributedDeath.
+        // A guard dying must not drop the block: the chief is still shielded. The
+        // kill comes as the client sees one (the exp line, the kill's *Combat Off*,
+        // the death event AppServices routes to NoteUnattributedDeath), which names
+        // no monster. Clearing the block when the priority itself dies is not
+        // covered yet: on this path no death names the chief.
         h.Feed("You gain 10 experience.");
         h.Feed("*Combat Off*");
         h.Combat.NoteUnattributedDeath();
