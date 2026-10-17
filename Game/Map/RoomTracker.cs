@@ -2834,7 +2834,11 @@ public sealed class RoomTracker
         // The room ahead shown under the name it bears is its own arrival, and the
         // held display, under another name, was the room being left re-looked.
         if (heldNamesTarget && MatchesPredicted(target, observation)) return false;
-        if (!MatchesPredicted(beyond, observation) && !ArrivesInRoomTheDataLeavesUnnamed(beyond, observation)) return false;
+        // The new display must be the room beyond's. Where it could as well be the
+        // room ahead under a new name, only the room beyond's own name says so.
+        if (!MatchesPredicted(beyond, observation)
+            && (!ArrivesInRoomTheDataLeavesUnnamed(beyond, observation)
+                || (heldNamesTarget && ArrivesInRoomTheDataLeavesUnnamed(target, observation)))) return false;
 
         _heldDisplay = null;
         string moveLabel = DescribeMove(head);

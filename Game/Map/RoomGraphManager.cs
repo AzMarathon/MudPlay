@@ -337,12 +337,13 @@ public sealed class RoomGraphManager
     // name and exits as its own: it bears the name, every exit shown is one of its
     // exits, and every exit its exits line always prints is shown (an unsearched
     // hidden exit or a text exit is left off; GAME_MECHANICS "Room display parsing
-    // — the room title is positional, not just bright cyan"). The tracker asks it of the rooms beside the one being left,
-    // whose display could be taken for a room ahead the data leaves unnamed. A
-    // room the data leaves unnamed doesn't count, whatever it is called by now:
-    // the rooms of one house can share a name, and would each stand in the way of
-    // the next. An unreachable room doesn't either (see ConfigureUnreachable): the
-    // character can't be in one.
+    // — the room title is positional, not just bright cyan"). The tracker asks it
+    // of the room being left and the rooms beside it, whose display could be
+    // taken for a room ahead the data leaves unnamed. A room the data leaves
+    // unnamed doesn't count, whatever it is called by now: the rooms of one house
+    // can share a name, and would each stand in the way of the next. An
+    // unreachable room doesn't either (see ConfigureUnreachable): the character
+    // can't be in one.
     public bool NamedInDataCouldShow(RoomKey key, string name, IReadOnlySet<Direction> exits)
     {
         ArgumentNullException.ThrowIfNull(exits);

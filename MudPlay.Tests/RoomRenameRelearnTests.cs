@@ -729,6 +729,32 @@ public sealed class RoomRenameRelearnTests : IDisposable
         Assert.Equal((RoomConfidence.Confirmed, hall), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
     }
 
+    // The same, the board having renamed the landing and the hall: the landing's
+    // display under its new name is its own arrival, not the hall's, so the held
+    // re-look of the entrance is not taken for the landing. Each room is learned
+    // from its own display, and the hall is where we end.
+    [Fact]
+    public void NoEcho_ReLookHeld_ThenTheRoomAheadRenamed()
+    {
+        RoomKey hall = new(15, 879);
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Entrance);
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1.05));
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(1.1));
+        tracker.NoteRoomObserved(new RoomObservation(OwnNewName(Landing), Shown(graph.GetRoom(Landing)!)), T0.AddSeconds(1.6));
+        tracker.NoteRoomObserved(new RoomObservation(OwnNewName(hall), Shown(graph.GetRoom(hall)!)), T0.AddSeconds(2.1));
+
+        Assert.Equal(new[]
+        {
+            new NameLearnedEvent(Landing, OwnNewName(Landing)),
+            new NameLearnedEvent(hall, OwnNewName(hall)),
+        }, learned);
+        Assert.Equal((RoomConfidence.Confirmed, hall), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
     // The same two steps on a statline that echoes: a re-look of the entrance
     // before the echo is never held for later, so the landing's echoed arrival
     // names the landing.
