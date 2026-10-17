@@ -360,10 +360,13 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private string? _backstabDefaultWeaponLabel;
     private int _bsWeaponMin, _bsWeaponMax;
 
-    // Alignment of the picked monster — decides which of the player's wards
-    // applies in the incoming-hit calc.
-    private bool _monsterIsEvil;
-    private bool _monsterIsGood;
+    // Alignment code of the picked monster (MajorMUD Align) — decides which of the
+    // player's wards applies in the incoming-hit calc. 3 (Neutral) gates neither.
+    private const int NeutralAlign = 3;
+    private int _monsterAlign = NeutralAlign;
+    // The class's ArmourType: it sets the to-hit floor a monster's attack meets
+    // (GAME_MECHANICS "To-hit floor").
+    private int _armourType;
 
     // ----- Mana-regen breakpoint calculator --------------------------------
 
@@ -883,6 +886,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             IsParadigmRealm = _realm == RealmType.ParaMud;
             _level = _stats.Level;
             _nCombatLevel = GetInt(classRow, "CombatLVL");
+            _armourType = GetInt(classRow, "ArmourType");
             _str = _stats.Strength;
             _agi = _stats.Agility;
             _intel = _stats.Intellect;
@@ -1258,7 +1262,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             || !_monsterNumberByLabel.TryGetValue(SelectedMonsterName, out int monsterNumber)
             || FindMonsterRowByNumber(monsterNumber) is not GameRow row)
         {
-            _monsterIsEvil = _monsterIsGood = false;
+            _monsterAlign = NeutralAlign;
             MonsterAc = MonsterDr = MonsterDodge = 0;
             MonsterAttacks.Add(NewAttackRow("—", 50));
             RenumberAttacks();
@@ -1267,9 +1271,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             return;
         }
 
-        int align = GetInt(row, "Align");
-        _monsterIsEvil = align is 1 or 2 or 5 or 6;
-        _monsterIsGood = align is 0 or 4;
+        _monsterAlign = GetInt(row, "Align");
 
         MonsterAc = GetInt(row, "ArmourClass");
         MonsterDr = GetInt(row, "DamageResist");
@@ -1361,7 +1363,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
         MonsterMatchupResult res = MonsterMatchupCalculator.Compute(player, monster);
         MatchupHasWeapon = res.HasWeapon;
-        MatchupPlayerHit = $"{res.PlayerHitPercent}%";
+        MatchupPlayerHit = IncomingHitEstimator.FormatPercent(res.PlayerHitChance);
         MatchupPlayerDamage = $"{res.PlayerDamagePerHit} / hit";
         MatchupSwings = res.HasWeapon
             ? res.PlayerSwingsPerRound.ToString("0.0", CultureInfo.InvariantCulture)
@@ -1373,17 +1375,14 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
 
     // Return-hit chance of one monster attack against the current (editable)
     // player AC + dodge, with the player's ward applied only for the matching
-    // alignment. Mirrors MonsterMatchupCalculator's Monster → player direction.
-    private int HitFor(int accuracy) => CombatCalculator.CalculateHitChance(
-        attackerAccuracy: accuracy,
-        defenderAC: PlayerAc,
-        defenderDodge: PlayerDodge,
-        protEvil: _monsterIsEvil ? _protEvil : 0,
-        protGood: _monsterIsGood ? _protGood : 0,
-        realmType: _realm).OverallHitPercent;
+    // alignment and the class's to-hit floor — the same unrounded chance Monster
+    // Intel shows, in the same format.
+    private double HitFor(int accuracy) => MonsterMatchupCalculatorSpells.AttackHitChance(
+        accuracy, _monsterAlign, PlayerAc, PlayerDodge, _protEvil, _protGood, _realm,
+        defenderArmourType: _armourType);
 
     private void RecomputeRow(MonsterAttackRowViewModel row)
-        => row.HitPercent = string.Create(CultureInfo.InvariantCulture, $"{HitFor(row.Accuracy)}%");
+        => row.HitPercent = IncomingHitEstimator.FormatPercent(HitFor(row.Accuracy));
 
     private void RecomputeAllRows()
     {

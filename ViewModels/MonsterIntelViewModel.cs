@@ -1051,14 +1051,14 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             BackstabVerdict.NoDamage => $"Backstab: its {r.DamageResist} DR stops the whole stab",
             BackstabVerdict.CantKill => $"Backstab: can't kill it in one stab — max {r.MaxDamage} vs {hp} HP",
             BackstabVerdict.HighRollOnly => $"Backstab: kills only on a high roll — min {r.MinDamage} vs {hp} HP",
-            BackstabVerdict.KillIfItLands => $"Backstab: one-stab kill if it lands — {r.HitPercent}% to land, not the {r.HitCap}% ceiling",
-            _ => $"Backstab: sure one-stab kill — min {r.MinDamage} ≥ {hp} HP · {r.HitPercent}% to land",
+            BackstabVerdict.KillIfItLands => $"Backstab: one-stab kill if it lands — {IncomingHitEstimator.FormatPercent(r.HitChance)} to land, not the {r.HitCap}% ceiling",
+            _ => $"Backstab: sure one-stab kill — min {r.MinDamage} ≥ {hp} HP · {IncomingHitEstimator.FormatPercent(r.HitChance)} to land",
         };
         if (r.Verdict == BackstabVerdict.SeesHidden) return new MatchupAttackLine(text, null, basis);
 
         BackstabWorn(_inventory!.Snapshot.EquippedItems, out string? setWeapon);
         string detail = $"{r.MinDamage}–{r.MaxDamage} dmg after {r.DamageResist} DR ({bs.BackstabMin}–{bs.BackstabMax} before) · "
-            + $"{r.HitPercent}% to land vs backstab defence {m.BsDefense} (a sure kill needs the {r.HitCap}% ceiling)"
+            + $"{IncomingHitEstimator.FormatPercent(r.HitChance)} to land vs backstab defence {m.BsDefense} (a sure kill needs the {r.HitCap}% ceiling)"
             + (setWeapon is null ? "" : $" · with {setWeapon}");
         if (best is { } top && EvaluateBackstab(top, m, target) is var hi
             && (hi.MinDamage != r.MinDamage || hi.MaxDamage != r.MaxDamage))
@@ -1459,7 +1459,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
                     reach = $"Your buffs at their lowest roll; at their highest, {FormatRounds(top.RoundsToKill)} · ~{top.PlayerDps:0}/round";
             }
             MatchupMeleeLines.Add(new MatchupAttackLine(res.HasWeapon && res.RoundsToKill > 0
-                ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · ~{res.PlayerDps:0}/round · {res.PlayerHitPercent}% hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
+                ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · ~{res.PlayerDps:0}/round · {IncomingHitEstimator.FormatPercent(res.PlayerHitChance)} hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
                 : $"{MeleeLabel(mt)}: can't out-damage it", reach, basis));
         }
 

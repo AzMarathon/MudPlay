@@ -39,7 +39,7 @@ public sealed class BackstabMatchupCalculatorTests
             bsDefense: 0, seesHidden: false);
 
         Assert.Equal(99, r.HitCap);
-        Assert.Equal(99, r.HitPercent);
+        Assert.Equal(99, r.HitChance, 6);
         Assert.Equal(BackstabVerdict.SureKill, r.Verdict);
         Assert.True(r.IsOneStabKill);
     }
@@ -53,7 +53,7 @@ public sealed class BackstabMatchupCalculatorTests
             Stabber(accuracy: 103, min: 40, max: 50), Target(hp: 35, ac: 20),
             bsDefense: 0, seesHidden: false);
 
-        Assert.Equal(98, r.HitPercent);
+        Assert.Equal(98, r.HitChance, 6);
         Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
     }
 
@@ -67,8 +67,8 @@ public sealed class BackstabMatchupCalculatorTests
             Stabber(accuracy: 100, min: 40, max: 50), Target(hp: 35, ac: 20),
             bsDefense: 30, seesHidden: false);
 
-        Assert.Equal(CombatCalculator.StockLandingPercent(100 - (20 / 4 + 30)), r.HitPercent);
-        Assert.Equal(65, r.HitPercent);   // 64 in 99
+        Assert.Equal(CombatCalculator.StockLandingPercent(100 - (20 / 4 + 30)), r.HitChance, 6);
+        Assert.Equal(65, r.HitChance, 6);   // 64 in 99
         Assert.Equal(BackstabVerdict.KillIfItLands, r.Verdict);
         Assert.False(r.IsOneStabKill);
     }

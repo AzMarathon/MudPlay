@@ -26,7 +26,7 @@ public sealed class AttackEstimatorTests
         AttackEstimate est = AttackEstimator.Estimate(
             MudAttackType.Normal, Profile(RealmType.ParaMud, accuracy: 100, min: 10, max: 30, swings: 3), default);
 
-        Assert.Equal(100, est.HitPercent);
+        Assert.Equal(100, est.HitChance, 6);
         Assert.Equal((10, 30), (est.MinAfterDr, est.MaxAfterDr));
         Assert.Equal(3 * 20, est.DamagePerRound, 3);
     }
@@ -65,13 +65,13 @@ public sealed class AttackEstimatorTests
         AttackEstimate swing = AttackEstimator.Estimate(MudAttackType.Normal, profile, target);
         AttackEstimate stab = AttackEstimator.Estimate(MudAttackType.Backstab, profile, target);
 
-        int expected = CombatCalculator.CalculateHitChance(
+        double expected = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 80, defenderAC: 80, defenderDodge: 0, bsDefense: 5,
-            isBackstab: true, realmType: RealmType.ParaMud).OverallHitPercent;
-        Assert.Equal(expected, stab.HitPercent);
-        Assert.True(stab.HitPercent > swing.HitPercent);
+            isBackstab: true, realmType: RealmType.ParaMud).OverallHitChance;
+        Assert.Equal(expected, stab.HitChance, 6);
+        Assert.True(stab.HitChance > swing.HitChance);
         Assert.Equal(1, stab.SwingsPerRound);
-        Assert.Equal(stab.HitPercent / 100.0 * 70, stab.DamagePerRound, 3);
+        Assert.Equal(stab.HitChance / 100.0 * 70, stab.DamagePerRound, 3);
     }
 
     [Fact]

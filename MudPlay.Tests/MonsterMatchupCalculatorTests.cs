@@ -21,22 +21,36 @@ public sealed class MonsterMatchupCalculatorTests
         int ac = 50, int dr = 2, int hp = 100, int dodge = 0, bool hasAttack = true, int avgAttack = 8) =>
         new(ac, dr, hp, dodge, hasAttack, avgAttack);
 
+    // A monster has no class armour type, so a swing at it floors at the realm's
+    // default (Paradigm 2%, Stock 9%), and its dodge still comes off that. Dodge 80
+    // dodges 40% of 150 accuracy on Paradigm (6400/160), and 72 does on Stock
+    // (720/(150/8)); the whole-percent net hit read 2 − 2·40/100 = 2 and 9 − 3 = 6.
+    [Theory]
+    [InlineData(RealmType.ParaMud, 80, 2 * 0.6)]
+    [InlineData(RealmType.Stock, 72, 9 * 0.6)]
+    public void PlayerToMonster_DodgeCountsAtTheRealmFloor(RealmType realm, int dodge, double expected)
+    {
+        PlayerMatchupProfile p = new(realm, 150, 10, 1.0, true, 0);
+        MonsterMatchupResult r = MonsterMatchupCalculator.Compute(p, Monster(ac: 9999, dodge: dodge));
+        Assert.Equal(expected, r.PlayerHitChance, 6);
+    }
+
     [Fact]
     public void PlayerToMonster_MatchesHitFormula_AndProjectsDps()
     {
         PlayerMatchupProfile p = Player(accuracy: 200, avgDmg: 10, swings: 2.0, dr: 0);
         MonsterMatchupProfile m = Monster(ac: 50, dr: 2, hp: 100);
 
-        int expectedHit = CombatCalculator.CalculateHitChance(
+        double expectedHit = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 200, defenderAC: 50, defenderDodge: 0,
-            realmType: RealmType.ParaMud).OverallHitPercent;
+            realmType: RealmType.ParaMud).OverallHitChance;
         int expectedDmg = 10 - 2;
         double expectedDps = expectedHit / 100.0 * expectedDmg * 2.0;
         int expectedRounds = (int)Math.Ceiling(100 / expectedDps);
 
         MonsterMatchupResult r = MonsterMatchupCalculator.Compute(p, m);
 
-        Assert.Equal(expectedHit, r.PlayerHitPercent);
+        Assert.Equal(expectedHit, r.PlayerHitChance, 6);
         Assert.Equal(expectedDmg, r.PlayerDamagePerHit);
         Assert.Equal(expectedDps, r.PlayerDps, 5);
         Assert.Equal(expectedRounds, r.RoundsToKill);
@@ -75,15 +89,15 @@ public sealed class MonsterMatchupCalculatorTests
         MonsterMatchupProfile noDodge = Monster(ac: 50, dr: 2, hp: 100, dodge: 0);
         MonsterMatchupProfile withDodge = Monster(ac: 50, dr: 2, hp: 100, dodge: 70);
 
-        int expected = CombatCalculator.CalculateHitChance(
+        double expected = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 200, defenderAC: 50, defenderDodge: 70,
-            realmType: RealmType.ParaMud).OverallHitPercent;
+            realmType: RealmType.ParaMud).OverallHitChance;
 
         MonsterMatchupResult rNo = MonsterMatchupCalculator.Compute(p, noDodge);
         MonsterMatchupResult rDodge = MonsterMatchupCalculator.Compute(p, withDodge);
 
-        Assert.Equal(expected, rDodge.PlayerHitPercent);
-        Assert.True(rDodge.PlayerHitPercent <= rNo.PlayerHitPercent);
+        Assert.Equal(expected, rDodge.PlayerHitChance, 6);
+        Assert.True(rDodge.PlayerHitChance < rNo.PlayerHitChance);
     }
 
     [Fact]
@@ -115,7 +129,7 @@ public sealed class MonsterMatchupCalculatorTests
 
         double hit = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 9999, defenderAC: 1, defenderDodge: 0,
-            realmType: RealmType.ParaMud).OverallHitPercent / 100.0;
+            realmType: RealmType.ParaMud).OverallHitChance / 100.0;
         Assert.Equal(hit * 30.0 * 1.0, r.PlayerDps, 5);
     }
 
@@ -502,8 +516,7 @@ public sealed class MonsterMatchupCalculatorSpellsTests
         Assert.Equal(1 * (100 - dodgePct) / 100.0, chance, 6);
     }
 
-    // Away from the floor the unrounded chance is the hit × (1 − dodge) product;
-    // the whole-percent figure still rounds the dodge share toward a higher hit.
+    // Away from the floor too, the net chance is the hit × (1 − dodge) product.
     [Fact]
     public void AttackHitChance_IsHitTimesMissedDodge()
     {
@@ -511,7 +524,6 @@ public sealed class MonsterMatchupCalculatorSpellsTests
             attackerAccuracy: 150, defenderAC: 90, defenderDodge: 60, realmType: RealmType.ParaMud);
         Assert.True(r.DodgePercent > 0);
         Assert.Equal(r.HitPercent * (100 - r.DodgePercent) / 100.0, r.OverallHitChance, 6);
-        Assert.True(r.OverallHitPercent >= r.OverallHitChance);
     }
 
     // The class ArmourType only moves the ParaMUD hit FLOOR: light-armour classes

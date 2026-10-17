@@ -569,8 +569,8 @@ public static class LoopSimulator
             int swings = (int)_swingCarry;
             _swingCarry -= swings;
             MonsterDebuffEffect d = target.Debuff;
-            int hit = CombatCalculator.CalculateHitChance(melee.NormalAccuracy + ProcSum(p => p.AccuracyDelta), target.Entry.ArmourClass - d.AcDelta,
-                target.Entry.Dodge - d.DodgeDelta, realmType: _ch.Realm).OverallHitPercent;
+            double hit = CombatCalculator.CalculateHitChance(melee.NormalAccuracy + ProcSum(p => p.AccuracyDelta), target.Entry.ArmourClass - d.AcDelta,
+                target.Entry.Dodge - d.DodgeDelta, realmType: _ch.Realm).OverallHitChance;
             int dr = (int)Math.Max(0, (target.Entry.DamageResist - d.DrDelta) * melee.MonsterDrMultiplier);
             for (int i = 0; i < swings && target.Alive; i++)
             {
@@ -593,7 +593,7 @@ public static class LoopSimulator
                 HasPhysicalAttack: false, AvgAttackDamage: 0);
             BackstabMatchup stab = BackstabMatchupCalculator.Evaluate(
                 bs with { NormalAccuracy = bs.NormalAccuracy + ProcSum(p => p.AccuracyDelta) }, monster, e.BsDefense, seesHidden: false);
-            if (!Roll(stab.HitPercent)) return;
+            if (!Roll(stab.HitChance)) return;
             Damage(target, Between(stab.MinDamage, stab.MaxDamage));
         }
 

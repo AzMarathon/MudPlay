@@ -21,7 +21,9 @@ public static class MonsterMatchupCalculator
 
         // Player → monster. Some monsters carry a Dodge ability (e.g. Lord of the
         // Hunt); it raises their effective defence exactly like the player's dodge
-        // does on the return direction. Monsters have no prot wards.
+        // does on the return direction. Monsters have no prot wards, and no class
+        // armour type, so the realm's default floor applies (GAME_MECHANICS "To-hit
+        // floor").
         HitCalcResult playerHit = CombatCalculator.CalculateHitChance(
             attackerAccuracy: player.NormalAccuracy,
             defenderAC: monster.ArmourClass,
@@ -40,7 +42,7 @@ public static class MonsterMatchupCalculator
         double effectivePerHit = ((1.0 - critPct) * playerDmgPerHit) + (critPct * critPerHit);
 
         double dps = player.HasWeapon
-            ? playerHit.OverallHitPercent / 100.0 * effectivePerHit * player.SwingsPerRound
+            ? playerHit.OverallHitChance / 100.0 * effectivePerHit * player.SwingsPerRound
             : 0;
         // RoundsToKill is 0 when the player can't out-damage a kill (no weapon
         // or zero effective DPS) — the UI renders that as "—". Clamp before the
@@ -68,7 +70,7 @@ public static class MonsterMatchupCalculator
         }
 
         return new MonsterMatchupResult(
-            PlayerHitPercent: playerHit.OverallHitPercent,
+            PlayerHitChance: playerHit.OverallHitChance,
             PlayerDamagePerHit: playerDmgPerHit,
             PlayerSwingsPerRound: player.HasWeapon ? player.SwingsPerRound : 0,
             PlayerDps: dps,
@@ -151,7 +153,8 @@ public readonly record struct MonsterMatchupProfile(
 
 // Output of MonsterMatchupCalculator.Compute — the player's hit chance and
 // DPS / rounds-to-kill projection, plus the monster's damage and swings.
-//   PlayerHitPercent          — player normal-attack hit chance vs monster AC + dodge.
+//   PlayerHitChance           — player normal-attack hit chance vs monster AC + dodge,
+//                               unrounded.
 //   PlayerDamagePerHit        — player avg damage per landed hit, after monster DR.
 //   PlayerSwingsPerRound      — swings/round used in the DPS projection (0 unarmed).
 //   PlayerDps                 — projected damage per round: hit% * dmg/hit * swings.
@@ -163,7 +166,7 @@ public readonly record struct MonsterMatchupProfile(
 //   MonsterSwingsPerRound     — attacks/round the monster lands (energy/attEnergy),
 //                               thinned by a slowness debuff; 0 with no physical slot.
 public readonly record struct MonsterMatchupResult(
-    int PlayerHitPercent,
+    double PlayerHitChance,
     int PlayerDamagePerHit,
     double PlayerSwingsPerRound,
     double PlayerDps,

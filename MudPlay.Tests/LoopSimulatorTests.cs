@@ -157,6 +157,26 @@ public sealed class LoopSimulatorTests
         Assert.True(dodged.DamageTaken < plain.DamageTaken, "dodge must lower what gets through at the floor");
     }
 
+    // The other way round: our swing at a monster at the 2% floor, against dodge
+    // 80 (40% of 150 accuracy), lands 1.2% of the time, not the 2% the whole-percent
+    // net hit kept.
+    [Fact]
+    public void MonsterDodgeCountsAgainstOurSwingAtTheFloor()
+    {
+        SimRoom[] lap = { Lair(1, 1, 30, 3), Empty(2) };
+        MonsterCatalogEntry tough = Mob(3, hp: 1, exp: 50) with { ArmourClass = 9999 };
+        SimCharacter swinger = Character(damage: 1, swings: 5) with
+        {
+            Melee = Character().Melee with { NormalAccuracy = 150, AvgWeaponDamage = 1, SwingsPerRound = 5 },
+        };
+
+        LoopSimRun plain = LoopSimulator.Run(swinger, lap, World(tough), secondsPerStep: 1, hours: 1, seed: 7);
+        LoopSimRun dodged = LoopSimulator.Run(swinger, lap, World(tough with { Dodge = 80 }), secondsPerStep: 1, hours: 1, seed: 7);
+
+        Assert.True(dodged.Kills > 0);
+        Assert.True(dodged.Kills < plain.Kills, "the monster's dodge must lower how often we land at the floor");
+    }
+
     [Fact]
     public void LairRefillsOnlyOnItsRespawnClock()
     {

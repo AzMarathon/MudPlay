@@ -157,12 +157,10 @@ public static class CombatCalculator
         }
 
         int dodgeCap = realmType == RealmType.ParaMud ? PARAMUD_DODGE_CAP : STOCK_DODGE_CAP;
-        int overallHit = hitChance - (hitChance * dodgePercent / 100);
 
         return new HitCalcResult(
             HitPercent: hitChance,
             DodgePercent: dodgePercent,
-            OverallHitPercent: overallHit,
             HitMinCap: hitMin,
             HitMaxCap: hitMax,
             DodgeCap: dodgeCap,
