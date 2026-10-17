@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using MudPlay.Game.Map;
 using MudPlay.Game.Simulation;
 using MudPlay.Services;
@@ -345,21 +346,24 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
         if (OperatingSystem.IsWindows()) return;   // making a link needs a privilege there
         string victim = Path.Combine(AppPaths.DataRoot, $"victim-set-{_tag}");
         string set = $"test-safe-setlink-{_tag}";
-        // Long before the sweep's clock below, and by its stamp older than the limit
-        // there: a file only this test's sweep would take.
         var sweepNow = new DateTimeOffset(1970, 12, 1, 0, 0, 0, TimeSpan.Zero);
-        AreaRanking old = Ranking() with { MadeAt = sweepNow - AreaRankingFiles.MaxAge - TimeSpan.FromDays(30) };
         // The ranking is written where it belongs first, then moved behind the link.
         // A BBS of its own: a move or delete by BBS walks every set, this test's
         // other sets included.
         string bbs = $"linked-{_tag}";
         var owner = new SimulatorOwner(set, $"{bbs}/one");
         Directory.CreateDirectory(AppPaths.GameDataSetDir(set));
-        Assert.Null(_files.Write(owner, old).Error);
+        Assert.Null(_files.Write(owner, Ranking()).Error);
         Directory.Move(AppPaths.GameDataSetDir(set), victim);
         Directory.CreateSymbolicLink(AppPaths.GameDataSetDir(set), victim);
         string behind = Path.Combine(victim, "Simulator", bbs, "one.ranking.json");
         Assert.True(File.Exists(behind));
+        // Back-dated only once behind the link, past the limit on the sweep's clock
+        // below: while it sat in the set folder, another class's sweep would have
+        // taken it.
+        JsonNode node = JsonNode.Parse(File.ReadAllText(behind))!;
+        node["MadeAt"] = sweepNow - AreaRankingFiles.MaxAge - TimeSpan.FromDays(30);
+        File.WriteAllText(behind, node.ToJsonString());
         _canaries.Add(behind);
         Canary(Path.Combine(victim, "Rooms.json"));
 
