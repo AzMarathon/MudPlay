@@ -564,6 +564,17 @@ public sealed class AutoLightProvisioner
         return wait < EngineTripRetryCap ? wait : EngineTripRetryCap;
     }
 
+    // A light trip off the engine (or its reorder) was cut off by a dropped
+    // connection: that says nothing about the trip, so it isn't held as tried and
+    // the restarted run may make it again at once.
+    public void NoteEngineTripCutOff()
+    {
+        if (_engineBuyTried is null && _reorderRequestedFor is null) return;
+        _engineBuyTried = null;
+        _reorderRequestedFor = null;
+        _log?.Info(LogCategory, "light trip cut off by a dropped connection — not counted as tried");
+    }
+
     // A loop or Auto-Lair run started: check its circuit for dark rooms. A run the
     // user started (not a trip's own resume) gets a fresh try at a light trip that
     // couldn't buy before.

@@ -584,6 +584,7 @@ public sealed class AutoDepositManager : IDisposable
         _log?.Info(LogCategory, "connection dropped during the light buy — reroute ended, the buy not counted against the shop");
         GoIdle();
         if (!lightTrip) _cash.NotifyAutoDepositAborted();
+        else _provisioner.NoteEngineTripCutOff();
         if (resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop)
             _loopRunner.ResumeOnReconnect(loop, "a light buy the connection cut off");
         else if (resume.Kind == DetourResumeKind.Lair)

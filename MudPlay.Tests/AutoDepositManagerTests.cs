@@ -1156,6 +1156,48 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.NotEqual(LoopState.Idle, h.Loop.State);
     }
 
+    // A light trip the drop cut off isn't held as tried: the loop restarted after
+    // the reconnect makes the trip again at once, not after the back-off.
+    [Fact]
+    public void ALightTripCutOffByADrop_IsMadeAgainAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        // The checks are posted to the UI thread in the client: run once the
+        // dispatch that raised them is over.
+        List<Action> posted = new();
+        void RunPosted()
+        {
+            Action[] due = posted.ToArray();
+            posted.Clear();
+            foreach (Action a in due) a();
+        }
+        h.Provisioner.SetLoopRestock(
+            engineRunning: () => h.Loop.State != LoopState.Idle,
+            restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
+            engineRooms: h.Loop.ResolveLoopRoomKeys,
+            defer: posted.Add);
+        // AppServices tells the provisioner of each loop start.
+        h.Loop.Event += e =>
+        {
+            if (e.Kind == LoopEventKind.Started) h.Provisioner.OnEngineStarted(userStarted: e.UserStarted);
+        };
+        h.Provisioner.OnEngineStarted(userStarted: false);
+        RunPosted();
+        Assert.True(h.AutoDeposit.IsLightTrip);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        RunPosted();
+
+        Assert.True(h.AutoDeposit.IsLightTrip);
+    }
+
     // The stash cutoff's coin counts toward the light's price: with silver the
     // cutoff, the fifty gold kept in hand pay for the torch, so every silver is
     // hidden.
