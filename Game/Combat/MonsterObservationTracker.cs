@@ -28,6 +28,8 @@ public sealed class MonsterObservationTracker : IDisposable
 
     private readonly RoomEntityClassifier _roomClassifier;
     private readonly Func<string?> _currentTarget;
+    // "Is this name a party member?" Null = no party known (tests), so nothing is skipped.
+    private readonly Func<string, bool>? _isPartyMember;
     private readonly ProfileService? _profile;
     private readonly Func<DateTimeOffset> _clock;
     private readonly LogService? _log;
@@ -71,7 +73,8 @@ public sealed class MonsterObservationTracker : IDisposable
         Func<string?> currentTarget,
         ProfileService? profile,
         Func<DateTimeOffset>? clock = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<string, bool>? isPartyMember = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(roomClassifier);
@@ -81,6 +84,7 @@ public sealed class MonsterObservationTracker : IDisposable
         _profile = profile;
         _clock = clock ?? (static () => DateTimeOffset.Now);
         _log = log;
+        _isPartyMember = isPartyMember;
 
         _userHitsSub = router.Subscribe(KnownPatterns.UserHits, OnUserHits);
         _userMissesSub = router.Subscribe(KnownPatterns.UserMisses, OnUserMisses);
@@ -153,12 +157,14 @@ public sealed class MonsterObservationTracker : IDisposable
         Touch(o);
     }
 
-    private void OnUserMisses(MatchResult _)
+    private void OnUserMisses(MatchResult match)
     {
         // Dropped even when this line isn't counted: a retraction that follows is
         // about this line, never an earlier miss.
         _lastMissOn = null;
         if (!_engaged) return;
+        // A buff of ours a party member negated or resisted is no swing at the monster.
+        if (_isPartyMember is not null && Spells.NegatedCastLine.IsOwnCastAtPartyMember(match.Text, _isPartyMember)) return;
         if (ResolveCurrentTargetNumber() is not { } number) return;
         MonsterObservation o = GetOrCreate(number);
         o.MissCount++;

@@ -47,6 +47,12 @@ public static partial class NegatedCastLine
         return true;
     }
 
+    // Our own cast that a party member negated or resisted: a buff that didn't land,
+    // not a swing or attack spell of ours, so no combat stat counts it as a miss
+    // (user, 2026-10-17: "Not a miss").
+    public static bool IsOwnCastAtPartyMember(string? line, Func<string, bool> isPartyMember)
+        => TryRead(line, out Cast cast) && cast.Caster == Self && isPartyMember(cast.Target.Trim());
+
     // Our own cast that the target negated: only the caster line that says "negated".
     // A resist is not a negate (user, 2026-10-17), so Stock's "the spell is resisted."
     // form, which TryRead also reads, is not one.

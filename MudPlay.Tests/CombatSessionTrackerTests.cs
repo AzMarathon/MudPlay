@@ -27,7 +27,8 @@ public sealed class CombatSessionTrackerTests
 
         public Harness(
             IReadOnlyList<(string Name, CasterMessageMatcher Matcher)>? spellMatchers = null,
-            IReadOnlyList<SpellLineMatcher>? followUps = null)
+            IReadOnlyList<SpellLineMatcher>? followUps = null,
+            Func<string, bool>? isPartyMember = null)
         {
             DefaultPatterns.Seed(Router);
             Rounds = new RoundDamageTracker(Router, State);
@@ -35,7 +36,8 @@ public sealed class CombatSessionTrackerTests
                 .Select(m => new SpellLineMatcher(m.Name, m.Matcher)).Concat(followUps ?? []).ToList();
             Tracker = new CombatSessionTracker(
                 Router, Rounds,
-                resolveSpellMatchers: lines is null ? null : () => lines);
+                resolveSpellMatchers: lines is null ? null : () => lines,
+                isPartyMember: isPartyMember);
             Rounds.SetOwnSpellLineCheck(Tracker.MatchesOwnSpell);
             Rounds.NoteRoomEntities(new RoomEntitiesObservation(
                 "Also here: kobold, giant rat.",
@@ -206,6 +208,21 @@ public sealed class CombatSessionTrackerTests
         h.Feed("*Combat Off*");
         h.Feed("You feel much better!");
         Assert.Equal(0, h.Stats.Misses);
+    }
+
+    // A buff of ours that a party member negated or resisted is not a miss (user,
+    // 2026-10-17: "Not a miss"); the same line on a monster is one ("Count resists too").
+    [Theory]
+    [InlineData("You attempt to cast bless at Raijin, but it's negated!", 0)]
+    [InlineData("You attempt to cast bless at Raijin, but the spell is resisted.", 0)]
+    [InlineData("You attempt to cast disrupt at kobold, but it's negated!", 1)]
+    [InlineData("You attempt to cast disrupt at kobold, but the spell is resisted.", 1)]
+    public void OwnCastNegatedOrResisted_AMissOnlyOnAMonster(string line, int misses)
+    {
+        using Harness h = new(isPartyMember: n => string.Equals(n, "Raijin", StringComparison.OrdinalIgnoreCase));
+        h.Feed("*Combat Engaged*");
+        h.Feed(line);
+        Assert.Equal(misses, h.Stats.Misses);
     }
 
     [Fact]

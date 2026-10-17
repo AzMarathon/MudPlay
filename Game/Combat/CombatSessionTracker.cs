@@ -111,16 +111,21 @@ public sealed class CombatSessionTracker : IDisposable
     // out. A cast that doesn't land therefore still reads as a missed swing there.
     public event Action? CastLineMissRetracted;
 
+    // "Is this name a party member?" Null = no party known (tests), so nothing is skipped.
+    private readonly Func<string, bool>? _isPartyMember;
+
     public CombatSessionTracker(
         MessageRouter router,
         RoundDamageTracker rounds,
-        Func<IReadOnlyList<SpellLineMatcher>>? resolveSpellMatchers = null)
+        Func<IReadOnlyList<SpellLineMatcher>>? resolveSpellMatchers = null,
+        Func<string, bool>? isPartyMember = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(rounds);
         _router = router;
         _rounds = rounds;
         _resolveSpellMatchers = resolveSpellMatchers;
+        _isPartyMember = isPartyMember;
 
         _userHitsSub     = router.Subscribe(KnownPatterns.UserHits,     OnUserHits);
         _userMissesSub   = router.Subscribe(KnownPatterns.UserMisses,   OnUserMisses);
@@ -387,6 +392,8 @@ public sealed class CombatSessionTracker : IDisposable
     {
         // Already counted as the failed backstab it answered.
         if (string.Equals(match.Text, _backstabWhiff, StringComparison.Ordinal)) return;
+        // A buff of ours a party member negated or resisted is no swing of ours.
+        if (_isPartyMember is not null && NegatedCastLine.IsOwnCastAtPartyMember(match.Text, _isPartyMember)) return;
         // The miss skeleton also matches self-emotes ending in "!", so only a
         // line seen while combat is engaged is a real swing whiff.
         if (!_engaged) return;

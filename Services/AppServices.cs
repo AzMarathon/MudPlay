@@ -6288,7 +6288,7 @@ public sealed class AppServices
         // the boundaries that move them: connect / char switch (ProfileLoaded, which
         // also zeroes the session in lockstep with RoundDamage), a Combat-tab edit
         // (ProfileMutated), a game-data set swap, and a spellbook change.
-        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers);
+        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers, IsPartyMemberName);
         RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell, CombatSession.MatchesOwnRoomSpell);
         RoundDamage.SetOwnSpellRepeating(() => Combat.IsRepeatingSpell);
         Combat.BackstabResolved += CombatSession.OnBackstabResolved;
@@ -7577,7 +7577,7 @@ public sealed class AppServices
         // combat-line patterns CombatSessionTracker does, attributed per
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
-            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log, isPartyMember: IsPartyMemberName);
         // One judge of what was a swing: a miss the session figures take back as a
         // spell's cast line comes off the monster's record too.
         CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();

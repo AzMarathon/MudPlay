@@ -1,9 +1,11 @@
 # Version history
 
-## 3.181.3
+## 3.181.5
 
 - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
 - Only a negate line about a cast you sent counts, matched by spell name and member; a resisted cast is not a negate
+- A resisted attack spell counts toward its cast cap and as a miss, like a negated one
+- A buff a party member negated or resisted is no longer counted as a miss of yours
 
 ## 3.181.2
 

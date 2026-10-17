@@ -1419,10 +1419,12 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("disr fierce wraith", h.LastSent);   // the one allowed cast is still unspent
     }
 
-    // Our OWN attack spell negated by its target still spends a cast of its cap
-    // (user, 2026-10-17: "Count it").
-    [Fact]
-    public void NegatedAttackSpellOfOurs_CountsTowardItsCap()
+    // Our OWN attack spell negated or resisted by its target still spends a cast of
+    // its cap (user, 2026-10-17: "Count it", "Count resists too").
+    [Theory]
+    [InlineData("You attempt to cast disrupt at fierce wraith, but it's negated!")]
+    [InlineData("You attempt to cast disrupt at fierce wraith, but the spell is resisted.")]
+    public void NegatedOrResistedAttackSpellOfOurs_CountsTowardItsCap(string line)
     {
         using Harness h = new();
         h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 1 };
@@ -1432,7 +1434,7 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: fierce wraith.");
         Assert.Equal("disr fierce wraith", h.LastSent);
-        h.Feed("You attempt to cast disrupt at fierce wraith, but it's negated!");
+        h.Feed(line);
         h.Cast.OnCombatTick();
         h.Combat.OnCombatTick();
 

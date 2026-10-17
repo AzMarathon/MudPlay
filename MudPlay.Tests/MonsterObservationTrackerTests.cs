@@ -22,13 +22,13 @@ public sealed class MonsterObservationTrackerTests
         public string? CurrentTarget { get; set; }
         public int ChangedCount { get; private set; }
 
-        public Harness()
+        public Harness(Func<string, bool>? isPartyMember = null)
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(
                 Router, Monsters, Players, roomTracker: null, Log, gameData: null, Prefixes);
             Tracker = new MonsterObservationTracker(
-                Router, Classifier, () => CurrentTarget, profile: null);
+                Router, Classifier, () => CurrentTarget, profile: null, isPartyMember: isPartyMember);
             Tracker.Changed += () => ChangedCount++;
         }
 
@@ -183,6 +183,26 @@ public sealed class MonsterObservationTrackerTests
         Assert.Equal(1, o.MissCount);
         Assert.Equal(2, o.SwingCount);
         Assert.Equal(50d, o.HitRatePercent);
+    }
+
+    // A buff of ours a party member negated or resisted is no miss on the monster
+    // being fought (user, 2026-10-17: "Not a miss"); our attack spell on it is.
+    [Theory]
+    [InlineData("You attempt to cast bless at Raijin, but it's negated!", 0)]
+    [InlineData("You attempt to cast bless at Raijin, but the spell is resisted.", 0)]
+    [InlineData("You attempt to cast disrupt at giant rat, but the spell is resisted.", 1)]
+    public void OwnCastNegatedOrResisted_AMissOnTheMonsterOnlyWhenAimedAtIt(string line, int misses)
+    {
+        using Harness h = new(n => string.Equals(n, "Raijin", StringComparison.OrdinalIgnoreCase));
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.CurrentTarget = "giant rat";
+        h.Feed("*Combat Engaged*");
+        h.Feed("You slash giant rat for 8 damage!");
+
+        h.Feed(line);
+
+        Assert.Equal(misses, h.Tracker.For(1)!.MissCount);
     }
 
     // A spell's cast line has the shape of a miss. Counted as one, a pure caster's
