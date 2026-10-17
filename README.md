@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.39**
-> - Your own death is read from `You have been killed!`: the death sound, the death-floor refinement (now only ever lowered) and the round reset now run
-> - A party member's death is read from `<Name> is dead.`; the `has been slain by` and `has died` lines were never sent by the game
-> - A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited (never without a seen death line, nor after a re-invite)
-> - After a party-splitting teleport, a member is sent 3 `@join` nags before the wait for them can end
-> - The `@join` nag is no longer stopped by the game's echo of the invite it follows
+> **Version 3.183.41**
+> - Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
+> - Combat: "Attack Not Last" and follow Target Priority never cost a round; unanswered, they attack before the round fires
+> - Combat: a party member seen fighting releases those holds, and the followed player's hits set the target
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
