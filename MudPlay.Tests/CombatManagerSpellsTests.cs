@@ -3994,6 +3994,85 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a giant rat", h.LastSent);                        // fell back to own pick
     }
 
+    // The party walks in a beat after us on every step, so the room the hold reads is
+    // an arrival when the release comes. Report paradigm-20261017-050150: a Mystic on
+    // AttackNotLast never sent `pu` through a whole walk; each release and each
+    // fallback went into the arrival settle, and the settle's own engage held again.
+    private static void WalkIntoTunnelHorrorBehindTheParty(Harness h)
+    {
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        h.Feed("A tunnel horror stomps in from the south.");
+        h.Feed("Also here: tunnel horror.");
+        FeedPlayerLine(h, "Cidir walks into the room from the northwest.");
+        FeedPlayerLine(h, "Thresh walks into the room from the northwest.");
+        h.FireSettle();
+    }
+
+    // A player's name comes in the red the game paints players.
+    private static void FeedPlayerLine(Harness h, string line)
+    {
+        CellAttributes red = CellAttributes.Default with { Foreground = TerminalColor.Indexed(9) };
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            line, Enumerable.Repeat(red, line.Length).ToArray(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+    }
+
+    [Fact]
+    public void AttackNotLast_PartyWalkedInBehindUs_FirstAnnounceStillEngages()
+    {
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        WalkIntoTunnelHorrorBehindTheParty(h);
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("tunnel horror"));   // held
+
+        h.Feed("Cidir moves to attack tunnel horror.");                       // first commit
+        h.FireSettle();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        int after = h.Sent.Count;
+
+        h.Feed("Thresh moves to attack tunnel horror.");
+        h.FireSettle();
+        Assert.Equal(after, h.Sent.Count);                                    // once
+    }
+
+    [Fact]
+    public void AttackNotLast_FirstAnnounceInTheSameFlushAsTheWalkIn_Engages()
+    {
+        // The capture's 05:01:43 room: the walk-ins and the first attack came in one
+        // flush, inside the settle the walk-ins armed, and waited a round for the fallback.
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        h.Feed("Also here: tunnel horror.");
+        FeedPlayerLine(h, "Cidir walks into the room from the southwest.");
+        FeedPlayerLine(h, "Thresh walks into the room from the southwest.");
+        h.Feed("Cidir moves to attack tunnel horror.");
+        h.FireSettle();
+
+        Assert.Equal("pu tunnel horror", h.LastSent);
+    }
+
+    [Fact]
+    public void AttackNotLast_PartyWalkedInBehindUs_NoAnnounceStillFallsBack()
+    {
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        WalkIntoTunnelHorrorBehindTheParty(h);
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("tunnel horror"));   // held
+
+        h.Tick();                                                             // a round, no announce
+        h.FireSettle();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+    }
+
     // ----- room clear resets the chooser bookkeeping -------------------
 
     [Fact]

@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.34**
-> - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
-> - Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+> **Version 3.183.35**
+> - Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

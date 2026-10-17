@@ -298,6 +298,14 @@ public sealed partial class CombatManager : IDisposable
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
+    // A not-last / follow hold that ended (its announce, or its round-long fallback)
+    // while the room's last word was an arrival goes through the settle like any
+    // first engage. The release rides the settle so its engage doesn't hold again:
+    // the party walks in a beat after us on every step, so without this the hold
+    // re-latched on every release and never attacked (report paradigm-20261017-050150).
+    private bool _arrivalSettleReleasesNotLast;
+    private bool _arrivalSettleReleasesFollow;
+
     // Summon-on-death re-scan hold. The monster just killed summons another as it
     // dies, and that one isn't on the roster until the room is displayed again.
     // While armed, a fresh target pick waits for the re-display (ArmSummonRescan /
@@ -1333,7 +1341,10 @@ public sealed partial class CombatManager : IDisposable
         _userEngagedInstances.ToArray(),
         _castingSpellTarget, _spellAttackOwed,
         _readSettings().AttackTiming.ToString(),
-        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null,
+        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow"
+            : _arrivalSettleReleasesNotLast ? "not-last ended; engaging when the arrival settle elapses"
+            : _arrivalSettleReleasesFollow ? "follow ended; engaging when the arrival settle elapses"
+            : null,
         _spellChooser.DescribeCasts(), ConfirmedAttackCastCount);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
@@ -1620,6 +1631,12 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed || !_arrivalSettleArmed) return;
         _arrivalSettleArmed = false;
+        // A release is spent on this window's engage. Every path that doesn't engage
+        // drops it: what decides instead (a re-display, the new room) reads the room
+        // anew, and the hold's fallback still bounds that wait to a round.
+        bool releasesNotLast = _arrivalSettleReleasesNotLast;
+        bool releasesFollow = _arrivalSettleReleasesFollow;
+        DropArrivalSettleReleases();
         if (_classifier.Current is not { } cur) return;
         // A monster died DURING this settle window (a burst kill landing between arm and
         // now). Its death forced a roster resync (a room re-display) that hasn't arrived
@@ -1662,6 +1679,8 @@ public sealed partial class CombatManager : IDisposable
                 _arrivalSettleRearmed = true;
                 _arrivalSettleArmed = true;
                 _arrivalSettleArmedAt = DateTimeOffset.Now;
+                _arrivalSettleReleasesNotLast = releasesNotLast;
+                _arrivalSettleReleasesFollow = releasesFollow;
                 NoteArrivalSettleDecision("an exp line came during the window and no re-display could be asked for — waited one more window");
                 _log?.Combat(LogCategory,
                     "arrival-settle: an exp line came during the window and no re-display could be asked for — "
@@ -1679,12 +1698,28 @@ public sealed partial class CombatManager : IDisposable
                 + "the new room's display decides");
             return;
         }
-        NoteArrivalSettleDecision("window elapsed with no room re-display — engaged the accumulated room");
+        string released = releasesNotLast ? " (the attack-not-last hold had ended)"
+            : releasesFollow ? " (the target-priority follow hold had ended)" : "";
+        NoteArrivalSettleDecision("window elapsed with no room re-display — engaged the accumulated room" + released);
         _log?.Combat(LogCategory,
-            "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
+            "arrival-settle: window elapsed with no room re-display — engaging the accumulated room" + released);
+        bool notLastBypassWas = _notLastDeferBypass, followBypassWas = _followDeferBypass;
         _arrivalSettleBypass = true;
+        _notLastDeferBypass |= releasesNotLast;
+        _followDeferBypass |= releasesFollow;
         try { OnEntitiesObserved(cur); }
-        finally { _arrivalSettleBypass = false; }
+        finally
+        {
+            _arrivalSettleBypass = false;
+            _notLastDeferBypass = notLastBypassWas;
+            _followDeferBypass = followBypassWas;
+        }
+    }
+
+    private void DropArrivalSettleReleases()
+    {
+        _arrivalSettleReleasesNotLast = false;
+        _arrivalSettleReleasesFollow = false;
     }
 
     // What the arrival settle last did when its window elapsed, for the bug report:
@@ -1736,8 +1771,11 @@ public sealed partial class CombatManager : IDisposable
         // Fresh observation of the room — any pending follow / not-last deferral from
         // a previous observation is stale. Re-evaluated below once we know the
         // engageable set (a re-observe of the SAME room re-arms it if still apt).
+        // An arrival only adds to the room the not-last hold is on, and the settle it
+        // arms would return before re-arming: the party's walk-ins and its first
+        // attack come in one flush, so clearing here lost that attack to the settle.
         _awaitingFollowAnnounce = false;
-        if (!_notLastDeferBypass) _awaitingNotLast = false;
+        if (!_notLastDeferBypass && obs.Source != RoomObservationSource.Arrival) _awaitingNotLast = false;
 
         // Prune the user-engaged-neutral overrides for instances no longer in the
         // room (killed, or we changed rooms) so the takeover can't leak onto a
@@ -1756,9 +1794,14 @@ public sealed partial class CombatManager : IDisposable
         // change, a death resync) supersedes a pending simultaneous-arrival settle:
         // it carries the full roster, so it drives the decision now and the settle
         // callback that fires later finds nothing armed and no-ops. Skipped on the
-        // settle's own re-entrant call (bypass) so it can proceed to dispatch.
+        // settle's own re-entrant call (bypass) so it can proceed to dispatch. A hold
+        // release the settle carried is dropped with it: the fresh read holds anew,
+        // and the hold's round-long fallback still engages.
         if (!_arrivalSettleBypass && obs.Source != RoomObservationSource.Arrival)
+        {
             _arrivalSettleArmed = false;
+            DropArrivalSettleReleases();
+        }
 
         // A confirmed move into an EMPTY room re-opens the surprise round (the
         // classifier emits RoomChange only then). A move into an occupied room is
@@ -2014,6 +2057,14 @@ public sealed partial class CombatManager : IDisposable
         if (obs.Source == RoomObservationSource.Arrival && _currentTarget is null
             && _scheduleArrivalSettle is not null && !_arrivalSettleBypass)
         {
+            if (_notLastDeferBypass || _followDeferBypass)
+            {
+                _arrivalSettleReleasesNotLast |= _notLastDeferBypass;
+                _arrivalSettleReleasesFollow |= _followDeferBypass;
+                _log?.Combat(LogCategory,
+                    $"arrival-settle: the {(_notLastDeferBypass ? "attack-not-last" : "target-priority follow")} hold "
+                    + "has ended — engaging when the settle elapses, without holding again");
+            }
             if (!_arrivalSettleArmed)
             {
                 _arrivalSettleArmed = true;
@@ -4484,6 +4535,7 @@ public sealed partial class CombatManager : IDisposable
         _awaitingFollowAnnounce = false;
         _awaitingNotLast = false;
         _arrivalSettleArmed = false;
+        DropArrivalSettleReleases();
         ClearBackstabResolution();
         ClearAttackSpellCascadeState();
     }
