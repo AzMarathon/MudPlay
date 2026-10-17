@@ -13,24 +13,17 @@ public sealed class AutoLairSettingsTests
     // ----- defaults -------------------------------------------------
 
     [Fact]
-    public void Defaults_AreSane()
+    public void Defaults_AreTheShippedOnes()
     {
+        // What a profile with no Auto-Lair entry runs on (the hop bands are pinned by
+        // HopTimes_For_ReturnsBucketDefault).
         AutoLairSettings dto = new();
         Assert.Equal(AutoLairHeuristic.Default, dto.Heuristic);
         Assert.Equal(30, dto.EngageTimeoutSeconds);
         // Auto is the default — realm-aware model selection out of the box.
         Assert.Equal(AutoLairTravelCostMode.Auto, dto.TravelCostMode);
         Assert.Equal(1.5, dto.FlatSecondsPerHop);
-        Assert.NotNull(dto.HopTimesByEncumbrance);
-        // Measured stock hop timings are a two-band step function: None /
-        // Light / Medium share the fast band, Heavy / Encumbered the slow one.
-        Assert.Equal(dto.HopTimesByEncumbrance.None,  dto.HopTimesByEncumbrance.Light);
-        Assert.Equal(dto.HopTimesByEncumbrance.Light, dto.HopTimesByEncumbrance.Medium);
-        Assert.True(dto.HopTimesByEncumbrance.Medium  < dto.HopTimesByEncumbrance.Heavy);
-        Assert.Equal(dto.HopTimesByEncumbrance.Heavy,  dto.HopTimesByEncumbrance.Encumbered);
     }
-
-    // ----- JSON round-trip ------------------------------------------
 
     // ----- EncumbranceHopTimes.For ----------------------------------
 

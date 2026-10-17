@@ -1,6 +1,6 @@
 # Version history
 
-## 3.183.40
+## 3.183.41
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
@@ -8,6 +8,7 @@
 - The Navigation window's Stop now stops what the toolbar's Stop stops: it holds an errand first, and drops a queued run or a paused walk
 - Clear all also shows while building an Auto-Lair setup, and clears its lair markers
 - View → Reset layout, which had no panels to reset, is gone from the menu
+- Settings search no longer offers "Bless 1" to "Bless 15"; a search for bless finds the Spells tab note that points to the Buff Watchdog
 
 ## 3.183.34
 

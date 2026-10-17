@@ -1634,10 +1634,10 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(new[] { "default-set", "rest-set" }, applied);
     }
 
-    // Deselected mid-fight, and the health engine asks for rest gear before the
-    // deferred Default has happened.
+    // Deselected mid-fight, with the rest gate up when the fight clears: the same set
+    // stays on, a different one goes through Default to the rest set.
     [Fact]
-    public void HeldSet_ReleasedInCombat_ThenRestGearIsAskedFor()
+    public void HeldSet_ReleasedInCombat_RestGateUpAtTheClear_KeepsOrGoesThroughDefaultToTheRestSet()
     {
         var player = new PlayerState { InCombat = true };
         EquipmentSettings cfg = Config(
@@ -1664,6 +1664,36 @@ public sealed class AutoEquipCoordinatorTests
         hpGate = true;
         player.InCombat = false;
         Assert.Equal(new[] { "default-set", "rest-set" }, applied);
+    }
+
+    // Deselected mid-fight, and the fight carries into a boss room before it clears:
+    // automation asks for the Bossing set while the deferred Default is still owed.
+    // The same set stays on; any other goes on over Default.
+    [Fact]
+    public void HeldSet_ReleasedInCombat_ThenABossRoomBeforeTheClear()
+    {
+        var player = new PlayerState { InCombat = true };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "rest-set"),
+            SetWith(EquipTriggerType.Bossing, enabled: true, "boss-set"));
+        var applied = new List<string>();
+        var boss = new Game.Map.RoomKey(1, 500);
+        var plain = new Game.Map.RoomKey(1, 501);
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied, isBossRoom: k => k == boss);
+
+        coord.HoldSet(EquipTriggerType.Bossing);
+        coord.ReleaseHeldSet();
+        Assert.Equal(EquipTriggerType.Bossing, coord.ReleasedSetAwaitingDefault);
+        coord.OnRoomChanged(previous: plain, current: boss);
+        Assert.Empty(applied);
+        Assert.Null(coord.ReleasedSetAwaitingDefault);
+
+        coord.HoldSet(EquipTriggerType.PreRestHp);
+        coord.ReleaseHeldSet();
+        coord.OnRoomChanged(previous: plain, current: boss);
+        Assert.Equal(new[] { "default-set", "boss-set" }, applied);
+        Assert.Null(coord.ReleasedSetAwaitingDefault);
     }
 
     // ===== gear that came back to the pack =====

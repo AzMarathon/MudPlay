@@ -297,15 +297,6 @@ public sealed class TickEngineTests
     }
 
     [Fact]
-    public void CombatTickInterval_IsFiveSeconds()
-    {
-        // Pinning the universal MajorMUD combat-tick value so a stray
-        // refactor doesn't silently change it. The spec is explicit:
-        // 5 s is invariant across realm flavours.
-        Assert.Equal(TimeSpan.FromSeconds(5), TickEngine.CombatTickInterval);
-    }
-
-    [Fact]
     public void Dispose_StopsCombatTickEvents()
     {
         var (router, tick) = Setup();

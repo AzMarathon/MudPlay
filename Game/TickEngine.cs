@@ -21,7 +21,8 @@ namespace MudPlay.Game;
 // Regen countdowns are RegenTracker's, not this engine's.
 public sealed partial class TickEngine : ObservableObject, IDisposable
 {
-    // Combat tick interval — universal across MajorMUD realm flavours.
+    // The nominal combat round: where RoundLength starts until this board's own
+    // round has been measured.
     public static readonly TimeSpan CombatTickInterval = TimeSpan.FromSeconds(5);
 
     // How long a round really is here, which the projection steps by while no round
@@ -128,7 +129,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     // observed yet.
     public TimeSpan? TimeToNextCombatTick => RemainingFor(LastCombatTick, RoundLength);
 
-    // Fired on every combat tick — every 5 s, refreshed by damage lines.
+    // Fired on every combat tick — once a round (RoundLength), refreshed by damage lines.
     public event Action? CombatTickElapsed;
 
     // Fired every HeartbeatInterval (1 s) — a coarse watchdog poll with no cycle

@@ -165,11 +165,6 @@ public sealed class SpellsSettings
     // default lives in one place.
     public const int DefaultBlessRecastMarginSec = 15;
 
-    // Self-bless slots shown on a ParaMud realm. The effect cap is lifted there,
-    // so item / self / party buffs comfortably exceed 10; 15 is reasonable
-    // headroom for the common case.
-    public const int ParaMudBlessSlotCount = 15;
-
     // LEGACY: the two switches every self-buff shared. Each buff slot carries its
     // own now (BuffSlot.BlessWhileResting / BlessDuringCombat); profile schema 5
     // copied these onto the slots that existed then. Kept so an older profile still

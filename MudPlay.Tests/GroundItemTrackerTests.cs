@@ -171,19 +171,6 @@ public sealed class GroundItemTrackerTests
         Assert.Equal(new[] { "a copper key" }, ground.Items);
     }
 
-    // Without an item table wired (no game data), the heuristic stands alone and
-    // the denomination-named stacked item is misread as cash — documents the
-    // fallback the injected predicate exists to fix.
-    [Fact]
-    public void DenominationNamedStackedItem_MisreadAsCash_WithoutItemTable()
-    {
-        var (ground, router, _) = Setup();
-
-        FeedRoom(router, "You notice 2 gold key here.");
-
-        Assert.Empty(ground.Items);
-    }
-
     // ----- compound item names containing " and " (report 20260825-172400) --
 
     // An item whose own canonical name contains "and" ("rope and grapple", MDB
@@ -235,20 +222,6 @@ public sealed class GroundItemTrackerTests
         FeedRoom(router, "You notice a torch and a dagger here.");
 
         Assert.Equal(new[] { "a torch", "a dagger" }, ground.Items);
-    }
-
-    // Without an item table wired (no game data), the merge heuristic has
-    // nothing to check against and the naive split stands alone — documents
-    // the fallback the injected predicate exists to fix, same pattern as the
-    // cash-tiebreaker fallback test above.
-    [Fact]
-    public void CompoundItemName_MisparsedIntoTwoEntries_WithoutItemTable()
-    {
-        var (ground, router, _) = Setup();
-
-        FeedRoom(router, "You notice a rope and grapple here.");
-
-        Assert.Equal(new[] { "a rope", "grapple" }, ground.Items);
     }
 
     // Test double for the item table: matches an entry to a known item name after

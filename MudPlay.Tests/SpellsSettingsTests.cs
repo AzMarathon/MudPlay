@@ -90,12 +90,6 @@ public sealed class SpellsSettingsTests
     // ----- Bless-slot count policy + sparse persistence --------------
 
     [Fact]
-    public void BlessSlotCount_ParaMudFifteen()
-    {
-        Assert.Equal(15, SpellsSettings.ParaMudBlessSlotCount);
-    }
-
-    [Fact]
     public void BlessSlots_SerializeSparsely_NoGhostSlots()
     {
         SpellsSettings dto = new();

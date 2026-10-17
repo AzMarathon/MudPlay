@@ -64,10 +64,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     public override Control View => _view ??= new SpellsSectionView { DataContext = this };
 
-    public override IEnumerable<string> SearchableLabels =>
-        _staticSearchLabels.Concat(
-            Enumerable.Range(1, SpellsSettings.ParaMudBlessSlotCount)
-                      .Select(i => $"Bless {i}"));
+    // The tab's own text: bless timing and self buffs live in the Buff Watchdog now,
+    // so a search for them lands on the note that says so.
+    public override IEnumerable<string> SearchableLabels => _staticSearchLabels;
 
     private static readonly string[] _staticSearchLabels =
     {
@@ -80,6 +79,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
         "Ailment handling", "Coordination",
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
+        "Bless", "Self bless slots", "Buff Watchdog",
     };
 
     // ----- Category priority (1-10) ---------------------------------
