@@ -507,7 +507,11 @@ public sealed class AutoLightProvisioner
         }
         if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
 
-        string route = circuit.Count == 0 ? "the lair run" : $"the loop at {circuit[0]} ({circuit.Count} rooms)";
+        // Keyed on the circuit's set of rooms, not where it starts: every start or
+        // recovery re-plan begins the circle at the room it re-enters, and a key
+        // that moved with it would start the back-off over each time.
+        List<RoomKey> roomSet = circuit.Distinct().OrderBy(k => k.Map).ThenBy(k => k.Room).ToList();
+        string route = roomSet.Count == 0 ? "the lair run" : $"the loop through {roomSet[0]} ({roomSet.Count} rooms)";
         int lights = CarriedLights(snap.CarriedItems, catalogue).Count + (snap.ReadiedLight is null ? 0 : 1);
         long wealth = snap.Currency.TotalCopperValue;
         DateTimeOffset now = _now();
@@ -520,8 +524,6 @@ public sealed class AutoLightProvisioner
             bool canNowPay = _lightPrice(req.ItemId) is { } price && tried.Wealth < price && wealth >= price;
             if (tried.Lights == lights && !canNowPay && now - tried.At < EngineTripBackoff(tried.Failures)) return;
         }
-
-
 
         LightRestockOutcome outcome = restock(req);
         if (outcome == LightRestockOutcome.Busy)
@@ -805,16 +807,20 @@ public sealed class AutoLightProvisioner
         return true;
     }
 
-    // The first dump newer than a light-making cast (ours or any other): the item is
-    // there (lit at once when we stand in the dark, or when it was made for the dark
-    // room ahead) or the cast didn't take (a later cast may retry).
+    // A dump newer than a light-making cast: the item is there (lit at once when we
+    // stand in the dark, or when it was made for the dark room ahead), or — once our
+    // read for it is out — the cast didn't take (a later cast may retry).
     private void TakeMadeItem(InventorySnapshot snap)
     {
         if (_madeItem is not { } awaited || snap.LastUpdated <= awaited.Stamp) return;
-        _madeItem = null;
         IReadOnlyList<LightItem> carried = CarriedLights(snap.CarriedItems, _catalogue());
-        if (carried.FirstOrDefault(l => string.Equals(l.Name, awaited.Name, StringComparison.OrdinalIgnoreCase))
-            is not { Number: > 0 } made)
+        LightItem? found = carried.FirstOrDefault(l => string.Equals(l.Name, awaited.Name, StringComparison.OrdinalIgnoreCase));
+        // While the caster line is still awaited, a dump without the item may be one
+        // another engine asked for before the cast landed: only the caster line or
+        // the read after MadeItemWait settles that the cast didn't take.
+        if (found is not { Number: > 0 } && !awaited.ReadSent) return;
+        _madeItem = null;
+        if (found is not { Number: > 0 } made)
         {
             _log?.Info(LogCategory, $"room-light spell made no {awaited.Name} — the cast didn't take");
             return;

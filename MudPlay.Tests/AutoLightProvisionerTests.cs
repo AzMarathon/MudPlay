@@ -1056,7 +1056,6 @@ public sealed class AutoLightProvisionerTests
 
     [Theory]
     [InlineData("timeout")]
-    [InlineData("dump")]
     [InlineData("room")]
     public void LightMakingCast_TheWaitEnds_TheSpellIsTriedAgain(string how)
     {
@@ -1080,7 +1079,6 @@ public sealed class AutoLightProvisionerTests
             Assert.Single(h.CastSpells);
             h.Now += AutoLightProvisioner.MadeItemWait + TimeSpan.FromSeconds(1);
         }
-        if (how == "dump") { h.Snapshot = Snap(stamp: 9); h.Poll(); }
         if (how == "room")
         {
             h.Engine.OnRoomChanged();
@@ -1090,6 +1088,33 @@ public sealed class AutoLightProvisionerTests
         }
         h.Dark();
         Assert.Equal(2, h.CastSpells.Count);
+    }
+
+    // Another engine's `i`, sent just before the cast, lands while the caster line
+    // is still awaited: it shows no ball, which says nothing about the cast. The
+    // caster line then reads the inventory, and the ball is found.
+    [Fact]
+    public void LightMakingCast_ADumpBeforeTheCastLine_DoesNotEndTheWait()
+    {
+        Harness h = new()
+        {
+            Spell = Illuminate,
+            CastLine = "You cast {spellname}!",
+            Here = RoomAt(A, -300),
+            InDark = true,
+            Snapshot = Snap(stamp: 1),
+        };
+        h.Dark();                                   // cast, CR
+        h.Snapshot = Snap(stamp: 2);                // the other engine's dump, no ball
+        h.Poll();
+        h.Dark();
+        Assert.Single(h.CastSpells);
+
+        h.Feed("You cast illuminate!");
+        Assert.Equal(new[] { "", "i" }, h.Sent);
+        h.Snapshot = Snap(carried: new[] { "light ball" }, stamp: 3);
+        h.Poll();
+        Assert.Equal(new[] { "", "i", "use light ball", "" }, h.Sent);
     }
 
     // The probe: the Messages data's caster line isn't what the game printed, and
@@ -1487,6 +1512,30 @@ public sealed class AutoLightProvisionerTests
         h.Snapshot = Snap();
         h.Poll();
         Assert.Equal(10, asks);                                       // asked at once again
+    }
+
+    // Every start or recovery re-plan begins the circle at the room it re-enters:
+    // the same loop, rotated, is still the same loop for the back-off.
+    [Fact]
+    public void Loop_RotatedStartRoom_IsTheSameLoop_ForTheBackOff()
+    {
+        RoomKey b = new(1, 101);
+        Harness h = new() { Graph = GraphOf(RoomAt(A, -300), RoomAt(b, -300)) };
+        int asks = 0;
+        bool rotated = false;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
+            engineRooms: () => rotated ? new[] { b, A, b } : new[] { A, b, A });
+        h.Engine.OnEngineStarted(userStarted: false);
+        for (int i = 0; i < 4; i++)
+        {
+            rotated = !rotated;
+            h.Engine.OnEngineStarted(userStarted: false);   // a recovery re-plan's start
+        }
+        Assert.Equal(1, asks);
+
+        h.Now += AutoLightProvisioner.EngineTripRetry + TimeSpan.FromSeconds(1);
+        h.Poll();
+        Assert.Equal(2, asks);
     }
 
     [Fact]

@@ -14706,12 +14706,6 @@ public sealed class AppServices
                 : $" Nothing more drawn: the balance here ({balance:N0}) has none left beyond the item's {drawing:N0}."));
     }
 
-    // Per-copy buy cost in copper for the shop router's affordability gate:
-    // resolve the shop hosting shopRoom, price itemId's slot with the same
-    // MajorMUD markup + charm formula the room-detail readout uses, and round up
-    // (the game charges whole copper). Null when the room hosts no shop, the shop
-    // doesn't stock the item, or the set can't be read — the router then heads
-    // straight to the shop and buys with cash on hand.
     // One copy of an item at the cheapest shop selling it, or null when no shop
     // prices it.
     private long? CheapestPrice(int itemId)
@@ -14723,6 +14717,12 @@ public sealed class AppServices
         return best;
     }
 
+    // Per-copy buy cost in copper for the shop router's affordability gate:
+    // resolve the shop hosting shopRoom, price itemId's slot with the same
+    // MajorMUD markup + charm formula the room-detail readout uses, and round up
+    // (the game charges whole copper). Null when the room hosts no shop, the shop
+    // doesn't stock the item, or the set can't be read — the router then heads
+    // straight to the shop and buys with cash on hand.
     private long? PathItemBuyCost(int itemId, Game.Map.RoomKey shopRoom)
     {
         if (RoomGraph.GetRoom(shopRoom) is not { Shop: > 0 } room) return null;
