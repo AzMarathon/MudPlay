@@ -306,6 +306,13 @@ public sealed partial class CombatManager : IDisposable
     private bool _arrivalSettleReleasesNotLast;
     private bool _arrivalSettleReleasesFollow;
 
+    // Set only while a hold's own release re-dispatches the room (the not-last
+    // announce, or either hold's round fallback). The bypass flags can't say this:
+    // a resume and the backstab re-announce lift the follow hold too, with no hold
+    // having ended.
+    private bool _releasingNotLastHold;
+    private bool _releasingFollowHold;
+
     // Summon-on-death re-scan hold. The monster just killed summons another as it
     // dies, and that one isn't on the roster until the room is displayed again.
     // While armed, a fresh target pick waits for the re-display (ArmSummonRescan /
@@ -2057,12 +2064,12 @@ public sealed partial class CombatManager : IDisposable
         if (obs.Source == RoomObservationSource.Arrival && _currentTarget is null
             && _scheduleArrivalSettle is not null && !_arrivalSettleBypass)
         {
-            if (_notLastDeferBypass || _followDeferBypass)
+            if (_releasingNotLastHold || _releasingFollowHold)
             {
-                _arrivalSettleReleasesNotLast |= _notLastDeferBypass;
-                _arrivalSettleReleasesFollow |= _followDeferBypass;
+                _arrivalSettleReleasesNotLast |= _releasingNotLastHold;
+                _arrivalSettleReleasesFollow |= _releasingFollowHold;
                 _log?.Combat(LogCategory,
-                    $"arrival-settle: the {(_notLastDeferBypass ? "attack-not-last" : "target-priority follow")} hold "
+                    $"arrival-settle: the {(_releasingNotLastHold ? "attack-not-last" : "target-priority follow")} hold "
                     + "has ended — engaging when the settle elapses, without holding again");
             }
             if (!_arrivalSettleArmed)
@@ -3104,8 +3111,13 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory,
                 $"attack-not-last — first party announce ({announcer}); engaging our own pick once");
             _notLastDeferBypass = true;
+            _releasingNotLastHold = true;
             try { OnEntitiesObserved(obs); }
-            finally { _notLastDeferBypass = false; }
+            finally
+            {
+                _notLastDeferBypass = false;
+                _releasingNotLastHold = false;
+            }
         }
         return true;
     }

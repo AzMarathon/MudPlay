@@ -4061,6 +4061,31 @@ public sealed class CombatManagerSpellsTests
     }
 
     [Fact]
+    public void FollowLeader_MemberWalkedInBehindUs_NoAnnounceStillFallsBack()
+    {
+        // The follow hold's round fallback goes through the same settle when a member
+        // walks in behind us, and its engage must not hold again.
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+        h.Settings.NormalAttackCommand = "pu";
+        h.Players.RecordObservation("Cidir", "Priest", null, null, null, null, null, DateTime.UtcNow);
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.Party.LeaderName = "Cidir NineteenTr";
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+
+        h.Feed("Also here: tunnel horror, giant skeleton, Cidir.");
+        FeedPlayerLine(h, "Thresh walks into the room from the northwest.");
+        h.FireSettle();
+        Assert.DoesNotContain(h.AllSent, s => s.StartsWith("pu "));          // held for Cidir
+
+        h.Tick();                                                             // a round, no announce
+        h.FireSettle();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+    }
+
+    [Fact]
     public void AttackNotLast_PartyWalkedInBehindUs_NoAnnounceStillFallsBack()
     {
         using Harness h = new();
