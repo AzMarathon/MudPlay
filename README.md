@@ -1,13 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.6**
-> - Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
-> - Unsure of your room, a text-exit move (`go path`) still narrows down where you are
-> - Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
-> - Unsure of your room, moves typed together are each matched to their own room display
-> - Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
-> - A walk's forward re-locate reads every step's landing in order; a room it, the walk-back or an unsure re-match settles on is never saved as your known room, and a relog lands back on it
+> **Version 3.184.7**
+> - Combat: after a teleport, a drag with no follow line or a fear run, "Attack Not Last" and follow Target Priority hold the new room's first attack again
+> - Combat: a relog or reconnect starts the room's attack order afresh, even in the same room
+> - Combat: after a death or teleport into an empty room, a monster that walks in waits for the party's opening too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

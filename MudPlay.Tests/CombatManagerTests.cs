@@ -1,6 +1,7 @@
 using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -754,7 +755,7 @@ public sealed class CombatManagerTests
             b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        h.Combat.NoteRoomDisplayed();                            // the emptied room's re-display
+        h.Combat.NoteRoomDisplayed(new RoomObservation("Volcano Tunnel", new HashSet<Direction> { Direction.N }));                            // the emptied room's re-display
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
     }
 
