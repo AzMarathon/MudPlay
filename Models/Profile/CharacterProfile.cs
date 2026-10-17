@@ -373,6 +373,12 @@ public sealed class CharacterProfile
     // null or empty = no pending steps to replay.
     public List<DirectionDto>? RecentSteps { get; set; }
 
+    // The room RecentSteps start from, when that isn't LastKnownRoom: the tracker
+    // settled on a room it worked out (a footprint, a re-confirm while unsure) and
+    // began a new trail there without saving that room as known. Set with no steps,
+    // it is that room itself. null = the steps start from LastKnownRoom.
+    public RoomRef? RecentStepsFrom { get; set; }
+
     // Append-only history of deaths observed for this character. Written by
     // Game.DeathDetector when the "You now have N lives remaining." message
     // arrives; consumed by the Workshop DEATH section. null / empty means no
