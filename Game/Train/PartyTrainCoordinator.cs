@@ -798,18 +798,19 @@ public sealed class PartyTrainCoordinator : IDisposable
     }
 
     // End the trip running where it stands, from outside: the game data was read in
-    // afresh under it. The trip plans its bank and its trainer stops up front and
-    // then lives for minutes in its waits (the settle after coin changes hands, a
-    // walk, the members' trains), and nothing that stops the engines ends those:
-    // left alone it walked on to its next stop, and told the members to train at
-    // it, by the old data's room numbers. The wait in hand is ended, and the trip
+    // afresh under it, or the user ended it (a second Stop, Reset States). The trip
+    // plans its bank and its trainer stops up front and then lives for minutes in its
+    // waits (the settle after coin changes hands, a walk, the members' trains), and
+    // nothing that stops the engines ends those: left alone it walked on to its next
+    // stop, and told the members to train at it, by the old data's room numbers. The wait in hand is ended, and the trip
     // goes no further: no walk, no withdrawal, no order to a member. The trainer's
     // side goes with it, with nothing put back (TrainerWalkManager.Cancel), and the
     // members are told only that the trip is off. False when no trip is running.
     //
-    // This is the one caller of a trip's end from outside. A Stop, a death or a
-    // drop of the line end a trip only through the walk they stop; in a wait it
-    // goes on as before.
+    // A first Stop, a death or a drop of the line end a trip only through the walk
+    // they stop; in a wait it goes on as before. Left to the trainer's cancel, a
+    // trip waiting on the leader's own train waited for good: the trainer never
+    // answers a train it was told to cancel.
     public bool CallOffTrip(string why)
     {
         if (!_tripRunning || _calledOff is not null) return false;

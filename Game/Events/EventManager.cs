@@ -1685,10 +1685,12 @@ public sealed class EventManager : IDisposable
     // that, and the run by then is the new one — which aborted itself.
 
     // A Roomba sweep ended (GhSweepManager.SweepCompleted).
-    public void NoteRoombaFinished()
+    // finished: false for one that ended before it was done, which didn't get its
+    // job done.
+    public void NoteRoombaFinished(bool finished)
     {
         if (_driving) return;
-        if (_run is { Action: EventActionType.Roomba } run) Later(() => Complete(run, finished: true));
+        if (_run is { Action: EventActionType.Roomba } run) Later(() => Complete(run, finished));
     }
 
     // A bank / stash trip ended (AutoDepositManager.EventTripEnded).

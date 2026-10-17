@@ -178,6 +178,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.SimulatorRankings, SimulatorCharacter);
         _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
         _services.NavigationModeProvider = DescribeModeForReport;
+        _services.NavigationQueuedWalk = (
+            () => QueuedDestination is { } queued ? $"walk to {queued}, queued in the Navigation window," : null,
+            _ => QueuedDestination = null);
         // The Simulator's results are one character's on one game-data set: it is
         // told when either changes, and shows that pairing's own or nothing.
         _services.Profile.ProfileLoaded += OnSimulatorCharacterLoaded;
@@ -349,6 +352,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
         _services.PartyPathItemGate.HoldingWalkForChanged -= OnGatesChanged;
         _services.NavigationModeProvider = null;
+        _services.NavigationQueuedWalk = null;
         _services.MovementControl.PausedByTypedMoveChanged -= RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
         _services.SellDetour.DetouringChanged -= OnTripChanged;

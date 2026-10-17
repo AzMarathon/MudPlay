@@ -1,5 +1,19 @@
 # Version history
 
+## 3.181.12
+
+- Loading another character drops a loop held for a reconnect or loaded to start, with a notice
+- Stopping a pyramid climb or asylum maze solve stops the door it was bashing
+- A destination queued in the Navigation window is dropped when the game data changes
+- A Roomba sweep cut short says it stopped, and why, not "complete"; an event's Then counts it as not done
+- Roomba's Resume refuses an unfinished queue saved on other game data
+- A boss room picked after a game data change is not walked to
+- Route cards closed by a game data change say the walk was not started
+- A party's gate-item count asks nothing more once the game data changes
+- Help: switching game data forgets party hand-overs too
+- A second Stop or Reset States ends a party training trip waiting on the leader's own train
+- One failing held start no longer keeps a game data change from stopping the rest
+
 ## 3.181.1
 
 - Settings search highlights matching tabs like Help's search, and no longer hides the rest

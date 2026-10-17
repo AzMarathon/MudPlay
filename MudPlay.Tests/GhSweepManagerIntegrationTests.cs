@@ -1471,6 +1471,79 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Dispose();
     }
 
+    // The terminal, the Roomba tab's banner and its room list read the report: one
+    // cut short says it stopped, and why, never that it is complete.
+    [Fact]
+    public void TheReport_TellsAFinishedSweepFromOneStoppedEarly()
+    {
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+        List<GhSweepReport> reports = new();
+        h.Sweep.SweepCompleted += reports.Add;
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        Assert.True(Assert.Single(reports).Finished);
+
+        Assert.True(h.Sweep.Start());
+        h.Sweep.Stop("user stop from toolbar");
+
+        Assert.Equal(2, reports.Count);
+        Assert.False(reports[1].Finished);
+        Assert.Equal("user stop from toolbar", reports[1].StoppedBecause);
+
+        h.Dispose();
+    }
+
+    // The unfinished queue's rooms are numbers of the game data it was saved on.
+    [Fact]
+    public void Resume_IsRefused_UnderAnotherGameDataSet()
+    {
+        string set = "alpha";
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, activeGameData: () => set);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+        h.Feed("You notice a war hammer here.");
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        h.Sweep.Stop("test abort");
+        Assert.True(h.Sweep.CanResume);
+
+        set = "beta";
+        Assert.False(h.Sweep.Resume());
+        Assert.Equal("The unfinished sweep was saved on game data 'alpha', and 'beta' is active now: "
+            + "its rooms are that game data's.", h.Sweep.LastStartError);
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, h.Sweep.Phase);
+
+        set = "alpha";
+        Assert.True(h.Sweep.Resume());
+
+        h.Dispose();
+    }
+
+    [Fact]
+    public void Resume_FromThePersistedQueue_IsRefused_UnderAnotherGameDataSet()
+    {
+        ProfileService profile = new();
+        profile.LoadBlank();
+        GhSuspendedSweepStore store = new(profile);
+        store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "war hammer", 1, carried: false, hidden: false) }, "alpha");
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.False(h.Sweep.Resume());
+        Assert.StartsWith("The unfinished sweep was saved on game data 'alpha'", h.Sweep.LastStartError);
+        Assert.True(store.Any);
+
+        h.Dispose();
+    }
+
     [Fact]
     public void FullDestination_RerootsTheWholeBatchToTheBackupRoom()
     {
@@ -1630,7 +1703,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
     private static SweepHarness NewSweepHarness(string root, string scratchBbs,
         GhSuspendedSweepStore? suspended = null, int currentWeight = 1, int maxWeight = 100,
-        bool paradigm = true, string carriedInventory = "nothing")
+        bool paradigm = true, string carriedInventory = "nothing", Func<string?>? activeGameData = null)
     {
         Directory.CreateDirectory(Path.Combine(root, "alpha"));
         File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), """
@@ -1692,7 +1765,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             postToUi: action => action());
         sweep = new GhSweepManager(labels, runner, tracker, bfs, ground, names,
             router, coordinator, isOtherEngineBusy: () => false,
-            isParadigm: () => paradigm, inventory: inventory, suspendedStore: suspended);
+            isParadigm: () => paradigm, inventory: inventory, suspendedStore: suspended,
+            activeGameData: activeGameData);
 
         List<string> sent = new();
         sweep.SetWireSender(b => sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));

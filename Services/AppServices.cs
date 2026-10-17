@@ -1463,8 +1463,8 @@ public sealed class AppServices
         MonsterDropRouter.Cancel();
         ShortcutSource.Cancel();
         AutoLightShopRouter.Cancel();
-        // Route cards on screen were planned on the last set's rooms, and the
-        // "Resume first?" question is about a run of them.
+        // Route cards on screen were planned on the last set's rooms (each says so as
+        // it closes), and the "Resume first?" question is about a run of them.
         ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards();
         _resumeFirstQuestion?.NoCommand.Execute(null);
     }
@@ -2833,6 +2833,12 @@ public sealed class AppServices
     // the window's view model while it is open; cleared when it closes.
     public Func<string>? NavigationModeProvider { get; set; }
 
+    // The walk queued in the Navigation window for Go, while the window is open: what
+    // it holds as it reads in a notice, or null for none, and its drop. A change of
+    // game data drops it with the other held starts: a later Go would walk its room
+    // number on the other data (owner, 2026-10-16: "Clear it at the switch").
+    public (Func<string?> Held, Action<string> Drop)? NavigationQueuedWalk { get; set; }
+
     // Sets a user-started run out in the chosen mode (Auto-Combat off, or Sprint Mode
     // on, for the trip there). The auto-engine toggles live on the main window's
     // view-model, which registers this; the Navigation window, the route picker and
@@ -3608,6 +3614,15 @@ public sealed class AppServices
         // The remote handler shares AutoModeController with the Auto-All button,
         // so button + telepath drive one master switch. ResetSnapshot on load so
         // a freshly loaded character doesn't inherit the previous one's switch.
+        // A loop held to start by itself is dropped for another character ahead of
+        // that reset, which lets go of a restart held for the switch without a word.
+        Game.Map.HeldLoopsOnProfileSwap heldLoopsOnSwap = new(
+            () => MovementControl,
+            () => Profile.Current is null ? null : $"{Profile.CurrentBbsName}/{Profile.CurrentProfileName}",
+            notice => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice)),
+            action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+        Profile.ProfileLoaded += _ => heldLoopsOnSwap.OnProfileLoaded();
+        Profile.ProfileClosed += heldLoopsOnSwap.OnProfileClosed;
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
         // A `par` asked for to check who is in the party isn't a health read, so
         // the auto-heal toggle doesn't hold it. The master switch does.
@@ -7908,7 +7923,8 @@ public sealed class AppServices
             // a bashable no-key open and report back whether it opened.
             openDoor: (dir, done) => Door.Enqueue(
                 dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
-                reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
+                reply: r => done(r is Game.Map.DoorOpenResult.Opened)),
+            stopDoor: () => Door.StopAll());
         Walker.SetMazeSolver(MazeSolver);
         // Teleports on walks the client starts by itself (a walk the user starts states
         // its own preference and never reads this). Read live from the character, so a
@@ -7942,7 +7958,8 @@ public sealed class AppServices
             openDoor: (dir, statRequirement, canBash, keyItemId, sender, reply) =>
                 Door.Enqueue(dir, statRequirement, canBash, keyItemId, sender, reply),
             holdsItem: HoldsKeyItem,
-            gateEngineOn: gate => ReadAutoModeFlag(d => Game.Map.PyramidRunThrough.GateEngineOn(gate, d)));
+            gateEngineOn: gate => ReadAutoModeFlag(d => Game.Map.PyramidRunThrough.GateEngineOn(gate, d)),
+            stopDoor: () => Door.StopAll());
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
@@ -9203,7 +9220,8 @@ public sealed class AppServices
             // Carries an interrupted sweep forward: the items it was holding are
             // still in the pack with only its queue knowing where each belonged,
             // and its remaining plan is a full lap of the circuit to rebuild.
-            suspendedStore: GhSuspendedSweep);
+            suspendedStore: GhSuspendedSweep,
+            activeGameData: () => RoomGraph.ActiveSet);
 
         // The sweep manager is app-scoped but a resumable sweep is per-character:
         // drop the in-memory leftover on a character switch so Resume doesn't offer
@@ -9997,6 +10015,9 @@ public sealed class AppServices
             abandonErrand: reason =>
             {
                 StashTransfer.Cancel(reason);
+                // A leader's party trip waits on its own train with no walk to stop,
+                // and the trainer never answers a train it was told to cancel.
+                PartyTrain.CallOffTrip(reason);
                 TrainerWalk.Cancel(reason);
                 TrainFunding.Cancel(reason);
                 SellDetour.Cancel();
@@ -10019,6 +10040,8 @@ public sealed class AppServices
         // The same stop lets go of what a fight with a player would put back at
         // its end: the engines are idle for the fight, so the stop finds nothing.
         MovementControl.AddHeldStart(() => _pvpFightHeld.Held, reason => _pvpFightHeld.Drop(reason));
+        MovementControl.AddHeldStart(
+            () => NavigationQueuedWalk?.Held(), reason => NavigationQueuedWalk?.Drop(reason));
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10507,7 +10530,7 @@ public sealed class AppServices
         // after Events exists; MovementControl is built further up.
         MovementControl.Stopping += () => Events.NoteStop(MovementControl.GameDataChangeStop ?? "stopped by the user");
         Events.SetStatsReader(ReadEventReadings);
-        GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
+        GhSweep.SweepCompleted += report => Events.NoteRoombaFinished(report.Finished);
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
         // Boss-timer triggers: timed moments on the scheduler's 30 s clock, kills as
         // they're recorded.
@@ -15223,15 +15246,20 @@ public sealed class AppServices
         if (!PartyState.IsInParty || !PartyState.SelfIsLeader || PartyState.Members.Count <= 1) return;
         if (!Inventory.IsLoaded) return;
 
+        // Read in afresh mid-count, the route and its items are other data's: the
+        // walk being planned is dropped (RoutePlanInFlight), and asks nothing more.
+        GameDataCache.Load countedOn = GameData.ActiveLoad;
         var counted = new HashSet<int>();
         for (int round = 0; round < 3; round++)
         {
+            if (GameData.ActiveLoad != countedOn) return;
             List<int> toCount = PerMemberGateItemsOnRoute(source, destination, counted);
             if (toCount.Count == 0) return;
 
             var next = new Dictionary<int, (int, int)>(_partyGateCounts);
             foreach (int id in toCount)
             {
+                if (GameData.ActiveLoad != countedOn) return;
                 counted.Add(id);
                 if (ItemNames.GetName(id) is not { Length: > 0 } name) continue;
                 Game.Remote.PartyInventoryProbe.PartyItemResult asked = await PartyInventory.QueryAsync(id, name);
@@ -15668,6 +15696,7 @@ public sealed class AppServices
         AutoDeposit.Cancel();
         SellDetour.Cancel();
         AutoSell.Cancel();
+        PartyTrain.CallOffTrip(reason);
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         StashTransfer.Cancel(reason);

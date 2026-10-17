@@ -465,14 +465,21 @@ public sealed class MovementController : IDisposable
         string? errand = _activeErrand?.Invoke();
         if (errand is not null) stopped.Add(errand);
 
-        List<string> dropped = new();
-        if (_loops.PendingReconnectResumeName is { } heldLoop) dropped.Add($"loop '{heldLoop}', held for a reconnect,");
-        if (_loops.StagedLoop is { } staged) dropped.Add($"loop '{staged.Name}', loaded to start,");
+        List<string> dropped = HeldLoops();
         foreach ((Func<string?> held, Action<string> drop) in _heldStarts)
         {
-            if (held() is not { } heldStart) continue;
-            dropped.Add(heldStart);
-            drop(reason);
+            // One holder failing must not keep the stop from being made, nor the
+            // others from being let go.
+            try
+            {
+                if (held() is not { } heldStart) continue;
+                dropped.Add(heldStart);
+                drop(reason);
+            }
+            catch (Exception ex)
+            {
+                _log?.Warn("Movement", $"a held start could not be let go ({ex.GetType().Name}: {ex.Message}): {reason}");
+            }
         }
 
         // A start waiting on the "Resume first?" answer is a run of the last set's too.
@@ -486,15 +493,42 @@ public sealed class MovementController : IDisposable
         _loops.Unstage();
 
         if (stopped.Count == 0 && dropped.Count == 0) return null;
-        string what = string.Join("; ", new[]
+        string what = Sentence(string.Join("; ", new[]
         {
             stopped.Count == 0 ? null : string.Join(" and ", stopped) + " stopped",
             dropped.Count == 0 ? null : string.Join(" and ", dropped) + " dropped",
-        }.Where(part => part is not null));
-        what = char.ToUpperInvariant(what[0]) + what[1..];
+        }.Where(part => part is not null)));
         _log?.Info("Movement", $"{what}: {reason}");
         return what;
     }
+
+    // Another character was loaded, or the loaded one closed with none loaded after
+    // it (HeldLoopsOnProfileSwap). A swap is made with the link down, so nothing is
+    // running, but the loop set aside for the reconnect's restart, and the one loaded
+    // with Load, would start by themselves under the next character (user,
+    // 2026-10-12: "yes it should be dropped on a profile swap"). Returns what was
+    // dropped, as the start of the notice, or null when nothing was held.
+    public string? DropHeldLoopsForProfileChange(string why)
+    {
+        List<string> dropped = HeldLoops();
+        _loops.ClearPendingReconnectResume();
+        _loops.Unstage();
+        if (dropped.Count == 0) return null;
+        string what = Sentence(string.Join(" and ", dropped) + " dropped");
+        _log?.Info("Movement", $"{what}: {why}");
+        return what;
+    }
+
+    // The loops waiting to start by themselves, as they read in a notice.
+    private List<string> HeldLoops()
+    {
+        List<string> held = new();
+        if (_loops.PendingReconnectResumeName is { } resume) held.Add($"loop '{resume}', held for a reconnect,");
+        if (_loops.StagedLoop is { } staged) held.Add($"loop '{staged.Name}', loaded to start,");
+        return held;
+    }
+
+    private static string Sentence(string what) => char.ToUpperInvariant(what[0]) + what[1..];
 
     // Auto-All kill switch engaged: suspend an in-flight navigation the same way a
     // user Pause does — retaining the loop's step / walk destination / lair target
