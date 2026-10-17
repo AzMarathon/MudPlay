@@ -5317,7 +5317,7 @@ public sealed class AppServices
         // An applied line several spells print is read by which of them the room or
         // a monster in it casts. What of the room and its roster can be gone by is
         // CastReach.Standing's to say.
-        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
+        SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log, TBInfo);
         RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
         if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
         CastReach = new Game.Conditions.CastReach(SpellCasters, () =>

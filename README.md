@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.29**
-> - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
-> - Only a negate line about a cast you sent counts, matched by spell name and member; a resisted cast is not a negate
-> - A resisted attack spell counts toward its cast cap and as a miss, like a negated one
-> - A buff a party member negated or resisted is no longer counted as a miss of yours
+> **Version 3.181.32**
+> - Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
+> - Spells cast by an item, a textblock or an exit that the caster list missed are never ruled out (Stock's blazing comet, Paradigm's clean room)
+> - A spell that lands when another spell with a duration runs out is never ruled out by who is in the room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

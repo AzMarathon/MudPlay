@@ -1,5 +1,11 @@
 # Version history
 
+## 3.181.32
+
+- Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
+- Spells cast by an item, a textblock or an exit that the caster list missed are never ruled out (Stock's blazing comet, Paradigm's clean room)
+- A spell that lands when another spell with a duration runs out is never ruled out by who is in the room
+
 ## 3.181.29
 
 - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
