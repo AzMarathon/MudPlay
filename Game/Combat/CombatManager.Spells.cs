@@ -190,10 +190,9 @@ public sealed partial class CombatManager
     // spell, once cast while engaged, keeps hitting EVERY monster in the room each
     // round — survivors and mobs that roam in afterward — until a cast condition
     // fails (count < MinEnemies, MaxCastsPerRoom hit, or mana < the AoE's floor). It
-    // is NOT re-cast to cover new arrivals, and the game has NO engine-side dedup
-    // against recasting the same room spell: a redundant send BREAKS and restarts the
-    // channel (*Combat Off* + *Combat Engaged*), wasting the round (report
-    // paradigm-20260923-103938). Unlike _announcedSpellCode / _castingSpellTarget —
+    // is NOT re-cast to cover new arrivals: the channel already covers them, and a
+    // re-send before the round fires costs nothing but adds nothing (GAME_MECHANICS
+    // "Room-attack spells: cast bare, persistent channel"). Unlike _announcedSpellCode / _castingSpellTarget —
     // which a single kill clears so the round re-picks a fresh target — this marker
     // SURVIVES a kill (the channel outlives any one mob) and clears only on a genuine
     // end-of-fight (ClearAttackSpellCascadeState: room-clear / combat-off / death), a

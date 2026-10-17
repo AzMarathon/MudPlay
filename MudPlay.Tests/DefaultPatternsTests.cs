@@ -556,21 +556,20 @@ public sealed class DefaultPatternsTests
     public void SneakArrivalRegex_IgnoresTheSneakingOutForm(string line)
         => Assert.False(PatternById(KnownPatterns.SneakArrivalNotice).TryMatch(Line(line), out _));
 
-    // The room's line for a player's death: "has died." on record, "is dead." from
-    // the Stock engine.
-    [Theory]
-    [InlineData("Raijin has died.")]
-    [InlineData("Raijin is dead.")]
-    public void PartyMemberDiedRegex_ReadsBothWordings(string line)
+    // The room's line for a player's death is "<Name> is dead." on both realms.
+    [Fact]
+    public void PartyMemberDiedRegex_ReadsTheRoomLine()
     {
-        Assert.True(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line(line), out MatchResult r));
+        Assert.True(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line("Raijin is dead."), out MatchResult r));
         Assert.Equal("Raijin", r.Groups[0]);
     }
 
-    // A monster's own death sentence can end the same way; it names no one.
+    // A monster's own death sentence can end the same way; it names no one. And
+    // "<Name> has died." is no game line.
     [Theory]
     [InlineData("The roc hatchling lets out a squeal, and is dead.")]
     [InlineData("The crazed lunatic hugs his dead cat, and dies.")]
+    [InlineData("Raijin has died.")]
     public void PartyMemberDiedRegex_IgnoresAMonstersDeathSentence(string line)
         => Assert.False(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line(line), out _));
 

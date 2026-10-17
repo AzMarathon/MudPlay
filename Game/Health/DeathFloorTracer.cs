@@ -4,26 +4,30 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Health;
 
-// Traces a realm's true negative-HP death floor and refines
-// RealmProfile.PlayerDiesAtHp toward it from two independent kinds of evidence.
-// The seed (-25) is only a guess; both paths correct it downward:
-//   1. A clean *slow* death lands right at the floor, so its HP reading measures
-//      it exactly (RecordDeath).
-//   2. A *live* reading deep in the bleeding-out band that the character survived
-//      proves the floor sits below it — a hard hit we lived through is a valid
-//      lower bound even though it never qualifies as a slow death (NoteHp).
+// Traces a realm's negative-HP death floor and refines RealmProfile.PlayerDiesAtHp
+// toward it from HP readings the character survived. The seed (-25) is only a
+// guess; both paths only ever lower it, to one below a survived reading:
+//   1. The last HP read before a clean *slow* death (RecordDeath). It is taken
+//      as an HP the character lived through, so it proves only that the floor is
+//      below it. Whether a bleed-out's last prompt can show the floor itself is
+//      not confirmed (GAME_MECHANICS "Death threshold & consequences"); if it
+//      can, the floor this gives is one HP too deep, the safe side.
+//   2. A *live* reading deep in the bleeding-out band that a later in-band
+//      prompt proves was survived — a hard hit we lived through is a valid lower
+//      bound even though it never qualifies as a slow death (NoteHp).
+// Never raised: a floor set too shallow reads the character as already dead
+// while it still bleeds, and the emergency hang-up, which stops at the floor,
+// would not fire there.
 //
-// Why the HP trajectory and not the death line: MajorMUD prints exactly one
-// death message ("You have been slain by <killer>.") whether you were overkilled
-// by a single blow or bled out one tick at a time — a bleed-out still names the
-// last attacker, so the line can't tell the two apart. Only the HP trajectory
-// into death can. [CONFIRMED]
+// Why the HP trajectory and not the death line: MajorMUD prints the same death
+// line ("You have been killed!") whether you were overkilled by a single blow or
+// bled out one tick at a time, so the line can't tell the two apart. Only the HP
+// trajectory into death can. [CONFIRMED]
 //
-// Why only slow deaths measure the floor: the floor is a fixed per-realm
-// constant, but a bleed-out crosses it one small tick at a time and lands right
-// at it, so its HP reading is the floor. A single big hit overshoots far past
-// the floor with no clamp, so its reading understates (over-negatives) the floor
-// and must never refine it. [CONFIRMED]
+// Why only slow deaths count: a bleed-out crosses the floor one small tick at a
+// time, so its last reading sits within a tick of it. A single big hit
+// overshoots far past the floor with no clamp, so a reading it leaves
+// understates (over-negatives) the floor and must never refine it. [CONFIRMED]
 //
 // Classifier (self-calibrating, no magic bleed-tick constant): while HP <= 0 the
 // character is dropped and bleeding, so consecutive downward HP steps in that
@@ -141,9 +145,10 @@ public sealed class DeathFloorTracer : IDisposable
             $"refined {old} → {bound} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
     }
 
-    // The local player just died (wired to DeathLineWatcher.PlayerDied). Classify
-    // the death off the trajectory captured so far and, when it's a clean slow
-    // death, refine the active BBS's death floor to the measured HP.
+    // The local player just died (wired to DeathLineWatcher.PlayerDied, whose line
+    // comes before the respawn's full-HP prompt). Classify the death off the
+    // trajectory captured so far and, when it's a clean slow death, lower the
+    // active BBS's death floor to one below the last HP read, never raising it.
     public void RecordDeath()
     {
         // Snapshot + reset first: whatever happens, the next life starts with a
@@ -167,23 +172,24 @@ public sealed class DeathFloorTracer : IDisposable
         }
 
         int old = realm.PlayerDiesAtHp;
-        if (measured == old)
+        int bound = measured - 1;
+        if (bound >= old)
         {
             _log?.Debug(LogCategory,
-                $"slow death at HP {measured} confirms realm floor {old} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
+                $"slow death after HP {measured}: the floor is below it, and {old} already is (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
             return;
         }
 
-        realm.PlayerDiesAtHp = measured;
+        realm.PlayerDiesAtHp = bound;
         _saveBbs(active.Bbs);
         _log?.Info(LogCategory,
-            $"slow death at HP {measured} — refined realm floor {old} → {measured} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
+            $"slow death after HP {measured}, the last HP survived — refined realm floor {old} → {bound} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
     }
 
     // A death is a slow (measurable) death when we watched the character bleed
     // gradually into the band and cross the floor by a bleed tick, not a blow.
-    // measured = the accurate floor reading; reason = why a rejected death was
-    // rejected (for the log).
+    // measured = the last HP read, which was survived; reason = why a rejected
+    // death was rejected (for the log).
     private static bool IsSlowDeath(
         int? deathHp, bool sawBleed, int maxInBandStep, int maxHp,
         out int measured, out string reason)
