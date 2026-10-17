@@ -6,11 +6,10 @@ namespace MudPlay.Game.Calculators;
 //     (some monsters carry a Dodge ability; they have no alignment ward),
 //     per-hit damage after the monster's damage-resist, then DPS
 //     (hit% * dmg/hit * swings) and rounds-to-kill.
-//   Monster → player — the monster's primary physical attack's hit chance vs
-//     our AC + dodge (+ our prot-evil / prot-good only when the monster is
-//     evil / good), and its per-hit damage after our damage-resist. Physical
-//     attacks reduce by DR; elemental / magic resist doesn't apply to the
-//     physical melee slot.
+//   Monster → player — the monster's primary physical attack's per-hit damage
+//     after our damage-resist and its swings per round. Physical attacks reduce
+//     by DR; elemental / magic resist doesn't apply to the physical melee slot.
+//     Its chance to hit us is IncomingHitEstimator's, across every attack.
 // Pure math — the caller extracts the monster row and current player profile
 // and passes typed values in.
 public static class MonsterMatchupCalculator
@@ -52,21 +51,12 @@ public static class MonsterMatchupCalculator
         double rounds = dps > 0 ? System.Math.Ceiling(monster.Hp / dps) : 0;
         int roundsToKill = rounds >= int.MaxValue ? int.MaxValue : (int)rounds;
 
-        // Monster → player. Only the primary physical slot is previewed.
-        int monsterHit = 0;
+        // Monster → player: the primary physical slot's damage and swings (its chance
+        // to hit the player is IncomingHitEstimator's, across every attack).
         int monsterDmgPerHit = 0;
         int monsterSwings = 0;
-        double monsterDps = 0;
         if (monster.HasPhysicalAttack)
         {
-            HitCalcResult mHit = CombatCalculator.CalculateHitChance(
-                attackerAccuracy: monster.AttackAccuracy,
-                defenderAC: player.ArmourClass,
-                defenderDodge: player.Dodge,
-                protEvil: monster.IsEvil ? player.ProtEvil : 0,
-                protGood: monster.IsGood ? player.ProtGood : 0,
-                realmType: realm);
-            monsterHit = mHit.OverallHitPercent;
             monsterDmgPerHit = System.Math.Max(0, monster.AvgAttackDamage - player.DamageResist);
             // Monster attacks/round = its per-round energy budget divided by the
             // primary attack's energy cost — the same energy/AttEnergy formula the
@@ -75,7 +65,6 @@ public static class MonsterMatchupCalculator
             // is what makes the monster attack less. Falls back to a single swing
             // when the row carries no usable energy figures.
             monsterSwings = MonsterSwingsPerRound(monster.EnergyPerRound, monster.PrimaryAttackEnergy);
-            monsterDps = monsterHit / 100.0 * monsterDmgPerHit * monsterSwings;
         }
 
         return new MonsterMatchupResult(
@@ -87,8 +76,7 @@ public static class MonsterMatchupCalculator
             HasWeapon: player.HasWeapon,
             MonsterHasPhysicalAttack: monster.HasPhysicalAttack,
             MonsterDamagePerHit: monsterDmgPerHit,
-            MonsterSwingsPerRound: monsterSwings,
-            MonsterDps: monsterDps);
+            MonsterSwingsPerRound: monsterSwings);
     }
 
     // Attacks/round the monster lands with its primary physical slot: the
@@ -104,17 +92,13 @@ public static class MonsterMatchupCalculator
 }
 
 // Player-side inputs to MonsterMatchupCalculator.Compute — the offensive numbers
-// (normal-attack accuracy, average weapon damage, swings/round) and the
-// defensive numbers (AC, dodge, prot wards, DR).
+// (normal-attack accuracy, average weapon damage, swings/round) and the DR a
+// monster's hit is reduced by.
 //   Realm             — active realm, selects the Stock / ParaMUD hit formula.
 //   NormalAccuracy    — computed normal-attack accuracy (the to-hit number).
 //   AvgWeaponDamage   — avg of the normal-attack min/max damage, before monster DR.
 //   SwingsPerRound    — swings landed per round with the current weapon.
 //   HasWeapon         — false when unarmed, gates DPS / rounds-to-kill.
-//   ArmourClass       — player AC, the monster swings against.
-//   Dodge             — player raw dodge value (not a percentage).
-//   ProtEvil          — prot-evil ward, applied only when the monster is evil.
-//   ProtGood          — prot-good ward, applied only when the monster is good.
 //   DamageResist      — player DR, subtracted from each monster hit.
 //   CritChancePercent — normal-attack crit chance (0-100), gear/quest crit +
 //                       Quick-and-Deadly. Folds into DPS, not the per-hit display.
@@ -133,10 +117,6 @@ public readonly record struct PlayerMatchupProfile(
     int AvgWeaponDamage,
     double SwingsPerRound,
     bool HasWeapon,
-    int ArmourClass,
-    int Dodge,
-    int ProtEvil,
-    int ProtGood,
     int DamageResist,
     int CritChancePercent = 0,
     int AvgCritDamage = 0,
@@ -148,17 +128,13 @@ public readonly record struct PlayerMatchupProfile(
     int QuickAndDeadlyBonus = 0);
 
 // Monster-side inputs to MonsterMatchupCalculator.Compute — defense
-// (AC / DR / HP) and the primary physical attack slot (accuracy + average
-// damage), plus the evil / good flags that gate the player's wards.
+// (AC / DR / HP) and the primary physical attack slot (average damage, energy).
 //   ArmourClass       — monster AC the player swings against.
 //   DamageResist      — monster DR, subtracted from each player hit.
 //   Hp                — monster max HP, the rounds-to-kill denominator.
 //   Dodge             — monster raw dodge (the Dodge ability, abil 34), 0 for most.
 //   HasPhysicalAttack — true when the monster has a melee / rob slot to preview.
-//   AttackAccuracy    — primary physical slot's to-hit accuracy.
 //   AvgAttackDamage   — avg of the primary physical slot's min/max, before player DR.
-//   IsEvil            — monster is evil (Align in {1,2,5,6}), enables prot-evil.
-//   IsGood            — monster is good (Align in {0,4}), enables prot-good.
 //   EnergyPerRound    — the monster's per-round energy budget (row Energy).
 //   PrimaryAttackEnergy — the primary physical slot's per-attack energy cost;
 //                       swings/round = EnergyPerRound / this. A slowness debuff
@@ -169,15 +145,12 @@ public readonly record struct MonsterMatchupProfile(
     int Hp,
     int Dodge,
     bool HasPhysicalAttack,
-    int AttackAccuracy,
     int AvgAttackDamage,
-    bool IsEvil,
-    bool IsGood,
     int EnergyPerRound = 0,
     int PrimaryAttackEnergy = 0);
 
-// Output of MonsterMatchupCalculator.Compute — both hit directions plus the
-// player's DPS / rounds-to-kill projection.
+// Output of MonsterMatchupCalculator.Compute — the player's hit chance and
+// DPS / rounds-to-kill projection, plus the monster's damage and swings.
 //   PlayerHitPercent          — player normal-attack hit chance vs monster AC + dodge.
 //   PlayerDamagePerHit        — player avg damage per landed hit, after monster DR.
 //   PlayerSwingsPerRound      — swings/round used in the DPS projection (0 unarmed).
@@ -189,7 +162,6 @@ public readonly record struct MonsterMatchupProfile(
 //   MonsterDamagePerHit       — monster avg damage per landed hit, after player DR.
 //   MonsterSwingsPerRound     — attacks/round the monster lands (energy/attEnergy),
 //                               thinned by a slowness debuff; 0 with no physical slot.
-//   MonsterDps                — monster damage/round: hit% * dmg/hit * swings.
 public readonly record struct MonsterMatchupResult(
     int PlayerHitPercent,
     int PlayerDamagePerHit,
@@ -199,8 +171,7 @@ public readonly record struct MonsterMatchupResult(
     bool HasWeapon,
     bool MonsterHasPhysicalAttack,
     int MonsterDamagePerHit,
-    int MonsterSwingsPerRound = 0,
-    double MonsterDps = 0);
+    int MonsterSwingsPerRound = 0);
 
 // One of the player's known, damage-dealing attack spells — the input
 // MonsterMatchupCalculator.RankAttackSpells scores against a specific
@@ -259,53 +230,18 @@ public static class MonsterMatchupCalculatorSpells
     public static bool WeaponMeetsMagical(int weaponHitMagic, int monsterMagical)
         => weaponHitMagic >= monsterMagical;
 
-    // Chance THIS monster's own attack lands on a defender with the given
-    // live AC/Dodge, given whichever ward (Prot Evil/Prot Good) applies
-    // against its alignment — the Monster → player direction Compute() above
-    // already implements, exposed standalone since Monster Intel's "Hits You
-    // %" column needs it for every catalog row, not a single picked monster.
-    // Null when the monster has no catalogued physical attack to compute
-    // against. MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
-    public static int? IncomingHitPercent(
-        (int Majority, int Max)? physicalAccuracy, int alignment,
-        int defenderAc, int defenderDodge, int protEvil, int protGood,
-        RealmType realm, bool hasShadow = false,
-        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint)
-        => physicalAccuracy is { } acc
-            ? AttackHitPercent(acc.Majority, alignment, defenderAc, defenderDodge, protEvil,
-                protGood, realm, hasShadow, vileWard, defenderEvil)
-            : null;
-
-    // Chance ONE monster attack of the given accuracy lands on the defender, as a
-    // whole percent, applying whichever ward (Prot Evil / Prot Good / Vile Ward)
-    // matches the monster's alignment. The loop simulator's per-swing roll uses it;
-    // Monster Intel reads the unrounded AttackHitChance below.
-    public static int AttackHitPercent(
-        int accuracy, int alignment,
-        int defenderAc, int defenderDodge, int protEvil, int protGood,
-        RealmType realm, bool hasShadow = false,
-        int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint,
-        int defenderArmourType = 0)
-        => AttackHit(accuracy, alignment, defenderAc, defenderDodge, protEvil, protGood,
-            realm, hasShadow, vileWard, defenderEvil, defenderArmourType).OverallHitPercent;
-
-    // The same chance unrounded, so the defender's dodge still shows against a hit
-    // chance at or near the floor.
+    // Chance ONE monster attack of the given accuracy lands on the defender,
+    // applying whichever ward (Prot Evil / Prot Good / Vile Ward) matches the
+    // monster's alignment, unrounded so the defender's dodge still shows against a
+    // hit chance at or near the floor. Monster Intel, route Details and the loop
+    // simulator all read it (through IncomingHitEstimator).
+    // MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
     public static double AttackHitChance(
         int accuracy, int alignment,
         int defenderAc, int defenderDodge, int protEvil, int protGood,
         RealmType realm, bool hasShadow = false,
         int vileWard = 0, EvilLevel defenderEvil = EvilLevel.Saint,
         int defenderArmourType = 0)
-        => AttackHit(accuracy, alignment, defenderAc, defenderDodge, protEvil, protGood,
-            realm, hasShadow, vileWard, defenderEvil, defenderArmourType).OverallHitChance;
-
-    // MajorMUD alignment codes 1/2/5/6 are evil, 0/4 are good.
-    private static HitCalcResult AttackHit(
-        int accuracy, int alignment,
-        int defenderAc, int defenderDodge, int protEvil, int protGood,
-        RealmType realm, bool hasShadow, int vileWard, EvilLevel defenderEvil,
-        int defenderArmourType)
     {
         bool isEvil = alignment is 1 or 2 or 5 or 6;
         bool isGood = alignment is 0 or 4;
@@ -323,7 +259,7 @@ public static class MonsterMatchupCalculatorSpells
             evilLevel: defenderEvil,
             hasShadow: hasShadow,
             defenderArmourType: defenderArmourType,
-            realmType: realm);
+            realmType: realm).OverallHitChance;
     }
 
     // A monster's overall chance to land a hit when it swings, blended across ALL

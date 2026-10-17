@@ -11,7 +11,7 @@ public static class AttackEstimator
     {
         var monster = new MonsterMatchupProfile(
             ArmourClass: target.ArmourClass, DamageResist: target.DamageResist, Hp: 0, Dodge: target.Dodge,
-            HasPhysicalAttack: false, AttackAccuracy: 0, AvgAttackDamage: 0, IsEvil: false, IsGood: false);
+            HasPhysicalAttack: false, AvgAttackDamage: 0);
 
         if (type == MudAttackType.Backstab)
         {

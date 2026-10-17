@@ -730,9 +730,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             Hp: m.Hp,
             Dodge: m.Dodge - debuff.DodgeDelta,
             HasPhysicalAttack: m.PhysicalAccuracy is not null,
-            AttackAccuracy: (m.PhysicalAccuracy?.Majority ?? 0) - debuff.AccDelta,
             AvgAttackDamage: m.PrimaryPhysicalAvgDamage,
-            IsEvil: m.Align is 1 or 2 or 5 or 6, IsGood: m.Align is 0 or 4,
             EnergyPerRound: m.Energy,
             PrimaryAttackEnergy: attEnergy);
     }

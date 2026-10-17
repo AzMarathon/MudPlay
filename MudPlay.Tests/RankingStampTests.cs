@@ -266,7 +266,7 @@ public sealed class RankingStampTests : IDisposable
         CombatSettings? combat = null, Func<int, double>? hpResting = null) => new(
         RealmType.ParaMud, Level: 30, MaxHp: maxHp, MaxMana: 100,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 100, AvgWeaponDamage: damage,
-            SwingsPerRound: 2, HasWeapon: true, ArmourClass: 30, Dodge: 10, ProtEvil: 0, ProtGood: 0, DamageResist: 2),
+            SwingsPerRound: 2, HasWeapon: true, DamageResist: 2),
         WeaponHitMagic: 1,
         Defense: new PlayerDefenseProfile(30, 10, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 30),
         Regen: new SimRegen(_ => 2, hpResting ?? (_ => 12), extra => extra * 0.2, 5, RealmRegenProfile.ParaMud, RestReplacesStanding: true),

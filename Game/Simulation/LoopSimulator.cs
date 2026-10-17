@@ -55,7 +55,7 @@ public static class LoopSimulator
     //   - AreaTours: which lairs make an area and the order its tour takes them in;
     //   - the walk pace (AppServices.LoopSimulationWalkSeconds and the travel models
     //     behind it), which sets how many laps fit in the hour.
-    public const int SimulatorVersion = 1;
+    public const int SimulatorVersion = 2;
 
     public static LoopSimSummary RunMany(
         SimCharacter character, IReadOnlyList<SimRoom> lap, SimWorld world,
@@ -590,7 +590,7 @@ public static class LoopSimulator
             MonsterDebuffEffect d = target.Debuff;
             var monster = new MonsterMatchupProfile(e.ArmourClass - d.AcDelta,
                 (int)Math.Max(0, e.DamageResist - d.DrDelta), target.Hp, e.Dodge - d.DodgeDelta,
-                HasPhysicalAttack: false, AttackAccuracy: 0, AvgAttackDamage: 0, IsEvil: false, IsGood: false);
+                HasPhysicalAttack: false, AvgAttackDamage: 0);
             BackstabMatchup stab = BackstabMatchupCalculator.Evaluate(
                 bs with { NormalAccuracy = bs.NormalAccuracy + ProcSum(p => p.AccuracyDelta) }, monster, e.BsDefense, seesHidden: false);
             if (!Roll(stab.HitPercent)) return;
@@ -655,10 +655,14 @@ public static class LoopSimulator
                     mob.Energy -= cost;
                     if (a.Type == 1)
                     {
-                        int hit = MonsterMatchupCalculatorSpells.AttackHitPercent(a.Accuracy - d.AccDelta, e.Align,
-                            def.Ac + ProcSum(p => p.AcDelta), def.Dodge + ProcSum(p => p.DodgeDelta),
-                            def.ProtEvil, def.ProtGood, _ch.Realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
-                        if (!Roll(hit)) continue;
+                        // The same unrounded chance Monster Intel shows: a whole percent
+                        // truncated the dodge share away near the floor.
+                        PlayerDefenseProfile now = def with
+                        {
+                            Ac = def.Ac + ProcSum(p => p.AcDelta),
+                            Dodge = def.Dodge + ProcSum(p => p.DodgeDelta),
+                        };
+                        if (!Roll(IncomingHitEstimator.AttackHitChance(a, e.Align, now, _ch.Realm, d.AccDelta))) continue;
                         Hurt(Math.Max(0, Between(a.MinDamage, a.MaxDamage) - _ch.Melee.DamageResist));
                         // A landed attack fires its hit spell (GAME_MECHANICS "Monster
                         // on-hit procs (`AttHitSpell-N`) are physical attacks, not casts").
@@ -1066,6 +1070,10 @@ public static class LoopSimulator
         private void Count(string code) => _casts[code] = _casts.GetValueOrDefault(code) + 1;
 
         private bool Roll(int percent) => percent >= 100 || (percent > 0 && _rng.Next(100) < percent);
+
+        // A fractional chance, from one draw like the whole-percent roll; for a whole
+        // percent the two agree draw for draw.
+        private bool Roll(double percent) => percent >= 100 || (percent > 0 && _rng.NextDouble() * 100 < percent);
 
         private int Between(long min, long max) =>
             (int)(min >= max ? max : min + (long)(_rng.NextDouble() * (max - min + 1)));

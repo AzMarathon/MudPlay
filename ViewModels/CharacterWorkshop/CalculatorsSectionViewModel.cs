@@ -1347,10 +1347,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             Hp: 0,
             Dodge: MonsterDodge,
             HasPhysicalAttack: false,
-            AttackAccuracy: 0,
-            AvgAttackDamage: 0,
-            IsEvil: _monsterIsEvil,
-            IsGood: _monsterIsGood);
+            AvgAttackDamage: 0);
 
         var player = new PlayerMatchupProfile(
             Realm: _realm,
@@ -1358,10 +1355,6 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
             AvgWeaponDamage: _avgWeaponDamage,
             SwingsPerRound: _swingsPerRound,
             HasWeapon: _hasWeapon,
-            ArmourClass: PlayerAc,
-            Dodge: PlayerDodge,
-            ProtEvil: _protEvil,
-            ProtGood: _protGood,
             DamageResist: _damageResist,
             CritChancePercent: _critChance,
             AvgCritDamage: _avgCritDamage);

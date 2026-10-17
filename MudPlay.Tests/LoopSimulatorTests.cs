@@ -43,8 +43,7 @@ public sealed class LoopSimulatorTests
         int alignment = 0, RealmType realm = RealmType.ParaMud) => new(
         realm, Level: 30, MaxHp: maxHp, MaxMana: maxMana,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 9999, AvgWeaponDamage: damage,
-            SwingsPerRound: swings, HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0,
-            DamageResist: 0),
+            SwingsPerRound: swings, HasWeapon: true, DamageResist: 0),
         WeaponHitMagic: 10,
         Defense: new PlayerDefenseProfile(0, 0, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 0),
         // 15 HP a rest gain (every 5 s) and extra × 0.3 mana a pass (every 30 s): the same
@@ -83,8 +82,7 @@ public sealed class LoopSimulatorTests
     private static SimCharacter Stabber(int stab = 500) => Character(maxHp: 100, damage: 1) with
     {
         Backstab = new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 9999, AvgWeaponDamage: 1,
-            SwingsPerRound: 1, HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0,
-            DamageResist: 0, BackstabMin: stab, BackstabMax: stab),
+            SwingsPerRound: 1, HasWeapon: true, DamageResist: 0, BackstabMin: stab, BackstabMax: stab),
         BackstabHitMagic = 10,
         Combat = new CombatSettings { DoBackstab = true },
     };
@@ -134,6 +132,29 @@ public sealed class LoopSimulatorTests
         Assert.True(run.Kills > 0);
         Assert.Equal(run.Kills, run.Casts.GetValueOrDefault("bs"));
         Assert.True(run.Casts.GetValueOrDefault(new CombatSettings().NormalAttackCommand) >= run.Kills);
+    }
+
+    // A monster's swing lands at the same unrounded chance Monster Intel shows, so
+    // dodge still counts at the floor (report paradigm-20261014-121847). With an AC
+    // that pins the hit at Paradigm's 2% floor, raw dodge 80 dodges 40% of 150
+    // accuracy: 1.2%. The whole-percent roll it replaced read 2 − 2·40/100 = 2, so
+    // the dodging character took exactly what the non-dodging one did.
+    [Fact]
+    public void DodgeCountsAgainstASwingAtTheFloor()
+    {
+        SimRoom[] lap = { Lair(1, 1, 30, 3), Empty(2) };
+        SimWorld world = World(Mob(3, hp: 1_000_000, exp: 50, align: 3, Hit(1, 1, accuracy: 150)));
+        SimCharacter armoured = Character(maxHp: 10_000, damage: 1) with
+        {
+            Defense = new PlayerDefenseProfile(9999, 0, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 9999),
+        };
+        SimCharacter dodging = armoured with { Defense = armoured.Defense with { Dodge = 80 } };
+
+        LoopSimRun plain = LoopSimulator.Run(armoured, lap, world, secondsPerStep: 1, hours: 1, seed: 7);
+        LoopSimRun dodged = LoopSimulator.Run(dodging, lap, world, secondsPerStep: 1, hours: 1, seed: 7);
+
+        Assert.True(dodged.DamageTaken > 0, "a 1.2% swing still lands over an hour");
+        Assert.True(dodged.DamageTaken < plain.DamageTaken, "dodge must lower what gets through at the floor");
     }
 
     [Fact]

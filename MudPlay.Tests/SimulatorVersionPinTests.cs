@@ -34,7 +34,7 @@ namespace MudPlay.Tests;
 public sealed class SimulatorVersionPinTests(ITestOutputHelper output)
 {
     // The SimulatorVersion the figures below were taken at.
-    private const int PinnedAt = 1;
+    private const int PinnedAt = 2;
 
     private const string Bump =
         "The simulation gives a different result for the same character, lap and game data. If that is intended, " +
@@ -83,8 +83,7 @@ public sealed class SimulatorVersionPinTests(ITestOutputHelper output)
     private static SimCharacter Character() => new(
         RealmType.ParaMud, Level: 30, MaxHp: 180, MaxMana: 120,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 120, AvgWeaponDamage: 22,
-            SwingsPerRound: 2.5, HasWeapon: true, ArmourClass: 40, Dodge: 12, ProtEvil: 0, ProtGood: 0,
-            DamageResist: 3, CritChancePercent: 8, AvgCritDamage: 60, MinDamage: 12, MaxDamage: 32),
+            SwingsPerRound: 2.5, HasWeapon: true, DamageResist: 3, CritChancePercent: 8, AvgCritDamage: 60, MinDamage: 12, MaxDamage: 32),
         WeaponHitMagic: 2,
         Defense: new PlayerDefenseProfile(40, 12, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 40),
         Regen: new SimRegen(_ => 2, _ => 14, extra => 3 + extra * 0.1, 6, RealmRegenProfile.ParaMud, RestReplacesStanding: true),
@@ -151,8 +150,7 @@ public sealed class SimulatorVersionPinTests(ITestOutputHelper output)
         SpellSlots = new SpellsSettings { MinorHealSpell = "mend" },
         Buffs = new[] { new SimBuff("bles", 10, false, false, false, null, 0, false, BlessIfAboveMa: 20) },
         Backstab = new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 140, AvgWeaponDamage: 70,
-            SwingsPerRound: 1, HasWeapon: true, ArmourClass: 40, Dodge: 12, ProtEvil: 0, ProtGood: 0,
-            DamageResist: 3, BackstabMin: 55, BackstabMax: 85),
+            SwingsPerRound: 1, HasWeapon: true, DamageResist: 3, BackstabMin: 55, BackstabMax: 85),
         BackstabHitMagic = 2,
     };
 
@@ -203,8 +201,8 @@ public sealed class SimulatorVersionPinTests(ITestOutputHelper output)
     }
 
     private const string PinnedSneak =
-        "exp 19900 kills 45 laps 34 dmg 2844 lowHp 41 lowMa 0 attack 657.6 rest 218.4 med 2455.6 move 268.4 flees 13 died no casts a=1,bles=10,bolt=118,bs=39,mend=71 | " +
-        "exp 19400 kills 46 laps 29 dmg 2915 lowHp 38 lowMa 1 attack 666.5 rest 176.6 med 2517.8 move 239.1 flees 13 died no casts a=1,bles=9,bolt=129,bs=34,mend=74";
+        "exp 21900 kills 51 laps 50 dmg 2881 lowHp 41 lowMa 1 attack 684.2 rest 161.6 med 2389.8 move 364.4 flees 12 died no casts a=4,bles=10,bolt=118,bs=46,mend=74 | " +
+        "exp 20100 kills 47 laps 34 dmg 2754 lowHp 38 lowMa 1 attack 659.1 rest 148.0 med 2523.8 move 269.1 flees 13 died no casts bles=10,bolt=128,bs=36,mend=67";
 
     // ----- What a kept ranking is compared by ---------
 
@@ -226,6 +224,6 @@ public sealed class SimulatorVersionPinTests(ITestOutputHelper output)
     }
 
     private const string PinnedGroups =
-        "stats or gear=dd74438a80cd2c95 spells=ab646fd58ac771c1 settings=a94ce4b93dcdf8bc game-data edits=edits " +
+        "stats or gear=7300ec2bcee84536 spells=ab646fd58ac771c1 settings=a94ce4b93dcdf8bc game-data edits=edits " +
         "reach=e4155c9c19ec28b1 loops=c40c5515bd5b1716b6113fd87190266786f9cdca2ad48af747afce130533d5a3";
 }

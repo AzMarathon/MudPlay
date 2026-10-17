@@ -713,11 +713,6 @@ public static class CharacterCalculator
             AvgWeaponDamage: avgDamage,
             SwingsPerRound: swingsPerRound,
             HasWeapon: hasWeapon,
-            ArmourClass: stats.ArmourClass,
-            Dodge: CombatCalculator.CalcDodge(
-                stats.Level, stats.Agility, stats.Charm, t.PlusDodge, encum.CurrentWeight, encum.MaxWeight, realm),
-            ProtEvil: t.PlusProtEvil,
-            ProtGood: t.PlusProtGood,
             DamageResist: (int)t.PlusDR,
             CritChancePercent: critChance,
             AvgCritDamage: avgCritDamage,

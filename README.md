@@ -7,6 +7,7 @@
 > - Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
 > - Your Matchup lists each of a monster's physical attacks under the Melee line
 > - Bug reports carry the AC, dodge and class floor the hit chances are worked from
+> - Loop simulator rolls monster swings at the same chance, so dodge counts there too (area rankings saved before are dropped)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

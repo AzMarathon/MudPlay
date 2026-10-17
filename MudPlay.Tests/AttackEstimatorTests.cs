@@ -15,7 +15,7 @@ public sealed class AttackEstimatorTests
         RealmType realm, int accuracy, int min, int max, double swings = 1,
         int crit = 0, int quickAndDeadly = 0, int drMultiplier = 1) =>
         new(realm, NormalAccuracy: accuracy, AvgWeaponDamage: (min + max) / 2, SwingsPerRound: swings,
-            HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0, DamageResist: 0,
+            HasWeapon: true, DamageResist: 0,
             CritChancePercent: crit, AvgCritDamage: max * 3, MonsterDrMultiplier: drMultiplier,
             BackstabMin: min, BackstabMax: max, MinDamage: min, MaxDamage: max,
             QuickAndDeadlyBonus: quickAndDeadly);

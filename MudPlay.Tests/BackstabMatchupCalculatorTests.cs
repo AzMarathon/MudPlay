@@ -9,11 +9,11 @@ namespace MudPlay.Tests;
 public sealed class BackstabMatchupCalculatorTests
 {
     private static PlayerMatchupProfile Stabber(int accuracy, int min, int max, RealmType realm = RealmType.Stock) =>
-        new(realm, accuracy, (min + max) / 2, 1, true, 0, 0, 0, 0, 0,
+        new(realm, accuracy, (min + max) / 2, 1, true, 0,
             BackstabMin: min, BackstabMax: max);
 
     private static MonsterMatchupProfile Target(int hp, int dr = 0, int ac = 20) =>
-        new(ac, dr, hp, 0, true, 50, 5, false, false);
+        new(ac, dr, hp, 0, true, 5);
 
     // The user's example: a 37 min stab against 35 HP looks like a kill, but 5 DR
     // leaves 32 — only a high roll finishes it.
