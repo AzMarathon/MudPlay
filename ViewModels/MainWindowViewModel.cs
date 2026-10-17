@@ -160,7 +160,7 @@ public partial class MainWindowViewModel : ObservableObject
     public ObservableCollection<ToolbarButtonItem> ToolbarItems { get; } = new();
 
     // File → Quick Connect target. Wins over ResolveActiveBbs once set;
-    // cleared when the user picks a (different) BBS via Settings → BBS, or
+    // cleared when the user picks a (different) BBS via Settings → BBS + Display, or
     // when a new profile loads.
     private (string Host, int Port)? _quickConnectTarget;
 
@@ -1163,7 +1163,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetTerminalNotice(
             text => Avalonia.Threading.Dispatcher.UIThread.Post(
                 () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
-        // Let non-main surfaces (Settings → BBS) open the Profile Management window.
+        // Let non-main surfaces (Settings → BBS + Display) open the Profile Management window.
         AppServices.Current.SetOpenProfileManager(OpenProfileManager);
         AppServices.Current.SetStatusBarPreviewFactory(() => new ViewModels.StatusBar.StatusBarViewModel(this, preview: true));
         RebuildCombatProfilesMenu();
@@ -2672,9 +2672,9 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Host) || Port <= 0)
         {
-            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS, PICK ONE, AND SAVE.]",
+            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS + DISPLAY, PICK ONE, AND SAVE.]",
                                 TerminalStatusKind.Error);
-            AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS first.");
+            AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
         }
 
@@ -4750,7 +4750,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (BbsToSaveUnder(selectedBbs) is not { } bbs)
         {
             ShowInfoDialog("Save profile",
-                "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
+                "Add a BBS first (Settings → BBS + Display). Profiles are saved under a BBS.");
             return;
         }
         if (await NameAndSaveAsync(bbs,
@@ -4846,7 +4846,7 @@ public partial class MainWindowViewModel : ObservableObject
         if (BbsToSaveUnder(selectedBbs) is not { } bbs)
         {
             ShowInfoDialog("Save profile",
-                "Add a BBS first (Settings → BBS). Profiles are saved under a BBS.");
+                "Add a BBS first (Settings → BBS + Display). Profiles are saved under a BBS.");
             return;
         }
         await NameAndSaveAsync(bbs, note: null);

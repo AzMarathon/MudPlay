@@ -1049,7 +1049,7 @@ public sealed class AppServices
     // Read by the Player Workshop's Character Info tab.
     public Game.AlignmentTracker Alignment { get; }
 
-    // Add / rename / remove a BBS's realms (Profile Management, Settings → BBS).
+    // Add / rename / remove a BBS's realms (Profile Management, Settings → BBS + Display).
     public RealmCatalog Realms { get; }
 
     // Drives the train stats screen to apply the saved CP plan. Wrapped
@@ -3027,7 +3027,7 @@ public sealed class AppServices
         Dialogs = new DialogService();
         Confirm = new ConfirmService(Dialogs);
         // Hydrate the live confirm mirror from Global tier now and on
-        // every subsequent global-settings save (Settings → BBS's
+        // every subsequent global-settings save (Settings → BBS + Display's
         // confirm checkboxes write to Global through this path).
         ApplyConfirmFromGlobalSettings();
         Settings.GlobalSettingsChanged += _ => ApplyConfirmFromGlobalSettings();
@@ -12108,7 +12108,7 @@ public sealed class AppServices
             : $"in {named}";
     }
 
-    // Says in the program log what the realm's hang-up penalty (Settings → BBS)
+    // Says in the program log what the realm's hang-up penalty (Settings → BBS + Display)
     // makes of a hang-up the client has just sent: the health settings', the PvP
     // response's, a Hangup-relationship monster's, or an @panic / @hangup /
     // @relog. Which side applies comes from what is already tracked, a fight

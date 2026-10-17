@@ -133,7 +133,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // picks (merged + sorted together, see AddAllBlesses) but NEVER pre-checked:
     // a whole-party cast affects other players, a bigger decision than what a bulk
     // "add my blesses" click should make on someone's behalf, so the player always
-    // opts in per-buff by hand via the row's own Party Wide toggle.
+    // opts in per-buff by hand via the row's own Party toggle.
     private IReadOnlyList<Game.Spells.SelfBlessCandidate> _partyBlessCandidates =
         Array.Empty<Game.Spells.SelfBlessCandidate>();
 
@@ -861,7 +861,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // the rest are added unchecked so the player can swap a different family
     // member in by hand (unchecking one and checking another triggers the same
     // live mutual-exclusion as any other row — see OnSelfCastActivated). Party
-    // picks are ALWAYS added unchecked (Party Wide off) — a whole-party cast
+    // picks are ALWAYS added unchecked (Party off) — a whole-party cast
     // affects other players, so the player opts into each one explicitly.
     [RelayCommand]
     private void AddAllBlesses()

@@ -159,7 +159,7 @@
                             <NumericUpDown Grid.Row="7" Grid.Column="1"
                                            Value="{Binding HangIfBelowHp, Mode=TwoWay}"
                                            Minimum="{Binding HangMinimum}" Maximum="{Binding HpThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use 'Disable hang-ups' in Other settings."/>
+                                           ToolTip.Tip="Drop the connection when HP falls this low — emergency last resort. This can go negative in either mode, down to the realm death floor (HP % goes negative while bleeding out, as par shows), so you can set the hangup deep in the bleeding-out band, closer to death. 0 = hang the moment you drop. To turn it off, use Disable hangups (File menu or toolbar)."/>
                             <TextBlock Grid.Row="7" Grid.Column="2" Classes="FieldLabel"
                                        VerticalAlignment="Center" Margin="8,0,0,0"
                                        Text="{Binding HangIfBelowHpConverted}"/>

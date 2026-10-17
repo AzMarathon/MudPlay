@@ -21,14 +21,14 @@ public sealed partial class ProfilePickerDialogViewModel : ObservableObject, IDi
     public ObservableCollection<ProfileRef> Profiles { get; } = new();
 
     // Window title — the caller's base wording plus the absolute folder the list is read
-    // from (AppPaths.BbsDir), e.g. "Open profile - C:\Users\…\MudPlay\BBS", so
-    // it's obvious at a glance which data directory the app is actually using.
+    // from (AppPaths.BbsDir), e.g. "Copy toolbar + shortcuts - C:\Users\…\MudPlay\BBS",
+    // so it's obvious at a glance which data directory the app is actually using.
     public string WindowTitle { get; }
 
-    // Prompt line above the list — defaults to the Open-profile wording.
+    // Prompt line above the list.
     public string Prompt { get; }
 
-    // Confirm-button caption — defaults to "Open".
+    // Confirm-button caption.
     public string ConfirmLabel { get; }
 
     // Empty-state message shown when no profiles are available.
@@ -44,10 +44,10 @@ public sealed partial class ProfilePickerDialogViewModel : ObservableObject, IDi
 
     public ProfilePickerDialogViewModel(
         IEnumerable<ProfileRef> profiles,
-        string windowTitle = "Open profile",
-        string prompt = "Pick a character profile to load.",
-        string confirmLabel = "Open",
-        string emptyMessage = "No saved profiles yet — use File → Save profile as… to create one.")
+        string windowTitle = "Pick a profile",
+        string prompt = "Pick a character profile.",
+        string confirmLabel = "OK",
+        string emptyMessage = "No saved profiles yet — create one in Profile Management (File menu).")
     {
         WindowTitle  = $"{windowTitle} - {AppPaths.BbsDir}";
         Prompt       = prompt;

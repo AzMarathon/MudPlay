@@ -106,7 +106,7 @@
                                    Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                    PlaceholderText="My BBS" Width="280"
                                    HorizontalAlignment="Left"
-                                   ToolTip.Tip="Display name and on-disk filename. Renames the file when applied."/>
+                                   ToolTip.Tip="Display name and on-disk folder name. Renaming moves the BBS's folder, characters included, when applied."/>
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Host:"/>
                         <TextBox   Grid.Row="1" Grid.Column="1"
@@ -197,7 +197,7 @@
                                        Minimum="100" Maximum="100000" Increment="500"
                                        FormatString="0" Width="140"
                                        HorizontalAlignment="Left"
-                                       ToolTip.Tip="Applies on next launch — the live ring stays its current size."/>
+                                       ToolTip.Tip="Lines the scrollback keeps. Applied on OK / Apply: the live buffer resizes, dropping the oldest lines when it shrinks."/>
 
                         <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Wheel scroll (lines):"/>
                         <NumericUpDown Grid.Row="3" Grid.Column="1"
@@ -281,7 +281,7 @@
                                 <ComboBox  Grid.Row="1" Grid.Column="1" Width="260"
                                            ItemsSource="{Binding GameDataSetOptions}"
                                            SelectedItem="{Binding RealmGameDataSet, Mode=TwoWay}"
-                                           ToolTip.Tip="The imported game data (MDB) this realm uses. Global default follows File → Game Data's default set."/>
+                                           ToolTip.Tip="The imported game data (MDB) this realm uses. Global default follows the set picked in the Game Data menu while no realm is active."/>
                             </Grid>
 
                             <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Game-menu commands"/>
@@ -666,7 +666,7 @@
                                   ToolTip.Tip="Prompt before user-initiated disconnects (toolbar / hotkey / menu). App-initiated disconnects (carrier-lost, @hangup, health drops) bypass the prompt."/>
                         <CheckBox Content="Confirm save settings"
                                   IsChecked="{Binding ConfirmSaveSettings, Mode=TwoWay}"
-                                  ToolTip.Tip="Prompt before Settings → OK / Apply and other JSON-write saves. 'No' returns to the editor without saving or closing."/>
+                                  ToolTip.Tip="Prompt before Settings → OK / Apply writes your changes. 'No' returns to the editor without saving or closing."/>
                         <CheckBox Content="Confirm deletes"
                                   IsChecked="{Binding ConfirmDeletes, Mode=TwoWay}"
                                   ToolTip.Tip="Prompt before destructive deletes: a BBS profile, a navigation favorite, a Game Data record and similar. Removing a toolbar button is not gated."/>

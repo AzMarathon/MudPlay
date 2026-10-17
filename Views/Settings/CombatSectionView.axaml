@@ -641,7 +641,7 @@
                     <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="12">
                         <RadioButton GroupName="TargetOrder" Content="Normal"
                                      IsChecked="{Binding TargetOrderNormal, Mode=TwoWay}"
-                                     ToolTip.Tip="Swing at the highest-priority monster first (priority from Monsters.json AttackPriority). Only applies when Target Priority is Default."/>
+                                     ToolTip.Tip="Swing at the highest-priority monster first (each monster's Priority in Game Data → Monsters). Only applies when Target Priority is Default."/>
                         <RadioButton GroupName="TargetOrder" Content="Reverse"
                                      IsChecked="{Binding TargetOrderReverse, Mode=TwoWay}"
                                      ToolTip.Tip="Swing at the lowest-priority monster first. Only applies when Target Priority is Default."/>

@@ -112,7 +112,7 @@
             <TextBlock Classes="SectionHeader" Text="Session logging"/>
             <TextBlock Classes="HelpText"
                        Margin="0,0,0,4"
-                       Text="Persist to rolling per-character files under Data/Logs so they survive restarts: &lt;char&gt;.&lt;bbs&gt;.talk.log and &lt;char&gt;.&lt;bbs&gt;.transactions.log. Clearing a window (Clear chatlog / Transaction history Clear) also wipes its file."/>
+                       Text="Persist to rolling per-character files in the Logs folder (Tools → Open Logs folder…) so they survive restarts: &lt;char&gt;.&lt;bbs&gt;.talk.log and &lt;char&gt;.&lt;bbs&gt;.transactions.log. Clearing a window (Clear chatlog / Transaction history Clear) also wipes its file."/>
 
             <CheckBox Content="Log conversations"
                       IsChecked="{Binding LogConversations, Mode=TwoWay}"

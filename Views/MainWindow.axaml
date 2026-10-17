@@ -317,7 +317,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="Pick what this button does (and do it now)"
+                                            ToolTip.Tip="Pick what this button does (click the button to run it)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -376,7 +376,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="Pick what this button does (and do it now)"
+                                        ToolTip.Tip="Pick what this button does (click the button to run it)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -434,7 +434,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="Pick what this button does (and do it now)"
+                                        ToolTip.Tip="Pick what this button does (click the button to run it)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -503,7 +503,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="Pick what this button does (and do it now)"
+                                            ToolTip.Tip="Pick what this button does (click the button to run it)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"

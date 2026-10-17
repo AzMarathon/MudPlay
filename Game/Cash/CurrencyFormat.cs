@@ -9,7 +9,7 @@ namespace MudPlay.Game.Cash;
 // The ladder mirrors CurrencyHoldings.ToCopper — copper 1, silver 10, gold 100,
 // platinum 10 000, runic 1 000 000 — the single source of truth for the ratio.
 // Names are the stock denomination words; callers on a realm that renames the
-// runic word (Settings → BBS) pass it through the optional runicName argument so
+// runic word (Settings → BBS + Display) pass it through the optional runicName argument so
 // the top rung reads the board's label instead of "runic". Denominate renders the
 // abbreviated column (plat / silv / copp) to fit the narrow Session Stats cells;
 // Full keeps the whole words so its tooltip still mirrors the game's wealth line.

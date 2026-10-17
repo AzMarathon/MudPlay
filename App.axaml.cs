@@ -172,9 +172,9 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.FolderPickerDialogViewModel,
                 MudPlay.Views.Navigation.FolderPickerDialog>();
 
-            // File → Open profile / Save profile as — custom modeless dialogs
-            // replacing the platform file pickers (the per-folder layout means
-            // profiles live as subfolders, not flat .json files).
+            // Profile pick / name dialogs — custom modeless dialogs in place of
+            // the platform file pickers (the per-folder layout means profiles
+            // live as subfolders, not flat .json files).
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Profile.ProfilePickerDialogViewModel,
                 MudPlay.Views.Profile.ProfilePickerDialog>();

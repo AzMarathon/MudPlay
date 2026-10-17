@@ -678,7 +678,7 @@
                                                                     CommandParameter="{Binding}"/>
                                                             <Button Content="▾" FontSize="10" Padding="4,2"
                                                             Foreground="{StaticResource AccentGreenBrush}"
-                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive begins.">
+                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive.">
                                                         <Button.Flyout>
                                                             <MenuFlyout>
                                                                 <MenuItem Header="Run — Go with Auto-Combat off"

@@ -32,10 +32,9 @@ public sealed class MonsterMdbInfoBuilder
     private readonly TBInfoStore _tb;
     private readonly DialogService? _dialogs;
 
-    // Interval the HP row quotes for a monster's HPRegen: 90 seconds (18 combat rounds × 5 s)
-    // on every realm. GAME_MECHANICS "Monster HP regen" records the cycle as 30 s on both
-    // realms (user, 2026-09-30); this figure predates that.
-    private const int RegenIntervalSeconds = 90;
+    // Interval the HP row quotes for a monster's HPRegen: the engine's 30 s slow tick on
+    // both realms (GAME_MECHANICS "Monster HP regen"), the cycle MonsterHpTracker uses.
+    private const int RegenIntervalSeconds = 30;
 
     public MonsterMdbInfoBuilder(
         GameDataCache cache, RoomGraphManager? roomGraph, TBInfoStore tb, DialogService? dialogs = null)
@@ -108,7 +107,7 @@ public sealed class MonsterMdbInfoBuilder
             if (ReadInt(el, "Undead") != 0) AddRow(kv, "Undead", "Yes");
 
             // HP + HP Regen combined into one row, in the form
-            // "7200 (Regens: 2000 HPs every 90 seconds [18 rounds])".
+            // "7200 (Regens: 2000 HPs every 30 seconds [6 rounds])".
             int hp = ReadInt(el, "HP");
             if (hp > 0)
             {

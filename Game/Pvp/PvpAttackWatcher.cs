@@ -129,7 +129,7 @@ public sealed partial class PvpAttackWatcher : IDisposable
             if (_warnedPvpOff) return;
             _warnedPvpOff = true;
             _log?.Warn(LogCategory,
-                $"{name} attacked us, but PvP isn't enabled for this realm (Settings → BBS), so nothing is done about it");
+                $"{name} attacked us, but PvP isn't enabled for this realm (Settings → BBS + Display), so nothing is done about it");
             return;
         }
 

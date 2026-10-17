@@ -285,7 +285,7 @@
                                                     <Grid ColumnDefinitions="Auto,*" Margin="0,2">
                                                         <CheckBox Grid.Column="0" VerticalAlignment="Center"
                                                                   IsChecked="{Binding Applied, Mode=TwoWay}"
-                                                                  ToolTip.Tip="Apply this debuff to the selected monster"/>
+                                                                  ToolTip.Tip="Fold this debuff onto every monster in the list and Your Matchup"/>
                                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
                                                             <TextBlock Classes="DetailLine" Text="{Binding Label}"/>
                                                             <TextBlock Classes="FieldLabel"

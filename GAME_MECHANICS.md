@@ -4397,6 +4397,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 **Client use:**
 - With Settings → Combat **Cap at monster HP** on, the round ledger caps each monster's damage taken, and the dealer's damage dealt, at the HP estimate the hit found it at (`RoundDamageTracker.Hits`). An estimate already at 0 that still takes a hit was wrong, so that hit counts in full. *Client policy (user, 2026-09-30, report `paradigm-20260930-104446`): the cap is opt-in, off by default; off, the ledger counts each line's printed number.*
 - `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus its regen every 30 s on both realms), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
+- The monster record's Game Data tab quotes the same 30 s cycle on its HP row (`MonsterMdbInfoBuilder`; it said 90 s until 2026-10-16).
 
 ### Monster roaming and following
 

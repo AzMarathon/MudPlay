@@ -36,7 +36,7 @@
             </StackPanel>
             <Button Content="Reset to current" Margin="0,0,12,6"
                     Command="{Binding ResetToCurrentCommand}"
-                    ToolTip.Tip="Re-seed Race / Class / Realm and the level range from the live character."/>
+                    ToolTip.Tip="Re-seed Race / Class and the level range from the live character."/>
 
             <!-- Column picker. Choices persist per character, so each build can
                  surface the stats it actually plans around. -->
