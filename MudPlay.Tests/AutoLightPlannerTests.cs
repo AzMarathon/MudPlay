@@ -126,6 +126,18 @@ public sealed class AutoLightPlannerTests
     }
 
     [Fact]
+    public void ProvisioningOff_NoCoveringCarry_DoesNothing()
+    {
+        // Need 150 illu, only a torch (100) on hand, provisioning off: nothing to
+        // buy, so nothing to do (the room-by-room path lights the torch).
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Dark(-300), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
+            carriedLights: new[] { Torch }, Catalogue, Settings(carry: 0));
+
+        Assert.Equal(AutoLightAction.None, plan.Action);
+    }
+
+    [Fact]
     public void ProvisioningOff_NothingCarried_DoesNothing()
     {
         AutoLightPlan plan = AutoLightPlanner.Plan(

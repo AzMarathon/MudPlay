@@ -186,7 +186,7 @@ How to keep it current:
 
 ### AutoLightPlannerTests.cs
 - Covers: Game/Light/AutoLightPlanner
-- Checks: Whether a lit or dark route buys: a carried light that covers, the carried Preferred light and worn illu each mean no buy (the client acts only on Buy and Reorder). Catalogue buy sizing from CarryHours. Reorder threshold, latching inputs and provisioning-off cases. The room-light spell as a coverage tier and spell-only mode.
+- Checks: Whether a lit or dark route buys: a carried light that covers, the carried Preferred light and worn illu each mean no buy (the client acts only on Buy and Reorder). Catalogue buy sizing from CarryHours. Reorder threshold, latching inputs and provisioning-off cases (with no light that covers, nothing to do). The room-light spell as a coverage tier and spell-only mode.
 - Why: the decision core behind auto-light provisioning (whether to detour to a shop and how many to buy).
 
 ### AutoLightProvisionerTests.cs
