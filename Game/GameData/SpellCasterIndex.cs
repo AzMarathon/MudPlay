@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.Map;
+using MudPlay.Game.Quests;
 using MudPlay.Services;
 
 namespace MudPlay.Game.GameData;
@@ -22,8 +23,9 @@ namespace MudPlay.Game.GameData;
 //   * the rooms' own Spell for the room half;
 //   * what the client can't see cast, which leaves the spell open: it may have
 //     come from somewhere not in view, and is never ruled out. That is a player
-//     ("Learnable", "Learned From", an item that teaches it, a textblock's
-//     `learnspell`), an item's cast (its CastsSp slots), a textblock's `cast` step,
+//     who learned it ("Learnable", "Learned From", or taught by an item's LearnSp
+//     slot or a textblock's `learnspell`: a player's cast, not the item's or the
+//     textblock's), an item's cast (its CastsSp slots), a textblock's `cast` step,
 //     an exit's pre- or post-cast or spell trap, another spell's enchantment cast
 //     (ability 43) or temporary grant (160), a monster's death or spawn spell, and
 //     an EndCast from a spell with a duration, which lands when that spell ends,
@@ -31,7 +33,9 @@ namespace MudPlay.Game.GameData;
 // "Casted By" is then a cross-check: a source it names that the tables don't
 // account for (a "Room" entry that is not that room's own spell, a "Spell" entry
 // that is not an EndCast, a monster the set has no row for) still leaves the spell
-// open. Where it is cut off, the tables stand for the rest.
+// open. Where it is cut off, the tables stand for the rest, save for a spell in
+// the MinBase to MaxBase of a spell with an EndCast of 0: only the list names that
+// tie, so a list that may have lost it leaves the spell open.
 //
 // Built on a worker when a set's room graph has loaded (Warm), never by a lookup:
 // Of is asked while a game line is being read, and answers only for the load it
@@ -53,6 +57,7 @@ public sealed class SpellCasterIndex
     {
         public readonly HashSet<int> Items = new();
         public readonly HashSet<int> Textblocks = new();
+        public readonly HashSet<int> Taught = new();
         public readonly HashSet<int> Exits = new();
         public readonly HashSet<int> Spells = new();
         public int LandLater;
@@ -143,7 +148,8 @@ public sealed class SpellCasterIndex
                         $"Spell casters in '{load.Set}': {built.BySpell.Count} spells, "
                         + $"{built.BySpell.Values.Count(static c => c.OnlyMonstersAndRooms)} cast only by monsters or rooms "
                         + "(an applied line several spells share is read by which of them is cast where the character stands). "
-                        + $"Never ruled out, besides players: {tally.Items.Count} cast or taught by items, "
+                        + $"Never ruled out: {tally.Taught.Count} taught by items or textblocks, "
+                        + $"{tally.Items.Count} cast by items, "
                         + $"{tally.Textblocks.Count} by textblocks, {tally.Exits.Count} by exits, "
                         + $"{tally.Spells.Count} by other spells' casts and grants, "
                         + $"{tally.LandLater} landing when a spell with a duration ends. "
@@ -183,10 +189,10 @@ public sealed class SpellCasterIndex
         }
         HashSet<int> carried = new(roomSpell.Values);
 
-        ReadItems(tally.Items);
+        ReadItems(tally.Items, tally.Taught);
         if (_textblocks is not null)
             foreach (TBInfoEntry entry in _textblocks.Entries)
-                if (entry.Action is { } action) ReadTextblockSteps(action, tally.Textblocks);
+                if (entry.Action is { } action) ReadTextblockSteps(action, tally.Textblocks, tally.Taught);
 
         // The chains first: "Casted By" names a spell for more than a cast, and which
         // it is shows only on that spell's own row.
@@ -194,6 +200,7 @@ public sealed class SpellCasterIndex
         HashSet<(int By, int Spell)> ends = new();          // By takes Spell off: no cast
         HashSet<int> known = new();
         HashSet<int> lasting = new();                      // spells with a duration
+        List<(int Min, int Max)> endCastsOfNone = new();   // an EndCast of 0's MinBase..MaxBase
         foreach (GameRow row in spells.Rows)
         {
             int number = ReadInt(row, "Number");
@@ -204,6 +211,8 @@ public sealed class SpellCasterIndex
             {
                 int code = ReadInt(row, AbilFields[i]);
                 int value = ReadInt(row, AbilValFields[i]);
+                if (code == AbilEndCast && value == 0)
+                    endCastsOfNone.Add((ReadInt(row, "MinBase"), ReadInt(row, "MaxBase")));
                 if (value <= 0) continue;
                 if (code == AbilEndCast) AddTo(parents, value, number);
                 else if (code is AbilRemovesSpell or AbilKillSpell) ends.Add((number, value));
@@ -220,15 +229,22 @@ public sealed class SpellCasterIndex
             int number = ReadInt(row, "Number");
             if (number <= 0) continue;
 
-            if (ReadInt(row, "Learnable") == 1 || Clean(ReadString(row, "Learned From")).Length > 0)
+            if (ReadInt(row, "Learnable") == 1 || Clean(ReadString(row, "Learned From")).Length > 0
+                || tally.Taught.Contains(number))
                 open.Add(number);
 
             foreach (string raw in Clean(ReadString(row, "Casted By")).Split(','))
             {
                 string source = Clean(raw);
-                // Empty, or the column's cut ("Monster #1+", "R+"): the tables above
-                // stand for whatever it left out.
-                if (source.Length == 0 || source.EndsWith('+')) continue;
+                if (source.Length == 0) continue;
+                // The column's cut ("Monster #1+", "R+"): the tables above stand for
+                // whatever it left out, save a tie only the list shows.
+                if (source.EndsWith('+'))
+                {
+                    if (endCastsOfNone.Exists(range => number >= range.Min && number <= range.Max))
+                        open.Add(number);
+                    continue;
+                }
                 if (NumberAfter(source, "Monster #") is { } monster && nameOf.TryGetValue(monster, out string? name))
                     AddTo(castBy, number, name);
                 else if (NumberAfter(source, "Spell #") is { } other)
@@ -313,8 +329,8 @@ public sealed class SpellCasterIndex
     }
 
     // Every spell an item casts, on use or as a proc (ItemCastSpells), and every one
-    // it teaches: a player holds it either way.
-    private void ReadItems(HashSet<int> spells)
+    // it teaches, which a player then casts as one who learned it.
+    private void ReadItems(HashSet<int> casts, HashSet<int> taught)
     {
         // Read back for this build alone, so a table nobody held before it goes
         // back to the cache's idle sweep after.
@@ -323,35 +339,26 @@ public sealed class SpellCasterIndex
             foreach (GameRow row in items.Rows)
             {
                 foreach (ItemCastSpells.CastEntry cast in ItemCastSpells.ReadCasts(row))
-                    spells.Add(cast.SpellNumber);
+                    casts.Add(cast.SpellNumber);
                 for (int i = 0; i < ItemAbilSlots; i++)
-                    if (ReadInt(row, ItemAbilFields[i]) == AbilLearnSp && ReadInt(row, ItemAbilValFields[i]) is > 0 and var taught)
-                        spells.Add(taught);
+                    if (ReadInt(row, ItemAbilFields[i]) == AbilLearnSp && ReadInt(row, ItemAbilValFields[i]) is > 0 and var spell)
+                        taught.Add(spell);
             }
         if (!held) _cache.EvictTable("Items");
     }
 
-    // The spells a textblock's steps cast (`cast N`) or teach (`learnspell N`). Its
+    // The spells a textblock's steps cast (`cast N`) and teach (`learnspell N`). Its
     // lines are colon-separated steps, wherever they sit: after a typed keyword, a
     // roll's band or nothing.
-    private static void ReadTextblockSteps(string action, HashSet<int> spells)
+    private static void ReadTextblockSteps(string action, HashSet<int> casts, HashSet<int> taught)
     {
         foreach (string line in action.Split('\n'))
             foreach (string raw in line.Split(':'))
             {
-                ReadOnlySpan<char> step = raw.AsSpan().Trim();
-                int space = step.IndexOf(' ');
-                if (space <= 0) continue;
-                ReadOnlySpan<char> verb = step[..space];
-                if (!verb.Equals("cast", StringComparison.OrdinalIgnoreCase)
-                    && !verb.Equals("learnspell", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                ReadOnlySpan<char> rest = step[(space + 1)..].TrimStart();
-                int digits = 0;
-                while (digits < rest.Length && char.IsAsciiDigit(rest[digits])) digits++;
-                if (int.TryParse(rest[..digits], NumberStyles.None, CultureInfo.InvariantCulture, out int spell)
-                    && spell > 0)
-                    spells.Add(spell);
+                QuestScriptStep step = QuestScriptStep.Parse(raw);
+                if (step.Int(0) is not { } spell || spell <= 0) continue;
+                if (step.Verb == "cast") casts.Add(spell);
+                else if (step.Verb == "learnspell") taught.Add(spell);
             }
     }
 

@@ -81,32 +81,39 @@ public sealed class SpellCasterIndexTests : IDisposable
             "Casted By": "Monster #108, Textblock #2500(8%)" },
           { "Number": 9102, "Name": "(9199 with its list cut off)", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #108, Mons+\u0000" },
-          { "Number": 9107, "Name": "(9199, an item casts it, its list cut off before the item)", "Learnable": 0,
+          { "Number": 9201, "Name": "(9199, an item casts it, its list cut off before the item)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108, Ite+\u0000" },
-          { "Number": 9108, "Name": "(9199, an item teaches it, unlisted)", "Learnable": 0,
+          { "Number": 9202, "Name": "(9199, hostile, an item teaches it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Targets": 8 },
+          { "Number": 9203, "Name": "(9199, a room command's textblock casts it, unlisted)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9109, "Name": "(9199, a room command's textblock casts it, unlisted)", "Learnable": 0,
+          { "Number": 9204, "Name": "(9199, hostile, a textblock teaches it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Targets": 8 },
+          { "Number": 9214, "Name": "(9199, hostile, learnable)", "Learnable": 1,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Targets": 8 },
+          { "Number": 9220, "Name": "(the ice sorceress's, an EndCast of 0 over 9221 to 9222)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "MinBase": 9221, "MaxBase": 9222,
+            "Abil-0": 151, "AbilVal-0": 0 },
+          { "Number": 9221, "Name": "(9199 inside 9220's range, its list cut off)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108, Spe+\u0000" },
+          { "Number": 9205, "Name": "(9199, an exit casts it, unlisted)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9110, "Name": "(9199, a textblock teaches it, unlisted)", "Learnable": 0,
+          { "Number": 9206, "Name": "(9199, a spell trap casts it, unlisted)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9111, "Name": "(9199, an exit casts it, unlisted)", "Learnable": 0,
+          { "Number": 9207, "Name": "(9199, another spell's enchantment casts it, unlisted)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9112, "Name": "(9199, a spell trap casts it, unlisted)", "Learnable": 0,
+          { "Number": 9208, "Name": "(an enchantment)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "\u0000", "Abil-0": 43, "AbilVal-0": 9207, "Abil-1": 160, "AbilVal-1": 9209 },
+          { "Number": 9209, "Name": "(9199, another spell grants it, unlisted)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9113, "Name": "(9199, another spell's enchantment casts it, unlisted)", "Learnable": 0,
-            "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9114, "Name": "(an enchantment)", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "\u0000", "Abil-0": 43, "AbilVal-0": 9113, "Abil-1": 160, "AbilVal-1": 9115 },
-          { "Number": 9115, "Name": "(9199, another spell grants it, unlisted)", "Learnable": 0,
-            "Learned From": "\u0000", "Casted By": "Monster #108" },
-          { "Number": 9120, "Name": "(the ice sorceress's, lasting three rounds)", "Learnable": 0,
-            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 3, "Abil-0": 151, "AbilVal-0": 9121 },
-          { "Number": 9121, "Name": "(cast when 9120 runs out)", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "Spell #9120" },
-          { "Number": 9122, "Name": "(the ice sorceress's, gone at once)", "Learnable": 0,
-            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 0, "Abil-0": 151, "AbilVal-0": 9123 },
-          { "Number": 9123, "Name": "(cast as 9122 lands)", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "Spell #9122" },
+          { "Number": 9210, "Name": "(the ice sorceress's, lasting three rounds)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 3, "Abil-0": 151, "AbilVal-0": 9211 },
+          { "Number": 9211, "Name": "(cast when 9210 runs out)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Spell #9210" },
+          { "Number": 9212, "Name": "(the ice sorceress's, gone at once)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 0, "Abil-0": 151, "AbilVal-0": 9213 },
+          { "Number": 9213, "Name": "(cast as 9212 lands)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Spell #9212" },
           { "Number": 9103, "Name": "(9199 and a room whose own spell it is not)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108, Room 6/1138" },
           { "Number": 9104, "Name": "(9199 and an enchantment's on-hit spell)", "Learnable": 0,
@@ -140,20 +147,20 @@ public sealed class SpellCasterIndexTests : IDisposable
         ]
         """;
 
-    // Not from the set: an item that casts #9107 on a third of its swings, and one
-    // that teaches #9108.
+    // Not from the set: an item that casts #9201 on a third of its swings, and one
+    // that teaches #9202.
     internal const string Items = """
         [
-          { "Number": 9301, "Name": "(swings 9107)", "Abil-0": 114, "AbilVal-0": 33, "Abil-1": 43, "AbilVal-1": 9107 },
-          { "Number": 9302, "Name": "(teaches 9108)", "Abil-0": 42, "AbilVal-0": 9108 }
+          { "Number": 9301, "Name": "(swings 9201)", "Abil-0": 114, "AbilVal-0": 33, "Abil-1": 43, "AbilVal-1": 9201 },
+          { "Number": 9302, "Name": "(teaches 9202)", "Abil-0": 42, "AbilVal-0": 9202 }
         ]
         """;
 
-    // Not from the set: a room command that casts #9109, and a roll that teaches #9110.
+    // Not from the set: a room command that casts #9203, and a roll that teaches #9204.
     internal const string Textblocks = """
         [
-          { "Number": 9401, "LinkTo": 0, "Action": "pull lever:message 1:cast 9109\n", "Called From": "Room 6/1138" },
-          { "Number": 9402, "LinkTo": 0, "Action": "40:message 2\n100:learnspell 9110\n", "Called From": "Textblock #9401" }
+          { "Number": 9401, "LinkTo": 0, "Action": "pull lever:message 1:cast 9203\n", "Called From": "Room 6/1138" },
+          { "Number": 9402, "LinkTo": 0, "Action": "40:message 2\n100:learnspell 9204\n", "Called From": "Textblock #9401" }
         ]
         """;
 
@@ -162,8 +169,8 @@ public sealed class SpellCasterIndexTests : IDisposable
         RoomAt(6, 1139, "Underwater Passage", 511),
         RoomAt(6, 1140, "Underwater Passage", 511),
         RoomAt(6, 1209, "Ice Jewel Cave", 512),
-        // Not the set's exits: a post-cast of #9111 and a spell trap of #9112.
-        RoomAt(6, 1138, "Icy Lake", 0, "6/1139 (Cast: pre-0, post-9111)", "6/1209 (Spell Trap: 9112)"),
+        // Not the set's exits: a post-cast of #9205 and a spell trap of #9206.
+        RoomAt(6, 1138, "Icy Lake", 0, "6/1139 (Cast: pre-0, post-9205)", "6/1209 (Spell Trap: 9206)"),
         RoomAt(12, 72, "Desert", 515),
         RoomAt(16, 498, "Training Grounds", 829),
         RoomAt(16, 519, "Training Grounds", 829),
@@ -185,7 +192,8 @@ public sealed class SpellCasterIndexTests : IDisposable
 
     internal static (GameDataCache Cache, SpellCasterIndex Index) NewIndex(
         string root, string spells = Spells, string monsters = Monsters, string set = "alpha",
-        string items = Items, string textblocks = Textblocks, IReadOnlyList<Room>? rooms = null)
+        string items = Items, string textblocks = Textblocks, IReadOnlyList<Room>? rooms = null,
+        LogService? log = null)
     {
         string dir = Path.Combine(root, set);
         Directory.CreateDirectory(dir);
@@ -200,7 +208,7 @@ public sealed class SpellCasterIndexTests : IDisposable
         cache.ActiveSetChanged += store.OnActiveSetChanged;
         cache.SwitchSet(set);
         IReadOnlyList<Room> map = rooms ?? Rooms;
-        SpellCasterIndex index = new(cache, () => map, textblocks: store);
+        SpellCasterIndex index = new(cache, () => map, log, store);
         index.Warm();
         return (cache, index);
     }
@@ -238,8 +246,8 @@ public sealed class SpellCasterIndexTests : IDisposable
 
     // Each row here has a monster for a caster and one thing more, and is kept open
     // by that one thing alone: #9199, the same row without it, is closed. The rows
-    // numbered 91xx are made for this and are not the set's (its own rows with these
-    // sources mostly carry two of them at once); #179 and #5522 are.
+    // numbered 91xx and 92xx are made for this and are not the set's (its own rows
+    // with these sources mostly carry two of them at once); #179 and #5522 are.
     [Theory]
     [InlineData(179)]    // an item casts it too (the heavy black rod, beside Jareth)
     [InlineData(9101)]   // a textblock casts it too
@@ -247,15 +255,13 @@ public sealed class SpellCasterIndexTests : IDisposable
     [InlineData(9104)]   // another spell casts it otherwise than by ending in it
     [InlineData(9105)]   // a player can learn it
     [InlineData(9106)]   // an item teaches it
-    [InlineData(9107)]   // an item casts it, where the list was cut off
-    [InlineData(9108)]   // an item teaches it, and "Learned From" doesn't say so
-    [InlineData(9109)]   // a room command's textblock casts it, unlisted
-    [InlineData(9110)]   // a textblock teaches it, unlisted
-    [InlineData(9111)]   // an exit casts it as it is walked, unlisted
-    [InlineData(9112)]   // a spell trap casts it, unlisted
-    [InlineData(9113)]   // another spell's enchantment casts it, unlisted
-    [InlineData(9115)]   // another spell grants it to whoever it lands on, unlisted
-    [InlineData(9121)]   // it lands when a spell with a duration runs out
+    [InlineData(9201)]   // an item casts it, where the list was cut off
+    [InlineData(9203)]   // a room command's textblock casts it, unlisted
+    [InlineData(9205)]   // an exit casts it as it is walked, unlisted
+    [InlineData(9206)]   // a spell trap casts it, unlisted
+    [InlineData(9207)]   // another spell's enchantment casts it, unlisted
+    [InlineData(9209)]   // another spell grants it to whoever it lands on, unlisted
+    [InlineData(9211)]   // it lands when a spell with a duration runs out
     [InlineData(9100)]   // it lists a monster the set has no row for
     [InlineData(5522)]   // a death spell: its caster is gone from the roster when it lands
     public void AMonstersSpell_WithOneCasterNotInView_IsNeverClosed(int spell)
@@ -291,6 +297,43 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.True(index.Of(511)!.OnlyMonstersAndRooms);
     }
 
+    // Save one tie only the list shows: #9221 lies in the range of #9220, whose
+    // EndCast is 0, and its list may have lost a "Spell #9220".
+    [Fact]
+    public void AListCutOff_InsideTheRangeOfAnEndCastOfNone_StaysOpen()
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root);
+
+        Assert.True(index.Of(9220)!.OnlyMonstersAndRooms);
+        Assert.False(index.Of(9221)!.OnlyMonstersAndRooms);
+    }
+
+    // An item's LearnSp slot and a textblock's `learnspell` make a player the
+    // caster, as "Learnable" does: #9202 and #9204 read as #9214 does, not as an
+    // item's or a textblock's cast. The log counts them apart from the casts: the
+    // fixture's items cast #9201 alone and its textblocks #9203 alone.
+    [Fact]
+    public void ASpellTaughtByAnItemOrATextblock_IsLearnable()
+    {
+        LogService log = new();
+        List<string> lines = new();
+        log.EntryAdded += entry => lines.Add(entry.Message);
+        (_, SpellCasterIndex index) = NewIndex(_root, log: log);
+        SpellCasterIndex.Casters learnable = index.Of(9214)!;
+
+        string built = Assert.Single(lines, line => line.StartsWith("Spell casters", StringComparison.Ordinal));
+        Assert.Contains("2 taught by items or textblocks, 1 cast by items, 1 by textblocks", built, StringComparison.Ordinal);
+
+        foreach (int taught in new[] { 9202, 9204 })
+        {
+            SpellCasterIndex.Casters casters = index.Of(taught)!;
+            Assert.Equal(learnable.Monsters, casters.Monsters);
+            Assert.Equal(learnable.RoomSpells, casters.RoomSpells);
+            Assert.Equal(learnable.OnlyMonstersAndRooms, casters.OnlyMonstersAndRooms);
+            Assert.False(casters.OnlyMonstersAndRooms);
+        }
+    }
+
     // An EndCast from a spell with no duration lands as that spell does, its caster
     // still there; from one with a duration, when it runs out.
     [Fact]
@@ -298,10 +341,10 @@ public sealed class SpellCasterIndexTests : IDisposable
     {
         (_, SpellCasterIndex index) = NewIndex(_root);
 
-        Assert.Equal(new[] { "ice sorceress" }, index.Of(9123)!.Monsters);
-        Assert.True(index.Of(9123)!.OnlyMonstersAndRooms);
-        Assert.True(index.Of(9120)!.OnlyMonstersAndRooms);
-        Assert.False(index.Of(9121)!.OnlyMonstersAndRooms);
+        Assert.Equal(new[] { "ice sorceress" }, index.Of(9213)!.Monsters);
+        Assert.True(index.Of(9213)!.OnlyMonstersAndRooms);
+        Assert.True(index.Of(9210)!.OnlyMonstersAndRooms);
+        Assert.False(index.Of(9211)!.OnlyMonstersAndRooms);
     }
 
     // Stock 1.11p's blazing comet (#420): "Casted By" names only the diamond guardian,
@@ -481,7 +524,7 @@ public sealed class SpellCasterIndexTests : IDisposable
 
         Assert.False(index.Of(1363)!.OnlyMonstersAndRooms);
         Assert.False(index.Of(9199)!.OnlyMonstersAndRooms);
-        Assert.True(index.Of(9109)!.OnlyMonstersAndRooms);
+        Assert.True(index.Of(9203)!.OnlyMonstersAndRooms);
     }
 
     // The cache's load moves before the textblocks reload. A build in between would
@@ -500,11 +543,11 @@ public sealed class SpellCasterIndexTests : IDisposable
         SpellCasterIndex index = new(cache, () => Rooms, textblocks: store);
 
         index.Warm();
-        Assert.Null(index.Of(9109));
+        Assert.Null(index.Of(9203));
 
         store.OnActiveSetChanged("alpha");
         index.Warm();
-        Assert.False(index.Of(9109)!.OnlyMonstersAndRooms);
+        Assert.False(index.Of(9203)!.OnlyMonstersAndRooms);
     }
 
     [Fact]
