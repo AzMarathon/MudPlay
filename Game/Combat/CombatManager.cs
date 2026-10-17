@@ -106,6 +106,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _castAnnounceSub;
     private readonly IDisposable _roomPoisedSub;
     private readonly IDisposable _partyCombatSub;
+    private readonly IDisposable _followDragSub;
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
@@ -1089,6 +1090,8 @@ public sealed partial class CombatManager : IDisposable
         _castAnnounceSub = router.Subscribe(KnownPatterns.PartyCastAnnounce, OnCastAnnounce);
         _roomPoisedSub = router.Subscribe(KnownPatterns.PartyRoomPoised, OnRoomPoised);
         _partyCombatSub = router.Subscribe(KnownPatterns.UserHits, OnPartyCombatLine);
+        // A follower is dragged with no move of its own sent (FollowMoveObserver).
+        _followDragSub = router.Subscribe(KnownPatterns.PartyFollowMove, _ => { if (!_disposed) LeaveRoomFight(); });
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
@@ -1772,7 +1775,11 @@ public sealed partial class CombatManager : IDisposable
 
     private void ArmHoldDeadline()
     {
-        if (_holdDeadlineArmed || _scheduleHoldDeadline is not { } schedule) return;
+        // A deadline armed before the roster now read is another room's (we were
+        // dragged, or an old room's re-display came after our move): this room's hold
+        // gets its own.
+        if ((_holdDeadlineArmed && _holdDeadlineArmedAt >= _rosterReadAt)
+            || _scheduleHoldDeadline is not { } schedule) return;
         TimeSpan? toRound = _timeToNextRound?.Invoke();
         TimeSpan wait = toRound is { } r ? r - HoldDeadlineMargin : UnplacedHoldWait;
         if (wait < TimeSpan.Zero) wait = TimeSpan.Zero;
@@ -1798,6 +1805,25 @@ public sealed partial class CombatManager : IDisposable
     {
         _fightUnderwayHere = false;
         _followedTargetHere = null;
+    }
+
+    // We are leaving the room: our move went out, or the game is dragging us behind
+    // the party leader (a follower sends no move; the drag line comes before the new
+    // room's display). The fight and the hold's deadline we leave are that room's
+    // (see _roomStateAt).
+    private void LeaveRoomFight()
+    {
+        ForgetRoomFight();
+        DisarmHoldDeadlineKeepingHeldPick();
+    }
+
+    // A hold still latched after its deadline goes (a refused move leaves us in the
+    // room, or the new room's roster already re-latched it) gets a deadline of its own,
+    // so it can't wait out the round.
+    private void DisarmHoldDeadlineKeepingHeldPick()
+    {
+        DisarmHoldDeadline();
+        if (_awaitingNotLast || _awaitingFollowAnnounce) ArmHoldDeadline();
     }
 
     private void OnHoldDeadline(int generation)
@@ -2764,9 +2790,7 @@ public sealed partial class CombatManager : IDisposable
     // bs fires, so a move that doesn't go through can't backstab from a broken sneak.
     public void NoteMoveSent()
     {
-        // The fight and the hold we leave behind are that room's (see _roomStateAt).
-        ForgetRoomFight();
-        DisarmHoldDeadline();
+        LeaveRoomFight();
         if (!_readSettings().DoBackstab) return;
         if (_backstabOpenerConsumed) _openerSpentBeforeMove = true;
         _backstabOpenerConsumed = false;
@@ -4806,7 +4830,7 @@ public sealed partial class CombatManager : IDisposable
         // The new room's roster may already be read, with its hold armed (see
         // _roomStateAt): only what is older than that read is the room we left's.
         if (_roomStateAt < _rosterReadAt) ForgetRoomFight();
-        if (_holdDeadlineArmedAt < _rosterReadAt) DisarmHoldDeadline();
+        if (_holdDeadlineArmedAt < _rosterReadAt) DisarmHoldDeadlineKeepingHeldPick();
         if (_userBreakHold is { } held && !(lastMoveSentAt >= _userBreakHoldSince))
         {
             _log?.Combat(LogCategory,
@@ -6254,6 +6278,7 @@ public sealed partial class CombatManager : IDisposable
         _castAnnounceSub.Dispose();
         _roomPoisedSub.Dispose();
         _partyCombatSub.Dispose();
+        _followDragSub.Dispose();
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();

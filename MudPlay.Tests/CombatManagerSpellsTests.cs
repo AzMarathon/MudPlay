@@ -4223,6 +4223,68 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(1, Punches(h));
     }
 
+    private const string DragLine = " -- Following your Party leader north -- ";
+
+    private static void HoldInRoomA(Harness h)
+    {
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+        h.Feed("Also here: tunnel horror.");
+        Assert.Equal(0, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_DraggedAfterAFightInRoomA_NextRoomStillHolds()
+    {
+        // A follower sends no move: the game drags it and prints the drag line.
+        using Harness h = new();
+        FightInRoomAThenKill(h);
+
+        DateTimeOffset draggedAt = DateTimeOffset.Now;
+        h.Feed(DragLine);
+        h.Feed("Also here: giant skeleton.");
+        h.Combat.NoteRoomLeft(draggedAt);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_DraggedWhileHeld_NextRoomsDeadlineStillAttacks()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        HoldInRoomA(h);
+
+        DateTimeOffset draggedAt = DateTimeOffset.Now;
+        h.Feed(DragLine);
+        h.Feed("Also here: giant skeleton.");
+        h.Combat.NoteRoomLeft(draggedAt);
+
+        deadline.Fire();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_OldRoomRedisplayAfterOurMove_NextRoomsDeadlineStillAttacks()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        HoldInRoomA(h);
+
+        DateTimeOffset sentAt = DateTimeOffset.Now;
+        h.Combat.NoteMoveSent();
+        h.Feed("Also here: tunnel horror.");                     // room A, shown again
+        h.Feed("Also here: giant skeleton.");                    // room B
+        h.Combat.NoteRoomLeft(sentAt);
+
+        deadline.Fire();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
     [Fact]
     public void AttackNotLast_AnnounceBeforeTheDeadline_DeadlineSendsNothing()
     {
