@@ -1,5 +1,9 @@
 # Version history
 
+## 3.183.20
+
+- Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
 ## 3.183.19
 
 - Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
