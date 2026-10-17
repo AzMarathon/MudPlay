@@ -108,7 +108,16 @@
                                 <Panel Width="56">
                                     <CheckBox MinHeight="0" HorizontalAlignment="Center"
                                               IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                              ToolTip.Tip="{Binding DisplayName}"/>
+                                              ToolTip.Tip="{Binding ToolTipText}"/>
+                                    <!-- This member negated the buff: a red tint over the box,
+                                         hit-test-invisible so the box still unticks / ticks
+                                         through it (that is how the mark is cleared). -->
+                                    <Border Width="22" Height="22" CornerRadius="3"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            Background="#66FF5555"
+                                            BorderBrush="{StaticResource AccentRedBrush}" BorderThickness="1"
+                                            IsHitTestVisible="False"
+                                            IsVisible="{Binding IsNegated}"/>
                                 </Panel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

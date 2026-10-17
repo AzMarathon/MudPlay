@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using MudPlay.Game.Map;
 using MudPlay.Game.Simulation;
 using MudPlay.Services;
@@ -331,6 +332,61 @@ public sealed class AreaRankingFilesSafetyTests : IDisposable
         finally
         {
             Directory.Delete(AppPaths.GameDataSetDir(set), recursive: true);
+            Directory.Delete(victim, recursive: true);
+        }
+    }
+
+    // A game-data set folder that is itself a link is a set with no rankings (user,
+    // 2026-10-17): behind it lies a real Simulator folder, with a BBS folder and an
+    // old ranking in it, and no operation reads, writes, moves or deletes through it,
+    // the start-up sweep included.
+    [Fact]
+    public void ASetFolderThatIsALinkToElsewhere_IsTreatedAsHavingNoRankings()
+    {
+        if (OperatingSystem.IsWindows()) return;   // making a link needs a privilege there
+        string victim = Path.Combine(AppPaths.DataRoot, $"victim-set-{_tag}");
+        string set = $"test-safe-setlink-{_tag}";
+        var sweepNow = new DateTimeOffset(1970, 12, 1, 0, 0, 0, TimeSpan.Zero);
+        // The ranking is written where it belongs first, then moved behind the link.
+        // A BBS of its own: a move or delete by BBS walks every set, this test's
+        // other sets included.
+        string bbs = $"linked-{_tag}";
+        var owner = new SimulatorOwner(set, $"{bbs}/one");
+        Directory.CreateDirectory(AppPaths.GameDataSetDir(set));
+        Assert.Null(_files.Write(owner, Ranking()).Error);
+        Directory.Move(AppPaths.GameDataSetDir(set), victim);
+        Directory.CreateSymbolicLink(AppPaths.GameDataSetDir(set), victim);
+        string behind = Path.Combine(victim, "Simulator", bbs, "one.ranking.json");
+        Assert.True(File.Exists(behind));
+        // Back-dated only once behind the link, past the limit on the sweep's clock
+        // below: while it sat in the set folder, another class's sweep would have
+        // taken it.
+        JsonNode node = JsonNode.Parse(File.ReadAllText(behind))!;
+        node["MadeAt"] = sweepNow - AreaRankingFiles.MaxAge - TimeSpan.FromDays(30);
+        File.WriteAllText(behind, node.ToJsonString());
+        _canaries.Add(behind);
+        Canary(Path.Combine(victim, "Rooms.json"));
+
+        try
+        {
+            Assert.Null(AreaRankingFiles.FileFor(owner));
+            Assert.Equal((null, 0L), _files.Write(owner, Ranking()));
+            Assert.Equal(default, _files.Read(owner, World));
+            _files.Delete(owner);
+            _files.MoveCharacter(owner.Character, $"{bbs}/two");
+            _files.MoveCharacter(owner.Character, null);
+            _files.MoveBbs(bbs, Tavern);
+            _files.DeleteBbs(bbs);
+            Assert.Equal(0, _files.DeleteSet(set));
+            new AreaRankingFiles(() => sweepNow).SweepOld(Array.Empty<string>());
+
+            AssertNothingElseTouched();
+            Assert.Equal(2, Directory.EnumerateFiles(victim, "*", SearchOption.AllDirectories).Count());
+            Assert.False(Directory.Exists(Path.Combine(victim, "Simulator", Tavern)));
+        }
+        finally
+        {
+            File.Delete(AppPaths.GameDataSetDir(set));
             Directory.Delete(victim, recursive: true);
         }
     }

@@ -143,12 +143,24 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
     // match CastingDirector's clock. A memberName (party rows) overrides TargetText;
     // coveredBy (self rows) names a party buff that supersedes this self-buff.
-    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false, bool conflicted = false)
+    public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false, bool conflicted = false, bool negated = false)
     {
         Name = entry is { Outcome: { Length: > 0 } card } && entry.Value.Until > now
             ? OutcomeLabel(card)
             : _configuredName;
         IsConflicted = false;
+        if (negated)
+        {
+            // The member negated this buff (their box in the config panel shows red), so
+            // it is not cast on them until that box is re-ticked. Empty bar, labelled so.
+            IsHidden = false;
+            IsActive = false;
+            IsCovered = false;
+            InRecastWindow = false;
+            SetEmptyBar();
+            TimeText = "negated — not recast";
+            return;
+        }
         if (hidden)
         {
             // Member is hiding — the buff can't target them. Empty bar, labelled so.

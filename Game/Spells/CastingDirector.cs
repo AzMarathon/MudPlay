@@ -292,6 +292,7 @@ public sealed class CastingDirector : IDisposable
     private DateTime? _pausedAt;
 
     private Func<string, (string Caster, long DurationSec)?>? _buffInfoByShort;
+    private Func<string, string?>? _spellNameByShort;
     private Func<MessageRecord, string?>? _shortFromAppliedRecord;
     // Given a cast code, the cast codes of the buffs its spell removes (RemovesSpell).
     // Used to re-attribute a wear-off that lands right after a clobbering cast to its
@@ -1048,6 +1049,19 @@ public sealed class CastingDirector : IDisposable
         ArgumentNullException.ThrowIfNull(sink);
         _selfBuffCastSink = sink;
     }
+
+    // Wire the cast code → spell name lookup. The game's negate line names the spell in
+    // full, so this is how it is tied back to the cast we sent. Optional — until wired,
+    // no negate line is ever taken as ours.
+    public void SetSpellNameLookup(Func<string, string?> spellNameByShort)
+    {
+        ArgumentNullException.ThrowIfNull(spellNameByShort);
+        _spellNameByShort = spellNameByShort;
+    }
+
+    // A member negated one of our buffs and is now marked on its slot (cast code, the
+    // member's lower-cased given name). Raised on the UI thread with the line.
+    public event Action<string, string>? BuffNegated;
 
     // Override the clock used for buff-expiry math. Test seam — production uses
     // DateTime.UtcNow.
@@ -1965,6 +1979,13 @@ public sealed class CastingDirector : IDisposable
             return;
         }
 
+        if (IsOwnNegatedCast(line.Text, p.Short, p.Target, p.SentAt))
+        {
+            _pendingPartyCast = null;
+            MarkBuffNegated(p.Short, p.Target);
+            return;
+        }
+
         // "You do not see <target> here!" — the member is in the party (so in the room)
         // but HIDING, so a single-target cast can't land and the confirm we were waiting
         // for will never come. Back off casting on them (until we move / they reappear)
@@ -2046,6 +2067,41 @@ public sealed class CastingDirector : IDisposable
                 && string.Equals(GivenName(m.Name), given, StringComparison.OrdinalIgnoreCase))
                 return true;
         return false;
+    }
+
+    // The game's caster line for a cast the target negated, read as our own only when
+    // it names the spell we sent, at the member we sent it at, within the window the
+    // game answers a send in (user, 2026-10-17: "only act on casts we sent, matched by
+    // spell name"). The same line also comes for a room spell the game charges to us
+    // (the Underwater Passage's holding breath), which must not touch a buff of ours.
+    // A resist is not a negate, so a resisted cast is never read here (GAME_MECHANICS
+    // "Magic Resist (M.R.) and `TypeOfResists`").
+    private bool IsOwnNegatedCast(string text, string shortCode, string target, DateTime sentAt)
+    {
+        if (!NegatedCastLine.TryReadOwnNegate(text, out string negatedAt, out string negatedSpell)) return false;
+        if (_now() - sentAt > PendingSelfBuffRejectionWindow) return false;
+        if (_spellNameByShort?.Invoke(shortCode) is not { Length: > 0 } spellName
+            || !string.Equals(negatedSpell.Trim(), spellName.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
+        return string.Equals(GivenName(negatedAt.Trim()), GivenName(target.Trim()), StringComparison.OrdinalIgnoreCase);
+    }
+
+    // A member negated our buff: it never landed, so no timer stands for it, and the
+    // member is marked on every slot of that buff. Retrying would draw the same answer
+    // every round for as long as they wear what stops it, so the mark holds until the
+    // user re-ticks them (user, 2026-10-17).
+    private void MarkBuffNegated(string shortCode, string target)
+    {
+        string key = GivenName(target.Trim()).ToLowerInvariant();
+        _activeUntil.Remove((key, shortCode));
+        if (_readPartyBuffs?.Invoke() is { } buffs)
+            foreach (Models.Profile.BuffSlot slot in buffs.Slots)
+                if (string.Equals(slot.Spell?.Trim(), shortCode, StringComparison.OrdinalIgnoreCase)
+                    && !slot.NegatedTargets.Contains(key))
+                    slot.NegatedTargets.Add(key);
+        _log?.Info(LogCategory,
+            $"party-buff {shortCode} on {target} was negated — not cast on them again until their box is re-ticked in the Buff Watchdog.");
+        BuffNegated?.Invoke(shortCode, key);
     }
 
     // The server's "you can't see the target" answer to a single-target cast:
@@ -3266,6 +3322,7 @@ public sealed class CastingDirector : IDisposable
                     string given = GivenName(m.Name);
                     string key = given.ToLowerInvariant();
                     if (!slot.AllMembers && !slot.Targets.Contains(key)) continue;
+                    if (slot.NegatedTargets.Contains(key)) continue;
                     if (_hiddenTargets.Contains(key))
                     {
                         if (_isMemberInRoom?.Invoke(given) != true) continue;

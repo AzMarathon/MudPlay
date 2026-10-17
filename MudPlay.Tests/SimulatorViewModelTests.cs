@@ -664,6 +664,59 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.NotNull(h.Rankings.Get(new SimulatorOwner("beta", One)));
     }
 
+    // A row picked from the ranking put its tour on the map as the estimator's
+    // sketch. The set read in again drops the ranking (a table changed, or the set's
+    // data was replaced), and the tour goes with it, as the list did.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GameDataReadInAgainThatDropsTheRanking_ClearsTheSketchOfARowPickedFromIt(bool dataReplaced)
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills"));
+        h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+        Assert.Equal(2, h.Session.Clicks.Count);
+
+        if (dataReplaced) h.Rankings.ForgetSet("alpha");
+        else h.World = WithAnotherMonstersTable;
+        h.Cache.ReloadActiveSet();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Empty(h.Session.Clicks);
+        Assert.DoesNotContain(h.Simulator.Routes, r => r.IsSketch);
+        Assert.Contains(h.Said, l => l.StartsWith("the estimator sketch 'Hills' was cleared"));
+    }
+
+    // The same drop leaves a sketch that is the user's own: one clicked out on the
+    // map, and a picked row's tour edited since.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GameDataReadInAgainThatDropsTheRanking_KeepsASketchOfTheUsersOwn(bool pickedThenEdited)
+    {
+        using Harness h = Build();
+        h.Finish(Ranking("Hills"));
+        if (pickedThenEdited)
+        {
+            h.Simulator.SelectedRanking = h.Simulator.Rankings[0];
+            h.Session.AddClick(new RoomKey(1, 1));
+        }
+        else
+        {
+            h.Session.AddClick(new RoomKey(1, 1));
+            h.Session.AddClick(new RoomKey(1, 2));
+        }
+        int clicks = h.Session.Clicks.Count;
+
+        h.World = WithAnotherMonstersTable;
+        h.Cache.ReloadActiveSet();
+
+        Assert.Empty(h.Simulator.Rankings);
+        Assert.Equal(clicks, h.Session.Clicks.Count);
+        Assert.Contains(h.Simulator.Routes, r => r.IsSketch);
+        Assert.DoesNotContain(h.Said, l => l.StartsWith("the estimator sketch"));
+    }
+
     // A ranking that carries no record of its tables (made while the load could not
     // be stamped) can be compared with nothing: it goes when its set is read in
     // again, as every ranking on the set used to.

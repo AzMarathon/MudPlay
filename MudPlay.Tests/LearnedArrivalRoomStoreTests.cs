@@ -449,4 +449,107 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
         Assert.Equal("{ not json", File.ReadAllText(path + ".bad"));
         Assert.Equal(new[] { IstaGraveyard }, Client().ArrivalsFor(TerraIsta));
     }
+
+    // Another program holds the file: it may be whole. It is not set aside, and
+    // nothing is written over it; what is learned meanwhile is held. Once it
+    // opens, what it holds and what was learned are both on file.
+    [Fact]
+    public void AFileThatCantBeOpened_IsNotDamaged_AndIsNotWrittenUntilItHasBeenRead()
+    {
+        Client().Learn(TerraIsta, IstaGraveyard);
+        string path = FileFor("paradigm");
+        byte[] whole = File.ReadAllBytes(path);
+        RoomKey fuego = new(14, 1812);
+
+        LearnedArrivalRoomStore store;
+        using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            store = Client();
+            Assert.Equal(0, store.Count);
+            store.Learn(fuego, new RoomKey(14, 1850));
+            for (int i = 0; i < 5; i++) Assert.False(store.TakeInOutsideChanges());
+            Assert.Equal(new[] { new RoomKey(14, 1850) }, store.ArrivalsFor(fuego));
+            Assert.Equal(1, Warnings);
+            Assert.Contains(_log, e => e.Severity == LogSeverity.Warn && e.Message.Contains("can't be opened"));
+        }
+        Assert.Equal(whole, File.ReadAllBytes(path));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_root, "paradigm"), "*.bad"));
+
+        Assert.True(store.TakeInOutsideChanges());
+        Assert.Equal(2, store.Count);
+        Assert.Contains(_log, e => e.Message.Contains("could be opened again"));
+        LearnedArrivalRoomStore fresh = Client();
+        Assert.Equal(new[] { IstaGraveyard }, fresh.ArrivalsFor(TerraIsta));
+        Assert.Equal(new[] { new RoomKey(14, 1850) }, fresh.ArrivalsFor(fuego));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_root, "paradigm"), "*.bad"));
+    }
+
+    // Two clients learning at the same instant, over and over: each write is made
+    // under the hold, over what the other has just written, so nothing is lost.
+    [Fact]
+    public async Task TwoClientsWritingAtOnce_LoseNothing()
+    {
+        const int each = 40;
+        LearnedArrivalRoomStore one = new(null, FileFor), two = new(null, FileFor);
+        one.OnActiveSetChanged("paradigm");
+        two.OnActiveSetChanged("paradigm");
+        using Barrier start = new(2);
+        void Run(LearnedArrivalRoomStore store, int map)
+        {
+            start.SignalAndWait();
+            for (int i = 1; i <= each; i++) store.Learn(new RoomKey(map, i), new RoomKey(14, 1900));
+        }
+        Task first = Task.Run(() => Run(one, 1)), second = Task.Run(() => Run(two, 2));
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(60));
+        // Anything a hold kept from being written goes on the next heartbeat.
+        one.TakeInOutsideChanges();
+        two.TakeInOutsideChanges();
+
+        Assert.Equal(2 * each, Client().Count);
+    }
+
+    // A write that never finished left its temporary file: removed when the set
+    // is taken up, unless a client is writing the file at that moment.
+    [Fact]
+    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndOneUnderAWritersHoldIsLeft()
+    {
+        string path = FileFor("paradigm");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        string dead = $"{path}.{int.MaxValue}.tmp";
+        File.WriteAllText(dead, "{");
+
+        using (SharedFileWrite.Hold(path, out _)) Client();
+        Assert.True(File.Exists(dead));
+
+        Client();
+        Assert.False(File.Exists(dead));
+        Assert.Contains(_log, e => e.Severity == LogSeverity.Info && e.Message.Contains("left by a write that never finished"));
+    }
+
+    // A hold that timed out is not waited on again until one is had: whatever
+    // keeps it may not be another client, and each wait is on the UI thread.
+    [Fact]
+    public void AHoldThatTimedOut_IsTriedOnceAfter_UntilItIsHadAgain()
+    {
+        string path = FileFor("paradigm");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (SharedFileWrite.Hold(path, out _))
+        {
+            System.Diagnostics.Stopwatch first = System.Diagnostics.Stopwatch.StartNew();
+            Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(first.ElapsedMilliseconds >= 200);
+
+            System.Diagnostics.Stopwatch again = System.Diagnostics.Stopwatch.StartNew();
+            for (int beat = 0; beat < 5; beat++) Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(again.ElapsedMilliseconds < 200);
+        }
+        using (SharedFileWrite.Hold(path, out _)) { }
+        // Had again: the next one that has to wait, waits.
+        using (SharedFileWrite.Hold(path, out _))
+        {
+            System.Diagnostics.Stopwatch waited = System.Diagnostics.Stopwatch.StartNew();
+            Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(waited.ElapsedMilliseconds >= 200);
+        }
+    }
 }

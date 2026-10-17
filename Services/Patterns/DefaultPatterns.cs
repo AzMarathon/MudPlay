@@ -260,8 +260,14 @@ public static class DefaultPatterns
         // our own swing: a miss in the stats, and a confirmed cast of our attack
         // spell toward its cast cap (report paradigm-20261003-194358). Excluded on
         // the "'s cast of" phrase, which no swing of ours carries.
+        // Our own cast that its target negated or resisted is a miss of ours and a
+        // cast toward its cap (user, 2026-10-17: "Count resists too"). Paradigm's
+        // "You attempt to cast <spell> at <name>, but it's negated!" already fits the
+        // "!" skeleton; Stock's resist line ends in "." and needs its own branch:
+        // "You attempt to cast %s at %s, but the spell is resisted." Such a line about
+        // a buff on a party member is not a miss; the trackers skip it.
         yield return new RegexPattern(KnownPatterns.UserMisses,
-            @"^You (?![^\n]*\bfor \d+ damage\b)(?![^\n]*'s cast of )[^!]+!");
+            @"^You (?:attempt to cast .+ at [\w' -]+, but the spell is resisted\.$|(?![^\n]*\bfor \d+ damage\b)(?![^\n]*'s cast of )[^!]+!)");
         // Local player dodges an incoming mob attack. The dodge line ("The
         // kobold thief lunges at you, but you dodge!") also
         // satisfies MobMisses, so CombatSessionTracker de-dupes by skipping

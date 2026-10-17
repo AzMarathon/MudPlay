@@ -1457,14 +1457,16 @@ public sealed class AppServices
         // members' trains), and walks on to the next trainer it planned when the
         // wait ends. The errand hook has named it ("the training trip") and ended
         // the trainer's side; this ends the trip itself.
-        if (PartyTrain.CallOffTrip(reason) && !stopped.Contains("the training trip"))
+        // The errand's end, ahead of this, may have called it off for the same stop.
+        if ((PartyTrain.CallOffTrip(reason) | PartyTrain.TakeCalledOffFor(reason))
+            && !stopped.Contains("the training trip"))
             stopped.Add("the party training trip");
         // Detours that hold a room to walk to, or back to, afterwards.
         MonsterDropRouter.Cancel();
         ShortcutSource.Cancel();
         AutoLightShopRouter.Cancel();
-        // Route cards on screen were planned on the last set's rooms, and the
-        // "Resume first?" question is about a run of them.
+        // Route cards on screen were planned on the last set's rooms (each says so as
+        // it closes), and the "Resume first?" question is about a run of them.
         ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards();
         _resumeFirstQuestion?.NoCommand.Execute(null);
     }
@@ -1952,6 +1954,9 @@ public sealed class AppServices
     // client can't see). Conditions reads an applied line several spells share by
     // it. Rebuilt on a worker each time a set's room graph has loaded.
     public Game.GameData.SpellCasterIndex SpellCasters { get; private set; } = null!;
+
+    // Where the character stands, as SpellCasters is asked of it.
+    public Game.Conditions.CastReach CastReach { get; private set; } = null!;
 
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
@@ -2833,6 +2838,12 @@ public sealed class AppServices
     // the window's view model while it is open; cleared when it closes.
     public Func<string>? NavigationModeProvider { get; set; }
 
+    // The walk queued in the Navigation window for Go, while the window is open: what
+    // it holds as it reads in a notice, or null for none, and its drop. A change of
+    // game data drops it with the other held starts: a later Go would walk its room
+    // number on the other data (owner, 2026-10-16: "Clear it at the switch").
+    public (Func<string?> Held, Action<string> Drop)? NavigationQueuedWalk { get; set; }
+
     // Sets a user-started run out in the chosen mode (Auto-Combat off, or Sprint Mode
     // on, for the trip there). The auto-engine toggles live on the main window's
     // view-model, which registers this; the Navigation window, the route picker and
@@ -3290,6 +3301,10 @@ public sealed class AppServices
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
             log: Log);
+        // A telepath the game would not send, or whose letters fit two players, is
+        // not left pending in the chat log for a later confirmation to take.
+        Telepaths.GaveUp += Chat.TelepathGivenUp;
+        Chat.LastTelepathOnWire = () => Telepaths.LastWrittenTelepath;
         // Auto-party flag consumer — invites flagged players when they
         // appear in our room, accepts invites from flagged players.
         // Wire-sender is bound by MainWindowViewModel once the telnet
@@ -3608,6 +3623,16 @@ public sealed class AppServices
         // The remote handler shares AutoModeController with the Auto-All button,
         // so button + telepath drive one master switch. ResetSnapshot on load so
         // a freshly loaded character doesn't inherit the previous one's switch.
+        // A loop held to start by itself is dropped for another character ahead of
+        // that reset, which lets go of a restart held for the switch without a word.
+        Game.Map.HeldLoopsOnProfileSwap heldLoopsOnSwap = new(
+            () => MovementControl,
+            () => Profile.Current is null ? null : $"{Profile.CurrentBbsName}/{Profile.CurrentProfileName}",
+            notice => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice)),
+            action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
+        Profile.ProfileLoaded += _ => heldLoopsOnSwap.OnProfileLoaded();
+        Profile.ProfileClosed += heldLoopsOnSwap.OnProfileClosed;
+        Profile.ProfileRenamed += (_, _) => heldLoopsOnSwap.OnProfileRenamed();
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
         // A `par` asked for to check who is in the party isn't a health read, so
         // the auto-heal toggle doesn't hold it. The master switch does.
@@ -3994,8 +4019,10 @@ public sealed class AppServices
         // The lists that label rooms from the Rooms table (item, spell and quest
         // records, the trainer and bank lists, item givers) ask the map for a room
         // the table leaves unnamed, and the ones that keep the answer are told when
-        // a realm's names go on or come off. Both are set before the store is
-        // built, so its first apply already reaches them; ItemSources exists above.
+        // a realm's names go on or come off, and once a walk that learned names goes
+        // quiet (RoomGraph.TellKeptListsWhenQuiet, on the heartbeat). Both are set
+        // before the store is built, so its first apply already reaches them;
+        // ItemSources exists above.
         GameData.RoomNameWhenDataHasNone = (map, room) =>
             RoomGraph.LearnedNames.GetValueOrDefault(new Game.Map.RoomKey(map, room));
         RoomGraph.LearnedNamesChanged += () =>
@@ -4014,12 +4041,16 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => LearnedRoomNames.OnRealmChanged();
         Profile.BbsPinApplied += _ => LearnedRoomNames.OnRealmChanged();
         Profile.ProfileClosed += LearnedRoomNames.OnRealmChanged;
-        // A BBS renamed from Profile Management raises no pin: the realm's folder
-        // moved under the new name, and the store goes with it.
+        // A BBS or realm renamed: the realm's folder moved under the new name, and
+        // the store goes with it (a BBS renamed from Profile Management raises no
+        // pin at all).
         Profile.BbsRenamed += (from, to) =>
             LearnedRoomNames.OnFolderRenamed(AppPaths.BbsFolder(from), AppPaths.BbsFolder(to));
+        Profile.RealmRenamed += (bbs, from, to) =>
+            LearnedRoomNames.OnFolderRenamed(AppPaths.RealmFolder(bbs, from), AppPaths.RealmFolder(bbs, to));
         LearnedRoomNames.OnRealmChanged();
         Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
+        Tick.HeartbeatElapsed += RoomGraph.TellKeptListsWhenQuiet;
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).
@@ -5289,12 +5320,15 @@ public sealed class AppServices
         SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log, TBInfo);
         RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
         if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
-        Conditions.SetCastReach(new Game.Conditions.CastReach(SpellCasters, () =>
+        CastReach = new Game.Conditions.CastReach(SpellCasters, () =>
             Game.Conditions.CastReach.Standing(
                 RoomTracker.State.Confidence, RoomTracker.State.CurrentRoom,
                 inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
                 blinded: Conditions.IsBlinded,
-                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster)));
+                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster,
+                pvpRealm: ResolveActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
+        Conditions.SetCastReach(CastReach);
+        Conditions.CasterNamed += RoomClassifier.NoteCasterNamed;
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line
@@ -5529,6 +5563,10 @@ public sealed class AppServices
         // Party-buff plan (Party window) — the dynamic list of buff slots the
         // party-bless path casts, read live so a Party-window edit takes effect at once.
         CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // A negated member buff is marked on its slot for good (character tier), so
+        // the mark is saved with the profile the moment it lands.
+        CastDirector.SetSpellNameLookup(code => Spellbook.FindByCastCode(code)?.Name);
+        CastDirector.BuffNegated += (_, _) => Profile.Save();
         // Room-presence gate for single-target party buffs: a member is only blessed
         // when they're both in the party AND in the room. Backed by the live
         // room-occupant list (RoomEntityClassifier), matched by given name.
@@ -6284,7 +6322,7 @@ public sealed class AppServices
         // the boundaries that move them: connect / char switch (ProfileLoaded, which
         // also zeroes the session in lockstep with RoundDamage), a Combat-tab edit
         // (ProfileMutated), a game-data set swap, and a spellbook change.
-        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers);
+        CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers, IsPartyMemberOrSelfName);
         RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell, CombatSession.MatchesOwnRoomSpell);
         RoundDamage.SetOwnSpellRepeating(() => Combat.IsRepeatingSpell);
         Combat.BackstabResolved += CombatSession.OnBackstabResolved;
@@ -7573,7 +7611,7 @@ public sealed class AppServices
         // combat-line patterns CombatSessionTracker does, attributed per
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
-            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
+            Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log, isPartyMember: IsPartyMemberOrSelfName);
         // One judge of what was a swing: a miss the session figures take back as a
         // spell's cast line comes off the monster's record too.
         CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();
@@ -7911,7 +7949,8 @@ public sealed class AppServices
             // a bashable no-key open and report back whether it opened.
             openDoor: (dir, done) => Door.Enqueue(
                 dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
-                reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
+                reply: r => done(r is Game.Map.DoorOpenResult.Opened)),
+            stopDoor: () => Door.StopAll());
         Walker.SetMazeSolver(MazeSolver);
         // Teleports on walks the client starts by itself (a walk the user starts states
         // its own preference and never reads this). Read live from the character, so a
@@ -7945,7 +7984,8 @@ public sealed class AppServices
             openDoor: (dir, statRequirement, canBash, keyItemId, sender, reply) =>
                 Door.Enqueue(dir, statRequirement, canBash, keyItemId, sender, reply),
             holdsItem: HoldsKeyItem,
-            gateEngineOn: gate => ReadAutoModeFlag(d => Game.Map.PyramidRunThrough.GateEngineOn(gate, d)));
+            gateEngineOn: gate => ReadAutoModeFlag(d => Game.Map.PyramidRunThrough.GateEngineOn(gate, d)),
+            stopDoor: () => Door.StopAll());
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
@@ -9206,7 +9246,8 @@ public sealed class AppServices
             // Carries an interrupted sweep forward: the items it was holding are
             // still in the pack with only its queue knowing where each belonged,
             // and its remaining plan is a full lap of the circuit to rebuild.
-            suspendedStore: GhSuspendedSweep);
+            suspendedStore: GhSuspendedSweep,
+            activeGameData: () => RoomGraph.ActiveSet);
 
         // The sweep manager is app-scoped but a resumable sweep is per-character:
         // drop the in-memory leftover on a character switch so Resume doesn't offer
@@ -10000,6 +10041,9 @@ public sealed class AppServices
             abandonErrand: reason =>
             {
                 StashTransfer.Cancel(reason);
+                // A leader's party trip waits on its own train with no walk to stop,
+                // and the trainer never answers a train it was told to cancel.
+                PartyTrain.CallOffTrip(reason);
                 TrainerWalk.Cancel(reason);
                 TrainFunding.Cancel(reason);
                 SellDetour.Cancel();
@@ -10022,6 +10066,8 @@ public sealed class AppServices
         // The same stop lets go of what a fight with a player would put back at
         // its end: the engines are idle for the fight, so the stop finds nothing.
         MovementControl.AddHeldStart(() => _pvpFightHeld.Held, reason => _pvpFightHeld.Drop(reason));
+        MovementControl.AddHeldStart(
+            () => NavigationQueuedWalk?.Held(), reason => NavigationQueuedWalk?.Drop(reason));
         StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
@@ -10510,7 +10556,7 @@ public sealed class AppServices
         // after Events exists; MovementControl is built further up.
         MovementControl.Stopping += () => Events.NoteStop(MovementControl.GameDataChangeStop ?? "stopped by the user");
         Events.SetStatsReader(ReadEventReadings);
-        GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
+        GhSweep.SweepCompleted += report => Events.NoteRoombaFinished(report.Finished);
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
         // Boss-timer triggers: timed moments on the scheduler's 30 s clock, kills as
         // they're recorded.
@@ -14163,6 +14209,19 @@ public sealed class AppServices
     // name a current party member? Party names can be one or two words and the wire
     // line often uses just the first, so match the full name or its first token.
     // Backs the pyramid solver's party-member hold detection.
+    // A party member's name, or our own in game (party or solo): our cast at either is
+    // a buff, never a swing at a monster, so the combat stats skip its negate / resist.
+    private bool IsPartyMemberOrSelfName(string name) =>
+        IsPartyMemberOrSelfName(name, IsPartyMemberName, PlayerStats.Name);
+
+    internal static bool IsPartyMemberOrSelfName(string name, Func<string, bool> isPartyMember, string selfName)
+    {
+        if (isPartyMember(name)) return true;
+        static string First(string n) => n.Trim().Split(' ')[0];
+        return selfName.Trim().Length > 0 && name.Trim().Length > 0
+            && string.Equals(First(name), First(selfName), StringComparison.OrdinalIgnoreCase);
+    }
+
     private bool IsPartyMemberName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
@@ -15227,15 +15286,20 @@ public sealed class AppServices
         if (!PartyState.IsInParty || !PartyState.SelfIsLeader || PartyState.Members.Count <= 1) return;
         if (!Inventory.IsLoaded) return;
 
+        // Read in afresh mid-count, the route and its items are other data's: the
+        // walk being planned is dropped (RoutePlanInFlight), and asks nothing more.
+        GameDataCache.Load countedOn = GameData.ActiveLoad;
         var counted = new HashSet<int>();
         for (int round = 0; round < 3; round++)
         {
+            if (GameData.ActiveLoad != countedOn) return;
             List<int> toCount = PerMemberGateItemsOnRoute(source, destination, counted);
             if (toCount.Count == 0) return;
 
             var next = new Dictionary<int, (int, int)>(_partyGateCounts);
             foreach (int id in toCount)
             {
+                if (GameData.ActiveLoad != countedOn) return;
                 counted.Add(id);
                 if (ItemNames.GetName(id) is not { Length: > 0 } name) continue;
                 Game.Remote.PartyInventoryProbe.PartyItemResult asked = await PartyInventory.QueryAsync(id, name);
@@ -15672,6 +15736,7 @@ public sealed class AppServices
         AutoDeposit.Cancel();
         SellDetour.Cancel();
         AutoSell.Cancel();
+        PartyTrain.CallOffTrip(reason);
         TrainerWalk.Cancel(reason);
         TrainFunding.Cancel(reason);
         StashTransfer.Cancel(reason);

@@ -58,7 +58,7 @@ public sealed class MonsterSummonWatcher : IDisposable
         // again, whether or not the re-display below goes out.
         _classifier.NoteUnlistedArrival($"a summon: '{line.Text}'");
 
-        RoomEntity? summoner = FindMonster(room, source);
+        RoomEntity? summoner = room.FindMonster(source);
         if (summoner is null)
         {
             _log?.Debug(LogCategory, $"summon line names '{source}', not a monster on the roster — ignored");
@@ -69,22 +69,6 @@ public sealed class MonsterSummonWatcher : IDisposable
         _log?.Log(LogSeverity.Info, LogCategory, sent
             ? $"'{summoner.Value.RawName}' cast a summon — re-displaying the room so the summoned monster joins the roster"
             : $"'{summoner.Value.RawName}' cast a summon — room re-display skipped (dark room or one just sent)");
-    }
-
-    // The roster names a monster in full ("fat half-orc sentry") and resolves it to its
-    // record name ("half-orc sentry"); the summon line uses the name as shown.
-    private static RoomEntity? FindMonster(RoomEntitiesObservation room, string source)
-    {
-        string name = source.Trim();
-        foreach (RoomEntity e in room.Entities)
-        {
-            if (e.Kind != EntityKind.Monster) continue;
-            if (e.RawName.Equals(name, StringComparison.OrdinalIgnoreCase)
-                || e.ResolvedName.Equals(name, StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(" " + e.ResolvedName, StringComparison.OrdinalIgnoreCase))
-                return e;
-        }
-        return null;
     }
 
     public void Dispose()

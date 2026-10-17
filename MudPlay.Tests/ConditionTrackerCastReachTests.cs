@@ -35,6 +35,9 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
     private bool _blinded;
     private RoomEntitiesObservation? _roster = Roster();
     private bool _rosterIsWhole = true;
+    // Off a PvP realm unless a test says so, with nobody in the party.
+    private bool _pvp;
+    private readonly HashSet<string> _party = new(StringComparer.OrdinalIgnoreCase);
 
     public ConditionTrackerCastReachTests()
     {
@@ -49,7 +52,7 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
 
     private CastReach.Here? Standing() => CastReach.Standing(
         _confidence, RoomWith(_roomSpell), _dark, _enteredBlind, _blinded,
-        _roster, _rosterIsWhole, _casters.KnowsMonster);
+        _roster, _rosterIsWhole, _casters.KnowsMonster, _pvp, _party.Contains);
 
     private static Room RoomWith(int spell) => new()
     {
@@ -116,7 +119,11 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
 
     private static RoomEntity Monster(string name) => new("fierce " + name, name, EntityKind.Monster, 1);
 
+    private static RoomEntity Player(string name) => new(name, name, EntityKind.Player, null);
+
     private void Monsters(params string[] names) => _roster = Roster(names);
+
+    private void Present(params RoomEntity[] who) => _roster = new("Also here: …", who, DateTimeOffset.UtcNow);
 
     // ----- the freezing family ---------------------------------------
 
@@ -133,20 +140,133 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         Assert.False(_tracker.IsConfused);
     }
 
-    // The same room with the whole family: the mist a player can learn is never left
-    // out, since a player's cast is nothing the roster shows.
+    // The same room with the whole family. Glacial mist and the blizzard that ends in
+    // freezing can be learned, and are hostile: with no player here outside the
+    // party, nobody here casts them (user, 2026-10-17).
     [Fact]
-    public void AnIceStormCasterHere_TheMistAPlayerCanLearn_IsNotLeftOut()
+    public void AnIceStormCasterHere_TheMistAPlayerCanLearn_IsLeftOut_WithNoPlayerToCastIt()
     {
         AddTheFreezingFamily();
         Monsters("ice sorceress");
 
         Feed("You are freezing");
 
-        Assert.Contains("ice storm", AppliedNames);
+        Assert.Equal(new[] { "ice storm" }, AppliedNames);
+        Assert.False(_tracker.IsConfused);
+        Assert.Contains(_log.Snapshot(), e =>
+            e.Message.Contains("'glacial mist' (Confused)", StringComparison.Ordinal)
+            && e.Message.Contains("player outside the party", StringComparison.Ordinal));
+    }
+
+    // On a PvP realm a player outside the party can cast them at the character.
+    [Fact]
+    public void OnAPvpRealm_APlayerOutsideTheParty_KeepsTheLearnableMistInReach()
+    {
+        AddTheFreezingFamily();
+        _pvp = true;
+        Present(Monster("ice sorceress"), Player("Bob"));
+
+        Feed("You are freezing");
+
+        Assert.Equal(
+            new[] { "freezing", "glacial mist", "ice storm" }, AppliedNames.Order(StringComparer.Ordinal));
+        Assert.True(_tracker.IsConfused);
+    }
+
+    // A party member's mist doesn't land on the character, and off a PvP realm nobody
+    // else's does either (user, 2026-10-17).
+    [Theory]
+    [InlineData(true, true)]     // a PvP realm, the player in the party
+    [InlineData(false, false)]   // not a PvP realm, the player not in the party
+    public void APartyMember_OrAPlayerOffAPvpRealm_DoesNotKeepTheMistInReach(bool pvp, bool inParty)
+    {
+        AddTheFreezingFamily();
+        _pvp = pvp;
+        if (inParty) _party.Add("Bob");
+        Present(Monster("ice sorceress"), Player("Bob"));
+
+        Feed("You are freezing");
+
+        Assert.Equal(new[] { "ice storm" }, AppliedNames);
+        Assert.False(_tracker.IsConfused);
+    }
+
+    // On a PvP realm, a room that can't be seen, a roster that may be short, or a
+    // name nobody can place leaves the players unknown, and the mist in.
+    [Theory]
+    [InlineData("dark")]
+    [InlineData("not whole")]
+    [InlineData("unplaced name")]
+    public void OnAPvpRealm_PlayersNotKnown_LeaveTheLearnableMistIn(string why)
+    {
+        AddTheFreezingFamily();
+        _pvp = true;
+        _dark = why == "dark";
+        _rosterIsWhole = why != "not whole";
+        _party.Add("Bob");
+        Present(Monster("ice sorceress"), Player("Bob"),
+            new RoomEntity("Shadowy", "Shadowy", why == "unplaced name" ? EntityKind.Unknown : EntityKind.Player, null));
+        if (why != "unplaced name") _party.Add("Shadowy");
+
+        Assert.Null(Standing()!.Value.Strangers);
+
+        Feed("You are freezing");
+
         Assert.Contains("glacial mist", AppliedNames);
-        Assert.Contains("freezing", AppliedNames);
-        Assert.DoesNotContain("galacial mist", AppliedNames);
+        Assert.True(_tracker.IsConfused);
+    }
+
+    // Made-up records sharing one applied text: the white queen's (#1336), a
+    // learnable single-target hostile spell (#9107, Targets 8, otherwise the ice
+    // sorceress's) and a learnable single-target buff (#9112, Targets 2).
+    private void AddALearnableCurseAndBuff()
+    {
+        _messages.Messages.Add(Record("queen's chill (test)", MessageFlags.None,
+            "{null}", "You feel a chill", "The chill passes", 1336));
+        _messages.Messages.Add(Record("learned curse (test)", MessageFlags.Confused,
+            "{null}", "You feel a chill", "The chill passes", 9107));
+        _messages.Messages.Add(Record("learned buff (test)", MessageFlags.None,
+            "{null}", "You feel a chill", "The chill passes", 9112));
+    }
+
+    // A single-target hostile spell is ruled out like the mist; a buff players learn
+    // never is, whoever is here.
+    [Fact]
+    public void ALearnableSingleTargetCurse_IsLeftOut_AndALearnableBuffIsNot()
+    {
+        AddALearnableCurseAndBuff();
+        _pvp = true;
+        _party.Add("Jroc");
+        Present(Monster("white queen"), Player("Jroc"));
+
+        Feed("You feel a chill!");
+
+        Assert.Equal(
+            new[] { "learned buff (test)", "queen's chill (test)" }, AppliedNames.Order(StringComparer.Ordinal));
+        Assert.False(_tracker.IsConfused);
+    }
+
+    [Fact]
+    public void ALearnableSingleTargetCurse_IsInReach_OfAPlayerOutsideThePartyOnAPvpRealm()
+    {
+        AddALearnableCurseAndBuff();
+        _pvp = true;
+        Present(Monster("white queen"), Player("Bob"));
+
+        Feed("You feel a chill!");
+
+        Assert.Equal(3, _applied.Count);
+        Assert.True(_tracker.IsConfused);
+    }
+
+    // Off a PvP realm no player can aim the mist at the character, seen or not.
+    [Fact]
+    public void OffAPvpRealm_NoPlayerCanCastAtUs_EvenInTheDark()
+    {
+        _dark = true;
+        Present(Player("Bob"), new RoomEntity("Shadowy", "Shadowy", EntityKind.Unknown, null));
+
+        Assert.Empty(Standing()!.Value.Strangers!);
     }
 
     // The white queen casts galacial mist and the other ice storm.
@@ -434,10 +554,13 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
     [Fact]
     public void AMonstersSpell_IsRuledOutOnlyByARosterThatIsKnown()
     {
-        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, Array.Empty<string>())));
-        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, new[] { "ice sorceress" })));
-        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(1336, new CastReach.Here(0, Monsters: null)));
-        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(1336, new CastReach.Here(0, new[] { "white queen" })));
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, Nobody, Nobody)));
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, new[] { "ice sorceress" }, Nobody)));
+        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(1336, new CastReach.Here(0, Monsters: null, Nobody)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(1336, new CastReach.Here(0, new[] { "white queen" }, Nobody)));
+        // Players have no part in a spell monsters alone cast.
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, Nobody, Strangers: null)));
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1336, new CastReach.Here(0, Nobody, new[] { "Bob" })));
     }
 
     // Confusion #829 is the spell of two rooms and of no monster: the room alone
@@ -445,16 +568,66 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
     [Fact]
     public void ARoomsSpell_IsRuledOutByTheRoom_WhateverTheRoster()
     {
-        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(829, new CastReach.Here(511, Monsters: null)));
-        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(829, new CastReach.Here(829, Monsters: null)));
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(829, new CastReach.Here(511, Monsters: null, Strangers: null)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(829, new CastReach.Here(829, Monsters: null, Strangers: null)));
     }
 
     [Fact]
     public void ASpellWithACasterNotInView_OrNotInTheSet_IsNeverRuledOut()
     {
-        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(1042, new CastReach.Here(0, Array.Empty<string>())));
-        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(31999, new CastReach.Here(0, Array.Empty<string>())));
+        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(9105, new CastReach.Here(0, Nobody, Nobody)));
+        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(31999, new CastReach.Here(0, Nobody, Nobody)));
     }
+
+    // A learned hostile spell (#9108 has no monster caster; glacial mist #1042
+    // has some): out of reach with no player outside the party here, in reach with
+    // one, unknown while the players can't be told.
+    [Fact]
+    public void ALearnedSpellAimedAtFoes_IsReadByThePlayersOutsideTheParty()
+    {
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(9108, new CastReach.Here(0, Monsters: null, Nobody)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(9108, new CastReach.Here(0, Monsters: null, new[] { "Bob" })));
+        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(9108, new CastReach.Here(0, Nobody, Strangers: null)));
+
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(1042, new CastReach.Here(0, Nobody, Nobody)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(1042, new CastReach.Here(0, new[] { "Lorzina" }, Nobody)));
+        Assert.Equal(CastReach.Verdict.Unknown, VerdictOn(1042, new CastReach.Here(0, Monsters: null, Nobody)));
+    }
+
+    // A hostile spell players learn only from an item's LearnSp slot (#9202) or a
+    // textblock's `learnspell` (#9204), with no "Learnable" or "Learned From" to say
+    // so, is read as a learnable one, not left open as an item's or textblock's cast.
+    [Theory]
+    [InlineData(9202)]
+    [InlineData(9204)]
+    public void ATaughtSpellAimedAtFoes_IsReadByThePlayersOutsideTheParty(int spell)
+    {
+        Assert.Equal(CastReach.Verdict.OutOfReach, VerdictOn(spell, new CastReach.Here(0, Nobody, Nobody)));
+        Assert.Equal(CastReach.Verdict.InReach, VerdictOn(spell, new CastReach.Here(0, Nobody, new[] { "Bob" })));
+    }
+
+    // The Underwater Passage line again, with mists only an item or a textblock
+    // teaches: the dark wizard's ice storm is here, their caster (the ice sorceress)
+    // isn't, and no player outside the party is, so neither confuses.
+    [Fact]
+    public void AnIceStormCasterHere_MistsAnItemOrATextblockTeaches_AreLeftOut()
+    {
+        AddTheFreezingFamily(withTheLearnableMist: false);
+        _messages.Messages.Add(Record("item-taught mist", MessageFlags.Confused,
+            "An opalescent white mist surrounds you!", "You are freezing", "You are no longer freezing", 9202));
+        _messages.Messages.Add(Record("textblock-taught mist", MessageFlags.Confused,
+            "An opalescent white mist surrounds you!", "You are freezing", "You are no longer freezing", 9204));
+        Monsters("dark wizard");
+
+        Feed("You are freezing");
+
+        Assert.Contains("ice storm", AppliedNames);
+        Assert.DoesNotContain("item-taught mist", AppliedNames);
+        Assert.DoesNotContain("textblock-taught mist", AppliedNames);
+        Assert.False(_tracker.IsConfused);
+    }
+
+    private static readonly string[] Nobody = Array.Empty<string>();
 
     // ----- Standing: what the client's own state lets it go by -------
 
@@ -466,7 +639,7 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         bool noRoster = false, bool rosterIsWhole = true) =>
         CastReach.Standing(
             confidence, noRoom ? null : RoomWith(511), dark, enteredBlind, blinded,
-            noRoster ? null : Roster("ice sorceress"), rosterIsWhole, Known);
+            noRoster ? null : Roster("ice sorceress"), rosterIsWhole, Known, pvpRealm: true, isPartyMember: _ => false);
 
     [Fact]
     public void Standing_ConfirmedAndSeen_GivesTheRoomsSpellAndTheMonsters()
@@ -501,7 +674,19 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         {
             Assert.Equal(511, unseen!.Value.RoomSpell);
             Assert.Null(unseen.Value.Monsters);
+            Assert.Null(unseen.Value.Strangers);
         }
+    }
+
+    [Fact]
+    public void StrangersSeen_AreTheListedPlayersOutsideTheParty()
+    {
+        IReadOnlyCollection<string>? seen = CastReach.StrangersSeen(
+            new RoomEntitiesObservation("Also here: …",
+                new[] { Monster("ice sorceress"), Player("Bob"), Player("Jroc") }, DateTimeOffset.UtcNow),
+            cannotSee: false, rosterIsWhole: true, isPartyMember: name => name == "Jroc");
+
+        Assert.Equal(new[] { "Bob" }, seen);
     }
 
     // ----- what of the roster can be vouched for ----------------------

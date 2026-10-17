@@ -79,7 +79,13 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
             _suppress = true;
             _dto.AllMembers = value;
             _dto.Targets.Clear();
-            foreach (BuffMemberToggle t in MemberTargets) t.SetCheckedSilently(value);
+            // Unticking every member is unticking each one, so it lifts their marks too.
+            if (!value) _dto.NegatedTargets.Clear();
+            foreach (BuffMemberToggle t in MemberTargets)
+            {
+                t.SetCheckedSilently(value);
+                if (!value) t.IsNegated = false;
+            }
             _suppress = false;
             _persist();
             OnPropertyChanged(nameof(AllTargets));
@@ -290,16 +296,34 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     public void RebuildMemberTargets(IReadOnlyList<(string Display, string Given)> members)
     {
         MemberTargets.Clear();
+        string spellName = _resolveName(_dto.Spell);
         foreach ((string display, string given) in members)
             MemberTargets.Add(new BuffMemberToggle(
-                display, given, _dto.AllMembers || _dto.Targets.Contains(given), OnMemberToggled));
+                display, given, _dto.AllMembers || _dto.Targets.Contains(given), OnMemberToggled,
+                spellName, _dto.NegatedTargets.Contains(given)));
         HasPartyMembers = members.Count > 0;
         OnPropertyChanged(nameof(AllTargets));
+    }
+
+    // Re-read which members are marked as negating this buff (the casting engine adds a
+    // mark when one lands) without rebuilding the checkboxes.
+    public void RefreshNegatedMarks()
+    {
+        foreach (BuffMemberToggle t in MemberTargets)
+            t.IsNegated = _dto.NegatedTargets.Contains(t.Given);
     }
 
     private void OnMemberToggled(BuffMemberToggle t)
     {
         if (_suppress) return;
+
+        // Unticking a member lifts their negated mark, so ticking them again re-arms
+        // the buff on them: the one way back the user was given (user, 2026-10-17).
+        if (!t.IsChecked)
+        {
+            _dto.NegatedTargets.RemoveAll(x => string.Equals(x, t.Given, StringComparison.OrdinalIgnoreCase));
+            t.IsNegated = false;
+        }
 
         // Leaving auto-adapt "all members" the moment a single box is unticked:
         // freeze the currently-ticked roster into the explicit list, so the OTHER

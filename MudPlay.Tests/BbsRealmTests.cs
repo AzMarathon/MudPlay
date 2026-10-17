@@ -97,6 +97,8 @@ public sealed class BbsRealmTests : IDisposable
         store.Save(new BbsProfile { Name = _bbs });   // one realm, named after the BBS
         ProfileService profiles = new();
         RealmCatalog realms = new(store, profiles);
+        List<(string Bbs, string From, string To)> renamed = new();
+        profiles.RealmRenamed += (bbs, from, to) => renamed.Add((bbs, from, to));
 
         string added = realms.Add(_bbs)!;
         Assert.Equal("Realm 2", added);
@@ -109,9 +111,12 @@ public sealed class BbsRealmTests : IDisposable
         Assert.True(File.Exists(AppPaths.RealmPlayersFile(AppPaths.RealmFolder(_bbs, "PVE"))));
         Assert.Equal("PVE", profiles.RealmOf(new ProfileRef(_bbs, "Priest")));
         Assert.Equal("Priest", Assert.Single(realms.CharactersOn(_bbs, "PVE")).Name);
+        // Told once, for what is kept in the realm's folder to follow it.
+        Assert.Equal((_bbs, added, "PVE"), Assert.Single(renamed));
 
         // Removing a realm deletes the characters on it and its data.
         Assert.True(realms.Remove(_bbs, "PVE"));
+        Assert.Single(renamed);
         Assert.False(profiles.Exists(_bbs, "Priest"));
         Assert.False(Directory.Exists(AppPaths.RealmFolder(_bbs, "PVE")));
         Assert.False(realms.Remove(_bbs, _bbs));            // a BBS keeps one realm
