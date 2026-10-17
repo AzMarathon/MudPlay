@@ -1462,6 +1462,37 @@ public sealed class AutoLightProvisionerTests
         Assert.Equal(2, asks);
     }
 
+    // A drop that cuts off a loop trip undoes only that try: three misses before it
+    // still count, so the next miss waits the fourth back-off (80 minutes), not the
+    // first (10).
+    [Fact]
+    public void Loop_TripCutOffByADrop_KeepsTheEarlierMisses()
+    {
+        Harness h = new();
+        int asks = 0;
+        LightRestockOutcome answer = LightRestockOutcome.NotPossible;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return answer; }, engineRooms: () => new[] { A });
+        h.Engine.OnEngineStarted(userStarted: false);                 // miss 1
+        h.Now += TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // miss 2
+        h.Now += TimeSpan.FromMinutes(20) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // miss 3
+        Assert.Equal(3, asks);
+
+        answer = LightRestockOutcome.Started;
+        h.Now += TimeSpan.FromMinutes(40) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // the 4th: under way
+        Assert.Equal(4, asks);
+        h.Engine.NoteEngineTripCutOff();                              // the drop cuts it off
+
+        answer = LightRestockOutcome.NotPossible;
+        h.Poll();                                                     // free again at once: miss 4
+        Assert.Equal(5, asks);
+        h.Now += TimeSpan.FromMinutes(40) + TimeSpan.FromSeconds(1);
+        h.Poll();
+        Assert.Equal(5, asks);                                        // within the 80-minute back-off
+    }
+
     // A few coppers picked up after the try don't send the loop shopping again;
     // reaching the price of one copy (when it was short of it) does, and a purse
     // that could already pay never does.

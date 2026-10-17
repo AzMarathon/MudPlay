@@ -111,6 +111,7 @@ public sealed class AutoDepositManager : IDisposable
     private readonly Func<bool> _isFollower;
     // The light buy at a shop the reroute stops at.
     private readonly LightShopBuy _lightBuyer;
+    private readonly MovementCoordinator? _coordinator;
     // A loop's rooms by its waypoints (unbound: none known).
     private readonly Func<Loop, IReadOnlyList<RoomKey>> _loopRoomsOf;
     // Bounds the wait for the fresh `i` on bank arrival (see DepositSyncTimeout).
@@ -173,8 +174,12 @@ public sealed class AutoDepositManager : IDisposable
         TimeSpan? buyTimeout = null,
         Func<bool>? isFollower = null,
         Func<RoomKey, Loop, RoomKey?>? nearestLoopRoom = null,
-        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null)
+        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null,
+        // The movement gates: a user Stop's gate up when the link drops keeps the run
+        // stopped. Unwired, nothing is taken as held.
+        MovementCoordinator? coordinator = null)
     {
+        _coordinator = coordinator;
         ArgumentNullException.ThrowIfNull(cash);
         ArgumentNullException.ThrowIfNull(readCash);
         ArgumentNullException.ThrowIfNull(getSnapshot);
@@ -573,9 +578,10 @@ public sealed class AutoDepositManager : IDisposable
     // link from the shop. A loop it came off is handed to LoopRunner's own restart
     // after a reconnect (LoopRunner.ResumeOnReconnect), as a loop running at the drop
     // is, with the guards that has (the master switch, a party reform): it restarts on
-    // the reconnect's first prompt and walks on from the room the reconnect shows,
-    // its own planning taking up any light still wanted. An Auto-Lair run has no such
-    // restart and stays stopped.
+    // the reconnect's first prompt, its first step planned from the room last known,
+    // and its own planning takes up any light still wanted. Not when the user's Stop
+    // held the trip (the user gate is up): that stays a stop. An Auto-Lair run has no
+    // such restart and stays stopped.
     public void NoteDisconnected()
     {
         if (_phase != DepositPhase.BuyingLight) return;
@@ -585,7 +591,9 @@ public sealed class AutoDepositManager : IDisposable
         GoIdle();
         if (!lightTrip) _cash.NotifyAutoDepositAborted();
         else _provisioner.NoteEngineTripCutOff();
-        if (resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop)
+        if (_coordinator?.AssertedGates.Contains(MovementCoordinator.UserGate) == true)
+            _log?.Info(LogCategory, "the user's Stop held the trip — the run stays stopped after the drop");
+        else if (resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop)
             _loopRunner.ResumeOnReconnect(loop, "a light buy the connection cut off");
         else if (resume.Kind == DetourResumeKind.Lair)
             _log?.Info(LogCategory, "Auto-Lair stays stopped after the drop — start it again once back");

@@ -10023,7 +10023,8 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom,
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement));
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            coordinator: MovementCoordinator);
         // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
         // whose lit light dwindles under Reorder-at: the walk-to shop router stands
         // down while they run, so the buy is a trip of its own off the engine, back

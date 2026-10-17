@@ -114,6 +114,9 @@ public sealed class AutoLightProvisioner
     // copy (when it was short of it), the back-off passes, or the user starts a run;
     // a circuit that no longer needs a light clears it.
     private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTried;
+    // The record as it stood before the latest try, for a try a dropped connection
+    // cut off (NoteEngineTripCutOff).
+    private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTriedBefore;
 
     // What one copy of a light costs at the cheapest shop selling it, and at a given
     // shop (null: not known).
@@ -315,7 +318,7 @@ public sealed class AutoLightProvisioner
         _madeItem = null;
         _spellShort = null;
         _reorderRequestedFor = null;
-        _engineBuyTried = null;
+        _engineBuyTried = _engineBuyTriedBefore = null;
         _errandShopFailed.Clear();
         if (had) _log?.Info(LogCategory, $"{why} — light latches cleared");
     }
@@ -570,7 +573,8 @@ public sealed class AutoLightProvisioner
     public void NoteEngineTripCutOff()
     {
         if (_engineBuyTried is null && _reorderRequestedFor is null) return;
-        _engineBuyTried = null;
+        // Only this try is undone: earlier misses in a row keep their weight.
+        _engineBuyTried = _engineBuyTriedBefore;
         _reorderRequestedFor = null;
         _log?.Info(LogCategory, "light trip cut off by a dropped connection — not counted as tried");
     }
@@ -580,7 +584,7 @@ public sealed class AutoLightProvisioner
     // couldn't buy before.
     public void OnEngineStarted(bool userStarted)
     {
-        if (userStarted) _engineBuyTried = null;
+        if (userStarted) _engineBuyTried = _engineBuyTriedBefore = null;
         RequestEngineCheck(null, "the run started");
     }
 
@@ -608,7 +612,7 @@ public sealed class AutoLightProvisioner
         if (plan.Action != AutoLightAction.Buy)
         {
             // Lit now (a buy landed, a light was found): the back-off starts over.
-            if (plan.Action is AutoLightAction.None or AutoLightAction.Ready) _engineBuyTried = null;
+            if (plan.Action is AutoLightAction.None or AutoLightAction.Ready) _engineBuyTried = _engineBuyTriedBefore = null;
             return;
         }
         if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
@@ -637,6 +641,7 @@ public sealed class AutoLightProvisioner
             _log?.Debug(LogCategory, $"light trip for {route} waits — another trip has the walker ({plan.Reason})");
             return;
         }
+        _engineBuyTriedBefore = _engineBuyTried;
         _engineBuyTried = (route, lights, wealth, now, failures + 1);
         if (outcome == LightRestockOutcome.Started)
         {

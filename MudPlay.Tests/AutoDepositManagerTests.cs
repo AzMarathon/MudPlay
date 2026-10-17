@@ -319,7 +319,8 @@ public sealed class AutoDepositManagerTests : IDisposable
                 IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
-            });
+            },
+            coordinator: coord);
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -1104,6 +1105,23 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(LoopState.Approaching, h.Loop.State);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
         Assert.Equal("s", h.Moves.Last());          // planned from the room the reconnect showed
+    }
+
+    // The user's Stop held the trip (the user gate is up) when the link dropped: that
+    // stays a stop, and the loop isn't restarted on the reconnect.
+    [Fact]
+    public void ConnectionDropsWhileTheUsersStopHoldsTheTrip_TheLoopStaysStopped()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.Walker.Pause();
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
     }
 
     // The master switch off at the reconnect: LoopRunner holds the restart for it.
