@@ -8,9 +8,6 @@ namespace MudPlay.Game.Recovery;
 // (GAME_MECHANICS "Corpse recovery (`recover corpse`)").
 public static partial class CorpseRecoveryLines
 {
-    // What stands for the recover password wherever the client keeps the command.
-    public const string PasswordMask = "[redacted]";
-
     // `recover corpse <name> <password>`: the form for another player's corpse. The
     // password is the rest of the line, so one with a space in it is taken whole.
     public static bool TryParseRecoverWithPassword(string? command, out string name, out string password)
@@ -25,11 +22,23 @@ public static partial class CorpseRecoveryLines
     }
 
     // The command with its password masked, for anything that keeps what was sent
-    // (the sent-command trail, the program log). Any other line comes back as it was.
+    // or seen (the sent-command trail, the program log, the chat log). A line that
+    // only quotes the command (`/raijin @do recover corpse …`) is masked as
+    // RedactAnywhere does; any other line comes back as it was.
     public static string Redact(string command) =>
         TryParseRecoverWithPassword(command, out string name, out _)
-            ? $"recover corpse {name} {PasswordMask}"
-            : command;
+            ? $"recover corpse {name} {Services.BugReportScrub.Mask}"
+            : RedactAnywhere(command);
+
+    // Every `recover corpse <name> <password>` inside a longer text (a log line that
+    // quotes a relayed `@do`, a telepath in the chat log) with its password masked.
+    // Inside other text the password is taken to be one word, ending at a space or
+    // a quote.
+    private static string RedactAnywhere(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text.IndexOf("corpse", StringComparison.OrdinalIgnoreCase) < 0) return text;
+        return EmbeddedRecoverRegex().Replace(text, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
+    }
 
     // The command with its password left off, for the Up-arrow recall: a mask sent
     // back to the game would be taken as the password.
@@ -61,6 +70,10 @@ public static partial class CorpseRecoveryLines
     [GeneratedRegex(@"^\s*recover\s+corpse\s+(?<name>\S+)\s+(?<password>\S.*?)\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex RecoverWithPasswordRegex();
+
+    [GeneratedRegex(@"(?<lead>\brecover\s+corpse\s+[^\s'"";]+\s+)(?!\[redacted\])[^\s'"";]+",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex EmbeddedRecoverRegex();
 
     [GeneratedRegex(@"^You begin to pick through the corpse of (?<name>.+?)\.\.\.$", RegexOptions.CultureInvariant)]
     private static partial Regex BegunRegex();

@@ -1267,6 +1267,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _grabOnSurvey = false;   // one shot per arming — never loop
         _lookExitsOwed = false;
         _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
+        _corpseAskedFor = corpse;
         Send($"recover corpse {corpse}");
     }
 
@@ -2271,6 +2272,27 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return ourGiven.Length == 0 && corpseCount == 1 ? loneCorpse : null;
     }
 
+    // The corpse our own `recover corpse` named, and the live in-game name, both
+    // say the corpse is ours. The profile's stored name is asked only when neither
+    // is known: a copied profile can leave it stale (report stock-20260828-104653),
+    // and a stale name taken alone would leave our recovered pile open.
+    private bool IsOurCorpse(string whose)
+    {
+        string given = CorpseRecoveryLines.GivenName(whose);
+        string asked = CorpseRecoveryLines.GivenName(_corpseAskedFor);
+        string live = CorpseRecoveryLines.GivenName(_liveSelfName?.Invoke());
+        if (asked.Length == 0 && live.Length == 0)
+        {
+            string stored = CorpseRecoveryLines.GivenName(_profile.Current?.Name);
+            return stored.Length == 0 || string.Equals(given, stored, StringComparison.OrdinalIgnoreCase);
+        }
+        return string.Equals(given, asked, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(given, live, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The corpse name the last `recover corpse` we sent asked for.
+    private string? _corpseAskedFor;
+
     // Prefer the live in-game name over the profile's stored name, which a copied
     // profile can leave stale (report stock-20260828-104653) — matching another
     // player's corpse would be a serious mis-recovery.
@@ -2409,8 +2431,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             // Another player's corpse prints the same line, and it is theirs, not
             // ours (CorpseHandoffManager keeps it to hand back).
-            string ours = OurGivenName();
-            if (ours.Length > 0 && !string.Equals(CorpseRecoveryLines.GivenName(whose), ours, StringComparison.OrdinalIgnoreCase))
+            if (!IsOurCorpse(whose))
             {
                 _log?.Debug(LogCategory, $"paradigm: recovered {whose}'s corpse, not ours — our pile stays open");
                 return;

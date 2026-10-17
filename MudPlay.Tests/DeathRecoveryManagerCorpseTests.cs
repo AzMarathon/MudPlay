@@ -54,6 +54,25 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void Paradigm_TheCorpseWeAskedFor_ClosesOurPileWhenTheStoredNameIsStale()
+    {
+        // The stored name can be stale (report stock-20260828-104653) and the live
+        // one not yet known; the corpse our own command named is ours all the same.
+        using GraphHarness h = DiedAtTheGates();
+        string? live = "Ermias";
+        h.Recovery.AttachLiveSelfName(() => live);
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
+        Assert.Contains("recover corpse Ermias", h.Sent);
+
+        live = null;
+        h.Profile.Current!.Name = "Stale";
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
     public void Paradigm_WalkIn_ThenWalkingOn_TheNextRoomsFloorDoesNotMarkThePileMissing()
     {
         // The corpse is there and asked for. The walk goes on into a room with a

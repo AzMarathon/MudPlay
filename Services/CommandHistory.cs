@@ -29,14 +29,23 @@ public sealed class CommandHistory
     // the same move shouldn't bury the history under duplicates). Once at
     // Capacity the oldest entry is dropped.
     // Another player's corpse password is left off, so a recalled `recover corpse`
-    // needs it typed again.
+    // needs it typed again. A typed line can carry several commands (`;`, `^M`),
+    // so each one is looked at; a line with no such command is kept as typed.
     public void Record(string command)
     {
         if (string.IsNullOrWhiteSpace(command)) return;
-        command = Game.Recovery.CorpseRecoveryLines.WithoutPassword(command);
+        command = WithoutCorpsePasswords(command);
         if (_entries.Count > 0 && _entries[^1] == command) return;
         _entries.Add(command);
         if (_entries.Count > Capacity) _entries.RemoveAt(0);
         Changed?.Invoke();
+    }
+
+    internal static string WithoutCorpsePasswords(string line)
+    {
+        IReadOnlyList<string> steps = MacroStore.SplitTypedInput(line);
+        if (!steps.Any(step => Game.Recovery.CorpseRecoveryLines.TryParseRecoverWithPassword(step, out _, out _)))
+            return line;
+        return string.Join(";", steps.Select(Game.Recovery.CorpseRecoveryLines.WithoutPassword));
     }
 }

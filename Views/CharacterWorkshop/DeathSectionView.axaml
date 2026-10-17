@@ -105,9 +105,6 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Detail panel — always visible, reflecting the selected grid
-             row. Bounded height + scroll so long item lists don't stretch
-             the section. -->
         <!-- Other players' corpses recovered with `recover corpse <name> <password>`
              and not yet handed back. Only shown once there is one. -->
         <Border Grid.Row="3" Margin="0,10,0,0" Padding="12"
@@ -154,6 +151,9 @@
             </StackPanel>
         </Border>
 
+        <!-- Detail panel — always visible, reflecting the selected grid
+             row. Bounded height + scroll so long item lists don't stretch
+             the section. -->
         <Border Grid.Row="4" Margin="0,10,0,0" Padding="12"
                 Background="{StaticResource ChromeBgElevBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"

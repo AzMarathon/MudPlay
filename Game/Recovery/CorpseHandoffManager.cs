@@ -32,6 +32,11 @@ public sealed class CorpseHandoffManager
     // From the command going out to the first recovery line.
     public static readonly TimeSpan ArmWindow = TimeSpan.FromSeconds(20);
 
+    // From the first recovery line to the closing one. The lines come in one burst;
+    // past this the closing line was missed, and taking more `You took` lines into
+    // the record would hand away our own loot.
+    public static readonly TimeSpan CloseWindow = TimeSpan.FromSeconds(5);
+
     // A handoff with nothing sent or answered for this long is over: whatever is
     // still out was never answered. Longer than the pacer's own answer timeout and
     // rate-limit back-off, so a paced run is not cut short between two sends.
@@ -51,8 +56,9 @@ public sealed class CorpseHandoffManager
 
     private readonly HashSet<string> _sessionPasswords = new(StringComparer.Ordinal);
 
-    // The name typed in the command, and when it went out.
-    private (string Name, DateTimeOffset At)? _armed;
+    // Each name typed in a command not yet answered by its recovery, and when it
+    // went out: several can be sent in a row (`;`), and each is answered in turn.
+    private readonly List<(string Name, DateTimeOffset At)> _armed = new();
 
     // A recovery under way: the owner as printed, and what has come out so far.
     private sealed class Collecting(string owner)
@@ -100,6 +106,7 @@ public sealed class CorpseHandoffManager
         _scheduleAfter = scheduleAfter ?? throw new ArgumentNullException(nameof(scheduleAfter));
         _log = log;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        // The new character's profile is not where an unfinished record belongs.
         _profile.ProfileLoaded += _ => Reset("another character was loaded");
     }
 
@@ -120,25 +127,27 @@ public sealed class CorpseHandoffManager
     // ----- Recording ---------------------------------------------------------
 
     // Every line on its way out: only `recover corpse <name> <password>` matters.
-    public void ObserveOutbound(ReadOnlySpan<byte> data)
+    // usersOwn: typed by the user at the terminal or the Conversation window. Only
+    // such a line arms a record (user, 2026-10-17); one an engine, a macro or a
+    // relayed `@do` sent still has its password remembered for the bug report's mask.
+    public void ObserveOutbound(ReadOnlySpan<byte> data, bool usersOwn)
     {
         if (data.Length is 0 or > 300) return;
         foreach (string line in Encoding.Latin1.GetString(data).Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
-            ObserveCommand(line);
+            ObserveCommand(line, usersOwn);
     }
 
-    public void ObserveCommand(string command)
+    public void ObserveCommand(string command, bool usersOwn)
     {
         if (!CorpseRecoveryLines.TryParseRecoverWithPassword(command, out string name, out string password)) return;
         _sessionPasswords.Add(password.Trim());
-        FinishCollecting("another recovery was sent");
+        if (!usersOwn) return;
         if (IsSelf(name))
         {
-            _armed = null;
             _log?.Debug(LogCategory, "recover corpse names this character: our own corpse is not handed back");
             return;
         }
-        _armed = (name, _now());
+        _armed.Add((name, _now()));
         _log?.Debug(LogCategory, $"recover corpse {name} sent: waiting for the recovery lines");
     }
 
@@ -160,12 +169,20 @@ public sealed class CorpseHandoffManager
         if (CorpseRecoveryLines.Begun(text) is { } begun)
         {
             FinishCollecting("another recovery began");
-            if (_armed is not { } armed) return;
-            _armed = null;
-            if (_now() - armed.At > ArmWindow) return;
-            if (!CorpseRecoveryLines.GivenName(begun).StartsWith(armed.Name, StringComparison.OrdinalIgnoreCase)) return;
+            DateTimeOffset now = _now();
+            _armed.RemoveAll(a => now - a.At > ArmWindow);
+            // Our own corpse (an auto-recovery) answers none of the arms.
             if (IsSelf(begun)) return;
-            _collecting = new Collecting(begun);
+            string given = CorpseRecoveryLines.GivenName(begun);
+            int at = _armed.FindIndex(a => given.StartsWith(a.Name, StringComparison.OrdinalIgnoreCase));
+            if (at < 0) return;
+            _armed.RemoveAt(at);
+            Collecting started = new(begun);
+            _collecting = started;
+            _scheduleAfter(CloseWindow, () =>
+            {
+                if (ReferenceEquals(_collecting, started)) FinishCollecting($"no closing line within {CloseWindow.TotalSeconds:0} s");
+            });
             return;
         }
         if (_collecting is not { } c) return;
@@ -191,7 +208,7 @@ public sealed class CorpseHandoffManager
     // drew a recovery is dropped.
     public void NoteRoomChanged()
     {
-        _armed = null;
+        _armed.Clear();
         FinishCollecting("the character moved on");
     }
 
@@ -387,12 +404,17 @@ public sealed class CorpseHandoffManager
         Changed?.Invoke();
     }
 
-    // A disconnect: what is still queued would go to a game that isn't there.
-    public void NotifyDisconnected() => Reset("the link dropped");
+    // A disconnect: a recording under way keeps what its lines named, and what is
+    // still queued would go to a game that isn't there.
+    public void NotifyDisconnected()
+    {
+        FinishCollecting("the link dropped");
+        Reset("the link dropped");
+    }
 
     private void Reset(string why)
     {
-        _armed = null;
+        _armed.Clear();
         _collecting = null;
         if (_handoff is { } h) Finish(h, why);
         Changed?.Invoke();
@@ -409,7 +431,8 @@ public sealed class CorpseHandoffManager
     public string? DescribePending()
     {
         List<string> parts = new();
-        if (_armed is { } a) parts.Add($"waiting for the recovery lines of {a.Name}'s corpse (sent {a.At.LocalDateTime:HH:mm:ss})");
+        foreach ((string name, DateTimeOffset at) in _armed)
+            parts.Add($"waiting for the recovery lines of {name}'s corpse (sent {at.LocalDateTime:HH:mm:ss})");
         if (_collecting is { } c) parts.Add($"recording {c.Owner}'s corpse: {c.Items.Count} item line(s) so far");
         if (_handoff is { } h)
             parts.Add($"handing {h.Record.Owner}'s corpse to {h.Recipient}: {h.Given} given, {h.Outstanding.Count} awaiting an answer, "

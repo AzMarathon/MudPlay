@@ -136,7 +136,10 @@ public sealed class SessionLogService : IDisposable
     {
         string speaker = entry.Speaker is null ? string.Empty : $" {entry.Speaker}";
         if (!string.IsNullOrEmpty(entry.HeardFrom)) speaker += $"{HeardFromOpen}{entry.HeardFrom})";
-        return $"[{entry.Timestamp.ToLocalTime().ToString(StampFormat)}] {entry.Channel}{speaker}: {entry.Message}";
+        // A corpse password someone telepathed (`@do recover corpse <name> <pw>`) is
+        // theirs, not something to keep on disk.
+        string message = Game.Recovery.CorpseRecoveryLines.Redact(entry.Message);
+        return $"[{entry.Timestamp.ToLocalTime().ToString(StampFormat)}] {entry.Channel}{speaker}: {message}";
     }
 
     internal static string FormatTxnLine(TransactionEntry entry)

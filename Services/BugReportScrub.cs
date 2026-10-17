@@ -4,9 +4,10 @@ using System.Text.RegularExpressions;
 namespace MudPlay.Services;
 
 // Takes the account's login name, login password and suicide password, and any
-// other player's corpse password typed this session, out of a bug report. Reports get attached to public issues, so none of the three may
-// appear anywhere in one: not in the scrollback, the wire, the program log, the
-// sent-command trail, a trigger's text or a settings dump. The scrub runs over
+// other player's corpse password seen this session, out of a bug report. Reports
+// get attached to public issues, so none of them may appear anywhere in one: not
+// in the scrollback, the wire, the program log, the sent-command trail, a
+// trigger's text or a settings dump. The scrub runs over
 // the whole rendered document, after every section is built, so a section added
 // later is covered without knowing about it.
 //
@@ -194,6 +195,9 @@ public static class BugReportScrub
             // The echo is masked whether or not a password is saved here: one
             // typed by hand is echoed all the same.
             text = MaskPasswordEchoes(text, out int echoes);
+            // A corpse password in a line that quotes the command (a telepathed
+            // `@do`), whether or not it was typed here.
+            text = Game.Recovery.CorpseRecoveryLines.Redact(text);
             replaced = echoes;
             if (_patterns.Length == 0) return text;
             int count = echoes;

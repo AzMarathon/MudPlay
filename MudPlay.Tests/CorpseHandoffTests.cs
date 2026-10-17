@@ -1,8 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using MudPlay.Game;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Recovery;
+using MudPlay.Game.Remote;
+using MudPlay.Models.GameData;
+using MudPlay.Services.Patterns;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
@@ -65,7 +69,7 @@ public sealed class CorpseHandoffTests
 
         public void Recover(string owner, params string[] items)
         {
-            Manager.ObserveCommand($"recover corpse {owner.ToLowerInvariant()} {Password}");
+            Manager.ObserveCommand($"recover corpse {owner.ToLowerInvariant()} {Password}", usersOwn: true);
             Manager.OnLine($"You begin to pick through the corpse of {owner}...");
             Manager.NoteCoinsPicked("platinum", 51);
             Manager.NoteCoinsPicked("gold", 53);
@@ -146,18 +150,144 @@ public sealed class CorpseHandoffTests
     public void ArmRunsOut_AndAnotherNamesCorpseIsNotTaken()
     {
         Harness h = new();
-        h.Manager.ObserveCommand($"recover corpse raijin {Password}");
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
         h.Manager.OnLine("You begin to pick through the corpse of Nineteen...");
         h.Manager.OnLine("You took thorned whip.");
         h.Manager.OnLine("You have recovered the corpse of Nineteen.");
         Assert.Empty(h.Manager.Records);
 
-        h.Manager.ObserveCommand($"recover corpse raijin {Password}");
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
         h.Now += CorpseHandoffManager.ArmWindow + TimeSpan.FromSeconds(1);
         h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
         h.Manager.OnLine("You took thorned whip.");
         h.Manager.OnLine("You have recovered the corpse of Raijin.");
         Assert.Empty(h.Manager.Records);
+    }
+
+    [Fact]
+    public void SeveralCorpsesInARow_AreEachRecorded()
+    {
+        // `recover corpse raijin p1;recover corpse ermias p2`: both go out before
+        // either recovery prints.
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
+        h.Manager.ObserveCommand("recover corpse ermias otherpass", usersOwn: true);
+        foreach (string owner in new[] { "Raijin", "Ermias" })
+        {
+            h.Manager.OnLine($"You begin to pick through the corpse of {owner}...");
+            h.Manager.OnLine($"You took {owner.ToLowerInvariant()}'s sword.");
+            h.Manager.OnLine($"You have recovered the corpse of {owner}.");
+        }
+        Assert.Equal(new[] { "Ermias", "Raijin" }, h.Manager.Records.Select(r => r.Owner).OrderBy(o => o));
+    }
+
+    [Fact]
+    public void ACommandTypedMidBurst_DoesNotCutTheRecordShort()
+    {
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
+        h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
+        h.Manager.OnLine("You took thorned whip.");
+        h.Manager.ObserveCommand("recover corpse ermias otherpass", usersOwn: true);
+        h.Manager.OnLine("You took rope and grapple.");
+        h.Manager.OnLine("You have recovered the corpse of Raijin.");
+
+        CorpseHandoffRecord r = Assert.Single(h.Manager.Records);
+        Assert.Equal(new[] { "thorned whip", "rope and grapple" }, r.Items.Select(i => i.Name));
+    }
+
+    [Fact]
+    public void OurOwnAutoRecovery_DoesNotUseUpAFriendsArm()
+    {
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
+        h.Manager.OnLine("You begin to pick through the corpse of Fujin...");
+        h.Manager.OnLine("You took my own sword.");
+        h.Manager.OnLine("You have recovered the corpse of Fujin.");
+        h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
+        h.Manager.OnLine("You took thorned whip.");
+        h.Manager.OnLine("You have recovered the corpse of Raijin.");
+
+        CorpseHandoffRecord r = Assert.Single(h.Manager.Records);
+        Assert.Equal("Raijin", r.Owner);
+        Assert.Equal(new[] { "thorned whip" }, r.Items.Select(i => i.Name));
+    }
+
+    [Fact]
+    public void AMissedClosingLine_EndsTheRecordAfterFiveSeconds()
+    {
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
+        h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
+        h.Manager.OnLine("You took thorned whip.");
+        h.FireTimers();                                   // CloseWindow passes
+        h.Manager.OnLine("You took my own loot.");        // our own pickup later on
+        h.Manager.NoteCoinsPicked("gold", 7);
+
+        CorpseHandoffRecord r = Assert.Single(h.Manager.Records);
+        Assert.Equal(new[] { "thorned whip" }, r.Items.Select(i => i.Name));
+        Assert.Equal(0, r.Coins.Gold);
+        Assert.Contains("closing line", r.Note);
+    }
+
+    [Fact]
+    public void ADisconnect_KeepsWhatTheRecordingHadSoFar()
+    {
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: true);
+        h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
+        h.Manager.OnLine("You took thorned whip.");
+        h.Manager.NotifyDisconnected();
+        Assert.Equal("thorned whip", Assert.Single(Assert.Single(h.Manager.Records).Items).Name);
+    }
+
+    [Fact]
+    public void ACommandNotTypedByTheUser_DoesNotArm_ButItsPasswordIsMasked()
+    {
+        Harness h = new();
+        h.Manager.ObserveCommand($"recover corpse raijin {Password}", usersOwn: false);
+        h.Manager.OnLine("You begin to pick through the corpse of Raijin...");
+        h.Manager.OnLine("You took thorned whip.");
+        h.Manager.OnLine("You have recovered the corpse of Raijin.");
+        Assert.Empty(h.Manager.Records);
+        Assert.Contains(Password, h.Manager.SessionPasswords);
+    }
+
+    [Fact]
+    public void ARelayedDo_LogsTheCommandWithItsPasswordMasked()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PlayerDatabase players = new();
+        LogService log = new();
+        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players, log);
+        DoHandler handler = new(engine, log);
+        List<string> wire = new();
+        handler.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b)));
+        DateTime now = new(2026, 10, 17, 0, 0, 0, DateTimeKind.Utc);
+        players.RecordObservation("Raijin", null, null, null, null, null, null, now);
+        players.EditCustomization("Raijin", new PlayerCustomization(RemoteControls: PlayerRemoteControls.ExecuteCommands));
+
+        string said = $"@do recover corpse raijin {Password}";
+        engine.DispatchForTests(new ChatLogEntry(now, ChatChannel.TelepathIncoming, "Raijin", said, $"Raijin telepaths: {said}"));
+
+        Assert.Equal($"recover corpse raijin {Password}\r", Assert.Single(wire));
+        Assert.Contains(log.Snapshot(), e => e.Message.Contains("recover corpse raijin [redacted]"));
+        Assert.DoesNotContain(log.Snapshot(), e => e.Message.Contains(Password) || (e.Context?.Contains(Password) ?? false));
+        Assert.DoesNotContain(Password, SessionLogService.FormatChatLine(
+            new ChatLogEntry(now, ChatChannel.TelepathIncoming, "Raijin", said, $"Raijin telepaths: {said}")));
+    }
+
+    [Theory]
+    [InlineData("recover corpse raijin " + Password, "recover corpse raijin")]
+    [InlineData("look;recover corpse raijin " + Password, "look;recover corpse raijin")]
+    [InlineData("recover corpse raijin " + Password + ";n", "recover corpse raijin;n")]
+    [InlineData("look;n", "look;n")]
+    public void History_DropsThePasswordFromEveryStep(string typed, string kept)
+    {
+        CommandHistory history = new();
+        history.Record(typed);
+        Assert.Equal(kept, Assert.Single(history.Entries));
     }
 
     // ----- the password ---------------------------------------------------
