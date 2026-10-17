@@ -1,19 +1,42 @@
+using System.IO;
 using System.Text.Json;
+using MudPlay.Game.Light;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.ViewModels.Settings;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoLightSettings"/> default values + JSON round-trip. Defaults
-/// shape what a fresh character sees in the Auto-Light tab on first open;
-/// round-trip protects against schema drift (JsonSerializer is name-keyed). The
-/// section VM itself does I/O through the <see cref="Services.AppServices"/>
-/// singleton, so — as with the other section tests — this pins the persistable
-/// shape rather than driving the VM.
-/// </summary>
-public sealed class AutoLightSettingsTests
+// The Auto-Light tab: what a fresh character starts with, and what the tab stores in
+// the profile and reads back. The engine reads the stored AutoLight section, so the
+// stored shape is the client's contract, not the JSON serializer's.
+public sealed class AutoLightSettingsTests : IDisposable
 {
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "mudplay-autolight-" + Path.GetRandomFileName());
+    private readonly ProfileService _profile = TestProfiles.Loaded();
+    private readonly LightItemIndex _lights;
+
+    public AutoLightSettingsTests()
+    {
+        string dir = Path.Combine(_root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Items.json"),
+            "[{\"Number\":40,\"Name\":\"lantern\",\"ItemType\":6,\"UseCount\":120,\"Abil-0\":54,\"AbilVal-0\":40}]");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        _lights = new LightItemIndex(cache);
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_root, recursive: true); } catch { /* best-effort temp cleanup */ }
+    }
+
+    private AutoLightSectionViewModel Section() => new(_profile, _lights, data: null);
+
+    private JsonElement Stored() => _profile.Current!.Settings!["AutoLight"];
+
     [Fact]
     public void Defaults_AreSane()
     {
@@ -26,36 +49,59 @@ public sealed class AutoLightSettingsTests
     }
 
     [Fact]
-    public void RoundTripsThroughJson()
+    public void NamedLight_IsStoredByName_AndReadBack()
     {
-        AutoLightSettings src = new()
-        {
-            CarryHours = 12,
-            ReorderThresholdMinutes = 90,
-            PreferredLightName = "lantern",
-            UseRoomLightSpellOnly = true,
-        };
+        AutoLightSectionViewModel vm = Section();
+        vm.CarryHours = 12;
+        vm.ReorderThresholdMinutes = 90;
+        vm.SelectedLight = "lantern";
+        vm.Apply();
 
-        string json = JsonSerializer.Serialize(src);
-        AutoLightSettings? back = JsonSerializer.Deserialize<AutoLightSettings>(json);
+        Assert.Equal("lantern", Stored().GetProperty("PreferredLightName").GetString());
+        Assert.False(Stored().GetProperty("UseRoomLightSpellOnly").GetBoolean());
 
-        Assert.NotNull(back);
-        Assert.Equal(12, back!.CarryHours);
-        Assert.Equal(90, back.ReorderThresholdMinutes);
-        Assert.Equal("lantern", back.PreferredLightName);
-        Assert.True(back.UseRoomLightSpellOnly);
+        AutoLightSectionViewModel reopened = Section();
+        Assert.Equal(12, reopened.CarryHours);
+        Assert.Equal(90, reopened.ReorderThresholdMinutes);
+        Assert.Equal("lantern", reopened.SelectedLight);
+    }
+
+    // Auto-pick is stored as no name, not an empty string or the label, which the
+    // engine would try to resolve as a light.
+    [Fact]
+    public void AutoPick_IsStoredAsNoName()
+    {
+        AutoLightSectionViewModel vm = Section();
+        vm.SelectedLight = "lantern";
+        vm.Apply();
+        vm.SelectedLight = AutoLightSectionViewModel.AutoPickLabel;
+        vm.Apply();
+
+        Assert.Equal(JsonValueKind.Null, Stored().GetProperty("PreferredLightName").ValueKind);
+        Assert.Equal(AutoLightSectionViewModel.AutoPickLabel, Section().SelectedLight);
     }
 
     [Fact]
-    public void NullPreferredLight_SurvivesRoundTrip()
+    public void SpellOnly_IsStoredAsTheFlag_WithNoLight()
     {
-        // Auto-pick is the default and must persist as an absent/null name, not
-        // an empty string the engine would try to resolve as a light.
-        AutoLightSettings src = new() { PreferredLightName = null };
+        AutoLightSectionViewModel vm = Section();
+        vm.SelectedLight = AutoLightSectionViewModel.SpellOnlyLabel;
+        vm.Apply();
 
-        string json = JsonSerializer.Serialize(src);
-        AutoLightSettings? back = JsonSerializer.Deserialize<AutoLightSettings>(json);
+        Assert.True(Stored().GetProperty("UseRoomLightSpellOnly").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, Stored().GetProperty("PreferredLightName").ValueKind);
+        Assert.Equal(AutoLightSectionViewModel.SpellOnlyLabel, Section().SelectedLight);
+    }
 
-        Assert.Null(back!.PreferredLightName);
+    [Fact]
+    public void OutOfRangeHours_AreClampedWhenStored()
+    {
+        AutoLightSectionViewModel vm = Section();
+        vm.CarryHours = 100;
+        vm.ReorderThresholdMinutes = 1000;
+        vm.Apply();
+
+        Assert.Equal(48, Stored().GetProperty("CarryHours").GetInt32());
+        Assert.Equal(600, Stored().GetProperty("ReorderThresholdMinutes").GetInt32());
     }
 }

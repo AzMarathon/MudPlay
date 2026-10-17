@@ -841,10 +841,7 @@ public sealed class PartyTrainCoordinator : IDisposable
         return true;
     }
 
-    internal Task RunTripForTests(PartyTrainDecision decision, List<PartyTrainParticipant> participants) =>
-        RunTripAsync(decision, participants);
-
-    private async Task RunTripAsync(PartyTrainDecision decision, List<PartyTrainParticipant> participants)
+    internal async Task RunTripAsync(PartyTrainDecision decision, List<PartyTrainParticipant> participants)
     {
         _tripRunning = true;
         _calledOff = null;

@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.L — <see cref="AutoGetItemsManager"/> resolves each room
-/// "You notice ... here." entry against game data and sends
-/// <c>get &lt;name&gt;</c> only for items the user flagged
-/// AutoCollect, gated by the AutoGetItems master toggle and the
-/// collect-after-combat timing choice.
-/// </summary>
+// AutoGetItemsManager resolves each room "You notice ... here." entry against
+// game data and sends get <name> for items flagged AutoCollect. Pins the gates
+// (the master toggle, collect-after-combat timing, peeks), MaxToGet, the
+// encumbrance brackets and dropping coin to make weight, the floor ledger's
+// dedup and the re-look after a kill, and Stock / Paradigm batching.
 public sealed class AutoGetItemsManagerTests
 {
     private sealed class Harness : IDisposable
@@ -389,19 +387,6 @@ public sealed class AutoGetItemsManagerTests
     }
 
     [Fact]
-    public void PeekSuppressed_NoSend()
-    {
-        // A look-direction peek renders a full "You notice" survey for the
-        // adjacent room; getting from a room we never entered is the bug.
-        using Harness h = new() { PeekSuppressed = true };
-        h.Flags["long sword"] = true;
-
-        h.Feed("You notice a long sword here.");
-
-        Assert.Empty(h.Sent);
-    }
-
-    [Fact]
     public void PeekCleared_RealEntry_Sends()
     {
         using Harness h = new() { PeekSuppressed = true };
@@ -424,11 +409,11 @@ public sealed class AutoGetItemsManagerTests
         h.Flags["long sword"] = true;
         h.Flags["shield"] = true;
 
-        LineExtractor lines = new(new TerminalEmulator(80, 24));
-        h.Items.AttachLineExtractor(lines);
+        ServerFeed feed = new();
+        h.Items.AttachLineExtractor(feed.Lines);
 
-        FeedLine(lines, "You notice a long sword, a torch and a");
-        FeedLine(lines, "shield here.");
+        feed.Line("You notice a long sword, a torch and a");
+        feed.Line("shield here.");
 
         Assert.Equal(new[] { "get long sword", "get shield" }, h.SentText);
     }
@@ -1061,17 +1046,4 @@ public sealed class AutoGetItemsManagerTests
         Assert.Empty(h.Sent);
     }
 
-    private static void FeedLine(LineExtractor lines, string text)
-    {
-        System.Reflection.FieldInfo? field = typeof(LineExtractor)
-            .GetField("LineEmitted",
-                System.Reflection.BindingFlags.Instance |
-                System.Reflection.BindingFlags.NonPublic);
-        if (field?.GetValue(lines) is Action<LineExtractor.EmittedLine> handler)
-        {
-            handler(new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
-        }
-    }
 }

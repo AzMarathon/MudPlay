@@ -57,7 +57,7 @@ public sealed class TrainerWalkLightStopTests : IDisposable
 
         Assert.True(_w.Walker.WalkTo(Shop));
         Assert.False(trainer.IsBusy);
-        _w.RunTimers();
+        _w.Timers.RunAll();
         Assert.Equal(Shop, _w.Walker.Destination);
     }
 

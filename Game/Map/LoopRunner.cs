@@ -24,8 +24,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // (a Combat gate clearing on a room re-display); a LATER line in the SAME
     // burst can assert another gate — a party @wait — that must re-pause us
     // before the next move leaves. Posting past the burst lets that @wait land
-    // first (see DeferResumeDispatch). Defaults to Dispatcher.UIThread.Post;
-    // tests inject a synchronous or manually-drained variant.
+    // first (see DeferResumeDispatch). Defaults to Dispatcher.UIThread.Post.
     private readonly Action<Action> _postToUi;
     private readonly EngineRecoveryGate? _recovery;
     private readonly BfsMapper? _bfs;
@@ -192,16 +191,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // inside one second, none of which could have gone differently because nothing
     // about the world changed between them (report stock-20260904-143436). An
     // attempt is only a real chance if something has had time to change.
-    private TimeSpan _recoveryAttemptSpacing = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RecoveryAttemptSpacing = TimeSpan.FromSeconds(2);
     private DateTimeOffset _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
-
-    // Test seam: budget tests fire attempts back-to-back on purpose, which the
-    // spacing would otherwise swallow. Zero here means "every attempt counts",
-    // which is what those tests are actually asserting.
-    internal TimeSpan RecoveryAttemptSpacingForTests
-    {
-        set => _recoveryAttemptSpacing = value;
-    }
 
     // Waypoint the walker is currently approaching during LoopState.Approaching.
     // Null when not approaching.
@@ -240,11 +231,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // so it keeps climbing past the 10th lap instead of freezing.
     private int _completedLaps;
 
-    // Custom-command delay timer state. _delayTimer is lazily constructed on first
-    // delay use; _delayRemaining tracks the time left when the timer is stopped by
-    // a pause so resume continues from where it left off rather than restarting the
-    // full duration.
-    private DispatcherTimer? _delayTimer;
+    // Custom-command delay timer state. _delayRemaining tracks the time left when
+    // the timer is stopped by a pause so resume continues from where it left off
+    // rather than restarting the full duration.
+    private IDisposable? _delayTimer;
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
     private TimeSpan _delayRemaining;
     private long _delayStartTimestamp;
     // A room command's own delay runs in real time from the command (Stopwatch
@@ -279,9 +271,9 @@ public sealed class LoopRunner : IRecoverableEngine
     // disarmed on advance / pause / recovery / stop. On expiry — still Running, still
     // Pending — it escalates to the recovery gate, which re-establishes position
     // (Paradigm `rm` resync / stock footprint backtrack) and reroutes, re-sending the
-    // interrupted move without risking an overshoot. Lazily constructed like _delayTimer.
-    private DispatcherTimer? _stallWatchdog;
-    private static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
+    // interrupted move without risking an overshoot.
+    private IDisposable? _stallWatchdog;
+    internal static readonly TimeSpan StallWatchdogInterval = TimeSpan.FromSeconds(10);
 
     public LoopState State { get; private set; } = LoopState.Idle;
 
@@ -887,9 +879,6 @@ public sealed class LoopRunner : IRecoverableEngine
         return keys;
     }
 
-    // Bytes sent by the runner — captured for tests when no wire is bound.
-    public IReadOnlyList<byte[]> LastSentForTests => _sent;
-    private readonly List<byte[]> _sent = new();
 
     public event Action<LoopEvent>? Event;
 
@@ -898,10 +887,12 @@ public sealed class LoopRunner : IRecoverableEngine
         RoomGraphManager? graph = null, EngineRecoveryGate? recovery = null,
         BfsMapper? bfs = null, AutoWalkManager? walker = null,
         IRoomFilter? filter = null, Action<Action>? postToUi = null,
-        Func<DateTimeOffset>? now = null, Func<long>? timestamp = null)
+        Func<DateTimeOffset>? now = null, Func<long>? timestamp = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(coordinator);
+        _schedule = schedule ?? DispatcherTicks.Once;
         _tracker = tracker;
         _coordinator = coordinator;
         _promptScanner = promptScanner;
@@ -917,7 +908,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
 
         _tracker.StateChanged += OnTrackerStateChanged;
-        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), tracker, coordinator, log, _postToUi,
+        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), tracker, coordinator, log, _postToUi, _schedule,
             describe: l => $"loop '{l.Name}'",
             runningNow: () => State != LoopState.Idle ? $"loop '{_loop?.Name ?? "?"}'" : null,
             start: l => Start(l));
@@ -1355,7 +1346,7 @@ public sealed class LoopRunner : IRecoverableEngine
         //     pick the closest waypoint, walker drives the approach,
         //     loop steps are rotated + expanded UP FRONT so the
         //     approach-preview overlay can render the upcoming cycle.
-        //   - Walker missing (unit tests) or no graph → expand from
+        //   - Walker missing or no graph → expand from
         //     waypoint 0 and let the runner fail-or-recover.
 
         // Started is raised AFTER each branch commits its state +
@@ -1735,7 +1726,6 @@ public sealed class LoopRunner : IRecoverableEngine
         _gatedApproachFetch = fetch;
     }
 
-    // Internal so a test can hand it a walker event directly.
     internal void OnWalkerEvent(WalkEvent e)
     {
         // The runner cares about walker events during two shapes of "approach in
@@ -2829,18 +2819,21 @@ public sealed class LoopRunner : IRecoverableEngine
             OnDelayElapsed();
             return;
         }
-        _delayTimer ??= new DispatcherTimer();
-        _delayTimer.Tick -= OnDelayTick;
-        _delayTimer.Tick += OnDelayTick;
-        _delayTimer.Interval = _delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice;
+        _delayTimer?.Dispose();
         _delayStartTimestamp = _timestamp();
-        _delayTimer.Start();
+        _delayTimer = _schedule(_delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice, OnDelayTick);
+    }
+
+    private void CancelDelayTimer()
+    {
+        _delayTimer?.Dispose();
+        _delayTimer = null;
     }
 
     private void PauseDelayTimer()
     {
-        if (_delayTimer is null || !_delayTimer.IsEnabled) return;
-        _delayTimer.Stop();
+        if (_delayTimer is null) return;
+        CancelDelayTimer();
         if (_delayDeadline != 0)
         {
             // The clock keeps running; what's left is re-read on resume. Kept above
@@ -2856,17 +2849,15 @@ public sealed class LoopRunner : IRecoverableEngine
     private void StopDelayTimer()
     {
         _delayDeadline = 0;
-        if (_delayTimer is null) return;
-        _delayTimer.Stop();
-        _delayTimer.Tick -= OnDelayTick;
+        CancelDelayTimer();
         _delayRemaining = TimeSpan.Zero;
     }
 
-    private void OnDelayTick(object? sender, EventArgs e)
+    private void OnDelayTick()
     {
+        _delayTimer = null;
         if (_delayDeadline != 0 && DeadlineRemaining() > TimeSpan.Zero)
         {
-            _delayTimer?.Stop();
             StartOrResumeDelayTimer();   // the next slice of a long delay
             return;
         }
@@ -2875,7 +2866,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void OnDelayElapsed()
     {
-        _delayTimer?.Stop();
+        CancelDelayTimer();
         _delayRemaining = TimeSpan.Zero;
         _delayDeadline = 0;
         if (_awaitingCommandReplies && State == LoopState.Running && HoldForCombat())
@@ -2889,28 +2880,23 @@ public sealed class LoopRunner : IRecoverableEngine
         AdvanceStep();
     }
 
-    // Test seam — pretend the custom-command delay just elapsed.
-    internal void FireDelayForTests() => OnDelayElapsed();
-
     private void ArmStallWatchdog(string why)
     {
-        _stallWatchdog ??= new DispatcherTimer();
-        _stallWatchdog.Tick -= OnStallWatchdogTick;
-        _stallWatchdog.Tick += OnStallWatchdogTick;
-        _stallWatchdog.Interval = StallWatchdogInterval;
-        _stallWatchdog.Stop();
-        _stallWatchdog.Start();
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = _schedule(StallWatchdogInterval, OnStallWatchdogElapsed);
         _log?.Debug("LoopRunner",
             $"stall watchdog armed ({StallWatchdogInterval.TotalSeconds:F0}s): {why}");
     }
 
-    private void DisarmStallWatchdog() => _stallWatchdog?.Stop();
-
-    private void OnStallWatchdogTick(object? sender, EventArgs e) => OnStallWatchdogElapsed();
+    private void DisarmStallWatchdog()
+    {
+        _stallWatchdog?.Dispose();
+        _stallWatchdog = null;
+    }
 
     private void OnStallWatchdogElapsed()
     {
-        _stallWatchdog?.Stop();
+        _stallWatchdog = null;
         // Only act if we're genuinely still wedged: Running, a step in flight, and
         // the tracker still Pending. A move that confirmed normally already advanced
         // us (AdvanceStep disarms); a re-pause disarmed us too. Escalate to the
@@ -2998,27 +2984,8 @@ public sealed class LoopRunner : IRecoverableEngine
         ArmStallWatchdog($"step {_index + 1}: {why}, one more wait");
     }
 
-    // Test seam — pretend the in-flight stall watchdog just elapsed.
-    internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
-
-    // Test seam — true while the in-flight stall watchdog is armed and
-    // counting down. FireStallWatchdogForTests bypasses arming entirely (it
-    // invokes the elapsed-handler directly), so it can't tell a test whether
-    // EmitCardinal actually armed the watchdog on send — this can.
-    internal bool IsStallWatchdogArmedForTests => _stallWatchdog?.IsEnabled == true;
-
-    // Test seam — pretend the bound prompt scanner just observed an in-game
-    // prompt (the reconnect-resume trigger), without needing a real
-    // WirePromptScanner wired to a wire.
-    internal void FirePromptObservedForTests() => OnPromptObserved(default);
-
-    // Test seam — the loop NotifyDisconnected captured to resume on the next
-    // in-game prompt, or null if nothing is pending.
-    internal Loop? PendingReconnectResumeForTests => _restart.Pending;
-
     private void Write(byte[] bytes, string reason)
     {
-        _sent.Add(bytes);
         if (_wireSender is null)
             _log?.Warn("LoopRunner", $"wire not bound; suppressed: {reason}");
         else
@@ -3165,6 +3132,10 @@ public sealed class LoopRunner : IRecoverableEngine
 
     public void ResumeAfterMasterSwitch() => _restart.ResumeAfterMasterSwitch();
 
+    // A walk or an Auto-Lair run the user started while the restart was owed: the
+    // restart gives way to it, as to a loop of the runner's own.
+    public void SetOtherRunProbe(Func<string?> otherRun) => _restart.OtherRun = otherRun;
+
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
     // Nothing in the recovery ladder (the gate's Tier2/Tier3/awaiting-rm wait, or
@@ -3181,14 +3152,15 @@ public sealed class LoopRunner : IRecoverableEngine
         _restart.NoteDisconnected(State != LoopState.Idle ? _loop : null,
             () => Stop("disconnected — will resume on reconnect", willResume: true));
 
-    // PartyReformCoordinator.PendingReform. Unset in tests / before wiring → no
-    // reform, so the restarted loop steps at once.
+    // PartyReformCoordinator.PendingReform. Unset before wiring → no reform, so the
+    // restarted loop steps at once.
     public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom) => _restart.SetReformProbe(reformAwaitsRoom);
 
     // For the bug report: the loop waiting to restart after a reconnect, and whether
     // the restarted loop is being held until the party reform has seen the room.
     public string? PendingReconnectResumeName => _restart.Pending?.Name;
     public bool ReconnectResumeHeldForReform => _restart.HeldForReform;
+    internal static readonly TimeSpan ReconnectReformHoldMax = ReconnectRestart<Loop>.ReformHoldMax;
 
     private void OnPromptObserved(PromptObservation _)
     {
@@ -3202,12 +3174,6 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi(() => { if (_index == step) FinishCommandWaitIfAnswered(); });
     }
 
-    // Test seam — pretend the prompt scanner fired.
-    internal void FirePromptForTests() => OnPromptObserved(default);
-
-    // Test seam — the reconnect hold's timer doesn't tick under headless xUnit.
-    internal void FireReconnectHoldElapsedForTests() => _restart.EndReformHoldForTimeout();
-
     // Auto-recovery entry: a mid-circuit step landed somewhere we didn't plan for
     // (blocked at the source room, or the recovery gate handed back a room that
     // isn't the step's expected target). Rather than fail to Idle, re-determine
@@ -3220,7 +3186,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // echoing, rather than act on it.
     private bool RecoveryWouldDeclineAsEcho() =>
         !_resumingAfterFlee && _recoverAttempts > 0
-        && _now() - _lastRecoveryAttemptAt < _recoveryAttemptSpacing;
+        && _now() - _lastRecoveryAttemptAt < RecoveryAttemptSpacing;
 
     private void EnterRecovery(string reason)
     {

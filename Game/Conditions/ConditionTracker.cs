@@ -187,10 +187,6 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _lines.LineEmitted += OnLine;
     }
 
-    // True when the given record is currently active on us (its applied message
-    // fired without a matching ends-with).
-    public bool IsActive(MessageRecord r) => _active.Contains(r.Id);
-
     // True when any currently-active record satisfies match.
     public bool AnyActive(Func<MessageRecord, bool> match)
     {

@@ -71,7 +71,7 @@ public sealed class CombatManagerRoomChangeHoldTests
         private readonly TerminalEmulator _terminal = new(80, 25);
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public PartyState Party { get; } = new();
         public LogService Log { get; } = new();
         public LineExtractor Lines { get; }

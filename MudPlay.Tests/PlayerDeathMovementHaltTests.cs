@@ -8,15 +8,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// The death-stop bridge: on our own death it full-stops every movement engine
-/// (the wired stopper) and CLEARS <see cref="MovementCoordinator.UserGate"/> — a
-/// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
-/// a manual/remote nav action afterward runs freely. It rides
-/// <see cref="RoomTracker.PlayerDeathObserved"/>, which fires for BOTH death
-/// lives readouts, so a death by damage ("You have N lives left.") stops as surely
-/// as a suicide ("You now have N lives remaining.").
-/// </summary>
+// The death-stop bridge: on our own death it full-stops every movement engine
+// (the wired stopper) and CLEARS MovementCoordinator.UserGate — a
+// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
+// a manual/remote nav action afterward runs freely. It rides
+// RoomTracker.PlayerDeathObserved, which fires for BOTH death
+// lives readouts, so a death by damage ("You have N lives left.") stops as surely
+// as a suicide ("You now have N lives remaining.").
 public sealed class PlayerDeathMovementHaltTests
 {
     private sealed class Harness : IDisposable
@@ -40,6 +38,8 @@ public sealed class PlayerDeathMovementHaltTests
         public PlayerDeathMovementHalt Halt { get; }
         public int EngineStopCount { get; private set; }
         public List<byte[]> Sent { get; } = new();
+        // The post-death graveyard resync.
+        public ManualTimers Resync { get; } = new();
 
         public Harness()
         {
@@ -52,7 +52,7 @@ public sealed class PlayerDeathMovementHaltTests
             graph.OnActiveSetChanged("alpha");
 
             Tracker = new RoomTracker(graph);
-            Halt = new PlayerDeathMovementHalt(Tracker, Coord);
+            Halt = new PlayerDeathMovementHalt(Tracker, Coord, schedule: Resync.Arm);
             Halt.SetWireSender(Sent.Add);
             // AppServices always wires a stopper (Walker/LoopRunner/AutoLair Stop);
             // count invocations so the death-stop path is exercised as in production.
@@ -135,7 +135,7 @@ public sealed class PlayerDeathMovementHaltTests
         Assert.Equal(RoomConfidence.PendingRespawn, h.Tracker.State.Confidence);
         Assert.False(h.SentCarriageReturn);   // armed, not fired yet
 
-        h.Halt.FireGraveyardResyncForTests();
+        h.Resync.RunAll();
 
         Assert.True(h.SentCarriageReturn);
     }
@@ -145,10 +145,12 @@ public sealed class PlayerDeathMovementHaltTests
     {
         // Unbound sender (pre-connect) → the resync is a silent no-op, never a throw.
         using Harness h = new();
-        var halt = new PlayerDeathMovementHalt(h.Tracker, h.Coord);   // no SetWireSender
+        ManualTimers resync = new();
+        var halt = new PlayerDeathMovementHalt(h.Tracker, h.Coord, schedule: resync.Arm);   // no SetWireSender
         h.Tracker.NoteDeath(6, "You have 6 lives left.");
+        Assert.Equal(1, resync.Pending);
 
-        halt.FireGraveyardResyncForTests();   // must not throw
+        resync.RunAll();   // must not throw
 
         halt.Dispose();
     }

@@ -1,4 +1,3 @@
-using Avalonia.Threading;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
@@ -30,27 +29,31 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // The reform reads the first room display, which a lit room prints within the
     // second. A room too dark to display never gives it one, and the run mustn't wait
     // on that for good.
-    private static readonly TimeSpan ReformHoldMax = TimeSpan.FromSeconds(5);
+    public static TimeSpan ReformHoldMax { get; } = TimeSpan.FromSeconds(5);
 
     private readonly string _owner;
     private readonly RoomTracker _tracker;
     private readonly MovementCoordinator? _coordinator;
     private readonly LogService? _log;
     private readonly Action<Action> _postToUi;
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
     private readonly Func<TRun, string> _describe;
     private readonly Func<string?> _runningNow;
     private readonly Action<TRun> _start;
-    private DispatcherTimer? _reformHoldTimer;
+    private IDisposable? _reformHoldTimer;
     private Func<bool>? _reformAwaitsRoom;
 
     // owner: the engine, as its log lines and gate holds name it. describe: the run as
     // a log line names it ("loop 'Ring'"). runningNow: the run the engine has going,
     // as describe names it, or null when it is idle. start: starts the run again.
+    // schedule runs the reform hold's time limit (DispatcherTicks.Once live).
     public ReconnectRestart(string owner, RoomTracker tracker, MovementCoordinator? coordinator, LogService? log,
-        Action<Action> postToUi, Func<TRun, string> describe, Func<string?> runningNow, Action<TRun> start)
+        Action<Action> postToUi, Func<TimeSpan, Action, IDisposable> schedule,
+        Func<TRun, string> describe, Func<string?> runningNow, Action<TRun> start)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(postToUi);
+        ArgumentNullException.ThrowIfNull(schedule);
         ArgumentNullException.ThrowIfNull(describe);
         ArgumentNullException.ThrowIfNull(runningNow);
         ArgumentNullException.ThrowIfNull(start);
@@ -59,6 +62,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         _coordinator = coordinator;
         _log = log;
         _postToUi = postToUi;
+        _schedule = schedule;
         _describe = describe;
         _runningNow = runningNow;
         _start = start;
@@ -66,11 +70,24 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         _tracker.PlayerDeathInferred += Clear;
     }
 
+    // The engine is being disposed: the tracker outlives it.
+    public void Detach()
+    {
+        _tracker.StateChanged -= OnTrackerStateChanged;
+        _tracker.PlayerDeathInferred -= Clear;
+        _reformHoldTimer?.Dispose();
+        _reformHoldTimer = null;
+    }
+
     // The run waiting to restart, or null.
     public TRun? Pending { get; private set; }
 
     // True while the master switch (Auto-All) is off.
     public Func<bool>? MasterSwitchOff { get; set; }
+
+    // A run of another engine that is going (a walk, the other of loop and
+    // Auto-Lair), as describe names a run, or null. Unset: none looked at.
+    public Func<string?>? OtherRun { get; set; }
 
     // The first game prompt came with the switch off: the restart is owed, and
     // ResumeAfterMasterSwitch runs it.
@@ -171,7 +188,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         if (Pending is not { } run) return;
         // A run started meanwhile (the user's, while this one was still owed) is the
         // run now: restarted, the old one would supersede it.
-        if (_runningNow() is { } running)
+        if ((_runningNow() ?? OtherRun?.Invoke()) is { } running)
         {
             _log?.Info(_owner, $"reconnect: {_describe(run)} is not restarted; {running} was started meanwhile");
             Clear();
@@ -210,11 +227,8 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         _log?.Info(_owner, "reconnect: holding movement until the party reform has seen the room");
         _coordinator?.AssertGate(MovementCoordinator.ReconnectReformGate, _owner,
             "the party reform has yet to see the room");
-        _reformHoldTimer ??= new DispatcherTimer { Interval = ReformHoldMax };
-        _reformHoldTimer.Tick -= OnReformHoldElapsed;
-        _reformHoldTimer.Tick += OnReformHoldElapsed;
-        _reformHoldTimer.Stop();
-        _reformHoldTimer.Start();
+        _reformHoldTimer?.Dispose();
+        _reformHoldTimer = _schedule(ReformHoldMax, OnReformHoldElapsed);
     }
 
     // linesStillToCome: called from a prompt, whose lines (the room display the
@@ -231,17 +245,18 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         if (linesStillToCome) _postToUi(() => ReleaseHoldOnceReformSawRoom(linesStillToCome: false));
     }
 
-    private void OnReformHoldElapsed(object? sender, EventArgs e) => EndReformHoldForTimeout();
-
-    // The hold's time is up with no room display for the reform.
-    internal void EndReformHoldForTimeout() =>
+    private void OnReformHoldElapsed()
+    {
+        _reformHoldTimer = null;
         EndReformHold($"no room display for the party reform within {ReformHoldMax.TotalSeconds:0}s");
+    }
 
     public void EndReformHold(string why)
     {
         if (!HeldForReform) return;
         HeldForReform = false;
-        _reformHoldTimer?.Stop();
+        _reformHoldTimer?.Dispose();
+        _reformHoldTimer = null;
         _log?.Info(_owner, $"reconnect: movement hold for the party reform dropped ({why})");
         _coordinator?.ClearGate(MovementCoordinator.ReconnectReformGate, _owner, why);
     }

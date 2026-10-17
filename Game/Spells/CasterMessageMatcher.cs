@@ -60,7 +60,7 @@ public sealed class CasterMessageMatcher
         new("{d}",         "Generic number — matched then dropped (legacy)."),
     };
 
-    private enum PlaceholderRole { Unknown, Spell, Target, Source }
+    internal enum PlaceholderRole { Unknown, Spell, Target, Source }
 
     private readonly Regex _regex;
     // The template's literal text, cut at the placeholders: one run before the first
@@ -98,6 +98,24 @@ public sealed class CasterMessageMatcher
     // would cost far more in startup time and memory than the interpreter costs in
     // per-line matching.
     public static CasterMessageMatcher? TryCreate(string? template, bool compiled = true)
+    {
+        if (ShapeOf(template) is not { } shape) return null;
+        RegexOptions options = RegexOptions.CultureInvariant;
+        if (compiled) options |= RegexOptions.Compiled;
+        Regex regex = new(shape.Pattern, options);
+        return new CasterMessageMatcher(
+            template!, regex, shape.LiteralRuns,
+            shape.StringGroups, shape.NumberGroups, shape.StringRoles);
+    }
+
+    // What a template compiles to: the regex pattern, its literal runs and which
+    // groups are names and which numbers. Null when the template is blank or has no
+    // placeholder.
+    internal sealed record TemplateShape(
+        string Pattern, string[] LiteralRuns,
+        int[] StringGroups, int[] NumberGroups, PlaceholderRole[] StringRoles);
+
+    internal static TemplateShape? ShapeOf(string? template)
     {
         if (string.IsNullOrWhiteSpace(template)) return null;
 
@@ -139,11 +157,7 @@ public sealed class CasterMessageMatcher
 
         if (!sawString && !sawNumber) return null;
 
-        RegexOptions options = RegexOptions.CultureInvariant;
-        if (compiled) options |= RegexOptions.Compiled;
-        Regex regex = new(pattern.ToString(), options);
-        return new CasterMessageMatcher(
-            template, regex, literalRuns.ToArray(),
+        return new TemplateShape(pattern.ToString(), literalRuns.ToArray(),
             stringGroups.ToArray(), numberGroups.ToArray(), stringRoles.ToArray());
     }
 
@@ -278,7 +292,6 @@ public sealed class CasterMessageMatcher
     public bool CanNameTarget =>
         IndexOfRole(PlaceholderRole.Target) >= 0 || IndexOfRole(PlaceholderRole.Unknown) >= 0;
     public bool PinsSpell => IndexOfRole(PlaceholderRole.Spell) >= 0;
-    public bool PinsSource => IndexOfRole(PlaceholderRole.Source) >= 0;
     public bool HasNumber => _numberGroupIndexes.Length > 0;
 
     // Match the line and hand back every capture by what it is: the names in template

@@ -8,14 +8,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoLightShopRouter"/> — the provisioning detour that turns the
-/// provisioner's <see cref="AutoLightAction.Buy"/> verdict into a walk-to-shop /
-/// <c>buy</c> run and resumes to the original destination. Exercises the master-
-/// toggle gate, engine-walk suppression, fewest-added-steps shop pick, the buy
-/// batch, resume-on-first-copy (one covers the dark route), and the failure
-/// suppression that keeps a re-announced dark route from looping the detour.
-/// </summary>
+// AutoLightShopRouter — the provisioning detour that turns the
+// provisioner's AutoLightAction.Buy verdict into a walk-to-shop /
+// buy run and resumes to the original destination. Exercises the master-
+// toggle gate, engine-walk suppression, fewest-added-steps shop pick, the buy
+// batch, resume-on-first-copy (one covers the dark route), and the failure
+// suppression that keeps a re-announced dark route from looping the detour.
 public sealed class AutoLightShopRouterTests
 {
     private static readonly RoomKey Cur = new(1, 100);
@@ -42,10 +40,14 @@ public sealed class AutoLightShopRouterTests
         public bool Enabled = true;
         public bool EngineWalk;
         public readonly List<RoomKey> Walks = new();
+        // What the router put on the wire, through the sender the client binds.
+        public readonly List<byte[]> Sent = new();
 
         public void Carry(int id, int n = 1) => Carried[id] = n;
 
-        public AutoLightShopRouter Build() => new(
+        public AutoLightShopRouter Build()
+        {
+            AutoLightShopRouter router = new(
             shopRoomsSellingItem: id => ShopRooms.TryGetValue(id, out List<RoomKey>? r)
                 ? r
                 : (IReadOnlyList<RoomKey>)Array.Empty<RoomKey>(),
@@ -59,6 +61,9 @@ public sealed class AutoLightShopRouterTests
             post: a => a(),                          // synchronous in tests
             log: null,
             buyTimeout: TimeSpan.FromHours(1));       // real timer never fires mid-test
+            router.SetWireSender(Sent.Add);
+            return router;
+        }
 
         // One shop (ShopA) selling the lantern, three steps out, four steps on.
         public Harness WithSingleShop()
@@ -208,7 +213,7 @@ public sealed class AutoLightShopRouterTests
 
         Assert.Equal(
             new[] { "buy lantern", "buy lantern" },
-            r.LastSentForTests.Select(Decode).ToArray());
+            h.Sent.Select(Decode).ToArray());
         Assert.True(r.DetourActive);     // still Buying until a copy lands
     }
 
@@ -223,7 +228,7 @@ public sealed class AutoLightShopRouterTests
 
         r.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", ShopA));
 
-        Assert.Equal(2, r.LastSentForTests.Count);
+        Assert.Equal(2, h.Sent.Count);
     }
 
     [Fact]
@@ -257,7 +262,7 @@ public sealed class AutoLightShopRouterTests
         Assert.Equal(2, h.Walks.Count);
         Assert.Equal(Dest, h.Walks[1]);
         Assert.False(r.DetourActive);
-        Assert.Empty(r.LastSentForTests); // never reached the shop, never bought
+        Assert.Empty(h.Sent); // never reached the shop, never bought
     }
 
     [Fact]
@@ -363,6 +368,8 @@ public sealed class AutoLightShopRouterTests
             post: a => a(),
             log: null,
             buyTimeout: TimeSpan.FromHours(1));
+        List<byte[]> sent = new();
+        router.SetWireSender(sent.Add);
 
         router.OnBuyRequested(Buy());
 
@@ -370,7 +377,7 @@ public sealed class AutoLightShopRouterTests
         Assert.Equal(ShopA, Assert.Single(walks));
 
         router.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "reached", ShopA));
-        Assert.Equal("buy lantern", Decode(Assert.Single(router.LastSentForTests)));
+        Assert.Equal("buy lantern", Decode(Assert.Single(sent)));
     }
 
     // ----- Failure suppression: the re-announced dark route can't loop -------

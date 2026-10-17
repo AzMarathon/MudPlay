@@ -48,8 +48,10 @@ public sealed class NavFolderWatcher
     {
     }
 
-    // The walk, the read and the hand-back to the UI thread are parameters so a test
-    // can run each in turn without threads or timing.
+    // The tree walk and the file reads run off the UI thread (a share that is slow or
+    // down would freeze the client), and what they found is posted back to the UI
+    // thread, where the catalogues live. Each hop is a parameter; the public
+    // constructor passes the thread pool and the dispatcher.
     internal NavFolderWatcher(LoopManager loops, LairManager lairs, NavFolderManager folders, LogService? log,
         int pollEvery, Func<string, Task<NavTreeScan>>? walk, Func<Func<Action>, Task<Action>>? read, Action<Action>? post)
     {

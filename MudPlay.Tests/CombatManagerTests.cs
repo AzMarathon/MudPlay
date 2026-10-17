@@ -11,18 +11,16 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.A — <see cref="CombatManager"/> target selection, swing
-/// command emission, room-clear detection, and TargetOrder
-/// (Normal vs Reverse) dispatch.
-/// </summary>
+// CombatManager target selection, swing
+// command emission, room-clear detection, and TargetOrder
+// (Normal vs Reverse) dispatch.
 public sealed class CombatManagerTests
 {
     private sealed class Harness : IDisposable
     {
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public PartyState Party { get; } = new();
         public LogService Log { get; } = new();
         public RoomEntityClassifier Classifier { get; }
@@ -110,13 +108,8 @@ public sealed class CombatManagerTests
             };
         }
 
-        public void AddMonster(int number, string name, bool killable,
-                               bool allowNoPrefix = true,
-                               params string[] flavorPrefixes)
+        public void AddMonster(int number, string name)
         {
-            string[] deathLines = killable
-                ? new[] { $"The {name} dies." }
-                : Array.Empty<string>();
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}",
                 Name: name,
@@ -184,7 +177,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.AutoCombatEnabled = false;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -196,7 +189,7 @@ public sealed class CombatManagerTests
     public void MasterOn_OneMonster_SendsAttackBaseName()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -214,7 +207,7 @@ public sealed class CombatManagerTests
         // block; here nothing goes out until the wear-off clears the gate.
         using Harness h = new();
         h.AttackPrevented = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -227,7 +220,7 @@ public sealed class CombatManagerTests
         // Fear refuses attacks ("You are too afraid!") until it wears off.
         using Harness h = new();
         h.Feared = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -243,7 +236,7 @@ public sealed class CombatManagerTests
         // paradigm-20260814-230258: lbol kills → `mmis` at the dead mob). Generic:
         // needs no per-monster death message.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");                 // engage + swing (attack committed)
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -260,7 +253,7 @@ public sealed class CombatManagerTests
         // the dropped target instead (report paradigm-20260925-115042: a stitched zombie's
         // summoned bone snake went unchecked).
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.DeathAttributionTarget);
 
@@ -277,7 +270,7 @@ public sealed class CombatManagerTests
         // with NO exp line — that's our own attack being interrupted, NOT a kill. The
         // exp line is the discriminator, so with no exp the target must survive.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -295,9 +288,9 @@ public sealed class CombatManagerTests
         // path must force ONE CR re-parse and re-pick from the true roster — not peel mobs
         // off one-by-one, which re-fires the re-pick against still-dying survivors.
         using Harness h = new();
-        h.AddMonster(1, "dark goblin", killable: true);
-        h.AddMonster(2, "dark goblin archer", killable: true);
-        h.AddMonster(3, "angry dark goblin", killable: true);
+        h.AddMonster(1, "dark goblin");
+        h.AddMonster(2, "dark goblin archer");
+        h.AddMonster(3, "angry dark goblin");
 
         h.Feed("Also here: dark goblin, dark goblin archer, angry dark goblin.");
         int sentAfterEngage = h.Sent.Count;
@@ -329,9 +322,9 @@ public sealed class CombatManagerTests
         // left"). A 2nd+ exp gain in one round must force the CR re-parse mid-round, with
         // no Off, so the chooser re-picks the thinned roster and drops to single-target.
         using Harness h = new();
-        h.AddMonster(1, "soldier ant", killable: true);
-        h.AddMonster(2, "soldier ant", killable: true);
-        h.AddMonster(3, "queen ant", killable: true);
+        h.AddMonster(1, "soldier ant");
+        h.AddMonster(2, "soldier ant");
+        h.AddMonster(3, "queen ant");
 
         h.Feed("Also here: soldier ant, soldier ant, queen ant.");
         int sentAfterEngage = h.Sent.Count;
@@ -353,7 +346,7 @@ public sealed class CombatManagerTests
     public void OnActionFailed_ResendsLastAttack_WhenFighting()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
@@ -371,7 +364,7 @@ public sealed class CombatManagerTests
     public void OnActionFailed_OnceEngaged_DoesNotResendTheAttack()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
@@ -401,7 +394,7 @@ public sealed class CombatManagerTests
     public void HandleFumble_EngagedFight_ReplaysAFumbledHeal_AndSendsNoAttack()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
         (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
@@ -421,7 +414,7 @@ public sealed class CombatManagerTests
     public void HandleFumble_EngagedFight_LastCommandIsTheSwing_SendsNothing()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
         h.Feed("Also here: giant rat.");
         send(Encoding.Latin1.GetBytes("a giant rat\r"));        // the gate saw the swing go out
@@ -439,7 +432,7 @@ public sealed class CombatManagerTests
     public void HandleFumble_NotEngaged_ResendsTheSwing_AndSkipsTheReplay()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         int replays = 0;
 
@@ -469,7 +462,7 @@ public sealed class CombatManagerTests
     public void Engagement_EndsOnCombatOff_AndOnAFreshAttack()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
         Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
@@ -500,7 +493,7 @@ public sealed class CombatManagerTests
     public void OnActionFailed_NoOp_WhenDisabled()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
@@ -525,8 +518,8 @@ public sealed class CombatManagerTests
     public void GuardProtect_SetsGuardBlock_WhenProtectedIsOurTarget()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         Assert.Equal("brigand chief", h.Combat.CurrentTarget);
@@ -546,8 +539,8 @@ public sealed class CombatManagerTests
     public void GuardProtect_Ignored_WhenProtectedIsNotOurTarget()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         // We're engaging a plain brigand, not the chief.
         h.Feed("Also here: brigand.");
@@ -563,8 +556,8 @@ public sealed class CombatManagerTests
     public void GuardProtect_Ignored_WhenAutoCombatOff()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         Assert.Equal("brigand chief", h.Combat.CurrentTarget);
@@ -579,8 +572,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_SurvivesAKill()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -601,8 +594,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_ClearedOnRoomChange()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -617,8 +610,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_ClearedOnTargetNotHere()
     {
         using Harness h = new();
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -640,8 +633,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_PriorityKilled_ReDisplayWithoutIt_ClearsBlock_NoRetryAtTheCorpse()
     {
         using Harness h = new(wireDeathWatcher: true);
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief, large brigand.");
         Assert.Equal("brigand chief", h.Combat.CurrentTarget);
@@ -672,8 +665,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_GuardKilled_ReDisplayStillListsPriority_KeepsBlock()
     {
         using Harness h = new(wireDeathWatcher: true);
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief, large brigand, small brigand.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -694,9 +687,9 @@ public sealed class CombatManagerTests
     public void GuardBlock_PriorityKilledInsideCooldown_ReDisplayStillAsked_RetryHeldUntilRead()
     {
         using Harness h = new(wireDeathWatcher: true);
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
-        h.AddMonster(3, "giant rat", killable: true);
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
+        h.AddMonster(3, "giant rat");
 
         h.Feed("Also here: brigand chief, large brigand, giant rat.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -734,8 +727,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_PriorityKilledLast_EmptyReDisplay_NoRetryAndBlockDropped()
     {
         using Harness h = new(wireDeathWatcher: true);
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief, large brigand.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -766,8 +759,8 @@ public sealed class CombatManagerTests
     public void GuardBlock_DarkRoom_LastGuardKilled_RetriesAtOnce()
     {
         using Harness h = new(wireDeathWatcher: true);
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -791,8 +784,8 @@ public sealed class CombatManagerTests
         using Harness h = new(wireDeathWatcher: true);
         List<Action> timers = new();
         h.Combat.SetArrivalSettleScheduler((_, cb) => timers.Add(cb));
-        h.AddMonster(1, "brigand chief", killable: true);
-        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+        h.AddMonster(1, "brigand chief");
+        h.AddMonster(2, "brigand");
 
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
@@ -820,7 +813,7 @@ public sealed class CombatManagerTests
     public void AttackEchoedAsSay_DropsTheGhostTarget_AndRefreshesTheRoom()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -840,7 +833,7 @@ public sealed class CombatManagerTests
         // Baseline: in a lit room a no-effect swing drops the target and fires the
         // recovery CR so the server re-displays the room for a fresh pick.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
         Assert.Equal(0, h.CrRefreshSends);
@@ -859,7 +852,7 @@ public sealed class CombatManagerTests
         // attack being refused. The echo ahead of the line names the command it
         // answers, so only a refused attack drops the target.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -885,7 +878,7 @@ public sealed class CombatManagerTests
         // step — the double-step-past-lairs bug. The target still drops; only the
         // blind CR is withheld.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -902,7 +895,7 @@ public sealed class CombatManagerTests
         // The "You don't see X here!" recovery path shares the same suppression:
         // no CR refresh while we can't see.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -923,8 +916,8 @@ public sealed class CombatManagerTests
         // sat taking hits while only self-healing. Dropping the phantom directly
         // re-fires an observation that re-picks the present attacker.
         using Harness h = new();
-        h.AddMonster(1, "big zombie cat", killable: true);
-        h.AddMonster(2, "angry zombie cat", killable: true);
+        h.AddMonster(1, "big zombie cat");
+        h.AddMonster(2, "angry zombie cat");
         h.Feed("Also here: big zombie cat, angry zombie cat.");   // engage the first
         Assert.Equal("big zombie cat", h.Combat.CurrentTarget);
 
@@ -947,7 +940,7 @@ public sealed class CombatManagerTests
         // instance — and `attack nasty giant rat` works fine in the
         // single-instance case too.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true, allowNoPrefix: true, "nasty");
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: nasty giant rat.");
 
@@ -964,8 +957,7 @@ public sealed class CombatManagerTests
         // kobold thief", not "attack kobold thief", or the server
         // picks an instance for us.
         using Harness h = new();
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large", "fierce");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
 
@@ -980,8 +972,7 @@ public sealed class CombatManagerTests
         // detect the change and send a new attack against the
         // remaining instance by its prefixed name.
         using Harness h = new();
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Single(h.Sent);
@@ -1006,7 +997,7 @@ public sealed class CombatManagerTests
         // biting. The death must clear _currentTarget so the survivor
         // is re-engaged.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true, allowNoPrefix: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat, giant rat, lashworm.");
         Assert.Equal("a giant rat", h.LastSent);
@@ -1021,7 +1012,7 @@ public sealed class CombatManagerTests
         h.Feed("*Combat Off*");
         h.Combat.NoteUnattributedDeath();
         Assert.True(h.Sent.Count > initialSent,
-            "expected a fresh `pu giant rat` after the same-name kill");
+            "expected a fresh `a giant rat` after the same-name kill");
         Assert.Equal("a giant rat", h.LastSent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
@@ -1038,8 +1029,8 @@ public sealed class CombatManagerTests
         // Now the death is attributed to _currentTarget, dropped from the roster,
         // and the survivor is re-picked immediately.
         using Harness h = new();
-        h.AddMonster(1, "big margoyle", killable: false);
-        h.AddMonster(2, "small margoyle", killable: false);
+        h.AddMonster(1, "big margoyle");
+        h.AddMonster(2, "small margoyle");
 
         h.Feed("Also here: big margoyle, small margoyle.");
         Assert.Equal("a big margoyle", h.LastSent);
@@ -1066,8 +1057,8 @@ public sealed class CombatManagerTests
         // until the fallback re-display. The stashed inferred-kill identity now lets the
         // Off-path drop the corpse and re-pick the survivor immediately.
         using Harness h = new();
-        h.AddMonster(1, "nasty orc lieutenant", killable: false);
-        h.AddMonster(2, "angry orc lieutenant", killable: false);
+        h.AddMonster(1, "nasty orc lieutenant");
+        h.AddMonster(2, "angry orc lieutenant");
 
         h.Feed("Also here: nasty orc lieutenant, angry orc lieutenant.");
         Assert.Equal("a nasty orc lieutenant", h.LastSent);
@@ -1097,7 +1088,7 @@ public sealed class CombatManagerTests
         // synthetic EntitiesObserved releases the Combat gate — no CR-nudge wait,
         // no re-swing at the corpse (the "sits idle after a kill" stall).
         using Harness h = new();
-        h.AddMonster(1, "big margoyle", killable: false);
+        h.AddMonster(1, "big margoyle");
 
         h.Feed("Also here: big margoyle.");
         Assert.Equal("big margoyle", h.Combat.CurrentTarget);
@@ -1112,7 +1103,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.NormalAttackCommand = "attack";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -1127,7 +1118,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.NormalAttackCommand = "ki";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         static bool IsKiWarning(LogEntry e) =>
             e.Severity == LogSeverity.Warn && e.Message.Contains("`ki`") && e.Message.Contains("`kic`");
@@ -1172,7 +1163,7 @@ public sealed class CombatManagerTests
         // DTO default + canonical MajorMUD alias.
         using Harness h = new();
         h.Settings.NormalAttackCommand = "";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -1180,42 +1171,6 @@ public sealed class CombatManagerTests
     }
 
     // ----- engageable filter ------------------------------------------
-
-    [Fact]
-    public void ShopkeeperFlaggedFriend_NoSwing()
-    {
-        // Engageability is Relationship-based: a shopkeeper marked
-        // Friend (via MonsterOverlay seed at the active set) gets
-        // skipped. An empty DeathLine on its message record no
-        // longer matters — the user's clarification: DeathLine is
-        // the *death-message pattern*, not a "killable" flag, so
-        // we can't use it as the engage gate.
-        using Harness h = new();
-        h.AddMonster(7, "shopkeeper", killable: true);
-        h.SetOverlay(7, relationship: MonsterRelationship.Friend);
-
-        h.Feed("Also here: shopkeeper.");
-
-        Assert.Empty(h.Sent);
-    }
-
-    [Fact]
-    public void UnknownToDataMonster_EmptyDeathLine_StillEngaged()
-    {
-        // Regression check for the acid-slime bug: 152 of 1100
-        // monsters in stock data ship with empty DeathLine
-        // (incomplete data, not unkillable). Without the
-        // Relationship filter, those mobs would be silently
-        // skipped — walker keeps walking while the server beats
-        // on the player.
-        using Harness h = new();
-        h.AddMonster(99, "acid slime", killable: false);   // killable=false → empty DeathLine
-
-        h.Feed("Also here: acid slime.");
-
-        Assert.Single(h.Sent);
-        Assert.Equal("a acid slime", h.LastSent);
-    }
 
     [Fact]
     public void PlayerInRoom_Ignored_NoSwing()
@@ -1233,8 +1188,8 @@ public sealed class CombatManagerTests
     public void TargetOrderNormal_PicksFirstInAlsoHere()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat",  killable: true);
-        h.AddMonster(2, "goblin",     killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
 
         h.Feed("Also here: giant rat, goblin.");
 
@@ -1247,8 +1202,8 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.TargetOrder = TargetOrder.Reverse;
-        h.AddMonster(1, "giant rat",  killable: true);
-        h.AddMonster(2, "goblin",     killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
 
         h.Feed("Also here: giant rat, goblin.");
 
@@ -1261,7 +1216,7 @@ public sealed class CombatManagerTests
     public void RoomCleared_CurrentTargetReset()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.NotNull(h.Combat.CurrentTarget);
@@ -1276,7 +1231,7 @@ public sealed class CombatManagerTests
         // Server keeps swinging at the named target each round; we
         // must NOT re-send the attack on every Also-Here re-display.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("Also here: giant rat.");     // re-display mid-fight
@@ -1291,8 +1246,8 @@ public sealed class CombatManagerTests
         // First mob dies, room re-displays with a different mob —
         // CombatManager swings at the next one.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin",    killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
 
         h.Feed("Also here: giant rat, goblin.");
         Assert.Equal("a giant rat", h.LastSent);
@@ -1311,7 +1266,7 @@ public sealed class CombatManagerTests
         // and stay quiet through subsequent re-displays until ALL
         // are dead.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat, giant rat, giant rat.");
         h.Feed("Also here: giant rat, giant rat.");        // one died
@@ -1330,7 +1285,7 @@ public sealed class CombatManagerTests
     public void MasterOffMidFight_ClearsCurrentTarget()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.NotNull(h.Combat.CurrentTarget);
@@ -1342,30 +1297,6 @@ public sealed class CombatManagerTests
 
     // ----- no wire sender bound ---------------------------------------
 
-    [Fact]
-    public void NoWireSender_LogsButDoesNotThrow()
-    {
-        Harness h = new();
-        // Don't bind the sender — verify the null-path no-throw shape.
-        CombatManager combat = new(h.Router, h.Classifier, h.Monsters,
-            resolveOverlay: _ => new MonsterOverlay(),
-            party: h.Party,
-            readSettings: () => h.Settings,
-            isEnabled: () => h.AutoCombatEnabled,
-            readOwnGivenName: () => h.OwnName,
-            post: a => a(),
-            log: h.Log);
-
-        h.AddMonster(1, "giant rat", killable: true);
-        h.Feed("Also here: giant rat.");
-
-        // No throws; the engine tracked the target for state purposes
-        // but didn't send anything.
-        Assert.Equal("giant rat", combat.CurrentTarget);
-        combat.Dispose();
-        h.Dispose();
-    }
-
     // ----- MonsterOverlay priority sort --------------------------------
 
     [Fact]
@@ -1374,26 +1305,13 @@ public sealed class CombatManagerTests
         // First (=0 in enum) beats Normal (=2) → goblin gets picked
         // even though it appears second in the Also-Here line.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin",    killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
         h.SetOverlay(2, priority: MonsterAttackPriority.First);
 
         h.Feed("Also here: giant rat, goblin.");
 
         Assert.Equal("a goblin", h.LastSent);
-    }
-
-    [Fact]
-    public void EqualPriority_TiebreakOnAppearanceOrder()
-    {
-        // Both Normal → first in Also-Here wins under TargetOrder.Normal.
-        using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin",    killable: true);
-
-        h.Feed("Also here: giant rat, goblin.");
-
-        Assert.Equal("a giant rat", h.LastSent);
     }
 
     [Fact]
@@ -1403,9 +1321,9 @@ public sealed class CombatManagerTests
         // picks the LAST sorted entry — the lowest-priority mob.
         using Harness h = new();
         h.Settings.TargetOrder = TargetOrder.Reverse;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin",    killable: true);
-        h.AddMonster(3, "rat king",  killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
+        h.AddMonster(3, "rat king");
         h.SetOverlay(1, priority: MonsterAttackPriority.First);
         h.SetOverlay(3, priority: MonsterAttackPriority.Last);
 
@@ -1420,7 +1338,7 @@ public sealed class CombatManagerTests
     public void RelationshipFriend_SkippedEvenIfKillable()
     {
         using Harness h = new();
-        h.AddMonster(1, "guardian", killable: true);
+        h.AddMonster(1, "guardian");
         h.SetOverlay(1, relationship: MonsterRelationship.Friend);
 
         h.Feed("Also here: guardian.");
@@ -1431,11 +1349,10 @@ public sealed class CombatManagerTests
     [Fact]
     public void RelationshipNeutral_SkippedByDefault()
     {
-        // Neutral defaults to "don't attack unless attacked first".
-        // First-cut treats Neutral the same as Friend (skip); a future
-        // PR can wire "attack all monsters" to bypass this.
+        // Neutral defaults to "don't attack unless attacked first", skipped like
+        // Friend (KillOnSight is what attacks it).
         using Harness h = new();
-        h.AddMonster(1, "merchant", killable: true);
+        h.AddMonster(1, "merchant");
         h.SetOverlay(1, relationship: MonsterRelationship.Neutral);
 
         h.Feed("Also here: merchant.");
@@ -1447,22 +1364,8 @@ public sealed class CombatManagerTests
     public void RelationshipEnemy_Engaged()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.SetOverlay(1, relationship: MonsterRelationship.Enemy);
-
-        h.Feed("Also here: giant rat.");
-
-        Assert.Equal("a giant rat", h.LastSent);
-    }
-
-    [Fact]
-    public void RelationshipNull_DefaultsToEnemy()
-    {
-        // No overlay entry at all → null Relationship → engineering
-        // default is Enemy (skip is too aggressive; everything in the
-        // game-data monster table is fightable unless tagged otherwise).
-        using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
 
@@ -1475,7 +1378,7 @@ public sealed class CombatManagerTests
     public void AttackTimingDefault_DoesNotRefire()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");       // initial swing
         Assert.Single(h.Sent);
@@ -1489,7 +1392,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1506,7 +1409,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Bob" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1531,7 +1434,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Raijin WuzHere" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1556,7 +1459,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Suijin" });
         h.Party.Members.Add(new PartyMember { Name = "Raijin" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");        // initial swing (synchronous)
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1597,7 +1500,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
         h.Party.Members.Add(new PartyMember { Name = "Thresh" });
-        h.AddMonster(1, "obsidian demon", killable: true);
+        h.AddMonster(1, "obsidian demon");
 
         h.Feed("Also here: obsidian demon.");   // initial swing
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1624,7 +1527,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
         h.Party.Members.Add(new PartyMember { Name = "Cidir" });
-        h.AddMonster(1, "fat greater wyvern", killable: true);
+        h.AddMonster(1, "fat greater wyvern");
 
         h.Feed("Also here: fat greater wyvern.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1656,7 +1559,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
         h.Party.Members.Add(new PartyMember { Name = "Thresh" });
-        h.AddMonster(1, "large giant hellhound", killable: true);
+        h.AddMonster(1, "large giant hellhound");
 
         h.Feed("Also here: large giant hellhound.");
         h.Feed("*Combat Engaged*");
@@ -1679,7 +1582,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
         h.Party.Members.Add(new PartyMember { Name = "Thresh" });
-        h.AddMonster(1, "large giant hellhound", killable: true);
+        h.AddMonster(1, "large giant hellhound");
 
         h.Feed("Also here: large giant hellhound.");
         h.Feed("*Combat Engaged*");
@@ -1703,7 +1606,7 @@ public sealed class CombatManagerTests
         List<Action> settle = new();
         h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "fat greater wyvern", killable: true);
+        h.AddMonster(1, "fat greater wyvern");
 
         h.Feed("Also here: fat greater wyvern.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1726,7 +1629,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackAfter;
         h.Settings.AttackAfterPlayerName = "Tank";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1747,7 +1650,7 @@ public sealed class CombatManagerTests
         // came through and we re-fired, we'd swing twice per round.
         using Harness h = new() { OwnName = "MudPlay" };
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -1774,7 +1677,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
@@ -1790,7 +1693,7 @@ public sealed class CombatManagerTests
         // — the regex tolerates the prompt prefix.
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1817,7 +1720,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.Party.Members.Add(new PartyMember { Name = "Sidekick" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1843,7 +1746,7 @@ public sealed class CombatManagerTests
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1870,7 +1773,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.Party.Members.Add(new PartyMember { Name = "Sidekick" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");            // initial swing (synchronous)
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1899,7 +1802,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.Party.Members.Add(new PartyMember { Name = "Sidekick" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -1917,7 +1820,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Priest" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -1937,7 +1840,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Priest" });
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -1952,7 +1855,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new() { OwnName = "MudPlay" };
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -1975,8 +1878,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastParty;
         h.Party.Members.Add(new PartyMember { Name = "Tank" });
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -2003,8 +1905,7 @@ public sealed class CombatManagerTests
         // stranger on our target re-fires.
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -2034,8 +1935,7 @@ public sealed class CombatManagerTests
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2058,8 +1958,7 @@ public sealed class CombatManagerTests
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
         h.Party.LeaderName = "Boss McBossface";
         h.Party.Members.Add(new PartyMember { Name = "Boss McBossface" });
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2081,8 +1980,7 @@ public sealed class CombatManagerTests
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2101,8 +1999,7 @@ public sealed class CombatManagerTests
         h.Settings.TargetPriority = TargetPriority.FollowMember;
         h.Settings.TargetPriorityMemberName = "Healer";
         h.Party.Members.Add(new PartyMember { Name = "Healer" });
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2121,8 +2018,7 @@ public sealed class CombatManagerTests
         h.Party.IsInParty = true;
         h.Settings.TargetPriority = TargetPriority.FollowMember;
         h.Settings.TargetPriorityMemberName = "Healer";
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2140,8 +2036,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Party.IsInParty = true;
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         Assert.Equal("a angry kobold thief", h.LastSent);
@@ -2162,7 +2057,7 @@ public sealed class CombatManagerTests
         h.Party.IsInParty = true;
         h.Settings.TargetPriority = TargetPriority.FollowMember;
         h.Settings.TargetPriorityMemberName = "Healer";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("a giant rat", h.LastSent);
@@ -2188,8 +2083,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.AddPlayer("Boss");
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: Boss, angry kobold thief, large kobold thief.");
         Assert.Empty(h.Sent);                       // held — nothing sent yet
@@ -2212,8 +2106,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.AddPlayer("Boss");
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: Boss, angry kobold thief, large kobold thief.");
         Assert.Empty(h.Sent);                       // held
@@ -2235,8 +2128,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.AddPlayer("Boss");
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: Boss, angry kobold thief, large kobold thief.");
         h.Feed("Boss moves to attack large kobold thief.");
@@ -2257,8 +2149,7 @@ public sealed class CombatManagerTests
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
         h.Party.LeaderName = "Boss";
         h.AddPlayer("Boss");
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: Boss, angry kobold thief, large kobold thief.");
         Assert.Single(h.Sent);                      // eager own pick, no hold
@@ -2280,7 +2171,7 @@ public sealed class CombatManagerTests
         h.Party.LeaderName = "Boss";
         h.Party.Members.Add(new PartyMember { Name = "Boss" });
         h.AddPlayer("Boss");
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: Boss, giant rat.");
         Assert.Single(h.Sent);
@@ -2298,7 +2189,7 @@ public sealed class CombatManagerTests
         // wipe — the next Also-Here parse rebuilds the picture and
         // drives a fresh pick (covered separately).
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
@@ -2316,8 +2207,8 @@ public sealed class CombatManagerTests
     public void RoomChange_ThenNewRoomAlsoHere_PicksFreshTarget()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin",    killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
@@ -2342,8 +2233,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.AttackTiming = AttackTiming.AttackAfter;
         h.Settings.AttackAfterPlayerName = "Tank";
-        h.AddMonster(1, "kobold thief", killable: true, allowNoPrefix: false,
-            "angry", "large");
+        h.AddMonster(1, "kobold thief");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
         h.Feed("*Combat Engaged*");   // the game answers our attack
@@ -2372,7 +2262,7 @@ public sealed class CombatManagerTests
         // includes Also Here + prompt without the full room dump, so
         // the classifier rebuilds the picture cheaply.
         using Harness h = new();
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
 
         // No room observation yet — classifier.Current is null.
         h.Feed("The kobold thief swings at you but misses!");
@@ -2388,7 +2278,7 @@ public sealed class CombatManagerTests
     public void CombatLine_WithNoEngageable_LeavesTheRosterShortOfSomeone()
     {
         using Harness h = new();
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
         h.AddPlayer("Someone");
         h.Feed("Also here: Someone.");
         Assert.True(h.Classifier.RosterIsWhole);
@@ -2422,7 +2312,7 @@ public sealed class CombatManagerTests
         // real combat line (or the round tick) brings it back.
         using Harness h = new();
         h.Combat.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(OffRoundDamageLinesTests.MagmaHeat));
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         BackdateLastAttack(h.Combat);
         h.Feed("*Combat Off*");
@@ -2440,7 +2330,7 @@ public sealed class CombatManagerTests
         // Normal case: we have a target. Combat line is expected; no
         // wire send.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("a giant rat", h.LastSent);
@@ -2474,7 +2364,7 @@ public sealed class CombatManagerTests
         // server replies "You don't see giant rat here!". Drop our
         // target and force a re-display so the next round picks fresh.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Equal("a giant rat", h.LastSent);
@@ -2494,7 +2384,7 @@ public sealed class CombatManagerTests
         // monster we're fighting is still here, so the target stays and no refresh
         // goes out.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         int sentBefore = h.Sent.Count;
 
@@ -2509,7 +2399,7 @@ public sealed class CombatManagerTests
     public void TargetNotHere_UncontractedForm_DropsTheTarget()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
 
         h.Feed("You do not see giant rat here!");
@@ -2535,7 +2425,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalWeapon = "longsword";
         h.Settings.NormalOffHand = "shield";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -2552,7 +2442,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "longsword";
         h.Settings.AlternateWeapon = "warhammer";
         h.Settings.AlternateAttackCommand = "swing";
-        h.AddMonster(1, "stone golem", killable: true);
+        h.AddMonster(1, "stone golem");
 
         h.Feed("Also here: stone golem.");
         h.Swaps.Clear();
@@ -2577,7 +2467,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
         h.Settings.AlternateAttackCommand = "aa";
-        h.AddMonster(1, "margoyle", killable: true);
+        h.AddMonster(1, "margoyle");
         h.Feed("Also here: margoyle.");
 
         // First no-effect → request the alternate (now believed on it, unforced).
@@ -2606,7 +2496,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
         h.Settings.AlternateAttackCommand = "aa";
-        h.AddMonster(1, "margoyle", killable: true);
+        h.AddMonster(1, "margoyle");
         h.Feed("Also here: margoyle.");
 
         Assert.True(h.Combat.CanEngageMonster(1));       // actionable before any failure
@@ -2635,7 +2525,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
         h.Settings.AlternateAttackCommand = "a";
-        h.AddMonster(1, "nexus hunter", killable: true);
+        h.AddMonster(1, "nexus hunter");
         h.Feed("Also here: big nexus hunter.");
 
         // First no-effect: the engine requests the alternate, so its belief flag now
@@ -2665,7 +2555,7 @@ public sealed class CombatManagerTests
         h.Settings.AlternateAttackCommand = "a";
         h.Combat.SetCarriedCheck(name => name == "platinum sceptre");
         h.WornWeapon = "platinum sceptre";
-        h.AddMonster(1, "centaur outcast", killable: true);
+        h.AddMonster(1, "centaur outcast");
         h.Feed("Also here: centaur outcast.");
         h.Sent.Clear();
 
@@ -2689,9 +2579,9 @@ public sealed class CombatManagerTests
         Action? pending = null;
         h.Combat.SetArrivalSettleScheduler((_, cb) => pending = cb);
         h.Combat.SetDeathSummonProbe(n => n == 180);
-        h.AddMonster(180, "Champion of Blood", killable: true);
-        h.AddMonster(181, "greater hellion", killable: true);
-        h.AddMonster(144, "dark priest", killable: true);
+        h.AddMonster(180, "Champion of Blood");
+        h.AddMonster(181, "greater hellion");
+        h.AddMonster(144, "dark priest");
         h.SetOverlay(180, priority: MonsterAttackPriority.High);
         h.SetOverlay(181, priority: MonsterAttackPriority.High);
         h.Feed("Also here: Champion of Blood, dark priest.");
@@ -2787,7 +2677,7 @@ public sealed class CombatManagerTests
             h.Settings.NormalWeapon = "shortsword";
             h.WornWeapon = "silver rapier";
             h.Combat.SetCarriedCheck(name => name == "silver rapier");
-            h.AddMonster(108, "ice sorceress", killable: true);
+            h.AddMonster(108, "ice sorceress");
 
             h.Feed("Also here: ice sorceress.");
 
@@ -2810,7 +2700,7 @@ public sealed class CombatManagerTests
             h.Settings.NormalWeapon = "shortsword";
             h.WornWeapon = "silver rapier";
             h.Combat.SetCarriedCheck(_ => true);
-            h.AddMonster(108, "ice sorceress", killable: true);
+            h.AddMonster(108, "ice sorceress");
 
             h.Feed("Also here: ice sorceress.");
 
@@ -2866,8 +2756,8 @@ public sealed class CombatManagerTests
             WireStrikeGate(h, root);
             h.Settings.NormalAttackCommand = strike;
             h.Combat.SetInnateHitMagic(() => 6, () => false);      // a Paradigm Mystic
-            h.AddMonster(1250, "giant hellhound", killable: true);
-            h.AddMonster(681, "pyrimera", killable: true);
+            h.AddMonster(1250, "giant hellhound");
+            h.AddMonster(681, "pyrimera");
 
             h.Feed("Also here: giant hellhound.");
 
@@ -2889,7 +2779,7 @@ public sealed class CombatManagerTests
             WireStrikeGate(h, root);
             h.Settings.NormalAttackCommand = "pu";
             h.Combat.SetInnateHitMagic(() => 6, () => false);
-            h.AddMonster(1033, "demon imp", killable: true);
+            h.AddMonster(1033, "demon imp");
 
             h.Feed("Also here: demon imp.");
 
@@ -2913,7 +2803,7 @@ public sealed class CombatManagerTests
             WireStrikeGate(h, root);
             h.Settings.NormalAttackCommand = strike;
             h.Combat.SetInnateHitMagic(() => 6, () => false);
-            h.AddMonster(1250, "giant hellhound", killable: true);
+            h.AddMonster(1250, "giant hellhound");
             h.Feed("Also here: giant hellhound.");
             Assert.True(h.Combat.CanEngageMonster(1250));
 
@@ -2935,7 +2825,7 @@ public sealed class CombatManagerTests
             using Harness h = new();
             WireStrikeGate(h, root);
             h.Settings.NormalAttackCommand = "pu";
-            h.AddMonster(1250, "giant hellhound", killable: true);
+            h.AddMonster(1250, "giant hellhound");
 
             h.Feed("Also here: giant hellhound.");
 
@@ -2963,7 +2853,7 @@ public sealed class CombatManagerTests
             h.Settings.NormalAttackCommand = "a";
             h.Combat.SetInnateHitMagic(() => classHitMagic, () => stock);
             int number = monsterNeeds == 3 ? 1250 : 681;
-            h.AddMonster(number, monsterNeeds == 3 ? "giant hellhound" : "pyrimera", killable: true);
+            h.AddMonster(number, monsterNeeds == 3 ? "giant hellhound" : "pyrimera");
 
             h.Feed($"Also here: {(monsterNeeds == 3 ? "giant hellhound" : "pyrimera")}.");
 
@@ -2986,8 +2876,8 @@ public sealed class CombatManagerTests
             WireStrikeGate(h, root);
             h.Settings.NormalAttackCommand = "a";
             h.Combat.SetInnateHitMagic(() => 10, () => stock);
-            h.AddMonster(681, "pyrimera", killable: true);
-            h.AddMonster(1033, "demon imp", killable: true);
+            h.AddMonster(681, "pyrimera");
+            h.AddMonster(1033, "demon imp");
 
             h.Feed("Also here: pyrimera.");
 
@@ -3029,7 +2919,7 @@ public sealed class CombatManagerTests
         h.Settings.AlternateWeapon = "rune-etched sceptre";
         h.Settings.AlternateAttackCommand = "a";
         h.WornWeapon = "platinum sceptre";
-        h.AddMonster(1, "centaur outcast", killable: true);
+        h.AddMonster(1, "centaur outcast");
         h.Feed("Also here: centaur outcast.");
         h.Sent.Clear();
 
@@ -3050,7 +2940,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
         h.Settings.AlternateAttackCommand = "a";
-        h.AddMonster(1, "nexus hunter", killable: true);
+        h.AddMonster(1, "nexus hunter");
         h.Feed("Also here: big nexus hunter.");
 
         h.Feed("Your weapon has no effect against this monster!");   // normal → swap to alt
@@ -3072,7 +2962,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
-        h.AddMonster(1, "nexus hunter", killable: true);
+        h.AddMonster(1, "nexus hunter");
         h.Feed("Also here: big nexus hunter.");
 
         h.Feed("Your weapon has no effect against this monster!");
@@ -3096,7 +2986,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "attack";
-        h.AddMonster(1, "acid slime", killable: true);
+        h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");
         Assert.Equal("harm acid slime", h.LastSent);
@@ -3115,7 +3005,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "harm";   // same → nothing to fall to
-        h.AddMonster(1, "acid slime", killable: true);
+        h.AddMonster(1, "acid slime");
         h.Feed("Also here: acid slime.");
         h.Sent.Clear();
 
@@ -3132,7 +3022,7 @@ public sealed class CombatManagerTests
         // round the engine chose physical (here: no attack spell configured → physical).
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
-        h.AddMonster(1, "acid slime", killable: true);
+        h.AddMonster(1, "acid slime");
         h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "attack" };
 
         h.Feed("Also here: acid slime.");
@@ -3149,7 +3039,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "attack";
-        h.AddMonster(1, "acid slime", killable: true);
+        h.AddMonster(1, "acid slime");
         h.Overlays[1] = new MonsterOverlay { OverridePhysicalCommand = "smite" };
 
         h.Feed("Also here: acid slime.");
@@ -3172,8 +3062,8 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "throwing hammers";
         h.Settings.AlternateWeapon = "golden broadsword";
         h.Settings.AlternateAttackCommand = "aa";
-        h.AddMonster(1, "margoyle", killable: true);
-        h.AddMonster(2, "giant rat", killable: true);
+        h.AddMonster(1, "margoyle");
+        h.AddMonster(2, "giant rat");
         h.Feed("Also here: margoyle, giant rat.");       // engages margoyle (first)
 
         h.Feed("Your weapon has no effect against this monster!");   // normal → alt
@@ -3201,7 +3091,7 @@ public sealed class CombatManagerTests
         Assert.False(pre.UsingAlternateWeapon);
 
         h.Settings.NormalWeapon = "longsword";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
 
         CombatManager.DebugState post = h.Combat.Snapshot();
@@ -3215,7 +3105,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.NormalWeapon = "longsword";
         h.Settings.AlternateWeapon = "warhammer";
-        h.AddMonster(1, "stone golem", killable: true);
+        h.AddMonster(1, "stone golem");
 
         h.Feed("Also here: stone golem.");
         h.Feed("Your weapon has no effect against this monster!");
@@ -3240,7 +3130,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "longsword";
         h.Settings.BackstabWeapon = "dagger";
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Swaps.Clear();
@@ -3287,20 +3177,20 @@ public sealed class CombatManagerTests
         Assert.Empty(h.Swaps);
     }
 
-    // ----- Backstab window (PR 4.c) ----------------------------------
+    // ----- Backstab window -------------------------------------------
 
     [Fact]
     public void Backstab_SendsBs_WhenSneaking_NoSeeHidden()
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");
 
         // Opening swing into the room is `bs`, and the BS path must NOT
-        // re-equip — the BS weapon is pre-equipped at room-clear.
+        // re-equip — the BS weapon goes on before the move in.
         Assert.Equal("bs giant rat", h.LastSent);
         Assert.Empty(h.Swaps);
     }
@@ -3313,8 +3203,8 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "frost serpent", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "frost serpent");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");
@@ -3333,7 +3223,7 @@ public sealed class CombatManagerTests
     public void Attack_HeldBySendGate_IsReDecidedWhenTheHoldLifts()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         bool held = true;
         h.Combat.SetWireHoldProbe(() => held);
 
@@ -3350,7 +3240,7 @@ public sealed class CombatManagerTests
     public void WireReleased_WithNothingHeld_SendsNothing()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         int sent = h.Sent.Count;
 
@@ -3364,8 +3254,8 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "crystal golem", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "crystal golem");
         // The golem (monster #2) carries SeeHidden — its presence reveals
         // the sneaker to the whole room, so the opening swing is a normal
         // attack, not a backstab.
@@ -3384,7 +3274,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = false;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");
@@ -3397,7 +3287,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");
@@ -3412,7 +3302,7 @@ public sealed class CombatManagerTests
         // the engine falls through to a normal attack.
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -3429,8 +3319,8 @@ public sealed class CombatManagerTests
         // fall through to a normal attack (the under-backstab report).
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         // Room A: opener fires, then is consumed.
@@ -3453,7 +3343,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "dark cultist", killable: true);
+        h.AddMonster(1, "dark cultist");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3475,7 +3365,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "carrion beast", killable: true);
+        h.AddMonster(1, "carrion beast");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
         h.Combat.SetSneakBrokeOnEntryProbe(() => true);
         bool fled = false;
@@ -3493,7 +3383,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = false;
-        h.AddMonster(1, "carrion beast", killable: true);
+        h.AddMonster(1, "carrion beast");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
         h.Combat.SetSneakBrokeOnEntryProbe(() => true);
         bool fled = false;
@@ -3513,7 +3403,7 @@ public sealed class CombatManagerTests
         using Harness h = new() { DeferUi = true };
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3532,7 +3422,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "dark cultist", killable: true);
+        h.AddMonster(1, "dark cultist");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3549,7 +3439,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "orc rogue", killable: true);
+        h.AddMonster(1, "orc rogue");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3567,7 +3457,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "big azure slime", killable: true);
+        h.AddMonster(1, "big azure slime");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         int casts = 0;
         h.Combat.SetCastBeforeBackstabReannounce(() => { casts++; return true; });
@@ -3585,7 +3475,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "big azure slime", killable: true);
+        h.AddMonster(1, "big azure slime");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         h.Combat.SetCastBeforeBackstabReannounce(() => false);
 
@@ -3618,7 +3508,7 @@ public sealed class CombatManagerTests
         (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
         using Harness _h = h;
         h.Settings.RunIfBackstabFails = false;
-        h.AddMonster(1, "carrion beast", killable: true);
+        h.AddMonster(1, "carrion beast");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
         h.Combat.SetSneakBrokeOnEntryProbe(() => true);
 
@@ -3634,7 +3524,7 @@ public sealed class CombatManagerTests
     {
         (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false, allowRun: false);
         using Harness _h = h;
-        h.AddMonster(1, "carrion beast", killable: true);
+        h.AddMonster(1, "carrion beast");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
         h.Combat.SetSneakBrokeOnEntryProbe(() => true);
 
@@ -3650,7 +3540,7 @@ public sealed class CombatManagerTests
         (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
         using Harness _h = h;
         h.Settings.RunIfBackstabFails = false;
-        h.AddMonster(1, "dark cultist", killable: true);
+        h.AddMonster(1, "dark cultist");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: dark cultist.");
@@ -3665,7 +3555,7 @@ public sealed class CombatManagerTests
     {
         (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
         using Harness _h = h;
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: kobold thief.");
@@ -3681,7 +3571,7 @@ public sealed class CombatManagerTests
     {
         (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
         using Harness _h = h;
-        h.AddMonster(1, "orc rogue", killable: true);
+        h.AddMonster(1, "orc rogue");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: orc rogue.");
@@ -3696,8 +3586,8 @@ public sealed class CombatManagerTests
     {
         (Harness h, List<bool> landed, _) = HitAndRunHarness(deferUi: true);
         using Harness _h = h;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(4, "carrion beast", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(4, "carrion beast");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat, carrion beast.");
@@ -3716,8 +3606,8 @@ public sealed class CombatManagerTests
     {
         (Harness h, List<bool> landed, List<string> runs) = HitAndRunHarness(deferUi: true, allowRun: false);
         using Harness _h = h;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "lashworm", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "lashworm");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat, lashworm.");
@@ -3737,7 +3627,7 @@ public sealed class CombatManagerTests
     {
         (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false);
         using Harness _h = h;
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
 
         h.Feed("Also here: kobold thief.");
@@ -3751,7 +3641,7 @@ public sealed class CombatManagerTests
     {
         (Harness h, _, List<string> runs) = HitAndRunHarness(deferUi: false, allowRun: false);
         using Harness _h = h;
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
 
         h.Feed("Also here: kobold thief.");
@@ -3767,7 +3657,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "nasty filthbug", killable: true);
+        h.AddMonster(1, "nasty filthbug");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         h.Combat.SetFleeInFlightProbe(() => true);
 
@@ -3784,7 +3674,7 @@ public sealed class CombatManagerTests
     public void ResumeHeldByAFlee_FightsBackOnceTheRunHasNowhereToGo()
     {
         using Harness h = new();
-        h.AddMonster(1, "cave bear", killable: false);
+        h.AddMonster(1, "cave bear");
         bool fleeing = false;
         h.Combat.SetFleeInFlightProbe(() => fleeing);
 
@@ -3810,7 +3700,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");
@@ -3829,7 +3719,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "kobold thief", killable: true);
+        h.AddMonster(1, "kobold thief");
         h.Combat.SetBackstabHooks(isStealthed: () => false, hasSeeHidden: _ => false);
         List<string> runs = new();
         h.Combat.SetHitAndRunHooks(_ => { }, r => { runs.Add(r); return true; });
@@ -3846,7 +3736,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = false;   // opt-out
-        h.AddMonster(1, "dark cultist", killable: true);
+        h.AddMonster(1, "dark cultist");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3862,7 +3752,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.DoBackstab = true;
         h.Settings.RunIfBackstabFails = true;
-        h.AddMonster(1, "dark cultist", killable: true);
+        h.AddMonster(1, "dark cultist");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
         bool fled = false;
         h.Combat.SetBackstabFailureFlee(() => fled = true);
@@ -3889,7 +3779,7 @@ public sealed class CombatManagerTests
         using Harness h = new() { DeferUi = true };
         h.Settings.DoBackstab = true;
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");          // opener: bs (synchronous)
@@ -3926,7 +3816,7 @@ public sealed class CombatManagerTests
         h.Settings.DoBackstab = true;
         h.Settings.NormalAttackCommand = "pu";
         h.Settings.AttackTiming = AttackTiming.AttackLastRoom;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         // Opener fires bs and is consumed; the target is held.
@@ -3963,9 +3853,9 @@ public sealed class CombatManagerTests
         // even though the RoomChange re-arm never fired.
         using Harness h = new();
         h.Settings.DoBackstab = true;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "goblin", killable: true);
-        h.AddMonster(3, "dark elf", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "goblin");
+        h.AddMonster(3, "dark elf");
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         // First arrival: opener fires, then is consumed.
@@ -3983,7 +3873,7 @@ public sealed class CombatManagerTests
         Assert.Equal("bs dark elf", h.LastSent);
     }
 
-    // ----- seehidden clear override (PR 4.c-b) -----------------------
+    // ----- seehidden clear override ----------------------------------
 
     [Fact]
     public void SeeHiddenOverride_EngagesDespiteCombatOff()
@@ -3994,7 +3884,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.AutoCombatEnabled = false;
         h.Combat.SetSeeHiddenClearGate(() => true);
-        h.AddMonster(1, "crystal golem", killable: true);
+        h.AddMonster(1, "crystal golem");
 
         h.Feed("Also here: crystal golem.");
 
@@ -4012,8 +3902,8 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.AutoCombatEnabled = false;
         h.Combat.SetSeeHiddenClearGate(() => true);
-        h.AddMonster(1, "harpy", killable: true);
-        h.AddMonster(2, "gorgon", killable: true);
+        h.AddMonster(1, "harpy");
+        h.AddMonster(2, "gorgon");
 
         h.Feed("Also here: harpy, gorgon.");
         Assert.Equal("a harpy", h.LastSent);
@@ -4031,7 +3921,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.AutoCombatEnabled = false;
         h.Combat.SetSeeHiddenClearGate(() => false);
-        h.AddMonster(1, "crystal golem", killable: true);
+        h.AddMonster(1, "crystal golem");
 
         h.Feed("Also here: crystal golem.");
 
@@ -4049,8 +3939,8 @@ public sealed class CombatManagerTests
         h.AutoCombatEnabled = false;
         h.Settings.MaxMonstersInRoom = 1;     // would normally skip a 2-mob room
         h.Combat.SetSeeHiddenClearGate(() => true);
-        h.AddMonster(1, "crystal golem", killable: true);
-        h.AddMonster(2, "giant rat", killable: true);
+        h.AddMonster(1, "crystal golem");
+        h.AddMonster(2, "giant rat");
 
         h.Feed("Also here: crystal golem, giant rat.");
 
@@ -4063,7 +3953,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.NormalWeapon = "longsword";
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Swaps.Clear();
@@ -4085,7 +3975,7 @@ public sealed class CombatManagerTests
         h.Settings.NormalWeapon = "longsword";
         h.Settings.AlternateWeapon = "warhammer";
         h.Settings.AlternateAttackCommand = "swing";
-        h.AddMonster(1, "stone golem", killable: true);
+        h.AddMonster(1, "stone golem");
 
         // First golem — normal weapon, no-effect fires, swap to alt.
         h.Feed("Also here: stone golem.");
@@ -4112,7 +4002,7 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.MinMonstersInRoom = 2;
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
 
@@ -4124,9 +4014,9 @@ public sealed class CombatManagerTests
     {
         using Harness h = new();
         h.Settings.MaxMonstersInRoom = 2;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "kobold", killable: true);
-        h.AddMonster(3, "goblin", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
+        h.AddMonster(3, "goblin");
 
         h.Feed("Also here: giant rat, kobold, goblin.");
 
@@ -4145,9 +4035,9 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.MaxMonstersInRoom = 2;
         h.Combat.SetMovementActiveGate(() => false);   // no walker/loop attached — idle
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "kobold", killable: true);
-        h.AddMonster(3, "goblin", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
+        h.AddMonster(3, "goblin");
 
         h.Feed("Also here: giant rat, kobold, goblin.");
 
@@ -4161,9 +4051,9 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.MaxMonstersInRoom = 2;
         h.Combat.SetMovementActiveGate(() => true);   // a walker/loop IS driving us through
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "kobold", killable: true);
-        h.AddMonster(3, "goblin", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
+        h.AddMonster(3, "goblin");
 
         h.Feed("Also here: giant rat, kobold, goblin.");
 
@@ -4177,8 +4067,8 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.Settings.MinMonstersInRoom = 1;
         h.Settings.MaxMonstersInRoom = 5;
-        h.AddMonster(1, "giant rat", killable: true);
-        h.AddMonster(2, "kobold", killable: true);
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "kobold");
 
         h.Feed("Also here: giant rat, kobold.");
 
@@ -4212,7 +4102,7 @@ public sealed class CombatManagerTests
         // KAI pummel emits Off after every strike; resuming on the bare Off
         // would spin). The next mob swing arms the paced resume.
         using Harness h = new();
-        h.AddMonster(1, "acid slime", killable: false);
+        h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");
         Assert.Single(h.Sent);
@@ -4245,7 +4135,7 @@ public sealed class CombatManagerTests
         // the path that kills the "long pause before re-attack" symptom for
         // mobs whose attack message we don't match.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -4275,7 +4165,7 @@ public sealed class CombatManagerTests
     public void CombatOffAfterTheAttackWasAnswered_NextRoundLineReAttacks_AndSoDoesTheHealAfterIt()
     {
         using Harness h = new();
-        h.AddMonster(1250, "giant hellhound", killable: false, allowNoPrefix: true, "nasty");
+        h.AddMonster(1250, "giant hellhound");
 
         h.Feed("Also here: nasty giant hellhound.");
         Assert.Equal("a nasty giant hellhound", h.LastSent);
@@ -4313,7 +4203,7 @@ public sealed class CombatManagerTests
         // The same break with no combat line the client reads: the round tick is
         // the other thing that asks.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
@@ -4332,7 +4222,7 @@ public sealed class CombatManagerTests
         // attack (a kill's, after the re-pick already swung at the survivor). That
         // attack is in flight, and a resume would send it twice.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -4346,14 +4236,14 @@ public sealed class CombatManagerTests
     }
 
     // The guard is 1.5 s from the attack. The stamps it reads are wall-clock
-    // (CombatManager.SetClock doesn't reach them), so the attack is aged instead.
+    // (the injected combat clock doesn't reach them), so the attack is aged instead.
     [Theory]
     [InlineData(1.4, 1)]
     [InlineData(1.6, 2)]
     public void UnansweredCombatOff_GuardEndsOneAndAHalfSecondsAfterTheAttack(double attackAgeSeconds, int sentAfter)
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         BackdateLastAttack(h.Combat, attackAgeSeconds);
 
@@ -4369,7 +4259,7 @@ public sealed class CombatManagerTests
         // The Off that ends an answered attack a moment after a kill is the kill's
         // own. If the corpse is still on the roster, the guard keeps a swing off it.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
         SetStamp(h.Combat, "_lastDeathAt", DateTimeOffset.Now);
@@ -4386,7 +4276,7 @@ public sealed class CombatManagerTests
     public void AnsweredCombatOff_AutoCombatOff_SendsNothing()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
         h.AutoCombatEnabled = false;
@@ -4404,7 +4294,7 @@ public sealed class CombatManagerTests
         // The cast's Off queues the re-attack (a 200 ms deferral in the app); the
         // round's lines land before it goes out and must not queue another.
         using Harness h = new() { DeferUi = true };
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.PumpUi();
         h.Feed("*Combat Engaged*");
@@ -4430,7 +4320,7 @@ public sealed class CombatManagerTests
     public void TypedGearCommand_CombatOff_ReAttacksAtOnce_AndOnlyOnce()
     {
         using Harness h = new();
-        h.AddMonster(1250, "giant hellhound", killable: false, allowNoPrefix: true, "nasty");
+        h.AddMonster(1250, "giant hellhound");
 
         h.Feed("Also here: nasty giant hellhound.");
         h.Feed("*Combat Engaged*");
@@ -4463,7 +4353,7 @@ public sealed class CombatManagerTests
         // waits for the round like any resume (a cast of ours is never paced; a user's
         // typing is).
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
 
@@ -4481,7 +4371,7 @@ public sealed class CombatManagerTests
     public void TypedGearCommand_AutoCombatOff_ArmsNothing()
     {
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
         h.AutoCombatEnabled = false;
@@ -4498,7 +4388,7 @@ public sealed class CombatManagerTests
         // The command stopped nothing (an item we don't hold). An Off that comes
         // three seconds later is not its doing and gets no instant re-attack.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         BackdateLastAttack(h.Combat);
 
@@ -4515,7 +4405,7 @@ public sealed class CombatManagerTests
         // The Equipment Manager's own swap arms the same latch at its swap-complete
         // edge. Unchanged: one re-attack on the wear's Off, none on a second Off.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: false);
+        h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
 
@@ -4535,7 +4425,7 @@ public sealed class CombatManagerTests
         // the cast triggers is then attributed to it and the weapon attack
         // resumes on that very line — no full-round idle, no mob-swing wait.
         using Harness h = new();
-        h.AddMonster(1, "cave bear", killable: false);
+        h.AddMonster(1, "cave bear");
 
         h.Feed("Also here: cave bear.");
         Assert.Single(h.Sent);
@@ -4566,7 +4456,7 @@ public sealed class CombatManagerTests
         // between-round-cast branch must bypass that guard: the *Combat Off*
         // is provably our cast interrupting the swing, not a swing in flight.
         using Harness h = new();
-        h.AddMonster(1, "large orc rogue", killable: false);
+        h.AddMonster(1, "large orc rogue");
 
         h.Feed("Also here: large orc rogue.");
         Assert.Single(h.Sent);
@@ -4594,7 +4484,7 @@ public sealed class CombatManagerTests
         // target is proven by the room (HasEngageable), and ResumeEngage re-picks
         // from it — so a null target must NOT block the resume.
         using Harness h = new();
-        h.AddMonster(1, "cave bear", killable: true);
+        h.AddMonster(1, "cave bear");
 
         h.Feed("Also here: cave bear.");
         Assert.Single(h.Sent);
@@ -4630,7 +4520,7 @@ public sealed class CombatManagerTests
         // death detected this burst must suppress the between-round-cast resume and
         // hand re-engagement to the death→re-observe path (a fresh, resynced roster).
         using Harness h = new();
-        h.AddMonster(1, "large troglodyte warrior", killable: true);
+        h.AddMonster(1, "large troglodyte warrior");
 
         h.Feed("Also here: large troglodyte warrior.");
         Assert.Single(h.Sent);
@@ -4668,7 +4558,7 @@ public sealed class CombatManagerTests
     public void DeterministicTickResume_KillLandsInDeferWindow_NoCorpseAttack()
     {
         using Harness h = new() { DeferUi = true };
-        h.AddMonster(1, "cave bear", killable: true);
+        h.AddMonster(1, "cave bear");
 
         h.Feed("Also here: cave bear.");
         Assert.Equal("a cave bear", h.LastSent);
@@ -4703,7 +4593,7 @@ public sealed class CombatManagerTests
     public void DeterministicTickResume_TargetAlive_DeferredDispatchResumes()
     {
         using Harness h = new() { DeferUi = true };
-        h.AddMonster(1, "cave bear", killable: true);
+        h.AddMonster(1, "cave bear");
 
         h.Feed("Also here: cave bear.");
         Assert.Equal("a cave bear", h.LastSent);
@@ -4730,8 +4620,8 @@ public sealed class CombatManagerTests
         // full round until the cast-block latch cleared. Once an attack has gone out
         // since the death, the Off is the cast's interrupt and must resume.
         using Harness h = new();
-        h.AddMonster(1, "angry bugbear", killable: false);
-        h.AddMonster(2, "short bugbear", killable: false);
+        h.AddMonster(1, "angry bugbear");
+        h.AddMonster(2, "short bugbear");
 
         h.Feed("Also here: angry bugbear, short bugbear.");
         Assert.Equal("a angry bugbear", h.LastSent);
@@ -4766,8 +4656,8 @@ public sealed class CombatManagerTests
         // cast did NOT interrupt it, so the resume must fall through to the guarded
         // path and be suppressed.
         using Harness h = new();
-        h.AddMonster(1, "angry bugbear", killable: false);
-        h.AddMonster(2, "short bugbear", killable: false);
+        h.AddMonster(1, "angry bugbear");
+        h.AddMonster(2, "short bugbear");
 
         h.Feed("Also here: angry bugbear, short bugbear.");
         Assert.Equal("a angry bugbear", h.LastSent);
@@ -4817,7 +4707,7 @@ public sealed class CombatManagerTests
         // at our target) must NOT burn an extra swing. Only a preceding
         // *Combat Off* arms the resume.
         using Harness h = new();
-        h.AddMonster(1, "acid slime", killable: false);
+        h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");
         Assert.Single(h.Sent);
@@ -4836,7 +4726,7 @@ public sealed class CombatManagerTests
         // server is swinging for us again, so the interrupt flag is cleared
         // and no resume fires. A following mob swing must NOT re-attack.
         using Harness h = new();
-        h.AddMonster(1, "acid slime", killable: false);
+        h.AddMonster(1, "acid slime");
 
         h.Feed("Also here: acid slime.");
         Assert.Single(h.Sent);
@@ -4860,8 +4750,8 @@ public sealed class CombatManagerTests
         // (the 0-dmg/1-miss ghost round in the report log). The resume must see
         // the just-sent swing and stand down.
         using Harness h = new();
-        h.AddMonster(1, "dark goblin archer", killable: true);
-        h.AddMonster(2, "nasty thug", killable: true);
+        h.AddMonster(1, "dark goblin archer");
+        h.AddMonster(2, "nasty thug");
 
         h.Feed("Also here: dark goblin archer, nasty thug.");
         Assert.Single(h.Sent);
@@ -4887,9 +4777,9 @@ public sealed class CombatManagerTests
 
     // ----- engage-verification safety net ------------------------------
 
-    /// <summary>Backdate the private engage-wait timestamp so the next
-    /// tick sees the confirmation window as elapsed — lets the test
-    /// exercise the timeout path without sleeping the real clock.</summary>
+    // Backdate the private engage-wait timestamp so the next
+    // tick sees the confirmation window as elapsed — lets the test
+    // exercise the timeout path without sleeping the real clock.
     private static void ExpireEngageWindow(CombatManager combat)
     {
         System.Reflection.FieldInfo f = typeof(CombatManager).GetField(
@@ -4900,11 +4790,11 @@ public sealed class CombatManagerTests
         f.SetValue(combat, DateTimeOffset.Now - TimeSpan.FromSeconds(30));
     }
 
-    /// <summary>Backdate the last-swing stamp so the interrupt-resume guard
-    /// sees the attack as a full round old — the real timing when a mob swing
-    /// or between-round cast resumes. The guard only suppresses a resume that
-    /// lands right on the heels of a fresh swing (see ResumeAfterAttackGuard),
-    /// so time-compressed tests must age the stamp to exercise a real resume.</summary>
+    // Backdate the last-swing stamp so the interrupt-resume guard
+    // sees the attack as a full round old — the real timing when a mob swing
+    // or between-round cast resumes. The guard only suppresses a resume that
+    // lands right on the heels of a fresh swing (see ResumeAfterAttackGuard),
+    // so time-compressed tests must age the stamp to exercise a real resume.
     private static void BackdateLastAttack(CombatManager combat, double seconds = 5) =>
         SetStamp(combat, "_lastAttackSentAt", DateTimeOffset.Now - TimeSpan.FromSeconds(seconds));
 
@@ -4928,7 +4818,7 @@ public sealed class CombatManagerTests
         // *Combat Engaged*; after the window the tick must drop the stale
         // target and fire a bare CR to force a fresh room display.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
@@ -4949,12 +4839,13 @@ public sealed class CombatManagerTests
         // The server acknowledged the swing — the engage-verify net must
         // stay disarmed; no spurious CR even once the window would lapse.
         using Harness h = new();
-        h.AddMonster(1, "giant rat", killable: true);
+        h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
-        h.Feed("*Combat Engaged*");          // server confirms
+        ExpireEngageWindow(h.Combat);        // the window has run out…
+        h.Feed("*Combat Engaged*");          // …but the server confirms
         h.Combat.OnCombatTick();
 
         Assert.Single(h.Sent);               // no extra CR
