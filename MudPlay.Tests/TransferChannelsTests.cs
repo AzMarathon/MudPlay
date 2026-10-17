@@ -75,6 +75,28 @@ public sealed class TransferChannelsTests
     public void TheTransferForms_AreKnown(string command, string args, Transfer expected) =>
         Assert.Equal(expected, TransferChannels.Identify(command, args.Split(' ')));
 
+    // A line as it went out names the transfer and the channel its speak form puts
+    // it on; a form not recorded may be any channel. A telepath is one name, then
+    // the command.
+    [Theory]
+    [InlineData("/bo @timer sync", RemoteChannel.Telepath)]
+    [InlineData("bg @timer sync", RemoteChannel.Gangpath)]
+    [InlineData("br @timer sync", RemoteChannel.Broadcast)]
+    [InlineData(".@timer sync", RemoteChannel.Local)]
+    [InlineData("@timer sync", RemoteChannel.Local)]
+    [InlineData("gos @timer sync", null)]
+    public void ARequestAsItWentOut_NamesItsChannel(string line, RemoteChannel? channel)
+    {
+        Assert.Equal(Transfer.TimerSync, TransferChannels.RequestIn(line)?.Transfer);
+        Assert.Equal(channel, TransferChannels.RequestIn(line)?.Channel);
+    }
+
+    [Theory]
+    [InlineData("/bob hi @timer sync")]
+    [InlineData("bg @timer dragon")]
+    [InlineData("bg hello")]
+    public void ALineThatAsksForNoTransfer_IsNoRequest(string line) => Assert.Null(TransferChannels.RequestIn(line));
+
     // The other forms of the three commands are ordinary remote commands.
     [Theory]
     [InlineData("@loop", "kings road")]

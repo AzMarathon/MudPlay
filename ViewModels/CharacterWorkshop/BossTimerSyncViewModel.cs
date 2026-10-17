@@ -36,6 +36,13 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // all agree and left listed if they do not. Against a timer we hold, an answer is
 // decided as it comes, since neither outcome writes: the same is nothing, and one
 // that differs is listed.
+// While another telepath request of the user's waits for the game to show it
+// sent, the one player asked may not stay the only one: that player's answer is
+// gathered, and judged once the game has answered the request (HoldBack).
+// A timer we hold is one still running, as our own answer to a sync counts it
+// (BossTimerStore.StatusFor): an expired timer counts as holding none (user,
+// 2026-10-17: "Expired = none"), and so does a Cleanup boss's while no cleanup
+// time is set, though the Bosses tab shows it DEAD.
 // All of it is for answers to a request the USER made. What answers a request the
 // client sent for another player's remote command is listed, never written.
 // (An earlier rule, 2026-10-11, made every answer on a shared channel a pick;
@@ -104,16 +111,21 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     // one reaching, when the telepath was the user's own; null when the client sent
     // it for another player (a relay-back, a `@do`), whose answer is then a pick.
     // preArmedByUser says which of the two it was, for the window to say.
+    // killTimesWhenAsked: our kill times as the user's request went out
+    // (KillTimesNow, taken then), for a window the request's echo opened; null
+    // takes them now.
     public BossTimerSyncViewModel(
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
-        RemoteChannel? preArmedOn = null, string? preArmedTo = null, bool preArmedByUser = true)
+        RemoteChannel? preArmedOn = null, string? preArmedTo = null, bool preArmedByUser = true,
+        IReadOnlyDictionary<string, DateTimeOffset?>? killTimesWhenAsked = null)
         : this(bosses, timers, gameData, chat, send, preArmedOn,
             AppServices.Current.Log,
             () => AppServices.Current.RemoteCommands.DisableBroadcastChannel,
             AppServices.Current.RemoteCommands.IsSelfEcho,
             active => AppServices.Current.TimerSyncWindowActive = active,
             preArmedTo,
-            preArmedByUser: preArmedByUser)
+            preArmedByUser: preArmedByUser,
+            killTimesWhenAsked: killTimesWhenAsked)
     {
     }
 
@@ -123,7 +135,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         BossStore bosses, BossTimerStore timers, GameDataCache gameData, ChatRouter chat, Action<string> send,
         RemoteChannel? preArmedOn, LogService log, Func<bool> broadcastOff, Func<string, bool> isOurName,
         Action<bool> windowActive, string? preArmedTo = null, Action<Action>? onUiThread = null,
-        bool preArmedByUser = true, Action<TimeSpan, Action>? armTimer = null)
+        bool preArmedByUser = true, Action<TimeSpan, Action>? armTimer = null,
+        IReadOnlyDictionary<string, DateTimeOffset?>? killTimesWhenAsked = null)
     {
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);
@@ -153,6 +166,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _collector.ResponseReceived += OnResponse;
         _collector.UserAsked += OnUserAsked;
         _collector.Activity += OnActivity;
+        _collector.TelepathRequestAnswered += OnTelepathRequestAnswered;
         _timers.Changed += OnTimersChanged;
         _windowActive(true);   // suppress a duplicate auto-open
 
@@ -161,10 +175,17 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
 
         if (preArmedOn is { } askedOn)
         {
-            _collector.Begin(askedOn, preArmedTo, preArmedByUser);
+            // What we held as the user pressed Enter, not now at the echo: a change
+            // of ours in between is a change after asking, and is seen as one.
+            if (preArmedByUser && killTimesWhenAsked is not null)
+            {
+                _whenAsked = new Dictionary<string, DateTimeOffset?>(killTimesWhenAsked, StringComparer.OrdinalIgnoreCase);
+                OnTimersChanged();
+            }
             Requested = true;
+            _collector.Begin(askedOn, preArmedTo, preArmedByUser);
             Status = !preArmedByUser
-                ? "Collecting responses to a @timer sync this client sent for another player's remote command, not one you made — nothing is merged or synced: every timer is listed to pick, and written only by Apply Selected…"
+                ? NotTheUsersRequestStatus
                 : "Collecting responses to your @timer sync — " + WhatArrivingTimersDo();
         }
     }
@@ -218,8 +239,8 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         // be the first letters of a player's, and the game names the player when it
         // shows the telepath sent, which the collector reads. Only that player's
         // telepathed answer is then taken as an answer to it.
-        _collector.Begin(channel);
         Requested = true;
+        _collector.Begin(channel);
         _send(wire);
         Status = channel == RemoteChannel.Telepath && !_collector.SeveralMayAnswer
             ? "Requested — once the game shows the telepath sent, that player's timers are compared with yours as they arrive: one you had none for is merged in; one that differs replaces yours when they are the only player asked, and is listed to pick otherwise…"
@@ -234,34 +255,72 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         _onUiThread(() => Fold(response));
     }
 
-    private void OnActivity() => _onUiThread(ArmSettle);
+    private void OnActivity() => _onUiThread(() =>
+    {
+        if (!Requested) NoteRequestTyped();
+        ArmSettle();
+    });
 
-    // Our timers as they stood when the user first asked in this window, brought
-    // up to date with what the window itself has merged in or synced since. A
-    // timer that is no longer what this says changed after the user asked (a kill
-    // of our own, a clear, an edit on the Bosses tab, a pick applied): an answer
-    // was asked for against the old one and is never written over the new one as
-    // it arrives. The boss is listed instead, like any pick. Null until the user
-    // has asked. Not taken again at a later request: a kill made between two
-    // requests stays ours to keep or to give up by a pick.
+    // A request typed at the terminal into a window opened from the Bosses tab,
+    // before anything was asked in it: the window collects its answers as if it
+    // had been opened by it.
+    private void NoteRequestTyped()
+    {
+        Requested = true;
+        Status = _collector.OnePlayerAsked || _collector.SeveralMayAnswer
+            ? "Collecting responses to the @timer sync you typed — " + WhatArrivingTimersDo()
+            : NotTheUsersRequestStatus;
+    }
+
+    private const string NotTheUsersRequestStatus =
+        "Collecting responses to a @timer sync this client sent for another player's remote command, not one you made — nothing is merged or synced: every timer is listed to pick, and written only by Apply Selected…";
+
+    // Our kill times as they stood when the user first asked in this window (as
+    // they pressed Enter or the button sent it, not when the game showed it),
+    // brought up to date with what the window itself has written since: merged
+    // in, synced, or a pick applied. A kill time that is no longer what this says
+    // changed after the user asked (a kill of our own, a clear, an edit on the
+    // Bosses tab): an answer was asked for against the old one and is never
+    // written over the new one as it arrives. The boss is listed instead, like any
+    // pick. Null until the user has asked. Not taken again at a later request: a
+    // kill made between two requests stays ours to keep or to give up by a pick.
+    // Kill times as stored, expired or not: a timer running out is no change of
+    // ours.
     private Dictionary<string, DateTimeOffset?>? _whenAsked;
     // The bosses whose timer was seen to change since then by anything but this
-    // window's own merge or sync. Kept once seen: a kill that was then cleared
-    // leaves us holding what we held when asked, and was still our doing.
+    // window's own writes. Kept once seen: a kill that was then cleared leaves us
+    // holding what we held when asked, and was still our doing.
     private readonly HashSet<string> _changedSinceAsked = new(StringComparer.OrdinalIgnoreCase);
-    private bool _writingArrived;
+    private bool _writingOwn;
 
-    private void OnUserAsked()
+    private void OnUserAsked() => _onUiThread(() =>
     {
-        if (_whenAsked is not null) return;
-        _whenAsked = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
-        foreach (BossDef boss in _bosses.ResolveForRealm(_realm))
-            _whenAsked[boss.Name] = _timers.KilledAt(boss.Name);
+        if (_disposed || _whenAsked is not null) return;
+        _whenAsked = KillTimesNow(_bosses, _timers, _realm);
+    });
+
+    // Our kill times as stored now, for every boss on our list.
+    internal static Dictionary<string, DateTimeOffset?> KillTimesNow(BossStore bosses, BossTimerStore timers, RealmType realm)
+    {
+        var killTimes = new Dictionary<string, DateTimeOffset?>(StringComparer.OrdinalIgnoreCase);
+        foreach (BossDef boss in bosses.ResolveForRealm(realm))
+            killTimes[boss.Name] = timers.KilledAt(boss.Name);
+        return killTimes;
+    }
+
+    // The timer we hold for a boss: its kill time while the timer is still
+    // running, as a responder's own set counts it (StatusFor); null for none, or
+    // one that has run out.
+    private DateTimeOffset? Held(string boss)
+    {
+        if (_timers.KilledAt(boss) is not { } killed) return null;
+        BossDef? ours = ResolveOurBoss(null, boss);
+        return ours is not null && _timers.StatusFor(ours, _realm) is null ? null : killed;
     }
 
     private void OnTimersChanged()
     {
-        if (_writingArrived || _whenAsked is null) return;
+        if (_writingOwn || _whenAsked is null) return;
         foreach (BossDef boss in _bosses.ResolveForRealm(_realm))
             if (_timers.KilledAt(boss.Name) != HeldWhenAsked(boss.Name))
                 _changedSinceAsked.Add(boss.Name);
@@ -271,25 +330,32 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     private DateTimeOffset? HeldWhenAsked(string boss) =>
         _whenAsked is { } then && then.TryGetValue(boss, out DateTimeOffset? was) ? was : null;
 
-    // The comparison with the store is for a change nothing announced (a timer
-    // that ran out).
+    // The comparison with the store is for a change no event was seen for.
     private bool ChangedSinceAsked(string boss) =>
         _whenAsked is not null && (_changedSinceAsked.Contains(boss) || _timers.KilledAt(boss) != HeldWhenAsked(boss));
 
-    // Write a timer that arrived, as the rule for arriving timers has it.
-    private void WriteArrived(string boss, DateTimeOffset killedAt)
+    // Write a timer as the window's own doing: one that arrived, merged in or
+    // synced as the rule for arriving timers has it, or a pick the user applied.
+    // Neither is a change behind the window's back, so what we held when asked
+    // moves with it; a kill of ours after it is a change again.
+    private void WriteOwn(string boss, DateTimeOffset killedAt)
     {
-        _writingArrived = true;
+        _writingOwn = true;
         try { _timers.MarkKilled(boss, killedAt); }
-        finally { _writingArrived = false; }
+        finally { _writingOwn = false; }
         _wroteAny = true;
-        if (_whenAsked is not null) _whenAsked[boss] = _timers.KilledAt(boss);
+        if (_whenAsked is null) return;
+        _whenAsked[boss] = _timers.KilledAt(boss);
+        _changedSinceAsked.Remove(boss);
     }
 
     private const string ChangedSinceAskedNote = " · changed since you asked";
 
     private string OursText(string boss, DateTimeOffset? killedAt) =>
-        (killedAt is { } k ? FormatKilled(k) : NoTimerText) + (ChangedSinceAsked(boss) ? ChangedSinceAskedNote : string.Empty);
+        (killedAt is { } k ? FormatKilled(k)
+            : _timers.KilledAt(boss) is { } ranOut ? $"{NoTimerText} (yours ran out: killed {FormatKilled(ranOut)})"
+            : NoTimerText)
+        + (ChangedSinceAsked(boss) ? ChangedSinceAskedNote : string.Empty);
 
     // Start the quiet period again, while a request of the user's is out that
     // several players can answer. With one player asked there is nothing to wait
@@ -326,7 +392,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             if (row.OursKilledAt is null && AllAgree(gathered) && !ChangedSinceAsked(name))
             {
                 DateTimeOffset agreed = gathered[0].KilledAt;
-                WriteArrived(name, agreed);
+                WriteOwn(name, agreed);
                 row.MarkAutoMerged(string.Join(", ", gathered.Select(c => c.Responder)), agreed, FormatKilled(agreed));
                 mergedIn.Add(name);
             }
@@ -349,9 +415,67 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     }
 
     // The bosses whose gathered replies have not been judged yet.
-    private List<string> AwaitingTheSettle() => !_settlePending
-        ? new List<string>()
-        : Rows.Where(r => r.OursKilledAt is null && r.Gathered().Count > 0).Select(r => r.BossName).ToList();
+    private List<string> AwaitingTheSettle() =>
+        _heldBack ? Rows.Where(r => r.Gathered().Count > 0).Select(r => r.BossName).ToList()
+        : _settlePending ? Rows.Where(r => r.OursKilledAt is null && r.Gathered().Count > 0).Select(r => r.BossName).ToList()
+        : new List<string>();
+
+    // True while the answer of the one player asked is gathered, not written:
+    // a telepath request of the user's to another player has gone out since and
+    // the game has not yet shown it sent. Several players may be asked one after
+    // another without waiting, and the first one's answer can arrive before the
+    // game confirms the second request; written then, it would have synced from
+    // a player who turns out not to be the only one asked.
+    private bool _heldBack;
+
+    private void HoldBack()
+    {
+        if (_heldBack) return;
+        _heldBack = true;
+        ArmHeldBackCheck();
+    }
+
+    // A request the game never answers is waited on only as long as a
+    // confirmation could still be paired with it.
+    private void ArmHeldBackCheck() => _armTimer(ChatRouter.PendingCaptureStaleAfter, () =>
+    {
+        if (_disposed || !_heldBack) return;
+        if (_collector.AwaitingTelepathSent) ArmHeldBackCheck();
+        else JudgeHeldBack();
+    });
+
+    private void OnTelepathRequestAnswered() => _onUiThread(JudgeHeldBack);
+
+    // The game has answered every telepath request of the user's. What was held
+    // back is judged as it would have been on arrival: with the one player still
+    // the only one asked, as that player's answer (merged in, synced or left
+    // alone); with several asked by now, it stays gathered for the quiet period.
+    private void JudgeHeldBack()
+    {
+        if (!_heldBack || _disposed || _collector.AwaitingTelepathSent) return;
+        _heldBack = false;
+        if (!_collector.OnePlayerAsked)
+        {
+            if (!_settlePending) ArmSettle();
+            _log.Info("BossTimerSync", "every telepath request of the user's is answered and several players are asked: the answers held back are gathered with the rest");
+            UpdateStatus();
+            return;
+        }
+        var judged = new List<string>();
+        foreach (BossTimerSyncRowViewModel row in Rows)
+        {
+            IReadOnlyList<BossTimerSyncCellViewModel> heldBack = row.Gathered();
+            if (heldBack.Count == 0) continue;
+            foreach (BossTimerSyncCellViewModel cell in heldBack) row.Withdraw(cell);
+            foreach (BossTimerSyncCellViewModel cell in heldBack)
+                IngestOffer(row, cell.Responder, cell.KilledAt, RemoteChannel.Telepath, TimerSyncStanding.TheOneAsked);
+            judged.Add(row.BossName);
+        }
+        _log.Info("BossTimerSync",
+            $"every telepath request of the user's is answered and one player is asked: {judged.Count} boss(es) held back judged as that player's answer" +
+            (judged.Count > 0 ? $" ({string.Join(", ", judged)})" : string.Empty));
+        UpdateStatus();
+    }
 
     // Take one responder's set into the table.
     internal void Fold(BossTimerSyncResponse r)
@@ -374,7 +498,10 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             _ => "no answer to a request of the user's",
         };
         _log.Info("BossTimerSync",
-            $"folded {r.Sender}'s {r.Records.Count} timer(s) heard on {r.Channel} ({standing}): {merged} merged in, {synced} synced, {inSync} already in sync, {conflict} to pick, {gathered} gathered until the replies settle");
+            $"folded {r.Sender}'s {r.Records.Count} timer(s) heard on {r.Channel} ({standing}): {merged} merged in, {synced} synced, {inSync} already in sync, {conflict} to pick, {gathered} gathered" +
+            (gathered == 0 ? string.Empty
+                : _heldBack ? " until the game shows the user's other telepath request sent or not"
+                : " until the replies settle"));
         UpdateStatus();
     }
 
@@ -393,20 +520,30 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         if (kind is TimerMergeKind.AutoMerge or TimerMergeKind.Sync or TimerMergeKind.Gather
             && ChangedSinceAsked(row.MatchName!))
             kind = TimerMergeKind.Conflict;
+        // The one player asked may not stay the only one while another telepath
+        // request of the user's waits for the game to show it sent.
+        if (kind is TimerMergeKind.AutoMerge or TimerMergeKind.Sync
+            && standing == TimerSyncStanding.TheOneAsked && _collector.AwaitingTelepathSent)
+        {
+            kind = TimerMergeKind.Gather;
+            HoldBack();
+        }
         string listedAs = heardOn == RemoteChannel.Broadcast ? $"{FormatKilled(offer)} · heard on broadcast" : FormatKilled(offer);
         switch (kind)
         {
             case TimerMergeKind.Gather:
                 // Shown with the others as it comes, and pickable; written only if
-                // every reply for the boss agrees once they have settled.
+                // every reply for the boss agrees once they have settled, or, held
+                // back, as the one player's answer once that player is still the
+                // only one asked.
                 row.AddConflict(sender, offer, listedAs, gathered: true);
                 break;
             case TimerMergeKind.AutoMerge:
-                WriteArrived(row.MatchName!, offer);   // only fires for tracked bosses
+                WriteOwn(row.MatchName!, offer);   // only fires for tracked bosses
                 row.MarkAutoMerged(sender, offer, FormatKilled(offer));
                 break;
             case TimerMergeKind.Sync:
-                WriteArrived(row.MatchName!, offer);   // only fires for tracked bosses
+                WriteOwn(row.MatchName!, offer);   // only fires for tracked bosses
                 row.MarkSynced(sender, offer, FormatKilled(offer));
                 break;
             case TimerMergeKind.InSync:
@@ -468,7 +605,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         if (row.MatchName is null && ResolveOurBoss(row.MonsterNumber, row.SentName) is { } ours)
             row.Track(ours.Name, NoTimerText);
         if (row.MatchName is not { } name) return false;
-        DateTimeOffset? now = _timers.KilledAt(name);
+        DateTimeOffset? now = Held(name);
         if (now == row.OursKilledAt) return false;
         row.Rebase(now, OursText(name, now));
         return true;
@@ -494,7 +631,11 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         int synced = Rows.Count(r => r.WasSynced);
         int inSync = Rows.Count(r => !r.HasConflict && !r.WasAutoMerged && !r.WasSynced && r.ResolvedStatus.Length > 0);
         string counts = $"{conflicts} to pick, {merged} merged in, {synced} synced, {inSync} already in sync";
-        Status = _settlePending
+        Status = _heldBack
+            ? $"{_responders.Count} responder(s) so far: {waiting} waiting for the game to show your other telepath request sent, {counts}. " +
+              "Once it has, or says it reached nobody, the first player's timers are merged in or synced if they are still the only player asked, and gathered with the other replies if not; " +
+              "until then nothing is written for them unless you pick and Apply Selected."
+            : _settlePending
             ? $"{_responders.Count} responder(s) so far, replies still being gathered: {waiting} waiting for every reply, {counts}. " +
               $"A timer you hold none for is merged in once no reply has come for {QuietSeconds} seconds and every reply for it agrees; " +
               "until then nothing is written for it unless you pick and Apply Selected, and closing the window writes nothing more."
@@ -517,7 +658,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             return builtUntracked;
 
         string display = ours?.Name ?? (name is { Length: > 0 } ? name : number is { } num ? $"Monster #{num}" : "(unknown)");
-        DateTimeOffset? oursKilled = ours is not null ? _timers.KilledAt(ours.Name) : null;
+        DateTimeOffset? oursKilled = ours is not null ? Held(ours.Name) : null;
         string oursText = ours is not null ? OursText(ours.Name, oursKilled) : "— not in your list —";
 
         BossTimerSyncRowViewModel row = new(display, number, ours?.Name, name, oursKilled, oursText);
@@ -546,10 +687,12 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
     }
 
     // Write the picks. A pick was made against the timer the row showed as ours; if
-    // ours has changed since (we killed the boss while the window was open, or its
-    // timer ran out), the pick is not written: an older time offered would go over
-    // a kill of our own. That row is shown against our timer as it is now, the
-    // window stays open, and the user picks again or closes.
+    // our stored kill time has changed since (we killed the boss while the window
+    // was open, cleared or edited it), the pick is not written: an older time
+    // offered would go over a kill of our own. That row is shown against our timer
+    // as it is now, the window stays open, and the user picks again or closes. A
+    // timer that merely ran out is no change of ours: the row is shown as holding
+    // none, and the pick is written.
     [RelayCommand]
     private void Apply()
     {
@@ -560,11 +703,13 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             if (row.SelectedKilledAt is not { } chosen) continue;
             // Every kind of row: one built for a boss off our list is looked up as
             // the list is now, and held to the same check.
-            if (Rebased(row)) { moved.Add(row.BossName); continue; }
+            DateTimeOffset? offeredAgainst = row.OursKilledAt;
+            Rebased(row);
+            if (OurKillMoved(row, offeredAgainst)) { moved.Add(row.BossName); continue; }
             if (row.MatchName is { } target)
             {
                 if (row.OursKilledAt == chosen) continue;   // no-op
-                _timers.MarkKilled(target, chosen);
+                WriteOwn(target, chosen);
             }
             else if (AdoptUntracked(row, chosen) is { } adoptedAs)   // a boss we weren't tracking
             {
@@ -579,7 +724,6 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             row.Rebase(chosen, FormatKilled(chosen));
             applied++;
         }
-        if (applied > 0) _wroteAny = true;
         if (moved.Count > 0)
         {
             _log.Info("BossTimerSync",
@@ -591,6 +735,15 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         Status = $"Applied {applied} timer update(s).";
         CloseRequested?.Invoke(_wroteAny);   // auto-merges may have written even if no picks
     }
+
+    // Whether our stored kill time is other than the one a row's pick was offered
+    // against (null for none). Not when the row showed it running and it has run
+    // out since, or showed none against one that had already run out: the same
+    // kill either way.
+    private bool OurKillMoved(BossTimerSyncRowViewModel row, DateTimeOffset? offeredAgainst) =>
+        row.MatchName is { } name
+        && _timers.KilledAt(name) != offeredAgainst
+        && Held(name) != offeredAgainst;
 
     // Adopt a timer for a boss not currently in our list: recover its real def from the
     // catalog (a seed boss we'd removed, or an overlay one) — or, failing that, synth a
@@ -612,7 +765,7 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
             .ToList();
         list.Add(def);
         _bosses.Save(list);
-        _timers.MarkKilled(def.Name, chosen);
+        WriteOwn(def.Name, chosen);
         return def.Name;
     }
 
@@ -629,11 +782,12 @@ public sealed partial class BossTimerSyncViewModel : ObservableObject, IDialogVi
         if (_disposed) return;
         if (AwaitingTheSettle() is { Count: > 0 } abandoned)
             _log.Info("BossTimerSync",
-                $"closed while replies were still being gathered: nothing was merged in for {abandoned.Count} boss(es) whose replies had not settled ({string.Join(", ", abandoned)})");
+                $"closed while replies were still being gathered: nothing was written for {abandoned.Count} boss(es) whose replies had not been judged ({string.Join(", ", abandoned)})");
         _disposed = true;
         _collector.ResponseReceived -= OnResponse;
         _collector.UserAsked -= OnUserAsked;
         _collector.Activity -= OnActivity;
+        _collector.TelepathRequestAnswered -= OnTelepathRequestAnswered;
         _timers.Changed -= OnTimersChanged;
         _collector.Dispose();
         _windowActive(false);

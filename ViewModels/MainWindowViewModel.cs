@@ -1512,6 +1512,7 @@ public partial class MainWindowViewModel : ObservableObject
         // adopt window) and for `@loop send yes` (the window in which that player's
         // loop is saved). See OnChatForTransfers.
         AppServices.Current.Chat.EntryClassified += OnChatForTransfers;
+        AppServices.Current.Chat.UsersLineSent += OnUsersLineSentForTimerSync;
         // Poller needs the same wire-sender to send @health round-trip
         // requests and the periodic par poll.
         AppServices.Current.PartyPoller.SetWireSender(Named("PartyPoller"));
@@ -4212,6 +4213,28 @@ public partial class MainWindowViewModel : ObservableObject
         return Given(self).Equals(Given(speaker), StringComparison.OrdinalIgnoreCase);
     }
 
+    // Our kill times as the user's first `@timer sync` with no window open went
+    // out, and when. The window its echo opens counts "asked" from then, not from
+    // the echo: a kill of ours in between is a change after asking. Kept only as
+    // long as an echo can still be paired with the line.
+    private (DateTimeOffset At, Dictionary<string, DateTimeOffset?> KillTimes)? _killTimesAtTimerSyncAsked;
+
+    private void OnUsersLineSentForTimerSync(string line)
+    {
+        if (AppServices.Current.TimerSyncWindowActive
+            || !Game.Remote.BossTimerSyncCollector.AsksForTimerSync(
+                line, () => AppServices.Current.RemoteCommands.DisableBroadcastChannel))
+            return;
+        if (FreshKillTimesAtTimerSyncAsked() is not null) return;   // the first request counts
+        _killTimesAtTimerSyncAsked = (DateTimeOffset.UtcNow, ViewModels.CharacterWorkshop.BossTimerSyncViewModel.KillTimesNow(
+            AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.GameData.ActiveRealm));
+    }
+
+    private Dictionary<string, DateTimeOffset?>? FreshKillTimesAtTimerSyncAsked() =>
+        _killTimesAtTimerSyncAsked is { } taken && DateTimeOffset.UtcNow - taken.At <= Game.ChatRouter.PendingCaptureStaleAfter
+            ? taken.KillTimes
+            : null;
+
     // askedOn: the channel our request went out on, the one its answers are taken on.
     // telepathedTo: the player it was telepathed to, when it was.
     // byUser: the request was the user's own, not one the client sent for another
@@ -4221,6 +4244,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Already collecting: the open window's collector sees the request go out
         // too, and takes answers on its channel as well.
         if (AppServices.Current.TimerSyncWindowActive) return;
+        Dictionary<string, DateTimeOffset?>? killTimesWhenAsked = byUser ? FreshKillTimesAtTimerSyncAsked() : null;
+        _killTimesAtTimerSyncAsked = null;
         var vm = new ViewModels.CharacterWorkshop.BossTimerSyncViewModel(
             AppServices.Current.Bosses,
             AppServices.Current.BossTimers,
@@ -4229,7 +4254,8 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.SendTypedInput,
             preArmedOn: askedOn,
             preArmedTo: telepathedTo,
-            preArmedByUser: byUser);
+            preArmedByUser: byUser,
+            killTimesWhenAsked: killTimesWhenAsked);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ViewModels.CharacterWorkshop.BossTimerSyncViewModel, bool>(vm);
     }

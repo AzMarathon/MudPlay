@@ -1,5 +1,14 @@
 # Version history
 
+## 3.183.19
+
+- Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
+- Sync Timers: a pick you apply no longer reads "changed since you asked"
+- Sync Timers: what you held when you asked is taken as you press Enter, not when the game echoes it
+- Sync Timers: a request typed into the open window before Request Timers is now collected there
+- Sync Timers: an expired timer of yours counts as none, so a reply for it merges in
+- Help: a request typed at a non-game prompt opens no window where the board shows nothing back
+
 ## 3.183.13
 
 - A line whose condition was left out by who can cast it here is logged at Info, naming both sides
