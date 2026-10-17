@@ -5794,7 +5794,10 @@ public sealed class AppServices
             onAttack: Combat.NoteUserAttack,
             isExitCommandHere: IsExitCommandHere);
         Combat.UserBreakHoldNotice += text => WriteTerminalNotice($"[{text}]");
-        RoomTracker.StateChanged += t => Combat.NoteRoomTransition(t, RoomTracker.LastMoveSentAt);
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft(RoomTracker.LastMoveSentAt);
+        };
         Profile.ProfileLoaded += _ => Combat.ClearUserBreakHold("another profile was loaded");
         // The room read a held monster's silent round asked for is sent from here
         // when another re-display's cooldown held it back.

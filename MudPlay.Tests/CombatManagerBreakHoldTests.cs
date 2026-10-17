@@ -1089,7 +1089,7 @@ public sealed class CombatManagerBreakHoldTests
         h.Tick();
         h.Tick();
 
-        h.Combat.NoteRoomDisplayed();
+        h.Combat.NoteRoomDisplayed(new RoomObservation("Volcano Tunnel", new HashSet<Direction> { Direction.N }));
 
         Assert.Null(h.Combat.UserBreakHoldTarget);
         Assert.Contains("lists nobody", h.Combat.UserBreakHoldSummary);
@@ -1103,7 +1103,7 @@ public sealed class CombatManagerBreakHoldTests
         using Harness h = FightingARat();
         h.UserBreaks();
 
-        h.Combat.NoteRoomDisplayed();
+        h.Combat.NoteRoomDisplayed(new RoomObservation("Volcano Tunnel", new HashSet<Direction> { Direction.N }));
 
         Assert.Equal(Rat, h.Combat.UserBreakHoldTarget);
         Assert.True(h.Classifier.Current is { Entities.Count: 1 });

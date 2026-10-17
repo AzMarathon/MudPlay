@@ -16,8 +16,8 @@ namespace MudPlay.Tests;
 // the fight in a room is under way, a new pick there goes out at once. These tests pin
 // which room the fight on record belongs to when we change rooms without a move of our
 // own (a teleport, a drag with no drag line, a fear run, a death, a relog), driving
-// the wire through the terminal, the line extractor, the router and the room tracker
-// as the client runs them.
+// the wire through the terminal, the line extractor, the router, the room display
+// parser and the room tracker as the client runs them.
 public sealed class CombatManagerRoomChangeHoldTests
 {
     private const string Rooms = """
@@ -66,6 +66,8 @@ public sealed class CombatManagerRoomChangeHoldTests
         public RoomTracker Tracker { get; }
         public RoomDisplayParser Display { get; }
         public DeathDetector Deaths { get; }
+        public RoomEntryWatcher Entry { get; }
+        public MonsterDeathWatcher MonsterDeaths { get; }
         public RoomEntityClassifier Classifier { get; }
         public CombatManager Combat { get; }
         public List<byte[]> Sent { get; } = new();
@@ -83,11 +85,11 @@ public sealed class CombatManagerRoomChangeHoldTests
         private Action? _deadline;
         public void FireDeadline() => _deadline?.Invoke();
 
-        public Harness()
+        public Harness(string rooms = Rooms)
         {
             _root = Path.Combine(Path.GetTempPath(), "mudplay-roomchange-hold-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
+            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
             RoomGraphManager graph = new(cache);
@@ -104,7 +106,15 @@ public sealed class CombatManagerRoomChangeHoldTests
             Deaths = new DeathDetector(Tracker, Log);
             Deaths.AttachLineExtractor(Lines);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker, Log);
+            // Built ahead of the combat engine, as in AppServices: a kill drops the
+            // monster from the roster through it.
+            MonsterDeaths = new MonsterDeathWatcher(Router, Log);
+            MonsterDeaths.MonsterDied += evt =>
+            {
+                if (evt.RoomSpellRoster is null) Combat!.NoteUnattributedDeath();
+            };
             Classifier.AttachLineExtractor(Lines);
+            Entry = new RoomEntryWatcher(Router, Classifier, Log);
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: _ => new MonsterOverlay(),
                 party: Party,
@@ -114,10 +124,18 @@ public sealed class CombatManagerRoomChangeHoldTests
                 post: a => a(),
                 log: Log);
             Combat.SetWireSender(b => Sent.Add(b));
+            Combat.RoomSpellKill += MonsterDeaths.NoteRoomSpellKill;
             Combat.SetFearGate(() => Feared);
             Combat.SetHoldDeadline(() => ToRound, (_, due) => _deadline = due);
-            // As AppServices wires them.
-            Tracker.StateChanged += t => Combat.NoteRoomTransition(t, Tracker.LastMoveSentAt);
+            // As AppServices and the main window wire them.
+            Tracker.StateChanged += t =>
+            {
+                if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft(Tracker.LastMoveSentAt);
+            };
+            Display.RoomParsed += obs =>
+            {
+                if (!Tracker.IsPeekSuppressed()) Combat.NoteRoomDisplayed(obs);
+            };
             Tracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
             Tracker.PlayerDeathObserved += () => Classifier.NoteRoomChanged();
 
@@ -163,7 +181,9 @@ public sealed class CombatManagerRoomChangeHoldTests
 
         public void Dispose()
         {
+            Entry.Dispose();
             Combat.Dispose();
+            MonsterDeaths.Dispose();
             Classifier.Dispose();
             Deaths.Dispose();
             Display.Dispose();
@@ -172,15 +192,19 @@ public sealed class CombatManagerRoomChangeHoldTests
         }
     }
 
-    // In the Volcano Tunnel the party opens on the tunnel horror, we attack behind
-    // them, and it dies: the fight there is under way.
+    // We walk south into the Volcano Tunnel, where the party opens on the tunnel
+    // horror, we attack behind them, and it dies: the fight there is under way.
     private static void FightInTheTunnel(Harness h)
     {
+        h.ShowRoom("Lava Chamber", null, "south");
+        h.SendMove(Direction.S);
         h.ShowRoom("Volcano Tunnel", "tunnel horror", "north");
         Assert.Equal(0, h.Punches);
         h.Wire("Thresh moves to attack tunnel horror.");
         Assert.Equal("pu tunnel horror", h.LastSent);
-        h.Wire("*Combat Engaged*", "Thresh stabs tunnel horror for 50 damage!", "You gain 100 experience.");
+        // The kill that empties the room ends with *Combat Off* on both realms.
+        h.Wire("*Combat Engaged*", "Thresh stabs tunnel horror for 50 damage!", "You gain 100 experience.",
+            "*Combat Off*");
         Assert.Equal(1, h.Punches);
     }
 
@@ -374,5 +398,122 @@ public sealed class CombatManagerRoomChangeHoldTests
         Assert.Contains("not yet placed", h.Combat.AttackOrderRoomState);
         h.Wire("Obvious exits: east.");
         Assert.Contains("fight under way here: no", h.Combat.AttackOrderRoomState);
+    }
+
+    // Two "Crater Floor" rooms alike in name and exits: the tracker can't place us,
+    // so only the display itself says the room shown again is the room we were in.
+    private static void FollowFightOnTheCraterFloor(Harness h)
+    {
+        h.Settings.AttackTiming = AttackTiming.Default;
+        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+        h.ShowRoom("Crater Floor", "tunnel horror, cave bear, giant skeleton, Cidir", "down");
+        Assert.NotEqual(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        h.Wire("Cidir moves to attack tunnel horror.");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Wire("*Combat Engaged*", "Cidir smashes giant skeleton for 80 damage!", "You gain 100 experience.");
+        Assert.Equal(1, h.Punches);
+    }
+
+    [Fact]
+    public void TrackerCantPlace_SameRoomShownAgain_FollowTakesTheLeadersTargetAtOnce()
+    {
+        using Harness h = new();
+        FollowFightOnTheCraterFloor(h);
+
+        h.ShowRoom("Crater Floor", "cave bear, giant skeleton, Cidir", "down");
+        Assert.Equal("pu giant skeleton", h.LastSent);              // the leader's, not our own cave bear
+        Assert.Equal(2, h.Punches);
+    }
+
+    [Fact]
+    public void NoGameData_SameRoomShownAgain_PicksOnTheExitsLine()
+    {
+        // An unmapped area: no room the tracker knows, yet a re-display after a kill
+        // still picks without waiting for the deadline.
+        using Harness h = new(rooms: "[]");
+        h.ShowRoom("Smoking Rift", "tunnel horror, giant skeleton", "north, south");
+        h.Wire("Thresh moves to attack giant skeleton.");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Wire("*Combat Engaged*", "You gain 100 experience.");
+
+        h.ShowRoom("Smoking Rift", "giant skeleton", "north, south");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(2, h.Punches);
+    }
+
+    [Fact]
+    public void NoGameData_TeleportToAnotherRoom_Holds()
+    {
+        using Harness h = new(rooms: "[]");
+        h.ShowRoom("Smoking Rift", "tunnel horror", "north, south");
+        h.Wire("Thresh moves to attack tunnel horror.", "*Combat Engaged*", "You gain 100 experience.");
+        Assert.Equal(1, h.Punches);
+
+        h.ShowRoom("Smoking Rift", "giant skeleton", "east");       // same name, other exits
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void FollowHoldNothingPlaced_DeadlineTakesTheLeadersTarget()
+    {
+        // A re-display with no exits line (a blind character's) places nothing, so the
+        // pick waits for the deadline; it still goes onto the leader's target.
+        using Harness h = new();
+        FollowFightOnTheCraterFloor(h);
+
+        h.Wire("\u001b[1;36mCrater Floor\u001b[0m", "Also here: cave bear, giant skeleton, Cidir.");
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void DeathIntoAnEmptyRoom_AWalkInStillHolds()
+    {
+        using Harness h = new();
+        FightInTheTunnel(h);
+
+        h.Wire("You have been killed!", "But, due to a miracle, you have been saved.", "You have 7 lives left.");
+        h.ShowRoom("Temple, Halls of the Dead", null, "up");
+        h.Wire("A giant skeleton stomps in from above.");
+        Assert.Equal(1, h.Punches);
+
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void TeleportIntoAnEmptyRoom_AWalkInStillHolds()
+    {
+        using Harness h = new();
+        FightInTheTunnel(h);
+
+        h.ShowRoom("Obsidian Hall", null, "east");
+        h.Wire("A giant skeleton stomps in from the east.");
+        Assert.Equal(1, h.Punches);
+
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void FightSeenInTheNewRoomBeforeItsExitsLine_IsThatRoomsFight()
+    {
+        // After a teleport the follow hold waits on the new room. A party member's hit
+        // there, read before the exits line, is this room's fight: a monster walking in
+        // is picked at once, not held.
+        using Harness h = new();
+        FightInTheTunnel(h);
+        h.Settings.AttackTiming = AttackTiming.Default;
+        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+
+        h.Wire("\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton, cave bear, Cidir.");
+        Assert.Equal(1, h.Punches);                                 // the follow hold
+        h.Wire("Thresh stabs cave bear for 50 damage!");
+        Assert.Equal(1, h.Punches);
+        h.Wire("A tunnel horror stomps in from the east.");
+        Assert.Equal("pu giant skeleton", h.LastSent);
     }
 }

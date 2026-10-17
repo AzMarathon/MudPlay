@@ -4,6 +4,7 @@
 > **Version 3.184.1**
 > - Combat: after a teleport, a drag with no follow line or a fear run, "Attack Not Last" and follow Target Priority hold the new room's first attack again
 > - Combat: a relog or reconnect starts the room's attack order afresh, even in the same room
+> - Combat: after a death or teleport into an empty room, a monster that walks in waits for the party's opening too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
