@@ -112,6 +112,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required AutoDepositManager AutoDeposit { get; init; }
         // The game's prompts, as the wire scanner reads them, and the walker's sends.
         public required WirePromptScanner Prompts { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
         public required List<string> Moves { get; init; }
 
         // The game's statline prompt arrives.
@@ -251,11 +252,12 @@ public sealed class AutoDepositManagerTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         List<string> moves = new();
         walker.SetWireSender(b => moves.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
-        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
+        WirePromptScanner prompts = new();
+        LoopRunner loop = new(tracker, coord, promptScanner: prompts, graph: graph, bfs: bfs, walker: walker,
+            postToUi: action => action());
         loop.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
-        WirePromptScanner prompts = new();
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -317,8 +319,7 @@ public sealed class AutoDepositManagerTests : IDisposable
                 IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
-            },
-            promptScanner: prompts);
+            });
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -340,6 +341,7 @@ public sealed class AutoDepositManagerTests : IDisposable
             AutoDeposit = autoDeposit,
             Prompts = prompts,
             Moves = moves,
+            Coordinator = coord,
         };
         // Split the manager's single wire by command so `dep` assertions stay
         // isolated from `buy`s the light detour issues on the same wire.
@@ -1061,73 +1063,82 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Single(h.BuyLines());
     }
 
-    // The connection drops while the bank run buys its light: the buy is let go, the
-    // shop isn't held back for a window that never got its answer, and nothing
-    // walks on the dead link. The reconnect's room display comes in with no move
-    // owed (no phantom move for the tracker to land), and the first prompt after it
-    // sets the walk back off; the loop resumes on arrival.
+    // The connection drops while the bank run buys its light: the buy is let go
+    // unrecorded, the reroute ends, nothing walks on the dead link, and the loop is
+    // handed to LoopRunner's restart after a reconnect.
     [Fact]
-    public void ConnectionDropsDuringTheLightBuy_TheWalkBackWaitsForThePrompt()
+    public void ConnectionDropsDuringTheLightBuy_TheLoopRestartsAfterTheReconnect()
     {
         using Harness h = NewHarness(DarkGraphJson);
         BankRunBuyingItsLight(h);
         int sent = h.Moves.Count;
 
         h.AutoDeposit.NoteDisconnected();
-        Assert.Equal(sent, h.Moves.Count);
-        Assert.Equal(WalkState.Idle, h.Walker.State);
-        Assert.True(h.AutoDeposit.IsRerouting);
-
-        Arrive(h, new RoomKey(1, 4));                     // the reconnect shows the shop
-        Assert.Equal(new RoomKey(1, 4), h.Tracker.State.CurrentRoom?.Key);
-        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
-        Assert.Equal(sent, h.Moves.Count);
-
-        h.Prompt();
-        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
-        Assert.True(h.Moves.Count > sent);
-        Arrive(h, new RoomKey(1, 1));
-        Assert.Equal(LoopState.Running, h.Loop.State);
         Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(sent, h.Moves.Count);
+        Assert.Equal("test", h.Loop.PendingReconnectResumeName);
         Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
+
+        // The reconnect, in wire order: the prompt is read ahead of its chunk's
+        // room display.
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
     }
 
-    // The relog lands somewhere else (the dark 1/2): the walk back is planned from
-    // there, not from the shop.
+    // The reconnect lands somewhere else (the bank's room): the loop restarts on the
+    // prompt, as any loop cut off by a drop does, and once the room display is read
+    // its walk goes on from the room it shows.
     [Fact]
-    public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_WalksBackFromThere()
+    public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_TheLoopRestartsFromThere()
     {
         using Harness h = NewHarness(DarkGraphJson);
         BankRunBuyingItsLight(h);
         h.AutoDeposit.NoteDisconnected();
 
-        h.Tracker.SetLocated(new RoomKey(1, 2));          // where the reconnect placed us
         h.Prompt();
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(LoopState.Approaching, h.Loop.State);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
-        Assert.Equal("s", h.Moves.Last());
-        Arrive(h, new RoomKey(1, 1));
-        Assert.Equal(LoopState.Running, h.Loop.State);
+        Assert.Equal("s", h.Moves.Last());          // planned from the room the reconnect showed
     }
 
-    // A profile or game-data change before the reconnect drops the walk back owed.
+    // The master switch off at the reconnect: LoopRunner holds the restart for it.
     [Fact]
-    public void ConnectionDropsDuringTheLightBuy_AProfileChangeDropsTheWalkBack()
+    public void ConnectionDropsDuringTheLightBuy_MasterSwitchOff_TheRestartWaits()
     {
         using Harness h = NewHarness(DarkGraphJson);
         BankRunBuyingItsLight(h);
         h.AutoDeposit.NoteDisconnected();
-        int sent = h.Moves.Count;
+        h.Loop.MasterSwitchOff = () => true;
 
-        h.AutoDeposit.DropReconnectResume("profile loaded");
-        Assert.False(h.AutoDeposit.IsRerouting);
         h.Prompt();
-        Assert.Equal(sent, h.Moves.Count);
-        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        Assert.True(h.Loop.ReconnectResumeHeldForMasterSwitch);
+    }
+
+    // A party reform still to see the room: the restarted loop is held behind the
+    // reform's gate.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_PartyReformPending_TheRestartIsHeld()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        h.Loop.SetReconnectReformProbe(() => true);
+
+        h.Prompt();
+        Assert.True(h.Loop.ReconnectResumeHeldForReform);
+        Assert.Contains(MovementCoordinator.ReconnectReformGate, h.Coordinator.AssertedGates);
     }
 
     // The same for a loop's light trip: the loop isn't left stopped.
     [Fact]
-    public void ConnectionDropsDuringALightTripsBuy_TheLoopResumesAfterThePrompt()
+    public void ConnectionDropsDuringALightTripsBuy_TheLoopRestartsAfterTheReconnect()
     {
         using Harness h = NewHarness(DarkGraphJson);
         StartLoop(h);
@@ -1138,12 +1149,11 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Single(h.BuyLines());
 
         h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
         Assert.Equal(WalkState.Idle, h.Walker.State);
         h.Prompt();
-        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
-        Arrive(h, new RoomKey(1, 1));
-        Assert.Equal(LoopState.Running, h.Loop.State);
-        Assert.False(h.AutoDeposit.IsRerouting);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
     }
 
     // The stash cutoff's coin counts toward the light's price: with silver the

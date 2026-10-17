@@ -10023,11 +10023,7 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom,
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
-            promptScanner: PromptScanner);
-        // A walk back held for a reconnect belongs to what was loaded when it was held.
-        Profile.ProfileLoaded += _ => AutoDeposit.DropReconnectResume("profile loaded");
-        GameData.ActiveSetChanged += _ => AutoDeposit.DropReconnectResume("game data changed");
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement));
         // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
         // whose lit light dwindles under Reorder-at: the walk-to shop router stands
         // down while they run, so the buy is a trip of its own off the engine, back

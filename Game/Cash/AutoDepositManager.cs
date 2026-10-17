@@ -111,7 +111,6 @@ public sealed class AutoDepositManager : IDisposable
     private readonly Func<bool> _isFollower;
     // The light buy at a shop the reroute stops at.
     private readonly LightShopBuy _lightBuyer;
-    private readonly WirePromptScanner? _promptScanner;
     // A loop's rooms by its waypoints (unbound: none known).
     private readonly Func<Loop, IReadOnlyList<RoomKey>> _loopRoomsOf;
     // Bounds the wait for the fresh `i` on bank arrival (see DepositSyncTimeout).
@@ -174,10 +173,7 @@ public sealed class AutoDepositManager : IDisposable
         TimeSpan? buyTimeout = null,
         Func<bool>? isFollower = null,
         Func<RoomKey, Loop, RoomKey?>? nearestLoopRoom = null,
-        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null,
-        // The game's prompts: the first after a reconnect sets off a walk back the
-        // drop held. Unwired, a held walk back waits for Cancel.
-        WirePromptScanner? promptScanner = null)
+        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null)
     {
         ArgumentNullException.ThrowIfNull(cash);
         ArgumentNullException.ThrowIfNull(readCash);
@@ -219,8 +215,6 @@ public sealed class AutoDepositManager : IDisposable
 
         _cash.AutoDepositRequested += OnAutoDepositRequested;
         _walker.Event += OnWalkEvent;
-        _promptScanner = promptScanner;
-        if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObserved;
         // The pass-through stash is NOT subscribed to RoomTracker.StateChanged
         // here: it must run BEFORE the loop's next-move step so the `hide` reaches
         // the wire ahead of the move (otherwise the coins get hidden in the next
@@ -573,41 +567,27 @@ public sealed class AutoDepositManager : IDisposable
         _stash.ExecuteStash(room.Key);
     }
 
-    // The connection dropped while a light was being bought: the buy's window would
-    // close in the next session and read as a shop that didn't sell, so the buy is
-    // let go unrecorded. The walk back waits for the first in-game prompt after the
-    // reconnect (NoteInGamePrompt): started now, its first step would go out on the
-    // dead link and leave the tracker a move that never happened, and it would plan
-    // from the shop however the relog placed the character. The engine then resumes
-    // on arrival, as after any reroute.
+    // The connection dropped while a light was being bought. The buy's window would
+    // close in the next session and read as a shop that didn't sell, so it is let go
+    // unrecorded, and the reroute ends here: a walk back now would step on the dead
+    // link from the shop. A loop it came off is handed to LoopRunner's own restart
+    // after a reconnect (LoopRunner.ResumeOnReconnect), as a loop running at the drop
+    // is, with the guards that has (the master switch, a party reform): it restarts on
+    // the reconnect's first prompt and walks on from the room the reconnect shows,
+    // its own planning taking up any light still wanted. An Auto-Lair run has no such
+    // restart and stays stopped.
     public void NoteDisconnected()
     {
         if (_phase != DepositPhase.BuyingLight) return;
-        _log?.Info(LogCategory, "connection dropped during the light buy — the walk back waits for the reconnect");
-        _lightBuyer.Cancel();
-        _lightBuy = null;
-        _phase = DepositPhase.AwaitingReconnect;
-        ReroutingChanged?.Invoke();
-    }
-
-    // A game prompt (WirePromptScanner.PromptObserved): the first one after a
-    // reconnect sets the walk back off, from wherever the tracker now has us.
-    private void OnPromptObserved(PromptObservation _)
-    {
-        if (_phase != DepositPhase.AwaitingReconnect) return;
-        _log?.Info(LogCategory, "back in the game — walking back from where the reconnect left us");
-        WalkBackToOrigin();
-    }
-
-    // A profile or game-data change before the reconnect: the walk back it owed
-    // belongs to what was loaded before.
-    public void DropReconnectResume(string why)
-    {
-        if (_phase != DepositPhase.AwaitingReconnect) return;
-        _log?.Info(LogCategory, $"walk back after the reconnect dropped ({why})");
+        DetourResume resume = _resume;
         bool lightTrip = _lightTrip;
+        _log?.Info(LogCategory, "connection dropped during the light buy — reroute ended, the buy not counted against the shop");
         GoIdle();
         if (!lightTrip) _cash.NotifyAutoDepositAborted();
+        if (resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop)
+            _loopRunner.ResumeOnReconnect(loop, "a light buy the connection cut off");
+        else if (resume.Kind == DetourResumeKind.Lair)
+            _log?.Info(LogCategory, "Auto-Lair stays stopped after the drop — start it again once back");
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -1025,7 +1005,6 @@ public sealed class AutoDepositManager : IDisposable
         _disposed = true;
         _cash.AutoDepositRequested -= OnAutoDepositRequested;
         _walker.Event -= OnWalkEvent;
-        if (_promptScanner is not null) _promptScanner.PromptObserved -= OnPromptObserved;
         // OnRoomEntered is driven by AppServices (not a direct subscription).
         _lightBuyer.Dispose();
         _depositSyncTimer.Dispose();
@@ -1040,9 +1019,6 @@ public sealed class AutoDepositManager : IDisposable
         AwaitingInventoryForDeposit,
         WalkingToLightShop,
         BuyingLight,
-        // The connection dropped during the light buy; the walk back goes on the
-        // first in-game prompt after the reconnect.
-        AwaitingReconnect,
         WalkingBackToOrigin,
     }
 }
