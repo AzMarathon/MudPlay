@@ -1435,6 +1435,16 @@ public static class BugReportBuilder
         }
         sb.Append('\n');
 
+        // Members who negated a buff of ours: never cast on them again until re-ticked,
+        // so a "why won't it buff <member>" report shows the mark behind it.
+        List<string> negatedMarks = (svc.Profile.Current?.PartyBuffs?.Slots ?? new List<Models.Profile.BuffSlot>())
+            .Where(slot => !string.IsNullOrWhiteSpace(slot.Spell))
+            .SelectMany(slot => slot.NegatedTargets.Select(given => $"- {slot.Spell!.Trim()} on {given}"))
+            .ToList();
+        sb.Append("**Buffs negated by a member (not cast on them until their box is re-ticked)**\n\n");
+        sb.Append(negatedMarks.Count == 0 ? "(none)\n" : string.Join("\n", negatedMarks) + "\n");
+        sb.Append('\n');
+
         // Stock counterpart: one-directional losers KEPT by casting the remover first
         // (loser cast-code → remover cast-code). Surfaced so a "both won't hold on stock"
         // report shows the ordering the director is applying. Empty off stock.

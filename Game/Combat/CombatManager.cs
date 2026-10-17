@@ -3574,6 +3574,19 @@ public sealed partial class CombatManager : IDisposable
 
         string text = match.Text;
 
+        // Our own cast that its target negated or resisted names that target in full,
+        // so it counts only when that is the monster fought: the substring test below
+        // would take a buff resisted by a member "Batu" for a cast at a "bat".
+        if (NegatedCastLine.TryRead(text, out NegatedCastLine.Cast negated) && negated.Caster == NegatedCastLine.Self)
+        {
+            string at = negated.Target.Trim();
+            int space = at.IndexOf(' ');
+            string given = space >= 0 ? at[..space] : at;
+            if (!string.Equals(at, target, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(given, target, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
         // Two message shapes confirm our own single-target attack-spell round. The
         // physical shape ("You hit the orc for 10 damage!") also covers a first-person
         // attack spell and is checked first since it needs no game-data lookup. Some

@@ -1419,6 +1419,52 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("disr fierce wraith", h.LastSent);   // the one allowed cast is still unspent
     }
 
+    // A party buff resisted by a member whose name holds the monster's ("Batu" while
+    // fighting a bat) is no cast of the attack spell.
+    [Theory]
+    [InlineData("You attempt to cast bless at Batu, but the spell is resisted.")]
+    [InlineData("You attempt to cast bless at Batu, but it's negated!")]
+    public void BuffResistedByAMemberNamedLikeTheMonster_IsNotACastOfOurs(string line)
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "bat");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: bat.");
+        Assert.Equal("disr bat", h.LastSent);
+        h.Feed(line);
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("disr bat", h.LastSent);
+    }
+
+    // Our OWN attack spell negated or resisted by its target still spends a cast of
+    // its cap (user, 2026-10-17: "Count it", "Count resists too").
+    [Theory]
+    [InlineData("You attempt to cast disrupt at fierce wraith, but it's negated!")]
+    [InlineData("You attempt to cast disrupt at fierce wraith, but the spell is resisted.")]
+    public void NegatedOrResistedAttackSpellOfOurs_CountsTowardItsCap(string line)
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "fierce wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: fierce wraith.");
+        Assert.Equal("disr fierce wraith", h.LastSent);
+        h.Feed(line);
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("turn fierce wraith", h.LastSent);   // the cap of one is spent
+    }
+
     [Fact]
     public void MaxCasts2_ConfirmedCastCount_GroupsProjectiles_CountsSeparateCasts_NoRoundCloseNeeded()
     {
