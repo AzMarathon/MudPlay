@@ -4747,6 +4747,10 @@ public sealed class CastingDirectorTests
         public Dictionary<string, string[]> Removes { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
+        // Buff short → full spell name, the name the game's negate line carries.
+        public Dictionary<string, string> SpellNames { get; } =
+            new(StringComparer.OrdinalIgnoreCase) { ["bles"] = "bless" };
+
         public PartyBlessHarness()
         {
             DefaultPatterns.Seed(Router);
@@ -4777,6 +4781,7 @@ public sealed class CastingDirectorTests
             });
             Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
             Director.SetPartyWideBuffCheck(s => WholeParty.Contains(s));
+            Director.SetSpellNameLookup(code => SpellNames.TryGetValue(code, out string? n) ? n : null);
             // Healthy + full mana so survival categories never pre-empt buffs.
             State.MaxHp = 200; State.Hp = 200;
             State.MaxMa = 100; State.Ma = 100;
@@ -4971,6 +4976,143 @@ public sealed class CastingDirectorTests
         h.Director.NotifyRoundComplete();    // new round frees the between-round slot
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
+    }
+
+    // ----- A member negates our buff (user rulings 2026-10-17) -----------------
+
+    private static void NextRound(PartyBlessHarness h, int seconds = 6)
+    {
+        h.Now = h.Now.AddSeconds(seconds);
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+    }
+
+    [Fact]
+    public void PartyBless_MemberNegatesIt_MarkedOnTheSlot_NoTimer_NeverOfferedAgain()
+    {
+        // "if we buff someone, and they're wearing something that negates it, that means
+        // we can never buff them with that spell and shouldnt keep trying".
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        List<(string Short, string Given)> raised = new();
+        h.Director.BuffNegated += (s, g) => raised.Add((s, g));
+
+        h.Director.Evaluate();
+        Assert.Equal("bles Raijin", Assert.Single(h.CastsSent));
+
+        h.Confirm("You attempt to cast bless at Raijin, but it's negated!");
+
+        Assert.Equal(new[] { "raijin" }, slot.NegatedTargets);
+        Assert.Equal(("bles", "raijin"), Assert.Single(raised));
+        Assert.DoesNotContain(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin");
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains("bles on Raijin was negated"));
+
+        h.CastsSent.Clear();
+        for (int i = 0; i < 5; i++) NextRound(h);
+        Assert.Empty(h.CastsSent);
+
+        // For good, not for this fight: a new character load keeps the mark (it lives
+        // on the saved slot, the character tier), so still nothing is cast.
+        h.Director.ResetBuffTracking();
+        NextRound(h, 600);
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_NegatedMarkLifted_CastsOnTheMemberAgain()
+    {
+        // The user unticks and re-ticks the member, which lifts the mark: re-armed.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You attempt to cast bless at Raijin, but it's negated!");
+        h.CastsSent.Clear();
+        NextRound(h);
+        Assert.Empty(h.CastsSent);
+
+        slot.NegatedTargets.Clear();
+        NextRound(h);
+        Assert.Equal("bles Raijin", Assert.Single(h.CastsSent));
+    }
+
+    [Fact]
+    public void PartyBless_TimedFromSend_StockResistedLine_DropsTheTimerArmedOnSend()
+    {
+        // A caster line that can't name the target times the buff from its send; the
+        // resisted line (Stock's wording of the same three lines) takes that timer back.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {spellname}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin");
+
+        h.Confirm("You attempt to cast bless at Raijin, but the spell is resisted.");
+
+        Assert.DoesNotContain(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin");
+        Assert.Equal(new[] { "raijin" }, slot.NegatedTargets);
+    }
+
+    [Fact]
+    public void PartyBless_RoomSpellNegatedOnTheMember_LeavesOurCastAlone()
+    {
+        // "yes, only act on casts we sent, matched by spell name": the Underwater
+        // Passage's own holding breath, negated by a worn fish-helm, prints the same
+        // caster line while our bless is out. It is not our cast.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You attempt to cast holding breath at Raijin, but it's negated!");
+        Assert.Empty(slot.NegatedTargets);
+
+        h.Confirm("You cast bless on Raijin!");   // our bless still lands and is timed
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin" && b.Short == "bles");
+    }
+
+    [Fact]
+    public void PartyBless_NegateLineTwoRoundsAfterOurCast_IsNotTiedToIt()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Now = h.Now.AddSeconds(11);
+        h.Confirm("You attempt to cast bless at Raijin, but it's negated!");
+
+        Assert.Empty(slot.NegatedTargets);
+    }
+
+    [Fact]
+    public void PartyBless_NegateLineNamingAnotherTarget_IsNotOurs()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You attempt to cast bless at Goldar, but it's negated!");
+        h.Confirm("Raijin negates Goldar's cast of bless!");
+
+        Assert.Empty(slot.NegatedTargets);
     }
 
     [Fact]

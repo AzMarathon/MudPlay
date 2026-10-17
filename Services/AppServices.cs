@@ -5529,6 +5529,10 @@ public sealed class AppServices
         // Party-buff plan (Party window) — the dynamic list of buff slots the
         // party-bless path casts, read live so a Party-window edit takes effect at once.
         CastDirector.SetPartyBuffSource(() => Profile.Current?.PartyBuffs);
+        // A negated member buff is marked on its slot for good (character tier), so
+        // the mark is saved with the profile the moment it lands.
+        CastDirector.SetSpellNameLookup(code => Spellbook.FindByCastCode(code)?.Name);
+        CastDirector.BuffNegated += (_, _) => Profile.Save();
         // Room-presence gate for single-target party buffs: a member is only blessed
         // when they're both in the party AND in the room. Backed by the live
         // room-occupant list (RoomEntityClassifier), matched by given name.

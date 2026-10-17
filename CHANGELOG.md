@@ -1,5 +1,10 @@
 # Version history
 
+## 3.181.3
+
+- A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
+- Only a negate line about a cast you sent counts, matched by spell name and member
+
 ## 3.181.2
 
 - Deaths remember the game data they were recorded on, shown in a new Game data column

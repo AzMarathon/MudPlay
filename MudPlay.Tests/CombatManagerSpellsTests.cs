@@ -1419,6 +1419,27 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("disr fierce wraith", h.LastSent);   // the one allowed cast is still unspent
     }
 
+    // Our OWN attack spell negated by its target still spends a cast of its cap
+    // (user, 2026-10-17: "Count it").
+    [Fact]
+    public void NegatedAttackSpellOfOurs_CountsTowardItsCap()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "fierce wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: fierce wraith.");
+        Assert.Equal("disr fierce wraith", h.LastSent);
+        h.Feed("You attempt to cast disrupt at fierce wraith, but it's negated!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("turn fierce wraith", h.LastSent);   // the cap of one is spent
+    }
+
     [Fact]
     public void MaxCasts2_ConfirmedCastCount_GroupsProjectiles_CountsSeparateCasts_NoRoundCloseNeeded()
     {
