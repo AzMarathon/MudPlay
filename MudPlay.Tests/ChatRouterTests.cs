@@ -1,4 +1,5 @@
 using MudPlay.Game;
+using MudPlay.Game.Remote;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -607,6 +608,184 @@ public sealed class ChatRouterTests
 
         now = now.AddSeconds(20);
         Assert.False(Sent("bg @roomba sync"));
+    }
+
+    // ----- a telepath that was not sent -------------------------------------
+
+    // The chat log with the telepath pacer in front of the wire, wired as the app
+    // wires them: a line sent is told to the chat log and handed to the pacer; a
+    // line the board shows reaches the chat log first, then the pacer.
+    private sealed class Wired
+    {
+        public DateTimeOffset Now = DateTimeOffset.UnixEpoch;
+        private readonly List<(DateTimeOffset Due, Action Fire)> _timers = new();
+        public readonly MessageRouter Router = new();
+        public readonly ChatRouter Chat;
+        public readonly TelepathPacer Pacer;
+        public readonly List<string> OnWire = new();
+
+        public Wired()
+        {
+            DefaultPatterns.Seed(Router);
+            Chat = new ChatRouter(Router, clock: () => Now);
+            Pacer = new TelepathPacer((delay, fire) => _timers.Add((Now + delay, fire)), () => Now);
+            Pacer.SetWriter(b => OnWire.Add(System.Text.Encoding.Latin1.GetString(b)));
+            Pacer.GaveUp += Chat.TelepathGivenUp;
+            Chat.LastTelepathOnWire = () => Pacer.LastWrittenTelepath;
+        }
+
+        public void Sends(string line, bool usersOwn = true)
+        {
+            Chat.ObserveOutbound(Wire(line), usersOwn);
+            Pacer.Send(Wire(line));
+        }
+
+        public void Shows(string row)
+        {
+            Router.Dispatch(Line(row));
+            Pacer.OnAck(row);
+        }
+
+        // Time passes; the pacer's timers that come due run.
+        public void Waits(int ms)
+        {
+            DateTimeOffset end = Now.AddMilliseconds(ms);
+            while (_timers.Where(t => t.Due <= end).OrderBy(t => t.Due).FirstOrDefault() is { Fire: not null } due)
+            {
+                _timers.Remove(due);
+                Now = due.Due;
+                due.Fire();
+            }
+            Now = end;
+        }
+    }
+
+    // A request the game refuses once and sends on the pacer's resend is confirmed
+    // as it always was: the request's, the user's, with its text.
+    [Fact]
+    public void TelepathOut_ARequestNotSentOnce_ThatGoesThroughOnTheResend_IsConfirmedAsTheUsers()
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        w.Sends("/Bob @timer sync");
+        w.Shows("--- Telepath Not Sent ---");
+        w.Waits(200);
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        Assert.Equal(new[] { "/Bob @timer sync\r", "/Bob @timer sync\r" }, w.OnWire);
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bob", "@timer sync"), (e.Speaker, e.Message));
+        Assert.True(users);
+        Assert.Equal(0, w.Chat.DroppedUnsentTelepaths);
+    }
+
+    // A request the game refuses on every try reached nobody. A later telepath of
+    // the user's to that player, by the same letters or fewer, is confirmed as
+    // itself, not as the request.
+    [Theory]
+    [InlineData("/Bob hi")]
+    [InlineData("/bo hi")]
+    public void TelepathOut_ARequestNotSentOnEveryTry_IsNotTheOneALaterConfirmationTakes(string later)
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        w.Sends("/Bob @timer sync");
+        for (int i = 0; i < TelepathPacer.MaxAttempts; i++)
+        {
+            w.Waits(200);
+            w.Shows("--- Telepath Not Sent ---");
+        }
+        Assert.Equal(1, w.Chat.DroppedUnsentTelepaths);
+        w.Sends(later);
+        w.Waits(200);
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bob", "hi"), (e.Speaker, e.Message));
+        Assert.True(users);
+        Assert.Equal(0, w.Chat.PendingTelepathCount);
+    }
+
+    // Letters that fit two players draw the ambiguous-name reply, and the request
+    // reached nobody. A later telepath by the same letters or fewer, confirmed for
+    // one of those players, is confirmed as itself. The rows end at the next line,
+    // the board's copy of the later telepath or the confirmation itself.
+    [Theory]
+    [InlineData("/bo hi", true)]
+    [InlineData("/bo hi", false)]
+    [InlineData("/b hi", true)]
+    public void TelepathOut_ARequestWhoseLettersFitTwoPlayers_IsNotTheOneALaterConfirmationTakes(
+        string later, bool boardShowsItBack)
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        w.Sends("/bo @timer sync");
+        w.Shows("Please be more specific.  You could have meant any of these:");
+        w.Shows("-- Bob");
+        w.Shows("-- Bobby");
+        w.Sends(later);
+        w.Waits(200);
+        if (boardShowsItBack) w.Shows(later);
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bob", "hi"), (e.Speaker, e.Message));
+        Assert.True(users);
+        Assert.Equal(1, w.Chat.DroppedUnsentTelepaths);
+    }
+
+    // The same reply to a `look` or `ask` is not a telepath's: not when another
+    // line went out after the telepath, nor when the telepath was the last line out
+    // but the rows are not names its letters begin. The telepath stays pending and
+    // its confirmation has its text.
+    [Theory]
+    [InlineData(false, "look bo", "-- bone", "-- bottle")]
+    [InlineData(false, "ask bo about the key", "-- Bob", "-- bouncer")]
+    [InlineData(true, "look o", "-- old gypsy woman", "-- old gypsy man")]
+    public void AmbiguousReply_ToAnotherCommand_DropsNoTelepath(bool commandFirst, string command, string row1, string row2)
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        if (commandFirst) w.Sends(command);
+        w.Sends("/bo @timer sync");
+        if (!commandFirst) w.Sends(command);
+        w.Shows("Please be more specific.  You could have meant any of these:");
+        w.Shows(row1);
+        w.Shows(row2);
+        w.Shows("[HP=32/MA=27]:");
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bob", "@timer sync"), (e.Speaker, e.Message));
+        Assert.True(users);
+        Assert.Equal(0, w.Chat.DroppedUnsentTelepaths);
+    }
+
+    // An ambiguous `look` just after a confirmed telepath leaves the next telepath
+    // to that player alone.
+    [Fact]
+    public void AmbiguousReply_ToALookAfterAConfirmedTelepath_DropsNothing()
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        w.Sends("/Bob @timer sync");
+        w.Shows("--- Telepath Sent to Bob ---");
+        w.Sends("/Bob @health", usersOwn: false);
+        w.Sends("look b");
+        w.Shows("Please be more specific.  You could have meant any of these:");
+        w.Shows("-- Bob");
+        w.Shows("-- Betty");
+        w.Waits(200);
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        Assert.Equal(new[] { ("Bob", "@timer sync", true), ("Bob", "@health", false) },
+            seen.Select(s => (s.Entry.Speaker!, s.Entry.Message, s.Users)));
+        Assert.Equal(0, w.Chat.DroppedUnsentTelepaths);
     }
 
     [Fact]

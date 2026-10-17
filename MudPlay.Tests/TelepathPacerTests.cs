@@ -92,6 +92,44 @@ public sealed class TelepathPacerTests
         Assert.Equal(1, h.Pacer.GivenUp);
     }
 
+    // Only the last refusal, the one not resent, is told as given up, with the line
+    // as it went out; a refusal that is resent is not.
+    [Fact]
+    public void GaveUp_IsToldOnlyWhenNoTryIsLeft()
+    {
+        Harness h = new();
+        List<string> gaveUp = new();
+        h.Pacer.GaveUp += gaveUp.Add;
+        h.Send("/Raijin @level\r");
+        for (int i = 0; i < TelepathPacer.MaxAttempts; i++)
+        {
+            h.Advance(TimeSpan.FromMilliseconds(200));
+            Assert.Empty(gaveUp);
+            h.Pacer.OnAck("--- Telepath Not Sent ---");
+        }
+
+        Assert.Equal("/Raijin @level", Assert.Single(gaveUp));
+    }
+
+    // The last telepath written is known while nothing else has gone out after it:
+    // any other line, written at once ahead of a waiting telepath or after it,
+    // clears it.
+    [Fact]
+    public void LastWrittenTelepath_IsClearedByAnyOtherLine()
+    {
+        Harness h = new();
+        h.Send("/Raijin @health\r");
+        Assert.Equal("/Raijin @health", h.Pacer.LastWrittenTelepath);
+
+        h.Send("look\r");
+        Assert.Null(h.Pacer.LastWrittenTelepath);
+
+        h.Send("/Raijin @level\rstat\r");   // `stat` goes at once, the telepath after the gap
+        Assert.Null(h.Pacer.LastWrittenTelepath);
+        h.Advance(TelepathPacer.Gap);
+        Assert.Equal("/Raijin @level", h.Pacer.LastWrittenTelepath);
+    }
+
     // A chat line quoting an ack must not trigger a resend; "/raij" is acked as Raijin.
     [Fact]
     public void Acks_AreAnchored_AndMatchAnAbbreviatedTarget()

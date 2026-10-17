@@ -1,5 +1,10 @@
 # Version history
 
+## 3.181.2
+
+- A telepath the game refused on every try, or whose letters fit two players, is let go at once
+- A later telepath to that player no longer makes them the one a timer request asked
+
 ## 3.181.1
 
 - Settings search highlights matching tabs like Help's search, and no longer hides the rest

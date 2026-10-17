@@ -32,7 +32,8 @@ public sealed class ChatRouter : IDisposable
     // e.g. a @roomba reply answering with one telepath per item — and the server's
     // "--- Telepath Sent to X ---" lines then arrive as their own burst; each takes
     // the oldest pending send addressed to the player it names
-    // (TakeTelepathConfirmed, which applies the staleness check first).
+    // (TakeTelepathConfirmed, which applies the staleness check first). A send the
+    // game is known not to have sent is dropped before then (DropUnsentTelepath).
     private readonly List<PendingTelepath> _pendingTelepaths = new();
     // Same pairing for an outgoing directed say: the typed `>Target message` carries
     // the message, the server's `--- Message Directed to X ---` confirmation the target.
@@ -224,6 +225,7 @@ public sealed class ChatRouter : IDisposable
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
+        TrackAmbiguousReply(line.Text);
         TryCaptureShownTelepath(line.Text);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
@@ -461,16 +463,9 @@ public sealed class ChatRouter : IDisposable
             PendingTelepath old = _pendingTelepaths[i];
             if (now - old.EnqueuedAt <= PendingCaptureStaleAfter) continue;
             _pendingTelepaths.RemoveAt(i);
-            // Only a line the client sent by itself is quoted: that is its own
-            // protocol text. What the user sent, or a row off the screen that may
-            // be the copy of it, is the user's words, and no log keeps those.
-            string what = old.Origin == SendOrigin.Client
-                ? $"\"{old.Message}\""
-                : old.Origin == SendOrigin.User ? "a telepath the user sent (its words are not kept)"
-                : "a row shown on screen (its words are not kept)";
             _log?.Warn("ChatRouter",
                 $"discarding stale unconfirmed telepath capture (queued {(now - old.EnqueuedAt).TotalSeconds:F0}s ago, "
-                + $"never confirmed): {what} — its own confirmation never arrived, so it can't be the "
+                + $"never confirmed): {Describe(old)} — its own confirmation never arrived, so it can't be the "
                 + "match for this one.");
         }
         if (string.IsNullOrEmpty(name)) return null;
@@ -486,6 +481,82 @@ public sealed class ChatRouter : IDisposable
         _pendingTelepaths.RemoveAt(at);
         return sent;
     }
+
+    // Only a line the client sent by itself is quoted: that is its own protocol
+    // text. What the user sent, or a row off the screen that may be the copy of
+    // it, is the user's words, and no log keeps those.
+    private static string Describe(PendingTelepath send) =>
+        send.Origin == SendOrigin.Client ? $"\"{send.Message}\""
+        : send.Origin == SendOrigin.User ? "a telepath the user sent (its words are not kept)"
+        : "a row shown on screen (its words are not kept)";
+
+    // The telepath line (`/<name> <text>`) that was the last line written to the
+    // wire, or null when anything else has gone out since. Set by AppServices
+    // (TelepathPacer.LastWrittenTelepath); null → no ambiguous-name reply is ever
+    // taken for a telepath's.
+    public Func<string?>? LastTelepathOnWire { get; set; }
+
+    // TelepathPacer has given up on this telepath: the game answered every try
+    // with "--- Telepath Not Sent ---". Its resends do not come through here, so
+    // a pending send is dropped only now, never on a refusal that is resent: a
+    // resend that goes through is confirmed against it.
+    public void TelepathGivenUp(string line) =>
+        DropUnsentTelepath(line, "the game did not send it (--- Telepath Not Sent --- on every try)");
+
+    // A telepath whose letters fit more than one player is answered with the
+    // ambiguous-name reply, and nothing is sent. That reply is shared with `look`,
+    // `ask` and every command that names something, so it is taken for a
+    // telepath's only when that telepath was the last line written to the wire as
+    // the reply began, and every row it lists begins with the letters the telepath
+    // was addressed to. Judged once the rows have ended: at the next line that is
+    // not one, which comes before any confirmation is paired (LineDispatched runs
+    // ahead of the pattern subscribers).
+    private string? _ambiguousFor;
+    private bool _ambiguousRowSeen;
+
+    private void TrackAmbiguousReply(string text)
+    {
+        if (_ambiguousFor is { } line)
+        {
+            if (text.StartsWith(EngineReplyLines.AmbiguousNameRow, StringComparison.Ordinal))
+            {
+                IsTelepathLine(line, out int sp);
+                string row = text[EngineReplyLines.AmbiguousNameRow.Length..].Trim();
+                if (row.StartsWith(line[1..sp], StringComparison.OrdinalIgnoreCase)) _ambiguousRowSeen = true;
+                else _ambiguousFor = null;   // a row the telepath's letters don't begin: some other command's reply
+                return;
+            }
+            _ambiguousFor = null;
+            if (_ambiguousRowSeen)
+                DropUnsentTelepath(line, "the game answered that its letters fit more than one player");
+        }
+        if (text.TrimEnd() == EngineReplyLines.AmbiguousName
+            && LastTelepathOnWire?.Invoke()?.Trim() is { } sent && IsTelepathLine(sent, out _))
+        {
+            _ambiguousFor = sent;
+            _ambiguousRowSeen = false;
+        }
+    }
+
+    // A telepath the game answered with something other than a confirmation
+    // reached nobody: its pending send is dropped, so that a later confirmation
+    // for a player its letters begin cannot take it. line is the telepath as it
+    // went out; of identical pending sends, the oldest goes, the one a
+    // confirmation would have taken first.
+    private void DropUnsentTelepath(string line, string why)
+    {
+        string sent = line.Trim();
+        int at = _pendingTelepaths.FindIndex(p => $"/{p.Target} {p.Message}" == sent);
+        if (at < 0) return;
+        PendingTelepath dropped = _pendingTelepaths[at];
+        _pendingTelepaths.RemoveAt(at);
+        DroppedUnsentTelepaths++;
+        _log?.Debug("ChatRouter", $"dropping pending telepath {Describe(dropped)}: {why}; it asked nobody.");
+    }
+
+    // Bug-report surface.
+    public int PendingTelepathCount => _pendingTelepaths.Count;
+    public int DroppedUnsentTelepaths { get; private set; }
 
     // Where a pending send is known from: the line as the client sent it by itself
     // or for another player, the line as the user sent it, or a row on the screen.

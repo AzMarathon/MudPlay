@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.1**
-> - Settings search highlights matching tabs like Help's search, and no longer hides the rest
-> - It searches what each tab shows, tooltips included, with a match count under the tab list
-> - The open tab highlights its matching settings and scrolls to the first
-> - The search stays while you move between tabs
+> **Version 3.181.2**
+> - A telepath the game refused on every try, or whose letters fit two players, is let go at once
+> - A later telepath to that player no longer makes them the one a timer request asked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
