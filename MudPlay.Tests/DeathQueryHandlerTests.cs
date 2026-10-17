@@ -19,7 +19,7 @@ public sealed class DeathQueryHandlerTests
     private static readonly System.DateTime Now = new(2026, 6, 20, 0, 0, 0, System.DateTimeKind.Utc);
 
     private static (RemoteCommandManager engine, PlayerDatabase players) Setup(
-        IReadOnlyList<DeathRecord> records)
+        IReadOnlyList<DeathRecord> records, string? activeGameData = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -27,7 +27,8 @@ public sealed class DeathQueryHandlerTests
         PartyState party = new();
         PlayerDatabase players = new();
         RemoteCommandManager engine = new(chat, party, players);
-        _ = new DeathQueryHandler(engine, () => records);
+        _ = new DeathQueryHandler(engine, () => records,
+            r => r.GameData is { } set && !string.Equals(set, activeGameData, System.StringComparison.OrdinalIgnoreCase));
         return (engine, players);
     }
 
@@ -110,6 +111,25 @@ public sealed class DeathQueryHandlerTests
         engine.DispatchForTests(Telepath("Friend", "@death"));
 
         Assert.Contains("no unrecovered deaths", LastReply(engine));
+    }
+
+    // The asker reads the room number on the map: a death of another game data than
+    // the active one says which, since that number is another room here.
+    [Fact]
+    public void Death_OfAnotherGameData_NamesIt()
+    {
+        DeathRecord other = Death(2, 1, DeathRecoveryStatus.Active);
+        other.GameData = "alpha";
+        DeathRecord own = Death(1, 2, DeathRecoveryStatus.Active);
+        own.GameData = "beta";
+        var (engine, players) = Setup(new List<DeathRecord> { own, other }, activeGameData: "beta");
+        SeedPlayer(players, "Friend", PlayerRemoteControls.QueryDeaths);
+
+        engine.DispatchForTests(Telepath("Friend", "@death all"));
+
+        var replies = Replies(engine);
+        Assert.Contains(replies, r => r.Contains("death #2") && r.Contains("(1/102), recorded on game data 'alpha', 5 lives left"));
+        Assert.Contains(replies, r => r.Contains("death #1") && r.Contains("(1/101), 5 lives left"));
     }
 
     [Fact]

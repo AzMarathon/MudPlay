@@ -223,6 +223,10 @@ public sealed class RoomTracker
     // apply to one.
     public bool LastDeathTookNothing { get; private set; }
 
+    // The game-data set whose rooms the tracker places the character in, the set a
+    // death recorded now is stamped with (DeathRecord.GameData).
+    public string? RoomsGameData => _graph.ActiveSet;
+
     // The exit the one move in flight is crossing: what a refusal of that move is a
     // refusal of. Null with no move in flight, with more than one queued (the one
     // refused isn't then the one out of this room), or when it maps to no exit.
@@ -1443,6 +1447,7 @@ public sealed class RoomTracker
         {
             RecordNumber = profile.DeathHistory.Count + 1,
             RoomName = roomName,
+            GameData = RoomsGameData,
             // Recovered, not Active: every reader of the history takes Active and
             // Partial for a pile still out there.
             Status = nothingLost ? DeathRecoveryStatus.Recovered : DeathRecoveryStatus.Active,

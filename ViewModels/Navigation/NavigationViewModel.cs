@@ -701,13 +701,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // universal signal that fires for the miracle-save phrasing too, so the skull
     // lands the instant we die — and on any DeathRecoveryManager.Records change,
     // so it clears the instant the pile flips to Recovered. Null when nothing is
-    // outstanding so the map draws no marker.
+    // outstanding so the map draws no marker. A death recorded on another game data
+    // has no skull: its room number is another room on this map. Refreshed on a
+    // graph reload for that.
     private void RefreshDeathRooms()
     {
         HashSet<RoomKey>? next = null;
         foreach (DeathRecord r in _services.DeathRecovery.Records)
         {
             if (r.Status == DeathRecoveryStatus.Recovered || r.Room is not { } room) continue;
+            if (_services.DeathRecovery.OtherGameDataRefusal(r) is not null) continue;
             (next ??= new()).Add(new RoomKey(room.Map, room.Room));
         }
         DeathRooms = next;
@@ -4236,6 +4239,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshTeleportRooms();
         RefreshTrainerRooms();   // trainer set is per game-data set
         RefreshLevelGatedRooms();   // gates are per game-data set too
+        RefreshDeathRooms();   // a death's skull is drawn only on its own game data
     }
 
     // Every room with a non-exit way to move (Game.Map.TeleportRooms), for the map's

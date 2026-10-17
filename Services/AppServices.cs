@@ -6606,7 +6606,8 @@ public sealed class AppServices
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
-        DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records,
+            r => DeathRecovery.OtherGameDataRefusal(r) is not null);
         // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
         // switch-dispatch delay) so an @roomba sync / @loop send trickles its lines
         // out ~800ms apart instead of flooding the channel.
