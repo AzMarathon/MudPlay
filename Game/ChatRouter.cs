@@ -491,7 +491,8 @@ public sealed class ChatRouter : IDisposable
         : "a row shown on screen (its words are not kept)";
 
     // The telepath line (`/<name> <text>`) that was the last line written to the
-    // wire, or null when anything else has gone out since. Set by AppServices
+    // wire and is the only one awaiting an answer, or null when anything else has
+    // gone out since or another telepath is unanswered. Set by AppServices
     // (TelepathPacer.LastWrittenTelepath); null → no ambiguous-name reply is ever
     // taken for a telepath's.
     public Func<string?>? LastTelepathOnWire { get; set; }
@@ -507,8 +508,11 @@ public sealed class ChatRouter : IDisposable
     // ambiguous-name reply, and nothing is sent. That reply is shared with `look`,
     // `ask` and every command that names something, so it is taken for a
     // telepath's only when that telepath was the last line written to the wire as
-    // the reply began, and every row it lists begins with the letters the telepath
-    // was addressed to. Judged once the rows have ended: at the next line that is
+    // the reply began, and the only one awaiting an answer, and every row it lists
+    // begins with the letters the telepath was addressed to. A command written
+    // just before the telepath whose reply comes after it, with rows that fit,
+    // drops the telepath's pending send: the safe way round, since a confirmation
+    // then takes nothing. Judged once the rows have ended: at the next line that is
     // not one, which comes before any confirmation is paired (LineDispatched runs
     // ahead of the pattern subscribers).
     private string? _ambiguousFor;

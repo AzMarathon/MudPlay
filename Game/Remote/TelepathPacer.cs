@@ -122,10 +122,22 @@ public sealed partial class TelepathPacer
     public int GivenUp { get { lock (_lock) return _givenUp; } }
 
     // The telepath line (`/<name> <text>`, no line end) that was the last line
-    // written to the wire, or null when anything else has been written since. A
-    // reply the game gives to whatever was sent last is that telepath's only
-    // when this is set.
-    public string? LastWrittenTelepath { get { lock (_lock) return _lastWrittenTelepath; } }
+    // written to the wire, while it is the only telepath awaiting the game's
+    // answer; null when anything else has been written since, or another
+    // telepath is still unanswered (the reply may be that one's). A reply the
+    // game gives to whatever was sent last is that telepath's only when this is
+    // set.
+    public string? LastWrittenTelepath
+    {
+        get
+        {
+            lock (_lock)
+            {
+                ExpireUnacked();
+                return _inFlight.Count == 1 ? _lastWrittenTelepath : null;
+            }
+        }
+    }
 
     // Told the line (no line end) of a telepath the game refused with "--- Telepath
     // Not Sent ---" on every try: it reached nobody, and nothing more of it will

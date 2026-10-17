@@ -111,9 +111,10 @@ public sealed class TelepathPacerTests
         Assert.Equal("/Raijin @level", Assert.Single(gaveUp));
     }
 
-    // The last telepath written is known while nothing else has gone out after it:
-    // any other line, written at once ahead of a waiting telepath or after it,
-    // clears it.
+    // The last telepath written is known while nothing else has gone out after it
+    // and no other telepath is awaiting its answer: any other line, written at
+    // once ahead of a waiting telepath or after it, clears it, and an earlier
+    // telepath still unanswered hides it.
     [Fact]
     public void LastWrittenTelepath_IsClearedByAnyOtherLine()
     {
@@ -127,6 +128,8 @@ public sealed class TelepathPacerTests
         h.Send("/Raijin @level\rstat\r");   // `stat` goes at once, the telepath after the gap
         Assert.Null(h.Pacer.LastWrittenTelepath);
         h.Advance(TelepathPacer.Gap);
+        Assert.Null(h.Pacer.LastWrittenTelepath);   // `/Raijin @health` is still unanswered
+        h.Pacer.OnAck("--- Telepath Sent to Raijin ---");
         Assert.Equal("/Raijin @level", h.Pacer.LastWrittenTelepath);
     }
 

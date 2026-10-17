@@ -765,6 +765,31 @@ public sealed class ChatRouterTests
         Assert.Equal(0, w.Chat.DroppedUnsentTelepaths);
     }
 
+    // Letters that fit two players, and before the game's list comes back the
+    // client telepaths one of those players by the full name. The list may be the
+    // reply to either telepath, so it drops neither: the confirmation that follows
+    // is the client's telepath's, and the user's request asked nobody.
+    [Fact]
+    public void AmbiguousReply_WithAnotherTelepathAwaitingItsAnswer_DropsNoTelepath()
+    {
+        Wired w = new();
+        var seen = Watch(w.Chat);
+
+        w.Sends("/bo @timer sync");
+        w.Waits(150);
+        w.Sends("/Bob @health", usersOwn: false);
+        w.Waits(150);
+        w.Shows("Please be more specific.  You could have meant any of these:");
+        w.Shows("-- Bob");
+        w.Shows("-- Bobby");
+        w.Shows("--- Telepath Sent to Bob ---");
+
+        (ChatLogEntry e, bool users) = Assert.Single(seen);
+        Assert.Equal(("Bob", "@health"), (e.Speaker, e.Message));
+        Assert.False(users);
+        Assert.Equal(0, w.Chat.DroppedUnsentTelepaths);
+    }
+
     // An ambiguous `look` just after a confirmed telepath leaves the next telepath
     // to that player alone.
     [Fact]
