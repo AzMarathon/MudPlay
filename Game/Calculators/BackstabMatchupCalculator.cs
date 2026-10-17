@@ -26,7 +26,7 @@ public static class BackstabMatchupCalculator
             bsDefense: bsDefense,
             isBackstab: true,
             realmType: player.Realm);
-        int hit = roll.OverallHitPercent;
+        double hit = roll.OverallHitChance;
 
         BackstabVerdict verdict =
             max <= 0 ? BackstabVerdict.NoDamage
@@ -48,11 +48,11 @@ public enum BackstabVerdict
     SureKill,       // the min stab kills it and the stab lands at the realm's ceiling
 }
 
-// One backstab opener vs one monster. HitCap is the most any stab can land on
-// this realm. Min/MaxDamage are after the monster's DR (DamageResist, the amount
+// One backstab opener vs one monster. HitChance is unrounded; HitCap is the most
+// any stab can land on this realm. Min/MaxDamage are after the monster's DR (DamageResist, the amount
 // taken off each end).
 public readonly record struct BackstabMatchup(
-    BackstabVerdict Verdict, int HitPercent, int HitCap, int MinDamage, int MaxDamage, int DamageResist)
+    BackstabVerdict Verdict, double HitChance, int HitCap, int MinDamage, int MaxDamage, int DamageResist)
 {
     public bool IsOneStabKill => Verdict == BackstabVerdict.SureKill;
 }

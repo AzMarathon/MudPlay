@@ -1,8 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.43**
-> - A follower still held (knocked down) when it follows the leader again says `@held` and re-sends its `@wait`, so the party can cure it instead of waiting it out; the same for blind, confused, diseased and poisoned
+> **Version 3.180.46**
+> - Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
+> - Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
+> - Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
+> - Your Matchup lists each of a monster's physical attacks under the Melee line
+> - Your hit % on a monster counts its dodge too, in Monster Intel, the Workshop Calculators and the Item Finder; the Calculators' monster attack rows use your class floor
+> - Bug reports carry the AC, dodge and class floor the hit chances are worked from
+> - Loop simulator rolls swings both ways at the same chances, so dodge counts there too (area rankings saved before are dropped)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

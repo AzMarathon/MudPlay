@@ -157,15 +157,14 @@ public static class CombatCalculator
         }
 
         int dodgeCap = realmType == RealmType.ParaMud ? PARAMUD_DODGE_CAP : STOCK_DODGE_CAP;
-        int overallHit = hitChance - (hitChance * dodgePercent / 100);
 
         return new HitCalcResult(
             HitPercent: hitChance,
             DodgePercent: dodgePercent,
-            OverallHitPercent: overallHit,
             HitMinCap: hitMin,
             HitMaxCap: hitMax,
-            DodgeCap: dodgeCap);
+            DodgeCap: dodgeCap,
+            OverallHitChance: hitChance * (100 - dodgePercent) / 100.0);
     }
 
     // Scale a defender's vile ward by evil level: <=Seedy → 0, <=Criminal →

@@ -11945,6 +11945,23 @@ public sealed class AppServices
     public string SimulatorCharacterReads =>
         $"`stat` {(_simulatorStatRead ? "read" : "not read")}, inventory {(_simulatorInventoryRead && Inventory.IsLoaded ? "read" : "not read")}";
 
+    // The player's live defence against a monster's swing, from the live loadout by the
+    // shared IncomingHitEstimator — what route Details colours monsters by and the bug
+    // report prints. Null before a `stat` capture.
+    public Game.Calculators.PlayerDefenseProfile? LiveIncomingHitDefense()
+    {
+        Game.PlayerStats stats = PlayerStats;
+        if (stats is null || stats.Level <= 0) return null;
+        Game.Inventory.InventorySnapshot snapshot = Inventory.Snapshot;
+        Models.Profile.CharacterProfile? profile = Profile.Current;
+        int? classId = Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, stats.Class);
+        IReadOnlyList<Game.Quests.QuestBonus> quests =
+            Game.Quests.CompletedQuestBonuses.Resolve(GameData, classId, profile?.QuestLog);
+        return Game.Calculators.IncomingHitEstimator.BuildLiveDefense(
+            stats, snapshot.EquippedItems, snapshot.Encumbrance, GameData,
+            profile?.PartyBuffs, Spellbook?.Available, quests);
+    }
+
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the
     // shared monster-overlay resolve, worn gear, obtained spells, the Default-gear rest

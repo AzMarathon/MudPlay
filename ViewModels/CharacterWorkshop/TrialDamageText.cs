@@ -17,7 +17,7 @@ public static class TrialDamageText
         var rows = new List<TrialDamageRow>
         {
             new("Accuracy", est.Accuracy.ToString(inv)),
-            new("Hit chance", string.Create(inv, $"{est.HitPercent}%"),
+            new("Hit chance", IncomingHitEstimator.FormatPercent(est.HitChance),
                 "The chance one swing lands on this target, its dodge counted."),
         };
 

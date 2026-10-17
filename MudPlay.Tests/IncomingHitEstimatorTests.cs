@@ -76,4 +76,14 @@ public sealed class IncomingHitEstimatorTests : IDisposable
         Assert.Equal(61.5, def.AcExact, 3);
         Assert.Equal(61, def.Ac);
     }
+
+    [Theory]
+    [InlineData(0.0, "0.0%")]
+    [InlineData(0.04, "<0.1%")]       // can still land: never shown as 0
+    [InlineData(0.9, "0.9%")]
+    [InlineData(9.94, "9.9%")]
+    [InlineData(9.96, "10%")]
+    [InlineData(54.5, "55%")]
+    public void FormatPercent_TenthsUnderTen_WholeAbove(double chance, string shown)
+        => Assert.Equal(shown, IncomingHitEstimator.FormatPercent(chance));
 }

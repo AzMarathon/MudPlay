@@ -5,7 +5,6 @@ using MudPlay.Game;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
-using MudPlay.Game.Quests;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
@@ -27,7 +26,7 @@ public static class RouteDetailsLauncher
     {
         ArgumentNullException.ThrowIfNull(services);
         if (polyline is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
-        PlayerDefenseProfile? def = LiveDefense(services);
+        PlayerDefenseProfile? def = services.LiveIncomingHitDefense();
         return CurrentRouteDetails.Build(
             services.RoomGraph, services.Bfs, services.Movement,
             polyline, services.ItemNames.GetName,
@@ -94,23 +93,6 @@ public static class RouteDetailsLauncher
             includeLairDwell: services.IsAutoCombatEnabled,
             lairWillBeFought: services.LairWillBeFought);
         return eta > TimeSpan.Zero ? $"{title}  ·  ~{RouteEtaEstimator.FormatCompact(eta)}" : title;
-    }
-
-    // The player's live defence for Hits-You-% colouring, or null when there's no
-    // character context yet (no stat capture) — callers then leave monsters on their
-    // alignment tint. Assembled from the live loadout by the shared IncomingHitEstimator.
-    private static PlayerDefenseProfile? LiveDefense(AppServices services)
-    {
-        PlayerStats stats = services.PlayerStats;
-        if (stats is null || stats.Level <= 0) return null;
-        var snapshot = services.Inventory.Snapshot;
-        var profile = services.Profile.Current;
-        int? classId = CompletedQuestBonuses.ResolveClassId(services.GameData, stats.Class);
-        IReadOnlyList<QuestBonus> quests =
-            CompletedQuestBonuses.Resolve(services.GameData, classId, profile?.QuestLog);
-        return IncomingHitEstimator.BuildLiveDefense(
-            stats, snapshot.EquippedItems, snapshot.Encumbrance, services.GameData,
-            profile?.PartyBuffs, services.Spellbook?.Available, quests);
     }
 
     // Monster-name tints by MajorMUD alignment code (Monsters-table Align): the

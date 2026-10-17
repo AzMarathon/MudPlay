@@ -34,8 +34,8 @@ public readonly record struct PlayerDefenseProfile(
 
 // Shared source for "how likely is this monster to hit me right now" — the single
 // weighted incoming-hit figure Monster Intel's master list surfaces, extracted here
-// so the route Details window colours monster names from the SAME number Monster
-// Intel shows. Pure domain: takes explicit character inputs, no service holder.
+// so the route Details window colours monster names from the same calculation Monster
+// Intel uses. Pure domain: takes explicit character inputs, no service holder.
 public static class IncomingHitEstimator
 {
     // Assemble the live defense profile from explicit character inputs — the exact
@@ -92,15 +92,62 @@ public static class IncomingHitEstimator
     }
 
     // A monster's blended chance to land a hit on the player across ALL its physical
-    // attacks — the same weighted figure Monster Intel's Hits-You-% column shows.
-    // Null when the monster has no catalogued physical attack (an NPC/caster record).
+    // attacks, rounded to the whole percent the route Details bands compare — Monster
+    // Intel's Hits-You-% column with no debuffs applied and its what-if fields at their
+    // live values. Null when the monster has
+    // no catalogued physical attack (an NPC/caster record).
     public static int? WeightedHitPercent(
         MonsterCatalogEntry monster, in PlayerDefenseProfile def, RealmType realm)
+        => WeightedHitChance(monster, def, realm) is { } chance ? RoundPercent(chance) : null;
+
+    // The blend unrounded. accuracyDelta is a folded accuracy debuff (0 for none).
+    // Every Hits-You-% figure Monster Intel shows goes through here or AttackHitChance,
+    // so the list, the Incoming threat lines and the Attacks rows can't disagree.
+    public static double? WeightedHitChance(
+        MonsterCatalogEntry monster, in PlayerDefenseProfile def, RealmType realm, int accuracyDelta = 0)
     {
         ArgumentNullException.ThrowIfNull(monster);
-        return MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
-            monster.PhysicalAttacks, accuracyDelta: 0, monster.Align,
+        return MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(
+            monster.PhysicalAttacks, accuracyDelta, monster.Align,
             def.Ac, def.Dodge, def.ProtEvil, def.ProtGood,
             realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
     }
+
+    // One of the monster's attacks against the player, unrounded.
+    public static double AttackHitChance(
+        MonsterAttackSlot attack, int alignment, in PlayerDefenseProfile def, RealmType realm,
+        int accuracyDelta = 0)
+    {
+        ArgumentNullException.ThrowIfNull(attack);
+        return MonsterMatchupCalculatorSpells.AttackHitChance(
+            attack.Accuracy - accuracyDelta, alignment,
+            def.Ac, def.Dodge, def.ProtEvil, def.ProtGood,
+            realm, def.Shadow, def.VileWard, def.Evil, def.ArmourType);
+    }
+
+    // The blend and each physical attack behind it, most-used first. Null when the
+    // monster has no physical attack.
+    public static IncomingHitBreakdown? Breakdown(
+        MonsterCatalogEntry monster, in PlayerDefenseProfile def, RealmType realm, int accuracyDelta = 0)
+    {
+        if (WeightedHitChance(monster, def, realm, accuracyDelta) is not { } overall) return null;
+        PlayerDefenseProfile d = def;   // a lambda can't capture an `in` parameter
+        List<IncomingAttackHit> attacks = monster.PhysicalAttackSlots
+            .Select(a => new IncomingAttackHit(a, MonsterCatalogEntry.UseWeight(a),
+                AttackHitChance(a, monster.Align, d, realm, accuracyDelta)))
+            .OrderByDescending(x => x.Weight)
+            .ToList();
+        return new IncomingHitBreakdown(overall, attacks);
+    }
+
+    public static int RoundPercent(double chance) => (int)Math.Round(chance, MidpointRounding.AwayFromZero);
+
+    // A hit chance for display: to the tenth below 10%, where the floor and dodge
+    // live and a whole percent would hide them, whole above. A chance too small for
+    // a tenth isn't shown as 0%: it can still land.
+    public static string FormatPercent(double chance)
+        => chance > 0 && chance < 0.05 ? "<0.1%"
+            : chance < 9.95
+                ? chance.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%"
+                : RoundPercent(chance).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
 }

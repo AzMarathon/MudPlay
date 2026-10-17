@@ -27,7 +27,7 @@ public sealed partial class MonsterAttackRowViewModel : ObservableObject
     // Attack accuracy — editable so the user can explore the hit curve.
     [ObservableProperty] private int _accuracy;
 
-    // Resulting hit chance vs the player's current AC + dodge ("NN%").
+    // Resulting hit chance vs the player's current AC + dodge ("NN%", to the tenth below 10%).
     [ObservableProperty] private string _hitPercent = "—";
 
     public MonsterAttackRowViewModel(string label, string damage, int accuracy,

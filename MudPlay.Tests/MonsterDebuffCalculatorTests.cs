@@ -83,20 +83,18 @@ public sealed class MonsterDebuffCalculatorTests
         => Assert.Equal(expected, MonsterMatchupCalculator.MonsterSwingsPerRound(energy, attEnergy));
 
     [Fact]
-    public void Compute_FoldsMonsterSwingsIntoDps()
+    public void Compute_CountsMonsterSwingsFromEnergy()
     {
         var player = new PlayerMatchupProfile(
             Realm: RealmType.Stock, NormalAccuracy: 100, AvgWeaponDamage: 50, SwingsPerRound: 1,
-            HasWeapon: true, ArmourClass: 0, Dodge: 0, ProtEvil: 0, ProtGood: 0, DamageResist: 0);
+            HasWeapon: true, DamageResist: 0);
         var monster = new MonsterMatchupProfile(
             ArmourClass: 0, DamageResist: 0, Hp: 500, Dodge: 0, HasPhysicalAttack: true,
-            AttackAccuracy: 100, AvgAttackDamage: 10, IsEvil: false, IsGood: false,
+            AvgAttackDamage: 10,
             EnergyPerRound: 1000, PrimaryAttackEnergy: 200);
 
         MonsterMatchupResult r = MonsterMatchupCalculator.Compute(player, monster);
 
         Assert.Equal(5, r.MonsterSwingsPerRound);
-        // DPS folds swings: hit% * dmg/hit * swings (10 dmg × 5 swings at 100% base).
-        Assert.True(r.MonsterDps >= r.MonsterDamagePerHit, "monster DPS should scale by its swing count");
     }
 }
