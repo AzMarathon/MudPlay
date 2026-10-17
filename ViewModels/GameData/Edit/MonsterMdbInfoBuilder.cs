@@ -32,9 +32,9 @@ public sealed class MonsterMdbInfoBuilder
     private readonly TBInfoStore _tb;
     private readonly DialogService? _dialogs;
 
-    // MajorMUD's HP-regen tick: a monster heals its HPRegen amount once every 90 seconds
-    // (18 combat rounds × 5 s). (GreaterMUD's 30 s / 6 rounds would branch here off a realm
-    // flag if/when that realm is supported.)
+    // Interval the HP row quotes for a monster's HPRegen: 90 seconds (18 combat rounds × 5 s)
+    // on every realm. GAME_MECHANICS "Monster HP regen" records the cycle as 30 s on both
+    // realms (user, 2026-09-30); this figure predates that.
     private const int RegenIntervalSeconds = 90;
 
     public MonsterMdbInfoBuilder(
@@ -52,18 +52,18 @@ public sealed class MonsterMdbInfoBuilder
     //   1. WCC No / Experience (with ExpMulti when > 1)
     //   2. Regen Time / Game Limit (suffix "(no respawn)" when RegenTime = 0)
     //   3. Type / Alignment / Undead
-    //   4. HP / HP Regen — kept on separate rows per user spec.
+    //   4. HP, with HP Regen folded into the same row
     //   5. AC/DR combined slash, MR, Follow %, Charm LVL
     //   6. Cash — raw R/P/G/S/C breakdown
     //   7. Weapon / Create Spell / Death Spell / Greet (cross-ref names)
     //   8. BS Defense (when > 0)
     //   9. Abilities — friendly labels from AbilityNames; Abil-N = 146 (Guarded by) split into
     //      its own row with monster-name cross-ref.
-    //  10. Item Drops 0..9 / Attacks 0..4 / Mid Spells 0..4 — first row in each group carries
-    //      the section label; subsequent rows have a blank key so they indent visually under
-    //      the header.
-    // Per user spec we deliberately omit combat-sim outputs (predicted damage etc. — Workshop
-    // COMBAT Preview territory) and the alignment-derived [Hostile]/[Not-Hostile] tag.
+    //  10. Item Drops (one chip row) / Mob's Attacks 0..4 / Between Rounds 0..4 — the
+    //      first row of a multi-row group carries the label; later rows have a blank key.
+    //  11. Summons / Spawns In / Placed In / Summoned In — clickable record and room lists.
+    // Per user spec we deliberately omit combat-sim outputs (predicted damage etc. — the
+    // Workshop's Calculators tab) and the alignment-derived [Hostile]/[Not-Hostile] tag.
     public IReadOnlyList<MdbInfoRow> Build(string wccNoStr)
     {
         List<MdbInfoRow> kv = new();
@@ -180,9 +180,8 @@ public sealed class MonsterMdbInfoBuilder
                     continue;
                 }
                 // Code 1 ("Damage") is a spell/item effect code with no defined
-                // effect on a monster — MMUD-Explorer treats it as a non-stat
-                // ability, and it appears on exactly one monster in the stock
-                // data with value 0. Inert noise; don't surface it.
+                // effect on a monster, and it appears on exactly one monster in the
+                // stock data with value 0. Inert noise; don't surface it.
                 if (code == 1) continue;
                 string label = AbilityNames.GetName(code) ?? $"Ability {code}";
                 abilities.Add(val == 0 ? label : $"{label} {FormatSigned(val)}");
@@ -687,7 +686,7 @@ public sealed class MonsterMdbInfoBuilder
         return v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double d) ? d : 0d;
     }
 
-    // "+5" / "-50" / "0" — used by signed-value ability rows.
+    // "+5" / "-50" / "0".
     private static string FormatSigned(int n) => n > 0
         ? "+" + n.ToString(System.Globalization.CultureInfo.InvariantCulture)
         : n.ToString(System.Globalization.CultureInfo.InvariantCulture);

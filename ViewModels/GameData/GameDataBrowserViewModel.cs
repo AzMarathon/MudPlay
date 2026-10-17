@@ -168,8 +168,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
                 s.SearchableLabels.Any(l => l.Contains(filter, StringComparison.OrdinalIgnoreCase));
             if (!matches) continue;
 
-            // Engine-backed sections live in EngineGroup; MDB-derived JSON tables and
-            // their derived views (Unobtainable / Quest Flags) live in TableGroup — the
+            // Engine-backed sections live in EngineSections; MDB-derived JSON tables and
+            // their derived views (Unobtainable / Quest Flags) live in TableSections — the
             // sidebar renders the two groups with a visual separator between them.
             if (s.ShowInTableGroup) TableSections.Add(s);
             else                    EngineSections.Add(s);

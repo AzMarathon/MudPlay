@@ -5,8 +5,9 @@ using Avalonia.Media;
 
 namespace MudPlay.Controls;
 
-// A minimal hand-drawn line chart for the Session Stats panel's kills/hour
-// readout. Takes a numeric series via Samples (oldest → newest, left → right)
+// A minimal hand-drawn line chart for the Session Stats window's per-hour rate
+// readouts (kills/hour, exp/hour). Takes a numeric series via Samples (oldest →
+// newest, left → right)
 // and draws it as a single polyline auto-scaled to the control's bounds, with
 // an optional translucent area fill underneath.
 //
@@ -15,7 +16,7 @@ namespace MudPlay.Controls;
 // to its own min/max each render so it always fills the vertical space; a flat
 // series pins to the centre line rather than dividing by zero. The data shape
 // (a plain IReadOnlyList<double>) is generic on purpose — the window's VM owns
-// "what's a kill rate"; this control only knows how to draw numbers. If the
+// what the numbers mean; this control only knows how to draw them. If the
 // bound series implements INotifyCollectionChanged the control re-renders when
 // it mutates, so a live ObservableCollection<double> animates as samples
 // append; a re-assigned list is picked up via AffectsRender.

@@ -100,8 +100,9 @@ public sealed partial class InventoryManager : IDisposable
     // incrementally between dumps: get / buy add, drop / sell remove, and
     // equip / remove move a name between this list and the worn set. Name
     // matching is best-effort (case-insensitive) and self-corrects on the next
-    // 'i'. Death-recovery reads it as a "last-known" deathpile snapshot; the
-    // worn half is deduped against it at capture time.
+    // 'i'. Death recovery records it as the "inventory lost" half of a deathpile
+    // (DeathLootCapture); a piece moves out of it as it is worn, so the worn half
+    // never shares a copy with it.
     private IReadOnlyList<string> _carried = Array.Empty<string>();
     // The lit light source, if the last dump listed one as "… (Readied/N)".
     // Rebased by each full 'i': a dump with no readied light clears it.
@@ -935,8 +936,8 @@ public sealed partial class InventoryManager : IDisposable
 
         string? keysLine = keyRows.Count > 0 ? string.Join(" ", keyRows) : null;
 
-        // Reconstruct the word-wrapped items text and pull currency tokens out
-        // of it. Item tokens are ignored in this slice — only coins matter.
+        // Reconstruct the word-wrapped items text and sort each token: a coin, the
+        // lit light, a worn piece, or a carried item.
         string itemsText = string.Join(" ", itemRows);
         const string prefix = "You are carrying ";
         // Check the "nothing" form first: it also starts with the prefix, so

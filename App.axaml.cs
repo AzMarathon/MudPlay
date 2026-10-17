@@ -3,9 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MudPlay.Services;
 using MudPlay.ViewModels;
-using MudPlay.ViewModels.Import;
 using MudPlay.Views;
-using MudPlay.Views.Import;
 
 namespace MudPlay;
 
@@ -68,12 +66,6 @@ public partial class App : Application
             AppServices.Current.Dialogs.SetMainWindow(mainWindow);
             AppServices.Current.Panels.SetOwnerWindow(mainWindow);
 
-            // Register the unified import-conflict dialog. Every importer
-            // (MDB tables, MegaMUD spell messages, MegaMUD .mp paths,
-            // favourites) routes its row-level conflicts through this one
-            // window via DialogService.OpenWindowAsync.
-            AppServices.Current.Dialogs.RegisterWindow<ImportConflictViewModel, ImportConflictWindow>();
-
             // Per-record edit dialogs — Messages tab + Monsters tab.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.MessageEditDialogViewModel,
@@ -99,8 +91,9 @@ public partial class App : Application
                 MudPlay.ViewModels.GameData.Batch.PlayerBatchEditDialogViewModel,
                 MudPlay.Views.GameData.Batch.PlayerBatchEditDialog>();
             // Interactive room-detail popup — Rooms tab double-click + Monsters
-            // tab room chips. Clickable title/exits centre the Nav map, monster
-            // names jump to their record, Add/Remove toggle the blacklist.
+            // tab room chips. Clickable title/exits centre the Nav map and monster
+            // names jump to their record; blacklisting stays on the map's
+            // right-click menu.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.RoomDetailDialogViewModel,
                 MudPlay.Views.GameData.Edit.RoomDetailDialog>();
@@ -198,23 +191,22 @@ public partial class App : Application
                 MudPlay.ViewModels.RoomNameLearnedDialogViewModel,
                 MudPlay.Views.RoomNameLearnedDialog>();
 
-            // Unknown-entity fix dialog. RoomEntityClassifier opens this
-            // when it emits a Warn row for an Also-Here name it can't
-            // resolve to a Monster or a Player; the dialog collects the
-            // user's intent (flavor prefix / player observation) and
-            // returns it for the classifier to commit at the active
-            // 4-tier scope.
+            // Unknown-entity fix dialog, opened by double-clicking a
+            // RoomEntityClassifier Warn row for an Also-Here name it
+            // couldn't resolve. It returns the user's choice (flavor
+            // prefix / player observation / monster), which the detail
+            // handler below commits.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.UnknownEntityFixDialogViewModel,
                 MudPlay.Views.UnknownEntityFixDialog>();
 
-            // Modify Room Blacklist (Game Data menu) — staged editor
+            // Modify Blacklist… (Game Data menu) — staged editor
             // over the per-BBS room blacklist.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.BlacklistEditorDialogViewModel,
                 MudPlay.Views.BlacklistEditorDialog>();
 
-            // Modify avoid rooms (Game Data menu) — staged editor over the
+            // Modify avoid/stash rooms… (Game Data menu) — staged editor over the
             // per-character avoided + stash room sets.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.AvoidRoomsEditorDialogViewModel,
@@ -225,20 +217,20 @@ public partial class App : Application
                 MudPlay.ViewModels.AddBuffDialogViewModel,
                 MudPlay.Views.AddBuffDialog>();
 
-            // Manage Sets… (Game Data menu) — copy/move a set's loop
+            // Manage Game Data… (Game Data menu) — copy/move a set's loop
             // library between sets, or delete a set (tables + loops).
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameDataManagerViewModel,
                 MudPlay.Views.GameDataManagerDialog>();
 
-            // Quest editor (Character Workshop → Quest Status → "Edit
+            // Quest editor (Player Workshop → Quest Status → "Edit
             // Quests…"). Names / show-hides / annotates quest steps;
             // writes the active set's {set}/quests.json overlay.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.QuestEditorViewModel,
                 MudPlay.Views.CharacterWorkshop.QuestEditorWindow>();
 
-            // Death-log viewer (Character Workshop → Death Recovery → "How did
+            // Death-log viewer (Player Workshop → Death Recovery → "How did
             // I Die?"). Read-only replay of the backscroll snapshot captured at
             // the moment of a recorded death.
             AppServices.Current.Dialogs.RegisterWindow<
@@ -278,9 +270,10 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.LoopEditorDialogViewModel,
                 MudPlay.Views.Navigation.LoopEditorDialog>();
 
-            // Auto-Lair Setups pane → right-click → "Edit…" + "Save lairs"
-            // bottom-strip button both route through this dialog. Name /
-            // Notes / Marker list with per-marker respawn override.
+            // Auto-Lair setup row → right-click → "Edit…", the top-bar Save
+            // chip in Lair mode, and Navigation Management's lair New / Edit
+            // all open this dialog. Name / Notes / Marker list with
+            // per-marker respawn override.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.LairEditorDialogViewModel,
                 MudPlay.Views.Navigation.LairEditorDialog>();
@@ -292,9 +285,9 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.LairTimerEditDialogViewModel,
                 MudPlay.Views.Navigation.LairTimerEditDialog>();
 
-            // Loop editor ✎ button on a waypoint row → per-waypoint
-            // command + delay editor. Payload routes back through the
-            // Loop editor's apply path.
+            // Clicking a building-loop or running-loop row in the Navigation
+            // rail → per-waypoint action editor (command, delay, rest /
+            // attack flags).
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.WaypointActionEditDialogViewModel,
                 MudPlay.Views.Navigation.WaypointActionEditDialog>();
@@ -306,9 +299,9 @@ public partial class App : Application
                 MudPlay.ViewModels.Navigation.GhRoomLabelPickerDialogViewModel,
                 MudPlay.Views.Navigation.GhRoomLabelPickerDialog>();
 
-            // Navigation → "Manage" chip → loops + auto-lair markers
-            // CRUD surface. Modeless; replaces the bottom-strip
-            // save/discard/name textbox UX with a dedicated window.
+            // Navigation Management (the Navigation rail's footer button) →
+            // loops + auto-lair setups + GOTO favourites CRUD surface.
+            // Modeless.
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Navigation.NavigationManagerDialogViewModel,
                 MudPlay.Views.Navigation.NavigationManagerDialog>();
@@ -374,15 +367,13 @@ public partial class App : Application
                     coverageWindow.Show(desktop.MainWindow!);
                 });
 
-            // RoomClassifier unknown-entity click-to-fix. The classifier
-            // emits Warn rows with the raw "Also Here:" line carried as
-            // LogEntry.Context and the unknown name quoted in the Message.
-            // Double-click on such a row opens the fix dialog. The dialog
-            // returns Add-as-flavor-prefix / Add-as-player-observation /
-            // Cancel; the handler commits the latter directly via
-            // PlayerDatabase. The former just logs the intent for now —
-            // picking the target monster needs a UI affordance (search +
-            // selection) that hasn't shipped yet.
+            // RoomEntityClassifier unknown-entity click-to-fix. The
+            // classifier emits Warn rows with the raw "Also Here:" line
+            // carried as LogEntry.Context and the unknown name quoted in
+            // the Message. Double-clicking such a row opens the fix dialog,
+            // and the chosen action is committed here: a player
+            // observation, a placeholder monster record, or the leading
+            // word added to the flavor-prefix vocabulary.
             AppServices.Current.Log.RegisterDetailHandler(
                 MudPlay.Game.Combat.RoomEntityClassifier.LogCategory,
                 async (entry) =>
@@ -458,7 +449,7 @@ public partial class App : Application
                         MudPlay.ViewModels.GameData.Edit.MessageCandidateCommit.BuildSeedRecord(
                             new(id, rawText, default, default, 0, false));
                     MudPlay.ViewModels.GameData.Edit.MessageEditDialogViewModel vm = new(
-                        seed, SettingsTier.Defaults, AppServices.Current.Messages.Messages,
+                        seed, AppServices.Current.Messages.Messages,
                         isNew: true, cache: AppServices.Current.GameData);
                     MudPlay.ViewModels.GameData.Edit.MessageEditResult? result =
                         await AppServices.Current.Dialogs

@@ -6,7 +6,7 @@ namespace MudPlay.Services;
 
 // ObservableCollection that can be refilled in one shot. A bulk (re)load done as
 // Clear + N Add fires N+1 CollectionChanged events, and every index-rebuilding
-// subscriber (MonsterDeathWatcher, ConditionTracker, SpellCoverageAuditor)
+// subscriber (ConditionTracker, MessageCandidateWatcher, SpellCoverageAuditor)
 // rebuilds its whole index on each one — O(n²) over a ~1100-record catalogue at
 // startup and on every game-data set switch. ReplaceAll swaps the backing list
 // with no per-item notification and then raises a single Reset, so each

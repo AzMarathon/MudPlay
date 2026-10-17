@@ -21,14 +21,15 @@ namespace MudPlay.ViewModels.Settings;
 // working profile) and Load handlers (load the active working profile into its
 // boxes). A chip switch / add / remove folds every tab's boxes into the outgoing
 // profile, moves the active pointer, then reloads every tab from the incoming one.
-// Commit folds once and persists all of it — both Settings sections, the
-// CombatProfiles blob, and the Default-set weapons — in a single Save, guarded so
-// calling it from each dirty tab's Apply commits only once.
+// Commit folds once and persists all of it — Settings["Combat"], ["Health"] and
+// ["Spells"], the CombatProfiles blob, the Default-set weapons and the active
+// profile's party healing — in a single Save, guarded so calling it from each
+// dirty tab's Apply commits only once.
 //
 // Lives for one Settings-window lifetime: created + owned by SettingsWindowViewModel
-// and passed to the Combat + Health section VMs. It subscribes to ProfileLoaded so a
-// mid-window character swap re-seeds and reloads both tabs (its handler runs before
-// the section VMs' because it is constructed first).
+// and passed to the Combat, Health, Spells and Party section VMs. It subscribes to
+// ProfileLoaded so a mid-window character swap re-seeds and reloads every tab (its
+// handler runs before the section VMs' because it is constructed first).
 public sealed class CombatProfileStagingSession : IDisposable
 {
     private readonly CombatProfileManager _mgr;
@@ -196,9 +197,9 @@ public sealed class CombatProfileStagingSession : IDisposable
         _dirty = true;
     }
 
-    // Persist everything as one unit — fold both tabs once, then write Settings
-    // ["Combat"] + Settings["Health"] + the CombatProfiles blob + the Default-set
-    // weapons in a single Save. Guarded on _dirty so calling it from each dirty
+    // Persist everything as one unit — fold every tab once, then write Settings
+    // ["Combat"] + ["Spells"] + ["Health"] + the CombatProfiles blob + the
+    // Default-set weapons in a single Save. Guarded on _dirty so calling it from each dirty
     // section's Apply commits only once per ApplyAll cycle.
     public void CommitIfDirty()
     {
@@ -241,6 +242,6 @@ public sealed class CombatProfileStagingSession : IDisposable
         Committed?.Invoke();
     }
 
-    // Drop staged edits — re-clone from persisted and reload both tabs.
+    // Drop staged edits — re-clone from persisted and reload every tab.
     public void DiscardAndReset() => ReseedAndReloadTabs();
 }

@@ -4,10 +4,10 @@ namespace MudPlay.Services;
 
 // Canonical default toolbar layout — a curated, ordered set of catalogue actions
 // grouped by separators. Used when a profile has no stored
-// ToolbarSettings.Layout and when the user clicks "Reset to defaults" in the
-// Settings → Toolbar editor. This is the single source of truth for the default
-// layout; the catalogue (ToolbarItemCatalogue) is just the pool of available
-// actions.
+// ToolbarSettings.Layout and when the user clicks "Reset Toolbar to Default" on
+// the Settings → Toolbar + Shortcuts tab. This is the single source of truth for
+// the default layout; the catalogue (ToolbarItemCatalogue) is just the pool of
+// available actions.
 public static class ToolbarDefaults
 {
     // Action ids in default order. null marks a separator between groups:

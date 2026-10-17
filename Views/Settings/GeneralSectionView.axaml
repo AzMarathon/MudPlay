@@ -312,7 +312,7 @@
                     <CheckBox IsChecked="{Binding AmAutoRest,     Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoRestWired}"
                               Content="Auto-Rest"
-                              ToolTip.Tip="Master switch for resting: stopping to rest or meditate when HP or mana drops below your rest thresholds. Fleeing and the emergency hangup keep working while either Auto-Heal or Auto-Rest is on."/>
+                              ToolTip.Tip="Master switch for resting: stopping to rest or meditate when HP or mana drops below your rest thresholds. Fleeing keeps working while either Auto-Heal or Auto-Rest is on; the emergency hangup needs Auto-Rest."/>
                     <CheckBox IsChecked="{Binding AmAutoBless,    Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoBlessWired}"
                               Content="Auto-Bless"

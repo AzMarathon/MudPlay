@@ -49,7 +49,8 @@ public static class SpellDamageCalculator
     }
 
     // The elemental resist that bears on this spell, from its AttType. None for a
-    // Normal (magic) spell; Poison is binary immunity, never a scalable resist.
+    // Normal (magic) spell. Poison is an element of its own: Stock cuts a player's
+    // by ImmuPoison (PlayerElementalResist); no monster resist index scales it.
     public static SpellDamageElement Element(in SpellFormulaInput f) => f.AttType switch
     {
         0 => SpellDamageElement.Cold,

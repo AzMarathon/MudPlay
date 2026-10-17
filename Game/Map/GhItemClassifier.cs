@@ -64,7 +64,7 @@ public static class GhItemClassifier
     private static readonly Regex EmblemNamePattern = new(@"\bemblem\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Gang-house guards stand down only while the player carries that house's matching
-    // emblem (see GAME_MECHANICS.md "Gang houses & guard emblems") — sweeping one away as
+    // emblem (GAME_MECHANICS "Gang houses and guard emblems") — sweeping one away as
     // clutter risks the guards turning hostile. No ItemType/flag distinguishes an emblem in
     // the imported data; the name pattern is the only known signal, so it's excluded from
     // sort eligibility outright rather than left to category matching.

@@ -21,8 +21,8 @@ namespace MudPlay.Game.Combat;
 // "An ", or "The " ("The orc rogue walks out…"), but the classifier's stored
 // entity names are bare, so peel the article before matching.
 //
-// Only monster-kind entities hold the Combat gate, so RemoveDepartedEntity is a
-// no-op for a departing player — a player's stale entry in Current is harmless.
+// A player's departure line has the same shape: when no monster of that name is
+// listed, a player on the roster under it is removed instead (PlayerDeparted).
 public sealed class RoomDepartureWatcher : IDisposable
 {
     public const string LogCategory = "RoomDeparture";

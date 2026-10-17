@@ -150,10 +150,10 @@ public sealed partial class PartyMember : ObservableObject
     [ObservableProperty] [field: Owner(typeof(PartyManager))] private bool _isSelf;
 
     // ----- Per-member status flags ----------------------------------------
-    // Surfaced as the PartyWindow row's compact flag indicator. The combat
-    // engine sets the ailment flags as it recognises the applied / cured /
-    // par-confirmation messages — for now Resting and Meditating are the only
-    // ones live-wired (from the par state column).
+    // Surfaced as the PartyWindow row's compact flag indicator. Resting and
+    // Meditating come from the par state column; the ailment flags from members'
+    // .@<ailment> say announces (PartyAilmentTracker → PartyManager.SetMemberAilment),
+    // our own row's from the self responders, and, for poison, the par row's P flag.
     //
     // Set chosen for PartyWindow surfacing: rest / meditate posture, the
     // four curable ailments that meaningfully change party tactics (blind,

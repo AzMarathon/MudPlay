@@ -1,5 +1,12 @@
 # Version history
 
+## 3.182.4
+
+- Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
+- Stale on-screen text and tooltips corrected to match what the client does
+- Message editor's Use tier box removed (message edits always stay with the game-data set)
+- Auto-Lair's idle penalty setting removed (it had no effect)
+
 ## 3.182.0
 
 - Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it

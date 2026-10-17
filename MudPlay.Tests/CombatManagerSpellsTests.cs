@@ -1772,7 +1772,7 @@ public sealed class CombatManagerSpellsTests
     // mob swinging free before the resume landed (a live capture caught it
     // exactly: armr fires, *Combat Off*, one full round of silence — the mob's
     // free swing — then harm finally resumes). CastingDirector's attack-owed gate
-    // (CombatManager.IsSpellAttackOwed) is what actually prevents the collision
+    // (CombatManager._spellAttackOwed) is what actually prevents the collision
     // this used to guard against — it stops a SECOND heal/buff from contesting
     // the round, so by the time this resume runs nothing else wants the slot.
     //
@@ -3138,7 +3138,6 @@ public sealed class CombatManagerSpellsTests
         Assert.All(h.DeathEvents, d =>
         {
             Assert.Equal(16250, d.ExperienceGained);
-            Assert.Empty(d.Candidates);
             Assert.Equal("brute zombie", Assert.Single(d.RoomSpellRoster!).Name);
         });
         Assert.DoesNotContain(MovementCoordinator.CombatGate, coordinator.AssertedGates);
@@ -4399,7 +4398,7 @@ public sealed class CombatManagerSpellsTests
     // (spellTarget=small blue dragon hatchling)" with the dragon long gone).
     // The stale _castingSpellTarget leaves the attack resume waiting on a *Combat
     // Off* that never comes, stranding the attack. Disabling AutoCombat must drop
-    // the whole cascade, not just CurrentTarget. (IsSpellAttackOwed is asserted
+    // the whole cascade, not just CurrentTarget. (SpellAttackOwed is asserted
     // here as part of the cascade state; it's diagnostic now, not a cast gate.)
     [Fact]
     public void AutoCombatDisabled_ClearsStaleAttackSpellCascade()
@@ -4411,13 +4410,13 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: small blue dragon hatchling.");
         Assert.Equal("agon small blue dragon hatchling", h.LastSent);
         h.Combat.NoteBetweenRoundCast();   // a survival cast armed the round-owed latch
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Equal("small blue dragon hatchling", h.Combat.Snapshot().CastingSpellTarget);
 
         h.AutoCombatEnabled = false;
         h.Feed("Also here: small blue dragon hatchling.");   // next observation, combat off
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4436,11 +4435,11 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: small blue dragon hatchling.");
         h.Combat.NoteBetweenRoundCast();
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
 
         h.Combat.OnPlayerDeath();
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4463,11 +4462,11 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: small blue dragon hatchling.");
         h.Combat.NoteBetweenRoundCast();   // self-buff mid-fight; *Combat Off* never lands — connection drops
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
 
         h.Combat.OnDisconnected();
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4508,7 +4507,7 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal("turn shade", h.LastSent);
         Assert.False(h.Combat.CombatOff);
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
     }
 
     // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
@@ -4530,7 +4529,7 @@ public sealed class CombatManagerSpellsTests
         h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
         // Production subscription order: CastCoordinator clears the spent round,
         // then CombatManager retries the attack. CastingDirector sits between them
-        // and observes IsSpellAttackOwed=true, asserted below.
+        // and observes SpellAttackOwed=true, asserted below.
         tick.CombatTickElapsed += () => h.Cast.OnCombatTick();
         tick.CombatTickElapsed += h.Combat.OnCombatTick;
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
@@ -4545,7 +4544,7 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Empty(h.Sent);                    // attack genuinely blocked, nothing sent
         Assert.False(h.Combat.CombatOff);
-        Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed); // no second buff may steal the retry
         Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
 
         // The seeded timer reaches the projected next round without any recognized
@@ -4554,6 +4553,6 @@ public sealed class CombatManagerSpellsTests
         tick.PollTimersForTests();
 
         Assert.Equal("turn shade", h.LastSent);
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
     }
 }

@@ -26,10 +26,6 @@ namespace MudPlay.Game.Combat;
 // while a fight was on was tagged a monster's miss, and one that leads with a
 // monster's name ("Dire Wolf Lair") passed for that monster's attack (report
 // paradigm-20261010-215619).
-//
-// This PR only SURFACES the classification (event + LastKind) for the Wire
-// Inspector's classified view and future recognition consumers; the per-monster
-// MonsterMessages data remains the authoritative fallback for the engine.
 public sealed class CombatLineClassifier : IDisposable
 {
     private readonly MessageRouter _router;
@@ -54,11 +50,8 @@ public sealed class CombatLineClassifier : IDisposable
     private (string Text, string Tag)? _pendingLedger;
 
     // The most recent line's classification (None for non-combat / out-of-window
-    // lines). The Wire Inspector reads this per dispatched line.
+    // lines).
     public CombatLineKind LastKind { get; private set; }
-
-    // Fired for each line that classifies as a real combat outcome (kind != None).
-    public event Action<EmittedLine, CombatLineKind>? LineClassified;
 
     public CombatLineClassifier(MessageRouter router)
     {
@@ -95,8 +88,6 @@ public sealed class CombatLineClassifier : IDisposable
         bool recorded = _inCombatWindow || ledger is not null;
         if (recorded) Record(line.Text, kind, ledger);
         Seen(line.Text, recorded);
-        if (kind != CombatLineKind.None)
-            LineClassified?.Invoke(line, kind);
     }
 
     // Pure classification (unit-tested directly). Only lines inside a combat window

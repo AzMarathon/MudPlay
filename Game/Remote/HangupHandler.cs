@@ -18,9 +18,9 @@ namespace MudPlay.Game.Remote;
 // handler classifies the drop as HangupInitiated (no reactive auto-reconnect)
 // and MainMenuEntryAutomation skips arming the entry latch on the next manual
 // reconnect — user reads what's on the screen and types their entry command
-// themselves. The post-entry stat/exp/i refresh stays off the wire too, since it
-// only fires alongside the auto-entry. Future hang-up-if-naked / hang-up-if-low-HP
-// automation reuses the same signal pattern.
+// themselves. The post-entry stat / i refresh stays off the wire too, since it
+// only fires alongside the auto-entry. HealthManager's low-HP hangup raises the
+// same signal.
 public sealed class HangupHandler : IDisposable
 {
     private static readonly string[] RegisteredCommands = { "@hangup" };

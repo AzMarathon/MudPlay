@@ -61,9 +61,9 @@
                     <settings:CombatProfileChipBar DataContext="{Binding ChipBar}"/>
                 </StackPanel>
 
-                <!-- The entire Health tab is per combat profile — switch the active
-                     profile with the chip bar on the Combat tab and these thresholds
-                     swap with it. -->
+                <!-- Each bordered group below swaps with the active combat profile
+                     while its include box is ticked; unticked, it holds one value
+                     shared by every profile. -->
 
                 <!-- ============ Health (HP) ============ -->
                 <Panel Classes="ProfileFrame">

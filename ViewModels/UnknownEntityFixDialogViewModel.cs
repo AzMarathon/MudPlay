@@ -9,8 +9,9 @@ namespace MudPlay.ViewModels;
 // raw "Also Here:" wire line. Surfaces the offending entry name + the parsed
 // list and lets the user pick a fix action.
 //
-// Game.Combat.RoomEntityClassifier opens the dialog when it emits the
-// underlying Warn row, and the caller (App startup) wires the chosen action to
+// Game.Combat.RoomEntityClassifier emits the underlying Warn row; the Log-pane
+// double-click handler registered at App startup opens this dialog and wires the
+// chosen action to
 // the MonsterMessageStore (add-as-monster placeholder), the per-set
 // FlavorPrefixStore (add-flavor-prefix), or the PlayerDatabase (player
 // observation). The dialog itself doesn't touch the data layer — it only

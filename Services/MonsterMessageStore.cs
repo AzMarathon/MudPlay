@@ -4,10 +4,8 @@ using MudPlay.Models.GameData;
 namespace MudPlay.Services;
 
 // In-memory cache of the Monster Messages catalogue for the active game-data
-// set. Parallels MessageStore for monsters: one MonsterMessageRecord per
-// Monsters-table row, carrying the parser patterns for every line the monster
-// can produce in combat (hit / death / armor-block / dodge / miss + flavor
-// prefixes).
+// set: one MonsterMessageRecord per Monsters-table row, the canonical name the
+// room classifier resolves a display name back to.
 //
 // The catalogue is the universal seed with the user's additions (placeholder names
 // for unknown monsters) layered on top from the per-set file, which holds only the
@@ -35,9 +33,8 @@ public sealed class MonsterMessageStore
 
     // Live mirror of the active set's monster-message records.
     // BulkObservableCollection so a full (re)load raises one Reset instead of
-    // Clear + N Add — MonsterDeathWatcher rebuilds its death-index once per set
-    // switch, not once per record (O(n²) over ~1100 records at startup).
-    // Per-record editor upserts keep their normal per-op notification.
+    // Clear + N Add, matching MessageStore. Per-record editor upserts keep their
+    // normal per-op notification.
     public BulkObservableCollection<MonsterMessageRecord> Messages { get; } = new();
 
     // Set name currently sourcing Messages, or null when none is active.
@@ -124,13 +121,6 @@ public sealed class MonsterMessageStore
         Delta.Save(AppPaths.MonsterMessagesFile(ActiveSet), Messages, _seed, _log, "MonsterMessages");
     }
 
-    // Replace the catalogue with records and persist.
-    public void Replace(IEnumerable<MonsterMessageRecord> records)
-    {
-        Messages.ReplaceAll(records);
-        Save();
-    }
-
     // Find the record anchored to monsterNumber, or null.
     public MonsterMessageRecord? FindByMonsterNumber(int monsterNumber)
     {
@@ -158,18 +148,5 @@ public sealed class MonsterMessageStore
         }
         Messages.Add(record);
         Save();
-    }
-
-    // Replace the record at the original Id with updated. Used by the editor
-    // when content edits flip the projected Id — the originalId reference
-    // still points at the slot to swap. Falls back to upsert when no slot
-    // matches.
-    public void Replace(string originalId, MonsterMessageRecord updated)
-    {
-        for (int i = 0; i < Messages.Count; i++)
-        {
-            if (Messages[i].Id == originalId) { Messages[i] = updated; Save(); return; }
-        }
-        Upsert(updated);
     }
 }

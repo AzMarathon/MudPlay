@@ -100,16 +100,12 @@ public sealed class SummonOnDeathSettle : IDisposable
         RestartTimer();
     }
 
-    // True when the dying monster's DeathSpell summons another. The specific-death
-    // path carries the monster Number; the fallback path (no number) resolves the
+    // True when the dying monster's DeathSpell summons another. A room spell's kill
+    // is checked against every kind the room listed; any other death resolves the
     // current target's RawName against the room roster still present (removal
     // happens in a later handler).
     private bool DyingMonsterSummons(MonsterDeathEvent evt)
     {
-        foreach (MonsterDeathIdentity id in evt.Candidates)
-            if (id.Number is { } n && _summonIndex.SummonsOnDeath(n))
-                return true;
-
         // A room spell's kill is one of the kinds the room listed, whichever the
         // round was anchored to. Any of them that summons is worth the one re-scan.
         if (evt.RoomSpellRoster is { } listed)

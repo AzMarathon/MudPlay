@@ -271,20 +271,18 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.StatusFor(Boss("ghost king", number: 999, rooms: "1/1"), RealmType.ParaMud));
     }
 
-    private static MonsterDeathEvent Death(bool fallback, params (int? Number, string Name)[] candidates) => new(
-        candidates.Select(c => new MonsterDeathIdentity(c.Number, c.Name)).ToList(),
-        ExperienceGained: 100, At: DateTimeOffset.UtcNow, IsFallback: fallback);
+    private static MonsterDeathEvent Death() => new(ExperienceGained: 100, At: DateTimeOffset.UtcNow);
 
     [Fact]
     public void OnMonsterDied_EngagedNameInBossRoom_StartsTimer()
     {
-        // The canonical signal: engaged the boss by name, then a (fallback, no
-        // candidate) death fires in its room.
+        // The canonical signal: engaged the boss by name, then a death fires in
+        // its room.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "ogre king");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "ogre king");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
@@ -295,7 +293,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "The Ogre King");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "The Ogre King");
         Assert.NotNull(timers.KilledAt("ogre king"));
     }
 
@@ -310,32 +308,19 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("colossal midnight dragon", number: 851, rooms: "17/1772"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (null, "colossal  midnight dragon")), new RoomKey(17, 1772), engagedName: null);
+        timers.OnMonsterDied(Death(), new RoomKey(17, 1772), engagedName: "colossal  midnight dragon");
         Assert.NotNull(timers.KilledAt("colossal midnight dragon"));
     }
 
     [Fact]
-    public void OnMonsterDied_SpecificCandidateName_StartsTimer()
+    public void OnMonsterDied_NoEngagedName_Ignored()
     {
-        // Secondary path: a specific death line names the boss even without a live
-        // engaged-target name.
+        // A death with nothing to attribute it to — left to manual override.
         SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(false, (null, "ogre king")), new RoomKey(3, 300), engagedName: null);
-        Assert.NotNull(timers.KilledAt("ogre king"));
-    }
-
-    [Fact]
-    public void OnMonsterDied_NoEngagedNameNoCandidate_Ignored()
-    {
-        // A fallback death with nothing to attribute it to — left to manual override.
-        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1));
-        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
-        var (_, timers, _) = NewStores();
-
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: null);
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: null);
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -346,7 +331,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(3, 300), engagedName: "giant rat");
+        timers.OnMonsterDied(Death(), new RoomKey(3, 300), engagedName: "giant rat");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -357,7 +342,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(9, 999), engagedName: "ogre king");
+        timers.OnMonsterDied(Death(), new RoomKey(9, 999), engagedName: "ogre king");
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
@@ -2734,8 +2719,7 @@ public sealed class BossTimerTests : IDisposable
             rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
         var (_, timers, _) = NewStores();
         timers.SetRoomExpResolver((_, _) => (bossExp, others));
-        return (timers, exp => new MonsterDeathEvent(
-            Array.Empty<MonsterDeathIdentity>(), ExperienceGained: exp, At: DateTimeOffset.UtcNow, IsFallback: true));
+        return (timers, exp => new MonsterDeathEvent(ExperienceGained: exp, At: DateTimeOffset.UtcNow));
     }
 
     // It has four rooms, and the kill counts in any of them; a full party's share
@@ -2866,7 +2850,7 @@ public sealed class BossTimerTests : IDisposable
         SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(12, 2378), engagedName: "Nahr");
+        timers.OnMonsterDied(Death(), new RoomKey(12, 2378), engagedName: "Nahr");
 
         Assert.NotNull(timers.KilledAt("nahr (spaceghost)"));
         Assert.Null(timers.KilledAt("nahr (spheres)"));
@@ -2925,14 +2909,14 @@ public sealed class BossTimerTests : IDisposable
         var (bosses, timers, cache) = NewStores();
         RoomKey chambers = new(14, 6216);
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "Lord Chisholm");
         DateTimeOffset? atHisDeath = timers.KilledAt("lord chisholm (malformation)");
         Assert.NotNull(atHisDeath);
         Assert.Equal(1, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().Single()));
 
         timers.MarkKilled("lord chisholm (malformation)", DateTimeOffset.UtcNow.AddMinutes(-10));
         DateTimeOffset? before = timers.KilledAt("lord chisholm (malformation)");
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "malformation");
         Assert.Equal(before, timers.KilledAt("lord chisholm (malformation)"));
     }
 
@@ -2959,11 +2943,11 @@ public sealed class BossTimerTests : IDisposable
         var (timers, loot, kills) = ChisholmsChambers();
         RoomKey chambers = new(14, 6216);
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "Lord Chisholm");
         Assert.Equal(new[] { "lord chisholm (malformation)" }, kills);
         Assert.Equal(("lord chisholm (malformation)", "Lord Chisholm", 100), Assert.Single(loot));
 
-        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        timers.OnMonsterDied(Death(), chambers, engagedName: "malformation");
         Assert.Single(kills);
         Assert.Equal(2, loot.Count);
         Assert.Equal(("lord chisholm (malformation)", "malformation", 100), loot[1]);
@@ -2974,7 +2958,7 @@ public sealed class BossTimerTests : IDisposable
     {
         var (timers, loot, _) = ChisholmsChambers();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(14, 1), engagedName: "malformation");
+        timers.OnMonsterDied(Death(), new RoomKey(14, 1), engagedName: "malformation");
 
         Assert.Empty(loot);
     }

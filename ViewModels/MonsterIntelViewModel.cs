@@ -23,14 +23,14 @@ namespace MudPlay.ViewModels;
 // overlay editing). A persistent character bar (level, live HP/mana, weapon
 // HitMagic, known attack-spell count) sits above a searchable master list
 // over MonsterCatalog narrowed to what THIS character can safely fight right
-// now: Hittable / Castable (can I land a hit or a spell on it at all) and a
-// set of Hits-You-% threshold checkboxes (its own attack's chance to land on
-// ME, given my live AC/Dodge/wards). A monster with no computable Hits You %
-// (no catalogued physical attack — an NPC/caster-only record) is dropped
-// from the list entirely once a character is loaded, since it isn't a
-// meaningful "can this thing hurt me" entry. The per-monster detail panel
-// keeps only what that decision needs beyond the list: Attacks (how
-// dangerous is its swing), Your Matchup (weapon eligibility + ranked spell
+// now: a Hits-You-% band filter (its own attack's chance to land on ME, given
+// my live AC/Dodge/wards), the rounds-to-kill cap, and the regen / zero-exp
+// hides. A monster with no computable Hits You % (no catalogued physical
+// attack — an NPC/caster-only record) is dropped from the list entirely once
+// a character is loaded, since it isn't a meaningful "can this thing hurt me"
+// entry. The per-monster detail panel keeps only what that decision needs
+// beyond the list: Attacks (how dangerous is its swing), the monster's own
+// abilities and resistances, Your Matchup (weapon eligibility + ranked spell
 // effectiveness + incoming elemental threat), and Your Observations (what's
 // actually happened in past fights against it).
 public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposable
@@ -60,7 +60,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     private readonly bool _hasCharacterContext;
     private readonly List<PlayerAttackSpell> _ownedAttackSpells = new();
     private int _weaponHitMagic;
-    // Live player combat totals behind the Hits-You-% threshold checkboxes /
+    // Live player combat totals behind the Hits-You-% band filter /
     // master-list "Hits You %" column — recomputed alongside weapon/spell
     // capabilities in RebuildCharacterCapabilities whenever gear changes.
     // AC is the live un-floored value to the tenth (item AC is stored ×10) — it seeds
@@ -404,9 +404,6 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // (only the display ceiling changed, not the underlying projections).
     [ObservableProperty] private int _roundsToKillCap = NoRoundsCap;
 
-    // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
-    // AC/Dodge/ward totals behind the Hits-You-% threshold checkboxes,
-    // the master list's "Hits You %" / "Est. Rounds to Kill" columns, and
     // Completed-quest permanent bonuses for the current character, cached so a
     // loot-churn re-capture doesn't re-walk the quest tree — re-resolved only when the
     // class or the completed-quest set actually changes.
@@ -425,10 +422,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         return _questBonusCache;
     }
 
-    // Your Matchup. Called once at startup and again whenever gear or the
-    // spellbook changes, so a mid-session weapon swap or a newly-obtained
-    // spell updates the character bar and re-filters the list without
-    // reselecting a monster.
+    // Recomputes weapon HitMagic, the owned-attack-spell set, and the live
+    // AC/Dodge/ward totals behind the Hits-You-% band filter, the master list's
+    // "Hits You %" / "Est. Rounds to Kill" columns, and Your Matchup. Called once
+    // at startup and again whenever gear or the spellbook changes, so a
+    // mid-session weapon swap or a newly-obtained spell updates the character
+    // bar and re-filters the list without reselecting a monster.
     private void RebuildCharacterCapabilities()
     {
         IReadOnlyList<EquippedItem> worn = _inventory!.Snapshot.EquippedItems;
@@ -540,7 +539,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         }
 
         // The monster → player direction — the master list's "Hits You %" column
-        // and threshold checkboxes — computed from the (possibly tweaked) simulator.
+        // and band filter — computed from the (possibly tweaked) simulator.
         RecomputeIncomingHits();
         UpdateAcVsTarget();
 
@@ -554,9 +553,10 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // Estimated Rounds to Kill — the player-offense direction against each
         // monster's HP/AC/DR, using whichever attack the picker selected (default:
-        // the Normal melee swing). The rounds-to-kill cap then filters the list
-        // (see PassesFilter), so a superboss projecting into the millions of
-        // rounds simply drops out rather than showing a noise number.
+        // whichever of the character's attacks kills fastest). The rounds-to-kill
+        // cap then filters the list (see PassesFilter), so a superboss projecting
+        // into the millions of rounds simply drops out rather than showing a
+        // noise number.
         ComputeRoundsToKill(worn, encum);
     }
 
@@ -719,7 +719,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // Debuff deltas SUBTRACT from the monster's defense (AC / DR / Dodge) and its
     // to-hit (Accuracy) and are deliberately NOT clamped — a monster pushed below
     // zero accuracy can't land a hit, below-zero AC is trivially hit. Slowness
-    // raises the primary attack's energy x1.5 (MMUD-Explorer's ×3/2), thinning the
+    // raises the primary attack's energy ×1.5, thinning the
     // swing count MonsterMatchupCalculator derives from energy/attEnergy. With the
     // default (no-op) effect this reproduces the plain monster profile.
     private static MonsterMatchupProfile MonsterProfileFor(
@@ -1199,11 +1199,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // ----- detail panel -----
     // Deliberately narrow: this window answers "can I fight this thing right
     // now," not "tell me everything about it" (that's the Game Data Browser's
-    // Monsters tab). Attacks (how dangerous is its swing) and Your
-    // Matchup/Your Observations (below) are what's left once Overview, the
-    // Elemental Defenses matrix, Casts, Loot, Locations, and the Automation
-    // overlay editor moved back out — all still reachable from the Game Data
-    // Browser's Monsters tab, which owns the full record.
+    // Monsters tab, which owns the full record — loot, locations, casts and the
+    // automation overlay). The panel keeps Attacks, the monster's own abilities and
+    // resistances, Your Matchup and Your Observations.
 
     public ObservableCollection<AttackRowViewModel> AttackRows { get; } = new();
     [ObservableProperty]

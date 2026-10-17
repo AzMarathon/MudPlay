@@ -580,8 +580,8 @@ public sealed class PlayerDatabase
     // character) back to the player's in-game GIVEN name. Checks the authored
     // AccountName override first — both account and in-game names are unique,
     // so at most one row matches — then falls back to a direct given-name hit.
-    // Returns null when nothing matches. Used by the disconnect-watcher to
-    // attribute a board-custom logoff line to a party member.
+    // Returns null when nothing matches — so a board-custom logoff line keyed on
+    // the account can still be attributed to a party member.
     public string? ResolveGivenNameFromPresenceName(string presenceName)
     {
         if (string.IsNullOrWhiteSpace(presenceName)) return null;
@@ -676,8 +676,7 @@ public sealed class PlayerDatabase
         return removed;
     }
 
-    // Replace the realm observation layer wholesale. Used by load-from-disk
-    // paths and by tests that want a deterministic baseline.
+    // Replace the realm observation layer wholesale.
     public void ReplaceObservations(IEnumerable<PlayerObservation> rows)
     {
         _observations.Clear();

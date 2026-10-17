@@ -185,7 +185,7 @@ public sealed class SettingsResolver
 
     // Resolve a single game-data record (e.g. a Spell or Item) across all four
     // tiers. The Defaults tier for game data is the imported MDB → JSON set
-    // under Data/game data/{set}/; resolver consumers supply that base via
+    // under game data/{set}/; resolver consumers supply that base via
     // defaultsRecord. Higher-tier overrides come from per-set side-files
     // ({table}_overrides.{set}.json).
     public T ResolveGameData<T>(string table, string recordId, T defaultsRecord) where T : class, new()
@@ -259,9 +259,8 @@ public sealed class SettingsResolver
     }
 
     // Which tier owns the highest-priority override for the given record, or
-    // SettingsTier.Defaults when no tier has an override. Used by the Game Data
-    // Browser's "Use" column to label each row with the tier its current values
-    // come from.
+    // SettingsTier.Defaults when no tier has an override — what a record's values
+    // are labelled and edited at.
     public SettingsTier GetGameDataSourceTier(string table, string recordId)
     {
         string? set = _activeSetProvider?.Invoke();

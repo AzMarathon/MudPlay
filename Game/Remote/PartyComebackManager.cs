@@ -144,7 +144,7 @@ public sealed class PartyComebackManager : IDisposable
     // For the bug report: whom we gave up on and what we'd resume for them.
     public string? ParkedResumeSummary => _parkedResume is { } p
         ? $"{p.Given} → {p.Resume.Kind}, {(NowProvider() - p.At).TotalSeconds:F0}s ago" : null;
-    // "If leading, accept @comeback for up to" (Settings → Party).
+    // "If leading, accept @comeback for (min)" (Settings → Party).
     public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
 
     // A member left behind this soon after their own @ok wasn't really free to move.

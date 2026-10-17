@@ -557,10 +557,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         return num > 0 ? num : null;
     }
 
-    // True when the character's known class or race is excluded from this quest's crawled
-    // restriction set — a provable "can't take it" (a Warrior viewing Meditate, a Human
-    // viewing the Gaunt-One SeeHidden quest). An unknown class/race never excludes: the
-    // restriction sets are conservative, so we only flag what the crawl proves shut.
+    // The user's name for the quest, else the fallback title built from the crawl.
     private static string ResolveTitle(QuestDefinition def, CrawledQuest q) =>
         !string.IsNullOrWhiteSpace(def.Name) ? def.Name : QuestTextFormatter.FallbackTitle(q);
 

@@ -58,19 +58,6 @@
                          ToolTip.Tip="Treats idle wait as free; always chases the soonest-ready lair. Best when the player doesn't mind standing in a wait-room for a while."/>
 
             <Grid ColumnDefinitions="200,Auto,*" Margin="0,8,0,0" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Idle penalty weight"/>
-                <NumericUpDown Grid.Column="1"
-                               Value="{Binding IdlePenalty, Mode=TwoWay}"
-                               Minimum="0" Maximum="100" Increment="0.1"
-                               FormatString="0.0"
-                               Width="120"
-                               ShowButtonSpinner="True"
-                               ToolTip.Tip="Default 1.0 (treat idle and wasted equally). 0 = ignore idle (same as Throughput). 2+ = prefer ready-now lairs."/>
-                <TextBlock Grid.Column="2" Classes="FieldSuffix"
-                           Text="× idle-seconds in score"/>
-            </Grid>
-
-            <Grid ColumnDefinitions="200,Auto,*" Margin="0,4,0,0" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Engage timeout"/>
                 <NumericUpDown Grid.Column="1"
                                Value="{Binding EngageTimeoutSeconds, Mode=TwoWay}"

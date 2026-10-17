@@ -47,10 +47,6 @@
                        Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
             <Border Classes="SettingsSectionRule"/>
 
-            <!-- Tab title / phase tag / description deliberately omitted —
-                 the sidebar selection already labels the tab and the
-                 per-section group headers carry the structure. -->
-
             <!-- ============ Remote-control master switches (wired) ============ -->
             <TextBlock Classes="SectionHeader" Text="Remote-control master switches"/>
 
@@ -250,7 +246,7 @@
             <TextBlock Classes="SectionHeader" Text="Channel colours"/>
             <TextBlock Classes="HelpText"
                        Margin="0,0,0,4"
-                       Text="Per-channel colours for the Conversation window. Accent tints the channel tag, speaker name and filter toggle; Text tints the message body. Click a swatch to pick a colour visually; Reset returns a slot to the theme default. Applies the next time the window is opened."/>
+                       Text="Per-channel colours for the Conversation window. Accent tints the channel tag, speaker name and filter toggle; Text tints the message body. Click a swatch to pick a colour visually; Reset returns a slot to the theme default. Applies to the open window as soon as you click OK or Apply."/>
 
             <Grid ColumnDefinitions="90,190,20,190" Margin="0,2,0,2">
                 <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Accent"/>

@@ -347,7 +347,7 @@
                              pick any combination — the list shows monsters in the
                              union. Nothing picked = show all. -->
                         <Button Content="{Binding HitsFilterLabel}"
-                                ToolTip.Tip="Filter the list by how likely the monster is to hit you. Pick any combination of %-bands; the bands differ by realm — the lowest a monster's attack can land is 8% on Stock, 2% on ParaMUD.">
+                                ToolTip.Tip="Filter the list by how likely the monster is to hit you. Pick any combination of %-bands; the bands differ by realm — the lowest a monster's attack can land is 9% on Stock, 2% on ParaMUD.">
                             <Button.Flyout>
                                 <Flyout Placement="Bottom">
                                     <StackPanel MinWidth="150" Spacing="2">

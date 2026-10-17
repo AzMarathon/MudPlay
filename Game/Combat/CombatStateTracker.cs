@@ -17,10 +17,9 @@ namespace MudPlay.Game.Combat;
 // IsEngageable) — shopkeepers and quest-givers are marked Friend / Neutral and
 // don't hold the gate.
 //
-// Plus a master switch: isAutoAttackEnabled short-circuits the gate to
-// never-assert when off, so a fresh character (default
-// CombatSettings.MasterAutoAttackEnabled = false) walks through every room
-// unimpeded until the user opts in.
+// Plus a master switch: isAutoAttackEnabled (Auto-Combat,
+// GeneralSettings.AutoMode.AutoCombat) short-circuits the gate to never-assert
+// when off, so the walker passes through every room unimpeded.
 //
 // PlayerState.InCombat flips true on CombatStatus Engaged OR UserHits OR MobHits
 // OR MobMisses. It does NOT flip false on CombatStatus Off — see
@@ -858,9 +857,8 @@ public sealed class CombatStateTracker : IDisposable
     // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral
     // flagged KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
     // are marked Friend / Neutral / Hangup in the overlay seed; a monster whose Number resolves
-    // but whose overlay is missing is treated as fightable so the engine doesn't sit through a
-    // respawn just because the data table is missing a DeathLine (152 of 1100 stock monsters
-    // ship with empty DeathLine — acid slime, etc.).
+    // but whose overlay is missing is treated as fightable, so the engine doesn't sit through a
+    // respawn waiting on a tag nobody set.
     //
     // A monster the classifier CANNOT resolve to a Number is NOT engaged — we never proactively
     // hit something we can't identify, so a friendly / neutral NPC whose name didn't pin to its
@@ -885,7 +883,7 @@ public sealed class CombatStateTracker : IDisposable
     // mobs). These hit us every round we share the room, so they block resting. A
     // Neutral — even a KillOnSight one we intend to fight — never attacks first, so
     // it is NOT an attacking hostile (it only hits back once we engage it, which the
-    // InCombat flag then reflects). Backs HasAttackingHostile / the rest-block.
+    // InCombat flag then reflects). Backs HasHostileMonster / the rest-block.
     private bool IsAttackingHostile(RoomEntity e)
     {
         if (e.MonsterNumber is not int n) return true;   // unknown → assume enemy (fail-safe)

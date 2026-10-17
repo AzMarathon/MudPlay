@@ -30,10 +30,9 @@ namespace MudPlay.Services;
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
 // read live at death) matched against the boss list, confirmed by the current room
 // being one of the boss's rooms. Two bosses the game gives one name (BossDef.GameName)
-// are told apart by that room. This covers the common "exp + *Combat Off*"
-// fallback death, which carries no candidate identity of its own; a specific
-// death-line candidate name is accepted as a secondary match. Deaths we can't
-// attribute (no engaged name, no candidate) fall to the tab's manual override.
+// are told apart by that room. Every death is the "exp + *Combat Off*" kind, which
+// names no monster of its own; deaths we can't attribute (no engaged name) fall to
+// the tab's manual override.
 public sealed class BossTimerStore
 {
     private readonly BossStore _bosses;
@@ -141,11 +140,10 @@ public sealed class BossTimerStore
     public DateTimeOffset? KilledAt(string name)
         => _killed.TryGetValue(name, out DateTimeOffset at) ? at : null;
 
-    // Stamp a kill at now (UTC) and persist. Used by auto-detection.
+    // Stamp a kill at now (UTC) and persist.
     public void MarkKilled(string name) => MarkKilled(name, DateTimeOffset.UtcNow);
 
-    // Stamp a kill at a specific time and persist. Used by the tab's manual "Mark"
-    // dialog, where the user can back-date the kill.
+    // Stamp a kill at a specific time and persist — a manual mark may be back-dated.
     public void MarkKilled(string name, DateTimeOffset at)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
@@ -242,10 +240,10 @@ public sealed class BossTimerStore
 
     // Auto-start on a boss death. Attribution is by NAME: the monster we were
     // engaged with (engagedName = CombatManager.CurrentTarget, read live — this is
-    // what a fallback exp+Off death is, a death of whatever we were fighting), or a
-    // specific death-line candidate name, matched against a boss whose rooms include
-    // the current room. key/engagedName are read live at the death (the event itself
-    // carries neither location nor the engaged name).
+    // what a fallback exp+Off death is, a death of whatever we were fighting),
+    // matched against a boss whose rooms include the current room. key/engagedName
+    // are read live at the death (the event itself carries neither location nor
+    // the engaged name).
     // Fires when a death is attributed to a tracked boss in the current room — the
     // matched BossDef (whichever respawn type). Fires for EVERY matched boss. Kept
     // separate from the timer marking so a cleanup boss (no timer) still notifies.
@@ -270,7 +268,7 @@ public sealed class BossTimerStore
     //
     // recentFoes are the monsters named by the fight's damage lines. They matter only
     // when nothing else names the dead monster: no engaged target (a room too dark to
-    // list anyone) and no death line on record. A boss of this room those lines named
+    // list anyone). A boss of this room those lines named
     // is known to be here, and the unnamed death is its own when (user, 2026-10-07):
     //   - the exp gained is a share the boss could have paid and no other monster of
     //     the room could have (UnnamedDeathIsTheBosss); or
@@ -280,12 +278,11 @@ public sealed class BossTimerStore
     {
         if (key is not { } here) return;   // can't confirm placement
 
-        bool unnamed = string.IsNullOrWhiteSpace(engagedName) && evt.Candidates.Count == 0;
+        bool unnamed = string.IsNullOrWhiteSpace(engagedName);
         foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
-            bool named = NameMatches(def.MatchName, engagedName)
-                         || evt.Candidates.Any(c => NameMatches(def.MatchName, c.Name));
+            bool named = NameMatches(def.MatchName, engagedName);
             if (!named)
             {
                 if (!unnamed || recentFoes is not { Count: > 0 }
@@ -300,9 +297,7 @@ public sealed class BossTimerStore
             if (def.RespawnType == BossRespawnType.Timed) MarkKilled(def.Name);
             BossKilled?.Invoke(def);
             // The name that matched is the dead monster's; an unnamed death has none.
-            string? sawDie = !named ? null
-                : NameMatches(def.MatchName, engagedName) ? engagedName
-                : evt.Candidates.First(c => NameMatches(def.MatchName, c.Name)).Name;
+            string? sawDie = named ? engagedName : null;
             BossLootDropped?.Invoke(def, sawDie, evt.ExperienceGained);
             return;
         }
@@ -314,11 +309,9 @@ public sealed class BossTimerStore
             if (!RoomsContain(def, here)) continue;
             foreach (string summoned in _deathSummons(def))
             {
-                string? sawDie = NameMatches(summoned, engagedName) ? engagedName
-                    : evt.Candidates.Where(c => NameMatches(summoned, c.Name)).Select(c => c.Name).FirstOrDefault();
-                if (sawDie is null) continue;
-                _log?.Info("Bosses", $"'{sawDie}' died in {here}: what the death of boss '{def.Name}' summons");
-                BossLootDropped?.Invoke(def, sawDie, evt.ExperienceGained);
+                if (!NameMatches(summoned, engagedName)) continue;
+                _log?.Info("Bosses", $"'{engagedName}' died in {here}: what the death of boss '{def.Name}' summons");
+                BossLootDropped?.Invoke(def, engagedName, evt.ExperienceGained);
                 return;
             }
         }

@@ -341,9 +341,8 @@ public sealed class RoomTracker
 
     // Snapshot of the rolling confirmed-position history, newest-first. [0] is
     // the most recently confirmed room (typically the current room); [1] the one
-    // before it, and so on, capped at the internal history window. Used by
-    // PartyComebackManager to walk the leader backwards along the path just taken
-    // when a stranded follower sends @comeback without a target room.
+    // before it, and so on, capped at the internal history window — enough to
+    // walk back along the path just taken.
     public IReadOnlyList<RoomKey> GetHistory()
     {
         List<RoomKey> snapshot = new(_history.Count);
@@ -585,8 +584,8 @@ public sealed class RoomTracker
     // manual move of the same direction.
     private static readonly TimeSpan EchoClaimExpiry = TimeSpan.FromSeconds(2);
 
-    // Text-exit move (e.g. "go path") — used by the look-direction-interception
-    // work for arbitrary text commands that don't map to a Direction.
+    // A move the engine sends, by its command text, so a text exit (e.g. "go
+    // path") that maps to no Direction is tracked like a cardinal.
     public void NoteMoveSent(string command, Direction? cardinal = null, DateTimeOffset? whenUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
@@ -1517,8 +1516,8 @@ public sealed class RoomTracker
     // ("You are typing too quickly - command ignored") — the move never
     // executed, yet NoteMoveSent already counted it. Un-count the most-recent
     // pending move so the tracker doesn't run one room ahead of the character.
-    // This is the net-miscount that turns a homogeneous grid into a Lost state
-    // (issue #478): a single counted-but-never-made move is invisible among
+    // This is the net-miscount that turns a homogeneous grid into a Lost state:
+    // a single counted-but-never-made move is invisible among
     // identically-named rooms and compounds every lap. Unlike a plain refusal
     // ("no exit"), "command ignored" doesn't name WHAT it dropped — it could be
     // a non-move command — so this only reverts when a move is actually in
@@ -1914,7 +1913,7 @@ public sealed class RoomTracker
                 // confirms here. This is timing-independent — the earlier heuristic
                 // confirmed any matching redisplay that arrived after a 400ms floor, which
                 // let a LATE spontaneous re-look phantom-advance the loop and fire the next
-                // step from the source room (the "double move", issue #478).
+                // step from the source room (the "double move").
                 // Exit-set discriminator: a passive re-look shows the SAME exits the
                 // source last displayed. When a genuine move lands in a same-named
                 // neighbour whose exits DIFFER (report paradigm-20260811-104042: a

@@ -32,7 +32,8 @@ public sealed class HopTimingCalibrator : IDisposable
     private DateTimeOffset? _lastSentAt;
     private RoomKey? _lastSentFrom;
 
-    // When true, every hop gets one Info log line. Flip via the Settings tab.
+    // When true, every hop gets one Info log line. Flipped by the Program Log
+    // window's "Hop timing" checkbox.
     // Cheap to leave off — the calibrator stays subscribed but the handler
     // returns immediately.
     public bool Enabled { get; set; }

@@ -451,8 +451,8 @@ public partial class ConversationWindow : Window
         => _rowsList?.SelectedItems?.OfType<ConversationRowViewModel>()
            ?? Enumerable.Empty<ConversationRowViewModel>();
 
-    // Copy rows in on-screen order (SelectedItems is in click order), newest-first
-    // stays as displayed — one line per entry.
+    // Copy rows in on-screen order (oldest first), not SelectedItems' click order
+    // — one line per entry.
     private void CopyRows(IEnumerable<ConversationRowViewModel> rows)
     {
         if (DataContext is not ConversationViewModel vm) return;

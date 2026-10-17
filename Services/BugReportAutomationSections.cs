@@ -3,9 +3,10 @@ using MudPlay.Models.GameData;
 
 namespace MudPlay.Services;
 
-// Four small sections of the bug report: what the lesser engines have queued or
+// Five small sections of the bug report: what the lesser engines have queued or
 // are waiting for, the user's own triggers, aliases and macros, who may send the
-// client which remote commands, and the character's deaths.
+// client which remote commands, the character's deaths, and the corpses
+// recovered and not yet handed back.
 public static class BugReportAutomationSections
 {
     public const string PendingHeading = "Pending work";

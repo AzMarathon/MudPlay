@@ -6,8 +6,8 @@ using MudPlay.ViewModels.Navigation;
 
 namespace MudPlay.Views.Navigation;
 
-// Modeless free-vs-direct route picker. Shown when a user-initiated walk found a
-// shorter route through an acquirable gate. See
+// Modeless route picker, shown when a walk hits a fork worth a user decision
+// (item gate, teleport, traps, avoided rooms, shortcut, transport token). See
 // ViewModels.Navigation.RouteChoiceDialogViewModel.
 public partial class RouteChoiceDialog : Window
 {

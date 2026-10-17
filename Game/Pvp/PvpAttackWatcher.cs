@@ -8,7 +8,7 @@ namespace MudPlay.Game.Pvp;
 
 // Recognises another player attacking us and keeps the relationship in step: a
 // Neutral who attacks becomes an Enemy, saved on their record (GAME_MECHANICS
-// "Damage lines", Client policy). Three signs count:
+// "Damage lines — who hit whom", Client policy). Three signs count:
 //
 //   - "<player> moves to attack you!";
 //   - a damage line naming a player (the backstop for a missed announce);

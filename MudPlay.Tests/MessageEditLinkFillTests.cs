@@ -25,7 +25,7 @@ public sealed class MessageEditLinkFillTests
             Id: string.Empty, Name: string.Empty, Flags: MessageFlags.None, RawFlagsHex: 0,
             CasterMessage: "Unrecognized caster", TargetMessage: string.Empty, WitnessMessage: string.Empty,
             AppliedMessage: string.Empty, AppliedEndsWith: string.Empty, Links: Array.Empty<GameDataLink>()),
-        SettingsTier.Defaults, existing, isNew: true, cache: null);
+        existing, isNew: true, cache: null);
 
     [Fact]
     public void LinkingExistingSpell_FillsEmptySlots_AndSurfacesConflicts()

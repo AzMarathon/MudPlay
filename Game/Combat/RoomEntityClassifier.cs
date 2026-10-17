@@ -11,9 +11,8 @@ namespace MudPlay.Game.Combat;
 
 // Turns the wire's "Also here:" line into a classified entity list (Player /
 // Monster / Unknown). The output feeds CombatStateTracker — which holds the
-// Combat gate on MovementCoordinator while any classified Monster carries
-// non-zero AttackPriority — and the LogPane's double-click-to-fix flow for
-// unknown names.
+// Combat gate on MovementCoordinator while an engageable monster is here — and
+// the LogPane's double-click-to-fix flow for unknown names.
 //
 // Algorithm:
 // 1. Split the comma-separated occupant capture, normalising the Oxford " and "
@@ -41,10 +40,8 @@ namespace MudPlay.Game.Combat;
 //    UnknownEntityFixDialogViewModel from this row.
 //
 // Performance: ~1100 monster records in a typical realm × ~5 entries per
-// Also-Here line × ~prefix-list-size-per-record ≈ ~50k string comparisons in the
-// worst pathological case. Naive scan is fine for the hot path (rooms display
-// every few seconds at most); a prefix-aware lookup index can replace this if
-// profiling shows it matters.
+// Also-Here line, a bare-name compare each, plus one prefix strip per entry.
+// Naive scan is fine for the hot path (rooms display every few seconds at most).
 public sealed class RoomEntityClassifier : IDisposable
 {
     // LogService category for all rows this classifier emits.
@@ -704,15 +701,8 @@ public sealed class RoomEntityClassifier : IDisposable
 
     // Remove ONE entity matching monsterName (case-insensitive match against
     // ResolvedName then RawName as fallback) from Current and re-fire
-    // EntitiesObserved. Called by MonsterDeathWatcher when a specific death-line
-    // pattern is observed so CombatManager doesn't sit on a stale entity that
-    // already died — the bug behind the "fierce kobold thief arrived but no
-    // attack" scenario where the just-killed "giant rat" still appeared in the
-    // Current list and blocked the target re-pick.
-    //
-    // The death-line patterns use the base / canonical name (no flavour prefix),
-    // so resolved-name matches first; raw-name match covers the edge case where a
-    // no-prefix monster carries the same string in both fields. Returns true when
+    // EntitiesObserved, for a monster taken for dead, so CombatManager doesn't
+    // sit on a stale entity that already died and re-pick it. Returns true when
     // a matching entity was removed, false otherwise (defensive caller logging).
     public bool RemoveDeadEntity(string monsterName)
         => RemoveMonsterEntity(monsterName, RoomObservationSource.Death);

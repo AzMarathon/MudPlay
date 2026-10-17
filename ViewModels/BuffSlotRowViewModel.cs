@@ -110,8 +110,9 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     public string? Spell => _dto.Spell;
     public int RecastMarginSec => _dto.RecastMarginSec;
 
-    // True for a #item-cast slot (a wielded weapon/staff buff) — drives grouping
-    // this row under the Buff Watchdog's "Weapons" section instead of the main list.
+    // True for a #item-cast slot (a wielded weapon/staff buff) — groups the row
+    // with the item ("on use") buffs, after the self / single-target and
+    // whole-party ones.
     public bool IsItemCast => Game.Spells.ItemCastToken.IsToken(Spell);
 
     // Row label — the buff's spell name (falls back to the cast code) + its recast

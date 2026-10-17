@@ -19,14 +19,18 @@ namespace MudPlay.Controls;
 // Rendering pipeline:
 //   1. Compute per-cell pixel size from the chosen monospace font.
 //   2. For each row, walk left-to-right grouping consecutive cells that
-//      share the same attributes into "runs" (single fill + per-glyph draw).
+//      share the same attributes into "runs" (one background fill + one glyph
+//      run, see CellRunText).
 //   3. After all cells are drawn, paint the cursor caret if visible.
 //
 // Input pipeline:
-//   - OnTextInput catches normal printable text and posts the bytes
-//     (Latin-1 encoded) to UserInput.
-//   - OnKeyDown maps non-text keys (arrows, Enter, Ctrl+letter, F1–F4) to
-//     the matching ANSI/VT escape sequences and emits those.
+//   - Line mode (the usual case): OnTextInput appends printable text to the
+//     LocalInputBuffer, and Enter submits the whole line to UserInput
+//     (SubmitTypedLine) as Latin-1 + CR.
+//   - Character mode (a full-screen form owns the keyboard, or no buffer is
+//     bound): each typed character goes straight to UserInput.
+//   - OnKeyDown maps non-text keys (arrows, Ctrl+letter, F1–F4) to the
+//     matching ANSI/VT escape sequences and emits those.
 public sealed class TerminalControl : Control
 {
     // The emulator whose screen we render. Bound from XAML.
@@ -61,7 +65,9 @@ public sealed class TerminalControl : Control
 
     // When true, the startup mud splash plays over the terminal (drawn from a
     // standalone screen, never the emulator/scrollback). MainWindowViewModel
-    // sets it true at launch and clears it on connect / first data / profile load.
+    // sets it true at launch and clears it once a session begins (connect / first
+    // server data), or when a startup notice or an MDB import needs the terminal
+    // visible.
     public static readonly StyledProperty<bool> SplashActiveProperty =
         AvaloniaProperty.Register<TerminalControl, bool>(nameof(SplashActive));
 
@@ -156,9 +162,10 @@ public sealed class TerminalControl : Control
 
     private Typeface _typeface;
     // Native cell box at RenderFontSize (the DIP form of the chosen point size).
-    // Glyphs are ALWAYS drawn at this size; any window fitting happens by
-    // upscaling the rendered bitmap, never by rasterising the bitmap font at a
-    // fractional point size (which smears block-drawing glyphs and stems).
+    // The window zoom never changes it: the bitmap font is drawn at this size and
+    // its bitmap upscaled, never rasterised at a fractional point size (which
+    // smears block-drawing glyphs and stems); a vector font is drawn at this size
+    // under a scale transform.
     private double _cellW = 8;
     private double _cellH = 16;
     // Independent horizontal/vertical zoom applied to the native render to
@@ -169,17 +176,18 @@ public sealed class TerminalControl : Control
     // window's aspect ratio doesn't match the native grid's.
     private double _fitScaleX = 1.0;
     private double _fitScaleY = 1.0;
-    // Offscreen native-size buffer the grid renders into when zooming, then
-    // gets blitted nearest-neighbour to the control bounds. Null when unscaled.
+    // Offscreen native-size buffer the bitmap font renders into when zooming,
+    // then blitted nearest-neighbour to the control bounds. Allocated on the
+    // first zoomed frame and kept until the control detaches.
     private RenderTargetBitmap? _scaleBitmap;
     private bool _cursorBlinkOn = true;
     private DispatcherTimer? _blinkTimer;
     private Action? _onBufferChanged;
 
     // ----- Server-output repaint throttle --------------------------------
-    // Rendering a screen update is the app's heaviest per-frame work (DrawRun
-    // shapes a FormattedText per glyph), so a burst of server output otherwise
-    // repaints the whole grid at the monitor's refresh rate. That's wasteful even
+    // Rendering a screen update is the app's heaviest per-frame work (DrawRun lays
+    // out a glyph run for every colour run on the grid), so a burst of server
+    // output otherwise repaints the whole grid at the monitor's refresh rate. That's wasteful even
     // for one client and compounds when a user runs several copies at once — the
     // windows they aren't looking at keep paying full render cost for output nobody
     // is watching. Coalesce the server-output repaint to a frame budget that
@@ -236,7 +244,7 @@ public sealed class TerminalControl : Control
     // Every other choice (JetBrains Mono, any installed system monospace font)
     // is a real vector/outline font: rasterising it at a fractional point size
     // is exactly how normal text rendering already works, so it scales cleanly
-    // through a draw-transform instead (see RenderScaledVector).
+    // through a draw-transform instead (the PushTransform branch in Render).
     private const string BitmapFontFamilyName = "Mx437 IBM VGA 8x16";
 
     private bool IsBitmapFont => FontFamily.Name.Equals(BitmapFontFamilyName, StringComparison.OrdinalIgnoreCase);
@@ -549,14 +557,13 @@ public sealed class TerminalControl : Control
     // scaling by different factors (the bitmap stretches non-uniformly)
     // whenever the window's aspect ratio doesn't match the native grid's.
     //
-    // The zoom is applied by upscaling the native render bitmap
-    // nearest-neighbour (see Render) — NOT by rasterising the glyphs at a
-    // larger point size. The CP437 face is a bitmap font: rasterising it at a
-    // fractional size smears stems and leaves hairline gaps in the full-cell
-    // block-drawing glyphs MajorMUD uses for borders/statline (the "color
-    // bleed" fractional zoom produced). Nearest-neighbour upscaling introduces
-    // no new colours and no gaps, so the grid fills any window size while
-    // staying crisp.
+    // The bitmap font zooms by upscaling its native render nearest-neighbour
+    // (see RenderScaled), not by rasterising glyphs at a larger point size:
+    // rasterising the CP437 bitmap face at a fractional size smears stems and
+    // leaves hairline gaps in the full-cell block-drawing glyphs MajorMUD uses
+    // for borders/statline, while a nearest-neighbour upscale adds no new
+    // colours and no gaps. Vector fonts zoom through a draw-transform instead
+    // (see Render).
     private void RecomputeScale()
     {
         double fitX = 1.0, fitY = 1.0;
@@ -581,7 +588,7 @@ public sealed class TerminalControl : Control
 
     // Tell layout the control wants the native grid times the window zoom. At
     // zoom 1 that's the natural grid size; when fitting, it's the enlarged size
-    // that fills the viewport (the render upscales the native bitmap to match).
+    // that fills the viewport (Render scales the native drawing up to match).
     protected override Size MeasureOverride(Size availableSize)
     {
         var em = Emulator;
@@ -596,8 +603,9 @@ public sealed class TerminalControl : Control
         base.Render(context);
         var em = Emulator;
         var bounds = new Rect(Bounds.Size);
-        // Clear background. (Done explicitly even though Background="Black"
-        // is the window default — inside the ScrollViewer we may extend.)
+        // Clear to black: the hosting window and ScrollViewer paint chrome
+        // colours, and DrawRun skips default-background fills on the
+        // assumption the surface is already black.
         context.FillRectangle(Brushes.Black, bounds);
 
         // Startup splash: draw the standalone splash screen instead of the
@@ -947,10 +955,10 @@ public sealed class TerminalControl : Control
 
     // Brush cache: DrawRun resolves a fg + bg brush for every same-attr run, on
     // every repaint — a fresh ImmutableSolidColorBrush per run was pure allocation
-    // churn under heavy output. The ARGB space is bounded (the 16 base + 256 xterm
-    // palette entries, plus 16 more each time the user changes the base colours),
-    // so caching them never grows without limit. Render runs on the
-    // UI thread only, so a plain Dictionary needs no lock.
+    // churn under heavy output. Palette colours and the splash's fixed RGB tones
+    // keep it small; only a server sending many distinct 24-bit SGR colours would
+    // grow it. Render runs on the UI thread only, so a plain Dictionary needs no
+    // lock.
     private static readonly Dictionary<uint, IBrush> _brushCache = new();
 
     private static IBrush ToBrush(uint argb)

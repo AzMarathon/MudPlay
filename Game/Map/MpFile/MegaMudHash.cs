@@ -8,9 +8,9 @@ namespace MudPlay.Game.Map.MpFile;
 // without behaviour change so a known room name + exit set produces the exact
 // same 8-char token MegaMUD wrote into its rooms.md entries.
 //
-// Used by MpFileImporter to (a) decode a recorded step's hashExits into a
-// (nameHash, exitSet) candidate filter and (b) verify our graph's room produces
-// the same hashExits when walking a candidate path (per-leg integrity check).
+// A recorded step's hashExits decodes into a (nameHash, exitSet) candidate
+// filter, and our graph's room must produce the same hashExits when a candidate
+// path is walked (per-leg integrity check).
 public static class MegaMudHash
 {
     // Direction ordering matches MegaMUD's: N, S, E, W, NE, NW, SE, SW, U, D.

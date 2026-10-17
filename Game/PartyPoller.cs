@@ -23,9 +23,8 @@ namespace MudPlay.Game;
 //      whose totals carry unknown damage. Apart from those, RequestPar sends one
 //      for a caller that needs to know who is still in the party.
 //
-// Reply-format match: the on-join replies come back as
-// "X telepaths: HP 690/720, MA 200/300 (Resting)" — i.e. the other party
-// member's PartyEssentialHandlers.OnHealth reply routed through their telepath.
+// Reply-format match: the on-join reply comes back as a telepath carrying the
+// member's PartyEssentialHandlers.OnHealth answer, "{HP=690/720,MA=200/300, Resting}".
 // The poller subscribes to ChatRouter.EntryClassified and watches incoming
 // telepaths whose body matches the canonical health-reply regex; the speaker
 // field tells us which member to update.

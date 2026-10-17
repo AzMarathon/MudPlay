@@ -36,7 +36,7 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
     // set is active than the one it was opened on.
     private string? OtherGameDataRefusal() => _openedOn.Refusal("setup", _setups.SetName);
 
-    // Window title — "Create Setup" when new, "Edit Setup" otherwise.
+    // Window title — "Create Auto-Lair Setup" when new, "Edit Auto-Lair Setup" otherwise.
     public string DialogTitle => _isNew ? "Create Auto-Lair Setup" : "Edit Auto-Lair Setup";
 
     [ObservableProperty]

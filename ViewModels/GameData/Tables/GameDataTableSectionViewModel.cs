@@ -275,9 +275,9 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // richer query it accepts (e.g. Items' auto-* / stash flag keywords). Null = no tip.
     public virtual string? FilterHint => null;
 
-    // Optional muted-info banner shown directly under the tab header — used by sections that
-    // need a one-liner note for the user (e.g. Aliases: "fires from the Conversation window's
-    // input field only"). null hides the banner row.
+    // Optional muted-info banner shown directly under the tab header, for a section's
+    // one-liner note to the user (e.g. Aliases: where an alias expands and where it
+    // doesn't). null hides the banner row.
     public virtual string? BannerText => null;
 
     // Optional per-column display formatters. Keys are column names in Columns; values
@@ -542,7 +542,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     // into labelled sections. The panel CURATES the list (which rows qualify) as a
     // deliberate act — editing a control is a PENDING edit that does nothing until
     // "Apply" is pressed (CommitPanelFilters copies each box's value over). Distinct
-    // from the always-live "Filter…" text box, which FINDS a specific row within the
+    // from the "Filter…" text box (applied on Enter), which FINDS a specific row within the
     // curated list. Empty by default, so tables with no groups render no sidebar.
     public ObservableCollection<FilterGroup> FilterGroups { get; } = new();
     public bool HasFilterPanel => FilterGroups.Count > 0;
@@ -822,10 +822,10 @@ public sealed class GameDataRow
     // and kept, since a row's values don't change once loaded; a reload builds new rows.
     public string? SearchIndex { get; set; }
 
-    // Opaque per-section payload — used by sections (e.g. Messages) that need a direct handle
-    // back to the source record after the user double-clicks. Lets the section avoid the
-    // Id-from-cells dance when display columns don't include the identity fields (the Messages
-    // table shows "Lines/Preview" summaries, not the raw message text the Id is hashed from).
+    // Opaque per-section payload: a direct handle back to the source record after the user
+    // double-clicks. Lets a section avoid the Id-from-cells dance when display columns don't
+    // include the identity fields (the Messages table shows "Lines/Preview" summaries, not
+    // the raw message text the Id is hashed from).
     public object? Tag { get; set; }
 
     private GameDataRow(RowShape shape, string?[] raw, string?[] display)

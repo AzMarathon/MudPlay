@@ -95,8 +95,9 @@ public partial class MainWindow : Window
         // by App.OnFrameworkInitializationCompleted.
         GlobalHotkeys.AttachMain(this);
 
-        // Forward keystrokes captured by the terminal control to whatever
-        // view-model is currently set as DataContext.
+        // Forward what the terminal control sends (whole typed lines, or keys
+        // while a form owns the keyboard) to whatever view-model is the
+        // DataContext.
         Terminal.UserInput += bytes =>
         {
             if (DataContext is MainWindowViewModel vm)
@@ -176,9 +177,9 @@ public partial class MainWindow : Window
             // First-run setup tour. The step card is a free-floating window shown
             // to the LEFT of the main window (never over the terminal); show/hide
             // it as the tour activates, and keep it glued to our left edge as we
-            // move. Register the force-show hook (Help = real outstanding steps,
-            // Program Log test button = demo), then auto-show when a brand-new
-            // install is still missing a prerequisite and it hasn't been dismissed.
+            // move. Register the force-show hook the Program Log's test button uses
+            // (demo mode), then auto-show when a brand-new install is still missing
+            // a prerequisite and it hasn't been dismissed.
             if (DataContext is MainWindowViewModel mvm)
             {
                 mvm.Tutorial.PropertyChanged += (_, ev) =>
@@ -233,7 +234,7 @@ public partial class MainWindow : Window
 
         // Confirm-exit prompt + auto-save the loaded profile before exit.
         //
-        // When the user has "Confirm exit" turned on in Settings → BBS,
+        // When the user has "Confirm exit" turned on in Settings → BBS + Display,
         // intercept the first Closing fire, cancel it, run the modeless
         // confirm dialog async, then re-issue Close() if the user said
         // yes. The _exitConfirmed latch makes the second Close skip the
@@ -422,13 +423,11 @@ public partial class MainWindow : Window
     private const double ToolbarPadding = 16;
 
     // ----- Customizable terminal right-click menu -----------------------------
-    // The ContextMenu's first three items (Favorites submenu, Recent submenu, and
-    // their trailing separator) are fixed in XAML so their live bindings keep
-    // working; everything after is rebuilt from AppServices.ContextMenu.Layout.
-    // Each entry resolves through MenuActionCatalogue into a MenuItem — a command,
+    // The whole menu is rebuilt from AppServices.ContextMenu.Layout; nothing is
+    // pinned in XAML. Each entry resolves through MenuActionCatalogue into a
+    // MenuItem — a command,
     // a toggle, a whole-menu submenu, a Workshop-tab link, or a calculator link —
     // reusing the same reflection bridge the toolbar/keybinds use for commands.
-    private const int ContextMenuFixedLeadingItems = 0;
     private bool _ctxRebuildQueued;
     // Walk-flyout (Favorites / Recent) collection subscriptions from the current
     // build, dropped and re-made on each rebuild so they don't accumulate.
@@ -455,9 +454,8 @@ public partial class MainWindow : Window
             src.CollectionChanged -= handler;
         _walkFlyoutSubs.Clear();
         ItemCollection items = TerminalContextMenu.Items;
-        // Drop everything a previous build appended; keep the fixed leaders.
-        while (items.Count > ContextMenuFixedLeadingItems)
-            items.RemoveAt(items.Count - 1);
+        // Drop everything a previous build added.
+        items.Clear();
 
         foreach (ContextMenuEntry entry in vm.ContextMenu.Layout)
             if (BuildLayoutItem(entry, vm) is { } built) items.Add(built);
@@ -640,7 +638,8 @@ public partial class MainWindow : Window
     // Compose the Game Data menu's items: every imported set on top
     // (each as a checkable MenuItem the user can click to activate),
     // a separator, then the static actions (Open Browser / Import .mdb
-    // / Import loops). Avalonia's MenuItem can't mix ItemsSource-bound
+    // / Import loops / Manage Game Data, then the blacklist and
+    // avoid/stash editors). Avalonia's MenuItem can't mix ItemsSource-bound
     // dynamic children with inline static ones, so we assemble the
     // whole list in code on every change.
     private void RebuildGameDataMenu(MainWindowViewModel vm)
@@ -660,12 +659,14 @@ public partial class MainWindow : Window
 
         if (vm.GameDataSets.Count > 0) GameDataMenu.Items.Add(new Separator());
 
-        GameDataMenu.Items.Add(new MenuItem
+        MenuItem openBrowser = new()
         {
-            Header       = "Open Browser…",
-            InputGesture = new KeyGesture(Key.G, KeyModifiers.Control),
-            Command      = vm.OpenGameDataBrowserCommand,
-        });
+            Header  = "Open Browser…",
+            Command = vm.OpenGameDataBrowserCommand,
+        };
+        openBrowser.Bind(MenuItem.InputGestureProperty,
+            new Binding(nameof(MainWindowViewModel.GameDataBrowserGesture)) { Source = vm });
+        GameDataMenu.Items.Add(openBrowser);
         GameDataMenu.Items.Add(new Separator());
         MenuItem importMdb = new()
         {
@@ -699,7 +700,7 @@ public partial class MainWindow : Window
         });
     }
 
-    // Rebuild the Action → Profiles fly-out from the shared CombatProfileItems —
+    // Rebuild the Action → Combat Profiles fly-out from the shared CombatProfileItems —
     // one checkable "N) name" row per profile, the active one checked. Hidden until
     // a profile exists.
     private void RebuildProfilesMenu(MainWindowViewModel vm)

@@ -908,11 +908,6 @@ public static class BugReportBuilder
         if (m.Held) yield return "held";
     }
 
-    // In-flight automation FSM state that the log lines only hint at: the @join
-    // nag table (which invitees we're chasing and how far along) and the combat
-    // weapon-swap shadow (what we believe is equipped, without re-parsing `inv`).
-    // These are the exact internals a triager otherwise has to reconstruct from
-    // code + log timestamps.
     // Compact, names over numbers, unset fields left out.
     private static readonly System.Text.Json.JsonSerializerOptions EventDumpJson = new()
     {
@@ -920,6 +915,11 @@ public static class BugReportBuilder
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
+    // In-flight automation state the log lines only hint at: every event and what
+    // the engine makes of it now, the @join nag table (which invitees we're
+    // chasing and how far along), and the combat engine's target and weapon
+    // state. These are the internals a triager otherwise has to reconstruct from
+    // code + log timestamps.
     private static string BuildEngineState(AppServices svc)
     {
         StringBuilder sb = new();
@@ -1227,9 +1227,6 @@ public static class BugReportBuilder
     private static string CountSuffix(int? count) => count is > 0 ? $" x{count}" : string.Empty;
     private static string ManaSuffix(int? mana) => mana is > 0 ? $" m{mana}" : string.Empty;
 
-    // The last rounds' damage ledgers, oldest first: who the client credited with
-    // what damage, for a report that the round totals or Session Stats' per-round
-    // damage look wrong.
     // Session Stats' Player Statistics as the window shows them, plus the spells whose
     // lines it can recognise — the basis for a "counted as a swing" / "proc missing" report.
     private static string BuildSessionCombat(AppServices svc)
@@ -1278,6 +1275,9 @@ public static class BugReportBuilder
         return rows.Count == 0 ? "_(no monsters tracked in the room)_" : string.Concat(rows.Select(r => $"- {r}\n"));
     }
 
+    // The last rounds' damage ledgers, oldest first: who the client credited with
+    // what damage, for a report that the round totals or Session Stats' per-round
+    // damage look wrong.
     private static string BuildCombatRounds(AppServices svc)
     {
         IReadOnlyList<Game.Combat.RoundSummary> recent = svc.RoundDamage.Recent;
@@ -2319,13 +2319,6 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // The navigation engines the Movement section only summarizes: the
-    // point-to-point walk engine (absent above — Movement covers loops/lairs but
-    // not a plain "go to room X" walk), the obstacle FSMs a walk stalls on
-    // (door / hidden-exit / trap), and the path-item detour routers. A "walker
-    // stuck / took a wrong route / stalled on a door" report needs the walk's
-    // live target + progress + last stop reason and which obstacle handler is
-    // mid-request — the exact internals the log only hints at.
     // Re-plan the last walk-to the user requested — from where they are NOW to
     // where they aimed — so a "blocked" / generic route card in the report can be
     // diagnosed after the fact: what the picker computed, which exit it stopped
@@ -2405,6 +2398,13 @@ public static class BugReportBuilder
         }
     }
 
+    // The navigation engines the Movement section only summarizes: the
+    // point-to-point walk engine (absent above — Movement covers loops/lairs but
+    // not a plain "go to room X" walk), the obstacle FSMs a walk stalls on
+    // (door / hidden-exit / trap), and the path-item detour routers. A "walker
+    // stuck / took a wrong route / stalled on a door" report needs the walk's
+    // live target + progress + last stop reason and which obstacle handler is
+    // mid-request — the exact internals the log only hints at.
     private static string BuildNavigationEngines(AppServices svc)
     {
         StringBuilder sb = new();
@@ -2959,9 +2959,6 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // Resolve one tab-keyed section across the tier hierarchy and emit it as a
-    // labelled JSON block. Isolated per-section so one section failing to
-    // resolve leaves the rest intact.
     // Casting spell profiles: how many exist, which is active, and every profile's
     // FULL held config — each slot (empty shown as —) with its gates, plus the
     // mana-mode / drain-trigger / drains-override knobs, the active one flagged. So
@@ -2996,6 +2993,9 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
+    // Resolve one tab-keyed section across the tier hierarchy and emit it as a
+    // labelled JSON block. Isolated per-section so one section failing to
+    // resolve leaves the rest intact.
     private static void AppendResolved<T>(StringBuilder sb, AppServices svc, string tabKey)
         where T : class, new()
     {

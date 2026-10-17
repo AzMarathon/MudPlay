@@ -7,12 +7,13 @@ using MudPlay.ViewModels.Navigation;
 
 namespace MudPlay.Views.Navigation;
 
-// Modeless dialog hosting saved Loops + Auto-Lair markers for
-// run/load/edit/delete actions. Surfaced from the NavigationWindow's
-// "Navigation Management" button in the action row.
+// Modeless dialog hosting saved Loops + Auto-Lair setups and GOTO favourites
+// for run/load/edit/delete. Opened from the Navigation window's rail-footer
+// "Navigation Management" button, or on the Go To tab from the toolbar's play
+// button when nothing is staged.
 //
-// Drag-drop lives in code-behind (allowed for drag-session state per CLAUDE.md):
-// a leaf row is the drag source; a folder node — or the empty tree area (root) —
+// Drag-drop lives in code-behind because the drag session's pointer state is
+// purely view-side: a leaf row is the drag source; a folder node — or the empty tree area (root) —
 // is the drop target. The actual move routes back through the view-model's
 // MoveLoopToFolder / MoveLairToFolder so the store + on-disk layout stay the
 // single source of truth.
@@ -48,7 +49,7 @@ public partial class NavigationManagerDialog : Window
     }
 
     // Double-clicking a leaf runs it — the fast "play this now" gesture,
-    // matching each row's green Run button. Edit stays reachable via the Edit
+    // matching each row's green Go button. Edit stays reachable via the Edit
     // button / context menu. Folder nodes are ignored (LeafRowOf returns null).
     private void OnRowDoubleTapped(object? sender, TappedEventArgs e)
     {

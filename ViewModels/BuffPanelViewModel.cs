@@ -14,7 +14,7 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels;
 
-// The Party window's buff panel: add / remove party-buff slots, pick a buff from
+// The Buff Watchdog window's buff panel: add / remove party-buff slots, pick a buff from
 // the spellbook, set its recast timer, and choose targeting (whole-party on/off,
 // or which members for a single-target buff). Backed by CharacterProfile.PartyBuffs
 // (char-only), persisted on every edit. The member checklist rebuilds when the

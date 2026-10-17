@@ -3,14 +3,13 @@
              xmlns:controls="using:MudPlay.Controls"
              x:Class="MudPlay.App"
              RequestedThemeVariant="Dark">
-    <!-- Dark variant matches the skeleton's chrome palette. -->
+    <!-- Dark variant: the chrome palette in Themes/Palette.axaml is dark-only. -->
 
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Skeleton-derived design tokens. See docs/UI-design-spec.md
-                     and docs/skeleton/main-shell.jsx for the source values.
-                     Issue #4 tracks moving these into user preferences. -->
+                <!-- Chrome design tokens (colour, type, density, icon geometry),
+                     loaded before the styles that reference them. -->
                 <ResourceInclude Source="avares://MudPlay/Themes/Palette.axaml"/>
                 <ResourceInclude Source="avares://MudPlay/Themes/Typography.axaml"/>
                 <ResourceInclude Source="avares://MudPlay/Themes/Density.axaml"/>

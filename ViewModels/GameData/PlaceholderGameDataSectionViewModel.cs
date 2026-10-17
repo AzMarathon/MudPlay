@@ -3,9 +3,9 @@ using MudPlay.Views.GameData;
 
 namespace MudPlay.ViewModels.GameData;
 
-// Stub section rendered where the real editor isn't wired yet. Carries the section's
-// title + phase tag + description so the user sees the full sidebar and hovering each
-// entry explains what it hosts.
+// Fallback section shown when the browser is built without the service a section
+// needs (e.g. in tests). Carries the section's title, a short tag and a description
+// so the sidebar stays complete and hovering each entry explains what it hosts.
 public sealed class PlaceholderGameDataSectionViewModel : GameDataSectionViewModel
 {
     private Control? _view;
@@ -13,7 +13,7 @@ public sealed class PlaceholderGameDataSectionViewModel : GameDataSectionViewMod
     public override string Id { get; }
     public override string Title { get; }
 
-    // Phase / PR tag shown on the placeholder body.
+    // Short tag shown on the placeholder body.
     public string PhaseTag { get; }
 
     // One-line summary of what the real editor will host.

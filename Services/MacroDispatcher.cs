@@ -61,9 +61,8 @@ public sealed class MacroDispatcher
         return true;
     }
 
-    // Fires a macro directly via the bound sender. Used by TryHandleKey
-    // internally and by tests that want to assert on the bytes that go out
-    // for a given command without simulating a key event.
+    // Fires a macro directly via the bound sender. Internal so a test can
+    // assert on the bytes a command sends without simulating a key event.
     internal void FireMacro(Macro macro)
     {
         if (_sender is null) return;

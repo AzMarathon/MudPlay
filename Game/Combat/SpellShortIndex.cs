@@ -44,10 +44,7 @@ public sealed class SpellShortIndex
     // Multiple spells can share a Short (e.g. several "turn"-coded undead
     // spells) — any one of them resolves to the same wire text once
     // ShortByNumber converts back, so which candidate wins is immaterial;
-    // first-seen wins for a stable result. Used by the Monster editor's
-    // "Override Attack" box to auto-resolve a typed cast-code onto the
-    // mana-gated spell rung instead of falling through to a raw, ungated
-    // command (report paradigm-20260813-070249).
+    // first-seen wins for a stable result.
     public int? NumberByShort(string code)
     {
         if (string.IsNullOrWhiteSpace(code)) return null;

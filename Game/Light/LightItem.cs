@@ -1,9 +1,7 @@
 namespace MudPlay.Game.Light;
 
 // One light-source item (ItemType 6) from the active game-data set: its projected
-// illumination and burn budget. Produced by LightItemIndex and used by the
-// auto-light provisioning logic to answer "how much illumination does this give"
-// and "how long does it burn".
+// illumination and burn budget, what auto-light weighs a light by.
 //
 // Number is the MDB item id; Name is the verbatim MDB name (e.g. lantern).
 //

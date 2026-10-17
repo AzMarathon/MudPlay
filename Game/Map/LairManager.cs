@@ -8,15 +8,15 @@ namespace MudPlay.Game.Map;
 
 // Per-set Auto-Lair setup catalogue. Round-trips LairSetups under the
 // shared GameDataSetLoopsFolder — same folder as loops, with the
-// .lair.json filename suffix as the schema discriminator. Mirrors
+// .lair filename suffix as the schema discriminator. Mirrors
 // LoopManager's shape (same load-on-pin, save-fires-Changed,
 // delete-on-name lifecycle) so the UI rail can render Loops + Auto-Lair
 // Setups side by side with identical wiring.
 //
 // One-shot migration: earlier exports lived under LegacyBbsLairsFolder as
 // plain .json files. The first LoadAll for a given set scans that folder,
-// copies each setup into the shared Loops folder with the .lair.json
-// suffix, and removes the legacy directory once empty.
+// moves each setup into the shared Loops folder with the .lair suffix,
+// and removes the legacy directory once empty.
 public sealed class LairManager
 {
     // Suffix that flags a file in the shared Loops folder as a lair setup.

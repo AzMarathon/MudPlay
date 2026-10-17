@@ -19,7 +19,7 @@ public enum ChatChannel
     // "X gangpaths: …" — gang/guild channel.
     Gangpath,
 
-    // "Broadcast from X …" — operator broadcasts.
+    // "Broadcast from X …" — the numbered channel players `join` and speak on with `br`.
     Broadcast,
 
     // "X yells …" — room-shouted message, audible across nearby rooms.

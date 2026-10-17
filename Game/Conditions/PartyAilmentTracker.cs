@@ -90,7 +90,7 @@ public sealed class PartyAilmentTracker : IDisposable
     // expiry (monotonic ms). The "duration timed out" clear: SweepExpiredChips
     // drops a chip whose window elapsed. Every non-timeout clear (cure / par /
     // @status / inbound off) removes the entry first, so the sweep only fires when
-    // nothing else cleared. Poison is never armed here — it's par-owned (PR A).
+    // nothing else cleared. Poison is never armed here — it's par-owned.
     private readonly Dictionary<(string Given, MessageFlags Flag), long> _expiryAtMs = new();
     private readonly LogService? _log;
     private LineExtractor? _lines;
@@ -140,7 +140,8 @@ public sealed class PartyAilmentTracker : IDisposable
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         string speaker = entry.Speaker;
 
-        // Say-channel ailment toggle: '.@poisoned on' / '.@poisoned off' / '.@held'.
+        // Say-channel ailment announce: a bare '.@blind' / '.@confused' / '.@diseased' /
+        // '.@held' (an older client's 'on' / 'off' suffix is still read).
         if (entry.Channel == ChatChannel.Local)
             HandleAilmentToggle(entry, speaker);
 
@@ -246,7 +247,7 @@ public sealed class PartyAilmentTracker : IDisposable
     }
 
     // Reconcile a member's curable-ailment chips against a @status reply — the
-    // pull-based counterpart to the push-based .@X on/off say. The reply body
+    // pull-based counterpart to the push-based say announce. The reply body
     // (wrapped in { } by RemoteCommandManager.SendReply) ends with an ailment
     // clause: "no ailments" or "ailments: blind, poisoned", spelled with the same
     // plain words PartyEssentialHandlers.OnStatus emits (our say tokens minus the
@@ -309,7 +310,7 @@ public sealed class PartyAilmentTracker : IDisposable
     // Witness a monster's ailment-apply line naming a party member → set that
     // member's chip and arm its spell-data duration (the authoritative clear for a
     // landed effect; a "resist" prints no apply line, so no chip). Poison is
-    // excluded (par-owned, PR A); self is excluded (ConditionTracker owns it).
+    // excluded (par-owned); self is excluded (ConditionTracker owns it).
     // No-op when no apply-matchers are wired (cure/say-only test harnesses).
     private void WitnessApplies(LineExtractor.EmittedLine line)
     {

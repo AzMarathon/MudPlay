@@ -12,25 +12,22 @@ namespace MudPlay.Game.Map;
 // Room is the destination of a teleport line, so a view can link it; null otherwise.
 public readonly record struct TBInfoActionLine(string Text, int Depth, RoomKey? Room = null);
 
-// Faithful port of MegaMUD Explorer's textblock command decoder (its
-// AddCommandNode). A monster's greet textblock lists player-typeable keywords,
-// one per line as `keyword:pointer`, where pointer is another textblock whose
+// Textblock command decoder. A monster's greet textblock lists player-typeable
+// keywords, one per line as `keyword:pointer`, where pointer is another textblock whose
 // colon-separated directives are the "flags" that keyword triggers — cast a
 // spell, take/give an item, teach a spell, award experience, teleport, summon,
 // gate on a class/race/ability check, roll a weighted random outcome, and so on.
 // This walks that tree and produces a flat, depth-tagged line list the greet
 // popup renders: "what can I ask, and what happens when I do".
 //
-// Two intentional departures from the reference so the popup stays tight:
+// Two choices keep the popup tight:
 //   • Synonym keywords that point at the SAME block are grouped onto one line
 //     ("tolgard OR box OR package") and the block decoded once, rather than
 //     repeating the identical subtree per keyword.
-//   • Generic/raw directives are always shown (equivalent to the reference with
-//     its "hide textblocks" option off) so no flag is silently dropped.
+//   • Generic/raw directives are always shown, so no flag is silently dropped.
 public static class TBInfoActionDecoder
 {
-    // Bounds mirroring the reference's nest cap — a malformed self-referential
-    // chain can't spin the UI. The per-branch ancestor set breaks true cycles;
+    // Nest caps — a malformed self-referential chain can't spin the UI. The per-branch ancestor set breaks true cycles;
     // these bound pathological depth/breadth too.
     private const int MaxDepth = 40;
     private const int MaxLines = 400;
@@ -225,8 +222,8 @@ public static class TBInfoActionDecoder
         }
 
         // Decode one line's colon-separated directive tokens. Consecutive
-        // identical tokens collapse to a single "… (xN)" line, mirroring the
-        // reference (blocks that repeat "cast 5:cast 5:cast 5").
+        // identical tokens collapse to a single "… (xN)" line, for blocks that
+        // repeat "cast 5:cast 5:cast 5".
         private void DecodeDirectiveLine(string line, int depth, HashSet<int> ancestors)
         {
             List<string> tokens = SplitColonTokens(line);
@@ -250,8 +247,9 @@ public static class TBInfoActionDecoder
             }
         }
 
-        // The directive decode table — same order and semantics as the
-        // reference's If/ElseIf chain. Each recognised directive resolves its
+        // The directive decode table. Order matters: tokens are matched by
+        // substring, so the first directive a token contains wins. Each
+        // recognised directive resolves its
         // record id to a name; unrecognised tokens (minlevel, align, message,
         // text, takeitem-0, testability, …) fall through to a raw line so no
         // flag is hidden.
@@ -314,7 +312,7 @@ public static class TBInfoActionDecoder
                 int v = Extract(tok, "checkspell ");
                 if (v > 0) Emit($"Checkspell: {SpellName(v)}", depth);
                 // A second number is the textblock jumped to when the check
-                // fails; the reference tolerates a stray double space before it.
+                // fails; a stray double space before it is tolerated.
                 int v2 = Extract(tok, $"checkspell {v}");
                 if (v2 == 0) v2 = Extract(tok, $"checkspell  {v}");
                 if (v2 > 0) DecodeBlock(v2, depth + 1, ancestors);
@@ -399,7 +397,7 @@ public static class TBInfoActionDecoder
         return string.IsNullOrEmpty(name) ? $"{kind} #{number}" : name;
     }
 
-    // ----- Directive-argument parsers (port of the reference's inline scans) -----
+    // ----- Directive-argument parsers -----
 
     // `teleport <room> <map>` — room is the first integer, map the second.
     private static (int Room, int Map) ParseTeleport(string tok)
@@ -475,9 +473,8 @@ public static class TBInfoActionDecoder
 
     // ----- Small helpers -----
 
-    // Port of the reference's ExtractValueFromString: case-insensitively find
-    // search, skip any leading spaces/asterisks after it, then read the
-    // contiguous digit run. 0 when none.
+    // Case-insensitively find search, skip any leading spaces/asterisks after
+    // it, then read the contiguous digit run. 0 when none.
     private static int Extract(string whole, string search)
     {
         int idx = whole.IndexOf(search, StringComparison.OrdinalIgnoreCase);
@@ -524,8 +521,7 @@ public static class TBInfoActionDecoder
 
     private static string Commas(int n) => n.ToString("N0", CultureInfo.InvariantCulture);
 
-    // Trailing coin letter → denomination, matching the reference's Right()
-    // switch (R/P/G/S, else copper).
+    // Trailing coin letter → denomination (R/P/G/S, else copper).
     private static string Coin(string tok)
     {
         char last = tok.Length > 0 ? char.ToUpperInvariant(tok[^1]) : ' ';
@@ -563,8 +559,8 @@ public static class TBInfoActionDecoder
         return result;
     }
 
-    // Keyword cleaning matches the reference: '*' (hidden-command marker) is
-    // stripped and '|' (alternate-keyword separator) becomes " OR ".
+    // Keyword cleaning: '*' (hidden-command marker) is stripped and '|'
+    // (alternate-keyword separator) becomes " OR ".
     private static string CleanKeyword(string raw)
         => raw.Replace("*", string.Empty)
               .Replace("|", " OR ")

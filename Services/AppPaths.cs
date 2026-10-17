@@ -37,8 +37,8 @@ public static class AppPaths
 
     // Tiny one-line text file that overrides DataRoot with a user-chosen
     // absolute path. Lives at the platform-config equivalent
-    // (Linux: ~/.config/MudPlay/, Windows: %LocalAppData%\MudPlay\,
-    // macOS: ~/Library/Preferences/MudPlay/) — the only file MudPlay writes
+    // (Linux: ~/.config/MudPlay/, Windows: %APPDATA%\MudPlay\,
+    // macOS: ~/.config/MudPlay/) — the only file MudPlay writes
     // outside DataRoot. Absent on a fresh install; created by the Settings →
     // General "Change data directory" migration flow. DataRootRelocator writes
     // it; this type only reads it at static-init.
@@ -108,8 +108,8 @@ public static class AppPaths
         // the data root itself so the user can relocate data to a different
         // drive without losing the breadcrumb that tells us where it went.
         //   Linux  → $XDG_CONFIG_HOME (or ~/.config)
-        //   Win    → %LOCALAPPDATA%   (Windows doesn't separate config / data)
-        //   macOS  → ~/Library/Preferences
+        //   Win    → %APPDATA% (roaming)
+        //   macOS  → ~/.config
         string configDir = Environment.GetFolderPath(
             Environment.SpecialFolder.ApplicationData,
             Environment.SpecialFolderOption.Create);
@@ -303,10 +303,10 @@ public static class AppPaths
     public static string MessagesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "messages.json");
 
-    // Per-set Monster Messages catalogue file — one combat-line bundle per
-    // Monsters table row (HitYou / HitOther / DeathLine / ArmorBlock / Dodge /
-    // Miss + flavor prefixes). Sits beside the per-set spell MessagesFile so
-    // the realm's complete parser dataset travels together.
+    // Per-set Monster Messages catalogue file — one name record per Monsters
+    // table row (the canonical name the room classifier resolves a display name
+    // back to). Sits beside the per-set spell MessagesFile so the realm's
+    // complete parser dataset travels together.
     public static string MonsterMessagesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "monster-messages.json");
 
@@ -399,10 +399,10 @@ public static class AppPaths
     public static string BundledMessagesSeedFile(string realm) =>
         Path.Combine(BundledSeedsDir, $"Messages.{realm}.seed.json");
 
-    // User-writable Triggers seed JSON, hosted in the XDG-resolved Global/
-    // folder. TriggerEngine falls back to this when a set has no per-set
-    // TriggersFile. Bootstrapped from BundledTriggersSeedFile on first app
-    // launch if missing.
+    // User-writable Triggers seed JSON, hosted in the Global/ folder. A profile
+    // that doesn't own a trigger list yet takes a copy of it
+    // (TriggerEngine.TakeFirstList). Bootstrapped from BundledTriggersSeedFile on
+    // first app launch if missing.
     public static string DefaultTriggersSeedFile =>
         Path.Combine(DataRoot, "Global", "Triggers.seed.json");
 
@@ -470,8 +470,8 @@ public static class AppPaths
 
     // User-writable boss-catalog seed JSON in Global/ — the curated default
     // boss list (name, rooms, realm flags, respawn type); timer values are looked up
-    // from game data at runtime. BossStore falls back to this when the active set has
-    // no per-set overlay. Bootstrapped from BundledBossDefsSeedFile on first launch.
+    // from game data at runtime. BossStore lays the realm's overlay (RealmBossesFile)
+    // over it. Bootstrapped from BundledBossDefsSeedFile on first launch.
     public static string DefaultBossDefsSeedFile =>
         Path.Combine(DataRoot, "Global", "BossDefs.seed.json");
 
@@ -641,10 +641,9 @@ public static class AppPaths
     public static string GameDataSetDir(string setName) =>
         Named(GameDataRoot, setName, "game-data set name");
 
-    // Folder holding all files for one BBS — primary settings JSON plus per-set
-    // override side-files (monster_overrides.{set}.json,
-    // message_overrides.{set}.json, …) and any future helper files (per-BBS
-    // favorites list, character roster, etc.).
+    // Folder holding all files for one BBS — bbs.json, its realm folders
+    // (RealmsDir, where the BBS-tier override side-files live), its emote library,
+    // and the profiles of every character on it.
     public static string BbsFolder(string bbsName) =>
         Named(BbsDir, bbsName, "BBS name");
 

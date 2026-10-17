@@ -6,7 +6,7 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.ViewModels;
 
-// Read-only Roomba run log, opened from the GH Management tab's "Roomba Log"
+// Read-only Roomba run log, opened from the Workshop Roomba tab's "Roomba Log"
 // button. Surfaces the per-move record, the items left behind (with why), and an
 // end-of-run summary (rooms sorted / items sorted / the explicit unmovable list).
 // Refreshes live off GhSweepManager while a sweep runs.

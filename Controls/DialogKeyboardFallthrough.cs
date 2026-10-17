@@ -12,8 +12,8 @@ namespace MudPlay.Controls;
 //
 // Installed once at startup as a class handler on Window, so it covers every
 // window uniformly: the modeless dialogs spawned by DialogService AND the many
-// windows shown directly via Window.Show (Character Workshop, Map, Log pane,
-// etc.). A per-window attach would miss the latter.
+// windows shown directly via Window.Show (Character Workshop, Navigation, Log
+// pane, etc.). A per-window attach would miss the latter.
 //
 // The handlers run on the BUBBLE phase and not for already-handled events, so the
 // window's own controls always get first crack: a keystroke only reaches the
@@ -70,8 +70,7 @@ public static class DialogKeyboardFallthrough
     // True when the window's focused element is a text editor, so its keystrokes
     // stay with it. A bare TextBox — and the inner editors of NumericUpDown,
     // editable ComboBox and AutoCompleteBox, which all surface a focused TextBox —
-    // are covered by the single is-TextBox check (the same test BackscrollWindow
-    // uses for its Ctrl+C).
+    // are covered by the single is-TextBox check.
     internal static bool IsTextInputFocused(Visual window)
         => TopLevel.GetTopLevel(window)?.FocusManager?.GetFocusedElement() is TextBox;
 

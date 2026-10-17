@@ -34,19 +34,18 @@ public sealed class ConfirmService
     }
 
     // Prompt before the app exits. Returns true if the close should proceed
-    // (either the setting is off or the user clicked Yes). Used by MainWindow's
-    // Closing handler when the close was triggered by the user (window X, File →
-    // Quit). Programmatic shutdowns (none today) would skip this by not calling
-    // it.
+    // (either the setting is off or the user clicked Yes). Asked only for a close
+    // the user started (window X, File → Quit); a shutdown the client starts
+    // itself doesn't call it.
     public Task<bool> ConfirmExitAsync()
         => Settings.ConfirmExit
             ? PromptAsync("Exit MudPlay", "Are you sure you want to exit?", "Exit")
             : Task.FromResult(true);
 
     // Prompt before a user-initiated disconnect. App-initiated disconnects
-    // (carrier-lost auto-reconnect cycle, remote @hangup, future
-    // health-threshold drops) must NOT call this — only the toolbar / hotkey /
-    // menu paths the user triggered should.
+    // (carrier-lost auto-reconnect cycle, remote @hangup, the low-HP emergency
+    // hang-up) must NOT call this — only the toolbar / hotkey / menu paths the
+    // user triggered should.
     public Task<bool> ConfirmHangupAsync()
         => Settings.ConfirmHangup
             ? PromptAsync("Disconnect", "Are you sure you want to disconnect from the BBS?", "Disconnect")

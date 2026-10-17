@@ -300,8 +300,9 @@ public static class MonsterMatchupCalculatorSpells
 
     // Rank the player's known attack spells by effective damage against one
     // monster: a spell whose ReqLevel is below the monster's SpellImmu never
-    // lands (GAME_MECHANICS' ReqLevel ≥ SpellImmu eligibility rule, mirroring
-    // CombatManager.Spells.cs's SpellEligible); a spell restricted to undead-
+    // lands (GAME_MECHANICS "Why an attack spell fails to damage — three
+    // independent mechanics"; the combat engine applies the same rule in
+    // CombatSpellGates.LevelBlocked); a spell restricted to undead-
     // only (Abil 23) or living-only (Abil 108) targets is blocked outright
     // against a monster on the wrong side of that gate, independent of
     // SpellImmu/resist; a spell whose element the monster resists ≥100% deals

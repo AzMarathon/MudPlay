@@ -612,7 +612,7 @@
                   Margin="12,6"
                   ColumnSpacing="6">
                 <!-- Map-overlay toggles, tucked into a flyout to save bar room.
-                     The Manage button lives down in the loops-rail footer
+                     The Navigation Management button lives down in the loops-rail footer
                      (already wired to OpenManagerCommand). -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
                             IsVisible="{Binding MapExpanded}">
@@ -940,11 +940,10 @@
                                   Command="{Binding ToggleContextRoomStashCommand}"/>
                         <MenuItem Header="Toggle: Roomba Room"
                                   Command="{Binding ToggleContextGhRoomCommand}"/>
-                        <!-- Auto-lair marking moved into the top-right
-                             "Lair mode" toggle: enter the mode, click
-                             rooms on the map to add / remove markers,
-                             save via the rail's "Save lairs" button.
-                             Mirrors how Loop build mode works. -->
+                        <!-- Auto-lair marking lives in the top-bar Lair
+                             mode toggle: enter the mode, click rooms on
+                             the map to add / remove markers, then Save.
+                             Mirrors Loop build mode. -->
 
                         <Separator/>
                         <MenuItem Header="Add this room to Blacklist"
@@ -1045,8 +1044,8 @@
                     <TextBlock Text="MAP LEGEND" FontSize="10"
                                FontWeight="SemiBold" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                     <!-- Current room = amber fill + bright ring + a yellow centre dot
-                         (CurrentFill / CurrentPen / PlayerDotFill), the exact "you are
-                         here" shape the map draws. -->
+                         (CurrentPen / PlayerDotFill), the "you are here" shape the
+                         map draws. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Grid Width="14" Height="14">
                             <Border Background="#F8B500" BorderBrush="#FFD24D" BorderThickness="2"/>
@@ -1286,7 +1285,8 @@
                         <!-- Bottom margin reserves a buffer below the last
                              expander so that when the rail scrolls, the final
                              loop / Auto-Lair row can't sit flush under the
-                             fixed Manage footer and read as cut off. -->
+                             fixed Navigation Management footer and read as
+                             cut off. -->
                         <StackPanel Spacing="4" Margin="0,0,0,12">
 
                             <!-- ROOM INFO — populated on any left-click of a room;
@@ -1889,10 +1889,10 @@
                             </Expander>
 
                             <!-- GOTO — favourite rooms saved via the map's
-                                 right-click "Add to favorites" item. Each
-                                 row click walks there; the X button removes
-                                 the bookmark. Persisted on the active
-                                 character profile. -->
+                                 right-click "Save as Go To" item (or
+                                 Navigation Management's Add). Each row click
+                                 walks there; ✎ renames, ✕ removes. Persisted
+                                 on the active character profile. -->
                             <Expander Classes="RailSection"
                                       IsExpanded="{Binding IsGotoExpanded, Mode=TwoWay}">
                                 <Expander.Header>
@@ -2101,8 +2101,7 @@
                                  individually coloured: "Loops"
                                  green to match loop-name rows, "+"
                                  neutral white, "Auto-Lairs" orange
-                                 to match (future) auto-lair setup
-                                 rows. -->
+                                 to match the auto-lair setup rows. -->
                             <Expander Classes="RailSection"
                                       IsExpanded="{Binding IsLoopsExpanded, Mode=TwoWay}">
                                 <Expander.Header>
@@ -2149,8 +2148,8 @@
                                          directory tree and render as a single combined
                                          list: Auto-Lair leaves amber, loop leaves green.
                                          Folder create / rename / delete is reachable via
-                                         the folder-node context menu here (and the Manage
-                                         dialog); there is no "+ Folder" button on the rail. -->
+                                         the folder-node context menu here (and the Navigation
+                                         Management dialog); there is no "+ Folder" button on the rail. -->
                                     <!-- MaxHeight bounds the scroll viewport so virtualization
                                          engages on broad filter matches — see FavoriteTreeView. -->
                                     <ListBox Name="NavTreeView"
@@ -2297,7 +2296,7 @@
                                             </DataTemplate>
                                             <!-- Loop leaf — green accent. Name ellipsised when
                                                  long; start-room key + room count on a smaller
-                                                 second line. Load + Run stay right-aligned at
+                                                 second line. Load + Go stay right-aligned at
                                                  any name length. -->
                                             <DataTemplate DataType="vm:LoopRowViewModel">
                                                 <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2" ColumnSpacing="4" Background="Transparent"
@@ -2634,12 +2633,9 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- Bottom action strip — Manage is the single
-                         entry into the loops/lairs CRUD surface; the
-                         .mp importer used to live here as a separate
-                         button but moved INTO the Manage dialog per
-                         UX direction (it's a CRUD action on saved
-                         loops, not a top-level rail action). -->
+                    <!-- Bottom action strip — Navigation Management is
+                         the single entry into the loops / lairs / GOTO
+                         CRUD surface, .mp import included. -->
                     <Border Grid.Row="1"
                             BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                             BorderThickness="0,1,0,0"
@@ -2658,10 +2654,9 @@
         </Grid>
 
         <!-- Row 3: bottom strip — loop builder session status only.
-             Per UX direction the bar carries no actions: Save+Start
-             is the top-right Run button, naming/deleting/renaming
-             live in the Manage dialog, and exiting build mode
-             discards the in-progress clicks. -->
+             The bar carries no actions: Go starts the loop without
+             saving it, Save (top bar) persists it, and exiting build
+             mode discards the in-progress clicks. -->
         <Border Grid.Row="3"
                 Background="{StaticResource ChromeBgBrush}"
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
@@ -2691,19 +2686,11 @@
             </Grid>
         </Border>
 
-        <!-- The dedicated Auto-Lair RUNNING phase strip used to live
-             here. Its content (phase + current target + wait-room)
-             now rides next to the top-left AUTO-LAIR badge via
-             TopBarStatusText, so the bottom edge stays clean during
-             active runs. The BUILDING LAIR strip below still shows
-             pre-Run because the top-bar status reads the engine, not
-             the build session. -->
-
-        <!-- Row 3 (alternate): Auto-Lair BUILDING status strip. Mirrors
-             the Loop-builder strip — visible only while the user is
-             actively marking lair rooms (CurrentMode == AutoLair AND
-             scheduler not yet running). The Lair phase strip above
-             takes over the moment the scheduler starts. -->
+        <!-- Row 3 (alternate): Auto-Lair BUILDING status strip, mirroring
+             the loop-builder strip. Visible only while marking lair rooms
+             before Go (CurrentMode == AutoLair AND scheduler not yet
+             running); once the scheduler runs, its phase shows in the
+             top-bar status text instead. -->
         <Border Grid.Row="3"
                 Background="{StaticResource ChromeBgBrush}"
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"

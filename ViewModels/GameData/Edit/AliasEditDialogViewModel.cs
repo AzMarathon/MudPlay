@@ -16,7 +16,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // (AliasEngine.NameConflictReason). Save returns the updated Alias; Cancel returns null.
 public sealed partial class AliasEditDialogViewModel : ObservableObject, IDialogViewModel<Alias>
 {
-    // Matches a {N} placeholder where N is a non-negative integer. Used by the live preview panel.
+    // Matches a {N} placeholder where N is a non-negative integer.
     private static readonly Regex _placeholderPattern = new(@"\{(?<n>\d+)\}", RegexOptions.Compiled);
 
     public event Action<Alias?>? CloseRequested;

@@ -8,8 +8,8 @@ namespace MudPlay.Game.Remote;
 
 // On-demand party-inventory probe. Asks the whole party "do you have this item,
 // and how many?" by broadcasting @have <item> to every non-self member and
-// aggregating their replies into a single PartyItemResult. Backs the Settings →
-// Other "defer to party inventory" affordance: when a walk-route crosses an
+// aggregating their replies into a single PartyItemResult. Backs the party stage
+// of the path-item pipeline: when a walk-route crosses an
 // (Item: N) / (Ticket: N) gate whose per-member item we lack, PartyPathItemGate
 // probes the party first and — if a member has a spare — has them hand it over
 // instead of posting a search / shop need.
@@ -23,8 +23,8 @@ namespace MudPlay.Game.Remote;
 // without their replies crossing wires.
 //
 // A query completes early once every expected responder has replied, or when the
-// QueryWindow elapses. A member who never answers (offline, no ExecuteCommands
-// round-trip, hasn't parsed inventory) adds nothing to the total and is named in
+// QueryWindow elapses. A member who never answers (offline, no QueryInventory
+// grant for us, hasn't parsed inventory) adds nothing to the total and is named in
 // the result's Unanswered: still a member, taken to hold none.
 // The expected-responder set mirrors PartyBroadcaster's own filter (non-self,
 // named, joined), so we never wait on a member the broadcast skipped. With no one to ask

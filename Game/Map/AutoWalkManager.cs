@@ -148,9 +148,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private string? _sailingPlace;
 
     // Greet-teleport (ask-transport) in flight: an `ask <noun> <keyword>` that
-    // ports the asker (GAME_MECHANICS "greet teleport"). Unlike an ordinary
-    // teleport it can SILENTLY FAIL — a class-gated transport (issue #455: the
-    // bard-only barmaid) sits behind a `testskill` skill roll the client doesn't
+    // ports the asker (GAME_MECHANICS "Greet teleports — an NPC transports a
+    // player who asks"). Unlike an ordinary teleport it can SILENTLY FAIL — a
+    // class-gated transport (the bard-only barmaid) sits behind a `testskill` skill roll the client doesn't
     // model, and a failed roll leaves the character exactly where they were,
     // sometimes with no fresh room render at all. So this step can't just fire and
     // trust the next observation: it verifies it actually landed in the
@@ -603,12 +603,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _trapEnqueuer = enqueuer;
     }
 
-    // Gate for trapped-exit handling. Returns true when the walker should
-    // route a Trap exit through the trap enqueuer — i.e. Settings → Other
-    // "Utilize disarm traps if able" is on AND the local character has the
-    // Traps skill. Returns false to walk straight through the trap without
-    // attempting a disarm. When left unset the walker defaults to
-    // attempting the disarm.
+    // Gate for disarming a trapped exit ourselves. Returns true when the
+    // walker should route a Trap exit through the trap enqueuer — i.e.
+    // Settings → Other "Utilize self or party members to disarm traps" is on
+    // AND the local character can disarm. When false the walker tries party
+    // delegation (SetTrapDelegateGate), else walks straight through. When
+    // left unset the walker defaults to attempting the disarm.
     public void SetTrapDisarmGate(Func<bool> gate)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -630,9 +630,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // Gate for the party-delegation branch. Returns true when the
-    // "Utilize disarm traps if able" toggle is on, the LOCAL character
-    // can't disarm, AND at least one party member can — i.e. the "if
-    // able" clause is satisfied by party ability rather than our own.
+    // "Utilize self or party members to disarm traps" toggle is on, the
+    // LOCAL character can't disarm, AND at least one party member can.
     public void SetTrapDelegateGate(Func<bool> gate)
     {
         ArgumentNullException.ThrowIfNull(gate);
@@ -2870,7 +2869,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (sync == SpecialExitSend.Sent)
             {
                 // A greet teleport (`ask <noun> <keyword>`) can silently fail its
-                // skill roll and leave us put (issue #455) — don't just trust the
+                // skill roll and leave us put — don't just trust the
                 // next observation; arm a verify-and-re-ask watchdog. Ordinary CMD
                 // teleports (chime / boat / item-cast) stay fire-once here so their
                 // party-split relay isn't re-fired.
@@ -3218,7 +3217,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // A room command step (lever, winch, remote action) went out. Room actions end a
-    // sneak (GAME_MECHANICS "What ends a sneak"); the walk sends them anyway, and this
+    // sneak (GAME_MECHANICS "Sneaking — commands, equip order, and the sneak state
+    // machine", its What ends a sneak list); the walk sends them anyway, and this
     // lets the stealth engine re-sneak before the next move.
     private Action<string>? _roomActionSent;
 
@@ -3424,7 +3424,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // A greet teleport owns its step until it verifies the arrival room (or
         // re-asks after a failed skill roll). Intercept here so the generic
         // MoveStep recovery/replan paths — which would fail the walk after a
-        // bounded retry — never see a merely-unlucky roll (issue #455).
+        // bounded retry — never see a merely-unlucky roll.
         if (_awaitingGreetTeleport)
         {
             HandleGreetTeleportTransition(transition);
@@ -3434,7 +3434,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_path[_index] is not MoveStep) return;
 
         // A door / trap / hidden-exit sub-FSM owns this step until its own
-        // reply callback (OnDoorReply / OnTrapReply / OnHiddenSearchReply)
+        // reply callback (OnDoorReply / OnTrapReply / OnHiddenRevealReply)
         // fires the move and advances. While one is pending, the bash / pick /
         // search output re-observes the CURRENT room; letting the block below
         // act on that transition treats the still-in-progress step as
@@ -3563,8 +3563,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool TryReplanOrFail(RoomConfidence newConfidence, string when = "mid-step", bool onlyIfAsked = false)
     {
         // A block landing while the character is Confused is the movement-fumble
-        // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
-        // violently!"), not a genuine mapping/graph problem — mirrors
+        // mechanic (GAME_MECHANICS "Confusion fumbles — actions fail and must be
+        // re-sent"), not a genuine mapping/graph problem — mirrors
         // LoopRunner.EnterRecovery's identical rationale. LoopRunner's own
         // recovery budget was exempted from this already (paradigm-20260902-
         // 113201), but it can hand off into this walker's separate replan budget
@@ -4234,7 +4234,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Re-send the `ask <noun> <keyword>` and re-arm the watchdog — keeps asking
     // until the destination confirms. The class gate on the edge guarantees only a
     // class that CAN pass the roll ever reaches this step, so the retry converges
-    // rather than spinning on a character who can never succeed (issue #455). A held
+    // rather than spinning on a character who can never succeed. A held
     // walk (combat pause) doesn't re-ask; the resume path re-arms the watchdog.
     //
     // The tracker is NOT re-notified: the original ask already enqueued one Pending

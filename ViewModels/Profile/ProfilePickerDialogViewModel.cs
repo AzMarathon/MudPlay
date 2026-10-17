@@ -11,9 +11,9 @@ namespace MudPlay.ViewModels.Profile;
 // Picker over the saved character profiles on disk, each a ProfileRef (bbs, char) pair
 // — profiles are BBS-scoped now, so the bare character name is no longer a unique key.
 // Selecting + the confirm button — or double-clicking a row — commits the chosen ref;
-// Cancel / title-bar X returns null. Serves File → Open profile (default wording) and
-// any other "pick a profile" flow (e.g. Settings → Toolbar + Shortcuts "Copy from
-// profile") via the overridable title / prompt / confirm-label strings.
+// Cancel / title-bar X returns null. Serves the Toolbar + Shortcuts tab's "Import
+// toolbar + Keybinds" and right-click-menu import via the overridable title /
+// prompt / confirm-label strings.
 public sealed partial class ProfilePickerDialogViewModel : ObservableObject, IDialogViewModel<ProfileRef>
 {
     public event Action<ProfileRef?>? CloseRequested;
@@ -21,7 +21,7 @@ public sealed partial class ProfilePickerDialogViewModel : ObservableObject, IDi
     public ObservableCollection<ProfileRef> Profiles { get; } = new();
 
     // Window title — the caller's base wording plus the absolute folder the list is read
-    // from (AppPaths.BbsDir), e.g. "Open profile - C:\Users\…\MudPlay\Data\BBS", so
+    // from (AppPaths.BbsDir), e.g. "Open profile - C:\Users\…\MudPlay\BBS", so
     // it's obvious at a glance which data directory the app is actually using.
     public string WindowTitle { get; }
 

@@ -734,8 +734,8 @@ public sealed class EventManager : IDisposable
     public string LastThenSummary { get; private set; } = "(none)";
 
     // The events that jump the queue: the Logoff trigger (fired by the cleanup
-    // warning or the user's own disconnect). What an event's action does, a command
-    // that sends a log-off included, doesn't make it one.
+    // warning). What an event's action does, a command that sends a log-off
+    // included, doesn't make it one.
     internal static bool IsLogoffType(ScheduledEvent e) => e.TriggerType == EventTriggerType.Logoff;
 
     // Run the event (see the header), or queue it behind the run under way. Skips
@@ -769,10 +769,9 @@ public sealed class EventManager : IDisposable
         bool jumps = IsLogoffType(e);
         if (_run is { } holder)
         {
-            // A Logoff event runs in the minutes before a cleanup or the moment
-            // before a disconnect; one that waited behind a long trip would miss
-            // the connection. Behind another Logoff run it waits, at the head of
-            // the queue.
+            // A Logoff event runs in the minutes before a cleanup; one that waited
+            // behind a long trip would miss the connection. Behind another Logoff
+            // run it waits, at the head of the queue.
             if (!jumps || IsLogoffType(holder.Origin) || IsLogoffType(holder.Event))
             {
                 if (!Enqueue(e, holder, jumps)) return false;
@@ -949,14 +948,10 @@ public sealed class EventManager : IDisposable
     }
 
     // Synchronously fires every EventTriggerType.Logoff event in the list. Called
-    // from the user-initiated disconnect path BEFORE the wire closes (and BEFORE
-    // the dropped-connection auto-reconnect kicks in for dropped paths — those
-    // skip Logoff entirely because nobody calls this method on a server-side
-    // drop). Caller is responsible for the bounded flush window between this call
-    // and the actual DisposeAsync so the wire writes have time to drain. Returns
-    // the number of events actually dispatched so the caller can skip the flush
-    // wait when nothing fired: one Fire skipped (the master switch off, "Disable
-    // all events") is not counted.
+    // by EventScheduler when the BBS warns of its cleanup shutdown, while the
+    // connection is still up. Returns the number of events actually dispatched:
+    // one Fire skipped (the master switch off, "Disable all events") is not
+    // counted.
     public int FireLogoffEvents()
     {
         // Snapshot to a list so an event action that adds / removes

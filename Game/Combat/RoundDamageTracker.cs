@@ -45,9 +45,7 @@ namespace MudPlay.Game.Combat;
 // a poison tick, a room hazard — joins an open round but doesn't start one between
 // fights.
 //
-// Subscribers: CombatSessionTracker (our own statistics, per line and per round),
-// MonsterHpTracker, and AppServices, which prints the ledger when Settings → Combat
-// "Show combat round totals" is on.
+// Settings → Combat "Show combat round totals" prints the ledger on the terminal.
 // The opt-in combat trace file is written here when shouldWriteTrace returns true
 // on round close; it's queried per round so a mid-session toggle applies at once.
 public sealed class RoundDamageTracker : IDisposable
@@ -662,9 +660,9 @@ public sealed class RoundDamageTracker : IDisposable
         }
         else if (_trace is not null)
         {
-            // User toggled WriteCombatRoundTrace off mid-session — close
-            // the open trace file. Re-opens automatically when the
-            // toggle flips back on.
+            // The Log pane's diagnostics switch went off mid-session — close
+            // the open trace file. Re-opens automatically when it
+            // flips back on.
             _trace.Dispose();
             _trace = null;
         }

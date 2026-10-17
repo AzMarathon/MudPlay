@@ -68,11 +68,11 @@
                         Content="Clear" Command="{Binding ClearCommand}"/>
             </Grid>
 
-            <!-- On-disk / calibration toggles. Sit under the filter row.
-                 Auto-collect gates whether the program / memory / combat-trace
-                 files are written to Data/Logs at all; Hop timing gates the
-                 navigation calibration trace. Both off by default so a normal
-                 session leaves nothing extra behind. Saved globally. The row
+            <!-- On-disk / diagnostic toggles under the filter row. Auto-collect
+                 gates whether the program / memory / combat-trace / performance
+                 files are written to Logs at all; Hop timing gates the
+                 navigation calibration trace (both off by default, so a normal
+                 session leaves nothing extra behind). Saved globally. The row
                  wraps: it is wider than the window's starting width. -->
             <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="4">
                 <CheckBox IsChecked="{Binding AutoCollectLogs}"

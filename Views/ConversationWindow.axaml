@@ -103,7 +103,7 @@
             </Grid>
         </Border>
 
-        <!-- ============ Input + Export row ============ -->
+        <!-- ============ Input row ============ -->
         <Border DockPanel.Dock="Bottom"
                 Background="{StaticResource ChromeBgBrush}"
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
@@ -253,7 +253,7 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- ":" emote picker popup, anchored above the input box. Placed after RowsList
+        <!-- ":" emote picker popup, anchored below the input box. Placed after RowsList
              and with runtime bindings so its item template's DataType doesn't pollute
              the compiled ElementName=RowsList inference in the row template above. -->
         <Popup PlacementTarget="{Binding #InputBox}" Placement="Bottom"

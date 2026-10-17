@@ -9,9 +9,10 @@ public sealed class EquipmentStatSummary
 {
     // AC / DR (item base ArmourClass + Abil 2 + Abil 10 [Blur]; item base DamageResist + Abil 7).
     // PlusAC is the inclusive total (used by the combat / projected-AC formulas). PlusAcBlur
-    // tracks the Abil-10 "blur" portion SEPARATELY for display: blur AC is fundamentally
-    // different from worn AC — it scales inversely with carried encumbrance (0 at 100% heavy,
-    // full value at 0% load) — so readouts split it out rather than showing it as flat AC.
+    // tracks the Abil-10 "blur" portion SEPARATELY for display: blur AC is scaled in play,
+    // by load on Paradigm and by the heaviest armour worn on Stock (GAME_MECHANICS "Blur AC
+    // (ability code 10) — scaled by realm, NOT flat"), so readouts split it out rather than
+    // showing it as flat AC.
     public double PlusAC { get; set; }
     public double PlusAcBlur { get; set; }
     public double PlusDR { get; set; }
@@ -75,9 +76,10 @@ public sealed class EquipmentStatSummary
     public int PlusProtEvil { get; set; }        // Abil 24
     public int PlusProtGood { get; set; }        // Abil 25
 
-    // VileWard — AC bonus whose magnitude scales with the wearer's own evil; the
-    // exact scale is unconfirmed (see GAME_MECHANICS.md), so this is the raw item
-    // value for planning/ranking, not a modelled AC contribution.
+    // VileWard — Paradigm's AC bonus against evil monsters, scaled by the wearer's
+    // own evil. Kept raw here; CombatCalculator.AdjustVileWard scales it by the
+    // defender's evil tier where it counts (GAME_MECHANICS "Armour Class
+    // contributions — shadow, Prot-Evil, Prot-Good, VileWard").
     public int PlusVileWard { get; set; }        // Abil 1113
 
     // Weapon data (from item base fields, not abilities).

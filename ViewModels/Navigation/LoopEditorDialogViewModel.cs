@@ -9,10 +9,9 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Modeless editor for an existing Loop — rename, edit notes, reorder /
-// remove waypoints, attach / clear per-waypoint commands + delays. Adding a
-// new waypoint requires picking a room on the map; that's the builder's job,
-// not the editor's.
+// Modeless editor for an existing Loop — rename, edit notes, add (search box or
+// a map click) / reorder / remove waypoints, edit per-waypoint commands + delays
+// inline.
 //
 // Save mutates the loop in place + persists via LoopManager.Save, which
 // fires LoopsChanged so the Navigation pane refreshes. Cancel / X discards

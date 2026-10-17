@@ -18,7 +18,7 @@ namespace MudPlay.ViewModels.Navigation;
 // naming / saving / deleting all flow through this dialog instead of
 // crowding the build strip.
 //
-// Loops section: lists every loop on the active BBS. Each row exposes Edit
+// Loops section: lists every loop of the active game-data set. Each row exposes Edit
 // (opens LoopEditorDialogViewModel so rename + notes + per-waypoint command
 // edits all land in one place) and Delete (confirmed via ConfirmService).
 // The dialog stays open across edits — closing it is the user's explicit
@@ -27,9 +27,9 @@ namespace MudPlay.ViewModels.Navigation;
 // Auto-Lair Mode section: lists saved LairSetups stored alongside loops in
 // the shared AppPaths.GameDataSetLoopsFolder (lair files use the .lair.json
 // suffix). Each row exposes Run / Load / Edit / Delete — same row shape as
-// the Loops section. New setups happen via "Save lairs" in the rail's
-// build-mode strip; this dialog is the CRUD surface for already-named
-// setups.
+// the Loops section. New setups come from the Navigation window's Save chip
+// (in Lair mode, or while Auto-Lair runs) or from this dialog's New button
+// (an empty setup to fill in the editor).
 public sealed partial class NavigationManagerDialogViewModel : ObservableObject, IDialogViewModel<bool>
 {
     public event Action<bool>? CloseRequested;
@@ -222,8 +222,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     }
 
     // Rebuild the single combined tree from both backing lists. Lairs are
-    // added before loops so they sort ahead within each folder; the TreeView
-    // picks a leaf DataTemplate by runtime row type.
+    // added before loops so they sort ahead within each folder; the flat row
+    // list picks a leaf template by runtime row type.
     private void RebuildWalkTree()
     {
         string filter = (WalkFilter ?? string.Empty).Trim();
@@ -243,10 +243,9 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
                 if (l.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || (favQuery && l.Source.Favorite)) rows.Add(l);
         }
 
-        // Collapsed at rest (fast tab-swap); while filtering, build flat so the
-        // tree's VirtualizingStackPanel realises only visible matches instead of
-        // force-expanding every folder (an expanded folder tree defeats
-        // virtualization — see the rail's RebuildNavTree).
+        // Collapsed at rest (fast tab-swap); while filtering, build without
+        // folders so every match is a visible row instead of hiding inside a
+        // collapsed folder.
         Func<object, string?> folderOf = filtering ? (static _ => null) : FolderOfWalkRow;
         IEnumerable<string> folders = filtering ? Array.Empty<string>() : FolderSeed;
         NavTreeBuilder.Sync<object>(WalkTree, rows, folderOf, folders,
@@ -414,7 +413,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _favorites.RemoveFolder(node.Path, moveContentsToParent: true);
     }
 
-    // Move a favourite into folder (empty = root). Used by drag-drop + context-menu.
+    // Move a favourite into folder (empty = root).
     public void MoveFavoriteToFolder(FavoriteRowViewModel? row, string? folder)
     {
         if (row is null || _favorites is null) return;
@@ -906,7 +905,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         _folders.DeleteFolder(node.Path, moveContentsToParent: true);
     }
 
-    // Move a loop into the folder identified by folder (empty = root). Used by drag-drop + context-menu move.
+    // Move a loop into the folder identified by folder (empty = root).
     public void MoveLoopToFolder(ManagerLoopRow? row, string? folder)
     {
         if (row is null) return;

@@ -15,11 +15,12 @@ namespace MudPlay.ViewModels.GameData.Tables;
 
 // Game Data Browser → Monsters tab. Renders the imported MajorMUD Monsters table — the static
 // MDB table that drives Auto-Lair respawn timers (via RegenTime), CombatManager's per-monster
-// behaviour gating, and the Workshop COMBAT preview's damage projection.
+// behaviour gating, and the damage projections in the Workshop's Calculators tab and
+// Monster Intel.
 //
 // Column names mirror the MajorMUD MDB schema verbatim (per data-v1.11p.mdb). EXP is the
 // experience reward, MagicRes is the magic-resist score, AvgDmg is the average per-round
-// outgoing damage, RegenTime is respawn cadence in ticks. Type and Align render via
+// outgoing damage, RegenTime is the respawn time in hours. Type and Align render via
 // LookupEnums ("Solo" / "Lawful Good" / etc.). Undead is a byte-boolean from the MDB
 // (0 = no, non-zero = yes — the MDB stores Boolean True as -1, which arrives as 255).
 public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEditableTableSectionViewModel
@@ -119,12 +120,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         Title, "monster", "mob", "enemy", "creature", "lair", "regen", "respawn",
     };
 
-    // MajorMUD's HP-regen tick: a monster heals its HPRegen amount once every 90 seconds
-    // (18 combat rounds × 5 s). Shared by the "HP Regen" grid column and the edit dialog's HP
-    // detail row so the two never drift. (GreaterMUD's 30 s / 6 rounds would branch here off a
-    // realm flag if/when that realm is supported.)
-    private const int RegenIntervalSeconds = 90;
-
     protected override IReadOnlyDictionary<string, Func<string?, string?>> ColumnFormatters { get; } =
         new Dictionary<string, Func<string?, string?>>(StringComparer.OrdinalIgnoreCase)
         {
@@ -182,7 +177,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         // or AC ≤ 50 to find easy kills. The value tested is the leading integer of the
         // cell's raw value (so "80/10" AC/DR reads 80). This absorbs Monster Intel's
         // filtering dimensions (elemental resists, spell immunity, magic-weapon
-        // requirement, type/flags, loot). Live — editing any control re-filters.
+        // requirement, type/flags, loot). Edits apply when the panel's Apply is pressed.
         // Where it lives comes first: it is the cut a player makes before any stat bracket
         // ("what can I fight on this landmass / in this region / here?").
         FilterGroups.Add(new FilterGroup("Location", categories: _location.All));
@@ -490,10 +485,9 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             mdbInfo:          mdbInfo,
             writableTiers:    _resolverRef?.WritableTiers(),
             installedDefaults: seedDefaults,
-            // Lets "Override Attack" auto-resolve a typed cast-code (e.g.
-            // "turn") onto the mana-gated spell rung instead of silently
-            // falling through to a raw, ungated command — see
-            // MonsterEditDialogViewModel.ParseAttackOverride.
+            // Lets the spell boxes take the cast-code a player would type
+            // (e.g. "turn") rather than an internal spell number — see
+            // MonsterEditDialogViewModel.ResolveSpellOverride.
             resolveSpellShort: AppServices.Current.SpellShort.NumberByShort,
             // Inverse — shows the cast-code again on reopen instead of the
             // internal Spells.Number it resolved to.
@@ -575,8 +569,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     private IReadOnlyList<MdbInfoRow> BuildMdbInfo(string wccNoStr)
         => new MonsterMdbInfoBuilder(_cache, _roomGraph, AppServices.Current.TBInfo, _dialogs).Build(wccNoStr);
 
-    // Grid-cell JSON readers kept here (the builder carries its own copies) — used by the
-    // synthesised columns in ComputeRowCells.
+    // Grid-cell JSON readers for the synthesised columns (the builder carries its own copies).
     private static int ReadInt(GameRow el, string field)
     {
         if (!el.TryGetProperty(field, out GameValue v)) return 0;

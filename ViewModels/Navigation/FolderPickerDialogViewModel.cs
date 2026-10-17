@@ -7,10 +7,9 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Pick a destination folder from a list instead of typing a path. Used by the
-// "Move to folder…" action for a GOTO favourite. Returns the chosen folder path
-// on Save ("" = move to root), null on Cancel. The caller applies it through
-// FavoritesStore.MoveFavorite.
+// Pick a destination folder from a list instead of typing a path. Returns the
+// chosen folder path on Save ("" = move to root), null on Cancel. The caller
+// applies it through FavoritesStore.MoveFavorite.
 public sealed partial class FolderPickerDialogViewModel : ObservableObject, IDialogViewModel<string?>
 {
     public event Action<string?>? CloseRequested;

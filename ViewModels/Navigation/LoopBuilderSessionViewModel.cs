@@ -10,9 +10,8 @@ namespace MudPlay.ViewModels.Navigation;
 // clicked rooms and uses LoopManager.ExpandWaypoints to BFS-gap-fill the path
 // between them so the saved loop is ready to run. On Save the click list
 // becomes the loop's Waypoints (each click → one LoopWaypoint). Per-waypoint
-// commands + delays can be attached while building — click a row to open the
-// same WaypointActionEditDialog the loop editor uses (SetClickAction) — or later
-// via the loop editor.
+// commands + delays can be attached while building — click a row to open
+// WaypointActionEditDialog (SetClickAction) — or later in the loop editor.
 public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 {
     private readonly LoopManager _loops;
@@ -81,8 +80,8 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     // ExpandedStepCount on every click change.
     [ObservableProperty] private IReadOnlyList<RoomKey>? _previewedRoomKeys;
 
-    // Just the clicks the user laid down, in order — used by the map's
-    // numbered waypoint markers. Distinct from PreviewedRoomKeys which
+    // Just the clicks the user laid down, in order (the map numbers these).
+    // Distinct from PreviewedRoomKeys which
     // carries every BFS-filled intermediate.
     [ObservableProperty] private IReadOnlyList<RoomKey>? _waypointKeys;
 
@@ -160,8 +159,8 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     }
 
     // Attach (or clear) a per-waypoint command + delay on the click at index —
-    // driven by clicking the row in the loop-builder strip, which opens the same
-    // WaypointActionEditDialog the loop editor uses. Commands don't change the
+    // driven by clicking the row in the loop-builder strip, which opens
+    // WaypointActionEditDialog. Commands don't change the
     // gap-filled path, so no re-expand. No-op when index is out of range.
     public void SetClickAction(int index, string? command, long delayMs, bool doNotRest = false, bool doNotAttack = false,
         bool restHereHp = false, bool restHereMana = false)

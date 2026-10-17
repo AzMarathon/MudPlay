@@ -454,8 +454,8 @@ public readonly partial record struct RoomExit(
             return;  // hint stays None — movement is still a plain cardinal step
         }
 
-        // Race / Ability / Timed restrictions: walker treats as None for now
-        // (path-time gates are a later concern); RawHint carries the detail forward.
+        // Ability / Timed restrictions are not gated: the walker treats them as
+        // None, and RawHint carries the detail forward.
     }
 
     // Pull "N picklocks" / "N picklocks/strength" out of a modifier string. Used

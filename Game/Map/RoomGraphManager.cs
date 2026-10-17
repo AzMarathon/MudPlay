@@ -1559,7 +1559,7 @@ public sealed class RoomGraphManager
                     // A class-restricted transport (a `class N` directive in the
                     // greet chain) is stamped as the edge's ClassGate so
                     // MovementFilter.IsClassGateBlocked drops it for every class
-                    // but N — the wrong class never routes through it (issue #455).
+                    // but N — the wrong class never routes through it.
                     ClassGate: t.RequiredClass,
                     GatewayTeleport: false,
                     // Every person who asks pays the fare, so MovementFilter

@@ -50,11 +50,6 @@
                        Text="Saved to the loaded character — each character on a BBS keeps its own."/>
             <Border Classes="SettingsSectionRule"/>
 
-            <!-- Title / phase tag / description deliberately omitted per
-                 user direction — section headers throughout this tab
-                 are removed too. The bound Title is still surfaced via
-                 SettingsWindowViewModel's sidebar selection. -->
-
             <!-- Prose-style row matching the Player-Database row below.
                  Width="120" on the spinner so the value renders without
                  clipping (Avalonia's default NumericUpDown swallows
@@ -78,8 +73,8 @@
 
             <!-- Master gate for walker trap-disarming. Off → the walker
                  steps straight through trapped exits. On → it disarms
-                 first, but only when a disarm is actually possible (local
-                 Traps skill today; party delegation in a follow-up). -->
+                 first when it can: itself with the Traps skill, else a
+                 party member asked over @trap. -->
             <TextBlock Classes="FieldLabel" Text="Traps:" Margin="0,12,0,0"/>
             <CheckBox Content="Utilize self or party members to disarm traps"
                       IsChecked="{Binding UtilizeDisarmTrapsIfAble, Mode=TwoWay}"
@@ -276,13 +271,6 @@
                  coordinate with. HealthManager.TryFlee reads RunDirection /
                  BreakBeforeFleeing from CombatSettings now. -->
 
-            <!-- Note: the per-category Verbose toggles + the round-trace
-                 toggle moved to the Log pane menu as a single "Combat
-                 diagnostics" umbrella switch. The "Log movement hop timing"
-                 toggle moved there too (now just "Hop timing", next to
-                 "Auto-collect logs"). All are "while I'm debugging right
-                 now" affordances, not per-character preferences. -->
-
             <!-- ============ Location-based auto-equip ============
                  Wear an item while inside a map area, revert on the way out.
                  Each row: a map/room-number block, an And/Or dropdown, a
@@ -335,63 +323,6 @@
 
             <Button Content="Add rule" Command="{Binding AddLocationEquipRuleCommand}"
                     HorizontalAlignment="Left" Margin="0,4,0,0"/>
-
-            <!-- ============ Inline stub catalog ============
-                 Section headers stripped per user direction — the
-                 catalog renders as a flat list of rows. The numeric-
-                 row template puts the picker INLINE between the
-                 label and the suffix (e.g. "Attempt bash [120] times")
-                 instead of using a fixed-width left column with the
-                 picker pushed right. -->
-            <ItemsControl ItemsSource="{Binding StubGroups}" Margin="0,8,0,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:StubGroup">
-                        <ItemsControl ItemsSource="{Binding Fields}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:StubField">
-                                    <Grid ColumnDefinitions="*"
-                                          Margin="0,3,0,3"
-                                          ToolTip.Tip="{Binding Tooltip}">
-                                        <!-- Check rows: just the disabled checkbox spanning the row. -->
-                                        <CheckBox IsEnabled="False"
-                                                  Content="{Binding Label}"
-                                                  IsVisible="{Binding Kind, Converter={x:Static vm:KindEqualsConverter.Check}}"/>
-
-                                        <!-- Numeric rows: prose-style with the picker inline.
-                                             "Attempt bash [picker] times" — label + picker + suffix. -->
-                                        <StackPanel Orientation="Horizontal" Spacing="6"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding Kind, Converter={x:Static vm:KindEqualsConverter.Numeric}}">
-                                            <TextBlock Classes="FieldLabel" Text="{Binding Label}"/>
-                                            <NumericUpDown IsEnabled="False"
-                                                           Value="0"
-                                                           Minimum="{Binding Min}"
-                                                           Maximum="{Binding Max}"
-                                                           Width="100"/>
-                                            <TextBlock Classes="FieldLabel"
-                                                       Text="{Binding Suffix}"
-                                                       IsVisible="{Binding Suffix, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                        </StackPanel>
-
-                                        <!-- Text rows: label + textbox horizontally. -->
-                                        <StackPanel Orientation="Horizontal" Spacing="6"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding Kind, Converter={x:Static vm:KindEqualsConverter.Text}}">
-                                            <TextBlock Classes="FieldLabel" Text="{Binding Label}"/>
-                                            <TextBox IsEnabled="False" Width="220"/>
-                                        </StackPanel>
-
-                                        <!-- Note rows: italic prose, no control. -->
-                                        <TextBlock Classes="FieldNote"
-                                                   Text="{Binding Label}"
-                                                   IsVisible="{Binding Kind, Converter={x:Static vm:KindEqualsConverter.Note}}"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
 
         </StackPanel>
     </ScrollViewer>

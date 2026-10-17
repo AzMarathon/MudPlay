@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.182.0**
-> - Recovering a friend's corpse with `recover corpse <name> <password>` records every item and coin taken from it
-> - Death Recovery lists those corpses; Corpse handoff gives everything back to the name you type, paced, and keeps what was refused or unanswered
-> - The recover password is never saved or logged, and is masked in the Commands-sent capture, Up-arrow recall and bug reports
-> - Recovering a friend's corpse no longer marks your own open pile recovered
+> **Version 3.182.4**
+> - Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
+> - Stale on-screen text and tooltips corrected to match what the client does
+> - Message editor's Use tier box removed (message edits always stay with the game-data set)
+> - Auto-Lair's idle penalty setting removed (it had no effect)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

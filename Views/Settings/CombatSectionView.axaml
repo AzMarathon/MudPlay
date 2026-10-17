@@ -101,10 +101,10 @@
                 </StackPanel>
 
 
-                <!-- The master on/off for auto-attack lives on
-                     Settings → General → Auto-Combat (mirrored by the
-                     toolbar Toggle button). This tab configures HOW
-                     to attack, not WHETHER to. -->
+                <!-- Whether auto-attack runs is the Auto-Combat toggle
+                     (toolbar / Action menu); its starting state is
+                     General → Auto-Engines base modes. This tab
+                     configures HOW to attack, not WHETHER to. -->
 
                 <!-- ============ Combat action order ============ -->
                 <Panel Classes="ProfileFrame">

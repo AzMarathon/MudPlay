@@ -67,29 +67,6 @@ public readonly record struct CurrencyHoldings(
         _                        => long.MaxValue,   // Everything
     };
 
-    // Decompose the coin above a raw copper-farthing keep floor into a set of
-    // per-denomination offload commands. Hides the LOWEST denominations first
-    // (copper → runic), so the coins left on hand are the fewest possible: for a
-    // fixed value to shed, cheap coins are the most numerous per unit of value,
-    // so dumping them first leaves the highest-value coins behind. The result
-    // sits at the keep floor (or just above it, when discrete coins can't split
-    // to land exactly) with the minimum coin count. Used by the stash path,
-    // where `hide N <coin>` names a specific denomination and so needs the raw
-    // floor converted back into concrete coins to dump.
-    //
-    // Wealth is summed from the per-coin counts here (not TotalCopperValue) so
-    // the plan is realizable coin-by-coin: we only ever offload denominations we
-    // actually hold. excess = held - max(0, keepCopper); each step hides as many
-    // of the current denomination as fit inside the remaining excess without
-    // dropping below the floor. Returns the canonical "runic" name — callers map
-    // it to the board-specific word at send time. Empty when nothing sits above
-    // the floor.
-    // maxUnit caps which denominations are eligible to offload: only those whose
-    // copper unit is <= maxUnit are considered (the "only stash up to X" filter —
-    // long.MaxValue = no cap). Denominations above it are neither offloaded nor
-    // counted toward the keep floor; they simply stay in hand. keepCopper is a
-    // floor on the ELIGIBLE pool (the stash path passes 0 — its keep-on-hand
-    // rule lives on the banking side).
     // Coins to hand over so a recipient gets AT LEAST `copper`, spending no more than
     // `capCopper` — the opposite goal from PlanOffloadAboveKeep, which never overshoots.
     // Covering someone's training shortfall has to actually cover it, so: largest
@@ -141,6 +118,29 @@ public readonly record struct CurrencyHoldings(
         return (coins, given);
     }
 
+    // Decompose the coin above a raw copper-farthing keep floor into a set of
+    // per-denomination offload commands. Hides the LOWEST denominations first
+    // (copper → runic), so the coins left on hand are the fewest possible: for a
+    // fixed value to shed, cheap coins are the most numerous per unit of value,
+    // so dumping them first leaves the highest-value coins behind. The result
+    // sits at the keep floor (or just above it, when discrete coins can't split
+    // to land exactly) with the minimum coin count. The stash path's
+    // `hide N <coin>` names a specific denomination and so needs the raw
+    // floor converted back into concrete coins to dump.
+    //
+    // Wealth is summed from the per-coin counts here (not TotalCopperValue) so
+    // the plan is realizable coin-by-coin: we only ever offload denominations we
+    // actually hold. excess = held - max(0, keepCopper); each step hides as many
+    // of the current denomination as fit inside the remaining excess without
+    // dropping below the floor. Returns the canonical "runic" name — callers map
+    // it to the board-specific word at send time. Empty when nothing sits above
+    // the floor.
+    // maxUnit caps which denominations are eligible to offload: only those whose
+    // copper unit is <= maxUnit are considered (the "only stash up to X" filter —
+    // long.MaxValue = no cap). Denominations above it are neither offloaded nor
+    // counted toward the keep floor; they simply stay in hand. keepCopper is a
+    // floor on the ELIGIBLE pool (the stash path passes 0 — its keep-on-hand
+    // rule lives on the banking side).
     public IReadOnlyList<(string Currency, long Count)> PlanOffloadAboveKeep(
         long keepCopper, long maxUnit = long.MaxValue)
     {

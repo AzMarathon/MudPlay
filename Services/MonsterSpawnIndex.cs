@@ -13,7 +13,7 @@ namespace MudPlay.Services;
 //
 // Bosses and other script-spawned monsters carry their spawn site on the
 // monster record rather than the room's Room.RawLairTag. The room search
-// reads this via NavigationViewModel.RoomsByMonsterId; the room tooltip needs
+// reads this via RoomSearchService.RoomsByMonsterId; the room tooltip needs
 // the inverse — given a room, which monsters does it host? Without the index
 // a tooltip's Also Here line silently omits any boss whose presence lives
 // only on the monster record (live repro: 1/1678 Darkwood Forest, Webbed

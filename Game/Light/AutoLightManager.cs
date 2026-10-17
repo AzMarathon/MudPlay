@@ -6,15 +6,10 @@ namespace MudPlay.Game.Light;
 // Auto-light need poster. When the server prints a "can't see" room-light line
 // (The room is pitch black / The room is very dark - you can't see anything)
 // this posts a LightSource need to the NeedsRegistry; auto-get fulfils it by
-// grabbing a torch / lantern (or, once a light-spell / +illu-gear path exists,
-// equipping / casting). Darkness never halts movement — the walker proceeds with
-// the accuracy penalty; this engine only requests the light source.
-//
-// The predictive V = charIllu + roomLight model is deferred — no parser yet
-// produces the character's current illumination, so the exact illu gap can't be
-// computed. The live-observed path posts a coarse "need any light source"
-// descriptor (AnyLightDescriptor); the precise illu>=N gap lands when a charIllu
-// source exists.
+// grabbing a torch / lantern. Darkness never halts movement — the walker
+// proceeds with the accuracy penalty. Readying a carried light, the room-light
+// spell and buying are AutoLightProvisioner's; this need is the coarse
+// fallback, "any light source" (AnyLightDescriptor), not an exact illu gap.
 //
 // Only the two "can't see" lines drive a post. The penalized lines
 // (barely visible / dimly lit) still render room contents and have no auto-light
@@ -24,9 +19,8 @@ public sealed class AutoLightManager : IDisposable
     // LogService category — [AutoLight] rows on each genuinely-new need post.
     public const string LogCategory = "AutoLight";
 
-    // Coarse need descriptor posted on a live "can't see" line. Means "need any
-    // illumination source" — used until a charIllu parser lets us compute the
-    // precise illu>=N gap. All dark-room posts dedupe to this single need (you
+    // Coarse need descriptor posted on a live "can't see" line: "need any
+    // illumination source". All dark-room posts dedupe to this single need (you
     // need one light source, period).
     public const string AnyLightDescriptor = "illu>=1";
 

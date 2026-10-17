@@ -10,9 +10,8 @@ public sealed class OtherSettings
     // lives. Max lives in MajorMUD is 9, so the UI clamps this to 0..9. Pushed
     // into Game.Remote.RemoteCommandManager.MaxSuicideLivesThreshold.
     //
-    // The engine still hard-blocks suicide commands when the live lives count is
-    // unknown (no LivesProvider bound) — the conservative default. This setting
-    // only takes effect once that lives source is connected.
+    // The engine still hard-blocks suicide commands while the lives count is
+    // unknown (no stat screen read yet) — the conservative default.
     public int MaxSuicideLivesThreshold { get; set; } = 5;
 
     // Note: the ailment-handling toggles (the four "Ignore X" @wait gates
@@ -23,16 +22,16 @@ public sealed class OtherSettings
     // Master gate for walker trap-disarming. When true (default) the walker
     // routes a trapped exit through the disarm machinery before stepping through
     // — but only when a disarm is actually possible (the local character has the
-    // Traps skill, or — once the party-delegation path lands — a party member
-    // does). When false the walker walks straight through trapped exits with no
+    // Traps skill, or a party member does). When false the walker walks straight
+    // through trapped exits with no
     // disarm attempt. Labeled "Utilize disarm traps if able" in Settings → Other
     // because the "if able" capability check rides on top of this on/off switch.
     public bool UtilizeDisarmTrapsIfAble { get; set; } = true;
 
     // Caps the disarm-retry loop in the @trap handler — how many disarm trap
     // <dir> attempts we'll make after the trap has been spotted before giving
-    // up. Default 5, range 1..50. Damage-aware abort (stop early if the trap
-    // fires and we lose HP) ships with the HealthManager wiring.
+    // up. Default 5, range 1..50. A trap that goes off and leaves HP low holds the
+    // next try for the rest that follows (TrapDisarmManager.SetRestHold).
     public int MaxTrapDisarmAttempts { get; set; } = 5;
 
     // Location-based auto-equip rules. Each names an item to wear while inside a
@@ -133,9 +132,9 @@ public sealed class OtherSettings
     // Monster Intel "Edit Attacks" picker state, Char-tier, edited in the window.
     // Attack keys are stable strings: "melee:<MudAttackType>" (e.g. "melee:Normal",
     // "melee:Backstab") for the character's usable melee attacks, and "spell:<Short>"
-    // (e.g. "spell:mm") for an obtained attack spell. HiddenAttacks lists the attacks
-    // hidden from the Your Matchup panel (empty = show all). RoundsAttack is the one
-    // attack whose projection fills the master list's "Est. Rounds to Kill" column;
+    // (e.g. "spell:mm") for an obtained attack spell. MonsterIntelHiddenAttacks lists
+    // the attacks hidden from the Your Matchup panel (empty = show all).
+    // MonsterIntelRoundsAttack is the one attack whose projection fills the master list's "Est. Rounds to Kill" column;
     // null / unset / no-longer-available falls back to the Normal melee attack.
     public List<string> MonsterIntelHiddenAttacks { get; set; } = new();
     public string? MonsterIntelRoundsAttack { get; set; }
@@ -149,15 +148,6 @@ public sealed class OtherSettings
     // Monster Intel "Apply Buffs" picker state, Char-tier: cast codes of the
     // character's own offense buffs (e.g. shadowform) folded into the matchup as if up.
     public List<string> MonsterIntelAppliedBuffs { get; set; } = new();
-
-    // Note: the former per-character verbose toggles (VerboseCombat /
-    // VerboseRoomClassifier / VerboseCasting / VerboseCash / VerboseStealth) +
-    // WriteCombatRoundTrace lived here briefly. They moved to the Log pane menu
-    // as a single "Combat diagnostics" umbrella switch (session-only, not
-    // persisted) — see Services/LogDiagnosticState.cs. Verbose tracing is a
-    // "while I'm debugging right now" affordance, not a per-character
-    // preference, and keeping it off the profile saves it from leaking on
-    // between sessions.
 
     // Note: the run-away (flee) knobs (RunDirection / BreakBeforeFleeing)
     // graduated to CombatSettings — they sit on the Combat tab next to the

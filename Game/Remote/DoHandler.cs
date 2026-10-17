@@ -9,8 +9,8 @@ namespace MudPlay.Game.Remote;
 // and shipped on the wire as if the local user had typed them.
 //
 // Sender authorisation is handled by the engine via RemoteCommandCatalog — @do
-// requires PlayerRemoteControls.ExecuteCommands, which the Players-tab tooltip
-// flags as "do something on my behalf". Default deny for any player without an
+// requires PlayerRemoteControls.ExecuteCommands (the "Execute commands" box in the
+// player edit dialog). Default deny for any player without an
 // explicit grant; recommend granting only to known trusted players (party leader,
 // sysop-ranked teammates, etc.).
 //

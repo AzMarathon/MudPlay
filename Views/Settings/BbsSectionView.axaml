@@ -447,7 +447,7 @@
                     <!-- ============================================================
                          SECTION 2 — Character profile settings (per-character).
                          Written onto the loaded character's per-BBS credential
-                         slice (BbsSectionViewModel.CommitCredentials) — every
+                         slice (BbsSectionViewModel.WriteCredentials) — every
                          character on this BBS keeps its own.
                          ============================================================ -->
                     <TextBlock Classes="SettingsSectionBanner" Text="Character profile settings"/>
@@ -669,7 +669,7 @@
                                   ToolTip.Tip="Prompt before Settings → OK / Apply and other JSON-write saves. 'No' returns to the editor without saving or closing."/>
                         <CheckBox Content="Confirm deletes"
                                   IsChecked="{Binding ConfirmDeletes, Mode=TwoWay}"
-                                  ToolTip.Tip="Prompt before destructive list-row removes (toolbar rows, BBS profiles, future game-data records)."/>
+                                  ToolTip.Tip="Prompt before destructive deletes: a BBS profile, a navigation favorite, a Game Data record and similar. Removing a toolbar button is not gated."/>
                     </StackPanel>
 
                     <settings:StatusBarEditorView Margin="0,16,0,0" DataContext="{Binding StatusBarEditor}"/>

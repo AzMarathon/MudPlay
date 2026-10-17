@@ -11,9 +11,9 @@ using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
 
-// "General" tab. Per-character: default startup task, auto-connect, and the
-// boot-up state of every Action-menu auto-toggle in both Manual-Mode and
-// Auto-Mode columns.
+// "General" tab. Per-character: default startup task, auto-connect, the
+// boot-up (base) state of every auto-engine and whether each is turned back
+// on after a reconnect.
 //
 // Loads from CharacterProfile.Settings on construction and after a
 // ProfileService.ProfileLoaded event so the editor reflects whichever profile is
@@ -168,8 +168,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         RefreshLocalApiStatus();
     }
 
-    // Install-global (GlobalSettings.RecentProfilesShown): how many entries the
-    // File → Recent submenu lists. Default 5; capped at MaxRecentProfilesShown.
+    // Install-global (GlobalSettings.RecentProfilesShown): how many recent
+    // profiles the File menu lists. Default 5; capped at MaxRecentProfilesShown.
     [ObservableProperty] private int _recentProfilesShown = 5;
     public int MaxRecentProfilesShown => GlobalSettings.MaxRecentProfilesShown;
 
@@ -278,9 +278,10 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     }
 
     // ----- Auto-engine master switches -----
-    // Each AmXxx bool is the master on/off for the matching engine. Persisted to
-    // GeneralSettings.AutoMode and read live by each engine's gating delegate in
-    // AppServices. The XAML wires each CheckBox's IsEnabled to the matching
+    // Each AmXxx bool is this character's base on/off for the matching engine,
+    // persisted to GeneralSettings.AutoModeBase. The live AutoMode (toolbar /
+    // Action menu) is reconciled to it at profile load and at a loop / auto-lair
+    // start, not on Save. The XAML wires each CheckBox's IsEnabled to the matching
     // IsXxxWired flag so the user can see which engines are actually live vs
     // surface-only.
     [ObservableProperty] private bool _amAutoCombat;

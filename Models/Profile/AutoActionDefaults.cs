@@ -2,11 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace MudPlay.Models.Profile;
 
-// Initial state for every Action-menu auto-toggle when the character
-// logs in. Lives on GeneralSettings twice — once per Manual-Mode column
-// and once per Auto-Mode column — so the user can pick which engines come
-// up engaged depending on the play mode. The engines read these flags as
-// their boot-up state.
+// The on/off state of every Action-menu auto-toggle. Lives on GeneralSettings
+// twice: AutoMode, the live state the toolbar flips, and AutoModeBase, the
+// base modes the engines settle back to at profile load and circuit start.
 //
 // Field set mirrors the Action menu's auto-toggle group exactly
 // (Combat / Nuke / Heal / Rest / Bless / Light / Get-Items / Get-Cash /

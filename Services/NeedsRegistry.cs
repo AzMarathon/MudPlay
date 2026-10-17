@@ -9,18 +9,15 @@ namespace MudPlay.Services;
 public enum NeedKind
 {
     // The character needs an illumination source (torch / lantern / +illu
-    // gear / light spell) to see a dark room. Posted by auto-light, fulfilled
-    // opportunistically by auto-get.
+    // gear / light spell) to see a dark room. Posted by auto-light.
     LightSource,
 
     // The character needs a specific item to traverse a planned route — an
     // (Item: N) / (Ticket: N) exit gate the walker will hit but we don't
     // carry the required item. The Need.Descriptor is the item id (decimal).
     // Posted by Game.Map.PathItemDemandTracker at walk-start; resolved when
-    // the item enters inventory. Its consumers include the Settings → Other
-    // "search rooms if item needed" affordance (arms auto-search while any
-    // such need is outstanding) and active fulfillers (shop routing,
-    // monster-drop reroute, party obtain) that claim the same needs.
+    // the item enters inventory. Active fulfillers (shop routing, monster-drop
+    // reroute, give / summon routing, party obtain) react to the post.
     PathItem,
 }
 
@@ -50,10 +47,8 @@ public readonly record struct Need(
 
 // The fulfillment half of the auto-engine coordination model (the gating half
 // is Game.Map.MovementCoordinator). No engine references another by type: a
-// requester Posts a Need, and a fulfilling engine claims it (TryClaim),
-// satisfies it, then resolves it (Resolve). The requester never knows who
-// fulfils. Auto-light posts a LightSource need; auto-get fulfils by grabbing
-// a torch/lantern en route.
+// requester Posts a Need, fulfilling engines react to NeedPosted, and the
+// requester Resolves it once satisfied. The requester never knows who fulfils.
 //
 // Thread affinity: posts come from MessageRouter handlers and claims come
 // from engine ticks — both on the UI thread. The internal list is

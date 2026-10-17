@@ -22,12 +22,12 @@ using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// EQUIPMENT MANAGER section — one unified view. The left list holds the four
+// EQUIPMENT MANAGER section — one unified view. The left list holds the six
 // fixed trigger-purposed gear sets (Default / Backstab / Pre-rest HP / Pre-rest
-// Mana); Enable / Disable arm the selected set for automation. Selecting a set
-// shows its slot grid on the right: one row per equippable slot (plus the two
-// virtual Alt Weapon / Alt Off-Hand rows), each a search box whose suggestions
-// are the game-data items that fit the slot and that the live character (level /
+// Mana / While Moving / Bossing); Enable / Disable arm the selected set for
+// automation. Selecting a set shows its slot grid on the right: one row per
+// equippable slot (plus the two virtual Alt Weapon / Alt Off-Hand rows), each a
+// search box whose suggestions are the game-data items that fit the slot and that the live character (level /
 // class / alignment) can wear. A slot left blank is {no change} — skipped on
 // apply. Every edit auto-persists to CharacterProfile.Equipment; there is no Save
 // button.
@@ -72,7 +72,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     public override string Title => SectionTitle;
     public override Control View => _view ??= new EquipmentSectionView { DataContext = this };
 
-    // The four fixed trigger-purposed sets, in roster order.
+    // The six fixed trigger-purposed sets, in roster order.
     public ObservableCollection<EquipmentSetRowViewModel> SetRows { get; } = new();
 
     // The slot rows, in EquipmentSlotMap.DisplayOrder.
@@ -524,7 +524,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         RefreshCurrentlyEquipped();
     }
 
-    // Reconcile the persisted set blob to exactly the four roster entries, one per
+    // Reconcile the persisted set blob to exactly the six roster entries, one per
     // trigger, in roster order — seeding any missing, normalizing names, seeding a
     // blank keyword, and dropping legacy / duplicate sets. Returns whether anything
     // changed so the caller can persist.

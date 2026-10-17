@@ -580,10 +580,10 @@ public sealed class ChatRouter : IDisposable
     // are none of them the user's.
     public bool OutgoingTelepathWasUsers { get; private set; }
 
-    // Form is ">Target message" — the directed-say verb. Same pairing rationale as
-    // TryCaptureTelepath: the typed line carries the message, the server's later
-    // "--- Message Directed to X ---" confirmation supplies the target + fires the
-    // conversation entry, dequeued FIFO.
+    // Form is ">Target message" — the directed-say verb. The typed line carries the
+    // message and the server's later "--- Message Directed to X ---" confirmation the
+    // target; the confirmation doesn't repeat the text, so captures are paired with
+    // confirmations first in, first out, and the pair fires the conversation entry.
     private void TryCaptureDirectedSay(string text)
     {
         if (text.Length < 3 || text[0] != '>') return;

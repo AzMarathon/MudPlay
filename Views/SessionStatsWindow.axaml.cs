@@ -42,10 +42,8 @@ public partial class SessionStatsWindow : Window
     // drag in PointerMoved, so hold the press args.
     private PointerPressedEventArgs? _pressArgs;
 
-    // Last panel-content height we re-fit the window to. SizeToContent="Height"
-    // sizes the window on open but doesn't reliably shrink it when a panel is
-    // collapsed / hidden at runtime, so we re-trigger it whenever the stacked
-    // panels' desired height changes (guarded to avoid a layout loop).
+    // Last panel-content height we re-fit the window to; re-fit whenever the
+    // stacked panels' desired height changes (guarded to avoid a layout loop).
     private double _lastContentHeight = -1;
 
     public SessionStatsWindow()
@@ -53,7 +51,7 @@ public partial class SessionStatsWindow : Window
         InitializeComponent();
         GlobalHotkeys.Attach(this);
         // autoHeight: the window sizes its height to its visible content
-        // (SizeToContent="Height"), so the layout store must not pin a saved height.
+        // (RefitToContent), so the layout store must not pin a saved height.
         MudPlay.Services.AppServices.Current.WindowLayouts.AttachWindow(this, "session-stats", autoHeight: true);
         Closed += OnClosed;
 
@@ -104,9 +102,8 @@ public partial class SessionStatsWindow : Window
 
     // Re-fit the window height to its content whenever the panels' total height
     // changes (a panel expanded / collapsed / hidden, or opening the window with its
-    // saved set of expanded panels). Avalonia's SizeToContent
-    // fits on open but doesn't reliably react to runtime content changes here, so
-    // we drive the height ourselves: measure the whole body unbounded to learn the
+    // saved set of expanded panels). We drive the height ourselves (SizeToContent
+    // doesn't reliably react to runtime content changes): measure the whole body unbounded to learn the
     // height it wants, add the (constant) window chrome, clamp to Min/Max, and set
     // it. Guarded on the measured content height so the resize's own layout pass —
     // and the per-second stat refreshes — don't spin a loop.

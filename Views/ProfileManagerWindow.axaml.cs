@@ -8,8 +8,9 @@ using Avalonia.VisualTree;
 namespace MudPlay.Views;
 
 // Modeless Profile Management window. Bound to ViewModels.ProfileManagerViewModel;
-// code-behind only attaches the persisted window-layout and wires the
-// global-hotkeys handler so chord forwards still work when it has focus.
+// code-behind attaches the persisted window-layout and global hotkeys, opens a
+// BBS's settings on row double-click, closes on the VM's request, and disposes
+// the VM on close.
 public partial class ProfileManagerWindow : Window
 {
     public ProfileManagerWindow()

@@ -6,10 +6,10 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.Settings;
 
 // Shell view-model for the Settings window. Owns the section catalog, the
-// search box, and the OK / Apply / Cancel commit lifecycle. Every
-// settings tab persists on the loaded character profile — there is no scope
-// picker in this window. The Defaults / Global / BBS / Char hierarchy is
-// reserved for game-data record overrides.
+// search box, and the OK / Apply / Cancel commit lifecycle. Each section
+// persists to its own store (character profile, BBS record or Global tier);
+// there is no scope picker in this window. The Defaults / Global / BBS / Char
+// hierarchy picker is reserved for game-data record overrides.
 //
 // Commit model:
 //   OK     = apply dirty sections, close.
@@ -29,8 +29,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     // in tests, where the search falls back to SearchableLabels alone.
     private Func<SettingsSectionViewModel, IEnumerable<string>>? _shownText;
 
-    // Shared staged combat-profile list edited by BOTH the Combat and Health section
-    // VMs (a combat profile spans both tabs). Lives for this window's lifetime.
+    // Shared staged combat-profile list edited by the Combat, Health, Spells and Party
+    // section VMs (a combat profile spans those tabs). Lives for this window's lifetime.
     private CombatProfileStagingSession? _profileSession;
 
     // Raised when the shell wants the host window to close.
@@ -167,9 +167,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         CloseRequested?.Invoke();
     }
 
-    // Drop pending edits but don't close the window. Used by the host window's
-    // Closing handler to route X / Alt-F4 through the same rollback logic as
-    // Cancel without re-entering Close.
+    // Drop pending edits but don't close the window, so the title-bar X / Alt-F4
+    // can roll back like Cancel without re-entering Close.
     public void DiscardChanges()
     {
         foreach (SettingsSectionViewModel s in Sections) s.Discard();
@@ -285,10 +284,11 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             AppServices.Current.Settings);
         Sections.Add(bbsSection);
 
-        // One shared combat-profile staging session, edited by both the Health and
-        // Combat tabs (a profile spans both). Created before either section so its
-        // ProfileLoaded handler runs first (it drives the box reload on a mid-window
-        // character swap). Constructed FIRST here so it subscribes before the VMs.
+        // One shared combat-profile staging session, edited by the Combat, Health,
+        // Spells and Party tabs (a profile spans them all). Created before those
+        // sections so its ProfileLoaded handler runs first (it drives the box reload
+        // on a mid-window character swap). Constructed FIRST here so it subscribes
+        // before the VMs.
         _profileSession = new CombatProfileStagingSession(
             AppServices.Current.CombatProfiles,
             _profile,

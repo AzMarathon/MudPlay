@@ -4,7 +4,7 @@ namespace MudPlay.Game.Emotes;
 
 // The set of emotes the conversation window can substitute: word shortcodes
 // (":lol:"), classic emoticons (":)"), and image emotes (the bundled Pepe set). The
-// built-in catalog is static data; a later PR layers user-defined emotes on top.
+// built-in catalog is static data; WithUser layers the user's own emotes on top.
 //
 // Word shortcodes and image emotes share one case-insensitive name map (so ":monkaS:"
 // and ":monkas:" resolve alike). Emoticons are matched case-sensitively as literals
@@ -41,7 +41,6 @@ public sealed class EmoteCatalog
 
     // A fresh catalog = the built-in set with hiddenDefaults removed, then the user
     // emotes layered on top (same-named user emotes win, and re-add a hidden default).
-    // Used by EmoteStore to publish the live catalog.
     public static EmoteCatalog WithUser(IEnumerable<Emote> userEmotes, IEnumerable<string> hiddenDefaults)
     {
         EmoteCatalog c = BuildBuiltIn();

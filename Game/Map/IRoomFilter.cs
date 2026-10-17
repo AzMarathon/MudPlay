@@ -34,9 +34,9 @@ public readonly record struct ClosedRoomTerms(int MinLevel, IReadOnlyList<int> I
 // destination are evaluated by the caller so a user can still SetLocated
 // on an avoided room without breaking the walker.
 //
-// The interface is kept separate from its per-character AvoidedRoomFilter
-// implementation so the BFS engine can be tested without wiring the
-// profile layer.
+// The interface is kept separate from its per-character implementation
+// (Services.MovementFilter) so the BFS engine can be tested without wiring
+// the profile layer.
 public interface IRoomFilter
 {
     bool IsAvoided(RoomKey key);

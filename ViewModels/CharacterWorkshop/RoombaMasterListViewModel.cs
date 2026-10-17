@@ -14,7 +14,7 @@ using MudPlay.ViewModels.GameData.Edit;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Read-only master inventory across every room Roomba has ever scanned,
-// opened from the GH Management tab's "Master List" button. One row per
+// opened from the Workshop Roomba tab's "Master List" button. One row per
 // (item, room) sighting in GhItemLocationStore, cross-referenced against
 // Items.json's Obtained From via the same ItemMdbViewBuilder the Item edit
 // dialog uses — so the Market column reads exactly like that dialog's

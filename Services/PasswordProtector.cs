@@ -9,7 +9,7 @@ namespace MudPlay.Services;
 // Models.Profile.BbsCredentials.EncryptedPassword — so a character profile
 // JSON is fully self-contained for backup / copy.
 //
-// Key material lives in a single file at Data/.credkey — 32 random bytes,
+// Key material lives in a single file at <data root>/.credkey — 32 random bytes,
 // generated on first use, mode 0600 on Unix (NTFS already inherits
 // user-private perms on Windows). The key file is the only piece a would-be
 // reader needs in addition to the profile JSON to recover the plaintext, so

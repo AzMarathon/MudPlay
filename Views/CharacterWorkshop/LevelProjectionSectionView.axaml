@@ -18,7 +18,7 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- What-if controls: target level range + race / class / realm. -->
+        <!-- What-if controls: target level range + race / class. The realm follows the active game data. -->
         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,18,6">
                 <TextBlock Classes="FieldLabel" Text="Levels"/>

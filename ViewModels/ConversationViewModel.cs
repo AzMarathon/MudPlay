@@ -361,12 +361,12 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private IBrush TextBrush(ChatChannel c)
         => _textBrushes.TryGetValue(c, out IBrush? brush) ? brush : Brushes.Gray;
 
-    // Send InputText to the game and clear the field.
     // The window's Clear All: the same wipe as Tools → Clear chatlog (history and
     // the saved talk log), which the main window owns.
     [RelayCommand]
     private void ClearAll() => _clearChatlog();
 
+    // Send InputText to the game and clear the field.
     [RelayCommand]
     private void SendInput()
     {
