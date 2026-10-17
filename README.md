@@ -1,14 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.46**
-> - Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
-> - Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
-> - Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
-> - Your Matchup lists each of a monster's physical attacks under the Melee line
-> - Your hit % on a monster counts its dodge too, in Monster Intel, the Workshop Calculators and the Item Finder; the Calculators' monster attack rows use your class floor
-> - Bug reports carry the AC, dodge and class floor the hit chances are worked from
-> - Loop simulator rolls swings both ways at the same chances, so dodge counts there too (area rankings saved before are dropped)
+> **Version 3.180.48**
+> - Settings search highlights matching tabs like Help's search, and no longer hides the rest
+> - It searches what each tab shows, tooltips included, with a match count under the tab list
+> - The open tab highlights its matching settings and scrolls to the first
+> - The search stays while you move between tabs
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

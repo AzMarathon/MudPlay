@@ -25,17 +25,11 @@
           <Style Selector="TreeViewItem" x:DataType="vm:HelpNodeViewModel">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
           </Style>
-          <!-- A topic whose title or body holds the search text. -->
-          <Style Selector="Border.HelpMatch">
-            <Setter Property="Background" Value="#55E0B040"/>
-          </Style>
-          <Style Selector="Border.HelpMatch TextBlock">
-            <Setter Property="FontWeight" Value="SemiBold"/>
-          </Style>
         </TreeView.Styles>
         <TreeView.DataTemplates>
           <TreeDataTemplate DataType="vm:HelpNodeViewModel" ItemsSource="{Binding Children}">
-            <Border Classes.HelpMatch="{Binding IsMatch}" CornerRadius="3" Padding="3,0">
+            <!-- SearchMatch: the topic's title or body holds the search text. -->
+            <Border Classes.SearchMatch="{Binding IsMatch}" CornerRadius="3" Padding="3,0">
               <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" Padding="0,2"/>
             </Border>
           </TreeDataTemplate>
