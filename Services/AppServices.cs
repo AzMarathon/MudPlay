@@ -2654,7 +2654,7 @@ public sealed class AppServices
     public Game.Map.GhItemLocationStore GhItemLocations { get; private set; } = null!;
 
     // Per-character favourite-room bookmarks. Wires Navigation's
-    // GOTO pane + the map's "Add to favorites" context menu;
+    // GOTO pane + the map's "Save as Go To" context menu;
     // persisted via ProfileService.
     public FavoritesStore Favorites { get; private set; } = null!;
 

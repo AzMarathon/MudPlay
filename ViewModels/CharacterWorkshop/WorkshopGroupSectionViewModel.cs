@@ -41,8 +41,7 @@ public sealed partial class WorkshopGroupSectionViewModel : WorkshopSectionViewM
     partial void OnSelectedChildChanged(WorkshopSectionViewModel? value)
     {
         if (value is not null) RaiseLayoutChanged();
-        if (value?.Id == ItemFinderViewModel.SectionId) GuideActions.Report(GuideActions.ItemFinderShown);
-        else if (value?.Id == EquipmentSectionViewModel.SectionId) GuideActions.Report(GuideActions.EquipmentManagerShown);
+        if (value is not null && GuidePageActions.ForWorkshopPage(value.Id) is { } key) GuideActions.Report(key);
     }
 
     private void OnChildLayoutChanged(WorkshopSectionViewModel child)

@@ -6,7 +6,7 @@ using MudPlay.Models.Settings;
 namespace MudPlay.ViewModels.Guides;
 
 // A guide as the picker lists it: what it covers and how far the user got.
-public sealed record GuidePickerRow(string Id, string Title, string Description, string Status, bool IsDone, bool CanRestart);
+public sealed record GuidePickerRow(string Id, string Title, string Description, string Status, bool CanRestart);
 
 public sealed record GuidePickerGroup(string Area, IReadOnlyList<GuidePickerRow> Rows);
 
@@ -41,12 +41,11 @@ public sealed partial class GuidePickerViewModel
 
     private static GuidePickerRow ToRow(GuideDefinition g, GuideProgress progress)
     {
-        bool done = progress.Completed.Contains(g.Id);
-        string status = done ? "✓ Done"
+        string status = progress.Finished.ContainsKey(g.Id) ? "✓ Done"
             : g.Resumable && progress.StepReached.TryGetValue(g.Id, out int step)
                 ? $"Step {step + 1} of {g.Steps.Count}"
                 : g.Resumable ? $"{g.Steps.Count} steps" : "";
-        return new GuidePickerRow(g.Id, g.Title, g.Description, status, done, g.Resumable);
+        return new GuidePickerRow(g.Id, g.Title, g.Description, status, g.Resumable);
     }
 
     [RelayCommand]

@@ -63,7 +63,6 @@ public sealed partial class GuideViewModel : ObservableObject
 
     internal IReadOnlyList<GuideDefinition> Guides => _guides;
     internal GuideProgress Progress => _progressStore();
-    public string? ActiveGuideId => IsActive ? _guide?.Id : null;
 
     // The setup tour at its first outstanding step, built from what's missing now.
     public void StartSetup() => Begin(GuideCatalogue.SetupId, demo: false, restart: false);
@@ -73,7 +72,7 @@ public sealed partial class GuideViewModel : ObservableObject
     // (step 1 when they lack nothing), like the real auto-show.
     public void StartDemo() => Begin(GuideCatalogue.SetupId, demo: true, restart: false);
 
-    // Open a guide where the user left it (step 1 when new or already finished).
+    // Open a guide where the user left it (step 1 when new, or just finished).
     public void Start(string guideId) => Begin(guideId, demo: false, restart: false);
 
     // Forget a guide's progress and walk it again from step 1.
@@ -84,7 +83,7 @@ public sealed partial class GuideViewModel : ObservableObject
         GuideDefinition? guide = _guides.FirstOrDefault(g => g.Id == guideId);
         if (guide is null) return;
 
-        if (restart && (Progress.StepReached.Remove(guideId) | Progress.Completed.Remove(guideId)))
+        if (restart && (Progress.StepReached.Remove(guideId) | Progress.Finished.Remove(guideId)))
             _saveProgress();
 
         _guide = guide;
@@ -96,8 +95,9 @@ public sealed partial class GuideViewModel : ObservableObject
                 _steps.Add(step);
 
         int start = FirstUndoneIndex();
-        if (!demo && guide.Resumable && !Progress.Completed.Contains(guideId)
-            && Progress.StepReached.TryGetValue(guideId, out int reached))
+        // A finished guide's place is dropped at its Finish, so opening it again
+        // starts at step 1 and from then on keeps its place like any other.
+        if (!demo && guide.Resumable && Progress.StepReached.TryGetValue(guideId, out int reached))
             start = Math.Clamp(reached, 0, _steps.Count - 1);
 
         CurrentIndex = start;
@@ -254,7 +254,7 @@ public sealed partial class GuideViewModel : ObservableObject
         if (_demoMode || _guide is null) return;
         if (IsSetup) _persistSetupDismiss();
         Progress.StepReached.Remove(_guide.Id);
-        Progress.Completed.Add(_guide.Id);
+        Progress.Finished[_guide.Id] = true;
         _saveProgress();
         ProgressChanged?.Invoke();
         _log($"\"{_guide.Title}\" finished");
@@ -280,7 +280,6 @@ public sealed partial class GuideViewModel : ObservableObject
     private void RaiseStepProperties()
     {
         OnPropertyChanged(nameof(GuideTitle));
-        OnPropertyChanged(nameof(ActiveGuideId));
         OnPropertyChanged(nameof(CurrentTitle));
         OnPropertyChanged(nameof(CurrentTargetName));
         OnPropertyChanged(nameof(CurrentLines));

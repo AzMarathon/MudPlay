@@ -23,10 +23,10 @@ public static class GuideActions
 
     // ----- Navigation -----------------------------------------------------
     public const string NavigationOpened = "NavigationOpened";
-    public const string LoopRoomClicked = "LoopRoomClicked";
+    public const string LoopHasTwoRooms = "LoopHasTwoRooms";
     public const string LoopSaved = "LoopSaved";
     public const string LoopStarted = "LoopStarted";
-    public const string LairMarked = "LairMarked";
+    public const string TwoLairsMarked = "TwoLairsMarked";
     public const string LairSetupSaved = "LairSetupSaved";
     public const string AutoLairStarted = "AutoLairStarted";
     public const string DestinationQueued = "DestinationQueued";

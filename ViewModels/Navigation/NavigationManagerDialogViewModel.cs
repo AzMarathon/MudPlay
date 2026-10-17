@@ -28,7 +28,7 @@ namespace MudPlay.ViewModels.Navigation;
 // Auto-Lair Mode section: lists saved LairSetups stored alongside loops in
 // the shared AppPaths.GameDataSetLoopsFolder (lair files use the .lair.json
 // suffix). Each row exposes Run / Load / Edit / Delete — same row shape as
-// the Loops section. New setups happen via "Save lairs" in the rail's
+// the Loops section. New setups happen via Save on the chip row in the
 // build-mode strip; this dialog is the CRUD surface for already-named
 // setups.
 public sealed partial class NavigationManagerDialogViewModel : ObservableObject, IDialogViewModel<bool>

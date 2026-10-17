@@ -35,7 +35,7 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
 
     public string Description =>
         "Per-character tuning for the Auto-Lair scheduler. The marked-room list itself is per BBS " +
-        "(saved via the Navigation window's \"Save lairs\" button); these knobs say how aggressively " +
+        "(saved with the Save chip in the Navigation window's lair mode); these knobs say how aggressively " +
         "the scheduler chases ready-now lairs, how it estimates travel time, and how long the engage " +
         "window holds at a lair before re-evaluating.";
 

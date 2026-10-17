@@ -21,6 +21,9 @@ internal static class GuideCatalogue
     private static GuideLine Note(string text) => new(text);
     private static GuideStep Step(string title, string? target, params GuideLine[] lines) => new(title, lines, target);
 
+    // The Loop mode / Lair mode / Save / Go chips show only with the side panels out.
+    private const string ChipRowHidden = "No chips above the map? Click ◀ at the top right (Expand the side panels)";
+
     private static GuideStep OpenNavigation() =>
         Step("Open Navigation", "ViewMenu", Do("View → Navigation", A.NavigationOpened));
 
@@ -37,8 +40,9 @@ internal static class GuideCatalogue
             {
                 OpenNavigation(),
                 Step("Build the loop", null,
+                    Note(ChipRowHidden),
                     Note("Click the Loop mode chip above the map — it reads Building"),
-                    Do("Left-click each room of the circuit on the map, in order", A.LoopRoomClicked),
+                    Do("Left-click each room of the circuit on the map, in order — two or more", A.LoopHasTwoRooms),
                     Note("Alt+click takes a room back out; the list's ↑ ↓ ✕ tidy it")),
                 Step("Save it", null,
                     Note("Click Save on the chip row — Create Loop opens"),
@@ -57,8 +61,9 @@ internal static class GuideCatalogue
             {
                 OpenNavigation(),
                 Step("Mark the lairs", null,
+                    Note(ChipRowHidden),
                     Note("Click the Lair mode chip above the map"),
-                    Do("Left-click each lair room to mark it — at least two", A.LairMarked),
+                    Do("Left-click each lair room to mark it — at least two", A.TwoLairsMarked),
                     Note("Marked lairs list under CURRENT NAV: ✎ sets a lair's own timer, ✕ unmarks it")),
                 Step("Save the setup (optional)", null,
                     Note("Click Save on the chip row — Create Auto-Lair Setup opens"),
@@ -150,7 +155,7 @@ internal static class GuideCatalogue
                     Note("Expansion: what it sends instead"),
                     Do("Click Save", A.AliasAdded)),
                 Step("Use it", null,
-                    Note("Aliases fire from the Conversation window's input line"),
+                    Note("Type the alias at the start of a line, in the terminal or the Conversation input"),
                     Note("Double-click an alias to change it; Remove deletes it")),
             }),
         new GuideDefinition("triggers", Automation, "Triggers",

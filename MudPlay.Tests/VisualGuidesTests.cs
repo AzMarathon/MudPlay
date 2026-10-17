@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using MudPlay.Models.Settings;
+using MudPlay.ViewModels.CharacterWorkshop;
 using MudPlay.ViewModels.Guides;
 using Xunit;
 
@@ -106,7 +107,7 @@ public sealed class VisualGuidesTests
         vm.Start("sample");
         for (int i = 0; i < 4; i++) vm.NextCommand.Execute(null);
         Assert.False(vm.IsActive);
-        Assert.Contains("sample", s.Progress.Completed);
+        Assert.True(s.Progress.Finished.ContainsKey("sample"));
         Assert.False(s.Progress.StepReached.ContainsKey("sample"));
         Assert.Contains(s.Log, l => l.Contains("finished", StringComparison.Ordinal));
 
@@ -116,7 +117,57 @@ public sealed class VisualGuidesTests
         vm.NextCommand.Execute(null);
         vm.Restart("sample");
         Assert.Equal("Act", vm.CurrentTitle);
-        Assert.DoesNotContain("sample", s.Progress.Completed);
+        Assert.False(s.Progress.Finished.ContainsKey("sample"));
+    }
+
+    // "Close — your place is kept" holds while re-walking a finished guide too.
+    [Fact]
+    public void FinishedGuide_WalkedAgain_KeepsItsPlace()
+    {
+        Store s = new();
+        GuideViewModel vm = Runner(s);
+        vm.Start("sample");
+        for (int i = 0; i < 4; i++) vm.NextCommand.Execute(null);
+
+        vm.Start("sample");
+        vm.NextCommand.Execute(null);
+        vm.CloseCommand.Execute(null);
+        vm.Start("sample");
+        Assert.Equal("Probe", vm.CurrentTitle);
+        Assert.True(s.Progress.Finished.ContainsKey("sample"));
+    }
+
+    // The section the browser opens on (View → Macros) names itself, but only a
+    // later change is the user picking a table.
+    [Fact]
+    public void BrowserSection_OpeningSectionIsNotAPick()
+    {
+        Assert.Empty(GuidePageActions.ForBrowserSection(null, "monsters"));
+        Assert.Equal(new[] { GuideActions.MacrosShown }, GuidePageActions.ForBrowserSection(null, "macros"));
+        Assert.Equal(new[] { GuideActions.BrowserSectionPicked }, GuidePageActions.ForBrowserSection("macros", "monsters"));
+        Assert.Equal(new[] { GuideActions.BrowserSectionPicked, GuideActions.PlayersShown },
+            GuidePageActions.ForBrowserSection("monsters", "players"));
+    }
+
+    private sealed class FakePage(string id) : WorkshopSectionViewModel
+    {
+        public override string Id => id;
+        public override string Title => id;
+        public override Avalonia.Controls.Control View => throw new NotSupportedException();
+    }
+
+    // My Equipment opens on its first sub-tab without a sub-tab change, so the page
+    // is read from the tab's Leaf when the tab itself is picked.
+    [Fact]
+    public void WorkshopGroupTab_ReportsThePageItOpensOn()
+    {
+        WorkshopGroupSectionViewModel group = new("myequipment", "My Equipment",
+            new FakePage(EquipmentSectionViewModel.SectionId), new FakePage(ItemFinderViewModel.SectionId));
+        Assert.Equal(GuideActions.EquipmentManagerShown, GuidePageActions.ForWorkshopPage(group.Leaf.Id));
+
+        group.SelectedChild = group.Children[1];
+        Assert.Equal(GuideActions.ItemFinderShown, GuidePageActions.ForWorkshopPage(group.Leaf.Id));
+        Assert.Null(GuidePageActions.ForWorkshopPage("characterinfo"));
     }
 
     [Fact]

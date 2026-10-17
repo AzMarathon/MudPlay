@@ -155,16 +155,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         if (newValue is Tables.GameDataTableSectionViewModel tab)
             tab.OnActivated();
         if (newValue is null) return;
-        GuideActions.Report(GuideActions.BrowserSectionPicked);
-        string? shown = newValue.Id switch
-        {
-            "macros" => GuideActions.MacrosShown,
-            "aliases" => GuideActions.AliasesShown,
-            "triggers" => GuideActions.TriggersShown,
-            "players" => GuideActions.PlayersShown,
-            _ => null,
-        };
-        if (shown is not null) GuideActions.Report(shown);
+        foreach (string key in GuidePageActions.ForBrowserSection(oldValue?.Id, newValue.Id))
+            GuideActions.Report(key);
     }
 
     private void RebuildVisibleSections()
