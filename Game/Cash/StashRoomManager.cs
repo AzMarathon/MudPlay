@@ -146,7 +146,7 @@ public sealed class StashRoomManager : IDisposable
         long maxUnit = CurrencyHoldings.MaxUnitFor(cash.StashCoinCutoff);
         // Coin above the cutoff stays in hand anyway; only the rest of what is held
         // back comes off the hide.
-        long floor = Math.Max(0, holdBackCopper - CopperAbove(held, maxUnit));
+        long floor = Math.Max(0, holdBackCopper - (held.EligibleCopper() - held.EligibleCopper(maxUnit)));
         if (floor > 0) _log?.Info(LogCategory, $"keeping {floor} copper of the stash in hand for the trip back");
 
         List<(string Currency, long Amount)> dispatched = new();
@@ -200,20 +200,6 @@ public sealed class StashRoomManager : IDisposable
                 + $"currencies={dispatched.Count} items={hiddenItems.Count}");
             StashExecuted?.Invoke(new StashDispatch(enteredRoom, dispatched, hiddenItems));
         }
-    }
-
-    // The copper value of the coins above the stash cutoff (they aren't hidden).
-    private static long CopperAbove(CurrencyHoldings held, long maxUnit)
-    {
-        long above = 0;
-        foreach ((CoinDenomination denom, int count) in new[]
-                 {
-                     (CoinDenomination.Copper, held.Copper), (CoinDenomination.Silver, held.Silver),
-                     (CoinDenomination.Gold, held.Gold), (CoinDenomination.Platinum, held.Platinum),
-                     (CoinDenomination.Runic, held.Runic),
-                 })
-            if (CurrencyHoldings.CopperUnit(denom) > maxUnit) above += count * CurrencyHoldings.CopperUnit(denom);
-        return above;
     }
 
     // How many copies one carried-list entry stands for. Paradigm lists a stack as

@@ -100,18 +100,22 @@ internal sealed class ErrandLightWorld : IDisposable
     // What one torch costs (null: not known), and the clock the back-off reads.
     public long? TorchPrice { get; set; }
     public HashSet<RoomKey> Avoided { get; } = new();
+    // Stands in for the walker's LastUnpaidFailure: a walk that found no route for
+    // want of a toll or fare (the map here has none).
+    public RoomKey? UnpaidFailure { get; set; }
     // A torch's price at a particular shop, over TorchPrice.
     public Dictionary<RoomKey, long> ShopPrices { get; } = new();
     public DateTimeOffset Now { get; set; } = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
 
     public IReadOnlyList<LightItem> Catalogue { get; } = new[] { new LightItem(TorchId, "torch", 100, 7200) };
 
-    public ErrandLightWorld()
+    // shops: the Shops.json rows to use instead of the one trainer at 1/3.
+    public ErrandLightWorld(string? shops = null)
     {
         _root = Path.Combine(Path.GetTempPath(), "mudplay-errandlight-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
-        File.WriteAllText(Path.Combine(_root, "alpha", "Shops.json"), Shops);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Shops.json"), shops ?? Shops);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), "[]");
 
         Cache = new GameDataCache(_root);
@@ -184,7 +188,7 @@ internal sealed class ErrandLightWorld : IDisposable
         LightShopBuy buyer = new(Carried, ScheduleWindow);
         ErrandLightStop stop = new(errand, (from, to) => Walker.TryComputeRouteKeys(from, to),
             Provisioner, LightShops, () => Tracker.State.CurrentRoom?.Key, buyer, Sent.Add,
-            lastUnpaidFailure: () => Walker.LastUnpaidFailure);
+            lastUnpaidFailure: () => UnpaidFailure ?? Walker.LastUnpaidFailure);
         Inventory.Changed += stop.OnInventoryChanged;
         LastStop = stop;
         return stop;

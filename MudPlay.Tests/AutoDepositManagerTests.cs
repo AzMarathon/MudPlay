@@ -1033,11 +1033,12 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
     }
 
-    // The connection drops while the bank run buys its light: the run ends as a
-    // stopped one, and the shop isn't held back for the buy that never got its
-    // answer.
+    // The connection drops while the bank run buys its light: the buy is let go,
+    // the shop isn't held back for a window that never got its answer, and the walk
+    // back starts, as a reroute's walk carries on across a drop; the loop resumes on
+    // arrival.
     [Fact]
-    public void ConnectionDropsDuringTheLightBuy_RunEnds_ShopNotHeldBack()
+    public void ConnectionDropsDuringTheLightBuy_WalksBack_ResumesTheLoop_ShopNotHeldBack()
     {
         using Harness h = NewHarness(DarkGraphJson);
         StartLoop(h);
@@ -1053,8 +1054,53 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Single(h.BuyLines());
 
         h.AutoDeposit.NoteDisconnected();
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
         Assert.False(h.AutoDeposit.IsRerouting);
         Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
+    }
+
+    // The same for a loop's light trip: the loop isn't left stopped.
+    [Fact]
+    public void ConnectionDropsDuringALightTripsBuy_TheLoopResumes()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        Assert.Equal(LightRestockOutcome.Started,
+            h.AutoDeposit.StartLightRestock(new AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "light for the run"));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
+        Assert.False(h.AutoDeposit.IsRerouting);
+    }
+
+    // The stash cutoff's coin counts toward the light's price: with silver the
+    // cutoff, the fifty gold kept in hand pay for the torch, so every silver is
+    // hidden.
+    [Fact]
+    public void StashHoldBack_CountsTheCoinAboveTheCutoff()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        h.Settings.StashCoinCutoff = StashCoinCutoff.Silver;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 20, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5200);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 20 silver noble", Assert.Single(h.StashLines()));
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
     }
 
     [Fact]

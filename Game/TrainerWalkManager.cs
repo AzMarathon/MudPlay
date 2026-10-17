@@ -893,6 +893,9 @@ public sealed class TrainerWalkManager : IDisposable
         // Re-select from where the errand left us: the bank we withdrew at may sit
         // nearer a different branch of the same trainer.
         _target = SelectNearest(cur.Key) ?? t;
+        // The tolls on the way to the bank are paid: what the trainer walk's light
+        // stop leaves in hand is the bill from here.
+        if (_trainBill > 0) _trainBill = BillFrom(cur.Key);
         WalkToTrainer(_target.Value, cur.Key);
     }
 

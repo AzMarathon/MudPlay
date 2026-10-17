@@ -467,6 +467,108 @@ public sealed class ErrandLightStopTests : IDisposable
         Assert.Empty(_w.Buys);
     }
 
+    // A funding errand built on a world, its walk events wired as AppServices wires them.
+    private static TrainFundingRouter FundingFor(ErrandLightWorld w, params TrainFundingSource[] sources)
+    {
+        TrainFundingRouter funding = new(
+            currentRoom: () => w.Tracker.State.CurrentRoom?.Key,
+            onHandCopper: () => w.Inventory.Snapshot.Currency.TotalCopperValue,
+            sources: () => sources,
+            newDistanceLookup: () => (a, b) => w.Bfs.DistanceBetween(a, b),
+            walkTo: k => w.Walker.WalkTo(k, planThroughAcquirableGates: true),
+            send: w.Sent.Add, armTimer: w.Schedule, reconcileStash: (_, _) => { },
+            autoGetCash: () => true, setAutoGetCash: _ => { });
+        w.Walker.Event += funding.OnWalkEvent;
+        return funding;
+    }
+
+    // The training fees of a Train Now on the world, priced with Auto-Light off and a
+    // full purse; the run is then called off.
+    private static long PriceTraining(ErrandLightWorld w, TrainerWalkManager trainer)
+    {
+        long fees = 0;
+        trainer.ReserveForTraining = c => { if (c > 0) fees = c; };
+        w.AutoLightOn = false;
+        w.CarryWith(1_000_000);
+        trainer.TrainNow();
+        trainer.Cancel("priced");
+        w.Walker.Stop();
+        w.Tracker.SetLocated(Start);
+        w.AutoLightOn = true;
+        Assert.True(fees > 0);
+        return fees;
+    }
+
+    // After a funding errand, the trainer walk's stop keeps the bill from the bank,
+    // not the one priced at the start: the 1000-copper toll on the way out is behind
+    // it. The bank's draw leaves the fees and 500 more, enough for a 100-copper torch.
+    [Fact]
+    public void AfterFunding_TheTrainerWalkKeepsTheBillFromWhereItStands()
+    {
+        TrainerWalkManager trainer = _w.NewTrainer();
+        trainer.RouteTolls = (a, b) => a.Equals(Start) && b.Equals(Far) ? 1000 : 0;
+        trainer.HasTollFreeRoute = (_, _) => false;
+        trainer.SetFundingRouter(FundingFor(_w, new TrainFundingSource(TrainFundingSourceKind.Bank, West, "Bank", 1_000_000)));
+        long fees = PriceTraining(_w, trainer);
+
+        _w.TorchPrice = 100;
+        _w.CarryWith(10);
+        trainer.TrainNow();
+        Assert.Equal(West, _w.Walker.Destination);   // to the bank first
+        _w.WalkThere();
+        _w.CarryWith(fees + 500);                    // the withdrawal lands
+        _w.RunTimers();
+
+        Assert.Equal(Shop, _w.Walker.Destination);
+    }
+
+    // On a chain to the next trainer, the stop keeps the bill from the trainer it
+    // leaves: the toll on the way to the first, and the level trained there, are
+    // paid. The first trainer trains up to level 2, the second on from there.
+    [Fact]
+    public void OnTheChain_TheTrainerWalkKeepsTheBillFromWhereItStands()
+    {
+        using ErrandLightWorld w = new("""
+            [ { "Number": 1, "Name": "West Trainer", "ShopType": 8, "MinLVL": 1, "MaxLVL": 2,
+                "ClassRest": 0, "Markup%": 0, "Assigned To": "Room 1/5" },
+              { "Number": 2, "Name": "Far Trainer", "ShopType": 8, "MinLVL": 3, "MaxLVL": 50,
+                "ClassRest": 0, "Markup%": 0, "Assigned To": "Room 1/3" } ]
+            """);
+        TrainerWalkManager trainer = w.NewTrainer();
+        trainer.RouteTolls = (a, b) => a.Equals(Start) && b.Equals(West) ? 1000 : 0;
+        trainer.HasTollFreeRoute = (_, _) => true;
+        trainer.SetFundingRouter(FundingFor(w));
+        long fees = PriceTraining(w, trainer);
+
+        w.TorchPrice = 100;
+        w.CarryWith(fees + 500);
+        trainer.TrainNow();
+        Assert.Equal(West, w.Walker.Destination);
+        w.WalkThere();
+        w.Line("You hand over 50 copper farthings and you receive training to attain level 2.");
+        w.Line("You have progressed too far to use the training provided here.");
+
+        Assert.Equal(Shop, w.Walker.Destination);
+    }
+
+    // A walk to the shop that failed for want of a toll or fare (no route as the
+    // purse stands) is no word on the shop: the next errand stops there.
+    [Fact]
+    public void AShopMissedForAToll_IsNotHeldBack()
+    {
+        _w.Avoided.Add(Shop);
+        _w.UnpaidFailure = Shop;
+        Run first = BeginStashTransfer();
+        Assert.Equal(Far, _w.Walker.Destination);
+        first.Cancel();
+        _w.Walker.Stop();
+        _w.Avoided.Clear();
+        _w.UnpaidFailure = null;
+
+        BeginFunding();
+        Assert.Equal(Shop, _w.Walker.Destination);
+    }
+
     // The purse is checked against the price at the shop picked, not the cheapest
     // shop's: 500 copper can't pay the light shop's 1000, though Far East asks 10.
     [Fact]

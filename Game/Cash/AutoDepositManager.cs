@@ -568,16 +568,15 @@ public sealed class AutoDepositManager : IDisposable
     }
 
     // The connection dropped while a light was being bought: the buy's window would
-    // close in the next session, read as a shop that didn't sell, and walk the
-    // reroute on from wherever the reconnect lands. The reroute ends as a stopped
-    // one does.
+    // close in the next session and read as a shop that didn't sell. The buy is let
+    // go unrecorded and the walk back starts, as a reroute's walk does across a drop
+    // (nothing stops it; it carries on in the next session and resumes the engine on
+    // arrival).
     public void NoteDisconnected()
     {
         if (_phase != DepositPhase.BuyingLight) return;
-        _log?.Info(LogCategory, "connection dropped during the light buy — reroute ended");
-        bool lightTrip = _lightTrip;
-        GoIdle();
-        if (!lightTrip) _cash.NotifyAutoDepositAborted();
+        _log?.Info(LogCategory, "connection dropped during the light buy — walking back without it");
+        WalkBackToOrigin();
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -687,6 +686,8 @@ public sealed class AutoDepositManager : IDisposable
         // 2026-10-17), so it is planned on the purse before the deposit, and the
         // deposit leaves its price in hand: planned after, the purse would hold only
         // keep-on-hand and the buy would never be paid for.
+        // Known limit: the dark scan's route is planned on the pre-deposit purse, so it
+        // may cross a toll the banked purse then can't pay; the walk re-plans its own.
         ReturnLight? light = _eventTrip ? null : PlanReturnLight(KeepOnHandCopper());
         DepositAtBank(light?.Cost ?? 0);
         BeginReturnLeg(light);
