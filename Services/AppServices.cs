@@ -8390,9 +8390,11 @@ public sealed class AppServices
                 || Conditions.AnyActive(r => r.Links?.Any(l => string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)
                     && RoomLightSpell.IsDarkeningSpell(l.Number)) == true),
             log:         Log,
-            // A light trip, and an errand's stop, checks the purse against it.
-            lightPrice:  CheapestPrice);
+            // A light trip, and an errand's stop, checks the purse against these.
+            lightPrice:  CheapestPrice,
+            shopPrice:   PathItemBuyCost);
         Profile.ProfileLoaded += _ => AutoLightProvisioner.Forget("profile loaded");
+        Profile.BbsPinApplied += _ => AutoLightProvisioner.Forget("BBS or realm changed");
         GameData.ActiveSetChanged += _ => AutoLightProvisioner.Forget("game data changed");
         RoomTracker.PlayerDeathObserved += () => AutoLightProvisioner.Forget("death");
         AutoLightProvisioner.SetSneakKeptProbe(() => SneakGuard.Holds);
@@ -15479,7 +15481,8 @@ public sealed class AppServices
             route: (from, to) => Walker.TryComputeRouteKeys(from, to),
             provisioner: AutoLightProvisioner, shops: AutoLightShopRouter,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
-            buyer: buyer, send: cmd => SendGameCommand(cmd), log: Log);
+            buyer: buyer, send: cmd => SendGameCommand(cmd), log: Log,
+            lastUnpaidFailure: () => Walker.LastUnpaidFailure);
         Inventory.Changed += stop.OnInventoryChanged;
         _errandLightStops.Add((errand, stop));
         return stop;
@@ -15487,10 +15490,13 @@ public sealed class AppServices
 
     private readonly List<(string Errand, Game.Light.ErrandLightStop Stop)> _errandLightStops = new();
 
-    // The connection dropped: no errand's light stop walks on in the next session.
-    public void NotifyErrandLightStopsDisconnected()
+    // The connection dropped: no light buy under way (an errand's stop, or a bank
+    // run's, light trip's or stock-up's) walks on in the next session or reads the
+    // window's end as a shop that didn't sell.
+    public void NotifyLightBuysDisconnected()
     {
         foreach ((string _, Game.Light.ErrandLightStop stop) in _errandLightStops) stop.NoteDisconnected();
+        AutoDeposit.NoteDisconnected();
     }
 
     // Each errand's light stop, for the bug report.

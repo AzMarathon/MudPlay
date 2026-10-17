@@ -29,6 +29,10 @@ public sealed class ErrandLightStopTests : IDisposable
 
     public static TheoryData<Errand> Errands() => new(Enum.GetValues<Errand>());
 
+    // The errands that start on their own (Train Now is the user's, and tries again).
+    public static TheoryData<Errand> AutomaticErrands() =>
+        new(Enum.GetValues<Errand>().Where(e => e != Errand.Training));
+
     // A started errand: whether it is still under way, and its own teardown.
     private sealed record Run(Func<bool> Busy, Action Cancel);
 
@@ -129,14 +133,16 @@ public sealed class ErrandLightStopTests : IDisposable
     }
 
     // After a level, a scroll to buy at the shop at 1/3, the trip back to the start.
-    private Run BeginSpellShops()
+    private Run BeginSpellShops() => BeginSpellShops(scrollCost: 10);
+
+    private Run BeginSpellShops(long scrollCost)
     {
         ShopSpellPurchase scroll = new(1, "magic missile", 1, 900, "magic missile scroll", 10);
         ShopSpellErrand spells = new(
             currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
             plan: (_, _, _, visited, _) => visited.Contains(Far)
                 ? ShopSpellPlan.Empty
-                : new ShopSpellPlan(new[] { new ShopSpellStop(Far, "Far Shop", new[] { scroll }) }, 10,
+                : new ShopSpellPlan(new[] { new ShopSpellStop(Far, "Far Shop", new[] { scroll }) }, scrollCost,
                     Array.Empty<string>(), Array.Empty<string>()),
             carriedScrolls: _ => Array.Empty<ShopSpellPurchase>(),
             carriedCount: _ => 0,
@@ -340,7 +346,7 @@ public sealed class ErrandLightStopTests : IDisposable
     // A shop whose buy came to nothing is passed over by the next errand, whichever
     // it is (the next sell detour too), until the back-off passes.
     [Theory]
-    [MemberData(nameof(Errands))]
+    [MemberData(nameof(AutomaticErrands))]
     public void AShopThatDidNotSell_IsPassedOverByTheNextErrand(Errand next)
     {
         Run first = BeginStashTransfer();
@@ -353,6 +359,135 @@ public sealed class ErrandLightStopTests : IDisposable
         Begin(next);
         Assert.Equal(Far, _w.Walker.Destination);
         Assert.Single(_w.Buys);
+    }
+
+    // Train Now is the user's: the shop is tried again, as a loop the user starts
+    // lifts its back-off.
+    [Fact]
+    public void AShopThatDidNotSell_IsTriedAgainByTrainNow()
+    {
+        Run first = BeginStashTransfer();
+        _w.WalkThere();
+        _w.RunTimers();
+        first.Cancel();
+        _w.Walker.Stop();
+        _w.Tracker.SetLocated(Start);
+
+        BeginTraining();
+        Assert.Equal(Shop, _w.Walker.Destination);
+    }
+
+    // The map gives no way into the shop (an avoid): the walk on goes without it, and
+    // the shop is passed over by the next errand.
+    [Fact]
+    public void AShopThatCannotBeReached_IsPassedOverByTheNextErrand()
+    {
+        _w.Avoided.Add(Shop);
+        Run first = BeginStashTransfer();
+        Assert.Equal(Far, _w.Walker.Destination);
+        first.Cancel();
+        _w.Walker.Stop();
+        _w.Avoided.Clear();
+
+        BeginFunding();
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Empty(_w.Buys);
+    }
+
+    // A walk to the shop that couldn't start while the map has a way there (a toll
+    // the purse can't pay, say) says nothing about the shop: the next errand stops.
+    [Fact]
+    public void AWalkToTheShopThatFailsWithAWayThere_DoesNotHoldTheShopBack()
+    {
+        StashTransferRunner runner = new(
+            currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
+            onHandCopper: () => _w.Inventory.Snapshot.Currency.TotalCopperValue,
+            walkTo: k => !k.Equals(Shop) && _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
+            send: _w.Sent.Add, armTimer: _w.Schedule,
+            limitCollection: _ => { }, surveyedCopper: () => 0, collectSurveyed: _ => { },
+            forceAutoGetCash: _ => { }, reconcileStash: (_, _) => { }, notice: _ => { },
+            lightStop: _w.NewStop("the stash transfer"));
+        _w.Walker.Event += runner.OnWalkEvent;
+        Assert.Null(runner.Start(Far, Start, "Bank"));
+        Assert.Equal(Far, _w.Walker.Destination);
+        runner.Cancel("test");
+        _w.Walker.Stop();
+
+        BeginFunding();
+        Assert.Equal(Shop, _w.Walker.Destination);
+    }
+
+    // A buy on arrival is for the walk to the leg's own room: the end of another
+    // walk on the way (a side trip's leg) doesn't use it up.
+    [Fact]
+    public void ABuyOnArrival_WaitsForItsOwnWalk()
+    {
+        _w.LightShopRooms[0] = Far;
+        BeginStashTransfer();
+        Assert.True(_w.Walker.WalkTo(West, supersedeSilently: true));   // a side trip's leg
+        _w.Arrive(West);
+        Assert.Empty(_w.Buys);
+
+        Assert.True(_w.Walker.WalkTo(Far, supersedeSilently: true));
+        _w.WalkThere();
+        Assert.Equal("buy torch", Assert.Single(_w.Buys));
+    }
+
+    // The training walk's stop leaves the training bill in the purse: a light that
+    // would leave the train unpaid isn't bought.
+    [Fact]
+    public void TheTrainingWalkStop_KeepsTheTrainingBill()
+    {
+        TrainerWalkManager trainer = _w.NewTrainer();
+        long bill = 0;
+        trainer.ReserveForTraining = c => { if (c > 0) bill = c; };
+        TrainFundingRouter funding = new(
+            currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
+            onHandCopper: () => _w.Inventory.Snapshot.Currency.TotalCopperValue,
+            sources: () => Array.Empty<TrainFundingSource>(),
+            newDistanceLookup: () => (a, b) => _w.Bfs.DistanceBetween(a, b),
+            walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
+            send: _w.Sent.Add, armTimer: _w.Schedule, reconcileStash: (_, _) => { },
+            autoGetCash: () => true, setAutoGetCash: _ => { });
+        trainer.SetFundingRouter(funding);
+
+        // Priced once with Auto-Light off, for the bill.
+        _w.AutoLightOn = false;
+        _w.CarryWith(1_000_000);
+        trainer.TrainNow();
+        Assert.True(bill > 0);
+        trainer.Cancel("priced");
+        _w.Walker.Stop();
+
+        _w.AutoLightOn = true;
+        _w.TorchPrice = 100;
+        _w.CarryWith(bill + 50);            // the bill and half a torch
+        trainer.TrainNow();
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Empty(_w.Buys);
+    }
+
+    // The purse is checked against the price at the shop picked, not the cheapest
+    // shop's: 500 copper can't pay the light shop's 1000, though Far East asks 10.
+    [Fact]
+    public void ThePickedShopsPrice_IsTheOneChecked()
+    {
+        _w.LightShopRooms.Add(FarEast);
+        _w.ShopPrices[Shop] = 1000;
+        _w.ShopPrices[FarEast] = 10;
+        BeginStashTransfer();
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Empty(_w.Buys);
+    }
+
+    // The spell-shop leg's stop leaves the scrolls' money in the purse.
+    [Fact]
+    public void TheSpellShopStop_KeepsTheScrollMoney()
+    {
+        _w.TorchPrice = 100;                // 500 in the purse, 450 of it for scrolls
+        BeginSpellShops(scrollCost: 450);
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Empty(_w.Buys);
     }
 
     [Fact]

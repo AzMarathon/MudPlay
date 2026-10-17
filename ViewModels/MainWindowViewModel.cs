@@ -3599,9 +3599,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // wire, or set off again on reconnect.
                 AppServices.Current.DeathRecovery.NotifyDisconnected();
                 AppServices.Current.CorpseHandoff.NotifyDisconnected();
-                // A light stop's buy window would end in the next session and walk
-                // an errand on from wherever the reconnect lands.
-                AppServices.Current.NotifyErrandLightStopsDisconnected();
+                // A light buy's window would end in the next session and walk an
+                // errand or a bank run on from wherever the reconnect lands.
+                AppServices.Current.NotifyLightBuysDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.

@@ -125,6 +125,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         public Models.Profile.AutoLightSettings LightSettings { get; } = new();
         public List<Game.Light.LightItem> Catalogue { get; } = new();
         public List<RoomKey> LightShopRooms { get; } = new();
+        // What one torch costs at any shop (null: not known, so any purse pays).
+        public long? TorchPrice { get; set; }
         public List<byte[]> Bought { get; } = new();
 
         public IEnumerable<string> BuyLines() =>
@@ -274,7 +276,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             roomLightSpell: () => null,
             castRoomLightSpell: _ => false,
             roomLightSpellUp: _ => false,
-            settings: () => h.LightSettings);
+            settings: () => h.LightSettings,
+            lightPrice: _ => h.TorchPrice,
+            shopPrice: (_, _) => h.TorchPrice);
         Game.Light.AutoLightShopRouter lightShop = new(
             shopRoomsSellingItem: _ => h.LightShopRooms,
             currentRoom: () => tracker.State.CurrentRoom?.Key,
@@ -909,6 +913,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         StartLoop(h);                 // loop [1/1, 1/3], resumable engine
         ArmBankGate(h);               // bank at 1/3
         EnableLightDetour(h);
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
@@ -917,7 +922,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
-        Assert.Equal("dep 5000", h.DepositLines().Single());
+        // The torch's price stays in the purse for the buy in town.
+        Assert.Equal("dep 4990", h.DepositLines().Single());
 
         // Return leg (1/3 → 1/2 → 1/1) runs dark and nothing is carried → detour
         // to the light shop at 1/4 instead of straight home.
@@ -980,12 +986,13 @@ public sealed class AutoDepositManagerTests : IDisposable
         ArmBankGate(h);
         EnableLightDetour(h);
         h.LightShopRooms.Add(new RoomKey(1, 6));
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
-        Assert.Equal("dep 5000", h.DepositLines().Single());
+        Assert.Equal("dep 4990", h.DepositLines().Single());
 
         Assert.Equal(new RoomKey(1, 6), h.Walker.Destination);
         Arrive(h, new RoomKey(1, 5));
@@ -994,6 +1001,30 @@ public sealed class AutoDepositManagerTests : IDisposable
 
         GiveTorch(h);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
+    // The connection drops while the bank run buys its light: the run ends as a
+    // stopped one, and the shop isn't held back for the buy that never got its
+    // answer.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_RunEnds_ShopNotHeldBack()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
     }
 
     [Fact]

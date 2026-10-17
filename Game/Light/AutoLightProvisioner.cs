@@ -115,8 +115,10 @@ public sealed class AutoLightProvisioner
     // a circuit that no longer needs a light clears it.
     private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTried;
 
-    // What one copy of a light costs at the cheapest shop selling it (null: not known).
+    // What one copy of a light costs at the cheapest shop selling it, and at a given
+    // shop (null: not known).
     private readonly Func<int, long?> _lightPrice;
+    private readonly Func<int, RoomKey, long?> _shopPrice;
 
     // Errand light stops that came to nothing (the buy didn't land: out of stock or
     // no coin; or the shop couldn't be reached), by shop and light: the wealth
@@ -193,7 +195,8 @@ public sealed class AutoLightProvisioner
         Func<bool>? sightTakenAway = null,
         LogService? log = null,
         Func<DateTimeOffset>? now = null,
-        Func<int, long?>? lightPrice = null)
+        Func<int, long?>? lightPrice = null,
+        Func<int, RoomKey, long?>? shopPrice = null)
     {
         ArgumentNullException.ThrowIfNull(isEnabled);
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -226,6 +229,7 @@ public sealed class AutoLightProvisioner
         _sightTakenAway = sightTakenAway ?? (static () => false);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _lightPrice = lightPrice ?? (static _ => null);
+        _shopPrice = shopPrice ?? (static (_, _) => null);
         _log = log;
     }
 
@@ -303,7 +307,8 @@ public sealed class AutoLightProvisioner
     public void Forget(string why)
     {
         bool had = _pendingReadyName is not null || _autoReadiedName is not null
-                   || _spellShort is not null || _madeItem is not null || _engineBuyTried is not null;
+                   || _spellShort is not null || _madeItem is not null || _engineBuyTried is not null
+                   || _errandShopFailed.Count > 0;
         _pendingReadyName = null;
         _autoReadiedName = null;
         _readiedLightBurnedOut = false;
@@ -446,26 +451,33 @@ public sealed class AutoLightProvisioner
             out shop);
     }
 
-    // The buy cut down to what the purse pays for, leaving keepCopper in it: null
-    // when it can't pay for one copy. A light with no known price is left as asked.
-    public AutoLightBuyRequest? AffordableBuy(AutoLightBuyRequest buy, long keepCopper = 0)
+    // The buy at shop cut down to what the purse pays for at that shop's price,
+    // leaving keepCopper in it, and what it costs: null when it can't pay for one
+    // copy. A light with no known price there is left as asked, costing nothing
+    // known.
+    public AutoLightBuyRequest? AffordableBuy(AutoLightBuyRequest buy, RoomKey shop, long keepCopper, out long cost)
     {
-        if (_lightPrice(buy.ItemId) is not { } price || price <= 0) return buy;
+        cost = 0;
         InventorySnapshot snap = _snapshot();
+        int carried = FindByName(buy.LightName, _catalogue()) is { } light ? CarriedCopies(snap.CarriedItems, light) : 0;
+        if (_shopPrice(buy.ItemId, shop) is not { } price || price <= 0) return buy;
         long spare = snap.Currency.TotalCopperValue - Math.Max(0, keepCopper);
         long copies = spare / price;
         if (copies < 1)
         {
-            _log?.Info(LogCategory, $"no buy of {buy.LightName}: {Math.Max(0, spare):N0} copper to spend, one costs {price:N0}");
+            _log?.Info(LogCategory, $"no buy of {buy.LightName} at {shop}: {Math.Max(0, spare):N0} copper to spend, one costs {price:N0}");
             return null;
         }
-        int carried = FindByName(buy.LightName, _catalogue()) is { } light ? CarriedCopies(snap.CarriedItems, light) : 0;
-        long most = carried + copies;
-        return most >= buy.Count ? buy : buy with { Count = (int)most };
+        long wanted = Math.Max(1, buy.Count - carried);
+        long buying = Math.Min(wanted, copies);
+        cost = buying * price;
+        return buying >= wanted ? buy : buy with { Count = (int)(carried + buying) };
     }
 
     // How an errand's stop at a shop went: a buy that landed clears the shop; one
-    // that didn't, or a shop that couldn't be reached, holds it back for a while.
+    // that didn't, or a shop the map gives no way to, holds it back for a while.
+    // Only those: a walk that failed for a toll or a fare, or a connection that
+    // dropped, says nothing about the shop.
     public void NoteErrandShop(RoomKey shop, AutoLightBuyRequest buy, bool bought)
     {
         (RoomKey, int) key = (shop, buy.ItemId);
@@ -483,8 +495,17 @@ public sealed class AutoLightProvisioner
     {
         if (!_errandShopFailed.TryGetValue((shop, buy.ItemId), out var failed)) return false;
         long wealth = _snapshot().Currency.TotalCopperValue;
-        bool canNowPay = _lightPrice(buy.ItemId) is { } price && failed.Wealth < price && wealth >= price;
+        bool canNowPay = _shopPrice(buy.ItemId, shop) is { } price && failed.Wealth < price && wealth >= price;
         return !canNowPay && _now() - failed.At < EngineTripBackoff(failed.Failures);
+    }
+
+    // An errand the user started has better information than the back-off: every
+    // shop is tried again, as a loop the user starts is.
+    public void ClearErrandShopHolds(string why)
+    {
+        if (_errandShopFailed.Count == 0) return;
+        _errandShopFailed.Clear();
+        _log?.Info(LogCategory, $"{why} — errand light shops held back are tried again");
     }
 
     // Asked by the auto-get path for each light on a room's floor: how many copies

@@ -99,7 +99,8 @@ public sealed class TrainerWalkManager : IDisposable
     private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
     private RoomKey _runFrom;         // where a walk run started — the shop leg plans its way back here
     private bool _spellTripTried;     // the shop leg has had its one go this run
-    private long _trainBill;          // the run's training fees, priced when it set out
+    private long _trainBill;          // what the run has still to pay, as funding budgets it
+    private long _trainScrolls;       // the spell scrolls in that bill
     private bool _spellsOnly;         // a shop leg started by hand: no training, no train report
     private bool _fundingWithSpells;  // the funding errand in flight is collecting scroll money too
 
@@ -347,6 +348,7 @@ public sealed class TrainerWalkManager : IDisposable
         // on — the user asking to train now has better information than our
         // projection of when they'd be able to afford it.
         _fundingRetryAt = DateTimeOffset.MinValue;
+        _lightStop?.NoteUserStarted();
         _ = TrainNowAsync();
     }
 
@@ -726,16 +728,21 @@ public sealed class TrainerWalkManager : IDisposable
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return Game.Train.TrainFundingHandoff.Proceed;
         ReserveForTraining?.Invoke(cost);
-        _trainBill = cost;
 
         Game.Train.ShopSpellPlan? spells = withSpells ? ShopSpellsFor(itinerary, levels) : null;
         long scrolls = spells?.CostCopper ?? 0;
         _fundingWithSpells = scrolls > 0;
         if (scrolls <= 0) spells = null;
 
+        // What the trainer walks' light stop leaves in the purse: the bill funding
+        // budgets, fees, scrolls and the tolls on the way.
+        Game.Train.TrainTripTolls? tolls = TripTolls(itinerary, from, spells);
+        _trainScrolls = scrolls;
+        _trainBill = cost + scrolls + Math.Max(0, tolls?.CopperFrom(from) ?? 0);
+
         var trainerRoom = new RoomKey(first.Map, first.Room);
         Game.Train.TrainFundingHandoff handoff = Game.Train.TrainFundingHandoffRule.For(
-            _funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)),
+            _funding.Begin(cost + scrolls, trainerRoom, tolls),
             _refusal.RecoveryClaimed);
 
         // The scrolls come off the bill before either short answer is taken as final.
@@ -781,6 +788,20 @@ public sealed class TrainerWalkManager : IDisposable
                 Finish("Not enough money to train — staying armed.");
                 return Game.Train.TrainFundingHandoff.Abandon;
         }
+    }
+
+    // What is left to pay from a trainer the run has out-levelled: the fees of the
+    // levels still to train and the tolls on the way, with the scrolls funding
+    // counted. The levels trained so far are paid.
+    private long BillFrom(RoomKey from)
+    {
+        int levels = LevelsThisRun();
+        if (levels <= 0) return _trainScrolls;
+        IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
+            TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
+            ReadDisabledTrainers(), from, _bfs.DistanceMemo());
+        return Game.Train.TrainItineraryPlanner.TotalCost(itinerary) + _trainScrolls
+            + Math.Max(0, TripTolls(itinerary, from, null)?.CopperFrom(from) ?? 0);
     }
 
     // The scrolls the shop leg would buy once this run's levels are trained, walking
@@ -980,6 +1001,7 @@ public sealed class TrainerWalkManager : IDisposable
         _walkRun = false;
         _spellTripTried = false;
         _trainBill = 0;
+        _trainScrolls = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
         _alteredStats.Reset();
@@ -1127,6 +1149,7 @@ public sealed class TrainerWalkManager : IDisposable
 
         if (pick is not { } next) return false;
         var room = new RoomKey(next.Map, next.Room);
+        if (_trainBill > 0) _trainBill = BillFrom(cur.Key);
         if (!WalkToTrainerRoom(room)) return false;
 
         _target = next;
@@ -1483,6 +1506,7 @@ public sealed class TrainerWalkManager : IDisposable
         _walkRun = false;
         _spellTripTried = false;
         _trainBill = 0;
+        _trainScrolls = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
 

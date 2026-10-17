@@ -46,6 +46,7 @@ public sealed class ErrandLightStop
     private readonly Func<RoomKey?> _currentRoom;
     private readonly LightShopBuy _buyer;
     private readonly Action<string> _send;
+    private readonly Func<RoomKey?> _lastUnpaidFailure;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
@@ -68,7 +69,10 @@ public sealed class ErrandLightStop
     // the walker would plan between two rooms (AutoWalkManager.TryComputeRouteKeys).
     public ErrandLightStop(string errand, Func<RoomKey, RoomKey, IReadOnlyList<RoomKey>?> route,
         AutoLightProvisioner provisioner, AutoLightShopRouter shops, Func<RoomKey?> currentRoom,
-        LightShopBuy buyer, Action<string> send, LogService? log = null)
+        LightShopBuy buyer, Action<string> send, LogService? log = null,
+        // Where the last walk asked for found no route for want of a toll or fare
+        // (AutoWalkManager.LastUnpaidFailure): a shop so missed isn't held against.
+        Func<RoomKey?>? lastUnpaidFailure = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(errand);
         ArgumentNullException.ThrowIfNull(route);
@@ -84,6 +88,7 @@ public sealed class ErrandLightStop
         _currentRoom = currentRoom;
         _buyer = buyer;
         _send = send;
+        _lastUnpaidFailure = lastUnpaidFailure ?? (static () => null);
         _log = log;
     }
 
@@ -93,6 +98,10 @@ public sealed class ErrandLightStop
         Cancel();
         _tried = false;
     }
+
+    // The user started the errand (Train Now): the shops an earlier errand found
+    // wanting are tried again, as a loop the user starts lifts its back-off.
+    public void NoteUserStarted() => _provisioner.ClearErrandShopHolds($"{_errand} started by the user");
 
     // Walk the errand's leg to target with its own walk, by a light shop first when
     // the leg and the rooms ahead (the errand's later legs, in order) run dark. True
@@ -140,7 +149,7 @@ public sealed class ErrandLightStop
         }
         if (started) return true;
         _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: can't walk to the light shop at {stop.Shop} — walking on without it");
-        _provisioner.NoteErrandShop(stop.Shop, stop.Buy, bought: false);
+        NoteIfUnreachable(from, stop.Shop, stop.Buy);
         return WalkOn();
     }
 
@@ -227,14 +236,14 @@ public sealed class ErrandLightStop
         }
         if (_provisioner.PlanRouteBuy(rooms) is not { } wanted) return null;
         _tried = true;
-        if (_provisioner.AffordableBuy(wanted, keep) is not { } buy)
+        if (!_provisioner.TrySelectErrandShop(_shops, _route, from, wanted, out RoomKey shop))
         {
-            _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: the walk to {target} runs dark but the purse can't pay for '{wanted.LightName}' — walking on with what is carried");
+            _log?.Info(AutoLightProvisioner.LogCategory,
+                $"{_errand}: the walk to {target} runs dark but no reachable shop sells '{wanted.LightName}' (or each one let an errand down lately) — walking on with what is carried");
             return null;
         }
-        if (_provisioner.TrySelectErrandShop(_shops, _route, from, buy, out RoomKey shop)) return (shop, buy);
-        _log?.Info(AutoLightProvisioner.LogCategory,
-            $"{_errand}: the walk to {target} runs dark but no reachable shop sells '{buy.LightName}' (or each one let an errand down lately) — walking on with what is carried");
+        if (_provisioner.AffordableBuy(wanted, shop, keep, out _) is { } buy) return (shop, buy);
+        _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: the walk to {target} runs dark but the purse can't pay for '{wanted.LightName}' at {shop} — walking on with what is carried");
         return null;
     }
 
@@ -266,7 +275,7 @@ public sealed class ErrandLightStop
                 return WalkOn();
             }
             if (RoomsAhead(here, leg.Target, leg.Ahead) is { } rooms && _provisioner.PlanRouteBuy(rooms) is { } still
-                && _provisioner.AffordableBuy(still, leg.Keep) is { } buy)
+                && _provisioner.AffordableBuy(still, leg.Shop, leg.Keep, out _) is { } buy)
             {
                 _leg = leg with { Buy = buy };
                 BeginBuy();
@@ -276,8 +285,17 @@ public sealed class ErrandLightStop
             return WalkOn();
         }
         _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: couldn't reach the light shop at {leg.Shop} — walking on to {leg.Target}");
-        _provisioner.NoteErrandShop(leg.Shop, leg.Buy, bought: false);
+        if (e.Kind == WalkEventKind.Failed && _currentRoom() is { } at) NoteIfUnreachable(at, leg.Shop, leg.Buy);
         return WalkOn();
+    }
+
+    // A walk to the shop that failed holds the shop back only when the map gives
+    // no way there: a toll or fare the purse can't pay, a monster in the way or a
+    // dropped connection is no word on the shop.
+    private void NoteIfUnreachable(RoomKey from, RoomKey shop, AutoLightBuyRequest buy)
+    {
+        if (_lastUnpaidFailure() == shop || _route(from, shop) is not null) return;
+        _provisioner.NoteErrandShop(shop, buy, bought: false);
     }
 
     private void BeginBuy()

@@ -179,7 +179,8 @@ public sealed class ShopSpellErrand
 
         _drivingWalker = true;
         bool started;
-        try { started = _lightStop?.Walk(_stop.Room, _walkTo, LightStopTakenOver, ahead: [_returnTo]) ?? _walkTo(_stop.Room); }
+        // A light bought first leaves the scrolls' money in the purse.
+        try { started = _lightStop?.Walk(_stop.Room, _walkTo, LightStopTakenOver, ahead: [_returnTo], keepCopper: plan.CostCopper) ?? _walkTo(_stop.Room); }
         finally { _drivingWalker = false; }
         if (!started)
         {

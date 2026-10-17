@@ -99,6 +99,9 @@ internal sealed class ErrandLightWorld : IDisposable
     public List<RoomKey> LightShopRooms { get; } = new() { Shop };
     // What one torch costs (null: not known), and the clock the back-off reads.
     public long? TorchPrice { get; set; }
+    public HashSet<RoomKey> Avoided { get; } = new();
+    // A torch's price at a particular shop, over TorchPrice.
+    public Dictionary<RoomKey, long> ShopPrices { get; } = new();
     public DateTimeOffset Now { get; set; } = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
 
     public IReadOnlyList<LightItem> Catalogue { get; } = new[] { new LightItem(TorchId, "torch", 100, 7200) };
@@ -117,7 +120,9 @@ internal sealed class ErrandLightWorld : IDisposable
         Graph.OnActiveSetChanged("alpha");
         Bfs = new BfsMapper(Graph);
         Tracker = new RoomTracker(Graph);
-        Walker = new AutoWalkManager(Graph, Bfs, Tracker, Coordinator);
+        // The rooms a test has the walker go round (an avoid): the map then gives no
+        // way into them, while the shop router's step counts still see them.
+        Walker = new AutoWalkManager(Graph, Bfs, Tracker, Coordinator, new WalkAroundRoomsFilter(null, Avoided));
         Walker.SetWireSender(_ => { });
         Loop = new LoopRunner(Tracker, Coordinator, graph: Graph, bfs: Bfs, walker: Walker);
         Loop.SetWireSender(_ => { });
@@ -147,7 +152,10 @@ internal sealed class ErrandLightWorld : IDisposable
             settings: () => LightSettings,
             currentRoom: () => Tracker.State.CurrentRoom,
             now: () => Now,
-            lightPrice: id => id == TorchId ? TorchPrice : null);
+            lightPrice: id => id != TorchId ? null
+                : ShopPrices.Count == 0 ? TorchPrice : ShopPrices.Values.Min(),
+            shopPrice: (id, shop) => id != TorchId ? null
+                : ShopPrices.TryGetValue(shop, out long at) ? at : TorchPrice);
         LightShops = new AutoLightShopRouter(
             shopRoomsSellingItem: id => id == TorchId ? LightShopRooms : Array.Empty<RoomKey>(),
             currentRoom: () => Tracker.State.CurrentRoom?.Key,
@@ -166,16 +174,17 @@ internal sealed class ErrandLightWorld : IDisposable
         Carry();
     }
 
-    // A light stop for one errand, built as AppServices.NewErrandLightStop builds
-    // one, its buy window on the test's timers.
     // The stop NewStop built last.
     public ErrandLightStop? LastStop { get; private set; }
 
+    // A light stop for one errand, built as AppServices.NewErrandLightStop builds
+    // one, its buy window on the test's timers.
     public ErrandLightStop NewStop(string errand)
     {
         LightShopBuy buyer = new(Carried, ScheduleWindow);
         ErrandLightStop stop = new(errand, (from, to) => Walker.TryComputeRouteKeys(from, to),
-            Provisioner, LightShops, () => Tracker.State.CurrentRoom?.Key, buyer, Sent.Add);
+            Provisioner, LightShops, () => Tracker.State.CurrentRoom?.Key, buyer, Sent.Add,
+            lastUnpaidFailure: () => Walker.LastUnpaidFailure);
         Inventory.Changed += stop.OnInventoryChanged;
         LastStop = stop;
         return stop;
@@ -241,12 +250,15 @@ internal sealed class ErrandLightWorld : IDisposable
     public void Line(string text) => _emulator.Feed(Encoding.Latin1.GetBytes(text + "\r\n"));
 
     // A full `i`: the items carried and 500 copper.
-    public void Carry(params string[] items)
+    public void Carry(params string[] items) => CarryWith(500, items);
+
+    // A full `i` with copper in the purse.
+    public void CarryWith(long copper, params string[] items)
     {
         string pack = items.Length == 0 ? "" : string.Join(", ", items) + ", ";
-        Line($"You are carrying {pack}500 copper farthings.");
+        Line($"You are carrying {pack}{copper} copper farthings.");
         Line("You have no keys.");
-        Line("Wealth:    500 copper farthings");
+        Line($"Wealth:    {copper} copper farthings");
         Line("Encumbrance:    36/2880  -  Light  [1%]");
         Line("[HP=100/MA=50]:");
     }
