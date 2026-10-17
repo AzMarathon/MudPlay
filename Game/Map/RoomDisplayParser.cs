@@ -124,13 +124,15 @@ public sealed partial class RoomDisplayParser : IDisposable
         if (exits.Success)
         {
             HashSet<Direction> dirs = ParseExits(exits.Groups["list"].Value,
-                out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors);
+                out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors,
+                out HashSet<Direction> secretPassages);
             string? name = _brightCyanRoomName ?? FindRoomNameInBuffer();
             if (name is not null)
             {
                 var observation = new RoomObservation(name, dirs,
                     openDoors.Count > 0 ? openDoors : null,
-                    closedDoors.Count > 0 ? closedDoors : null);
+                    closedDoors.Count > 0 ? closedDoors : null,
+                    secretPassages.Count > 0 ? secretPassages : null);
                 RoomParsed?.Invoke(observation);
                 _tracker.NoteRoomObserved(observation, line.Timestamp);
                 _log?.Info("RoomDisplay",
@@ -282,11 +284,13 @@ public sealed partial class RoomDisplayParser : IDisposable
     }
 
     private static HashSet<Direction> ParseExits(string list,
-        out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors)
+        out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors,
+        out HashSet<Direction> secretPassages)
     {
         var result = new HashSet<Direction>();
         openDoors = new HashSet<Direction>();
         closedDoors = new HashSet<Direction>();
+        secretPassages = new HashSet<Direction>();
         if (string.IsNullOrWhiteSpace(list)) return result;
         if (list.Trim().Equals("none", StringComparison.OrdinalIgnoreCase)) return result;
 
@@ -317,6 +321,10 @@ public sealed partial class RoomDisplayParser : IDisposable
                 isClosedDoor = !isOpenDoor;
                 entry = entry[barrier.Length..];
             }
+            // A hidden exit with no label of its own lists as "secret passage <dir>"
+            // (GAME_MECHANICS "Room display parsing — the room title is positional,
+            // not just bright cyan"), and can hide again with no line printed.
+            bool isSecretPassage = entry.StartsWith("secret passage ", StringComparison.Ordinal);
 
             // Sub-split on spaces in case the entry has trailing
             // "and <dir>" or similar (rare).
@@ -344,6 +352,7 @@ public sealed partial class RoomDisplayParser : IDisposable
                 result.Add(d);
                 if (isOpenDoor) openDoors.Add(d);
                 else if (isClosedDoor) closedDoors.Add(d);
+                if (isSecretPassage) secretPassages.Add(d);
             }
         }
         return result;

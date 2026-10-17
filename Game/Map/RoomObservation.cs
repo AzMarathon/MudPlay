@@ -9,9 +9,12 @@ namespace MudPlay.Game.Map;
 // walker can skip the bash/pick FSM). ClosedDoorDirections lists directions
 // whose modifier was "closed door/gate" — the barrier is shut, so a peek/move
 // that way needs the door opened first. The tracker takes these as pre-parsed
-// inputs so the FSM stays testable in isolation.
+// inputs so the FSM stays testable in isolation. SecretPassageDirections lists the
+// exits shown as `secret passage <dir>`: a hidden exit found or opened, which can
+// hide again with no line printed.
 public readonly record struct RoomObservation(
     string Name,
     IReadOnlySet<Direction> Exits,
     IReadOnlySet<Direction>? OpenDoorDirections = null,
-    IReadOnlySet<Direction>? ClosedDoorDirections = null);
+    IReadOnlySet<Direction>? ClosedDoorDirections = null,
+    IReadOnlySet<Direction>? SecretPassageDirections = null);

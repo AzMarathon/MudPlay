@@ -961,6 +961,7 @@ public sealed class ProfileService
             copy.BuffTimers = null;
             copy.LastKnownRoom = null;
             copy.RecentSteps = null;
+            copy.RecentStepsFrom = null;
             copy.PendingReconnectLeader = null;
             // The sets name the source's gear; the set options are settings and stay.
             copy.Equipment?.Sets.Clear();

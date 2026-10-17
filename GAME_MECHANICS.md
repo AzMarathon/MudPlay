@@ -424,6 +424,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **How Stock's typed-ahead queue drains** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_fast_update_character` @0x4232c6 / @0x423149 / @0x423280, `_execute_pending_command` @0x450f24, `_cleanup_pending_commands`; Realm: Stock, Paradigm not recorded)*:
   - **One waiting command runs per fast tick.** A tick that starts with the delay at 0 runs one waiting command; the tick on which a delay runs out performs the deferred move and then runs one. So ten `get`s sent behind a move take ten ticks to answer, and anything sent meanwhile joins the back of the same queue. A line typed while the delay is 0 and the queue is empty runs at once (`_execute_input` @0x450171–0x4501a6).
   - **The game prints a queued command itself when it runs it**: the command text and a line break (`%s` + CR, @0x450f24), then the command's own output. So a command run from the queue is echoed at the time it runs, not when it was typed.
+  - **Paradigm echoes a typed-ahead move the same way: when the game runs it** *([CONFIRMED] 2026-10-17, user)*. A move sent before the one ahead of it has landed is echoed when it runs, not when it is typed. (An earlier note said Paradigm's timing was not recorded, asked of the user 2026-10-17 (PR #1091 review); superseded 2026-10-17.) **Client use:** on both realms `RoomTracker.NoteUnsureEcho` reads an echo as "every command before this one has been answered", and `DropMovesAlreadyAnswered` takes an echoed move's display as come (*Movement & navigation → Passive grid re-localiser (command-free)*).
   - **A queued line is kept to 254 characters** (@0x450fba).
   - **Leaving the game empties the queue, and so does dying.** `_cleanup_pending_commands` has one caller, `_cleanup_when_user_leaves` (@0x420e38), which runs on a death, a suicide, the end of the exit wait, a logoff and a hang-up. No flush was found on `break`, on being attacked or on a refused move (callees not all read).
 - **Stock has no `Too many messages sent…` line** *([OBSERVED] 2026-10-09: the text is not in `wccmmud.dll`, `wccmmpls.dll`, the message table or the textblocks; Realm: Stock)*. The Stock engine's only "slow down" lines are the two in the *Stock realms are stricter* bullet of this topic, both printed by `_add_delayed_command` (@0x45103e, @0x45105b). Its chat traffic has per-recipient caps instead, which print no rate line: see *Talk & chat channels → Telepath throttle and per-telepath acknowledgement* and *Talk & chat channels → Gossip and auction*.
@@ -2078,6 +2079,17 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - A hold ends on the first of: an announce from the party; a damage line between a party member and a monster in the room (`CombatManager.OnPartyCombatLine`, read with `DamageLineAttributor`; party members only); the in-round deadline (*Attack announce lines and round commits*); the round's fallback.
   - The followed player's announce or damage line ends it on their target, another member's on our own pick. The followed player's later announce still moves us onto their target.
   - Once our attack or the party's fight has been seen in the room (`_fightUnderwayHere`), later picks there don't hold. That and the hold's deadline are dropped when our move is sent (`NoteMoveSent`) or the game drags us behind the leader (the ` -- Following your Party leader <dir> -- ` line, which a follower gets in place of a move of its own), and a hold still latched gets a fresh deadline; a party damage line read with our move in flight is the old room's and is ignored. The tracker confirms a room only on its exits line, after the new room's `Also here:` has latched its hold, so `NoteRoomLeft` drops only what predates that roster read (a teleport, drag or flee room). A follow pick takes the monster the followed player was last seen hitting, if it is still here.
+  - **A fight seen before a room's `Also here:` isn't taken as that room's until the display's exits line places it** (`CombatManager.FightRoomUnplaced`, `PlaceRoomFight`, fed by `RoomDisplayParser.RoomParsed` with peeks left out; follow-up to report `paradigm-20261017-050150`). A teleport, a drag through a text exit (no follow line: *Party → Following the leader: follow / drag movement*) and a fear run (*Spells, buffs & conditions → Fear*) send no move of ours, so the roster comes before anything says the room changed. The first pick on it holds, with its deadline. On the exits line the display is compared with the room shown last, by the client and not the tracker, so a grid of like rooms or an unmapped area is placed the same way:
+    - **The same name, and every difference in the exits explained** → the same room (`ShowsTheRoomShownLast`). The exits listed change in place, and the client counts a change only with its own sign since the last display:
+      - **an exit added** after `You found an exit to the <dir>!` / `You found an exit upwards!` / `…downwards!` (*Movement & navigation → Hidden exits — `sea <dir>` reveal wording*), `The exit to the <dir> just opened!` (*Movement & navigation → Door and gate barriers in the room display*) or `A concealed passage opens to the <dir>.` (*Movement & navigation → Multi-action exits and levers*), read by `KnownPatterns.UserSearchSucceeded`, `RoomExitOpenedOrClosed` and `RoomConcealedPassageOpened`; or one the new display lists as `secret passage <dir>` (`RoomObservation.SecretPassageDirections`), since a search by someone else shows us only their `<name> is searching for exits.`;
+      - **an exit gone** after `The exit to the <dir> just closed!`, or when the last display listed it as `secret passage <dir>` (`RoomObservation.SecretPassageDirections`), which hides again on Stock with no line (*Movement & navigation → Room display parsing — the room title is positional, not just bright cyan*; *Hidden exits — `sea <dir>` reveal wording*).
+      - The held pick goes out at once, onto the followed player's last target when there is one. It is posted, after the tracker and the roster have read the display, and it is dropped if another roster has been read by then.
+    - **Anything else** → another room: an exit added or gone with no such sign (a drag between like-named rooms whose exits nest, a dead end's `Obvious exits: NONE!!!` against a room of the same name), or another name. The old fight is dropped, whether or not the display lists anyone, so a monster that walks into a room shown empty after a death or a teleport opens it.
+    - **No room shown since we left the last one** (our move, the drag line, leaving the game) → the display is compared with the room the tracker is sure we stand in, before it reads this display (`ShowsTheRoomWeSteppedInto`, `SetConfirmedRoomProbe`): its name, and every exit shown one of its mapped exits. A dark room we stepped into and fought in, lit later, keeps its fight. A death (the tracker has us nowhere until the death room is shown), a teleport out of the dark, or a tracker unsure of the room makes the display another room's.
+    - **A display read to its `Also here:` with no exits line after it** places nothing: the hold waits for its deadline, which still takes the followed player's last target. The game never prints such a display: every room display ends with `Obvious exits:` (*Movement & navigation → Room display parsing — the room title is positional, not just bright cyan*, user 2026-10-17). The path is only a guard against a lost or garbled exits line.
+    - A teleport into a room of the same name with the same exit list can't be told from a re-display, and is read as the same room; so is one whose exits differ only by a change the room just announced, or by a `secret passage` shown or gone. That costs the attack order, never the round.
+    - A hidden exit with a label of its own (listed by line 1 of its label message, not as `secret passage <dir>`) that hides again with no line reads as another room: the client can't tell its entry from a plain exit. That too costs only the attack order.
+  - **Leaving the game drops the room's fight and holds** (`CombatManager.NoteGameLeft`: the board's menu, a dropped link), so a relog that lands in the same room opens it afresh.
   - Another player's miss isn't read: how it is worded to onlookers isn't on record.
 - **Attack-last re-fire waits for the announces to go quiet** (`CombatManager.ScheduleAttackOrderRefire`, `RefireSettle` 500 ms; **Client policy**). Party announces arrive on separate lines, and a member reacting to someone else's announce (an attack-after, another attack-last) lands a few hundred ms later, so the re-fire goes out once, after the last of them. Every qualifying announce that lands after ours is answered, with no per-round cap (user, 2026-09-28): party members for attack-last-party, anyone for attack-last-room. It used to fire on the next dispatch turn with a cap of one, which left an attack-after member swinging behind an attack-last one (user report, 2026-09-28).
 - **An announce read before our last attack was answered isn't answered** (`CombatManager.ScheduleAttackOrderRefire`, `RefireAnswerWindow` 2 s; report `paradigm-20261013-153710`). The game prints lines in the order it handles commands, and answers each attack command with `*Combat Engaged*` (*Non-swing actions break combat (casting, equipping)*), so an announce printed ahead of that answer was handled ahead of our attack, which already lands after it. Another MudPlay member's own re-fire crosses ours this way on every fight, and answering it was a third attack each time. An announce after our answer is still answered. The window lets a refused attack, which gets no `*Combat Engaged*`, stop blocking re-fires.
@@ -4873,8 +4885,54 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **On Paradigm `rm` wins each site (realm-gated); on a stock realm with the power `sys st` fills in.**
 - **`sys st` reports the room you're standing in as `Room N  Map: M`**, the same map and room number `rm` gives on Paradigm; see *Sysop commands → `SYSOP STATUS` — forms and arguments* for the full dump and its syntax.
 - **Maze-solve stays `rm`-only** — the solver drives its own relocalization.
+- **Client policy** (user, 2026-10-17): **the tier-3 walk-back sends at most 64 reverse moves**
+  (`EngineRecoveryGate.Tier3DepthCeiling`). The executed history it reverses has no cap (a long walk through
+  rooms that read alike never refreshes the anchor). At the cap the gate takes the same give-up ladder as a
+  walk-back that ran out of history: the terminal `rm`, then `sys st`, then Lost and the RecoveryFailed
+  dialog. It logs `Tier3.cap:` with the candidates left.
 - **Client use:**
   - Both share the gate's `NoteAuthoritativePosition` / `OnAuthoritativeResyncFailed` consumers.
+  - The cap is counted in `EngineRecoveryGate.AdvanceReverseWalk` and ends through `FailTier3`.
+  - The tier-2 forward localiser folds each step with what its landing showed
+    (`FoldTier2ForwardLanding`, oldest unfolded step first, the steps landed being those executed less
+    `RoomTracker.MovesInFlight`). A landing it can't place is dropped rather than folded under the wrong step,
+    and a room it settles on is located as a deduction (`RoomTracker.LocateDeduced`), never as the persisted
+    strict anchor.
+  - **Client policy** *(user, 2026-10-17)*: a room the tier-3 walk-back settles on is a guess too.
+    `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`. The walker and the loop runner
+    resume from the key either way, and the bug report's *Recovery anchor* is the gate's own walk-back anchor.
+  - **Client policy** *(user, 2026-10-17; held to every save in the PR #1091 review)*: **a room worked out
+    while unsure is never saved as the known room, by any save.**
+    - **What sets `RoomTracker.PositionIsGuess`:**
+      - the tier-2 and tier-3 footprints (`LocateDeduced`);
+      - the passive locate's convergence;
+      - a name or trail re-match (`TryReanchorByName`, `TryReplayRecover`);
+      - a re-confirm of the room held while Suspect, when rooms other than it fit the display;
+      - every move predicted on from a guess.
+    - **What clears it:**
+      - a strict anchor: a 1-of-1 match (a re-confirm from Suspect whose display only that room fits
+        included), a manual locate, `rm` or `sys st`;
+      - holding no room: Lost, a Suspect with no room, a death, a graph reload;
+      - the profile closing (`OnProfileClosed`, which drops the trail too).
+    - **Each save runs `RoomTracker.PersistCurrentRoomForSave`.** The profile saves all through play (a buff
+      dropping, an equipment change, a settings apply) as well as on close.
+      - While the flag is set, the save keeps `LastKnownRoom`. It saves the room held as
+        `CharacterProfile.RecentStepsFrom`, a trail of none, and clears the steps.
+      - Otherwise it still saves the room held as known, with the trail cleared. A run of moves through rooms
+        that read alike, such as Paradigm's ~100 `Graveyard` rooms, confirms every room by prediction and
+        never by a 1-of-1 match.
+  - **A room settled on without saving it as known starts a new step trail there.** The trail's start is
+    saved with it (`CharacterProfile.RecentStepsFrom`).
+    - **On a relog,** `RoomTracker.Hydrate` lands at that start, still a guess, unless it is `LastKnownRoom`
+      itself. After a save while Confirmed, that is the room held, with no steps to replay.
+    - **A trail saved while the tracker wasn't Confirmed** (Suspect at the save) still has steps. Those
+      replay from the start when the first display disagrees with it.
+    - **Why the save saves the room held, not the trail to it:** in rooms that read alike no display
+      disagrees with the start, so a replay would never run, and the relog would sit at the start.
+    - **A start no longer in the active game data** drops the trail (logged), and the relog lands on
+      `LastKnownRoom`.
+    - (Before 2026-10-17, a relog after such a settling replayed the new steps from the old anchor, as if
+      they had been taken there.)
 
 ### Dark rooms — no name, no exits, traversal inferred from no bonk
 *Status: CONFIRMED*
@@ -5005,6 +5063,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Bright cyan is not uniquely the room title — an engine-side palette can remap spell/ability text to it.** A player running a palette that shifts spell/ability lines from dark blue to bright cyan makes every `<player> invokes the way of the monkey!`-style broadcast render in the **same bright cyan as room names**, deterministically (not an occasional fluke).
 - **Such a line can arrive in the arrival burst immediately *before* the real title**, so colour can't tell an ability line from the title under that palette.
 - **The room display is one contiguous block** — title → `Also here:` → `Obvious exits:` — so async player broadcasts land before it, never between the title and the exits line. The title is therefore the **last** bright-cyan line before `Obvious exits:`.
+- **`Also here:` prints only when someone else is in the room; `Obvious exits:` always prints** *([CONFIRMED] 2026-10-17, user: "also here only prints on a room display when there are npc's or players in the room besides the players own character. obvious exits always prints something")*. A room display with no NPC or other player in it has no `Also here:` line. Every room display ends with an `Obvious exits:` line, so an `Also here:` is never printed without one after it. This agrees with Stock's steps 6 and 7 below: step 6 leaves `Also here:` out when nobody is listed, and step 7 always prints the exits line, as `Obvious exits: NONE!!!` when no exit is visible.
+  - **Client use:** `CombatManager.PlaceRoomFight` places a fight on record by the exits line that closes the display (*Combat → Player attack order and "Attack last"*). A display read to its `Also here:` that never reaches an exits line (a lost or garbled line) places nothing, and the hold waits for its deadline. That path is only a guard.
 - **A miss or a dodge never shares the title's colour: those print dark cyan** *([CONFIRMED] 2026-10-10, user: "always dark cyan as far as i know")*. The statement and its capture are in *Wire, prompt & command output → Message catalogue (lines the client parses)*, the *Incoming mob attack — miss* row.
   - **Client use:** `CombatLineClassifier` reads no miss or dodge off a bright-cyan line, so a title printed while a fight is on (the room read again, or a step taken with combat still engaged) is left untagged in the Wire Inspector's Classified pane, and a title that leads with a monster's name (`Dire Wolf Lair`) is not that monster's attack under a break hold (`MonsterAttackLine.IsBy`; report `paradigm-20261010-215619`).
 - **Stock: the order of one room display** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_room_desc` @0x436f5d; Realm: Stock, Paradigm not recorded)*:
@@ -6910,6 +6970,40 @@ Among protectable hazards, a further split governs whether the navigator may off
     (`NoteMoveSent` / `NoteFollowMove`) and the room displays, re-anchoring (`SetRoom`) the instant the
     walked sequence fits exactly one graph room.
   - It stands down whenever an engine is attached (gated on `EngineRecoveryGate.HasAttachedEngine`).
+  - Each display read while unsure answers the oldest move sent while unsure (`RoomTracker._unsureMoves`,
+    `TakeAnsweredMove`), so moves typed together fold in order. A sure tracker turning unsure carries over
+    only the moves sent since the last display was read (`CarryPendingIntoUnsure`): in a corridor of rooms
+    that read alike the pending queue also holds moves whose displays were held as re-looks.
+  - A text exit folds through each candidate's own exit of that command (`PassiveHop`). A dark line or a
+    blind-move line answers a move too and dead-reckons it (`FoldUnshownMove`, `StepBlind`), per *Dark rooms
+    — no name, no exits, traversal inferred from no bonk* and *Moving while blind*. A Lost display no room
+    matches exactly still folds, by the subset match.
+  - A refusal while unsure un-counts the newest unsure move (`NoteMoveBlocked`, and `NoteCommandDropped`
+    within its 3 s window; the exit-gate and hold refusals through `MoveAwaitingAnswer`; a typed command the
+    room refuses through `NoteCommandMoveRefused`), and a redisplay with no move waiting is a repeat, not a
+    fold (`IsRepeatRedisplayWithoutMove`).
+  - A move nothing answers that the tracker reads (a command the game answers with only a prompt, a line no
+    detector knows) is retired (`RetireUnansweredMoves`, `NoteUnsureEcho`).
+    - **With an echo (both realms):** once the next command's echo comes with no display between. That rests on
+      the game echoing a typed-ahead command when it runs it, on Stock and Paradigm alike (*Wire, prompt &
+      command output → Command rate limit (typing/sending too fast)*; Paradigm user-confirmed 2026-10-17).
+    - **With no echo:** once it has had nothing for `UnansweredMoveAge` with a later move
+      out, counted from its send or the last display read, whichever is later. The bound is two expected hops
+      plus a second, never under 3.5 s. The expected hop is the Auto-Lair travel model's estimate
+      (`SetExpectedHopProbe`: Paradigm's movement formula or Stock's encumbrance buckets).
+    - The bound comes from *Per-hop movement speed*: Paradigm runs from the 1.0 s cap to ~3.1 s with
+      encumbrance, plus lag, and a 32%-encumbered priest's 1.37 s median has a tail past 1.5 s; Stock is ~0.6–0.7 s
+      light and ~1.65 s Heavy, with more units when dragging or after several moves. Moves typed together are
+      answered one hop apart, so a shorter bound retired a heavy character's typed-ahead move.
+    - An exhausted footprint drops the waiting moves whose display must already have been read against an
+      older move (`DropMovesAlreadyAnswered`): with an echo, those already echoed; with none, those sent more
+      than one expected hop ago. A move not yet echoed, or sent within a hop, stays (moves typed together).
+    - PR #1091 review, 2026-10-17.
+- **Client policy** *(Claude's design in PR #1091, 2026-10-17; not a user ruling)*: a footprint that comes
+  down to one room while a later move is still in flight waits for that move's display before re-anchoring
+  (`SettlePassiveFold`; the gate's forward localiser does the same). The set can only shrink, so waiting
+  never loses the room. A move past `UnansweredMoveAge` isn't waited for (`SettleStalePassiveWait`;
+  `RoomTracker.MovesInFlight` doesn't count it for the gate).
 
 ### Great Pyramid puzzle climb
 *Status: CONFIRMED 2026-07-29 (user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace); undead-priest holds CONFIRMED 2026-07-30 (user + game-data trace) · Realm: Paradigm (1.9.1); stock noted where it differs*

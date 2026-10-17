@@ -2224,6 +2224,13 @@ public static class BugReportBuilder
         Kv(sb, "Recovery tier", svc.Recovery.CurrentTier.ToString());
         Kv(sb, "Recovery anchor",
             svc.Recovery.Anchor is { } anc ? $"{anc.Map}/{anc.Room}" : "(none)");
+        // The steps a walk-back would reverse, and how far each footprint has
+        // narrowed: a "Lost after walking back" report turns on whether the
+        // history was long, the walk-back hit its cap, or the forward footprint
+        // was dropped before it could place us.
+        Kv(sb, "Recovery executed steps since anchor", svc.Recovery.ExecutedSinceAnchor.Count.ToString());
+        Kv(sb, "Recovery tier-2 forward footprint", svc.Recovery.Tier2ForwardStatus);
+        Kv(sb, "Recovery tier-3 walk-back footprint", svc.Recovery.Tier3Status);
         Kv(sb, "Awaiting rm resync", svc.Recovery.AwaitingAuthoritativeResync.ToString());
         var resync = svc.ParadigmResync;
         Kv(sb, "rm resync enabled", resync.Enabled.ToString());
@@ -2237,6 +2244,16 @@ public static class BugReportBuilder
         Kv(sb, "Current room",
             roomState.CurrentRoom is { } room ? $"{room.Key.Map}/{room.Key.Room} — {room.DisplayName}" : "(unknown)");
         Kv(sb, "Room confidence", roomState.Confidence.ToString());
+        // What a relog lands on: a "came back in the wrong room" report turns on
+        // whether the room held was a guess, the room saved as known, and the trail
+        // saved since, with the room it starts in when that isn't the known one.
+        Kv(sb, "Room held is a guess (not saved as known)", svc.RoomTracker.PositionIsGuess.ToString());
+        Models.Profile.CharacterProfile? saved = svc.Profile.Current;
+        Kv(sb, "Saved known room (LastKnownRoom)",
+            saved?.LastKnownRoom is { } lkr ? $"{lkr.Map}/{lkr.Room}" : "(none)");
+        Kv(sb, "Saved trail",
+            $"{saved?.RecentSteps?.Count ?? 0} steps from "
+            + (saved?.RecentStepsFrom is { } rsf ? $"{rsf.Map}/{rsf.Room} (a room worked out)" : "the known room"));
         // A room the data gives no name answers to the name this realm saw for it:
         // "the map lost me in my gang house" turns on whether one is held and on
         // the map, or was never kept.

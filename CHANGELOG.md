@@ -1,10 +1,25 @@
 # Version history
 
-## 3.184.2
+## 3.184.9
 
 - Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do
 - Auto-Light: a trip's light stop checks the whole trip, buys at the closest shop it can reach before the dark, checks the purse first, and skips a shop that didn't sell for a while
 - Auto-Light: a bank or stash run whose way back runs dark keeps the light's price, buys at the shop nearest it, then sets off back
+
+## 3.184.7
+
+- Combat: after a teleport, a drag with no follow line or a fear run, "Attack Not Last" and follow Target Priority hold the new room's first attack again
+- Combat: a relog or reconnect starts the room's attack order afresh, even in the same room
+- Combat: after a death or teleport into an empty room, a monster that walks in waits for the party's opening too
+
+## 3.184.6
+
+- Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
+- Unsure of your room, a text-exit move (`go path`) still narrows down where you are
+- Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
+- Unsure of your room, moves typed together are each matched to their own room display
+- Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
+- A walk's forward re-locate reads every step's landing in order; a room it, the walk-back or an unsure re-match settles on is never saved as your known room, and a relog lands back on it
 
 ## 3.184.0
 

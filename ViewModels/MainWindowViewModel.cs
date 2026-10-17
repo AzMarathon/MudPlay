@@ -1296,11 +1296,12 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
         // Under a typed break's hold the combat engine asks to see the room once a
         // fight in it goes quiet; a display that lists nobody is how an emptied room
-        // answers. A `look <direction>` shows the next room and answers nothing.
-        _roomDisplayParser.RoomParsed += _ =>
+        // answers. A `look <direction>` shows the next room and answers nothing. The
+        // display also tells the attack-order holds whether this is the room shown last.
+        _roomDisplayParser.RoomParsed += obs =>
         {
             if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
-                AppServices.Current.Combat.NoteRoomDisplayed();
+                AppServices.Current.Combat.NoteRoomDisplayed(obs);
         };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
