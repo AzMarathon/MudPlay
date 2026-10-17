@@ -1702,9 +1702,11 @@ public static class BugReportBuilder
             svc.RoomClassifier.Current, svc.RoomTracker.IsInDarkRoom, svc.RoomTracker.EnteredBlind,
             svc.Conditions.IsBlinded, svc.RoomClassifier.RosterIsWhole, svc.RoomClassifier.RosterNotWholeBecause,
             svc.SpellCasters.KnowsMonster);
-        Kv(sb, "Room list whole", notWhole is null ? "yes" : "no — " + notWhole);
+        // Both quote a game line, which may be someone's chat: censored as the
+        // program log's copy of them is.
+        Kv(sb, "Room list whole", notWhole is null ? "yes" : "no — " + Censor.CensorLogMessage(notWhole));
         Kv(sb, "Last line narrowed by who can cast here", svc.Conditions.LastNarrowed is { } n
-            ? $"{n.At.ToLocalTime():HH:mm:ss} '{n.Line}' — cast here: {n.Kept}; left out: {n.LeftOut}"
+            ? Censor.CensorLogMessage($"{n.At.ToLocalTime():HH:mm:ss} '{n.Line}' — cast here: {n.Kept}; left out: {n.LeftOut}")
             : "none this session");
     }
 

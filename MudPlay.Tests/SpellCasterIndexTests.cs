@@ -666,9 +666,12 @@ public sealed class SpellCasterIndexTests : IDisposable
     }
 
     // A switch that clears the room graph under the walk is no fault: that load
-    // warms its own.
-    [Fact]
-    public void ABuildOvertakenByASetSwitch_IsNoWarn()
+    // warms its own, whatever the torn read throws.
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(NullReferenceException))]
+    [InlineData(typeof(ArgumentOutOfRangeException))]
+    public void ABuildOvertakenByASetSwitch_IsNoWarn(Type thrown)
     {
         (GameDataCache cache, _) = NewIndex(_root);
         string dir = Path.Combine(_root, "beta");
@@ -678,7 +681,7 @@ public sealed class SpellCasterIndexTests : IDisposable
         SpellCasterIndex index = new(cache, () =>
         {
             cache.SwitchSet("beta");
-            throw new InvalidOperationException("Collection was modified");
+            throw (Exception)Activator.CreateInstance(thrown)!;
         }, log);
 
         index.Warm();

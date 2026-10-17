@@ -95,6 +95,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     private readonly Dictionary<string, DateTimeOffset> _castSeenAt = new(StringComparer.Ordinal);
     // The cast lines and the applied line arrive in one burst.
     private static readonly TimeSpan CastLineWindow = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan NarrowingRepeatWindow = TimeSpan.FromSeconds(60);
 
     private LineExtractor? _lines;
     private bool _disposed;
@@ -935,7 +936,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // it protects none of them (the three plagues print one line).
     //
     // A narrowed line is logged at Info, once for the line: what it leaves out is a
-    // condition the client then does not hold, and a report has to show why.
+    // condition the client then does not hold, and a report has to show why. The
+    // same narrowing again within a minute is logged at Debug.
     private List<MessageRecord> KeepWhatCouldBeCastHere(
         List<MessageRecord> matched, CastReach reach, string text, DateTimeOffset when)
     {
@@ -962,10 +964,16 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         Narrowing narrowed = new(when, text,
             string.Join(", ", castHere.Distinct()),
             string.Join(", ", outOfReach.Select(r => $"'{r.Name}' ({r.Flags})").Distinct()));
+        // A room spell narrows the same line every tick; once at Info says it, and
+        // the repeats in the window only add noise to a log read with Debug off.
+        bool repeat = LastNarrowed is { } last
+            && last.Line == narrowed.Line && last.Kept == narrowed.Kept && last.LeftOut == narrowed.LeftOut
+            && when - last.At < NarrowingRepeatWindow;
         LastNarrowed = narrowed;
-        _log?.Info(LogCategory,
-            $"applied line '{text}' shared by several spells — cast here: {narrowed.Kept}; "
-            + $"not applying, no monster, room or player outside the party that casts them being here: {narrowed.LeftOut}");
+        string said = $"applied line '{text}' shared by several spells — cast here: {narrowed.Kept}; "
+            + $"not applying, no monster, room or player outside the party that casts them being here: {narrowed.LeftOut}";
+        if (repeat) _log?.Debug(LogCategory, said);
+        else _log?.Info(LogCategory, said);
         return matched.FindAll(r => !outOfReach.Contains(r));
     }
 

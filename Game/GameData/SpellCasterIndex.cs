@@ -175,11 +175,11 @@ public sealed class SpellCasterIndex
                         + $"Built in {clock.ElapsedMilliseconds} ms.");
             }
         }
-        catch (InvalidOperationException ex) when (building is { } overtaken && overtaken != _cache.ActiveLoad)
+        catch (Exception ex) when (building is { } overtaken && overtaken != _cache.ActiveLoad)
         {
-            // The set switched again and the room graph was cleared under the walk;
-            // that load warms its own.
-            _log?.Debug("SpellCasterIndex", $"build overtaken by a set switch ({ex.Message})");
+            // The set switched again and its data was torn down under the walk, which
+            // can throw any type; that load warms its own.
+            _log?.Debug("SpellCasterIndex", $"build overtaken by a set switch ({ex.GetType().Name}: {ex.Message})");
         }
         catch (Exception ex)
         {

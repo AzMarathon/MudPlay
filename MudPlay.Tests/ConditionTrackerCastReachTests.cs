@@ -756,6 +756,28 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
         Assert.Contains("'galacial mist' (Confused)", narrowed.LeftOut, StringComparison.Ordinal);
     }
 
+    // A room spell repeats the same line every tick: the first narrowing is said at
+    // Info, the same one again within a minute only at Debug, and once the minute is
+    // out it is Info again.
+    [Fact]
+    public void TheSameNarrowingRepeated_IsInfoOnce_ThenDebugWithinTheWindow()
+    {
+        _log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        AddTheFreezingFamily();
+        Monsters("ice sorceress");
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+
+        FeedAt("You are freezing", start);
+        FeedAt("You are freezing", start.AddSeconds(10));
+        FeedAt("You are freezing", start.AddSeconds(80));
+
+        List<LogSeverity> said = _log.Snapshot()
+            .Where(e => e.Message.Contains("shared by several spells", StringComparison.Ordinal))
+            .Select(e => e.Severity).ToList();
+        Assert.Equal(new[] { LogSeverity.Info, LogSeverity.Debug, LogSeverity.Info }, said);
+        Assert.Equal(start.AddSeconds(80), _tracker.LastNarrowed!.At);
+    }
+
     [Fact]
     public void ALineNothingIsLeftOutOf_LogsNoNarrowing()
     {
@@ -785,5 +807,17 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
                 new RoomEntitiesObservation("Also here: …",
                     new[] { new RoomEntity("a shape", "a shape", EntityKind.Unknown, null) }, DateTimeOffset.UtcNow),
                 false, false, false, true, null, Known));
+    }
+
+    // After a link drop the classifier has no roster and says why; that reason, not
+    // the bare "no room list", is what the report shows.
+    [Fact]
+    public void WhyRosterNotWhole_WithNoRoster_GivesTheClassifiersReason()
+    {
+        Assert.Equal("the game was left; no room has been read since",
+            CastReach.WhyRosterNotWhole(
+                null, false, false, false, false, "the game was left; no room has been read since", Known));
+        Assert.Equal("no room list has been read",
+            CastReach.WhyRosterNotWhole(null, false, false, false, false, null, Known));
     }
 }
