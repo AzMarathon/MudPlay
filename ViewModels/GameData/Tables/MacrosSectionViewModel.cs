@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -102,6 +103,7 @@ public sealed class MacrosSectionViewModel : GameDataTableSectionViewModel, IEdi
         Macro? created = await _dialogs.OpenWindowAsync<MacroEditDialogViewModel, Macro>(vm);
         if (created is null) return;
         _store.Add(created);
+        GuideActions.Report(GuideActions.MacroAdded);
         Reload();
     }
 

@@ -10,7 +10,21 @@ On a brand-new install — no BBS, no character, or no game data imported yet �
 2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**. On a new install you are on the unnamed default profile, so the character you add **is loaded** and Profile Management **closes**: what you set up from here is kept on it.
 3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from. If Profile Management is still open, the import closes it first: with it open the import's file picker could end up out of reach, and the client looked frozen.
 
-Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → First-time setup…**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
+Don't want it? Click **Skip — don't show this again** and it won't return on launch. You can replay your own outstanding steps any time from **Help → Visual Guides… → First-time setup**, or walk the whole thing as a demo (as if nothing were set up) from the **Program Log → "Run setup tutorial"** button. The rest of this page is the same ground at your own pace.
+
+## Visual Guides
+
+**Help → Visual Guides…** lists step-by-step guides to the rest of the client, grouped by area. Each shows how far you got: **✓ Done**, **Step N of M**, or how many steps it has. Click **Open** and the guide runs in the same floating card as the setup tour: each step is a short checklist, a line **ticks (☑)** as you really do that thing (open the window, click Save, start the loop…), and the guide moves on by itself once a step's checklist is done. Lines marked **•** are explanations; read them and press **Next**. The menu a step starts from glows on the main window.
+
+- **Close — your place is kept** puts the card away; **Open** brings you back to the same step. **Restart** in the list starts a guide over from step 1.
+- Pressing **Help → Visual Guides…** again while the list is in front closes it.
+- The guides:
+  - **Getting started** — First-time setup.
+  - **Navigation** — build, save and run a loop; run Auto-Lair; walk to a room; loop settings (Entire Loop Settings and each room's command, delay, rest and attack options); import MegaMUD loops.
+  - **Automation** — macros, aliases, triggers, scheduled events.
+  - **Character & game data** — Monster Intel, a Player Workshop tour, Item Finder, the Game Data Browser, player permissions for @-commands, the Buff Watchdog, gear sets and combat profiles.
+  - **Settings & help** — the Settings window, and sending a bug report.
+- Progress is kept for the whole install, not per character.
 
 ## What MudPlay is
 

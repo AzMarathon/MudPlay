@@ -11,6 +11,7 @@ using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -1485,6 +1486,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshPreviewPath();
         // Mark the preview target on the map too (the walker owns the marker while walking).
         if (!IsWalking) DestinationRoomKey = value;
+        if (value is not null) GuideActions.Report(GuideActions.DestinationQueued);
     }
     // Drop the armed preview the instant a walk starts (the live WalkPath takes
     // over), and restore it if the walk stops with a destination still armed.
@@ -3554,11 +3556,19 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             case NavigationMode.LoopBuild:
                 if (remove) LoopBuilder?.RemoveLastClickOf(key);
-                else LoopBuilder?.AddClick(key);
+                else
+                {
+                    LoopBuilder?.AddClick(key);
+                    GuideActions.Report(GuideActions.LoopRoomClicked);
+                }
                 break;
             case NavigationMode.AutoLair:
                 if (remove) _services.AutoLair.Unmark(key);
-                else _services.AutoLair.Toggle(key);
+                else
+                {
+                    _services.AutoLair.Toggle(key);
+                    GuideActions.Report(GuideActions.LairMarked);
+                }
                 break;
             case NavigationMode.ExpEstimator:
                 if (remove) ExpEstimator?.RemoveLastClickOf(key);

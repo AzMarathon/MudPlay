@@ -10,6 +10,7 @@ using MudPlay.Game.Map;
 using MudPlay.Game.Map.MpFile;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.Navigation;
 
@@ -678,6 +679,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
             OwnSettings = running.OwnSettings,
         };
         _loops.Save(snapshot);
+        GuideActions.Report(GuideActions.LoopSaved);
         // Re-stamp the live runner's loop name so subsequent edits
         // / saves identify the same record on disk.
         running.Name = saveName;
@@ -704,6 +706,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     [RelayCommand]
     private async Task ImportMpAsync()
     {
+        GuideActions.Report(GuideActions.MpImportStarted);
         if (_mpImporter is null)
         {
             ImportStatus = "Importer not available — file a bug.";

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.183.0
+
+- Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
+- Each guide ticks its steps as you really do them, keeps your place, and can be restarted
+- The first-time setup tour is one of them and still opens on its own on a new install
+
 ## 3.181.1
 
 - Settings search highlights matching tabs like Help's search, and no longer hides the rest

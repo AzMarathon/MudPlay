@@ -11,6 +11,7 @@ using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels;
 
@@ -818,6 +819,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         dto.CastOnSelf = ResolveScope(r.Spell) == BuffSlotScope.SelfOnly
                          || r.OnlyWhenDark || r.CastBeforeRestingForMana;
         _settings.Slots.Add(dto);
+        GuideActions.Report(GuideActions.BuffAdded);
         BuffSlotRowViewModel row = MakeRow(dto);
         // Manual layout appends new buffs at the bottom; default sorts into type.
         if (_settings.ManualOrder) Slots.Add(row); else InsertSorted(row);
