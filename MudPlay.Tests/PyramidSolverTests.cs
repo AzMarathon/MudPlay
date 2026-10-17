@@ -46,6 +46,8 @@ public sealed class PyramidSolverTests : IDisposable
         public HashSet<(int Room, string Dir)> OpenedDoors { get; } = new();   // opened by the door manager
         public List<(int Room, Direction Dir, int Key)> DoorRequests { get; } = new();
         public bool DoorsJammed;                     // the door manager can open nothing
+        public bool DoorsHang;                       // the door manager never answers
+        public int DoorStops;                        // times the door manager was stopped
         public int SlamDoors;                        // the next N open doors shut as we step
         public bool LeaderHasKey;
         public int KeyRoomVisits;
@@ -115,6 +117,7 @@ public sealed class PyramidSolverTests : IDisposable
             {
                 Harness g = made!;
                 g.DoorRequests.Add((g.Room, doorDir, keyItemId));
+                if (g.DoorsHang) return;
                 bool opens = !g.DoorsJammed && (keyItemId > 0 ? g.LeaderHasKey : statRequirement < 1000);
                 if (!opens)
                 {
@@ -125,7 +128,8 @@ public sealed class PyramidSolverTests : IDisposable
                 reply(DoorOpenResult.Opened.Instance);
             },
             holdsItem: id => id == PyramidScript.GoldenLionKeyItem && made!.LeaderHasKey,
-            gateEngineOn: gate => made!.EnginesOn.Contains(gate));
+            gateEngineOn: gate => made!.EnginesOn.Contains(gate),
+            stopDoor: () => made!.DoorStops++);
 
         Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver };
         made = h;
@@ -1021,6 +1025,34 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Equal(0, h.Refused);                  // shown shut, so never walked into
         Assert.Contains((2002, Direction.E, 0), h.DoorRequests);
         Assert.DoesNotContain(h.SentText, t => t.StartsWith("bash", StringComparison.Ordinal));   // the manager's to send
+    }
+
+    // Stop with the climb's door still being worked: the door manager goes on at a
+    // door until it opens or the room changes, so it is stopped with the climb.
+    [Fact]
+    public void Cancel_WithItsDoorStillBeingOpened_StopsTheDoorManager()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.PlainDoorsOpen = false;
+        h.DoorsHang = true;
+        RunUntil(h, () => h.DoorRequests.Count > 0);
+
+        h.Solver.Cancel("test");
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(1, h.DoorStops);
+    }
+
+    [Fact]
+    public void Cancel_WithNoDoorInHand_LeavesTheDoorManagerAlone()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.PlainDoorsOpen = false;
+        RunUntil(h, () => h.DoorRequests.Count > 0);   // answered: opened at once
+
+        h.Solver.Cancel("test");
+
+        Assert.Equal(0, h.DoorStops);
     }
 
     [Fact]

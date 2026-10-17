@@ -142,6 +142,7 @@ public static class BugReportAutomationSections
               .Append(", ").Append(d.LivesRemaining).Append(" lives left — ").Append(d.Status)
               .Append(d.RecoveryMessage is { Length: > 0 } msg ? $": {msg}" : string.Empty)
               .Append(d.UnrecoveredItems is { Count: > 0 } missing ? $"; still missing {missing.Count} item(s)" : string.Empty)
+              .Append(d.GameData is { } set ? $"; recorded on game data '{set}'" : "; game data not recorded (taken as the active one's)")
               .Append('\n');
         }
         return sb.ToString();

@@ -138,6 +138,7 @@ public sealed class HangupItemRecheck
     private readonly Func<string, bool>? _staysOnDeath;
     private readonly Func<RoomKey, RoomKey, Recovery.HangupEntryRoomReading>? _entryRoomSays;
     private readonly Func<RoomKey, string>? _roomLabel;
+    private readonly Func<string?>? _roomsGameData;
     private readonly Func<Recovery.UnwitnessedDeath, DeathRecord?>? _recordDeath;
 
     private Phase _phase;
@@ -274,7 +275,8 @@ public sealed class HangupItemRecheck
         Func<Recovery.UnwitnessedDeath, DeathRecord?>? recordDeath = null,
         Func<string, bool>? staysOnDeath = null,
         Func<RoomKey, RoomKey, Recovery.HangupEntryRoomReading>? entryRoomSays = null,
-        Func<RoomKey, string>? roomLabel = null)
+        Func<RoomKey, string>? roomLabel = null,
+        Func<string?>? roomsGameData = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(profile);
@@ -319,6 +321,7 @@ public sealed class HangupItemRecheck
         _staysOnDeath = staysOnDeath;
         _entryRoomSays = entryRoomSays;
         _roomLabel = roomLabel;
+        _roomsGameData = roomsGameData;
     }
 
     // ----- for the bug report -------------------------------------------
@@ -410,6 +413,7 @@ public sealed class HangupItemRecheck
             Realm = _realmKey(),
             Character = _nameReadThisLink ?? carry?.Character,
             Room = _confirmedRoom() is { } room ? new RoomRef(room.Map, room.Room) : null,
+            GameData = _roomsGameData?.Invoke(),
             // What an unfinished check hasn't found was dropped before this
             // connection; a drop of this one comes on top of it.
             PenaltiesSpanned = outstanding.Count > 0 ? Spanned(_before) + 1 : 1,
@@ -513,7 +517,8 @@ public sealed class HangupItemRecheck
         _before = before;
         _phase = Phase.AwaitingEntry;
         _entryTicks = 0;
-        string left = $"{before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}, {RoomText(before.Room)}";
+        string left = $"{before.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}, {RoomText(before.Room)}"
+            + (before.GameData is { } set ? $" of game data '{set}'" : "");
         if (arena)
         {
             _deathBefore = before;
@@ -1331,7 +1336,8 @@ public sealed class HangupItemRecheck
             + (cameBackIn is null ? "" : $" It came back in {cameBackIn}.")
             + (before.ItemsUnknown ? " What it held then isn't known." : "");
         DeathRecord? record = _recordDeath?.Invoke(new Recovery.UnwitnessedDeath(
-            before.Room, before.At, lives, message, equipped, lost, before.ItemsUnknown ? null : before.Coins, atEntry));
+            before.Room, before.At, lives, message, equipped, lost, before.ItemsUnknown ? null : before.Coins, atEntry,
+            GameData: before.GameData));
 
         (string where, string number) = Recorded(record, before);
         string pile = equipped is null || lost is null
@@ -1374,7 +1380,8 @@ public sealed class HangupItemRecheck
         _deathBefore = null;
         string message = ArenaDeathMessage + (cameBackIn is null ? "" : $" It came back in {cameBackIn}.");
         DeathRecord? record = _recordDeath?.Invoke(new Recovery.UnwitnessedDeath(
-            before.Room, before.At, lives, message, Equipped: null, Lost: null, Coins: null, atEntry, NothingLost: true));
+            before.Room, before.At, lives, message, Equipped: null, Lost: null, Coins: null, atEntry, NothingLost: true,
+            GameData: before.GameData));
 
         (string where, string number) = Recorded(record, before);
         LastDeathCheck = $"{_now():HH:mm:ss} died in the arena, death{number} recorded with nothing lost"

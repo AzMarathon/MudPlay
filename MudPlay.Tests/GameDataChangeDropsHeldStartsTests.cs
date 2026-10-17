@@ -440,8 +440,9 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
     // room the party stands in (1/1), one at 1/3. The trip is started as the
     // coordinator's tick starts it, and stands in its wait for the first member's
     // train with the walk to 1/3 still to come. calledOff false leaves the stop
-    // unable to end it.
-    private Trip TripWaitingAtItsFirstStop(World w, bool calledOff = true)
+    // unable to end it. offByTheErrand: the errand's end calls it off first, in the
+    // same stop, as the app's abandon hook does.
+    private Trip TripWaitingAtItsFirstStop(World w, bool calledOff = true, bool offByTheErrand = false)
     {
         File.WriteAllText(Path.Combine(_root, "alpha", "Info.json"), "[{\"Legit\":1}]");
         File.WriteAllText(Path.Combine(_root, "beta", "Info.json"), "[{\"Legit\":1}]");
@@ -496,11 +497,14 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             log: w.Log);
         Trip trip = new() { Coordinator = coordinator, Trainer = trainer, Orders = orders, Timers = timers };
         w.Walker.Event += e => coordinator.OnWalkEvent(e.Kind);
+        if (offByTheErrand)
+            w.Controller.EndingForGameDataChange += (reason, _) => coordinator.CallOffTrip(reason);
         if (calledOff)
             // AppServices.EndHeldRunsForGameDataChange's line for it.
             w.Controller.EndingForGameDataChange += (reason, stopped) =>
             {
-                if (coordinator.CallOffTrip(reason) && !stopped.Contains("the training trip"))
+                if ((coordinator.CallOffTrip(reason) | coordinator.TakeCalledOffFor(reason))
+                    && !stopped.Contains("the training trip"))
                     stopped.Add("the party training trip");
             };
         _dispose.Add(parser);
@@ -562,6 +566,21 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         Assert.Empty(w.Sent);
         // The members are told the trip is off, and nothing with a room in it.
         Assert.Equal(new[] { "/Bob @ptrain trip off", "/Cid @ptrain trip off" }, trip.Orders.Skip(orders));
+    }
+
+    // Called off already by the errand's end in the same stop, it is named all the same.
+    [Fact]
+    public async Task ATripCalledOffByTheErrandsEnd_IsStillNamed()
+    {
+        World w = Build();
+        Trip trip = TripWaitingAtItsFirstStop(w, offByTheErrand: true);
+
+        string? said = w.Change(reimport: false);
+        await trip.Running.WaitAsync(Limit);
+
+        Assert.Equal($"[The party training trip stopped: {Why(false)}]", said);
+        // Named once: the same reason again finds nothing of this trip to name.
+        Assert.False(trip.Coordinator.TakeCalledOffFor("game data changed from 'alpha' to 'beta'"));
     }
 
     [Fact]

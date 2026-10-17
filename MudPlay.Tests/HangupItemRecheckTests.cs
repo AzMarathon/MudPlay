@@ -251,6 +251,8 @@ public sealed class HangupItemRecheckTests
         // not in the room itself.
         public RoomKey? LearnedIn { get; set; }
         public Dictionary<RoomKey, string> RoomNames { get; } = new();
+        // The game-data set whose rooms the map holds.
+        public string? GameDataSet { get; set; } = "alpha";
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
 
@@ -305,7 +307,8 @@ public sealed class HangupItemRecheckTests
                     room => LearnedArrivals.TryGetValue(room, out RoomKey seen)
                         ? new[] { new MudPlay.Game.Recovery.LearnedArrival(seen, LearnedIn ?? room) }
                         : null),
-                roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}");
+                roomLabel: room => RoomNames.TryGetValue(room, out string? name) ? $"{name} ({room})" : $"room {room}",
+                roomsGameData: () => GameDataSet);
             Check.SetWireSender(_ => { });
         }
 
@@ -1435,6 +1438,28 @@ public sealed class HangupItemRecheckTests
         h.Vitals = (200, 200);
         h.Check.OnInGameChanged(true);
         if (lives is { } read) h.ReadLives(read);
+    }
+
+    // The list's room is a number of the game data the map held when it was written,
+    // and the death it turns into is stamped with that set, not with one switched to
+    // before the next entry.
+    [Fact]
+    public void TheHeldList_IsStampedWithItsGameData_AndTheDeathKeepsIt()
+    {
+        Harness h = new() { PveShare = 50 };
+        h.ConnectAndEnter();
+        h.ReadInventory(Geared);
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+        Assert.Equal("alpha", h.Profile.HeldAtDisconnect!.GameData);
+
+        h.StoredAt(-5, Geared);
+        h.Profile.HeldAtDisconnect!.GameData = "alpha";
+        h.GameDataSet = "beta";
+        ComeBackDead(h, 6);
+        h.ReadInventory(Snap());
+
+        Assert.Equal("alpha", Assert.Single(h.Deaths).GameData);
     }
 
     [Fact]

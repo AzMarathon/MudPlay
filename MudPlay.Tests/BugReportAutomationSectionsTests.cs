@@ -58,15 +58,15 @@ public sealed class BugReportAutomationSectionsTests
         [
             new() { RecordNumber = 1, At = new DateTimeOffset(2026, 10, 1, 8, 0, 0, TimeSpan.Zero), LivesRemaining = 8, Status = DeathRecoveryStatus.Recovered },
             new() { RecordNumber = 2, At = new DateTimeOffset(2026, 10, 9, 9, 0, 0, TimeSpan.Zero), LivesRemaining = 7,
-                    RoomName = "A dark cave", UnrecoveredItems = ["a ring"] },
+                    RoomName = "A dark cave", UnrecoveredItems = ["a ring"], GameData = "alpha" },
         ];
 
         string text = BugReportAutomationSections.DeathHistory(records);
 
         Assert.Contains("The last 2 of 2 recorded.", text);
         Assert.True(text.IndexOf("- #1 ", StringComparison.Ordinal) < text.IndexOf("- #2 ", StringComparison.Ordinal));
-        Assert.Contains("8 lives left — Recovered", text);
-        Assert.Contains("(A dark cave), 7 lives left — Active; still missing 1 item(s)", text);
+        Assert.Contains("8 lives left — Recovered; game data not recorded (taken as the active one's)", text);
+        Assert.Contains("(A dark cave), 7 lives left — Active; still missing 1 item(s); recorded on game data 'alpha'", text);
     }
 
     [Fact]

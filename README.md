@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.2**
+> **Version 3.181.15**
 > - A telepath the game refused on every try, or whose letters fit two players, is let go at once
 > - A later telepath to that player no longer makes them the one a timer request asked
 >

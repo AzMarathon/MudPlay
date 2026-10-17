@@ -2282,7 +2282,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
+            WriteTerminalStatus(report.StoppedBecause is { } why
+                ? $"[Ganghouse roomba stopped: {why}]"
+                : "[Ganghouse roomba complete]", TerminalStatusKind.Notice));
 
     private static void LogSlowLine(LineExtractor.EmittedLine line, TimeSpan took)
         => AppServices.Current.Log.Warn("Lines", LineExtractor.SlowLineNotice(line, took));

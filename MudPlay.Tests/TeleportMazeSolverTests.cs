@@ -221,6 +221,8 @@ public sealed class TeleportMazeSolverTests : IDisposable
         // harness wired one). Each carries the callback the test invokes to report
         // open success/failure.
         public List<(Direction Dir, Action<bool> Done)> DoorOpens { get; init; } = new();
+        // Times the solver stopped the door FSM.
+        public int DoorStops;
         public List<string> SentText => Sent.Select(b => Encoding.Latin1.GetString(b)).ToList();
         public void Dispose() => Solver.Dispose();
     }
@@ -256,11 +258,13 @@ public sealed class TeleportMazeSolverTests : IDisposable
             : null;
         // Synchronous post + no dispatcher timers: Start() runs inline in TryBegin
         // and the settle / look timers are driven manually via test seams.
+        Harness? made = null;
         TeleportMazeSolver solver = new(index, graph, tracker, bfs, walker,
             log: null, useTimer: false, post: a => a(),
-            isParadigm: isParadigm ? () => true : null, openDoor: opener, coordinator: coord);
+            isParadigm: isParadigm ? () => true : null, openDoor: opener, coordinator: coord,
+            stopDoor: () => made!.DoorStops++);
 
-        Harness h = new()
+        Harness h = made = new()
         {
             Graph = graph, Bfs = bfs, Tracker = tracker,
             Walker = walker, Index = index, Solver = solver, DoorOpens = doorOpens, Coord = coord,
@@ -398,6 +402,23 @@ public sealed class TeleportMazeSolverTests : IDisposable
         Assert.Contains("look down\r", h.SentText);
         Assert.True(h.Solver.Active);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // Stop with the peek's door still being opened: the door FSM goes on bashing
+    // until the door opens or the room changes, so it is stopped with the solve.
+    [Fact]
+    public void Cancel_WithAPeekDoorBeingOpened_StopsTheDoorFsm()
+    {
+        Harness h = NewHarness(wireDoorOpener: true);
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 30)));
+        h.Solver.OnRoomObserved(AsylumClosed(Direction.E, Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+        Assert.Single(h.DoorOpens);
+
+        h.Solver.Cancel("test");
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(1, h.DoorStops);
     }
 
     [Fact]
