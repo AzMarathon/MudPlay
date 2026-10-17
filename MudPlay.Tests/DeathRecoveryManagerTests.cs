@@ -38,6 +38,16 @@ public sealed partial class DeathRecoveryManagerTests
         public DeathRecoveryManager Recovery { get; }
         public List<string> Sent { get; } = new();
         public InventorySnapshot Snapshot { get; set; } = InventorySnapshot.Empty;
+        // The clock the room tracker and recovery stamp what they see on: the real one,
+        // except that each reading is always later than the one before. Two things a
+        // test does one after the other are told apart by their order alone, however
+        // coarse the system clock is, with no pause between them.
+        private DateTimeOffset _clock;
+        private DateTimeOffset Now()
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            return _clock = now > _clock ? now : _clock.AddTicks(1);
+        }
 
         // Combat-interleave spies: Hostiles drives the hostilesPresent probe,
         // ResumeArmed counts NoteBetweenRoundCast nudges, GateHeld mirrors the
@@ -104,11 +114,11 @@ public sealed partial class DeathRecoveryManagerTests
             _router = new MessageRouter();
             DefaultPatterns.Seed(_router);
             LogService log = new();
-            Tracker = new RoomTracker(graph);
+            Tracker = new RoomTracker(graph, log: null, now: Now);
             Tracker.AttachInventorySnapshot(() => Snapshot);
             Watcher = new DeathLineWatcher(_router, log);
             Ground = new GroundItemTracker(_router, new CurrencyNaming());
-            Recovery = new DeathRecoveryManager(Watcher, Profile, Tracker, log);
+            Recovery = new DeathRecoveryManager(Watcher, Profile, Tracker, log, now: Now);
             Recovery.AttachGroundItems(Ground);
             Recovery.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Recovery.AttachInventorySnapshot(() => Snapshot);

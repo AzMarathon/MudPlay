@@ -433,57 +433,11 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         public required List<string> Orders { get; init; }
         // The timers the trip armed and has not been given: each wait's own.
         public required List<(TimeSpan After, Action Fire)> Timers { get; init; }
-        public required Pump Pump { get; init; }
+        public required ContinuationPump Pump { get; init; }
         public Task Running = Task.CompletedTask;
 
         // Lets the trip go on from whatever ended its wait, as far as it gets.
         public void GoesOn() => Pump.Drain();
-    }
-
-    // Where the trip goes on after each of its waits. Left to the thread pool, how
-    // soon it went on was up to how busy the machine was; here each await posts its
-    // continuation to this context, and the test runs them on its own thread, in
-    // order, when it calls Drain.
-    private sealed class Pump : SynchronizationContext
-    {
-        private readonly Queue<(SendOrPostCallback Callback, object? State)> _posted = new();
-
-        public override void Post(SendOrPostCallback d, object? state)
-        {
-            lock (_posted) _posted.Enqueue((d, state));
-        }
-
-        public override void Send(SendOrPostCallback d, object? state) =>
-            throw new NotSupportedException("the trip only posts");
-
-        public override SynchronizationContext CreateCopy() => this;
-
-        // Starts the trip under this context, so its first await is posted here.
-        public T Run<T>(Func<T> start)
-        {
-            SynchronizationContext? prior = Current;
-            SetSynchronizationContext(this);
-            try { return start(); }
-            finally { SetSynchronizationContext(prior); }
-        }
-
-        // Everything posted, and everything that posts in turn, until nothing is left.
-        public void Drain()
-        {
-            SynchronizationContext? prior = Current;
-            SetSynchronizationContext(this);
-            try
-            {
-                while (TryTake(out (SendOrPostCallback Callback, object? State) next))
-                    next.Callback(next.State);
-            }
-            finally { SetSynchronizationContext(prior); }
-        }
-
-        private bool TryTake(out (SendOrPostCallback Callback, object? State) next)
-        {
-            lock (_posted) return _posted.TryDequeue(out next);
-        }
     }
 
     // A leader with two members to train, each at a trainer of its own: one in the
@@ -545,7 +499,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             selfTimeToLevel: () => null,
             telepathsPending: () => false,
             log: w.Log);
-        Trip trip = new() { Coordinator = coordinator, Trainer = trainer, Orders = orders, Timers = timers, Pump = new Pump() };
+        Trip trip = new() { Coordinator = coordinator, Trainer = trainer, Orders = orders, Timers = timers, Pump = new ContinuationPump() };
         w.Walker.Event += e => coordinator.OnWalkEvent(e.Kind);
         if (offByTheErrand)
             w.Controller.EndingForGameDataChange += (reason, _) => coordinator.CallOffTrip(reason);

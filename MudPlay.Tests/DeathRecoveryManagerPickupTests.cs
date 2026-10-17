@@ -63,7 +63,6 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
         h.EnterGates();
         Assert.True(h.Recovery.RecoverNow(h.Latest));
-        System.Threading.Thread.Sleep(5);
         h.Tracker.NoteMoveSent(Direction.N);          // changed their mind and stepped off
         h.Sent.Clear();
 
@@ -189,7 +188,6 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Tracker.NoteRoomObserved(Obs3());
         h.Tracker.NoteMoveSent(Direction.S);
-        System.Threading.Thread.Sleep(5);
         h.FeedSurvey("a lantern");
         h.Tracker.NoteDarkRoomEntered();
         for (int i = 0; i < 3; i++) h.Heartbeat();
@@ -246,7 +244,6 @@ public sealed partial class DeathRecoveryManagerTests
         h.Tracker.NoteRoomObserved(Obs3());
         h.Tracker.NoteMoveSent(Direction.S);
         h.Tracker.NoteDarkRoomEntered();              // armed, in the dark
-        System.Threading.Thread.Sleep(5);
 
         h.Tracker.NoteMoveSent(Direction.N);          // walking on
         h.FeedSurvey("a torch");                      // 1/3's floor, our overflow on it

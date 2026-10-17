@@ -28,6 +28,7 @@ public sealed class PvpRoomSafetyTests
         public Dictionary<string, string> Classes { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, int> Levels { get; } = new(StringComparer.OrdinalIgnoreCase);
         public DateTimeOffset? LastMoveSentAt { get; private set; }
+        public DateTimeOffset Clock { get; private set; } = new(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
         public int RoomAttacksSeen { get; private set; }
 
         // Class → the level its first room attack comes at (0 = none). A class
@@ -50,9 +51,10 @@ public sealed class PvpRoomSafetyTests
                 levelOf: given => Levels.TryGetValue(given, out int level) ? level : null,
                 roomAttackFromLevel: cls => RoomAttackFrom.TryGetValue(cls, out int from) ? from : null,
                 realm: () => Realm,
-                lastMoveSentAt: () => LastMoveSentAt);
+                lastMoveSentAt: () => LastMoveSentAt,
+                now: () => Clock);
             Safety.RoomAttackSeen += () => RoomAttacksSeen++;
-            Watcher = new RoomEntryWatcher(Router, Classifier);
+            Watcher = new RoomEntryWatcher(Router, Classifier, now: () => Clock);
             Watcher.ArrivalObserved += Safety.NoteArrival;
 
             Monsters.Messages.Add(new MonsterMessageRecord(
@@ -70,12 +72,12 @@ public sealed class PvpRoomSafetyTests
             if (cls is not null) Classes[given] = cls;
         }
 
-        // Our own move going out. The pause keeps what follows strictly after it.
+        // Our own move going out, a moment after what went before and before what follows.
         public void Move()
         {
-            Thread.Sleep(2);
-            LastMoveSentAt = DateTimeOffset.Now;
-            Thread.Sleep(2);
+            Clock += TimeSpan.FromMilliseconds(1);
+            LastMoveSentAt = Clock;
+            Clock += TimeSpan.FromMilliseconds(1);
         }
 
         // Step into a room with nobody and nothing in it.
@@ -86,7 +88,7 @@ public sealed class PvpRoomSafetyTests
         }
 
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
-            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+            line, Array.Empty<CellAttributes>(), Clock, IsPromptLine: false));
 
         public void Dispose()
         {

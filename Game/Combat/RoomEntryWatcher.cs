@@ -53,6 +53,7 @@ public sealed class RoomEntryWatcher : IDisposable
     private readonly MessageRouter _router;
     private readonly RoomEntityClassifier _classifier;
     private readonly LogService? _log;
+    private readonly Func<DateTimeOffset> _now;
     private readonly IDisposable _arrivalSub;
     private readonly IDisposable _sneakArrivalSub;
     private readonly IDisposable _namelessArrivalSub;
@@ -67,13 +68,15 @@ public sealed class RoomEntryWatcher : IDisposable
     public RoomEntryWatcher(
         MessageRouter router,
         RoomEntityClassifier classifier,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(classifier);
         _router = router;
         _classifier = classifier;
         _log = log;
+        _now = now ?? (static () => DateTimeOffset.Now);
         _arrivalSub = router.Subscribe(KnownPatterns.RoomEntryArrival, OnArrival);
         _sneakArrivalSub = router.Subscribe(KnownPatterns.SneakArrivalNotice, OnSneakArrival);
         // An arrival worded without a name the pattern can lift out ("The banshee
@@ -167,7 +170,7 @@ public sealed class RoomEntryWatcher : IDisposable
         _log?.Info(LogCategory,
             $"arrival kind={finalKind} name={name} direction={direction}");
         ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
-            Name: name, Kind: finalKind, Direction: direction, At: DateTimeOffset.Now));
+            Name: name, Kind: finalKind, Direction: direction, At: _now()));
     }
 
     // "You notice <name> sneaking in from the <dir>." — a player who failed a
@@ -195,7 +198,7 @@ public sealed class RoomEntryWatcher : IDisposable
         _log?.Info(LogCategory,
             $"sneak arrival kind=Player name={name} direction={direction}");
         ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
-            Name: name, Kind: EntityKind.Player, Direction: direction, At: DateTimeOffset.Now));
+            Name: name, Kind: EntityKind.Player, Direction: direction, At: _now()));
     }
 
     // Colour-scan fallback (see class note). Fires for a custom, unstructured
@@ -239,7 +242,7 @@ public sealed class RoomEntryWatcher : IDisposable
         _log?.Info(LogCategory,
             $"colour-scan arrival kind=Monster name={monster.ResolvedName} (custom spawn line)");
         ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
-            Name: monster.ResolvedName, Kind: EntityKind.Monster, Direction: "nowhere", At: DateTimeOffset.Now));
+            Name: monster.ResolvedName, Kind: EntityKind.Monster, Direction: "nowhere", At: _now()));
     }
 
     // Scan for a monster name whose cells are ALL yellow-indexed. The name may be

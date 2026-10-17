@@ -570,7 +570,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
     // A walk the user started while Stop held an errand waits on "Resume first?".
     // It was a walk on the last set's rooms: the answer starts nothing.
     [Fact]
-    public async Task ARunWaitingOnTheResumeQuestion_IsNotStartedOnceAnswered()
+    public void ARunWaitingOnTheResumeQuestion_IsNotStartedOnceAnswered()
     {
         Harness h = OnAlpha();
         string? errand = "the stash transfer";
@@ -578,11 +578,14 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Controller.SetErrandHooks(() => errand, _ => errand = null, _ => answer.Task);
         Assert.True(h.Controller.HoldErrandOnStop());
         bool started = false;
-        h.Controller.StartUserRun(() => started = true);
+        // The question is awaited under the pump, so the answer is acted on here, when
+        // the test lets it, and not before the assertions or after them.
+        ContinuationPump pump = new();
+        pump.Run(() => h.Controller.StartUserRun(() => started = true));
 
         string? ended = h.SwitchTo("beta");
         answer.SetResult(false);
-        await Task.Yield();
+        Assert.Equal(1, pump.Drain());   // the answer was taken
 
         Assert.Equal("The stash transfer stopped", ended);
         Assert.False(started);

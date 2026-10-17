@@ -191,19 +191,24 @@ public sealed class LineExtractorTests
     public void ALineItsSubscribersDwellOn_IsReportedAsSlow()
     {
         TerminalEmulator emulator = new(80, 25);
-        LineExtractor extractor = new(emulator);
+        ManualClock clock = new();
+        LineExtractor extractor = new(emulator, clock.Timestamp);
+        TimeSpan dwell = LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50);
         extractor.LineEmitted += l =>
         {
-            if (l.Text == "slow") Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+            if (l.Text == "slow") clock.Advance(dwell);
+            // A line read just short of the threshold is not slow.
+            if (l.Text == "quick") clock.Advance(LineExtractor.SlowLineThreshold - TimeSpan.FromMilliseconds(1));
         };
         List<(string Text, TimeSpan Took)> slow = new();
         extractor.SlowLine += (l, took) => slow.Add((l.Text, took));
 
-        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("slow\r\n"));
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("quick\r\nslow\r\n"));
 
         (string text, TimeSpan took) = Assert.Single(slow);
         Assert.Equal("slow", text);
         Assert.True(took >= LineExtractor.SlowLineThreshold);
+        Assert.Equal(dwell, took);
     }
 
     // The slow line is reported as the chat subscriber saw it, so the log can say a
@@ -212,9 +217,10 @@ public sealed class LineExtractorTests
     public void ASlowChatLine_IsReportedAsChat()
     {
         TerminalEmulator emulator = new(80, 25);
-        LineExtractor extractor = new(emulator);
+        ManualClock clock = new();
+        LineExtractor extractor = new(emulator, clock.Timestamp);
         extractor.ChatLineEmitted += _ =>
-            Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+            clock.Advance(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
         List<(LineExtractor.EmittedLine Line, TimeSpan Took)> slow = new();
         extractor.SlowLine += (l, took) => slow.Add((l, took));
 

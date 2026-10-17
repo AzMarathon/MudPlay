@@ -275,11 +275,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // some other moment off this death's record.
     private static readonly TimeSpan ReturnedLineWindow = TimeSpan.FromSeconds(30);
 
+    private readonly Func<DateTimeOffset> _now;
+
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
         ProfileService profile,
         RoomTracker roomTracker,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(deathWatcher);
         ArgumentNullException.ThrowIfNull(profile);
@@ -288,6 +291,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _profile = profile;
         _roomTracker = roomTracker;
         _log = log;
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         // The spillover LOOK sweep just peeks exits via our Send; the walk-collect is
         // driven here off confirmed room arrivals (OnRoomChanged), not by the sweep.
         _sweep = new DeathGroundSweep(Send, log);
@@ -316,7 +320,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // tracker was Confirmed the room change does the same; Suspect, it raises none.)
     private void OnMoveBlocked()
     {
-        if (_grabOnSurvey && _activeRecovery is not null) _armedAt = DateTimeOffset.UtcNow;
+        if (_grabOnSurvey && _activeRecovery is not null) _armedAt = _now();
     }
 
     private void OnPlayerDied(PlayerDiedEvent evt)
@@ -951,7 +955,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Confirmed again in the death room with a grab still armed (a move sent
         // since it was armed has bounced): whatever went out has been answered, so a
         // survey from here on is this room's.
-        if (rec is not null && _grabOnSurvey) _armedAt = DateTimeOffset.UtcNow;
+        if (rec is not null && _grabOnSurvey) _armedAt = _now();
 
         // And when it was a display of the room that confirmed it, that display has
         // just ended with the grab still armed: it showed nothing to take.
@@ -1109,7 +1113,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             SetStatus(record, DeathRecoveryStatus.Partial, "Returned to the death room — recovering.");
 
         _grabOnSurvey = autoGrab;
-        _armedAt = DateTimeOffset.UtcNow;
+        _armedAt = _now();
         // Whose walk this was only matters where a sweep can follow: on Stock, with
         // a grab to settle.
         _classifyOwed = arrivedByWalk && autoGrab && IsStock;
@@ -1140,7 +1144,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Paradigm recovers the `corpse of <name>`, Stock `get`s the loose items.
     private void OnSurveyUpdated()
     {
-        _lastSurveyAt = DateTimeOffset.UtcNow;
+        _lastSurveyAt = _now();
         _floorSinceExits = true;
         // Spillover sweep LOOK phase: each `look <dir>` re-parses the PEEKED room's
         // floor into GroundItemTracker (it doesn't skip look-direction peeks), and
@@ -1204,7 +1208,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _missingThisVisit = null;
             _log?.Info(LogCategory, "auto-recover: the corpse is on this floor after all — the pile is reopened");
             _activeRecovery = written;
-            _armedAt = DateTimeOffset.UtcNow;
+            _armedAt = _now();
             // Auto-All went off since the verdict: the record is put right, but
             // the corpse is not asked for. It stands as an arrival made with
             // Auto-All off does, open and unarmed, for Recover Now or the user's
@@ -1598,7 +1602,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _legStopped = null;
         _abandonedCombat = false;
         _homeReachedShort = false;
-        _peekStartedAt = DateTimeOffset.UtcNow;
+        _peekStartedAt = _now();
         _log?.Info(LogCategory, _sweepNeighboursOnly
             ? $"stock-sweep: {want.Count} item(s) missing; another engine brought us to {here.Key.Map}/{here.Key.Room}, "
               + "so only its exits are looked through, and a neighbour seen holding our items is walked to"
@@ -2531,7 +2535,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         if (_isAutoEnabled?.Invoke() == false)
         {
-            if (_heldEquip.Count == 0) _heldEquipSince = DateTimeOffset.UtcNow;
+            if (_heldEquip.Count == 0) _heldEquipSince = _now();
             foreach (DeathItem item in ordered)
                 if (!_heldEquip.Exists(h => NamesMatch(h.Name, item.Name))) _heldEquip.Add(item);
             _log?.Info(LogCategory,
@@ -2988,7 +2992,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Test seam — feed a plain inbound line to the pickup parser. isPromptLine
     // exercises the "You took" confirmation arriving on a redrawn prompt row.
     internal void FeedTestLine(string text, DateTimeOffset? when = null, bool isPromptLine = false)
-        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? DateTimeOffset.UtcNow, isPromptLine));
+        => OnLine(new LineExtractor.EmittedLine(text, [], when ?? _now(), isPromptLine));
 
     // Append a synthetic death record (the "Simulate Death" button) so the DEATH
     // grid + recovery flow can be exercised without dying in game. Decrements the
@@ -3001,7 +3005,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Continue the declining-lives series from the most recent record.
         int prevLives = p.DeathHistory.Count > 0 ? p.DeathHistory[^1].LivesRemaining : 0;
         var record = new DeathRecord(
-            DateTimeOffset.UtcNow,
+            _now(),
             here is null ? null : new RoomRef(here.Key.Map, here.Key.Room),
             Math.Max(0, prevLives - 1),
             "Simulated death (test).")

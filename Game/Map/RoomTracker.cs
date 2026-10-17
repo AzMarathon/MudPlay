@@ -288,19 +288,22 @@ public sealed class RoomTracker
     // requested (false on stock realms / when throttled), and is otherwise a no-op.
     public Func<string, bool>? RequestAuthoritativeResync { get; set; }
 
+    private readonly Func<DateTimeOffset> _now;
+
     public RoomTracker(RoomGraphManager graph) : this(graph, log: null) { }
 
-    public RoomTracker(RoomGraphManager graph, LogService? log)
+    public RoomTracker(RoomGraphManager graph, LogService? log, Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _graph = graph;
         _log = log;
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _passiveGrid = new FootprintMatcher(
             probeHop: (from, dir) => GraphFootprintProbes.Hop(_graph, from, dir),
             matchesObservation: (key, obs) => GraphFootprintProbes.Matches(_graph, key, obs),
             log: log,
             depthCeiling: PassiveGridDepthCeiling);
-        State.LastUpdatedAt = DateTimeOffset.UtcNow;
+        State.LastUpdatedAt = _now();
     }
 
     // Wired by AppServices so the passive grid re-localiser stands down while an
@@ -367,7 +370,7 @@ public sealed class RoomTracker
     // candidate search.
     public void NoteDirectionFailed(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (State.Confidence != RoomConfidence.Confirmed) return;
         if (State.CurrentRoom is null) return;
         // Drop the oldest in-flight cardinal — server rejected it. If
@@ -416,7 +419,7 @@ public sealed class RoomTracker
         State.CurrentRoom = room;
         State.Confidence = RoomConfidence.Confirmed;
         State.SuspectStrikes = 0;
-        State.LastUpdatedAt = DateTimeOffset.UtcNow;
+        State.LastUpdatedAt = _now();
         PushHistory(room.Key, State.LastUpdatedAt);
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"Hydrate: Confirmed at {room.Name} {room.Key} with {_recentSteps.Count} pending replay steps.");
@@ -471,7 +474,7 @@ public sealed class RoomTracker
     // rather than enqueued as a phantom second move.
     public void NoteMoveSent(Direction direction, DateTimeOffset? whenUtc = null)
         => NoteMoveSentCore(direction, isEngineAnnouncement: true, isFollowDrag: false,
-                            whenUtc ?? DateTimeOffset.UtcNow);
+                            whenUtc ?? _now());
 
     // A party follower dragged one room in the leader's direction (FollowMoveObserver,
     // off the " -- Following your Party leader <dir> -- " line). Predicts like a
@@ -483,7 +486,7 @@ public sealed class RoomTracker
     // consume back.
     public void NoteFollowMove(Direction direction, DateTimeOffset? whenUtc = null)
         => NoteMoveSentCore(direction, isEngineAnnouncement: false, isFollowDrag: true,
-                            whenUtc ?? DateTimeOffset.UtcNow);
+                            whenUtc ?? _now());
 
     private void NoteMoveSentCore(Direction direction, bool isEngineAnnouncement, bool isFollowDrag,
                                   DateTimeOffset when)
@@ -524,7 +527,7 @@ public sealed class RoomTracker
     // Manual cardinal typing (no engine call, so no claim) lands as a real move.
     public void NoteMoveSentByObserver(Direction direction, DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (_cardinalEchoClaim is { Dir: var claimDir, ExpiresAt: var expiresAt }
             && claimDir == direction
             && when < expiresAt)
@@ -551,7 +554,7 @@ public sealed class RoomTracker
     public void NoteMoveSentByObserver(string command, DateTimeOffset? whenUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (_textEchoClaim is { Command: var claimCmd, ExpiresAt: var expiresAt }
             && string.Equals(claimCmd, command, StringComparison.OrdinalIgnoreCase)
             && when < expiresAt)
@@ -590,7 +593,7 @@ public sealed class RoomTracker
     public void NoteMoveSent(string command, Direction? cardinal = null, DateTimeOffset? whenUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
-        NoteMoveSentCore(command, cardinal, isEngineAnnouncement: true, whenUtc ?? DateTimeOffset.UtcNow);
+        NoteMoveSentCore(command, cardinal, isEngineAnnouncement: true, whenUtc ?? _now());
     }
 
     // An engine command that is NOT a move but whose wording collides with the
@@ -605,7 +608,7 @@ public sealed class RoomTracker
     public void NoteAuxCommandSent(string command, DateTimeOffset? whenUtc = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         _textEchoClaim = (command, when + EchoClaimExpiry);
     }
 
@@ -617,7 +620,7 @@ public sealed class RoomTracker
     public void NoteEngineCommandSent(string command, DateTimeOffset? whenUtc = null)
     {
         if (string.IsNullOrWhiteSpace(command)) return;
-        _engineCommandClaim = (command, (whenUtc ?? DateTimeOffset.UtcNow) + EchoClaimExpiry);
+        _engineCommandClaim = (command, (whenUtc ?? _now()) + EchoClaimExpiry);
     }
 
     private void NoteMoveSentCore(string command, Direction? cardinal, bool isEngineAnnouncement, DateTimeOffset when)
@@ -649,7 +652,7 @@ public sealed class RoomTracker
     // after LookSuppressWindowMs.
     public void NoteLookSent(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         _suppressObservationUntil = when.AddMilliseconds(LookSuppressWindowMs);
         _lookSentAt = when;
         _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -670,7 +673,7 @@ public sealed class RoomTracker
     // last anchor rather than fabricating a landing.
     public void NoteDarkRoomEntered(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
 
         // A look-direction peek into an adjacent dark room renders the same
         // "can't see" line while we stand in a lit room. Drop it as a preview,
@@ -764,7 +767,7 @@ public sealed class RoomTracker
     // succeeded-move "You are blind." reaches here.
     public void NoteBlindMove(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
 
         // A look-direction peek while blind can render this same line from the
         // lit room we're standing in. Drop it as a preview and consume the
@@ -870,7 +873,7 @@ public sealed class RoomTracker
     //     a step that ends somewhere else (CastTransitIsNext).
     public bool IsPeekSuppressed(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (CastTransitIsNext(when)) return true;
         if (_suppressObservationUntil is not { } until) return false;
         if (when > until) return false;
@@ -1009,7 +1012,7 @@ public sealed class RoomTracker
         if (_castDisplayWaitFor is not { } waitedFor) return;
         if (State.Confidence != RoomConfidence.Pending) return;
         if (!_pending.TryPeek(out PendingMove head) || head.SentAt != waitedFor) return;
-        _castAsked = (waitedFor, DateTimeOffset.UtcNow);
+        _castAsked = (waitedFor, _now());
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"No room shown {CastDisplayWait.TotalSeconds:0.#}s after move {DescribeMove(head)} through a teleporting exit — asking for the room.");
         _requestRedisplay?.Invoke();
@@ -1049,7 +1052,7 @@ public sealed class RoomTracker
             _castLandingUnseen = null;
             return;
         }
-        _castLandingUnseen = unseen with { At = DateTimeOffset.UtcNow };
+        _castLandingUnseen = unseen with { At = _now() };
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"No display of {unseen.Booked} {CastDisplayWait.TotalSeconds:0.#}s after the exit's spell sent us there — asking for the room.");
         ask();
@@ -1194,7 +1197,7 @@ public sealed class RoomTracker
     // this against the expected outcome of any pending move.
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
 
         if (_suppressObservationUntil is { } until)
         {
@@ -1371,7 +1374,7 @@ public sealed class RoomTracker
     public void NoteDeath(int livesRemaining, string? messageText = null, DateTimeOffset? whenUtc = null,
         bool tookNothing = false)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         Room? died = State.CurrentRoom;
         LastDeathRoom = died?.Key;
         LastDeathRoomConfirmed = died is not null && State.Confidence == RoomConfidence.Confirmed;
@@ -1479,7 +1482,7 @@ public sealed class RoomTracker
     // Confirmed at the current room.
     public void NoteMoveBlocked(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
 
         // Drop the most recent pending move + its persisted step — the
         // server refused, so it never happened.
@@ -1526,7 +1529,7 @@ public sealed class RoomTracker
     // contended command). A long-outstanding pending move is left alone.
     public void NoteCommandDropped(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (State.Confidence != RoomConfidence.Pending || _pending.IsEmpty) return;
         if (LastMoveSentAt is not { } sent || when - sent > DroppedCommandWindow) return;
 
@@ -1546,7 +1549,7 @@ public sealed class RoomTracker
     // fall IS the plan (the map-12 pit jumps), the re-check just confirms the room.
     public void NoteFell(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (State.Confidence is not (RoomConfidence.Confirmed or RoomConfidence.Pending)) return;
         while (!_pending.IsEmpty) DropMostRecentPending();
         EnterSuspect(when, "fell — the move may not have landed where it was headed");
@@ -1561,7 +1564,7 @@ public sealed class RoomTracker
     // reverted.
     public bool NoteCommandMoveRefused(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         if (State.Confidence != RoomConfidence.Pending) return false;
         if (MostRecentPending() is not { Command: not null } last) return false;
         if (when - last.SentAt > DroppedCommandWindow) return false;
@@ -1609,7 +1612,7 @@ public sealed class RoomTracker
         // confirmed move, must not overwrite the head move's echo and leave its
         // real landing looking un-echoed — which would hold the move as a re-look.
         if (!_pending.TryPeek(out PendingMove head) || !EchoMatchesHead(command, head)) return;
-        _lastInboundEcho = (command, whenUtc ?? DateTimeOffset.UtcNow);
+        _lastInboundEcho = (command, whenUtc ?? _now());
         _log?.Log(LogSeverity.Debug, "RoomTracker",
             $"Server echoed head move '{command}'; its next matching room display will confirm the landing.");
     }
@@ -1706,7 +1709,7 @@ public sealed class RoomTracker
     // "I'm here". Hard sets the current room and promotes to Confirmed.
     public void SetLocated(RoomKey key, DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
 
         Room? room = _graph.GetRoom(key);
         if (room is null)
@@ -1724,7 +1727,7 @@ public sealed class RoomTracker
     // just rebuilt — drop any per-set state and start over.
     public void OnGraphReloaded(DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
+        DateTimeOffset when = whenUtc ?? _now();
         ClearPendingAndSteps();
         _history.Clear();
         IsInDarkRoom = false;

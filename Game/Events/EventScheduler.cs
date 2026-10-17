@@ -88,13 +88,15 @@ public sealed class EventScheduler : IDisposable
     // clean shot.
     private bool _logoffFiredThisSession;
     private bool _disposed;
+    private readonly Func<DateTime> _now;
 
     public EventScheduler(
         EventManager events,
         WirePromptScanner prompt,
         CleanupWarningWatcher? cleanup = null,
         ProfileService? profile = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTime>? now = null)
     {
         ArgumentNullException.ThrowIfNull(events);
         ArgumentNullException.ThrowIfNull(prompt);
@@ -103,6 +105,7 @@ public sealed class EventScheduler : IDisposable
         _cleanup = cleanup;
         _profile = profile;
         _log = log;
+        _now = now ?? (static () => DateTime.Now);
 
         _atTimeTicker = new DispatcherTimer { Interval = AtTimeTickInterval };
         _atTimeTicker.Tick += OnAtTimeTick;
@@ -237,7 +240,7 @@ public sealed class EventScheduler : IDisposable
         // Truncate to HH:mm so a 30 s tick at 09:30:15 and 09:30:45 both
         // resolve to "09:30" and the dedup check below catches the
         // double-fire.
-        string nowKey = DateTime.Now.ToString("HH:mm");
+        string nowKey = _now().ToString("HH:mm");
 
         foreach (ScheduledEvent ev in _events.Events)
         {
@@ -296,11 +299,11 @@ public sealed class EventScheduler : IDisposable
         {
             // Re-arm the due-time before firing: DispatcherTimer repeats on
             // the same interval, so the next tick lands one interval out.
-            _everyNextFire[ev] = DateTime.Now + interval;
+            _everyNextFire[ev] = _now() + interval;
             _events.Fire(ev);
         };
         _everyTimers[ev] = t;
-        _everyNextFire[ev] = DateTime.Now + interval;
+        _everyNextFire[ev] = _now() + interval;
         t.Start();
     }
 
@@ -335,7 +338,7 @@ public sealed class EventScheduler : IDisposable
                 return _everyNextFire.TryGetValue(ev, out DateTime due) ? due : null;
             case EventTriggerType.AtTime:
                 if (ev.TryParseAtTime() is not { } target) return null;
-                DateTime now = DateTime.Now;
+                DateTime now = _now();
                 DateTime todayAt = now.Date + target.ToTimeSpan();
                 return todayAt > now ? todayAt : todayAt.AddDays(1);
             case EventTriggerType.Boss:

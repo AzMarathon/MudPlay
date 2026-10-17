@@ -40,7 +40,6 @@ public sealed partial class DeathRecoveryManagerTests
         using GraphHarness h = DiedAtTheGates();
         h.Tracker.NoteMoveSent(Direction.S);
         h.Tracker.NoteDarkRoomEntered();
-        System.Threading.Thread.Sleep(5);
 
         h.FeedSurvey("a lantern");
         h.Tracker.NoteRoomObserved(Obs3());
@@ -115,7 +114,6 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
         h.Tracker.NoteLookSent();
         Assert.True(h.Recovery.RecoverNow(h.Latest));
-        System.Threading.Thread.Sleep(5);
         h.FeedSurvey("a lantern");                    // the peek's floor
         h.Tracker.NoteRoomObserved(Obs3());           // set aside as a peek
         h.Recovery.FeedTestLine("Obvious exits: south");

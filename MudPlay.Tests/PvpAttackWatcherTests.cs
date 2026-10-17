@@ -44,8 +44,9 @@ public sealed class PvpAttackWatcherTests
                 levelOf: _ => null,
                 roomAttackFromLevel: _ => null,
                 realm: () => RealmType.ParaMud,
-                lastMoveSentAt: () => LastMoveSentAt);
-            Entry = new RoomEntryWatcher(Router, Classifier);
+                lastMoveSentAt: () => LastMoveSentAt,
+                now: () => Clock);
+            Entry = new RoomEntryWatcher(Router, Classifier, now: () => Clock);
             Entry.ArrivalObserved += Room.NoteArrival;
             PartySplit = new PartySplitTracker(Party, () => Hold, () => "Hero", () => Clock);
             Watcher = new PvpAttackWatcher(
@@ -66,15 +67,16 @@ public sealed class PvpAttackWatcherTests
         public PlayerRelationship RelationshipOf(string given) =>
             Players.Find(given)?.Relationship ?? PlayerRelationship.Neutral;
 
+        // Our own move going out, a moment after what went before and before what follows.
         public void Move()
         {
-            Thread.Sleep(2);
-            LastMoveSentAt = DateTimeOffset.Now;
-            Thread.Sleep(2);
+            Clock += TimeSpan.FromMilliseconds(1);
+            LastMoveSentAt = Clock;
+            Clock += TimeSpan.FromMilliseconds(1);
         }
 
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
-            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+            line, Array.Empty<CellAttributes>(), Clock, IsPromptLine: false));
 
         public void Dispose()
         {

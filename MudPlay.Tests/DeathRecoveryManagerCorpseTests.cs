@@ -179,7 +179,6 @@ public sealed partial class DeathRecoveryManagerTests
         // read before the move went out). The death room shows an empty floor.
         using GraphHarness h = DiedAtTheGates();
         h.FeedSurvey("corpse of Ermias");     // read next door, before the move
-        System.Threading.Thread.Sleep(5);
         h.Tracker.NoteMoveSentByObserver(Direction.S);
         h.EnterGates();
 
@@ -306,7 +305,6 @@ public sealed partial class DeathRecoveryManagerTests
         h.Tracker.NoteMoveSentByObserver(Direction.S);
         h.EnterGates();
         Assert.True(h.Recovery.RecoverNow(h.Latest));
-        System.Threading.Thread.Sleep(5);
         h.Tracker.NoteMoveSent(Direction.N);                 // stepped off before the answer
 
         h.FeedSurvey("a lantern");                           // the next room's floor

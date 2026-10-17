@@ -57,9 +57,13 @@ public sealed partial class LineExtractor
     // gathered so far for each of them.
     private readonly List<EmittedLine> _pendingWrap = new();
 
-    public LineExtractor(TerminalEmulator emulator)
+    // The clock a line's subscribers are timed on.
+    private readonly Func<long> _timestamp;
+
+    public LineExtractor(TerminalEmulator emulator, Func<long>? timestamp = null)
     {
         ArgumentNullException.ThrowIfNull(emulator);
+        _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         // Subscribe to the canonical "this row just finished" signal — fires
         // on every \n regardless of whether the row eventually scrolls off
         // the visible screen. The earlier Scrollback.RowAdded subscription
@@ -154,7 +158,7 @@ public sealed partial class LineExtractor
     // the ~35 LineEmitted subscribers) means a new parser is chat-proof by default.
     private void Publish(EmittedLine line)
     {
-        long started = Stopwatch.GetTimestamp();
+        long started = _timestamp();
         if (!line.IsPromptLine && ChatLineDetector.IsChat(line.Text))
         {
             line = line with { IsChat = true };
@@ -165,7 +169,7 @@ public sealed partial class LineExtractor
             LineEmitted?.Invoke(line);
         }
 
-        TimeSpan took = Stopwatch.GetElapsedTime(started);
+        TimeSpan took = Stopwatch.GetElapsedTime(started, _timestamp());
         if (took >= SlowLineThreshold) SlowLine?.Invoke(line, took);
     }
 
