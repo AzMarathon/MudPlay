@@ -997,4 +997,166 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
             && e.Message.StartsWith("avoid-list changed; loop 'ac' path crosses an avoided room", StringComparison.Ordinal));
         Assert.Equal("alpha", h.Runner.LastRunLoopGameData);
     }
+
+    // ----- a profile swap drops the loops held for the character that left ---------
+
+    // The profile events as ProfileService raises them, told to the guard the app
+    // subscribes. Its posts run when the test says.
+    private sealed class Swap
+    {
+        public string? Character = "bbs/Alice";
+        public List<string> Notices { get; } = new();
+        public List<Action> Posted { get; } = new();
+        public HeldLoopsOnProfileSwap Guard = null!;   // set by SwapOn
+
+        public void RunPosted()
+        {
+            Action[] posted = Posted.ToArray();
+            Posted.Clear();
+            foreach (Action a in posted) a();
+        }
+
+        // ProfileService.Load over a loaded profile: it closes, then the next loads.
+        public void Load(string character)
+        {
+            Character = null;
+            Guard.OnProfileClosed();
+            Character = character;
+            Guard.OnProfileLoaded();
+            RunPosted();
+        }
+
+        // Save As naming the draft, a re-home, its BBS renamed: ProfileRenamed.
+        public void Rename(string character)
+        {
+            Character = character;
+            Guard.OnProfileRenamed();
+        }
+
+        public void Close()
+        {
+            Character = null;
+            Guard.OnProfileClosed();
+            RunPosted();
+        }
+    }
+
+    private static Swap SwapOn(Harness h)
+    {
+        Swap swap = new();
+        swap.Guard = new HeldLoopsOnProfileSwap(
+            () => h.Controller, () => swap.Character, swap.Notices.Add, swap.Posted.Add);
+        swap.Guard.OnProfileLoaded();
+        return swap;
+    }
+
+    // Disconnect with a loop running, load another character, reconnect: nothing starts.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsDropped_WhenAnotherCharacterIsLoaded()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+        string[] sent = h.Sent.ToArray();
+
+        swap.Load("bbs/Bob");
+
+        Assert.Equal(new[] { "[Loop 'ab', held for a reconnect, dropped: another character was loaded]" }, swap.Notices);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "Movement"
+            && e.Message == "Loop 'ab', held for a reconnect, dropped: another character was loaded");
+        h.Runner.FirePromptObservedForTests();
+        h.LetTimePass();
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    // The same character loaded again keeps it: the reconnect restarts the loop as ever.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsKept_WhenTheSameCharacterIsLoadedAgain()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+
+        swap.Load("bbs/Alice");
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Empty(swap.Notices);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    // Named after its loop was set aside, the character loaded again under that name
+    // is the same one.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsKept_WhenTheRenamedCharacterIsLoadedAgain()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+
+        swap.Rename("bbs/Alicia");
+        swap.Load("bbs/Alicia");
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Empty(swap.Notices);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    [Fact]
+    public void ALoopLoadedToStart_IsDropped_WhenAnotherCharacterIsLoaded()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Runner.Stage(Ab());
+
+        swap.Load("bbs/Bob");
+
+        Assert.Equal(new[] { "[Loop 'ab', loaded to start, dropped: another character was loaded]" }, swap.Notices);
+        Assert.Null(h.Runner.StagedLoop);
+    }
+
+    // A close with nothing loaded after it is decided once the close has unwound.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsDropped_WhenTheCharacterIsClosed()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+
+        swap.Close();
+
+        Assert.Equal(new[] { "[Loop 'ab', held for a reconnect, dropped: the character was closed]" }, swap.Notices);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
+    }
+
+    // ----- what the stop asks the holders of a held start ----------------------------
+
+    // One holder failing doesn't keep the stop from being made, or the others from
+    // being let go.
+    [Fact]
+    public void AHolderThatThrows_DoesNotKeepTheStopFromBeingMade()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        string? droppedFor = null;
+        h.Controller.AddHeldStart(() => throw new InvalidOperationException("boom"), _ => { });
+        h.Controller.AddHeldStart(() => "walk to 1/3, queued in the Navigation window,", why => droppedFor = why);
+
+        string? ended = h.SwitchTo("beta");
+
+        Assert.Equal("Loop 'ab' stopped; walk to 1/3, queued in the Navigation window, dropped", ended);
+        Assert.Equal(Reason, droppedFor);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Warn && e.Source == "Movement"
+            && e.Message.Contains("boom", StringComparison.Ordinal));
+    }
 }

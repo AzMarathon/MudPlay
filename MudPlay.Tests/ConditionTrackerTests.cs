@@ -315,6 +315,37 @@ public sealed class ConditionTrackerTests
         }
     }
 
+    // Freezing water's record switched off in Game Data still owns its line: the line
+    // is the room's spell whether or not the record acts on it.
+    [Theory]
+    [InlineData("paradigm")]
+    [InlineData("stock")]
+    public void ShippedSeed_FreezingWatersLine_LatchesNothing_WithItsRecordDisabled(string realm)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-seed-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+            int at = seed.FindIndex(r => r.Name == "freezing water");
+            seed[at] = seed[at] with { Flags = seed[at].Flags | MessageFlags.Disabled };
+            using Harness h = new();
+            h.Messages.Messages.ReplaceAll(seed);
+
+            h.Feed("You are freezing cold!");
+            Assert.Empty(h.Applied);
+            Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
+
+            h.Feed("You are freezing!");
+            Assert.True(h.Tracker.IsConfused);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
     // The same five records by hand, so the rule is pinned without the seeds.
     [Fact]
     public void AppliedText_InsideAnotherSpellsCastLine_DoesNotLatch()

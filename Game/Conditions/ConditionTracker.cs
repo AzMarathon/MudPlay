@@ -90,7 +90,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // printed just ahead, says which it was. Indexed only for records whose shared
     // applied text carries more than one set of flags; everything else latches as
     // it always did.
-    private List<(Func<string, bool> Matches, string RecordId)> _castLineIndex = new();
+    private List<(CasterMessageMatcher? Template, string Literal, string RecordId)> _castLineIndex = new();
     private HashSet<string> _ambiguousApplied = new(StringComparer.Ordinal);
     private readonly Dictionary<string, DateTimeOffset> _castSeenAt = new(StringComparer.Ordinal);
     // The cast lines and the applied line arrive in one burst.
@@ -133,6 +133,12 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // combat must re-send its lost swing on EVERY occurrence, not just the first. Fires
     // at most once per line.
     public event Action<MessageRecord>? ActionFailed;
+
+    // Fires when a watched cast line (BuildCastLineIndex) names who cast it, with the
+    // name and the line. Its caster is in the room: one the roster doesn't list means
+    // the roster is short, and a shared applied line must not be read by it until the
+    // room is read again (RoomEntityClassifier.NoteCasterNamed).
+    public event Action<string, string>? CasterNamed;
 
     public ConditionTracker(MessageStore messages, LogService? log = null)
     {
@@ -289,9 +295,10 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         Dictionary<string, List<MessageRecord>> byName = new(StringComparer.OrdinalIgnoreCase);
         foreach (MessageRecord r in _messages.Messages)
         {
-            // 'Disabled (don't use)' — ignore the record wholesale: it never indexes,
-            // so it can't latch a condition, set a flag, contribute a fumble wording,
-            // or fire ActionFailed. Any active copy is dropped in the prune below.
+            // 'Disabled (don't use)' — the record never indexes here, so it can't
+            // latch a condition, set a flag, contribute a fumble wording, or fire
+            // ActionFailed. Any active copy is dropped in the prune below. Its cast
+            // lines still own what they hold (BuildCastLinesHolding).
             if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
 
             string name = r.Name.Trim();
@@ -377,7 +384,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             group.Add(r);
         }
 
-        List<(Func<string, bool>, string)> lines = new();
+        List<(CasterMessageMatcher?, string, string)> lines = new();
         HashSet<string> ambiguous = new(StringComparer.Ordinal);
         foreach (List<MessageRecord> group in byText.Values)
         {
@@ -391,13 +398,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 foreach (string template in new[] { r.TargetMessage, r.WitnessMessage, r.CasterMessage })
                 {
                     if (MessageRecord.IsBlankOrAbsent(template) || MessageRecord.IsTooShortToMatch(template)) continue;
-                    if (CasterMessageMatcher.TryCreate(template, compiled: false) is { } matcher)
-                        lines.Add((text => matcher.TryMatch(text, out _), r.Id));
-                    else
-                    {
-                        string literal = template.Trim();
-                        lines.Add((text => text.Contains(literal, StringComparison.Ordinal), r.Id));
-                    }
+                    lines.Add((CasterMessageMatcher.TryCreate(template, compiled: false), template.Trim(), r.Id));
                 }
             }
         }
@@ -471,8 +472,21 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             return;
         }
 
-        foreach ((Func<string, bool> matches, string recordId) in _castLineIndex)
-            if (matches(text)) _castSeenAt[recordId] = line.Timestamp;
+        HashSet<string>? casters = null;
+        foreach ((CasterMessageMatcher? template, string literal, string recordId) in _castLineIndex)
+        {
+            if (template is null)
+            {
+                if (!text.Contains(literal, StringComparison.Ordinal)) continue;
+            }
+            else if (!template.TryMatchCaptures(text, out MessageCaptures captures)) continue;
+            else if (captures.Source is { Length: > 0 } source
+                     && !source.Equals("You", StringComparison.OrdinalIgnoreCase))
+                (casters ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(source);
+            _castSeenAt[recordId] = line.Timestamp;
+        }
+        if (casters is not null)
+            foreach (string caster in casters) CasterNamed?.Invoke(caster, text);
 
         // EndsWith first — if a condition both starts and ends with
         // overlapping text on the same line (rare but possible), the
@@ -800,10 +814,12 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         Dictionary<string, List<string>>.AlternateLookup<ReadOnlySpan<char>> byPrefix =
             appliedByPrefix.GetAlternateLookup<ReadOnlySpan<char>>();
 
+        // A record switched off in Game Data still owns its lines: the line is that
+        // spell's whether or not the record acts on it, and switching off freezing
+        // water must not let the mists latch on its "You are freezing cold!" again.
         Dictionary<string, List<MessageRecord>> owners = new(StringComparer.Ordinal);
         foreach (MessageRecord r in records)
         {
-            if (r.Flags.HasFlag(MessageFlags.Disabled)) continue;
             foreach (string? slot in new[] { r.CasterMessage, r.TargetMessage, r.WitnessMessage })
             {
                 if (MessageRecord.IsBlankOrAbsent(slot)) continue;
@@ -894,10 +910,12 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // when its spell is cast only by monsters and rooms, none of them here, AND some
     // other matched record is one this room or a monster in it does cast. With no
     // caster in sight for any of them nothing is left out (a dark room, a hidden
-    // monster), and a spell a player, an item or a textblock can also cast is never
-    // left out. (User, 2026-10-11: "it should also be able to discriminate spells
-    // being cast based on monsters in the room, spells they have available and what
-    // spells the room casts as well".)
+    // monster), and a spell an item or a textblock can also cast is never left out.
+    // A player's spell is in reach only of a player outside the party on a PvP realm
+    // when it is hostile, and is never left out otherwise (CastReach). (User,
+    // 2026-10-11: "it should also be able to discriminate spells being cast based on
+    // monsters in the room, spells they have available and what spells the room
+    // casts as well".)
     //
     // Two kinds of record are never left out, whoever is here. One that holds,
     // stops attacks or blinds (NeverNarrowed). And one whose own cast line was just
@@ -930,7 +948,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         if (_log is { IsDebugEnabled: true })
             _log.Debug(LogCategory,
                 $"applied line shared by several spells — cast here: {string.Join(", ", castHere.Distinct())}; "
-                + "not applying, no monster or room that casts them being here: "
+                + "not applying, no monster, room or player outside the party that casts them being here: "
                 + string.Join(", ", outOfReach.Select(r => $"'{r.Name}' ({r.Flags})").Distinct()));
         return matched.FindAll(r => !outOfReach.Contains(r));
     }

@@ -763,6 +763,10 @@ public static class BugReportBuilder
         // is the "my telepath never arrived" report.
         Kv(sb, "Telepaths queued / awaiting ack", $"{svc.Telepaths.Queued} / {svc.Telepaths.InFlight}");
         Kv(sb, "Telepaths resent / given up (throttle)", $"{svc.Telepaths.Resends} / {svc.Telepaths.GivenUp}");
+        // Sent telepaths the chat log holds for a confirmation, and those it let go
+        // as not sent: "the player I asked wasn't counted" or "it counted the wrong one".
+        Kv(sb, "Sent telepaths awaiting confirmation / dropped as not sent",
+            $"{svc.Chat.PendingTelepathCount} / {svc.Chat.DroppedUnsentTelepaths}");
 
         // Party auto-train. "The party never went to train" / "we left someone
         // behind" hinges on each side's own report, what the leader heard, and why
@@ -1678,6 +1682,9 @@ public static class BugReportBuilder
         // gates poison-sensitive behavior (e.g. the downtime-rest paths skip a
         // poisoned character). Distinct from the party self-row's broadcast flags.
         Kv(sb, "Active conditions (self)", svc.Conditions.ActiveFlags.ToString());
+        // What an applied line several spells share is read by: a record none of
+        // these can have cast is left out (ConditionTracker.KeepWhatCouldBeCastHere).
+        Kv(sb, "Who can cast here", Game.Conditions.CastReach.Describe(svc.CastReach.Now()));
         sb.Append('\n');
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));
@@ -2106,8 +2113,8 @@ public static class BugReportBuilder
         // manifest is still on disk. A "Resume greyed out" or "it dumped my load"
         // report is undiagnosable without it. ResumableMoveCount falls back to the
         // persisted store, so it's non-zero even in a fresh session.
-        Kv(sb, "Roomba resumable (can / moves)",
-            $"{svc.GhSweep.CanResume} / {svc.GhSweep.ResumableMoveCount}");
+        Kv(sb, "Roomba resumable (can / moves / saved on game data)",
+            $"{svc.GhSweep.CanResume} / {svc.GhSweep.ResumableMoveCount} / {svc.GhSweep.ResumableGameData ?? "(not recorded)"}");
         // Full-ledger carry state — a "sweep stranded everything" or "won't pick up"
         // report needs the tracked working budget, what the ledger thinks is carried,
         // the live headroom, and how many items were left as too-heavy.

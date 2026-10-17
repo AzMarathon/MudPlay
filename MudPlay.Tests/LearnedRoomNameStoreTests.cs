@@ -959,9 +959,19 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
 
     // ----- the realm renamed ------------------------------------------------
 
-    // A realm renamed reaches the store as a pin with another folder. The folder
-    // moved whole, so the names file in it is the one last written here: the
-    // store goes with it, and nothing comes off the map, an unsaved name included.
+    // A realm renamed is told to the store (Profile.RealmRenamed) once its folder
+    // has moved. The pin that follows finds the store there already, and nothing
+    // comes off the map, an unsaved name included.
+    private string RenameRealmA(Client client)
+    {
+        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
+        if (Directory.Exists(_realmA)) Directory.Move(_realmA, renamed);
+        client.Store.OnFolderRenamed(_realmA, renamed);
+        client.Realm = renamed;
+        client.Store.OnRealmChanged();
+        return renamed;
+    }
+
     [Fact]
     public void ARealmRenamed_IsFollowedToItsFolder_AndNothingComesOffTheMap()
     {
@@ -971,22 +981,78 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         client.See(Cellar, CellarName);
         _log.Clear();
 
-        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
-        Directory.Move(_realmA, renamed);
-        client.Realm = renamed;
-        client.Store.OnRealmChanged();
+        string renamed = RenameRealmA(client);
 
         Assert.Equal(renamed, client.Store.RealmFolder);
         Assert.Equal((HouseName, CellarName), (client.NameOf(House), client.NameOf(Cellar)));
         Assert.Equal((1, 1), (client.Store.CountForActiveSet, client.Store.OnRoomMap));
+        // The question about the cellar was asked under the old folder; Save
+        // answered now files it in the new one.
+        Assert.Equal(LearnedRoomNameStore.KeepResult.Stored,
+            client.Store.Keep(Cellar, CellarName, _realmA, client.Graph.ActiveSet));
+        Assert.Contains("15/862", File.ReadAllText(NamesFile(renamed)));
+        Assert.False(Directory.Exists(_realmA));
+        Assert.Equal(1, Said("the realm's folder moved"));
+    }
+
+    // With no names file in the folder yet, the rename is followed all the same:
+    // the names learned this session stay on the map, and the first one saved
+    // goes to the new folder.
+    [Fact]
+    public void ARealmWithNoNamesFileRenamed_KeepsItsSessionNames()
+    {
+        Client client = Start(_realmA);
+        Directory.CreateDirectory(_realmA);
+        client.See(Cellar, CellarName);
+
+        string renamed = RenameRealmA(client);
+
+        Assert.Equal(renamed, client.Store.RealmFolder);
+        Assert.Equal(CellarName, client.NameOf(Cellar));
         Assert.True(client.Keep(Cellar, CellarName));
         Assert.Contains("15/862", File.ReadAllText(NamesFile(renamed)));
         Assert.False(Directory.Exists(_realmA));
     }
 
-    // A realm removed looks the same from here, the folder gone and the
-    // character on another realm of the BBS, except that the other realm's file
-    // is not the one last written here. That is a change of realm.
+    // The same, with no folder at all yet (nothing collected on the realm).
+    [Fact]
+    public void ARealmWithNoFolderRenamed_KeepsItsSessionNames()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+
+        string renamed = RenameRealmA(client);
+
+        Assert.Equal(CellarName, client.NameOf(Cellar));
+        Assert.True(client.Keep(Cellar, CellarName));
+        Assert.True(File.Exists(NamesFile(renamed)));
+        Assert.False(Directory.Exists(_realmA));
+    }
+
+    // A pin to another folder with no word of a rename is a change of realm,
+    // whatever the folders hold: the store doesn't guess.
+    [Fact]
+    public void AFolderMovedWithNoWordOfARename_IsAChangeOfRealm()
+    {
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        Assert.True(client.Keep(House, HouseName));
+        client.See(Cellar, CellarName);
+
+        string moved = Path.Combine(Path.GetDirectoryName(_realmA)!, "one moved");
+        Directory.Move(_realmA, moved);
+        client.Realm = moved;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(moved, client.Store.RealmFolder);
+        // The kept name is read back from the file that moved; the unsaved one is
+        // not carried.
+        Assert.Equal(HouseName, client.NameOf(House));
+        Assert.True(client.Unnamed(Cellar));
+    }
+
+    // A realm removed is a change of realm: the character is on another realm of
+    // the BBS, whose file is that realm's.
     [Fact]
     public void ARealmRemoved_IsAChangeOfRealm_NotARename()
     {
@@ -1009,22 +1075,154 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.DoesNotContain(HouseName, File.ReadAllText(NamesFile(_realmB)));
     }
 
-    // A realm that has no names file yet, renamed: it can't be told from a realm
-    // removed, so it is a change, and the unsaved name comes off.
+    // A realm removed and another made beside it whose names file has the very
+    // write time of the removed one's: still a change. Nothing of the removed
+    // realm's session is carried over.
     [Fact]
-    public void ARealmWithNoNamesFileRenamed_IsTakenForAChange()
+    public void ARealmRemoved_AndAnotherMadeWithAFileOfTheSameWriteTime_InheritsNothing()
+    {
+        Client client = Start(_realmA);
+        client.See(House, HouseName);
+        Assert.True(client.Keep(House, HouseName));
+        client.See(Cellar, CellarName);
+        DateTime written = File.GetLastWriteTimeUtc(NamesFile(_realmA));
+
+        Client there = Start(_realmB);
+        there.See(House, "Their House");
+        Assert.True(there.Keep(House, "Their House"));
+        File.SetLastWriteTimeUtc(NamesFile(_realmB), written);
+
+        Directory.Delete(_realmA, recursive: true);
+        client.Realm = _realmB;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmB, client.Store.RealmFolder);
+        Assert.Equal("Their House", client.NameOf(House));
+        Assert.True(client.Unnamed(Cellar));
+    }
+
+    // A realm renamed, and later a new realm given its old name and played: the
+    // old name is that realm's now, and a name seen on it is saved there.
+    [Fact]
+    public void ARealmGivenARenamedRealmsOldName_LaterSavesItsOwnNames()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+        RenameRealmA(client);
+
+        client.Realm = _realmA;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmA, client.Store.RealmFolder);
+        client.See(House, HouseName);
+        Assert.Equal(LearnedRoomNameStore.KeepResult.Stored, client.KeepHow(House, HouseName));
+        Assert.Contains("15/861", File.ReadAllText(NamesFile(_realmA)));
+    }
+
+    // In one Settings OK: the realm renamed, a new realm given its old name, and
+    // the character moved to that one. The pin takes up the new realm, not the
+    // renamed one.
+    [Fact]
+    public void ARealmGivenARenamedRealmsOldName_InTheSameOk_IsTakenUp()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
+        client.Store.OnFolderRenamed(_realmA, renamed);
+
+        client.Realm = _realmA;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmA, client.Store.RealmFolder);
+        Assert.True(client.Unnamed(Cellar));
+    }
+
+    // Another realm renamed: nothing of this one's moves.
+    [Fact]
+    public void AnotherRealmRenamed_LeavesThisOneAlone()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+
+        client.Store.OnFolderRenamed(_realmB, _realmB + " renamed");
+        client.Store.OnFolderRenamed(_realmA + "x", _realmA + "y");
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmA, client.Store.RealmFolder);
+        Assert.Equal(CellarName, client.NameOf(Cellar));
+    }
+
+    // ----- several clients writing at once -------------------------------------
+
+    // The second client's stamp can't see the first's write: it landed within the
+    // file clock's step of the second's last read. The second's write is made
+    // under the hold, over the file as it is then, so the first's name stays.
+    [Fact]
+    public void AWriteTheStampCantSee_IsNotWrittenOver()
+    {
+        Client one = Start(_realmA), two = Start(_realmA);
+        one.See(Cellar, CellarName);
+        Assert.True(one.Keep(Cellar, CellarName));
+        Assert.True(two.Store.TakeInOutsideChanges());
+        DateTime seen = File.GetLastWriteTimeUtc(NamesFile(_realmA));
+
+        one.See(House, HouseName);
+        Assert.True(one.Keep(House, HouseName));
+        File.SetLastWriteTimeUtc(NamesFile(_realmA), seen);
+
+        two.See(Attic, AtticName);
+        Assert.True(two.Keep(Attic, AtticName));
+
+        // And the house goes on the second's map with the write that found it.
+        Assert.Equal(HouseName, two.NameOf(House));
+        Client fresh = Start(_realmA);
+        Assert.Equal((HouseName, CellarName, AtticName),
+            (fresh.NameOf(House), fresh.NameOf(Cellar), fresh.NameOf(Attic)));
+        Assert.True(File.Exists(NamesFile(_realmA) + ".lock"));
+    }
+
+    // Another client holds the file for its write: this one waits for it, and if
+    // the hold outlasts the wait, the name is held and written on a later
+    // heartbeat, the file never written without the hold.
+    [Fact]
+    public void AHoldThatOutlastsTheWait_HoldsTheName_AndItIsWrittenLater()
     {
         Client client = Start(_realmA);
         Directory.CreateDirectory(_realmA);
         client.See(Cellar, CellarName);
+        using (SharedFileWrite.Hold(NamesFile(_realmA), out _))
+        {
+            Assert.Equal(LearnedRoomNameStore.KeepResult.HeldUnwritten, client.KeepHow(Cellar, CellarName));
+            Assert.False(File.Exists(NamesFile(_realmA)));
+        }
+        client.Store.TakeInOutsideChanges();
+        Assert.Equal(1, Said("could be written again"));
+        Assert.Equal(CellarName, Start(_realmA).NameOf(Cellar));
+    }
 
-        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
-        Directory.Move(_realmA, renamed);
-        client.Realm = renamed;
-        client.Store.OnRealmChanged();
+    // ----- what a write that never finished left -------------------------------
 
-        Assert.Equal(renamed, client.Store.RealmFolder);
-        Assert.True(client.Unnamed(Cellar));
+    [Fact]
+    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndOneUnderAWritersHoldIsLeft()
+    {
+        Directory.CreateDirectory(_realmA);
+        string dead = $"{NamesFile(_realmA)}.{int.MaxValue}.tmp";
+        string mine = $"{NamesFile(_realmA)}.{Environment.ProcessId}.tmp";
+        string others = $"{NamesFile(_realmA)}.{int.MaxValue}.{Guid.NewGuid():N}.tmp";
+        foreach (string temp in new[] { dead, mine, others }) File.WriteAllText(temp, "{");
+
+        // A client is writing the file: its temporary file may be the one being
+        // written, so none is touched.
+        using (SharedFileWrite.Hold(NamesFile(_realmA), out _)) Start(_realmA);
+        Assert.True(File.Exists(dead));
+        Assert.Equal(0, Said("left by a write that never finished"));
+
+        // No write in progress: whatever process made them, they are dead.
+        Start(_realmA);
+        Assert.False(File.Exists(dead));
+        Assert.False(File.Exists(mine));
+        Assert.True(File.Exists(others));
+        Assert.Equal(2, Said("left by a write that never finished"));
     }
 
     [Fact]

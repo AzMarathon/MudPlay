@@ -43,7 +43,11 @@ public sealed class ConditionTrackerRosterTests
           { "Number": 1113, "Name": "monster dark plague", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #1010" },
           { "Number": 5001, "Name": "dark plague", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "Monster #1011, Monster #1075, Monster #1084, Monster #2195" }
+            "Casted By": "Monster #1011, Monster #1075, Monster #1084, Monster #2195" },
+          { "Number": 191,  "Name": "shriek", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Monster #201, Monster #2575" },
+          { "Number": 5138, "Name": "shriek", "Learnable": 0, "Learned From": "\u0000", "Casted By": "Monster #1234" },
+          { "Number": 5400, "Name": "shriek", "Learnable": 0, "Learned From": "\u0000", "Casted By": "\u0000" }
         ]
         """;
 
@@ -66,7 +70,10 @@ public sealed class ConditionTrackerRosterTests
           { "Number": 2781, "Name": "Deathgaze", "MidSpell-3": 1024 },
           { "Number": 215,  "Name": "Zanthus the Lich", "MidSpell-3": 1024 },
           { "Number": 1075, "Name": "black queen", "MidSpell-3": 5001 },
-          { "Number": 2195, "Name": "luursa", "AttType-3": 2, "AttAcc-3": 5001, "Att%-3": 0 }
+          { "Number": 2195, "Name": "luursa", "AttType-3": 2, "AttAcc-3": 5001, "Att%-3": 0 },
+          { "Number": 201,  "Name": "roc", "AttType-2": 2, "AttAcc-2": 191, "Att%-2": 100 },
+          { "Number": 2575, "Name": "gryphon", "AttType-3": 2, "AttAcc-3": 191, "Att%-3": 80 },
+          { "Number": 1234, "Name": "Mother Ungol", "MidSpell-1": 5138 }
         ]
         """;
 
@@ -141,7 +148,9 @@ public sealed class ConditionTrackerRosterTests
             Told.ConditionApplied += ToldApplied.Add;
             Told.SetCastReach(new CastReach(casters, () => CastReach.Standing(
                 RoomConfidence.Confirmed, room, inDarkRoom: false, enteredBlind: false, blinded: false,
-                Classifier.Current, Classifier.RosterIsWhole, casters.KnowsMonster)));
+                Classifier.Current, Classifier.RosterIsWhole, casters.KnowsMonster,
+                pvpRealm: false, isPartyMember: _ => false)));
+            Told.CasterNamed += Classifier.NoteCasterNamed;
             NotTold = new ConditionTracker(_messages);
             NotTold.ConditionApplied += NotToldApplied.Add;
         }
@@ -249,11 +258,51 @@ public sealed class ConditionTrackerRosterTests
         h.AssertToldLatchesWhatNotToldDoes();
     }
 
+    // ----- a cast line that names its caster -------------------------
+
+    // Three Paradigm shriek records share `The {source} rears its head, and shrieks
+    // in fury!`: #191 (the rocs' and gryphons', a confusion), #5138 (Mother Ungol's)
+    // and #5400 (nobody's), neither of those two a confusion. #191's list is cut to
+    // the roc and the gryphon, its other six monsters left out of the rows above.
+    private const string Shriek = "rears its head, and shrieks in fury!";
+
+    [Fact]
+    public void AShriekByAListedCaster_IsReadByWhoIsListed()
+    {
+        using Harness h = new("paradigm");
+
+        h.Feed("Also here: Mother Ungol.", $"The Mother Ungol {Shriek}", "You are confused!");
+
+        Assert.True(h.Classifier.RosterIsWhole);
+        Assert.Equal(new[] { "shriek [None]" }, h.Names(h.ToldApplied));
+        Assert.False(h.Told.IsConfused);
+        Assert.True(h.NotTold.IsConfused);
+    }
+
+    // The gryphon shrieked and is not listed: the roster is short of it, and nothing
+    // is left out by it until the room is read again.
+    [Theory]
+    [InlineData("gryphon")]        // a monster of the set
+    [InlineData("snow leopard")]   // a name the set has no monster for
+    public void AShriekByACasterNotListed_LeavesNothingOut(string caster)
+    {
+        using Harness h = new("paradigm");
+
+        h.Feed("Also here: Mother Ungol.", $"The {caster} {Shriek}", "You are confused!");
+
+        Assert.False(h.Classifier.RosterIsWhole);
+        Assert.True(h.Told.IsConfused);
+        h.AssertToldLatchesWhatNotToldDoes();
+
+        h.Feed("Also here: Mother Ungol, gryphon.");
+        Assert.True(h.Classifier.RosterIsWhole);
+    }
+
     // ----- the cast line, with the roster whole ----------------------
 
-    // No follow line at all: the roster is whole and lists the monkey spirit alone.
-    // The terror that maddens is the Death Shrieker's, its own cast line was just
-    // seen, and that is the one applied.
+    // No follow line at all: the roster lists the monkey spirit alone. The terror
+    // that maddens is the Death Shrieker's, its own cast line was just seen, and that
+    // is the one applied. The line names the shrieker, so the roster is short of it.
     [Fact]
     public void ASpellsOwnCastLine_Decides_WhoeverIsListed()
     {
@@ -263,7 +312,7 @@ public sealed class ConditionTrackerRosterTests
             "The Death Shrieker's unearthly shriek strikes terror into your heart!",
             "You have gone mad!");
 
-        Assert.True(h.Classifier.RosterIsWhole);
+        Assert.False(h.Classifier.RosterIsWhole);
         Assert.Equal(new[] { "terror [Confused, AttackPrevented]" }, h.Names(h.ToldApplied));
         h.AssertToldLatchesWhatNotToldDoes();
     }
