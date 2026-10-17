@@ -388,9 +388,9 @@ public static class KnownPatterns
     public const string UserSellRefused   = "item.user-sell-refused";// "You cannot sell X here."
 
     // ----- Room light ----------------------------------------------------
-    // The two "can't see" room-light lines drive auto-light to post a
-    // LightSource need. The penalized lines (barely visible / dimly lit) still
-    // render room contents and have no auto-action, so they're not seeded.
+    // The two "can't see" room-light lines drive auto-light to light the room.
+    // The penalized lines (barely visible / dimly lit) still render room
+    // contents and have no auto-action, so they're not seeded.
     // Confirm the exact wording against a live capture before relying on it.
     public const string RoomPitchBlack   = "light.room-pitch-black";   // "The room is pitch black"
     public const string RoomVeryDark     = "light.room-very-dark";     // "The room is very dark - you can't see anything"

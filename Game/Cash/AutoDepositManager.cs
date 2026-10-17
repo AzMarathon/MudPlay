@@ -53,10 +53,19 @@ namespace MudPlay.Game.Cash;
 // bank -> origin leg (AutoLightProvisioner.PlanRouteBuy), and if that leg runs dark
 // with no carried light to cover it, detours through the fewest-added-steps light
 // shop (AutoLightShopRouter.TrySelectShop) — bank -> shop -> buy -> origin — before
-// resuming the loop. The whole light detour rides the AutoLight master toggle
-// (PlanRouteBuy returns null when it's off), so no separate opt-in. A shop it can't
-// reach or a buy that doesn't land in the buy window falls through to the plain
-// return walk — a missing light never strands the reroute.
+// resuming the loop. When the leg is covered but the pack holds less than Carry
+// hours of light (AutoLightProvisioner.PlanStockUp), the same stop is made if a
+// shop selling the light adds at most AutoLightProvisioner.StockUpMaxAddedSteps
+// (AutoLightShopRouter.TrySelectNearbyShop). The whole light detour rides the
+// AutoLight master toggle (both advisors return null when it's off), so no separate
+// opt-in. A shop it can't reach or a buy that doesn't land in the buy window falls
+// through to the plain return walk — a missing light never strands the reroute.
+//
+// Light restock trip. The same reroute, with the shop as its only stop
+// (StartLightRestock): a loop's lit light dwindling under Reorder-at, or a pack
+// short of light after a training trip that ended near a shop. Engine stopped,
+// shop -> buy -> back to the loop's nearest room, engine resumed. A deposit that
+// comes due meanwhile is re-armed to fire once the trip is over.
 //
 // Everything runs on the UI thread (AutoWalkManager.Event and
 // CashManager.AutoDepositRequested both fire there), so no marshalling is needed —
@@ -139,6 +148,11 @@ public sealed class AutoDepositManager : IDisposable
     private bool _destinationIsStash;
     // The reroute is an event's trip (StartEventTrip): it ends at the bank / stash.
     private bool _eventTrip;
+    // The reroute is a light restock trip (StartLightRestock): no bank, a shop only.
+    private bool _lightTrip;
+    // The loop's rooms, read before the reroute stopped it (a stopped loop has none):
+    // what the light stock-up on the way back asks about the darkness ahead.
+    private IReadOnlyList<RoomKey> _loopRooms = Array.Empty<RoomKey>();
 
     public AutoDepositManager(
         CashManager cash,
@@ -224,9 +238,13 @@ public sealed class AutoDepositManager : IDisposable
     public event Action? ReroutingChanged;
 
     // The deposit / stash is done and the reroute is on its way back (a light-shop
-    // stop on the way home included).
-    public bool IsReturning => _busy && _phase is DepositPhase.WalkingToLightShop
-        or DepositPhase.BuyingLight or DepositPhase.WalkingBackToOrigin;
+    // stop on the way home included). A light restock trip is returning once bought.
+    public bool IsReturning => _busy && (_lightTrip
+        ? _phase == DepositPhase.WalkingBackToOrigin
+        : _phase is DepositPhase.WalkingToLightShop or DepositPhase.BuyingLight or DepositPhase.WalkingBackToOrigin);
+
+    // The reroute is a light restock trip rather than a bank run.
+    public bool IsLightTrip => _busy && _lightTrip;
 
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
@@ -244,7 +262,7 @@ public sealed class AutoDepositManager : IDisposable
         _phase == DepositPhase.Idle
             ? "idle"
             : _lightBuy is { } buy
-                ? $"{_phase} (light: {buy.LightName} x{buy.Count})"
+                ? $"{_phase} ({(_lightTrip ? "light restock trip" : "light")}: {buy.LightName} x{buy.Count})"
                 : _phase.ToString();
 
     // Bind the wire sender — typically the gate-wrapped engine pipeline from
@@ -258,7 +276,13 @@ public sealed class AutoDepositManager : IDisposable
 
     private void OnAutoDepositRequested(long wealthValue)
     {
-        if (_busy) return;
+        if (_busy)
+        {
+            // A light restock trip has the walker: re-arm the deposit so it fires
+            // again once the trip is over, rather than waiting for wealth to dip.
+            if (_lightTrip) _cash.NotifyAutoDepositAborted();
+            return;
+        }
 
         // Snapshot BEFORE stopping anything — Stop() clears the engine's
         // run-state, so the resume target must be captured first. Only a
@@ -324,6 +348,7 @@ public sealed class AutoDepositManager : IDisposable
         // runs without a competing command stream or asserted gate. Guarded:
         // halting an Approaching loop stops the walker, whose Stopped event must
         // not read as a user abort of the reroute we're mid-launch of.
+        _loopRooms = _loopRunner.ResolveLoopRoomKeys();
         _drivingWalker = true;
         try { _resume.Stop(_walker, _loopRunner, _autoLair, "auto-deposit reroute"); }
         finally { _drivingWalker = false; }
@@ -426,6 +451,57 @@ public sealed class AutoDepositManager : IDisposable
         return false;
     }
 
+    // ----- Light restock trip ---------------------------------------
+
+    // Stop the running loop / Auto-Lair, walk to a shop selling buy's light, buy up
+    // to buy.Count and walk back to the loop's nearest room (or where it was left),
+    // then resume the engine. With maxAddedSteps the trip is made only when the shop
+    // adds at most that many steps to the walk back (a stock-up in passing); without,
+    // the nearest shop there and back is taken (a reorder the light can't do
+    // without).
+    public LightRestockOutcome StartLightRestock(AutoLightBuyRequest buy, int? maxAddedSteps, string why)
+    {
+        if (_busy) return LightRestockOutcome.Busy;
+        DetourResume resume = SnapshotRunningEngine();
+        if (resume.Kind == DetourResumeKind.None || _tracker.State.CurrentRoom is not { } current)
+            return LightRestockOutcome.NotPossible;
+
+        _resume = resume;
+        _origin = current.Key;
+        RoomKey back = ReturnRoom(current.Key);
+        RoomKey shop;
+        bool found = maxAddedSteps is { } max
+            ? _lightShop.TrySelectNearbyShop(current.Key, back, buy.ItemId, max, out shop)
+            : _lightShop.TrySelectShop(current.Key, back, buy.ItemId, out shop);
+        if (!found)
+        {
+            _resume = default;
+            _log?.Info(LogCategory, maxAddedSteps is { } m
+                ? $"light restock ({why}): no shop selling '{buy.LightName}' within {m} added steps"
+                : $"light restock ({why}): no reachable shop sells '{buy.LightName}'");
+            return LightRestockOutcome.NotPossible;
+        }
+
+        _busy = true;
+        _lightTrip = true;
+        _lightBuy = buy;
+        _destination = shop;
+        _destinationIsStash = false;
+        ReroutingChanged?.Invoke();
+        _log?.Info(LogCategory,
+            $"light restock trip ({why}): '{buy.LightName}' up to x{buy.Count} at {shop}, resume={resume.Kind} origin={_origin}");
+
+        _drivingWalker = true;
+        try { _resume.Stop(_walker, _loopRunner, _autoLair, "light restock trip"); }
+        finally { _drivingWalker = false; }
+
+        _phase = DepositPhase.WalkingToLightShop;
+        if (RerouteWalkTo(shop)) return LightRestockOutcome.Started;
+        _log?.Warn(LogCategory, $"can't reach light shop {shop} — resuming");
+        Resume();
+        return LightRestockOutcome.NotPossible;
+    }
+
     // How an event trip ended: deposited / stashed, gave up (no route, a leg
     // failed), or stopped from outside (a user or remote halt, Reset States).
     public event Action<EventTripOutcome>? EventTripEnded;
@@ -501,8 +577,9 @@ public sealed class AutoDepositManager : IDisposable
             if (_drivingWalker) return;
             _log?.Info(LogCategory, $"reroute aborted — movement stopped externally ({e.Detail})");
             bool eventTrip = _eventTrip;
+            bool lightTrip = _lightTrip;
             GoIdle();
-            _cash.NotifyAutoDepositAborted();
+            if (!lightTrip) _cash.NotifyAutoDepositAborted();
             if (eventTrip) EventTripEnded?.Invoke(EventTripOutcome.Stopped);
             return;
         }
@@ -598,8 +675,9 @@ public sealed class AutoDepositManager : IDisposable
 
     // Decide the trip home. If the bank -> origin leg runs dark and no carried light
     // covers it, detour through the nearest light shop (bank -> shop -> buy ->
-    // origin) before resuming; otherwise walk straight back. The light detour rides
-    // the AutoLight master toggle (PlanRouteBuy returns null when it's off).
+    // origin) before resuming; else stock up at a light shop close to the way back
+    // when the pack is short; otherwise walk straight back. The light detour rides
+    // the AutoLight master toggle (both advisors return null when it's off).
     private void BeginReturnLeg()
     {
         if (_eventTrip)
@@ -614,7 +692,7 @@ public sealed class AutoDepositManager : IDisposable
             _phase = DepositPhase.WalkingToLightShop;
             ReroutingChanged?.Invoke();
             _log?.Info(LogCategory,
-                $"return leg runs dark — detouring to light shop {shop} for '{buy.LightName}' x{buy.Count}");
+                $"detouring to light shop {shop} on the way back for '{buy.LightName}' x{buy.Count}");
             if (!RerouteWalkTo(shop))
             {
                 _log?.Warn(LogCategory, $"can't reach light shop {shop} — returning to origin without light");
@@ -638,13 +716,34 @@ public sealed class AutoDepositManager : IDisposable
         buy = default;
         RoomKey back = ReturnRoom(_destination);
         if (_walker.TryComputeRouteKeys(_destination, back) is not { } route) return false;
-        if (_provisioner.PlanRouteBuy(route) is not { } req) return false;
+        if (_provisioner.PlanRouteBuy(route) is not { } req)
+            return TryPlanLightStockUp(back, route, out shop, out buy);
         if (!_lightShop.TrySelectShop(_destination, back, req.ItemId, out shop))
         {
             _log?.Info(LogCategory,
                 $"return leg dark but no reachable shop stocks '{req.LightName}' — returning without light");
             return false;
         }
+        buy = req;
+        return true;
+    }
+
+    // The leg home is covered, but the pack is short of Carry hours of light: stop
+    // at a light shop when one lies within the stock-up allowance of the way back.
+    // The loop the trip returns to is what decides whether light is wanted at all.
+    private bool TryPlanLightStockUp(RoomKey back, IReadOnlyList<RoomKey> legHome, out RoomKey shop, out AutoLightBuyRequest buy)
+    {
+        shop = default;
+        buy = default;
+        IReadOnlyList<RoomKey> ahead = legHome.Concat(_loopRooms).ToList();
+        if (_provisioner.PlanStockUp(ahead) is not { } req) return false;
+        if (!_lightShop.TrySelectNearbyShop(_destination, back, req.ItemId, AutoLightProvisioner.StockUpMaxAddedSteps, out shop))
+        {
+            _log?.Info(LogCategory,
+                $"no shop selling '{req.LightName}' within {AutoLightProvisioner.StockUpMaxAddedSteps} added steps of the way back — no stock-up");
+            return false;
+        }
+        _log?.Info(LogCategory, $"stocking up on '{req.LightName}' at {shop} on the way back");
         buy = req;
         return true;
     }
@@ -814,8 +913,9 @@ public sealed class AutoDepositManager : IDisposable
         // character loops forever, full and never depositing (report
         // paradigm-20260730-125716). A genuine success (wealth now below threshold)
         // re-arms naturally on the next inventory line, which also clears the
-        // retry cooldown this sets, so the extra call is harmless there.
-        _cash.NotifyAutoDepositAborted();
+        // retry cooldown this sets, so the extra call is harmless there. A light
+        // restock trip deposited nothing and holds no deposit latch.
+        if (!_lightTrip) _cash.NotifyAutoDepositAborted();
 
         if (_eventTrip)
         {
@@ -842,6 +942,8 @@ public sealed class AutoDepositManager : IDisposable
         _lightBuy = null;
         _busy = false;
         _eventTrip = false;
+        _lightTrip = false;
+        _loopRooms = Array.Empty<RoomKey>();
         _phase = DepositPhase.Idle;
         ReroutingChanged?.Invoke();
     }

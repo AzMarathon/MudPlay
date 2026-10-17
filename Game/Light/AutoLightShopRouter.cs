@@ -6,12 +6,12 @@ namespace MudPlay.Game.Light;
 
 // Active provisioning detour for the auto-light engine — the shop-buying
 // counterpart to AutoLightProvisioner's ready-a-carried-light path. When the
-// planner decides the route ahead runs dark and nothing in the pack covers it
-// (the Buy verdict), the provisioner hands off an AutoLightBuyRequest here: detour
-// to the shop that adds the fewest steps, buy the carry-duration batch, then
-// resume to the original destination. The bought light is lit not here but by the
-// provisioner's ready path when the resumed walk re-announces the still-dark route
-// against a snapshot that now shows the light carried — so the use logic lives in
+// planner decides the walk ahead runs dark and nothing carried, worn or cast covers
+// it (the Buy verdict), or the lit light dwindles under Reorder-at on a walk, the
+// provisioner hands off an AutoLightBuyRequest here: detour to the shop that adds
+// the fewest steps, buy the carry-duration batch, then resume to the original
+// destination. The bought light is lit not here but by the provisioner's
+// room-by-room path once the walk reaches a dark room, so the use logic lives in
 // exactly one place.
 //
 // Gating: every provisioning action sits behind the single AutoLight master
@@ -25,20 +25,21 @@ namespace MudPlay.Game.Light;
 // the fewest steps added to the trip — using the same movement filter the walker
 // routes with. Ties break on the nearer shop then room-key order for determinism.
 //
+// Order: path items first, then lights. engineWalkActive covers every other
+// errand's detour, so a walk that also needs a gate item shops for it first; the
+// resumed walk re-announces its route and the light detour runs from there.
+//
 // Scope: detours apply only to a plain walk-to. While a loop or auto-lair run is
-// driving movement (engineWalkActive) provisioning is suppressed — hijacking a
-// farm loop to shop would be surprising, and the intended flow provisions on the
-// approach to a dark area, not mid-run. The reactive AutoLightManager LightSource
-// need still surfaces meanwhile.
+// driving movement (engineWalkActive) this router stands down; a reorder there goes
+// to the loop restock trip (AutoDepositManager.StartLightRestock) instead.
 //
 // Resolution & failure: the first freshly-bought copy landing in inventory
 // (OnInventoryChanged) resumes the original walk — the dark route need is met by
 // one copy even while the rest of the batch is still buying. A shop we can't
 // reach, or buys that don't land within the buy window (no gold, out of stock),
 // resume to the destination and suppress a re-detour to that same destination:
-// unlike a deduped need, the provisioner's Buy verdict re-fires on the resumed
-// walk's fresh route announcement, so without the suppression a failed buy would
-// loop forever. The suppression lifts as soon as the destination changes or the
+// the provisioner's Buy verdict re-fires on the resumed walk's fresh route
+// announcement, so without the suppression a failed buy would loop forever. The suppression lifts as soon as the destination changes or the
 // light is acquired.
 public sealed class AutoLightShopRouter : IDisposable
 {
@@ -132,6 +133,11 @@ public sealed class AutoLightShopRouter : IDisposable
     // True while a provisioning detour is in progress.
     public bool DetourActive => _phase != Phase.Idle;
 
+    // Where the detour stands, for the bug report.
+    public string Describe() => _phase == Phase.Idle
+        ? _suppressedDest is { } sup ? $"idle (a buy for the walk to {sup} failed; not retried for it)" : "idle"
+        : $"{_phase}: '{_lightName}' x{_targetCount} at {_shopRoom}, then on to {_origDest}";
+
     // Provisioning hand-off (bound to AutoLightProvisioner's Buy verdict). Arms a
     // detour toward the fewest-added-steps shop that stocks the light. A no-op when
     // the feature is off, an engine walk is driving, a detour is already running,
@@ -155,7 +161,7 @@ public sealed class AutoLightShopRouter : IDisposable
         if (!TrySelectShop(cur, dest, req.ItemId, out RoomKey shopRoom))
         {
             _log?.Info(LogCategory,
-                $"no reachable shop stocks '{req.LightName}' — leaving provisioning to search");
+                $"no reachable shop stocks '{req.LightName}' — walking on with what is carried");
             _suppressedDest = dest;
             return;
         }
@@ -220,9 +226,9 @@ public sealed class AutoLightShopRouter : IDisposable
     }
 
     // Buy-window elapsed. If no fresh copy landed the buy didn't take (no gold, out
-    // of stock) — resume to the destination and suppress a re-detour to it, leaving
-    // the reactive LightSource need for search. Invoked on the UI thread via the
-    // injected post delegate; tests call it directly.
+    // of stock) — resume to the destination and suppress a re-detour to it; the
+    // walk goes on with what is carried. Invoked on the UI thread via the injected
+    // post delegate.
     public void OnBuyTimeout()
     {
         if (_phase != Phase.Buying) return;
@@ -314,6 +320,17 @@ public sealed class AutoLightShopRouter : IDisposable
             }
         }
         return bestTotal != int.MaxValue;
+    }
+
+    // A shop selling the light that a trip from `from` to `to` can stop at for at
+    // most maxAddedSteps more steps than going straight there. The fewest-added-steps
+    // shop is the only candidate: if it is too far out of the way, so is every other.
+    public bool TrySelectNearbyShop(RoomKey from, RoomKey to, int itemId, int maxAddedSteps, out RoomKey shop)
+    {
+        if (!TrySelectShop(from, to, itemId, out shop)) return false;
+        if (_distanceBetween(from, to) is not { } direct) return false;
+        if (_distanceBetween(from, shop) is not { } toShop || _distanceBetween(shop, to) is not { } onward) return false;
+        return toShop + onward - direct <= maxAddedSteps;
     }
 
     private static bool KeyMatches(RoomKey? actual, RoomKey expected)

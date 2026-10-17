@@ -4,16 +4,20 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Light;
 
-// Resolves the illumination a configured "room-light spell" contributes, so the
-// auto-light engine can count it toward coverage alongside worn +illu gear.
-// Two realm-dependent shapes (both observed in stock v1.11p and Paradigm):
-//   * Buff spell   — carries Illu (ability 13) or RoomIllu (14); its strength is
-//     the spell's MinBase magnitude (starlight 175, Paradigm illuminate 95).
-//   * Light-ball   — a TextBlock (148) spell whose action `giveitem`s a light
+// Resolves what a configured "room-light spell" does for the auto-light engine.
+// Two shapes, told apart by ability code rather than spell name (both seen in
+// stock v1.11p and Paradigm data):
+//   * Buff         — carries Illu (ability 13) or RoomIllu (14); its strength is
+//     the spell's MinBase magnitude (starlight 175, Paradigm illuminate 95). It
+//     adds to a lit light item.
+//   * Makes a light — a TextBlock (148) spell whose action `giveitem`s a light
 //     item (stock illuminate -> light ball); its strength is that item's
-//     IlluTarget (light ball 100), delivered by casting then readying the ball.
-// Returns 0 for an unknown spell or one that grants no illumination. Memoized per
-// spell name; the cache clears on a game-data set switch.
+//     IlluTarget (light ball 100), delivered by casting then readying the item,
+//     which then holds the one lit slot.
+// Buff slots store the 4-letter cast code, not the spell name, so the code-keyed
+// lookups resolve it to a name first (the character's spell book when bound, else
+// the Spells table's Short column). Memoized per spell name; the cache clears on a
+// game-data set switch.
 public sealed class RoomLightSpellResolver
 {
     private const int IlluCode = 13;       // Illu
@@ -23,43 +27,77 @@ public sealed class RoomLightSpellResolver
 
     private readonly GameDataCache _cache;
     private readonly LightItemIndex _lights;
-    private readonly Dictionary<string, int> _memo = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<string, string?> _nameForCastCode;
+    private readonly Dictionary<string, (RoomLightSpellKind Kind, int Strength, LightItem? Made)> _memo =
+        new(StringComparer.OrdinalIgnoreCase);
 
-    public RoomLightSpellResolver(GameDataCache cache, LightItemIndex lights)
+    // nameForCastCode: the spell name the character's spell book gives a cast code
+    // (two spells can share a code; the book knows which one this character casts).
+    // Unbound, the first Spells row with that Short is taken.
+    public RoomLightSpellResolver(GameDataCache cache, LightItemIndex lights,
+        Func<string, string?>? nameForCastCode = null)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(lights);
         _cache = cache;
         _lights = lights;
+        _nameForCastCode = nameForCastCode ?? (static _ => null);
         _cache.ActiveSetChanged += _ => _memo.Clear();
     }
 
     // The illu strength the named room-light spell provides in the active set,
     // or 0 when the spell isn't found / grants no illumination.
     public int IlluForSpell(string? spellName)
+        => string.IsNullOrWhiteSpace(spellName) ? 0 : Effect(spellName.Trim()).Strength;
+
+    // The light spell a buff slot's cast code names, or null when the code is no
+    // spell in the active set or the spell grants no illumination.
+    public RoomLightSpell? ForCastCode(string? castCode)
     {
-        if (string.IsNullOrWhiteSpace(spellName)) return 0;
-        string key = spellName.Trim();
-        if (_memo.TryGetValue(key, out int cached)) return cached;
-        int illu = Resolve(key);
-        _memo[key] = illu;
-        return illu;
+        if (string.IsNullOrWhiteSpace(castCode)) return null;
+        string code = castCode.Trim();
+        string? name = _nameForCastCode(code) ?? NameByShort(code);
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        (RoomLightSpellKind kind, int strength, LightItem? made) = Effect(name.Trim());
+        return kind == RoomLightSpellKind.None ? null : new RoomLightSpell(code, name.Trim(), kind, strength, made);
     }
 
-    private int Resolve(string spellName)
+    // True when the cast code names a spell that gives light — what the Add-buff
+    // dialog asks before it offers "Only when the room is dark".
+    public bool IsLightCastCode(string? castCode) => ForCastCode(castCode) is not null;
+
+    private (RoomLightSpellKind Kind, int Strength, LightItem? Made) Effect(string spellName)
+    {
+        if (_memo.TryGetValue(spellName, out var cached)) return cached;
+        var effect = Resolve(spellName);
+        _memo[spellName] = effect;
+        return effect;
+    }
+
+    private (RoomLightSpellKind, int, LightItem?) Resolve(string spellName)
     {
         GameTable? doc = _cache.GetTable("Spells");
-        if (doc is null) return 0;
+        if (doc is null) return (RoomLightSpellKind.None, 0, null);
         foreach (GameRow row in doc.Rows)
         {
             if (!string.Equals(ReadString(row, "Name")?.Trim(), spellName, StringComparison.OrdinalIgnoreCase))
                 continue;
             return ResolveFromSpell(row);
         }
-        return 0;
+        return (RoomLightSpellKind.None, 0, null);
     }
 
-    private int ResolveFromSpell(GameRow spell)
+    private string? NameByShort(string code)
+    {
+        GameTable? doc = _cache.GetTable("Spells");
+        if (doc is null) return null;
+        foreach (GameRow row in doc.Rows)
+            if (string.Equals(ReadString(row, "Short")?.Trim(), code, StringComparison.OrdinalIgnoreCase))
+                return ReadString(row, "Name");
+        return null;
+    }
+
+    private (RoomLightSpellKind, int, LightItem?) ResolveFromSpell(GameRow spell)
     {
         // Buff handler: an Illu / RoomIllu ability => the spell's MinBase magnitude.
         bool hasTextblock = false;
@@ -68,7 +106,10 @@ public sealed class RoomLightSpellResolver
         {
             int code = ReadInt(spell, $"Abil-{i}");
             if (code == IlluCode || code == RoomIlluCode)
-                return ReadInt(spell, "MinBase");
+            {
+                int strength = ReadInt(spell, "MinBase");
+                return strength > 0 ? (RoomLightSpellKind.Buff, strength, null) : (RoomLightSpellKind.None, 0, null);
+            }
             if (code == TextBlockCode)
             {
                 hasTextblock = true;
@@ -79,14 +120,14 @@ public sealed class RoomLightSpellResolver
             }
         }
 
-        // Light-ball handler: a TextBlock that giveitems a light item => the
-        // generated ball's IlluTarget.
+        // Light-item handler: a TextBlock that giveitems a light item => the
+        // generated item's IlluTarget.
         if (hasTextblock)
             foreach (int itemNumber in GiveItemsFromTextblock(textblockRef))
-                if (LightStrength(itemNumber) is int strength && strength > 0)
-                    return strength;
+                if (LightByNumber(itemNumber) is { Strength: > 0 } light)
+                    return (RoomLightSpellKind.MakesLightItem, light.Strength, light);
 
-        return 0;
+        return (RoomLightSpellKind.None, 0, null);
     }
 
     // Item numbers a textblock's action `giveitem`s. Single level — the light-ball
@@ -113,10 +154,10 @@ public sealed class RoomLightSpellResolver
         }
     }
 
-    private int? LightStrength(int itemNumber)
+    private LightItem? LightByNumber(int itemNumber)
     {
         foreach (LightItem l in _lights.All)
-            if (l.Number == itemNumber) return l.Strength;
+            if (l.Number == itemNumber) return l;
         return null;
     }
 

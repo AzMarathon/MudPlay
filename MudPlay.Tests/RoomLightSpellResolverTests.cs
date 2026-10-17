@@ -1,14 +1,17 @@
 using System;
 using System.IO;
 using MudPlay.Game.Light;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.ViewModels;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// Stage 1 — the room-light spell -> illu resolver. Two realm-dependent shapes:
-// a buff spell (Illu 13 / RoomIllu 14 -> MinBase) and a light-ball spell
-// (TextBlock 148 -> giveitem a light item -> that item's IlluTarget).
+// The room-light spell resolver. Two shapes, told apart by ability code: a buff
+// spell (Illu 13 / RoomIllu 14 -> MinBase, adds to a lit light) and a light-making
+// spell (TextBlock 148 -> giveitem a light item -> that item's IlluTarget). Buff
+// slots store the cast code, which the code-keyed lookups resolve to a name first.
 public sealed class RoomLightSpellResolverTests : IDisposable
 {
     private readonly string _root;
@@ -104,5 +107,97 @@ public sealed class RoomLightSpellResolverTests : IDisposable
             tbinfo: "[{\"Number\":700,\"Action\":\"giveitem 500\"}]",
             items:  "[{\"Number\":500,\"Name\":\"apple\",\"ItemType\":11,\"UseCount\":0}]");
         Assert.Equal(0, r.IlluForSpell("gift"));
+    }
+
+    // Stock 1.11p's two light spells as the data has them: starlight a RoomIllu
+    // buff, illuminate a TextBlock that gives the light ball.
+    private const string StockSpells =
+        "[{\"Number\":26,\"Name\":\"starlight\",\"Short\":\"star\",\"MinBase\":175,\"Abil-0\":14}," +
+        " {\"Number\":2,\"Name\":\"illuminate\",\"Short\":\"illu\",\"MinBase\":4012,\"Abil-0\":148,\"AbilVal-0\":0}," +
+        " {\"Number\":1,\"Name\":\"magic missile\",\"Short\":\"mmis\",\"MinBase\":10,\"Abil-0\":1}]";
+    private const string StockTbinfo = "[{\"Number\":4012,\"Action\":\"giveitem 1085\\n\\n\"}]";
+    private const string StockItems =
+        "[{\"Number\":1085,\"Name\":\"light ball\",\"ItemType\":6,\"UseCount\":800,\"Abil-0\":54,\"AbilVal-0\":100}]";
+
+    [Fact]
+    public void ForCastCode_Stock_StarlightIsABuff_IlluminateMakesALightBall()
+    {
+        RoomLightSpellResolver r = Build(StockSpells, StockTbinfo, StockItems);
+
+        RoomLightSpell star = r.ForCastCode("star")!.Value;
+        Assert.Equal(RoomLightSpellKind.Buff, star.Kind);
+        Assert.Equal(175, star.Strength);
+        Assert.Null(star.MadeItem);
+
+        RoomLightSpell illu = r.ForCastCode("illu")!.Value;
+        Assert.Equal(RoomLightSpellKind.MakesLightItem, illu.Kind);
+        Assert.Equal(100, illu.Strength);
+        Assert.Equal("light ball", illu.MadeItem?.Name);
+        Assert.Equal("illuminate", illu.Name);
+    }
+
+    [Fact]
+    public void ForCastCode_Paradigm_IlluminateIsABuff()
+    {
+        // Paradigm 1.9.1's illuminate: an Illu (13) buff of 95, no item.
+        RoomLightSpellResolver r = Build(
+            "[{\"Number\":2,\"Name\":\"illuminate\",\"Short\":\"illu\",\"MinBase\":95,\"Abil-0\":13,\"Abil-1\":115,\"AbilVal-1\":10140}]");
+        RoomLightSpell illu = r.ForCastCode("illu")!.Value;
+        Assert.Equal(RoomLightSpellKind.Buff, illu.Kind);
+        Assert.Equal(95, illu.Strength);
+    }
+
+    [Fact]
+    public void ForCastCode_NotALightSpell_OrUnknown_IsNull()
+    {
+        RoomLightSpellResolver r = Build(StockSpells, StockTbinfo, StockItems);
+        Assert.Null(r.ForCastCode("mmis"));
+        Assert.Null(r.ForCastCode("zzzz"));
+        Assert.Null(r.ForCastCode(" "));
+        Assert.False(r.IsLightCastCode("mmis"));
+        Assert.True(r.IsLightCastCode("star"));
+    }
+
+    [Fact]
+    public void ForCastCode_SpellBookNameWinsOverTheShortColumn()
+    {
+        // Two rows share a code; the character's spell book says which one it casts.
+        const string spells =
+            "[{\"Number\":1,\"Name\":\"dim glow\",\"Short\":\"glow\",\"MinBase\":0,\"Abil-0\":1}," +
+            " {\"Number\":2,\"Name\":\"bright glow\",\"Short\":\"glow\",\"MinBase\":120,\"Abil-0\":13}]";
+        string dir = Path.Combine(_root, "beta");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), spells);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("beta");
+        RoomLightSpellResolver r = new(cache, new LightItemIndex(cache),
+            nameForCastCode: code => code == "glow" ? "bright glow" : null);
+
+        Assert.Equal(120, r.ForCastCode("glow")?.Strength);
+    }
+
+    // The Add-buff dialog asks the resolver about the slot's cast code (what the
+    // slot stores), so a light spell picked by its code offers "Only when the room
+    // is dark", and the slot it saves keeps the tick.
+    [Fact]
+    public void AddBuffDialog_LightSpellPickedByCastCode_OffersAndKeepsOnlyWhenDark()
+    {
+        RoomLightSpellResolver r = Build(StockSpells, StockTbinfo, StockItems);
+        BuffPickOption[] picks = { new("star", "starlight (Lvl 4)", true) };
+        AddBuffDialogViewModel d = new(picks, isLightSpell: r.IsLightCastCode, isRollSpell: _ => false);
+
+        d.SelectedPick = picks[0];
+        Assert.True(d.IsLightSpell);
+        d.OnlyWhenDark = true;
+        AddBuffResult? result = null;
+        d.CloseRequested += x => result = x;
+        d.OkCommand.Execute(null);
+
+        Assert.NotNull(result);
+        Assert.True(result.OnlyWhenDark);
+        BuffSlot slot = new();
+        BuffPanelViewModel.ApplyResult(slot, result);
+        Assert.Equal("star", slot.Spell);
+        Assert.True(slot.OnlyWhenDark);
     }
 }

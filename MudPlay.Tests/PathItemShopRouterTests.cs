@@ -232,17 +232,6 @@ public sealed class PathItemShopRouterTests
     }
 
     [Fact]
-    public void OnNeedPosted_NonPathItemNeed_Ignored()
-    {
-        var h = new Harness().WithSingleShop();
-        PathItemShopRouter r = h.Build();
-
-        r.OnNeedPosted(new Need(NeedKind.LightSource, "illu>=1", "test", DateTimeOffset.Now));
-
-        Assert.False(r.DetourActive);
-    }
-
-    [Fact]
     public void OnNeedPosted_TwoShops_PicksFewestAddedSteps()
     {
         var h = new Harness();

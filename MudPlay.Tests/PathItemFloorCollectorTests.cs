@@ -55,16 +55,4 @@ public sealed class PathItemFloorCollectorTests
         Assert.Empty(sent);
     }
 
-    [Fact]
-    public void DoesNotCollect_LightSourceNeed_OnlyPathItems()
-    {
-        NeedsRegistry needs = new();
-        needs.Post(NeedKind.LightSource, "illu>=42", "test");
-        List<string> sent = new();
-        var c = Make(needs, new HashSet<int> { 42 }, sent);
-
-        c.CollectRevealed();
-
-        Assert.Empty(sent);   // a light-source need is not a path item
-    }
 }

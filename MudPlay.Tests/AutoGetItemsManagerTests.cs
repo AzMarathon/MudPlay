@@ -174,6 +174,49 @@ public sealed class AutoGetItemsManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // Auto-Light's floor pickup rides the same pass: a light it wants is got with
+    // Auto-Get Items off and the light unflagged.
+    [Fact]
+    public void ALightAutoLightWants_IsGot_WithAutoGetOff()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.Flags["long sword"] = true;
+        int torch = h.NumberFor("torch");
+        h.Items.SetExtraCollect(i => i.Number == torch, "for Auto-Light");
+
+        h.Feed("You notice a torch, a long sword here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
+    // A light that is both flagged and wanted is one floor copy: got once.
+    [Fact]
+    public void AFlaggedLightAutoLightAlsoWants_IsGotOnce()
+    {
+        using Harness h = new();
+        h.Flags["torch"] = true;
+        h.Items.SetExtraCollect(_ => true, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
+        h.Feed("You notice a torch here.");   // the same floor shown again
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
+    [Fact]
+    public void ALightThatCannotBeTaken_IsNotGotForAutoLight()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.NoTake["torch"] = true;
+        h.Items.SetExtraCollect(_ => true, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
+
+        Assert.Empty(h.Sent);
+    }
+
     [Fact]
     public void DuringRoombaSweep_NoSend_EvenWhenFlagged()
     {

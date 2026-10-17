@@ -3824,6 +3824,21 @@ How one damage spell cast against a monster is worked out.
 - **Client use:**
   - A wear-off fires `ConditionTracker.ConditionEnded` only for the record whose own end-text matched — a sibling sharing the applied line is dropped from the active set (keeping flags honest) but does not fire the event, so it can't clear a different buff we actually cast.
   - Hand-typed casts arm the timer via `CastingDirector.NoteManualBuffCast`, fed by the `OutboundCastObserver`.
+  - Auto-Light's room-light buff (a slot the buff pass never maintains) arms the same timer through `CastingDirector.NoteManualBuffCast` when `AutoLightProvisioner` casts it, and reads it back through `CastingDirector.IsSelfBuffUp` (*Room-light spells — buff or light item*).
+
+### Room-light spells — buff or light item
+*Status: CONFIRMED 2026-10-17 (user) · Realm: differs*
+
+- **Paradigm: a light spell is a buff, so a light spell and a lit light item work together** *([CONFIRMED] 2026-10-17, user)*. In the Paradigm 1.9.1 data both are buffs *([OBSERVED] game data)*: `illuminate` (2, `illu`: Illu (13), MinBase 95, Dur 70) and `starlight` (26, `star`: RoomIllu (14), MinBase 175, Dur 80).
+- **Stock: only `starlight` combines with a lit light item; `illuminate` makes a light item, which is then used** *([CONFIRMED] 2026-10-17, user)*. In the Stock 1.11p data *([OBSERVED] game data)*: `starlight` (26, `star`) is RoomIllu (14), MinBase 175, Dur 80; `illuminate` (2, `illu`) is TextBlock (148) with MinBase 4012, and TBInfo 4012 is `giveitem 1085`, the `light ball` (ItemType 6, IlluTarget (54) 100, UseCount 800). The ball is lit with `use` like any light, so on Stock it holds the one lit slot (*Movement & navigation → Light sources*, *Stock: one light at a time, and it is not a worn slot*).
+- **Client policy (2026-10-17): the kind is read from the spell's ability codes, not its name.** A spell with Illu (13) or RoomIllu (14) is a buff whose MinBase adds to worn illumination and a lit light (the sum in *Movement & navigation → Light sources*, *Stock: how the light level is built*); a TextBlock (148) spell whose action `giveitem`s an ItemType 6 item makes a light item. Both realms' data give the user's rule read this way.
+- `[NEEDS CONFIRMATION]` Does casting a light spell redisplay the room, or is a bare CR needed as after `use <light>`? The client sends the CR after the cast, which only shows the room once more if the cast already did.
+- `[NEEDS CONFIRMATION]` What does Stock print when `illuminate` gives the ball? The client reads the ball off a fresh `i` instead of a line.
+
+**Client use:**
+- `RoomLightSpellResolver.ForCastCode` sorts the Only-when-dark slot's spell into `RoomLightSpellKind.Buff` or `MakesLightItem`, resolving the slot's cast code to the spell's name through the spell book first. Before 2026-10-17 the name lookup was handed the code, so the spell's coverage read 0 and the Add-buff dialog never offered *Only when the room is dark* (broken since PR #420).
+- `AutoLightProvisioner`: a buff is cast one room ahead of a dark room (or on the room's can't-see line) and a light item is lit only for what the buff leaves short; a light-making spell is cast when nothing carried lights the room, followed by `i`, and the item is lit once it shows up. In *Only use my room-light spell* mode only the spell, and the item it made, are used.
+- **Client policy (2026-10-17): a spell found not enough is latched by darkness.** When the spell is in effect (the buff's timer up, or the item it made lit) and the room still prints its can't-see line, `AutoLightProvisioner` does not cast it again for any room with a `Light` as low or lower until worn illumination rises. Illumination adds up and the spell's share is fixed, so a darker room can't be lit by it either; a latch on the one room would recast in every room of a dark area, and one that lasted until the spell ran out would recast in the same dark.
 
 ### The `stat` screen's buff readout is never a fresh cast
 *Status: Paradigm CONFIRMED 2026-08-16 (user + report `paradigm-20260816-232454`); Stock [OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p · Realm: differs (the readout's form)*
@@ -4900,6 +4915,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - So **another player's lit torch or RoomIllu lights the room for everyone in it, and Illumination (13) helps only its owner.**
   - **Bands** (the words `light` and the dark-room line print): below −200 `pitch black`; −200 to −151 `very dark`; −150 to −101 `barely visible`; −100 to −1 `dimly lit`; 0 to 199 `Regular Light`; 200 to 899 `Daylight`; 900 and up `You are blind!`.
   - **You can't see when the level is below −150** (`_can_see` @0x46bd46), so only `pitch black` and `very dark` appear in the dark-room line (*Dark rooms — no name, no exits, traversal inferred from no bonk*), or when it is above 900, which only BlindingLight on top of the cap can reach.
+- **A light spell either adds to a lit light or is one** *([CONFIRMED] 2026-10-17, user)*: on Paradigm every light spell is a buff that works with a lit light item; on Stock only `starlight` does, and `illuminate` makes a light item. The topic is *Spells, buffs & conditions → Room-light spells — buff or light item*.
 - **`use <light>` only grants the ability to see — it does NOT re-display the room** *(CONFIRMED, user 2026-08-11)*. After lighting in a dark room you must send a **bare carriage return** to redisplay:
   - if the light now lets you see, the full room prints (name / exits / `Also here:`, revealing any monsters that were standing there unseen);
   - if it's still too dark, the "can't see" dark message prints again.

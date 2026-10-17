@@ -31,7 +31,9 @@ namespace MudPlay.Game.Inventory;
 // (optional — unbound, the engine doesn't gate movement).
 //
 // Master switch: AutoActionDefaults.AutoGetItems (shared with the Settings →
-// General toggle and the toolbar Toggle command).
+// General toggle and the toolbar Toggle command). One other reason to pick an
+// item up runs through the same pass under its own toggle (SetExtraCollect): a
+// light Auto-Light wants.
 public sealed class AutoGetItemsManager : IDisposable
 {
     // LogService category — [AutoGet] rows per collected / deferred item.
@@ -381,9 +383,26 @@ public sealed class AutoGetItemsManager : IDisposable
     // GhSweepManager.IsActive; defaults to never-suppress.
     public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
 
+    // A second reason to pick an item up besides its AutoCollect flag: the
+    // auto-light engine's "a light worth carrying" (AutoLightProvisioner
+    // .WantsFloorLight). It carries its own master toggle, so it is asked whether
+    // Auto-Get Items is on or not, and it runs in this same survey pass so a light
+    // that is also flagged is got once, under the same caps, encumbrance and
+    // in-flight ledger. Unbound, nothing extra is collected.
+    private Func<ResolvedItem, bool>? _extraWanted;
+    private string _extraWhy = string.Empty;
+
+    public void SetExtraCollect(Func<ResolvedItem, bool> wanted, string why)
+    {
+        ArgumentNullException.ThrowIfNull(wanted);
+        _extraWanted = wanted;
+        _extraWhy = why;
+    }
+
     private void DispatchList(string list)
     {
-        if (!_isEnabled()) return;
+        bool autoGetOn = _isEnabled();
+        if (!autoGetOn && _extraWanted is null) return;
         // A Roomba sweep is sorting the house — don't let auto-collect grab extra
         // weight and shrink the headroom Roomba needs for its moves.
         if (SuppressDuringSweep())
@@ -453,7 +472,9 @@ public sealed class AutoGetItemsManager : IDisposable
                 _log?.Debug(LogCategory, $"skipped item={item.Name} (cannot be taken)");
                 continue;
             }
-            if (!item.AutoCollect) continue;     // user didn't flag it
+            // Flagged and Auto-Get on, or wanted for the extra reason (a light).
+            bool extra = !(autoGetOn && item.AutoCollect);
+            if (extra && _extraWanted?.Invoke(item) != true) continue;
 
             // A stacked ground pile is surveyed with a leading count ("5 piece of
             // amber"): every counted unit is weighed on its own, then sent as one
@@ -536,7 +557,7 @@ public sealed class AutoGetItemsManager : IDisposable
                 if (deferMode)
                 {
                     _deferred.Add(item.Name);
-                    _log?.Info(LogCategory, $"deferred (combat) item={item.Name}");
+                    _log?.Info(LogCategory, $"deferred (combat) item={item.Name}{(extra ? $" ({_extraWhy})" : string.Empty)}");
                 }
                 else
                 {
@@ -546,7 +567,8 @@ public sealed class AutoGetItemsManager : IDisposable
 
             if (!deferMode && allowedThisEntry > 0)
             {
-                _log?.Info(LogCategory, $"collect {allowedThisEntry}x item={item.Name}");
+                _log?.Info(LogCategory,
+                    $"collect {allowedThisEntry}x item={item.Name}{(extra ? $" ({_extraWhy})" : string.Empty)}");
                 // Paradigm grabs the pile in one `get N <item>`; Stock sends one per
                 // unit. NoteGetSent fires per emitted line so the gate balances the
                 // count-prefixed `You took N <item>` confirmation either way.

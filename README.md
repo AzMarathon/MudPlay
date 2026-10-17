@@ -1,9 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.34**
-> - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
-> - Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+> **Version 3.183.41**
+> - Auto-Light: the room-light spell is read by its cast code again, so the Add-buff dialog offers "Only when the room is dark" and the spell counts toward lighting a route
+> - Auto-Light: "Only use my room-light spell" lights only the spell (and a light ball it made) and buys nothing
+> - Auto-Light: the room-light buff goes up one room before a dark room, a light covers only what it leaves short, and a spell found not enough isn't recast in rooms as dark
+> - Auto-Light: a walk's light buy waits for its route-item detour and no longer takes over a training or bank trip
+> - Auto-Light: a light lying on the floor is picked up while the pack holds less than Carry hours
+> - Auto-Light: a loop's dwindling light is restocked on a light trip off the loop
+> - Auto-Light: bank and training trips stock up at a light shop within 25 steps of the way back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

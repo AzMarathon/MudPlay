@@ -219,18 +219,6 @@ public sealed class MonsterDropRouterTests
     }
 
     [Fact]
-    public void OnNeedPosted_NonPathItemNeed_Ignored()
-    {
-        var h = new Harness().WithSingleSpawn();
-        MonsterDropRouter r = h.Build();
-
-        r.OnNeedPosted(new Need(NeedKind.LightSource, "illu>=1", "test", DateTimeOffset.Now));
-
-        Assert.Equal(0, h.ConfirmCalls);
-        Assert.False(r.DetourActive);
-    }
-
-    [Fact]
     public void OnNeedPosted_TwoSpawns_PicksNearest()
     {
         var h = new Harness();

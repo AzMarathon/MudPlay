@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Light;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -230,7 +231,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
         ProfileService profile = new();
-        profile.LoadBlank();
+        profile.LoadDefaultProfile();
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
@@ -270,9 +271,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             catalogue: () => h.Catalogue,
             resolveRoom: graph.GetRoom,
             wornIllu: () => h.WornIllu,
-            roomLightSpellIllu: () => 0,
-            roomLightSpellName: () => null,
-            castRoomLightSpell: _ => { },
+            roomLightSpell: () => null,
+            castRoomLightSpell: _ => false,
+            roomLightSpellUp: _ => false,
             settings: () => h.LightSettings);
         Game.Light.AutoLightShopRouter lightShop = new(
             shopRoomsSellingItem: _ => h.LightShopRooms,
@@ -977,5 +978,94 @@ public sealed class AutoDepositManagerTests : IDisposable
         // Buy verdict but no reachable shop → head home without light, don't stall.
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
         Assert.Empty(h.BuyLines());
+    }
+
+    // The return leg is covered by the torch carried, but one torch (6 h) is short of
+    // a 12 h Carry-hours target and the shop off the origin adds 2 steps to the way
+    // back: the bank run stops there for one more torch.
+    [Fact]
+    public void BankReturnLegCovered_ShortOfCarryHours_StocksUpAtTheNearbyShop()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.LightSettings.CarryHours = 12;
+        h.LightSettings.PreferredLightName = "torch";
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        h.Snapshot = h.Snapshot with { CarriedItems = new[] { "torch" } };
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+
+        h.Snapshot = h.Snapshot with { CarriedItems = new[] { "torch", "torch" }, LastUpdated = DateTimeOffset.UtcNow };
+        h.AutoDeposit.OnInventoryChanged();
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
+    }
+
+    // A loop's lit torch dwindles under Reorder-at (50 minutes left of a 60-minute
+    // threshold): the reorder the `i` dump raises is a trip of its own off the loop —
+    // stopped, to the shop, one torch bought, back, the loop resumed.
+    [Fact]
+    public void LoopReorder_RestockTrip_WalksToTheShopBuysAndResumesTheLoop()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        h.Provisioner.SetLoopRestock(
+            engineRunning: () => h.Loop.State != LoopState.Idle,
+            restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "reorder"));
+
+        h.Snapshot = h.Snapshot with { ReadiedLight = new ReadiedLight("torch", 100), LastUpdated = DateTimeOffset.UtcNow };
+        h.Provisioner.OnInventoryChanged();
+
+        Assert.True(h.AutoDeposit.IsLightTrip);
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Assert.Contains("light restock trip", h.AutoDeposit.RerouteStatus);
+
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
+        Assert.False(h.AutoDeposit.IsRerouting);
+    }
+
+    [Fact]
+    public void LightRestockTrip_NoShopSellsTheLight_LoopKeepsRunning()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        h.LightShopRooms.Clear();
+
+        LightRestockOutcome outcome = h.AutoDeposit.StartLightRestock(
+            new Game.Light.AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "reorder");
+
+        Assert.Equal(LightRestockOutcome.NotPossible, outcome);
+        Assert.Equal(LoopState.Running, h.Loop.State);
+        Assert.False(h.AutoDeposit.IsRerouting);
+    }
+
+    [Fact]
+    public void LightRestockTrip_NoEngineRunning_NotPossible()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        EnableLightDetour(h);
+
+        Assert.Equal(LightRestockOutcome.NotPossible, h.AutoDeposit.StartLightRestock(
+            new Game.Light.AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "reorder"));
     }
 }

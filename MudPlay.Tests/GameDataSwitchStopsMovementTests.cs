@@ -824,15 +824,12 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         List<string> got = new();
         PathItemFloorCollector pickup = FloorPickup(h, got);
         h.Needs.Post(NeedKind.PathItem, "42", "test");
-        h.Needs.Post(NeedKind.LightSource, "any", "test");
 
         h.SwitchTo("beta");
         pickup.CollectRevealed();
 
         Assert.Empty(got);
         Assert.Empty(h.Needs.Outstanding(NeedKind.PathItem));
-        // A need that names no record of the game data is still a need.
-        Assert.Single(h.Needs.Outstanding(NeedKind.LightSource));
     }
 
     // What forgetting it guards: the need left standing has the other set's item

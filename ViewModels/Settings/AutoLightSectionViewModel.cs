@@ -114,10 +114,10 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         get
         {
             if (SelectedLight == SpellOnlyLabel)
-                return "Never buys or readies light items — relies on worn +illu gear plus your "
-                     + "Room Light Spell (set one in Settings → Spells).";
+                return "Never buys, picks up or lights a light item — only your room-light spell "
+                     + "(a Buff Watchdog slot ticked Only when the room is dark), and a light it makes.";
             if (CarryHours <= 0)
-                return "Provisioning off — readies one light on demand, no stocking up.";
+                return "Provisioning off — lights what you carry, buys nothing, picks a light up only when you carry none.";
             if (SelectedLight == AutoPickLabel)
                 return "Auto-sized to each route's darkest room.";
             LightItem? light = _lights?.FindByName(SelectedLight);

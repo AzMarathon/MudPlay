@@ -6,32 +6,42 @@ using MudPlay.Game.Inventory;
 using MudPlay.Game.Light;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoLightProvisioner"/> — the active engine behind auto-light. A
-/// planned route only PROVISIONS the pack (deferred buy / reorder); the route-scan's
-/// own Ready verdict is suppressed. A light is `use`d predictively one room ahead
-/// (OnApproachingRoom, off the target room's mapped light) or reactively on the
-/// server's live can't-see line (OnDarkRoomObserved, the fallback for an unmapped
-/// room), and `rem`d on stepping into a room seeable on worn gear alone. Exercises
-/// the master-toggle gate, the deferred buy / reorder, the predictive + reactive
-/// ready and the rem, and the pending latch that keeps a still-unconfirmed `use`
-/// from being re-sent on a stale inventory snapshot.
-/// </summary>
+// AutoLightProvisioner — the engine behind auto-light. A planned route only
+// PROVISIONS the pack (a buy / reorder hand-off); the route-scan's own Ready verdict
+// is never acted on. A room is lit predictively one room ahead (OnApproachingRoom,
+// off the target room's mapped light) or reactively on the server's live can't-see
+// line (dispatched through the MessageRouter, the fallback for an unmapped room), and
+// the light is `rem`d on stepping into a room seeable without it. Exercises the
+// master-toggle gate, the buy / reorder hand-offs, the room-light spell (a buff goes
+// first and stacks; a light-making spell is one more light source; a spell found not
+// enough is latched), spell-only mode, the floor-light and stock-up advisors, and
+// the pending latch that keeps a still-unconfirmed `use` from being re-sent.
 public sealed class AutoLightProvisionerTests
 {
-    // torch: 100 illu, 40-min burn; lantern: 175 illu, 2 h burn.
+    // torch: 100 illu, 40-min burn; lantern: 175 illu, 2 h burn; light ball (what
+    // Stock's illuminate makes): 100 illu.
     private static readonly LightItem Torch = new(1, "torch", Strength: 100, UseCount: 800);
     private static readonly LightItem Lantern = new(2, "lantern", Strength: 175, UseCount: 2400);
-    private static readonly IReadOnlyList<LightItem> Catalogue = new[] { Torch, Lantern };
+    private static readonly LightItem Ball = new(3, "light ball", Strength: 100, UseCount: 800);
+    private static readonly IReadOnlyList<LightItem> Catalogue = new[] { Torch, Lantern, Ball };
+
+    // The two room-light spell shapes: starlight (a RoomIllu buff) and Stock
+    // illuminate (makes a light ball).
+    private static readonly RoomLightSpell Starlight = new("star", "starlight", RoomLightSpellKind.Buff, 175, null);
+    private static readonly RoomLightSpell Illuminate = new("illu", "illuminate", RoomLightSpellKind.MakesLightItem, 100, Ball);
 
     private static readonly RoomKey A = new(1, 100);
     // Target rooms for the predictive-lookahead tests, resolved via the harness graph.
     private static readonly RoomKey DarkAhead = new(1, 200);
     private static readonly RoomKey LitAhead = new(1, 201);
+    private static readonly RoomKey DeepAhead = new(1, 202);
     private static readonly RoomKey Unmapped = new(1, 999);
 
     private static Room RoomAt(RoomKey key, int light) => new()
@@ -62,46 +72,62 @@ public sealed class AutoLightProvisionerTests
     {
         public bool Enabled = true;
         public int WornIllu;
-        public int RoomLightSpellIllu;
-        public string? RoomLightSpellName;
+        public RoomLightSpell? Spell;
+        // Cast codes whose buff timer reads up; a cast the harness lets through
+        // arms it, as CastingDirector.NoteManualBuffCast does in the client.
+        public readonly HashSet<string> SpellsUp = new();
+        public bool CastAllowed = true;
         public readonly List<string> CastSpells = new();
         public InventorySnapshot Snapshot = Snap();
         public AutoLightSettings Settings = new() { CarryHours = 12, ReorderThresholdMinutes = 60 };
         public Func<RoomKey, Room?> Graph = GraphOf(RoomAt(A, -300));
+        public Room? Here;
+        public bool InDark;
         public readonly List<AutoLightBuyRequest> BuyRequests = new();
+        public readonly List<string> Sent = new();
+        public readonly MessageRouter Router = new();
         public readonly AutoLightProvisioner Engine;
 
         public Harness()
         {
+            DefaultPatterns.Seed(Router);
             Engine = new AutoLightProvisioner(
                 isEnabled:   () => Enabled,
                 snapshot:    () => Snapshot,
                 catalogue:   () => Catalogue,
                 resolveRoom: k => Graph(k),
                 wornIllu:    () => WornIllu,
-                roomLightSpellIllu: () => RoomLightSpellIllu,
-                roomLightSpellName: () => RoomLightSpellName,
-                castRoomLightSpell: CastSpells.Add,
-                settings:    () => Settings);
-            Engine.SetWireSender(_ => { });
+                roomLightSpell: () => Spell,
+                castRoomLightSpell: code =>
+                {
+                    if (!CastAllowed) return false;
+                    CastSpells.Add(code);
+                    if (Spell is { IsBuff: true } b && b.CastCode == code) SpellsUp.Add(code);
+                    return true;
+                },
+                roomLightSpellUp: SpellsUp.Contains,
+                settings:    () => Settings,
+                currentRoom: () => Here,
+                inDarkRoom:  () => InDark);
+            Engine.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.SetProvisioner(BuyRequests.Add);
+            Engine.AttachRouter(Router);
         }
 
         public void Plan(params RoomKey[] route) => Engine.OnRoutePlanned(route);
 
         public void Poll() => Engine.OnInventoryChanged();
 
-        public void Dark() => Engine.OnDarkRoomObserved();
+        public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
+            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        public void Dark() => Feed("The room is pitch black.");
 
         public void Approach(RoomKey target) => Engine.OnApproachingRoom(target);
 
-        public void Expire() => Engine.OnReadiedLightExpired();
+        public void Expire() => Feed("Your torch flickers and goes out.");
 
         public void Enter(int roomLight) => Engine.OnRoomEntered(RoomAt(A, roomLight));
-
-        public IReadOnlyList<string> Sent => Engine.LastSentForTests
-            .Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
-            .ToList();
     }
 
     [Fact]
@@ -197,7 +223,7 @@ public sealed class AutoLightProvisionerTests
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "torch" }),
-            RoomLightSpellIllu = 175,
+            Spell = Starlight,
         };
         h.Plan(A);
         Assert.Empty(h.BuyRequests);
@@ -326,8 +352,8 @@ public sealed class AutoLightProvisionerTests
     [Fact]
     public void Reactive_DarkObserved_NothingCarried_SendsNothing()
     {
-        // No light in the pack and no room-light spell → leave buying/getting to
-        // the reactive need-poster; nothing is cast either.
+        // No light in the pack and no room-light spell → nothing to light the room
+        // with here (buying is the route planner's); nothing is cast either.
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 dagger" }) };
         h.Dark();
         Assert.Empty(h.Sent);
@@ -335,36 +361,49 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void Reactive_DarkObserved_NothingCarried_SpellConfigured_CastsSpell()
+    public void Reactive_DarkObserved_NothingCarried_BuffSpell_CastsThenRedisplays()
     {
-        // Nothing carried covers the dark room but a room-light spell is set → the
-        // engine escalates to the spell tier and casts it (no wire `use`).
+        // Nothing carried, a room-light buff is set → cast it, then the bare CR that
+        // redisplays the room it lit (no wire `use`).
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "5 dagger" }),
-            RoomLightSpellName = "starlight",
+            Spell = Starlight,
         };
         h.Dark();
-        Assert.Empty(h.Sent);
-        Assert.Equal(new[] { "starlight" }, h.CastSpells);
+        Assert.Equal(new[] { "" }, h.Sent);
+        Assert.Equal(new[] { "star" }, h.CastSpells);
     }
 
     [Fact]
-    public void Reactive_DarkObserved_CarriedCovers_SpellConfigured_ReadiesNotCasts()
+    public void Reactive_DarkObserved_CarriedLightAndBuff_CastsBuffFirst()
     {
-        // A carried light AND a spell are both available. The reactive path prefers
-        // the instant carried light (a readied light lights the room now; a cast
-        // costs a round + mana) — the spell is only the fallback when nothing's
-        // carried. Provisioning still counts the spell (Stage 3), so this doesn't
-        // over-buy.
+        // A carried light AND a room-light buff. The buff goes first: it adds to a
+        // lit light, and the planner already counts it as the baseline, so a light
+        // item covers only what the buff leaves short.
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "torch" }),
-            RoomLightSpellName = "starlight",
+            Spell = Starlight,
+        };
+        h.Dark();
+        Assert.Equal(new[] { "" }, h.Sent);
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+    }
+
+    [Fact]
+    public void Reactive_DarkObserved_BuffCastSlotBusy_ReadiesCarriedLight()
+    {
+        // The cast slot is taken this round (CastCoordinator refuses): the carried
+        // light lights the room now instead of waiting.
+        Harness h = new()
+        {
+            Snapshot = Snap(carried: new[] { "torch" }),
+            Spell = Starlight,
+            CastAllowed = false,
         };
         h.Dark();
         Assert.Equal(new[] { "use torch", "" }, h.Sent);
-        Assert.Empty(h.CastSpells);
     }
 
     [Fact]
@@ -374,33 +413,33 @@ public sealed class AutoLightProvisionerTests
         {
             Enabled = false,
             Snapshot = Snap(carried: new[] { "5 dagger" }),
-            RoomLightSpellName = "starlight",
+            Spell = Starlight,
         };
         h.Dark();
         Assert.Empty(h.CastSpells);
     }
 
     [Fact]
-    public void Reactive_DarkObserved_StockBall_CastsThenReadiesLandedBall()
+    public void Reactive_DarkObserved_LightMakingSpell_CastsReadsInventoryThenLightsTheItem()
     {
-        // Stock light-ball flow across two dark lines: the first has nothing carried
-        // → cast the spell (which drops a ball). The ball lands in a newer dump; the
-        // second dark line readies it via the carried tier and does NOT re-cast.
+        // Stock illuminate: nothing carried → cast it and read the inventory so the
+        // ball it makes shows up. The dump with the ball, landing while the room is
+        // still dark, lights it and redisplays the room; no second cast meanwhile.
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "5 dagger" }, stamp: 1),
-            RoomLightSpellName = "illuminate",
+            Spell = Illuminate,
+            InDark = true,
         };
         h.Dark();
-        Assert.Empty(h.Sent);
-        Assert.Equal(new[] { "illuminate" }, h.CastSpells);
-
-        // Ball landed — a fresh dump now carries it. (Modelled as the catalogue
-        // "torch": the provisioner readies whatever covering light appears.)
-        h.Snapshot = Snap(carried: new[] { "torch" }, stamp: 2);
         h.Dark();
-        Assert.Equal(new[] { "use torch", "" }, h.Sent);
-        Assert.Equal(new[] { "illuminate" }, h.CastSpells);   // no second cast
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
+        Assert.Equal(new[] { "i" }, h.Sent);
+
+        h.Snapshot = Snap(carried: new[] { "5 dagger", "light ball" }, stamp: 2);
+        h.Poll();
+        Assert.Equal(new[] { "i", "use light ball", "" }, h.Sent);
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
     }
 
     [Fact]
@@ -744,5 +783,343 @@ public sealed class AutoLightProvisionerTests
         Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "5 torch" }) };
         h.Enter(0);
         Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void RoomEntered_BuffUpCoversTheRoom_RemsLight()
+    {
+        // The torch was lit for a dark room; the next room (-300) is seeable on the
+        // starlight buff alone (0 + 175 − 300 = −125 ≥ −150), so the torch goes away.
+        Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
+        h.Dark();
+        h.Spell = Starlight;
+        h.SpellsUp.Add("star");
+        h.Enter(-300);
+        Assert.Equal(new[] { "use torch", "", "rem torch" }, h.Sent);
+    }
+
+    // ----- The room-light spell one room ahead ---------------------------------
+
+    [Fact]
+    public void Approach_BuffCovers_CastsOneRoomAhead_NoLightItem()
+    {
+        // The -300 room ahead needs 150; starlight's 175 covers it, so the buff goes
+        // up before the step and the carried torch stays in the pack.
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Snapshot = Snap(carried: new[] { "5 torch" }),
+            Spell = Starlight,
+        };
+        h.Approach(DarkAhead);
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Approach_BuffAlreadyUp_DoesNothing()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Snapshot = Snap(carried: new[] { "5 torch" }),
+            Spell = Starlight,
+        };
+        h.SpellsUp.Add("star");
+        h.Approach(DarkAhead);
+        Assert.Empty(h.CastSpells);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Approach_BuffShort_CastsAndReadiesALightForTheRest()
+    {
+        // The -450 room needs 300: the buff's 175 leaves 125, so the lantern is lit
+        // too — a buff and a light item add up.
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DeepAhead, -450)),
+            Snapshot = Snap(carried: new[] { "lantern" }),
+            Spell = Starlight,
+        };
+        h.Approach(DeepAhead);
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+        Assert.Equal(new[] { "use lantern" }, h.Sent);
+    }
+
+    [Fact]
+    public void SpellInEffectAndStillDark_IsLatched_NotRecastForRoomsAsDark()
+    {
+        RoomKey darker = new(1, 203);
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DeepAhead, -450), RoomAt(darker, -500), RoomAt(DarkAhead, -300)),
+            Spell = Starlight,
+            Here = RoomAt(DeepAhead, -450),
+        };
+        h.Approach(DeepAhead);          // cast ahead
+        h.Dark();                       // arrived, buff up, still can't see → latched
+        h.Dark();
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+        Assert.Contains("star not enough at Light -450", h.Engine.DescribeState());
+
+        h.SpellsUp.Clear();             // the buff ran out
+        h.Dark();                       // in the same dark: not cast again
+        h.Approach(darker);             // a room as dark or darker: not cast either
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+
+        h.Approach(DarkAhead);          // a brighter room it can light: cast
+        Assert.Equal(new[] { "star", "star" }, h.CastSpells);
+    }
+
+    [Fact]
+    public void SpellLatch_LiftsWhenWornIlluRises_OrOnForget()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DeepAhead, -450)),
+            Spell = Starlight,
+            Here = RoomAt(DeepAhead, -450),
+        };
+        h.Approach(DeepAhead);
+        h.Dark();
+        h.SpellsUp.Clear();
+        h.Approach(DeepAhead);
+        Assert.Single(h.CastSpells);
+
+        h.WornIllu = 50;                // better gear: the spell may now be enough
+        h.Approach(DeepAhead);
+        Assert.Equal(2, h.CastSpells.Count);
+
+        h.Dark();                       // latched again at worn 50
+        h.SpellsUp.Clear();
+        h.Engine.Forget("profile loaded");
+        h.Approach(DeepAhead);
+        Assert.Equal(3, h.CastSpells.Count);
+    }
+
+    [Fact]
+    public void LightMakingSpell_ItsItemLitAndStillDark_IsLatched()
+    {
+        // The ball illuminate made is lit and the room still can't be seen: not
+        // cast again here, before or after the ball burns out.
+        Harness h = new()
+        {
+            Spell = Illuminate,
+            Here = RoomAt(A, -450),
+            Snapshot = Snap(readied: new ReadiedLight("light ball", 70)),
+        };
+        h.Dark();
+        h.Expire();
+        h.Dark();
+        Assert.Empty(h.CastSpells);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void Approach_LightMakingSpell_CarriedLightGoesFirst()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Snapshot = Snap(carried: new[] { "torch" }),
+            Spell = Illuminate,
+        };
+        h.Approach(DarkAhead);
+        Assert.Empty(h.CastSpells);
+        Assert.Equal(new[] { "use torch" }, h.Sent);
+    }
+
+    [Fact]
+    public void Approach_LightMakingSpell_NothingCarried_CastsOnceAndReadsInventory()
+    {
+        Harness h = new()
+        {
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Spell = Illuminate,
+        };
+        h.Approach(DarkAhead);
+        h.Approach(DarkAhead);          // the made item is still awaited
+        Assert.Equal(new[] { "illu" }, h.CastSpells);
+        Assert.Equal(new[] { "i" }, h.Sent);
+    }
+
+    // ----- Only use my room-light spell ----------------------------------------
+
+    [Fact]
+    public void SpellOnly_Dark_CastsTheBuff_NeverLightsACarriedLight()
+    {
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, UseRoomLightSpellOnly = true },
+            Snapshot = Snap(carried: new[] { "5 torch" }),
+            Spell = Starlight,
+        };
+        h.Dark();
+        h.Dark();                       // buff up, still dark: the torch stays put
+        Assert.Equal(new[] { "star" }, h.CastSpells);
+        Assert.Equal(new[] { "" }, h.Sent);
+    }
+
+    [Fact]
+    public void SpellOnly_NoSpell_DarkOrApproach_SendsNothing()
+    {
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, UseRoomLightSpellOnly = true },
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Snapshot = Snap(carried: new[] { "5 torch" }),
+        };
+        h.Dark();
+        h.Approach(DarkAhead);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void SpellOnly_LightMakingSpell_ReadiesOnlyTheItemItMade()
+    {
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, UseRoomLightSpellOnly = true },
+            Graph = GraphOf(RoomAt(DarkAhead, -300)),
+            Snapshot = Snap(carried: new[] { "lantern", "light ball" }),
+            Spell = Illuminate,
+        };
+        h.Approach(DarkAhead);
+        Assert.Equal(new[] { "use light ball" }, h.Sent);
+    }
+
+    [Fact]
+    public void SpellOnly_ProvisionsNothing()
+    {
+        // No buy before a dark walk, no reorder of a dwindling light, nothing off the
+        // floor, no stock-up.
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, ReorderThresholdMinutes = 60, UseRoomLightSpellOnly = true },
+            Snapshot = Snap(readied: new ReadiedLight("lantern", 100)),
+        };
+        h.Plan(A);
+        h.Poll();
+        Assert.Empty(h.BuyRequests);
+        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.Null(h.Engine.PlanStockUp(new[] { A }));
+    }
+
+    // ----- A light on the floor -------------------------------------------------
+
+    [Fact]
+    public void FloorLight_WantedWhileShortOfCarryHours()
+    {
+        Harness h = new();
+        Assert.True(h.Engine.WantsFloorLight(Torch.Number));
+        h.Snapshot = Snap(carried: new[] { "6 lantern" });    // 6 × 2 h = the 12 h target
+        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+        Assert.False(h.Engine.WantsFloorLight(99));           // not a light
+    }
+
+    [Fact]
+    public void FloorLight_CarryHoursZero_OnlyWhenNoLightCarried()
+    {
+        Harness h = new() { Settings = new() { CarryHours = 0 } };
+        Assert.True(h.Engine.WantsFloorLight(Torch.Number));
+        h.Snapshot = Snap(carried: new[] { "torch" });
+        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+    }
+
+    [Fact]
+    public void FloorLight_Disabled_NotWanted()
+    {
+        Harness h = new() { Enabled = false };
+        Assert.False(h.Engine.WantsFloorLight(Torch.Number));
+    }
+
+    // ----- Stocking up on a trip that passes a shop ----------------------------
+
+    [Fact]
+    public void StockUp_PreferredLight_UpToCarryHours()
+    {
+        // 2 lanterns carried (4 h) of a 12 h target → 4 more, a target of 6.
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, PreferredLightName = "lantern" },
+            Snapshot = Snap(carried: new[] { "2 lantern" }),
+        };
+        AutoLightBuyRequest? buy = h.Engine.PlanStockUp(new[] { A });
+        Assert.Equal(new AutoLightBuyRequest(2, "lantern", 6), buy);
+        Assert.Contains("lantern x4 to stock up", h.Engine.DescribeState());
+    }
+
+    [Fact]
+    public void StockUp_NoDarkAheadAndNothingLit_NothingBought()
+    {
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, PreferredLightName = "lantern" },
+            Graph = GraphOf(RoomAt(A, 0)),
+        };
+        Assert.Null(h.Engine.PlanStockUp(new[] { A }));
+
+        // A light lit right now says light is in use (an Auto-Lair run has no
+        // circuit to read).
+        h.Snapshot = Snap(readied: new ReadiedLight("lantern", 240));
+        Assert.NotNull(h.Engine.PlanStockUp(new[] { A }));
+    }
+
+    [Fact]
+    public void StockUp_ShortByLessThanOneLight_NothingBought()
+    {
+        // 5 lanterns (10 h) and one lit with an hour left: 11 h of 12 — no whole
+        // lantern fits under the target.
+        Harness h = new()
+        {
+            Settings = new() { CarryHours = 12, PreferredLightName = "lantern" },
+            Snapshot = Snap(carried: new[] { "5 lantern" }, readied: new ReadiedLight("lantern", 120)),
+        };
+        Assert.Null(h.Engine.PlanStockUp(new[] { A }));
+    }
+
+    [Fact]
+    public void StockUp_NoPreferredAndNothingLit_NothingToStock()
+    {
+        Harness h = new();
+        Assert.Null(h.Engine.PlanStockUp(new[] { A }));
+    }
+
+    // ----- A reorder while a loop runs -----------------------------------------
+
+    [Fact]
+    public void Reorder_WhileLoopRuns_GoesToTheRestockTrip_Once()
+    {
+        Harness h = new() { Snapshot = Snap(readied: new ReadiedLight("lantern", 100)) };
+        List<AutoLightBuyRequest> trips = new();
+        h.Engine.SetLoopRestock(() => true, req => { trips.Add(req); return LightRestockOutcome.Started; });
+        h.Poll();
+        h.Snapshot = Snap(readied: new ReadiedLight("lantern", 90));
+        h.Poll();
+        Assert.Equal(new[] { new AutoLightBuyRequest(2, "lantern", 6) }, trips);
+        Assert.Empty(h.BuyRequests);
+    }
+
+    [Fact]
+    public void Reorder_WhileLoopRuns_TripBusy_AsksAgainNextDump()
+    {
+        Harness h = new() { Snapshot = Snap(readied: new ReadiedLight("lantern", 100)) };
+        int asks = 0;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.Busy; });
+        h.Poll();
+        h.Poll();
+        Assert.Equal(2, asks);
+    }
+
+    [Fact]
+    public void Reorder_NoEngineRunning_GoesToTheShopRouter()
+    {
+        Harness h = new() { Snapshot = Snap(readied: new ReadiedLight("lantern", 100)) };
+        int asks = 0;
+        h.Engine.SetLoopRestock(() => false, _ => { asks++; return LightRestockOutcome.Started; });
+        h.Poll();
+        Assert.Equal(0, asks);
+        Assert.Single(h.BuyRequests);
     }
 }

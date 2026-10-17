@@ -1478,6 +1478,7 @@ public sealed class AppServices
         StashTransfer.IsBusy ? "the stash transfer"
         : TrainerWalk.IsBusy || TrainFunding.IsBusy ? "the training trip"
         : SellDetour.IsDetouring ? "the sell trip"
+        : AutoDeposit.IsLightTrip ? "the light trip"
         : AutoDeposit.IsRerouting ? "the bank trip"
         : null;
 
@@ -2007,24 +2008,18 @@ public sealed class AppServices
         return null;
     }
 
-    // Auto-light need poster. On a "can't see"
-    // room-light line it posts a NeedKind.LightSource
-    // need to Needs; auto-get fulfils it.
-    // Gated by the AutoLight master toggle.
-    public Game.Light.AutoLightManager AutoLight { get; private set; } = null!;
-
-    // Active auto-light engine. Bound to the walker's route announcer: on each
-    // planned route it scans for the darkest room and readies a covering carried
-    // light (use <light>), or hands off to
-    // AutoLightShopRouter to provision one it lacks. Every action
-    // is gated by the AutoLight master toggle.
+    // The auto-light engine. Lights a dark room one step ahead (or on its can't-see
+    // line) with the room-light spell and / or a carried light, puts the light away
+    // past the dark, and provisions lights: a buy before a walk that crosses dark
+    // rooms, a reorder off a loop, a stock-up on a bank or training trip, a light
+    // off the floor. Every action is gated by the AutoLight master toggle.
     public Game.Light.AutoLightProvisioner AutoLightProvisioner { get; private set; } = null!;
 
     // Auto-light provisioning detour. On the provisioner's Buy verdict (route
     // dark, nothing carried covers) it walks to the fewest-added-steps shop that
     // stocks the light, buys the carry batch, and resumes — the provisioner
-    // lights it on the resumed route. Gated entirely by the AutoLight master
-    // toggle; wire-sender bound by MainWindowViewModel after connect.
+    // lights it room by room on the resumed walk. Gated entirely by the AutoLight
+    // master toggle; wire-sender bound by MainWindowViewModel after connect.
     public Game.Light.AutoLightShopRouter AutoLightShopRouter { get; private set; } = null!;
 
     // Keeps a checkspell hazard buff up while the walker crosses a hazard room.
@@ -6048,7 +6043,8 @@ public sealed class AppServices
         // deferred (Inventory is assigned later in this method), so reading
         // PlayerIllumination.Current at tooltip / route time sees the live dump.
         Lights = new Game.Light.LightItemIndex(GameData);
-        RoomLightSpell = new Game.Light.RoomLightSpellResolver(GameData, Lights);
+        RoomLightSpell = new Game.Light.RoomLightSpellResolver(GameData, Lights,
+            nameForCastCode: code => Spellbook.FindByCastCode(code)?.Name);
         PlayerIllumination = new Game.Light.PlayerIllumination(
             () => Inventory.Snapshot, Lights, GameData);
 
@@ -6161,14 +6157,6 @@ public sealed class AppServices
             // chance, whatever was walking it stopping, is wired with the dwell below.
             Stealth.NoteIdleOpportunity();
         };
-
-        // AutoLightManager. Posts a LightSource need to
-        // the registry on a "can't see" room-light line. Gated by the
-        // AutoLight master toggle (Settings → General checkbox + the toolbar
-        // Toggle button write the same flag; the delegate is queried per
-        // dark-room line so toggling takes effect immediately).
-        AutoLight = new Game.Light.AutoLightManager(Router, Needs, Log);
-        AutoLight.SetEnabledToggle(() => ReadAutoModeFlag(d => d.AutoLight));
 
         // DeathRecoveryManager. Aggregates the
         // DeathLineWatcher.PlayerDied event + the profile's
@@ -7404,6 +7392,9 @@ public sealed class AppServices
             dropCoinForWeight: (weight, item) => Cash.TryDropCoinForWeight(weight, item));
         AutoGetItems.SetAcquisitionGate(Acquisition);
         AutoGetItems.SetRoomRedisplay(RoomRedisplay);
+        // A light on the floor is picked up for Auto-Light, flagged or not and with
+        // Auto-Get Items on or off (AutoLightProvisioner is built further down).
+        AutoGetItems.SetExtraCollect(item => AutoLightProvisioner.WantsFloorLight(item.Number), "for Auto-Light");
         // Combat-finished flush: every room-entity observation re-checks
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).
@@ -8354,22 +8345,35 @@ public sealed class AppServices
         Walker.SetConfusedCheck(() => Conditions.IsConfused);
 
         // Active auto-light engine — announced the same planned route as the
-        // item gate above. It scans for the darkest room and readies a covering
-        // carried light before we walk into the dark. `wornIllu` is the worn-only
-        // baseline (the readied light it may swap out is excluded) so a light it
-        // picks is measured on its own strength. Gated by the AutoLight toggle;
-        // its wire-sender is bound by MainWindowViewModel after connect.
+        // item gate above (after it, so a path item's detour goes first). It scans
+        // for the darkest room and provisions a light the walk needs. `wornIllu` is
+        // the worn-only baseline (the readied light it may swap out is excluded) so
+        // a light it picks is measured on its own strength. Gated by the AutoLight
+        // toggle; its wire-sender is bound by MainWindowViewModel after connect.
         AutoLightProvisioner = new Game.Light.AutoLightProvisioner(
             isEnabled:   () => ReadAutoModeFlag(d => d.AutoLight),
             snapshot:    () => Inventory.Snapshot,
             catalogue:   () => Lights.All,
             resolveRoom: RoomGraph.GetRoom,
             wornIllu:    () => PlayerIllumination.WornOnly,
-            roomLightSpellIllu: () => RoomLightSpell.IlluForSpell(RoomLightSlotSpell()),
-            roomLightSpellName: RoomLightSlotSpell,
-            castRoomLightSpell: name => Cast.TryCast(name),
+            roomLightSpell: RoomLightSlotSpell,
+            // The only-when-dark slot is never maintained by the buff pass, so the
+            // cast is reported to it here: its timer is what says the buff is up,
+            // and the Buff Watchdog shows it like any other.
+            castRoomLightSpell: code =>
+            {
+                if (!Cast.TryCast(code)) return false;
+                CastDirector.NoteManualBuffCast(code);
+                return true;
+            },
+            roomLightSpellUp: code => CastDirector.IsSelfBuffUp(code),
             settings:    () => ReadSection<Models.Profile.AutoLightSettings>(Profile.Current, "AutoLight"),
+            currentRoom: () => RoomTracker.State.CurrentRoom,
+            inDarkRoom:  () => RoomTracker.IsInDarkRoom,
             log:         Log);
+        Profile.ProfileLoaded += _ => AutoLightProvisioner.Forget("profile loaded");
+        GameData.ActiveSetChanged += _ => AutoLightProvisioner.Forget("game data changed");
+        RoomTracker.PlayerDeathObserved += () => AutoLightProvisioner.Forget("death");
         AutoLightProvisioner.SetSneakKeptProbe(() => SneakGuard.Holds);
         Walker.SetRouteAnnouncer(AutoLightProvisioner.OnRoutePlanned);
 
@@ -8459,8 +8463,9 @@ public sealed class AppServices
         };
 
         // Predictive one-room-lookahead: the walker hands the room it's about to
-        // enter to both provisioners BEFORE the move bytes — the light one `use`s a
-        // carried light when the room reads dark, the hazard one raises a carried
+        // enter to both provisioners BEFORE the move bytes — the light one casts the
+        // room-light buff and / or `use`s a carried light when the room reads dark,
+        // the hazard one raises a carried
         // buff when the room is a checkspell hazard (LoopRunner gets the same hook
         // below).
         Walker.SetApproachRoomHook(key =>
@@ -8472,12 +8477,14 @@ public sealed class AppServices
         // Auto-light provisioning detour. When the provisioner's planner returns
         // Buy (route dark, nothing carried covers), detour to the fewest-added-
         // steps shop that stocks the light, buy the carry batch, and resume — the
-        // provisioner's ready path lights it on the resumed announcement. Reuses
-        // the same shop-lookup / distance / carried-count seams as
-        // PathItemShopRouter, but gated ENTIRELY by the AutoLight master toggle
-        // (no separate opt-in — a player who doesn't want light bought leaves
-        // AutoLight off). engineWalkActive suppresses the detour during a loop /
-        // lair run. Wire-sender bound by MainWindowViewModel after connect.
+        // provisioner lights it room by room on the resumed walk. Reuses the same
+        // shop-lookup / distance / carried-count seams as PathItemShopRouter, but
+        // gated ENTIRELY by the AutoLight master toggle (no separate opt-in — a
+        // player who doesn't want light bought leaves AutoLight off).
+        // engineWalkActive stands it down during a loop / lair run and while any
+        // other errand has the walker: a path item's shop or give detour, announced
+        // first on the same walk, goes first, and the walk it resumes is announced
+        // again for the light. Wire-sender bound by MainWindowViewModel after connect.
         AutoLightShopRouter = new Game.Light.AutoLightShopRouter(
             shopRoomsSellingItem: ShopRoomsSellingItem,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
@@ -8486,7 +8493,7 @@ public sealed class AppServices
             carriedCount: CountItemCarried,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoLight),
             engineWalkActive: () =>
-                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle,
+                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle || ErrandHasTheWalker,
             walkTo: LightDetourWalkTo,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -8513,34 +8520,30 @@ public sealed class AppServices
         Inventory.Changed += AutoLightShopRouter.OnInventoryChanged;
         // Reorder poll: an `i` dump is the only moment the readied light's charge
         // refreshes, so the provisioner catches a dwindling supply here and hands
-        // a restock to the same shop-detour router (once per readied instance).
+        // a restock to the shop-detour router on a walk, or to the loop restock
+        // trip while a loop / Auto-Lair runs (once per readied instance). It is also
+        // where a light-making spell's item shows up.
         Inventory.Changed += AutoLightProvisioner.OnInventoryChanged;
-        // Reactive readying — the authoritative "light this room" signal. The
-        // server's two "can't see" lines (the same ones that drive
-        // NoteDarkRoomEntered) are the ONLY trigger that lights a carried light:
-        // the provisioner never readies predictively off a route scan, so a room
-        // that renders fine can't be over-lit by a bad darkness guess.
-        Router.Subscribe(Services.Patterns.KnownPatterns.RoomPitchBlack,
-            _ => AutoLightProvisioner.OnDarkRoomObserved());
-        Router.Subscribe(Services.Patterns.KnownPatterns.RoomVeryDark,
-            _ => AutoLightProvisioner.OnDarkRoomObserved());
 
         // A readied light burning out ("Your <light> flickers and goes out."). The
         // inventory takes it off what is held first, so everything that reads the
         // snapshot (the death record among them) sees the light gone at once and not
-        // at the next `i` dump. The provisioner then drops its own latches on that
-        // light, so the dark-room line that follows re-readies a carried spare.
+        // at the next `i` dump. The provisioner's own subscription comes after it and
+        // drops its latches on that light, so the dark-room line that follows
+        // re-readies a carried spare.
         Router.Subscribe(Services.Patterns.KnownPatterns.LightBurnedOut,
             _ => Inventory.NoteLitLightBurnedOut());
-        Router.Subscribe(Services.Patterns.KnownPatterns.LightBurnedOut,
-            _ => AutoLightProvisioner.OnReadiedLightExpired());
+        // The two "can't see" lines (the same ones that drive NoteDarkRoomEntered)
+        // light the room the graph couldn't score ahead, and tell whether what was
+        // lit ahead was enough.
+        AutoLightProvisioner.AttachRouter(Router);
 
         // The other half of the reactive light policy: putting the light away once
         // we reach a room that renders without it. On each confirmed room entry —
         // but never while the room is still dark (IsInDarkRoom guards against
         // rem'ing the light we just lit for it) — hand the new room to the
         // provisioner, which `rem`s an auto-readied light when the room is seeable
-        // on worn gear alone.
+        // without it (worn gear, and the room-light buff while it is up).
         RoomTracker.StateChanged += t =>
         {
             if (RoomTracker.IsInDarkRoom) return;
@@ -9895,6 +9898,7 @@ public sealed class AppServices
         {
             PartyTrain.AfterSoloRun();
             AutoDeposit.OnInventoryChanged();
+            StockUpLightAfterTraining();
         };
         // Training drops you out of and back into the realm, which disbands a party
         // server-side, so the solo run stays out of a group — a party trains through
@@ -9992,6 +9996,12 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom);
+        // A loop's or Auto-Lair's lit light dwindling under Reorder-at: the walk-to
+        // shop router stands down while they run, so the restock is a trip of its own
+        // off the engine, back to it once bought.
+        AutoLightProvisioner.SetLoopRestock(
+            engineRunning: () => LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive,
+            restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "reorder"));
         // A split-teleport reform waits for the leader to leave the room it started in.
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
         // Players listed by a `look <direction>` peek stand in the next room.
@@ -13606,32 +13616,27 @@ public sealed class AppServices
     }
 
     // The unified-list "only when dark" light spell the auto-light system casts on
-    // entering a dark room — a CastOnSelf slot flagged OnlyWhenDark. Null when none.
-    private string? RoomLightSlotSpell()
+    // the way into a dark room — a CastOnSelf slot flagged OnlyWhenDark whose cast
+    // code resolves to a light spell. Null when none.
+    private Game.Light.RoomLightSpell? RoomLightSlotSpell()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return null;
         foreach (Models.Profile.BuffSlot s in buffs.Slots)
-            if (s.CastOnSelf && s.OnlyWhenDark && !string.IsNullOrWhiteSpace(s.Spell))
-                return s.Spell!.Trim();
+            if (s.CastOnSelf && s.OnlyWhenDark && RoomLightSpell.ForCastCode(s.Spell) is { } spell)
+                return spell;
         return null;
     }
 
     // Total illumination the character's configured buffs would add if their light
     // spells were up — every Buff Watchdog slot whose spell grants light (an
     // Illu/RoomIllu buff or a light-ball), summed. Feeds the ROOM INFO "Your Illu"
-    // projection alongside worn-gear illumination. Buff slots store the 4-letter
-    // cast code, so resolve each to its spell name (what RoomLightSpellResolver
-    // matches on) before the illu lookup; non-light spells contribute 0.
+    // projection alongside worn-gear illumination; non-light spells contribute 0.
     public int ConfiguredLightSpellIllu()
     {
         if (Profile.Current?.PartyBuffs is not { } buffs) return 0;
         int total = 0;
         foreach (Models.Profile.BuffSlot s in buffs.Slots)
-        {
-            if (s.Spell?.Trim() is not { Length: > 0 } code) continue;
-            string name = Spellbook.FindByCastCode(code)?.Name ?? code;
-            total += RoomLightSpell.IlluForSpell(name);
-        }
+            total += RoomLightSpell.ForCastCode(s.Spell)?.Strength ?? 0;
         return total;
     }
 
@@ -15410,6 +15415,17 @@ public sealed class AppServices
         if (DeathRecovery.SpillSweepActive) return null;
         _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
         return _lightDetourJourney?.Destination ?? Walker.Destination;
+    }
+
+    // A training trip is over and the engine is back up: with the pack short of
+    // Carry hours of light and a shop selling it close to the way back to the loop,
+    // stop there first. A bank run the training set off checks the same on its own
+    // way back, so it is left to that.
+    private void StockUpLightAfterTraining()
+    {
+        if (AutoDeposit.IsRerouting) return;
+        if (AutoLightProvisioner.PlanStockUp(LoopRunner.ResolveLoopRoomKeys()) is not { } buy) return;
+        AutoDeposit.StartLightRestock(buy, Game.Light.AutoLightProvisioner.StockUpMaxAddedSteps, "after training");
     }
 
     private void LightDetourWalkTo(Game.Map.RoomKey key)

@@ -8,10 +8,6 @@ namespace MudPlay.Services;
 // one; no speculative bloat.
 public enum NeedKind
 {
-    // The character needs an illumination source (torch / lantern / +illu
-    // gear / light spell) to see a dark room. Posted by auto-light.
-    LightSource,
-
     // The character needs a specific item to traverse a planned route — an
     // (Item: N) / (Ticket: N) exit gate the walker will hit but we don't
     // carry the required item. The Need.Descriptor is the item id (decimal).
@@ -26,11 +22,11 @@ public enum NeedKind
 // as the same request and dedupes them on NeedsRegistry.Post.
 //   Kind       — what category of thing is needed.
 //   Descriptor — a free-form specifier the fulfiller reads to know what to
-//     get — e.g. the required illu gap ("illu>=42") for a LightSource. The
-//     requester and fulfiller agree on the format; the registry treats it as
-//     an opaque identity key.
+//     get — e.g. the item id ("175") for a PathItem. The requester and
+//     fulfiller agree on the format; the registry treats it as an opaque
+//     identity key.
 //   Requester  — identifier of the engine that posted the need (e.g.
-//     "AutoLightManager"). Diagnostic only.
+//     "PathItemDemandTracker"). Diagnostic only.
 //   PostedAt   — wall-clock time the need was first posted.
 //   Quantity   — how many copies the local character should acquire to
 //     satisfy this need — 1 solo, the party shortfall when the leader is

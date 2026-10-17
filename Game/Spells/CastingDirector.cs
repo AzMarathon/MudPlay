@@ -1523,6 +1523,14 @@ public sealed class CastingDirector : IDisposable
         return list;
     }
 
+    // Whether the self buff with this cast code is believed up right now: its timer
+    // is armed and hasn't run out. The auto-light engine asks before casting its
+    // room-light spell, a slot this director never maintains itself.
+    public bool IsSelfBuffUp(string shortCode)
+        => !string.IsNullOrWhiteSpace(shortCode)
+           && _activeUntil.TryGetValue(("", shortCode.Trim()), out (DateTime Until, int MarginSec, int TotalSec) t)
+           && t.Until > _now();
+
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
     // confirmed-active, or within the slot's recast lead of expiry. The lead is the
     // one stored with the timer when it was armed (0 ⇒ only once the buff has
