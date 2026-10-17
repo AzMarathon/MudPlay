@@ -2096,8 +2096,8 @@ public static class BugReportBuilder
         // manifest is still on disk. A "Resume greyed out" or "it dumped my load"
         // report is undiagnosable without it. ResumableMoveCount falls back to the
         // persisted store, so it's non-zero even in a fresh session.
-        Kv(sb, "Roomba resumable (can / moves)",
-            $"{svc.GhSweep.CanResume} / {svc.GhSweep.ResumableMoveCount}");
+        Kv(sb, "Roomba resumable (can / moves / saved on game data)",
+            $"{svc.GhSweep.CanResume} / {svc.GhSweep.ResumableMoveCount} / {svc.GhSweep.ResumableGameData ?? "(not recorded)"}");
         // Full-ledger carry state — a "sweep stranded everything" or "won't pick up"
         // report needs the tracked working budget, what the ledger thinks is carried,
         // the live headroom, and how many items were left as too-heavy.

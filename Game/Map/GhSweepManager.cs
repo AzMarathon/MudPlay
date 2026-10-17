@@ -214,6 +214,10 @@ public sealed class GhSweepManager : IDisposable
     // one piece of a dead sweep still worth something. Cleared by a fresh Start,
     // since that re-scans anyway.
     private List<PendingSortMove>? _suspended;
+    // The game-data set _suspended's rooms are numbers of.
+    private string? _suspendedGameData;
+    // The active game-data set, for stamping the unfinished queue. Unset → none.
+    private readonly Func<string?> _activeGameData;
 
     private readonly DispatcherTimer _reconSearchSettle;
     private readonly DispatcherTimer _dispatchSettle;
@@ -484,7 +488,8 @@ public sealed class GhSweepManager : IDisposable
         GhItemLocationStore? itemLocations = null,
         Func<RoomKey, bool>? isRoomActivelyManaged = null,
         WirePromptScanner? promptScanner = null,
-        GhSuspendedSweepStore? suspendedStore = null)
+        GhSuspendedSweepStore? suspendedStore = null,
+        Func<string?>? activeGameData = null)
     {
         ArgumentNullException.ThrowIfNull(labels);
         ArgumentNullException.ThrowIfNull(loopRunner);
@@ -513,6 +518,7 @@ public sealed class GhSweepManager : IDisposable
         _isRoomActivelyManaged = isRoomActivelyManaged ?? (static _ => true);
         _promptScanner = promptScanner;
         _suspendedStore = suspendedStore;
+        _activeGameData = activeGameData ?? (static () => null);
         _log = log;
 
         _reconSearchSettle = new DispatcherTimer { Interval = ReconSearchSettle };
@@ -668,6 +674,9 @@ public sealed class GhSweepManager : IDisposable
 
     public bool CanResume => Phase == SweepPhase.Idle && ResumableMoveCount > 0;
 
+    // The game-data set that work's rooms are numbers of (null: none recorded).
+    public string? ResumableGameData => _suspended is not null ? _suspendedGameData : _suspendedStore?.GameData;
+
     // This manager is app-scoped, but a resumable sweep belongs to ONE character:
     // the manifest is persisted per profile (GhSuspendedSweepStore keys on the active
     // character), yet _suspended is a shared in-memory copy. A character switch must
@@ -694,6 +703,13 @@ public sealed class GhSweepManager : IDisposable
     public bool Resume()
     {
         LastStartError = null;
+        string? savedOn = ResumableGameData;
+        if (OtherGameDataRefusal(savedOn) is { } refusal)
+        {
+            LastStartError = refusal;
+            _log?.Info(LogCategory, $"resume refused: {refusal}");
+            return false;
+        }
         // In-memory first (same session), else rehydrate the persisted record —
         // that's the path a client restart takes.
         List<PendingSortMove>? resumable = _suspended ?? RehydrateSuspended();
@@ -716,6 +732,7 @@ public sealed class GhSweepManager : IDisposable
             // Put it back — a route we can't plot right now (mid-combat, position
             // unknown) is worth retrying once the player sorts that out.
             _suspended = restored;
+            _suspendedGameData = savedOn;
             _pending.Clear();
             LastStartError = "Couldn't plot a walkable route through the labeled rooms.";
             _log?.Warn(LogCategory, "resume refused: LoopRunner declined the sweep circuit");
@@ -728,8 +745,8 @@ public sealed class GhSweepManager : IDisposable
         StrandUnmovableItems();
         // The live queue now owns this work; the persisted copy would otherwise let
         // a later Start adopt the carried half a second time. It's rewritten at the
-        // next sweep end either way.
-        _suspendedStore?.Clear();
+        // next sweep end either way. One kept for another set is not this queue.
+        if (!StoredRecordIsOtherSets) _suspendedStore?.Clear();
 
         _log?.Info(LogCategory,
             $"sweep resumed: {_pending.Count} move(s) carried over, recon skipped");
@@ -807,7 +824,7 @@ public sealed class GhSweepManager : IDisposable
     {
         if (Phase == SweepPhase.Idle) return;
         _log?.Info(LogCategory, $"sweep stopped: {reason}");
-        GhSweepReport report = BuildFinalReport();
+        GhSweepReport report = BuildFinalReport(stoppedBecause: reason);
         ResetToIdle(reason);
         SweepCompleted?.Invoke(report);
     }
@@ -864,7 +881,9 @@ public sealed class GhSweepManager : IDisposable
                 // as Stranded rather than silently discarding what the player
                 // is now carrying.
                 _log?.Warn(LogCategory, $"sweep ended by loop: {e.Kind} — {e.Detail}");
-                ReportAbnormalEnd();
+                ReportAbnormalEnd(e.Kind == LoopEventKind.Failed
+                    ? $"its loop failed ({e.Detail})"
+                    : $"its loop was stopped ({e.Detail})");
                 return;
         }
     }
@@ -957,9 +976,9 @@ public sealed class GhSweepManager : IDisposable
     // carried and undelivered is now sitting in the player's pack with
     // nowhere logged for it to go — surface that explicitly rather than
     // silently discarding _pending on ResetToIdle.
-    private void ReportAbnormalEnd()
+    private void ReportAbnormalEnd(string why)
     {
-        GhSweepReport report = BuildFinalReport();
+        GhSweepReport report = BuildFinalReport(stoppedBecause: why);
         ResetToIdle();
         SweepCompleted?.Invoke(report);
     }
@@ -969,7 +988,7 @@ public sealed class GhSweepManager : IDisposable
     // player's pack) and builds the outgoing report. Shared by every sweep
     // exit path (Stop, an external LoopRunner ending, FinishSweep's normal
     // completion) so none of them can silently drop what's currently carried.
-    private GhSweepReport BuildFinalReport()
+    private GhSweepReport BuildFinalReport(string? stoppedBecause = null)
     {
         // Hold the unfinished queue so Resume can pick it up without re-walking
         // the whole circuit. Recon is by far the most expensive part of a sweep —
@@ -977,6 +996,9 @@ public sealed class GhSweepManager : IDisposable
         // survey that is still perfectly good.
         _suspended = _pending.Where(p => !p.Delivered).ToList();
         if (_suspended.Count == 0) _suspended = null;
+        // The rooms are the active set's numbers: under another set they are other
+        // rooms, and Resume refuses the queue there (OtherGameDataRefusal).
+        _suspendedGameData = _activeGameData();
 
         List<PendingSortMove> stillCarried = _pending.Where(p => p.IsCarried && !p.Delivered).ToList();
         foreach (PendingSortMove move in stillCarried)
@@ -989,9 +1011,14 @@ public sealed class GhSweepManager : IDisposable
         // what lets Resume skip the scan even after the client restarts. Always
         // written, including empty, so a clean finish clears the last record
         // rather than leaving it to be re-delivered forever.
-        _suspendedStore?.Save((_suspended ?? new List<PendingSortMove>()).Select(m =>
-            new GhSuspendedMove($"{m.From.Map}/{m.From.Room}", $"{m.To.Map}/{m.To.Room}",
-                m.ItemName, m.Count, m.IsCarried, m.RequiresSearch)));
+        if (StoredRecordIsOtherSets)
+            _log?.Info(LogCategory,
+                $"the unfinished sweep saved on game data '{_suspendedStore!.GameData}' is kept for when it is active again; "
+                + "this sweep's leftovers are not saved over it");
+        else
+            _suspendedStore?.Save((_suspended ?? new List<PendingSortMove>()).Select(m =>
+                new GhSuspendedMove($"{m.From.Map}/{m.From.Room}", $"{m.To.Map}/{m.To.Room}",
+                    m.ItemName, m.Count, m.IsCarried, m.RequiresSearch)), _suspendedGameData);
 
         if (stillCarried.Count > 0)
         {
@@ -1012,7 +1039,7 @@ public sealed class GhSweepManager : IDisposable
                 + ". Label another room for the same category to give them a backup.");
         }
 
-        return new GhSweepReport(_movedSoFar.ToList(), _leftInPlace.ToList(), _stranded.ToList());
+        return new GhSweepReport(_movedSoFar.ToList(), _leftInPlace.ToList(), _stranded.ToList(), stoppedBecause);
     }
 
     private void BeginSortPhase()
@@ -1283,6 +1310,22 @@ public sealed class GhSweepManager : IDisposable
     private static string NameStacks(IReadOnlyList<PendingSortMove> stacks) =>
         NameFew(stacks.Take(StacksNamedPerLogLine + 1).Select(Stack).ToList(), stacks.Count);
 
+    // The record on disk is another set's: what the pack holds for that set, and its
+    // rooms, are kept for when it is active again, not saved or cleared over.
+    private bool StoredRecordIsOtherSets
+        => _suspendedStore is { Any: true } store && OtherGameDataRefusal(store.GameData) is not null;
+
+    // An unfinished queue saved on another game-data set than the active one: its
+    // rooms are that set's numbers, other rooms here. Null when it may be used (the
+    // same set, or a record saved before queues were stamped).
+    private string? OtherGameDataRefusal(string? savedOn)
+    {
+        string? now = _activeGameData();
+        if (savedOn is null || string.Equals(savedOn, now, StringComparison.OrdinalIgnoreCase)) return null;
+        return $"The unfinished sweep was saved on game data '{savedOn}', and '{now ?? "(none)"}' is active now: "
+            + "its rooms are that game data's.";
+    }
+
     // Re-adopt what a previous sweep left in the pack. These enter already
     // IsCarried, so the planner treats them as deliveries owed — with the unload
     // hysteresis that means a pack still full from last time is emptied before
@@ -1298,6 +1341,11 @@ public sealed class GhSweepManager : IDisposable
         if (_suspendedStore is null) return;
         IReadOnlyList<GhSuspendedMove> manifest = _suspendedStore.LoadCarried();
         if (manifest.Count == 0) return;
+        if (OtherGameDataRefusal(_suspendedStore.GameData) is { } refusal)
+        {
+            _log?.Info(LogCategory, $"{manifest.Count} item(s) remembered from the last sweep not adopted: {refusal}");
+            return;
+        }
 
         if (_inventory is null || !_inventory.IsLoaded)
         {

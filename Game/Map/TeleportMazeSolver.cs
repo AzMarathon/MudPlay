@@ -127,6 +127,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // shared door FSM (null in tests / when no door opener is wired → the closed
     // neighbour is simply skipped, same as a failed open).
     private readonly Action<Direction, Action<bool>>? _openDoor;
+    // The door FSM's stop: it goes on at a door until it opens or the room changes,
+    // so a solve that ends with its peek door still being worked stops it.
+    private readonly Action? _stopDoor;
     private readonly HashSet<Direction> _ownClosedDoors = new();
     private readonly HashSet<Direction> _peekDoorsTried = new();
     private bool _awaitingPeekDoor;
@@ -195,8 +198,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         ParadigmPositionResolver? paradigmResolver = null,
         Func<bool>? enabled = null,
         Action<Direction, Action<bool>>? openDoor = null,
-        MovementCoordinator? coordinator = null)
-        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor, coordinator) { }
+        MovementCoordinator? coordinator = null,
+        Action? stopDoor = null)
+        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor, coordinator, stopDoor) { }
 
     internal TeleportMazeSolver(
         TeleportMazeIndex index,
@@ -211,7 +215,8 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         ParadigmPositionResolver? paradigmResolver = null,
         Func<bool>? enabled = null,
         Action<Direction, Action<bool>>? openDoor = null,
-        MovementCoordinator? coordinator = null)
+        MovementCoordinator? coordinator = null,
+        Action? stopDoor = null)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(graph);
@@ -230,6 +235,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _paradigmResolver = paradigmResolver;
         _enabled = enabled ?? (() => true);
         _openDoor = openDoor;
+        _stopDoor = stopDoor;
         _coordinator = coordinator;
 
         _walker.Event += OnWalkerEvent;
@@ -800,6 +806,12 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _heldMove = null;
         _phase = Phase.Idle;
         Active = false;
+        // With the solve over first, so the FSM's "stopped" answer is dropped.
+        if (_awaitingPeekDoor)
+        {
+            _awaitingPeekDoor = false;
+            _stopDoor?.Invoke();
+        }
         StateChanged?.Invoke();
     }
 

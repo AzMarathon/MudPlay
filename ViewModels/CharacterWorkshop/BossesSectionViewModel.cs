@@ -342,10 +342,22 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             key => current is { } c ? bfs.DistanceBetween(c, key, movement) : null,
             key => graph.GetRoom(key)?.DisplayName);
 
+        GameDataCache.Load listedOn = AppServices.Current.GameData.ActiveLoad;
         BossRoomPick? pick = await AppServices.Current.Dialogs
             .OpenWindowAsync<BossRoomPickerDialogViewModel, BossRoomPick?>(
                 new BossRoomPickerDialogViewModel(row.Name, options));
         if (pick is null) return;
+        // The picker stays open through a change of game data, and its rooms are
+        // numbers of the data it was opened on.
+        GameDataLoadChange change = GameDataLoadChange.Between(listedOn, AppServices.Current.GameData.ActiveLoad);
+        if (change.Changed)
+        {
+            AppServices.Current.Log.Info("Bosses",
+                $"{row.Name}: walk to {pick.Room} not started: {change.Why} while the room picker was open");
+            AppServices.Current.WriteTerminalNotice(
+                $"[Walk to {pick.Room} not started: {change.Why} while the boss room picker was open]");
+            return;
+        }
         if (pick.StartNow) AppServices.Current.GoWalkTo(pick.Room);
         else AppServices.Current.QueueWalkTo(pick.Room);
     }
