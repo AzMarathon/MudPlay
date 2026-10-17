@@ -1674,10 +1674,29 @@ How HP works from full health down through dropping and death, how monster healt
   - **Poison still runs first:** a poisoned character sees `You feel ill.` and loses the poison amount, then a dropped one also loses the 1 HP bleed in the same tick.
 - **Dropping removes you from the party** — see *Party → Dropping (0 HP) or instant death removes you from the party* and *Party → Dropped ally rescue*.
 - **The game rejects every action command while dropped / mortally wounded** — except `sys …` commands (see *Sysop commands → Sysop power gating*). Movement, casting, aiding and telepaths all bounce with `You may not do that while you are mortally wounded!`, `Your command had no effect.`, or (for remote / telepath commands) `{command invalid or not allowed}`.
-- **On Stock a dropped character may still use a fixed list of commands, the telepath among them** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_handle_commands` @0x4136cf–0x413780, the compare chain @0x4136e9–0x41374c; Realm: Stock, Paradigm not recorded)*. With HP at 0 or below (or one character flag that wasn't identified) every other recognised command prints `You may not do that while you are mortally wounded!` (@0x413759).
-  - **Allowed:** `/` telepath (`whisper`), the channel broadcast (`'`, `-`, `br`), `help`, `save`, `look`, `status`, `health`, `inventory`, `keys`, `who` / `scan`, `exp`, `profile`, `statline`, `quiet` / `brief`, `verbose`, `topten`, `feedback`, `global`, `suicide`, `reroll`, `sysop`, and the dead commands `sound` and `identity`.
-  - **Refused, among others:** every move, `bg`, `gossip`, `auction`, the directed say `>`, `set`, `par`, `join`, `aid`, `rest`, `break`, `quit`.
-  - `[NEEDS CONFIRMATION]` A line that is no command at all is not stopped by this gate. The room's exit words and a spell's cast code both test HP above 0 (@0x4503f3, @0x450840), but no HP test was found on the speech path, so a dropped character's say or yell may go through. Does a dropped Stock character's `.text` reach the room?
+- **On Stock a dropped character may still use a fixed list of commands, the telepath among them** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_handle_commands` @0x4136cf–0x413780, the compare chain @0x4136e9–0x41374c; command words re-read 2026-10-17 by emulating `_parse_command` @0x40dd44 over every input it branches on, handlers from the switch table @0x4137a6; Realm: Stock, Paradigm not recorded)*. The gate runs when HP is 0 or below (`[user+0xb0]`, @0x4136cf) **or the character is paralysed** (Paralyze, ability 75: word `user+0x6f4` bit 0x800, set by `_update_dynamic_with_ability` @0x43ddaf and cleared by `_negate_dynamic_with_ability` @0x43dfd0; an earlier note called this flag unidentified, superseded 2026-10-17). No spell in either imported set carries ability 75 (*Spells, buffs & conditions → Ailment identification — which spells cause disease / poison / blind / hold*), so in practice only HP sets it off. Every other recognised command then prints `You may not do that while you are mortally wounded!` (@0x413759), the paralysed character included.
+  - **Allowed, with the words the parser takes** (`st[atus]` means `st`, `sta` … `status`):
+    - telepath: any first word starting `/` (`/name msg`), or `whi[sper] name msg`. `whisper` is the telepath, not an in-room whisper; both print `%s telepaths: …` (`_cmd_whisper` @0x4571f2).
+    - broadcast: any first word starting `'` or `-`, or `br[oadcast]`. With no text it lists the channel's users (`_cmd_broadcast` @0x4543f9).
+    - `l[ook]`; `st[atus]`; `he[alth]`; `i` or `inve[ntory]` (`in` and `inv` match nothing); `ke[ys]`; `who` (exact) or `sc[an]` (`wh` matches nothing); `exp[erience]` (`ex` matches nothing); `pr[ofile]`; `to[pten]`; `?` or `hel[p]` (`h` matches nothing).
+    - `statl[ine] on|off|full`: needs the second word, else `Syntax: STATLINE {ON/OFF/FULL}`.
+    - `qu[iet]` and `bri[ef]`: one handler (`q` alone is quit). `verb[ose]`: any word starting `verb` is verbose (`vers…` is version, refused).
+    - `fe[edback] <text>` (`_send_feedback_mail` @0x40add5); `glo[bal] …` passes the rest to the BBS global-command handler (`_cmd_global` @0x4697a8); `sy[sop] …`: every `sys` line passes, its subcommands check the sysop key themselves (`_cmd_sysop` @0x4626f9).
+    - `suicide` and `reroll`: full word only (`_cmd_suicide` @0x4692be).
+    - `sa[ve]`: allowed, but it only prints `You may not save your character. You must exit normally…` (@0x413adb); it never saves.
+    - dead: `soun[d]` (@0x413b28) and `id[entity]` (`_cmd_identity` @0x4541ea always returns 0) do nothing.
+    - The command numbers let through are 12–15, 17–19, 23, 41, 43, 44, 49–53, 58, 71, 74, 75, 87, 106, 113, 130.
+  - **One-word commands with extra words don't run.** `status`, `health`, `inventory`, `keys`, `who` / `scan`, `profile`, `quiet` / `brief`, `verbose` and `save` test for exactly one word (e.g. @0x413b47, @0x414010, @0x414171, @0x414315); with more, the line falls through as plain text (the next bullet) after passing the gate.
+  - **Refused, among others:** every move, `bg`, `gossip`, `auction`, the directed say `>`, `set`, `par`, `join`, `aid`, `rest`, `break`, `q` / `quit`.
+  - **`x` skips the gate but is still refused:** `_execute_input` catches an exact `x` (@0x45025e) and calls `_cmd_quit`, which answers `You may not exit MajorMud while you are mortally wounded!` (@0x46198e) instead of the gate's line.
+  - **A line that is no command at all never reaches the gate** *([OBSERVED] 2026-10-17, static reading; not checked in game)*: `_parse_command` returns 0 and `_handle_commands` exits (@0x413692) before the HP test. `_execute_input` @0x45003c then tries, in order:
+    1. the room's exit words and special command: HP above 0 only (@0x4503f3);
+    2. a spell typed by its cast code: HP above 0 and not paralysed (@0x450840 / @0x450855); otherwise there is no refusal line, and the text drops through;
+    3. the Mute check, `You cannot speak!` (@0x450915);
+    4. profanity;
+    5. actions / socials (`_handle_ljn_actions` @0x4604c7): no HP test at the top, but its helpers were not read;
+    6. say / yell (0x450a3f–0x450d0e): no HP test.
+  - `[NEEDS CONFIRMATION]` **So a dropped (or paralysed) Stock character's `.text` and `"text` look like they reach the room.** In fast talk mode, which a new character has by default (`player+0x5f4`, set in `_create_player` @0x4164e5), any unrecognised text is spoken (@0x450a93). That includes a cast code, the dead `sound` / `identity`, and an allowed one-word command given extra words. In slow mode only `.` and `"` lines are spoken, and anything else prints `Your command had no effect.` (@0x450ca5). Does a dropped Stock character's `.text` reach the room? (An earlier note asked the same from the speech path alone; the gate and talk-mode findings above added 2026-10-17.)
   - **The telepath bounce in the *game rejects every action command* bullet of this topic is taken as Paradigm's only** *(user 2026-10-09: "assume the telepath rejection is paradigm only")*; on Stock a dropped character can telepath, per the allow-list above. (Was `[CONFLICT — ask the user]`; settled 2026-10-09.)
 - **Two reversals bring a dropped character back into the positive:**
   - **another player** issues `aid <name>` on them, or
@@ -3647,6 +3666,7 @@ How one damage spell cast against a monster is worked out.
 - **Poison / blind / hold-person ARE enumerated engine effects**, so their cures clear the effect
   wholesale and the causing spells are found by the spell's own **inflict ability code**: Poison =
   **19**, BlindUser = **107**, HoldPerson = **74**, Paralyze = **75** (74+75 → "Movement prevented").
+  - **Paralyze (75) also shuts a character's commands down as if dropped** (*Health, resting & recovery → 0 HP — dropped / bleeding out*), but no spell uses it.
   - **In the data, paralyze spells use 74, and nothing uses 75** *([OBSERVED] 2026-09-26, game data —
     v1.11p and Paradigm 1.9.1 identical)*: hold person #66 / #395, paralyze #125 / #251, paralysis
     #939 and earthquake hold #927 all carry **74 (HoldPerson)**. The *paralyzed* condition spells
