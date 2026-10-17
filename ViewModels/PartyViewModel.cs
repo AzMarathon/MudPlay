@@ -139,7 +139,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
     {
         // Only the fields that contribute to HeaderText warrant a
         // refresh — other PartyMember properties churn frequently
-        // (HpDisplay, status flags) and don't affect the header.
+        // (HpRichDisplay, status flags) and don't affect the header.
         if (e.PropertyName is nameof(PartyMember.HpPercent)
                           or nameof(PartyMember.IsSelf)
                           or nameof(PartyMember.Name))

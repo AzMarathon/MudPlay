@@ -107,19 +107,4 @@ public sealed class LookupEnumsTests
     public void Format_NonNumeric_ReturnsInputUnchanged(string? raw)
         => Assert.Equal(raw, LookupEnums.FormatItemType(raw));
 
-    [Fact]
-    public void FormatAbilityCode_Zero_RendersAsEmpty()
-        => Assert.Equal(string.Empty, LookupEnums.FormatAbilityCode("0"));
-
-    [Fact]
-    public void FormatAbilityCode_Known_RendersName()
-        => Assert.Equal("AC", LookupEnums.FormatAbilityCode("2"));
-
-    [Fact]
-    public void FormatAbilityValue_Zero_RendersAsEmpty()
-        => Assert.Equal(string.Empty, LookupEnums.FormatAbilityValue("0"));
-
-    [Fact]
-    public void FormatAbilityValue_Nonzero_RendersUnchanged()
-        => Assert.Equal("15", LookupEnums.FormatAbilityValue("15"));
 }

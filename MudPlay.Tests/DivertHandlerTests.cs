@@ -61,7 +61,6 @@ public sealed class DivertHandlerTests
 
         Telepath(router, "Bob", "@divert Raijin");
 
-        Assert.Equal("Raijin", handler.TargetForTests);
         // Engine reply routes back to the sender on the telepath channel.
         Assert.Equal("/Bob {Now diverting telepaths to: Raijin}\r",
             Encoding.Latin1.GetString(Assert.Single(_replies)));
@@ -70,16 +69,17 @@ public sealed class DivertHandlerTests
     [Fact]
     public void Divert_NoArg_StopsAndReplies()
     {
-        var (router, handler, players, _, engine) = Setup();
+        var (router, _, players, forwardWire, _) = Setup();
         SeedPlayer(players, "Bob", PlayerRemoteControls.DivertConversations);
 
         Telepath(router, "Bob", "@divert Raijin");
         _replies.Clear();
         Telepath(router, "Bob", "@divert");
 
-        Assert.Null(handler.TargetForTests);
         Assert.Equal("/Bob {No longer diverting telepaths}\r",
             Encoding.Latin1.GetString(Assert.Single(_replies)));
+        Telepath(router, "Carl", "hello there");
+        Assert.Empty(forwardWire);
     }
 
     [Fact]
@@ -172,7 +172,6 @@ public sealed class DivertHandlerTests
         Telepath(router, "Stranger", "@divert Raijin");
         Telepath(router, "Carl", "hello there");
 
-        Assert.Null(handler.TargetForTests);
         Assert.Empty(forwardWire);
     }
 
@@ -184,7 +183,6 @@ public sealed class DivertHandlerTests
 
         Telepath(router, "Bob", "@divert Raijin");
         Telepath(router, "Bob", "@divert Susanoo");
-        Assert.Equal("Susanoo", handler.TargetForTests);
 
         Telepath(router, "Carl", "hi");
         Assert.Equal("/Susanoo Carl telepathed: hi\r",
@@ -216,12 +214,14 @@ public sealed class DivertHandlerTests
         PartyState party = new();
         PlayerDatabase players = new(new ProfileService(), () => null);
         RemoteCommandManager engine = new(chat, party, players);
+        engine.SetWireSender(_replies.Add);
         using DivertHandler handler = new(engine, chat);   // no SetWireSender
         SeedPlayer(players, "Bob", PlayerRemoteControls.DivertConversations);
 
         Telepath(router, "Bob", "@divert Raijin");
         Telepath(router, "Carl", "hello there");
 
-        Assert.Equal("Raijin", handler.TargetForTests);   // armed, just can't forward
+        // Armed, just can't forward.
+        Assert.Contains(_replies, b => Encoding.Latin1.GetString(b).Contains("Now diverting telepaths to: Raijin"));
     }
 }

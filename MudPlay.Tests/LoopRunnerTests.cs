@@ -195,6 +195,14 @@ public sealed class LoopRunnerTests : IDisposable
     // 1/2 expand to [N (1→2), S (2→1)] — a 2-step cycle the runner
     // can complete a full lap of with just one round-trip observation
     // pair.
+    // The game refuses the step a few seconds after the last try, as the refusal of
+    // a reroute's re-sent step comes.
+    private static void RefusedLater(Harness h, ManualClock clock)
+    {
+        clock.Advance(TimeSpan.FromSeconds(3));
+        h.Tracker.NoteMoveBlocked();
+    }
+
     private static Loop AbCycle() =>
         new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
 
@@ -510,7 +518,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         Assert.Null(h.Runner.CurrentLoop);
-        Assert.Same(loop, h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal(loop.Name, h.Runner.PendingReconnectResumeName);
         Assert.Contains(loop, h.Runner.HeldLoops);
     }
 
@@ -1062,24 +1070,24 @@ public sealed class LoopRunnerTests : IDisposable
     [Fact]
     public void RolledReveal_PastTheCap_EntersRecovery_AndFailsOnTheLoopsOwnBudget()
     {
-        Harness h = NewHarness(RolledRevealRooms, tbinfoJson: RolledRevealTbInfo);
+        ManualClock clock = new();
+        Harness h = NewHarness(RolledRevealRooms, tbinfoJson: RolledRevealTbInfo, clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.Start(AbCycle());
         int Reveals() => h.Sent.Count(b => Encoding.Latin1.GetString(b) == "clear rubble\r");
 
         for (int miss = 0; miss < SpecialExitDispatch.RolledRevealRetryCap; miss++)
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
         Assert.Equal(LoopState.Running, h.Runner.State);
         Assert.Equal(1 + SpecialExitDispatch.RolledRevealRetryCap, Reveals());
         Assert.Equal(SpecialExitDispatch.RolledRevealRetryCap, h.Runner.RolledRevealRetries);
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
 
-        h.Tracker.NoteMoveBlocked();                      // the cap is spent: recovery
+        RefusedLater(h, clock);                      // the cap is spent: recovery
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
 
         for (int i = 0; i < 20 && h.Runner.State != LoopState.Idle; i++)
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
         // One more reveal for each of the loop's recoveries, never a second ten.
@@ -1093,13 +1101,9 @@ public sealed class LoopRunnerTests : IDisposable
         // A block that never clears must not reroute forever — the bounded
         // budget (MaxRecoverAttempts = 3) eventually surfaces as Failed so the
         // Nav chip and toolbar don't hang in a "recovering" state indefinitely.
-        Harness h = NewHarness();
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
-
-        // This test spends the budget deliberately, back-to-back. Production
-        // spaces attempts so a reroute that instantly re-blocks can't burn all
-        // three in one millisecond; that pacing isn't what's under test here.
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.Start(AbCycle());
 
         // Four explicit refusals: three consume the retry budget (each reroutes
@@ -1107,7 +1111,7 @@ public sealed class LoopRunnerTests : IDisposable
         // cap and fails.
         for (int i = 0; i < 4; i++)
         {
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
         }
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
@@ -1178,7 +1182,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
         Assert.Empty(h.Events);
     }
 
@@ -1200,8 +1204,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
-        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
-        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Stopped && e.Detail.Contains("disconnected"));
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
@@ -1222,7 +1225,7 @@ public sealed class LoopRunnerTests : IDisposable
         // (a real reconnect would have re-established it via the login sequence).
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);   // one-shot, consumed
+        Assert.Null(h.Runner.PendingReconnectResumeName);   // one-shot, consumed
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
         Assert.Equal(LoopState.Running, h.Runner.State);
         Assert.Equal(2, h.Sent.Count);   // fresh Start() sent step 1 again
@@ -1252,12 +1255,12 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Equal(sent, h.Sent.Count);
         Assert.True(h.Runner.ReconnectResumeHeldForMasterSwitch);
-        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
 
         off = false;
         h.Runner.ResumeAfterMasterSwitch();
 
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
         Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
         Assert.Equal(LoopState.Running, h.Runner.State);
     }
@@ -1321,14 +1324,13 @@ public sealed class LoopRunnerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         h.Runner.NotifyDisconnected();
-        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
         int sent = h.Sent.Count;
 
         h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
             null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null));
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.Equal(sent, h.Sent.Count);
     }
@@ -1347,7 +1349,6 @@ public sealed class LoopRunnerTests : IDisposable
         h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
             null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null, AtEntry: false));
 
-        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
     }
 
     // Report paradigm-20260923-092317: the leader's link dropped mid-loop. Back in the
@@ -1369,7 +1370,7 @@ public sealed class LoopRunnerTests : IDisposable
 
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));     // the prompt, read ahead of its lines
 
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
         Assert.Equal(LoopState.Paused, h.Runner.State);         // a paused run, not an idle one
         Assert.True(h.Runner.ReconnectResumeHeldForReform);
         Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.ReconnectReformGate));
@@ -1408,7 +1409,7 @@ public sealed class LoopRunnerTests : IDisposable
 
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Null(h.Runner.PendingReconnectResumeName);
         Assert.Equal(LoopState.Paused, h.Runner.State);
         Assert.Single(h.Sent);                      // no step out of the room
 
@@ -1482,7 +1483,7 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Idle, h.Runner.State);
         Assert.False(h.Runner.ReconnectResumeHeldForReform);
         Assert.False(h.Coordinator.IsPaused);
-        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
         h.Ticks.RunDue(LoopRunner.ReconnectReformHoldMax);            // the old hold's timer does nothing
         Assert.Equal(LoopState.Idle, h.Runner.State);
 
@@ -1614,19 +1615,15 @@ public sealed class LoopRunnerTests : IDisposable
         // but every refusal resolves while paused — confirms the resume-time
         // recovery path is bounded by MaxRecoverAttempts exactly like the
         // real-time one, not an unbounded retry loop.
-        Harness h = NewHarness();
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
-
-        // This test spends the budget deliberately, back-to-back. Production
-        // spaces attempts so a reroute that instantly re-blocks can't burn all
-        // three in one millisecond; that pacing isn't what's under test here.
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.Start(AbCycle());
 
         for (int i = 0; i < 4; i++)
         {
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
             h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
         }
 
@@ -1640,8 +1637,8 @@ public sealed class LoopRunnerTests : IDisposable
     [Fact]
     public void RepeatedFleeResumes_DoNotExhaustTheRecoveryBudget()
     {
-        Harness h = NewHarness();
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
 
@@ -1649,6 +1646,7 @@ public sealed class LoopRunnerTests : IDisposable
         {
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate);   // a fight at the step's target
             h.Tracker.SetLocated(new RoomKey(1, 1));                      // the flee put us back
+            clock.Advance(TimeSpan.FromSeconds(3));
             h.Runner.ResumeAfterFlee(new RoomKey(1, 1));
             h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
         }
@@ -2049,8 +2047,8 @@ public sealed class LoopRunnerTests : IDisposable
     [Fact]
     public void RepeatedGenuineDesyncs_StillExhaustTheRecoveryBudget()
     {
-        Harness h = NewHarness();
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
 
@@ -2058,6 +2056,7 @@ public sealed class LoopRunnerTests : IDisposable
         {
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
             h.Tracker.SetLocated(new RoomKey(1, 1));
+            clock.Advance(TimeSpan.FromSeconds(3));
             h.Runner.ResumeAfterRecovery(new RoomKey(1, 1));
             h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
         }
@@ -2099,27 +2098,23 @@ public sealed class LoopRunnerTests : IDisposable
         // into a real problem once the status clears — a persistent block hit
         // right after confusion wears off still fails after MaxRecoverAttempts
         // genuine attempts, exactly like BlockedAtSource_PersistentBlock above.
-        Harness h = NewHarness();
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         bool confused = true;
-
-        // This test spends the budget deliberately, back-to-back. Production
-        // spaces attempts so a reroute that instantly re-blocks can't burn all
-        // three in one millisecond; that pacing isn't what's under test here.
-        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         h.Runner.SetConfusedCheck(() => confused);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
 
         for (int i = 0; i < 5; i++)
         {
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
         }
         Assert.Equal(LoopState.Running, h.Runner.State);   // unaffected while confused
 
         confused = false;
         for (int i = 0; i < 4; i++)
         {
-            h.Tracker.NoteMoveBlocked();
+            RefusedLater(h, clock);
         }
 
         Assert.Equal(LoopState.Idle, h.Runner.State);

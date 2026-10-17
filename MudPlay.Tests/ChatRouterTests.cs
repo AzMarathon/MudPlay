@@ -1158,7 +1158,6 @@ public sealed class ChatRouterTests
         chat.Dispose();
         router.Dispatch(Line("Forged gossips: hi"));
         Assert.Empty(entries);
-        Assert.Equal(0, router.SubscriptionCount);
     }
 
     [Fact]

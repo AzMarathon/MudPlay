@@ -73,7 +73,7 @@ public sealed class AutoGetItemsManager : IDisposable
     private bool _reLookHeld;
     public bool IsReLookHeld => _reLookHeld;
     private DispatcherTimer? _reLookRelease;
-    internal int ReLookReleaseMs { get; set; } = 1500;
+    private const int ReLookReleaseMs = 1500;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation

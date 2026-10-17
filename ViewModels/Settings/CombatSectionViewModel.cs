@@ -540,9 +540,6 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
     private void OnSessionCommitted() => OnPropertyChanged(nameof(IsDirty));
 
-    public CombatSectionViewModel()
-        : this(AppServices.Current.Profile, CreateStandaloneSession()) { }
-
     // Convenience for SettingsWindowViewModel, which builds the shared session and
     // passes the same instance to the Combat, Health, Spells and Party section VMs.
     // "Include in combat profile" checkboxes, one per header on this tab.
@@ -617,12 +614,6 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         OnChipsChanged();
         _suppressDirty = false;
     }
-
-    // Standalone session for the parameterless (design-time / non-Settings-window)
-    // path; the Settings window builds its own shared instance and injects it.
-    private static CombatProfileStagingSession CreateStandaloneSession() =>
-        new(AppServices.Current.CombatProfiles, AppServices.Current.Profile,
-            () => AppServices.Current.Profile.Current?.Equipment);
 
     private static GameDataCache? TryGetGameData()
     {

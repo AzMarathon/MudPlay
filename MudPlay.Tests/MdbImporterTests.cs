@@ -30,41 +30,6 @@ public sealed class MdbImporterTests
     }
 
     [Fact]
-    public void GetSubfolderPath_ComposesUnderGameDataRoot()
-    {
-        MdbImporter importer = new();
-        string path = importer.GetSubfolderPath("Paradigm-PVE2");
-        Assert.Equal(Path.Combine(importer.GameDataRoot, "Paradigm-PVE2"), path);
-    }
-
-    [Fact]
-    public void GetGameDataFolders_ReturnsSortedSubdirectoryNames()
-    {
-        MdbImporter importer = new();
-        string a = Path.Combine(importer.GameDataRoot, "zzz-test-set-a");
-        string b = Path.Combine(importer.GameDataRoot, "aaa-test-set-b");
-        Directory.CreateDirectory(a);
-        Directory.CreateDirectory(b);
-
-        try
-        {
-            var folders = importer.GetGameDataFolders().ToList();
-            Assert.Contains("aaa-test-set-b", folders);
-            Assert.Contains("zzz-test-set-a", folders);
-
-            // Sort is alphabetical / ordinal-ignore-case.
-            int idxA = folders.IndexOf("aaa-test-set-b");
-            int idxZ = folders.IndexOf("zzz-test-set-a");
-            Assert.True(idxA < idxZ, "Expected alphabetical ordering");
-        }
-        finally
-        {
-            Directory.Delete(a, recursive: true);
-            Directory.Delete(b, recursive: true);
-        }
-    }
-
-    [Fact]
     public async Task ImportAsync_MissingFile_ReturnsFailureWithNotFoundMessage()
     {
         MdbImporter importer = new();

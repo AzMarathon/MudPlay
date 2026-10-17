@@ -1883,8 +1883,6 @@ public sealed class PartyComebackManager : IDisposable
         Resume();
     }
 
-    internal bool FollowTimerRunning => _followTimer is not null;
-
     // The member a recovery was for, seen following again while the master switch
     // was off.
     private string? _rejoinedWhileOff;

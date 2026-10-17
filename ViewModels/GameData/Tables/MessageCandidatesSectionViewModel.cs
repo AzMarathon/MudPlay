@@ -36,8 +36,6 @@ public sealed class MessageCandidatesSectionViewModel : GameDataTableSectionView
         "Raw Text", "Seen In", "Likely source", "Occurrences", "First Seen", "Last Seen", "Status",
     };
 
-    public override string SearchKeyColumn => "Raw Text";
-
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "unrecognized", "candidate", "message",

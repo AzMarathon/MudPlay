@@ -395,7 +395,6 @@ public sealed class HazardBuffRefreshTests : IDisposable
 
         Assert.True(index.StripsBuff(1361, 711));
         Assert.False(index.StripsBuffs(1361));
-        Assert.Equal(0, index.StripSpellCount);
     }
 
     // A transport token casts negate magic ahead of its teleport.

@@ -20,12 +20,6 @@ public enum RouteRequirementKind
 // HazardProtection it's the any-of counter set (hold at least one).
 public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<int> ItemIds)
 {
-    // True when this gate merely unlocks a SHORTER route — the crosser can reach the
-    // destination without it (an optional shortcut, not a hard requirement). Never
-    // auto-obtained: a shortcut item may have no reliable source (e.g. a monster drop
-    // that may be dead), so fetching it could strand the walk with nothing gained.
-    public bool Optional { get; init; }
-
     // True when the crosser ALREADY carries this gate's item. Surfaced (rather than
     // silently dropped as "not blocked") so the requirement list is complete — the
     // route genuinely crosses this gate, the crosser just already satisfies it.
@@ -1239,7 +1233,7 @@ public static class RouteChoicePlanner
             if (req.Kind is RouteRequirementKind.HazardProtection) continue;
             // Never source an optional shortcut item (may be unsourceable) or one the
             // crosser already carries.
-            if (req.Optional || req.Carried) continue;
+            if (req.Carried) continue;
             foreach (int id in req.ItemIds)
             {
                 if (id <= 0 || ids.Contains(id)) continue;

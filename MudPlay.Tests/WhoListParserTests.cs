@@ -166,7 +166,6 @@ public sealed class WhoListParserTests
         AssertHas(db, given: "Eddas",   family: "Fenwicks",  align: "Neutral", title: "Druid Novice",   gang: null);   // Neutral is named outright
         AssertHas(db, given: "Garrick", family: "Holme",     align: "Good",    title: "Kai Warrior",    gang: "Old People Only");
         AssertHas(db, given: "Isolde",  family: "Jute",      align: "Good",    title: "Fighter Priest", gang: null);
-        Assert.Equal(5, p.LastBlockRowCount);
     }
 
     // The same players in fantasy style: a Neutral reputation is a blank left

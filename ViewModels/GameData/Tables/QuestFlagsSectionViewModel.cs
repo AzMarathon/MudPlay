@@ -59,8 +59,6 @@ public sealed class QuestFlagsSectionViewModel : GameDataTableSectionViewModel, 
         "Kind", "Source", "Location",
     };
 
-    public override string SearchKeyColumn => "Name";
-
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "quest", "flag", "ability", "giveability", "checkability", "testability",

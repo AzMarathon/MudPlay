@@ -568,7 +568,6 @@ public sealed class BfsMapperTests : IDisposable
         // Cellar (1/7) is reachable only via D from 1/6 → it's not
         // in the layout at all (no position, no off-grid entry).
         Assert.DoesNotContain(new RoomKey(1, 7), layout.Positions.Keys);
-        Assert.Empty(layout.OffGrid);                     // off-grid lane is gone
 
         // 1/6 still gets its VerticalHint.Down so the renderer can
         // draw the down-arrow glyph on the source cell.
@@ -592,7 +591,7 @@ public sealed class BfsMapperTests : IDisposable
     }
 
     [Fact]
-    public void BuildLayout_Collision_RoutesSecondVisitToOffGrid()
+    public void BuildLayout_SecondRouteToARoom_KeepsItsFirstPlacement()
     {
         // Non-Euclidean fixture: 1/1 N → 1/2 N → 1/3.
         // Then 1/3 W → 1/4, 1/4 S → 1/2.  Going 1/1 N N W S returns to
@@ -635,7 +634,6 @@ public sealed class BfsMapperTests : IDisposable
         // 1/3 W would also be (-1, -2) → no collision actually; both
         // are distinct coords.
         Assert.Equal((-1, -1), layout.Positions[new RoomKey(1, 4)]);
-        Assert.Empty(layout.OffGrid);
     }
 
     [Fact]
@@ -719,7 +717,6 @@ public sealed class BfsMapperTests : IDisposable
         var (bfs, _) = NewMapper();
         RoomLayout layout = bfs.BuildLayout(new RoomKey(999, 1));
         Assert.Empty(layout.Positions);
-        Assert.Empty(layout.OffGrid);
     }
 
     // ----- cross-plane text portals ----------------------------------

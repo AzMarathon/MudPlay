@@ -23,7 +23,6 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
     public event Action<MonsterEditResult?>? CloseRequested;
 
     public string WccNoStr { get; }
-    public int    MonsterNumber { get; }
 
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private SettingsTier _useTier = SettingsTier.Character;
@@ -228,7 +227,6 @@ public sealed partial class MonsterEditDialogViewModel : ObservableObject, IDial
         _manaModePercentage = manaModePercentage;
         _liveMaxMa = liveMaxMa;
         WccNoStr      = wccNoStr;
-        MonsterNumber = int.TryParse(wccNoStr, out int n) ? n : 0;
         Name          = existing?.Name ?? mdbName;
         // The writable tiers (Character / BBS / Global) plus "Installed defaults" as
         // the last option — picking it resets the record (wipes every tier's

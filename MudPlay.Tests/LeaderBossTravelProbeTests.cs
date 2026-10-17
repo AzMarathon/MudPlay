@@ -86,7 +86,6 @@ public sealed class LeaderBossTravelProbeTests
 
         h.Timers.RunDue(LeaderBossTravelProbe.ReplyTimeout);
         Assert.Empty(h.Answers);
-        Assert.True(h.Probe.WaitingForLeaderToMove);
 
         h.Probe.NoteMoved();
         Assert.Equal(2, h.ProbeWire.Count);
@@ -136,7 +135,6 @@ public sealed class LeaderBossTravelProbeTests
         h.Probe.Ask();
         h.Line("Raijin telepaths: {not moving}");
         Assert.Empty(h.Answers);
-        Assert.True(h.Probe.WaitingForLeaderToMove);
 
         h.Probe.NoteMoved();
         Assert.Equal(2, h.ProbeWire.Count);
@@ -155,7 +153,6 @@ public sealed class LeaderBossTravelProbeTests
         h.Line("Raijin telepaths: {not moving}");
 
         Assert.Equal(new[] { false }, h.Answers);
-        Assert.False(h.Probe.WaitingForLeaderToMove);
     }
 
     [Fact]

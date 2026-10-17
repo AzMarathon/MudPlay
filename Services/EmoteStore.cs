@@ -35,7 +35,7 @@ public sealed class EmoteSet
 // box). Id is a stable handle so the editor can re-find a staged draft it's editing.
 public sealed class EmoteDraft
 {
-    public string Id { get; set; } = System.Guid.NewGuid().ToString("N");
+    public string Id { get; } = System.Guid.NewGuid().ToString("N");
     public string Shortcode { get; set; } = "";
     public string? Emoji { get; set; }
     public string? ImageSourcePath { get; set; }

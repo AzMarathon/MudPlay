@@ -208,7 +208,7 @@ public sealed class MovementControllerTests : IDisposable
         h.Controller.Stop();
 
         Assert.False(h.Loops.ReconnectResumeHeldForMasterSwitch);
-        Assert.Null(h.Loops.PendingReconnectResumeForTests);
+        Assert.Null(h.Loops.PendingReconnectResumeName);
     }
 
     [Fact]
@@ -640,6 +640,65 @@ public sealed class MovementControllerTests : IDisposable
         Assert.Equal(1, e.Asked);
         Assert.Equal(0, first);
         Assert.Equal(1, second);
+    }
+
+    // ----- The user's Stop, the same from the toolbar and the Navigation window -----
+
+    [Fact]
+    public void StopByUser_HoldsAnErrandUnderWay_AndTheNextPressEndsIt()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        Assert.False(h.Controller.StopByUser());
+        Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
+        Assert.NotEqual(WalkState.Idle, h.Walker.State);
+
+        e.Now += TimeSpan.FromSeconds(5);
+        Assert.True(h.Controller.StopByUser());
+
+        Assert.Equal(1, e.Abandoned);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+    }
+
+    [Fact]
+    public void StopByUser_DropsTheRunQueuedBehindAHeldErrand()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        Assert.False(h.Controller.StopByUser());
+        int started = 0;
+        h.Controller.StartUserRun(() => started++);   // asked, answered "resume it first"
+
+        e.Now += TimeSpan.FromSeconds(5);
+        Assert.False(h.Controller.StopByUser());      // the resumed errand is held again
+        e.Now += TimeSpan.FromSeconds(5);
+        Assert.True(h.Controller.StopByUser());       // and ended
+        e.Active = null;
+        h.Controller.NoteErrandStateChanged();
+
+        Assert.Equal(0, started);
+    }
+
+    [Fact]
+    public void StopByUser_EndsAPausedWalk_AndLiftsThePause()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.Pause();
+        Assert.True(h.Controller.IsUserPaused);
+
+        Assert.True(h.Controller.StopByUser());
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.False(h.Controller.IsUserPaused);
+        Assert.False(h.Coordinator.IsPaused);
     }
 
     // Stop is the only stop control there is: pressed again while the errand is

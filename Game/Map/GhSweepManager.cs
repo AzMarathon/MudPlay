@@ -440,6 +440,11 @@ public sealed class GhSweepManager : IDisposable
     public IReadOnlyList<GhSweepStranded> Stranded => _stranded;
     public int CircuitRoomCount => _sweepRooms.Count;
     public int PendingMoveCount => _pending.Count(p => !p.Delivered);
+    // The moves still to make, in the order they were queued.
+    public IReadOnlyList<GhSweepPendingMove> PendingMoves => _pending
+        .Where(p => !p.Delivered)
+        .Select(p => new GhSweepPendingMove(p.From, p.To, p.ItemName, p.Count, p.RequiresSearch, p.IsCarried))
+        .ToList();
     public int CarriedPendingCount => _pending.Count(p => p.IsCarried && !p.Delivered);
     public int HiddenPendingCount => _pending.Count(p => p.RequiresSearch && !p.Delivered);
     public int CompletedSortLaps => _sortLapCount;
@@ -2022,18 +2027,6 @@ public sealed class GhSweepManager : IDisposable
         timer?.Dispose();
         timer = null;
     }
-    internal int QueuedCommandCountForTests => _commandQueue.Count;
-
-    // Weight model, for asserting that a pack temporarily loaded with things
-    // Roomba didn't collect narrows headroom without writing anything off.
-    internal int BestCaseBudgetForTests => BestCaseBudget();
-    internal void SetCarryWeightsForTests(int max, int baseWeight)
-    {
-        _maxCarryWeight = max;
-        _baseCarryWeight = baseWeight;
-        _minBaseCarryWeight = Math.Min(_minBaseCarryWeight, baseWeight);
-    }
-    internal void StrandUnmovableForTests() => StrandUnmovableItems();
 
     // The game reported a rate-limit clobber. On the hard form the last command
     // was DROPPED, so re-queue it at the front; on the soft nudge it probably

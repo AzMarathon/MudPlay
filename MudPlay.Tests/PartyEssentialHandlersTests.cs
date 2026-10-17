@@ -79,21 +79,18 @@ public sealed class PartyEssentialHandlersTests
 
     // ===== Registration shape =====
 
-    [Fact]
-    public void Ctor_RegistersAllCommands()
+    private static readonly string[] Commands =
     {
-        var (engine, _, _, _, _, _) = Setup();
-        // 13 commands: @version @health @status @where @who @path @party
-        // @wait @ok @waiting @lives @invite @join
-        Assert.Equal(13, engine.HandlerCount);
-    }
+        "@version", "@health", "@status", "@where", "@who", "@path", "@party",
+        "@wait", "@ok", "@waiting", "@lives", "@invite", "@join",
+    };
 
     [Fact]
     public void Dispose_UnregistersAll()
     {
         var (engine, handlers, _, _, _, _) = Setup();
         handlers.Dispose();
-        Assert.Equal(0, engine.HandlerCount);
+        Assert.All(Commands, c => Assert.False(engine.UnregisterHandler(c), c));   // already gone
     }
 
     // ===== Query handlers =====

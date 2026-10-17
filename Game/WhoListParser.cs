@@ -212,9 +212,6 @@ public sealed partial class WhoListParser : IDisposable
         ListRead?.Invoke();
     }
 
-    // Number of rows recorded by the most recent who block. Useful for tests / debug.
-    internal int LastBlockRowCount => _rowsThisBlock;
-
     private static bool TryParseRow(string text, out PlayerRowMatch row)
     {
         Match m = PlayerRowPattern().Match(text);

@@ -61,7 +61,7 @@ public sealed class GlobeOfDarknessSeedTests : IDisposable
         Assert.DoesNotContain(applied, r => r.Name == "blind globe");
 
         Feed("The unnatural darkness lifts.");
-        Assert.DoesNotContain(applied, tracker.IsActive);
+        Assert.DoesNotContain(applied, r => tracker.IsActiveByName(r.Name));
     }
 
     [Theory]

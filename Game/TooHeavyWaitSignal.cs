@@ -141,8 +141,6 @@ public sealed class TooHeavyWaitSignal : IDisposable
         _wire.Send("i");
     }
 
-    internal void RecheckForTests() => Recheck();
-
     private void StartTimer()
     {
         if (_timer is not null) return;

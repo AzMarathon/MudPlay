@@ -68,7 +68,7 @@ public sealed class LoopShareTests : IDisposable
     [Fact]
     public void Codec_RoundTripsTheRoute_ButNotFavourite()
     {
-        Loop decoded = LoopShareCodec.Decode(LoopShareCodec.Encode(SampleLoop()));
+        Loop decoded = LoopShareCodec.Decode(LoopShareCodec.Encode(SampleLoop()), out _);
 
         Assert.Equal("King's Road", decoded.Name);
         Assert.Equal("watch the bridge", decoded.Notes);
@@ -92,7 +92,7 @@ public sealed class LoopShareTests : IDisposable
         IReadOnlyList<string> chunks = LoopShareCodec.Encode(loop);
 
         Assert.Contains("\"ld\":3", Unpack(string.Concat(chunks)));
-        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, LoopShareCodec.Decode(chunks).LairEntryDebuff);
+        Assert.Equal(LairEntryDebuffMode.WaitForPriorityBuffs, LoopShareCodec.Decode(chunks, out _).LairEntryDebuff);
     }
 
     // A way of waiting this client doesn't know (one a newer client added) arrives as
@@ -103,7 +103,7 @@ public sealed class LoopShareTests : IDisposable
     {
         string blob = Pack("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\"}],\"ld\":99}");
 
-        Loop decoded = LoopShareCodec.Decode(new[] { blob });
+        Loop decoded = LoopShareCodec.Decode(new[] { blob }, out _);
 
         Assert.Equal(LairEntryDebuffMode.Off, decoded.LairEntryDebuff);
         Assert.Equal(2, decoded.Waypoints.Count);
@@ -151,14 +151,14 @@ public sealed class LoopShareTests : IDisposable
 
         Assert.True(chunks.Count > 1);
         Assert.All(chunks, c => Assert.InRange(c.Length, 1, LoopShareCodec.MaxChunkChars));
-        Assert.Equal(400, LoopShareCodec.Decode(chunks).Waypoints.Count);
+        Assert.Equal(400, LoopShareCodec.Decode(chunks, out _).Waypoints.Count);
     }
 
     [Fact]
     public void Codec_Garbage_IsAFormatException()
     {
-        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { "not*base64!" }));
-        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { "AAAA" }));
+        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { "not*base64!" }, out _));
+        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { "AAAA" }, out _));
     }
 
     // A loop's name is written to the terminal and to a file name, and a room's
@@ -171,7 +171,7 @@ public sealed class LoopShareTests : IDisposable
     [InlineData("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\",\"c\":\"n\\rdrop all\"},{\"r\":\"1/2\"}]}")]
     [InlineData("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\"},{\"r\":\"1/2\",\"c\":\"say hi\\u0007\"}]}")]
     public void Codec_ControlCharacterInTheNameOrACommand_Refused(string json) =>
-        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { Pack(json) }));
+        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { Pack(json) }, out _));
 
     // What chains commands in a loop is plain text, and still goes through.
     [Fact]
@@ -180,7 +180,7 @@ public sealed class LoopShareTests : IDisposable
         Loop decoded = LoopShareCodec.Decode(new[]
         {
             Pack("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\",\"c\":\"open door;n^Msearch\"},{\"r\":\"1/2\"}]}"),
-        });
+        }, out _);
 
         Assert.Equal("open door;n^Msearch", decoded.Waypoints[0].Command);
     }
@@ -212,7 +212,7 @@ public sealed class LoopShareTests : IDisposable
     public void Codec_OneRoomLoop_Refused()
     {
         string blob = Pack("{\"n\":\"x\",\"w\":[{\"r\":\"1/1\"}]}");
-        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { blob }));
+        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { blob }, out _));
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public sealed class LoopShareTests : IDisposable
     {
         string blob = Pack("{\"n\":\"" + new string('a', 2_000_000) + "\"}");
         Assert.True(blob.Length < 10_000);   // tiny on the wire…
-        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { blob }));   // …huge inflated
+        Assert.Throws<FormatException>(() => LoopShareCodec.Decode(new[] { blob }, out _));   // …huge inflated
     }
 
     private static string Pack(string json)
@@ -268,7 +268,7 @@ public sealed class LoopShareTests : IDisposable
         Assert.All(data, l => Assert.StartsWith(LoopShareHandler.DataToken + " ", l));
 
         // The data lines decode back to the loop.
-        Loop decoded = LoopShareCodec.Decode(data.Select(l => l.Split(' ')[3]));
+        Loop decoded = LoopShareCodec.Decode(data.Select(l => l.Split(' ')[3]), out _);
         Assert.Equal("King's Road", decoded.Name);
     }
 

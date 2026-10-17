@@ -85,13 +85,6 @@ public sealed class ShortcutSourceCoordinator
         _log = log;
     }
 
-    public bool Active => _phase != Phase.Idle;
-
-    // Can this shortcut item be attempted — does it resolve to a source room? The
-    // card only offers "go get it" when true; otherwise the shortcut is a dead end
-    // and the picker shows it as unobtainable.
-    public bool CanAttempt(int shortcutItemId) => _resolveSource(shortcutItemId) is not null;
-
     // Begin the walk-to-source → obtain → shortcut-or-long flow. Returns false when
     // the item has no resolvable source (caller falls back to the long route).
     // beforeLongRoute runs just ahead of the walk to the destination when the item

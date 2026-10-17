@@ -89,23 +89,6 @@ public sealed class RoomBlacklistStoreTests : IDisposable
     }
 
     [Fact]
-    public void Remove_FiresChanged_OnlyForRealRemoval()
-    {
-        RoomBlacklistStore store = new();
-        store.Add(new RoomKey(15, 200), "Ganghouse");
-        int fires = 0;
-        store.Changed += () => fires++;
-
-        Assert.True(store.Remove(new RoomKey(15, 200)));
-        Assert.Equal(1, fires);
-        Assert.False(store.IsBlacklisted(new RoomKey(15, 200)));
-
-        // Removing an absent key is a no-op.
-        Assert.False(store.Remove(new RoomKey(15, 200)));
-        Assert.Equal(1, fires);
-    }
-
-    [Fact]
     public void ReplaceAll_SwapsContents_AndFiresChangedOnce()
     {
         RoomBlacklistStore store = new();

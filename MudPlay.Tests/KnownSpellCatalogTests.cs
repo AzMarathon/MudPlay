@@ -190,17 +190,6 @@ public sealed class KnownSpellCatalogTests : IDisposable
     }
 
     [Fact]
-    public void GetByShort_ReturnsUsable_NullOtherwise()
-    {
-        KnownSpellCatalog catalog = NewCatalog();
-
-        Assert.Equal(100, catalog.GetByShort("star", 12)!.Value.Number);
-        Assert.Null(catalog.GetByShort("star", 1));     // Warrior can't cast it
-        Assert.Null(catalog.GetByShort("kai1", 12));    // Mage ≠ Kai magery
-        Assert.Null(catalog.GetByShort("nope", 12));    // unknown shortcode
-    }
-
-    [Fact]
     public void ResolveClassNumber_IsCaseInsensitive()
     {
         KnownSpellCatalog catalog = NewCatalog();
@@ -224,7 +213,7 @@ public sealed class KnownSpellCatalogTests : IDisposable
     public void KnownSpell_Formula_FeedsCalculator()
     {
         // star: MinBase 5, MaxBase 10, no scaling, no energy multiplier.
-        KnownSpell star = NewCatalog().GetByShort("star", 12)!.Value;
+        KnownSpell star = NewCatalog().Query(12, 0).Single(s => s.Short == "star");
         Assert.Equal(5, SpellCalculator.MinDamage(star.Formula, level: 10));
         Assert.Equal(10, SpellCalculator.MaxDamage(star.Formula, level: 10));
     }

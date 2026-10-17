@@ -78,7 +78,7 @@ public sealed class CombatProfileGroupTests
         Assert.Equal(fresh.Count, needed.Count);   // the fixture really changed every field
 
         var owner = new Dictionary<string, CombatProfileGroup>();
-        foreach (CombatProfileGroup g in CombatProfileGroupCopy.All)
+        foreach (CombatProfileGroup g in Enum.GetValues<CombatProfileGroup>())
         {
             var target = new CombatSpellProfile();
             CombatProfileGroupCopy.Copy(g, src, target);
@@ -188,7 +188,7 @@ public sealed class CombatProfileGroupTests
         session.SetShared(CombatProfileGroup.Backstab, shared: true);
         session.CommitIfDirty();
 
-        Assert.True(profile.Current.CombatProfiles!.IsShared(CombatProfileGroup.Backstab));
+        Assert.True(profile.Current.CombatProfiles!.SharedGroups?.Contains(CombatProfileGroup.Backstab) == true);
         Assert.All(profile.Current.CombatProfiles.Profiles, p => Assert.True(p.DoBackstab));
     }
 
@@ -211,7 +211,7 @@ public sealed class CombatProfileGroupTests
         session.SetShared(CombatProfileGroup.Backstab, shared: false);
         session.CommitIfDirty();
 
-        Assert.False(profile.Current.CombatProfiles!.IsShared(CombatProfileGroup.Backstab));
+        Assert.False(profile.Current.CombatProfiles!.SharedGroups?.Contains(CombatProfileGroup.Backstab) == true);
         Assert.All(profile.Current.CombatProfiles.Profiles, p => Assert.True(p.DoBackstab));
     }
 

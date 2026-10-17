@@ -586,7 +586,7 @@ public sealed partial class CombatManager : IDisposable
     // CLOSE; unwired leaves it -1 and the legacy wall-clock path runs.
     //
     // Wired (AppServices) to ConfirmedAttackCastCount, NOT RoundDamageTracker's own
-    // RoundCount — that tracker's 5s timer-driven window is sized for DPS/session
+    // round counter — that tracker's 5s timer-driven window is sized for DPS/session
     // stats, not for this. A fast multi-projectile caster can complete more than one
     // real cast inside a single RoundDamageTracker window (its "first hit" anchor
     // only starts counting once combat produces a damage line, so a slow-opening
@@ -621,7 +621,7 @@ public sealed partial class CombatManager : IDisposable
 
     // How many real single-target attack-spell casts OnAttackCastConfirmed has
     // observed landing this session — the precise signal ReadRoundCount is wired to
-    // (see its comment). Monotonic, like RoundDamageTracker.RoundCount; callers
+    // (see its comment). Monotonic, like RoundDamageTracker's round counter; callers
     // baseline against it via _lastTalliedRound, never read it as a target-scoped
     // count.
     internal int ConfirmedAttackCastCount { get; private set; }
@@ -4379,9 +4379,6 @@ public sealed partial class CombatManager : IDisposable
     private bool _heldRoomLookPending;
     private DateTimeOffset _heldRoomLookSentAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan HeldRoomReadWait = TimeSpan.FromSeconds(3);
-
-    // The monster a typed `break` is holding the attack on, or null.
-    public string? UserBreakHoldTarget => _userBreakHold;
 
     // The hold is keeping an engine that would otherwise fight from fighting. The
     // combat tracker's idle watchdog reads it: a quiet room under the hold is meant,

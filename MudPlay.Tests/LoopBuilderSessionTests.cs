@@ -253,17 +253,15 @@ public sealed class LoopBuilderSessionTests : IDisposable
     }
 
     [Fact]
-    public void RemoveLastClick_PopsAndRecomputes()
+    public void RemoveClickAt_TheLast_PopsAndRecomputes()
     {
         // Schema v2: every expansion closes the loop. Two clicks
         // 1→2 expand to N (1→2) + S (2→1, closing) = 2 steps.
-        // After RemoveLastClick we drop back to 1 click which can't
-        // form a cycle, so ExpandedStepCount returns 0.
         (LoopBuilderSessionViewModel s, _) = NewSession();
         s.AddClick(new RoomKey(1, 1));
         s.AddClick(new RoomKey(1, 2));
         s.AddClick(new RoomKey(1, 3));
-        s.RemoveLastClick();
+        s.RemoveClickAt(2);
         Assert.Equal(2, s.Clicks.Count);
         Assert.Equal(2, s.ExpandedStepCount);    // N to 2, S closing back to 1
     }
@@ -390,7 +388,6 @@ public sealed class LoopBuilderSessionTests : IDisposable
         File.WriteAllText(Path.Combine(setRoot, "Rooms.json"), DisconnectedGraph);
         GameDataCache cache = new();
         cache.SwitchSet(_setName);
-        cache.Reload();
         RoomGraphManager graph = new(cache);
         graph.OnActiveSetChanged(_setName);
         BfsMapper bfs = new(graph);

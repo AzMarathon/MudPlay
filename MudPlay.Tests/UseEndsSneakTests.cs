@@ -444,13 +444,14 @@ public sealed class UseEndsSneakTests : IDisposable
     public void SneakedInThenHid_EngineStep_SendsNoSn_IsNotHeld_AndIsSneakingAgain()
     {
         using World w = new() { EngineDriving = true };
-        w.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        MovementCoordinator coordinator = new();
+        w.Stealth.SetMovementCoordinator(coordinator);
         w.Feed("Sneaking...");
         w.Feed("Attempting to hide...");
         Assert.Equal(StealthState.Hidden, w.Stealth.State);
 
         Assert.True(w.Stealth.ReadyToMoveSneaking());
-        Assert.False(w.Stealth.IsHoldingForSneakAnswer);
+        Assert.False(coordinator.IsGateAsserted(MovementCoordinator.SneakSettleGate));
         w.Stealth.RequestPreMoveStealth();
         w.Stealth.NoteDirectionalMoveSent();        // the step's direction goes out
         w.Stealth.NoteTypedMove();

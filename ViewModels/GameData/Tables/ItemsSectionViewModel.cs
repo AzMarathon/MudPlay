@@ -65,8 +65,6 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         TogglesColumn,   // our configured auto-* / carry flags for this item
     };
 
-    public override string SearchKeyColumn => "Name";
-
     public override string? FilterHint =>
         "Type text to match name, item type, worn slot, or weapon / armour type " +
         "(e.g. \"weapon\", \"feet\", \"plate\"), or an auto-toggle word to show only " +
@@ -372,22 +370,4 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
 
         Reload();
     }
-
-    // Test seam: the rendered "Other Info" rows for a given item Number, so the use-cast
-    // effect / damage rendering can be pinned without standing up a dialog. Mirrors what the
-    // edit dialog's read-only pane shows.
-    internal IReadOnlyList<KeyValuePair<string, string>> BuildOtherInfoForTests(string itemNumber)
-        => new ItemMdbViewBuilder(_cache, _playerStats?.Charm ?? 0).Build(itemNumber).OtherInfo;
-
-    // Test seam: the rendered clickable bought/sold shop rows for a given item.
-    internal IReadOnlyList<ShopSaleRow> BuildShopSalesForTests(string itemNumber)
-        => new ItemMdbViewBuilder(_cache, _playerStats?.Charm ?? 0).Build(itemNumber).Shops;
-
-    // Test seam: the clickable "Dropped by" monster links for a given item.
-    internal IReadOnlyList<Edit.DroppedByRow> BuildDroppedByForTests(string itemNumber)
-        => new ItemMdbViewBuilder(_cache, 50).Build(itemNumber).DroppedBy ?? System.Array.Empty<Edit.DroppedByRow>();
-
-    // Test seam: the clickable "Placed in" room links for a given item.
-    internal IReadOnlyList<Edit.PlacedInRow> BuildPlacedInForTests(string itemNumber)
-        => new ItemMdbViewBuilder(_cache, 50).Build(itemNumber).PlacedIn ?? System.Array.Empty<Edit.PlacedInRow>();
 }

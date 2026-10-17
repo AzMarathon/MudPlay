@@ -5802,7 +5802,7 @@ public sealed class AppServices
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
-        // RoundDamageTracker's timer-driven RoundCount. That tracker's 5s window is
+        // RoundDamageTracker's timer-driven round counter. That tracker's 5s window is
         // sized for DPS/session stats, not per-cast precision, and can bundle more
         // than one real cast into a single round for a fast caster, under-counting
         // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
@@ -15642,7 +15642,7 @@ public sealed class AppServices
         {
             // Already satisfied (carried) or an optional shortcut → nothing to source;
             // don't let it veto the auto-obtain, and never source it.
-            if (req.Carried || req.Optional) continue;
+            if (req.Carried) continue;
             if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 or RouteRequirementKind.DoorKey))
                 return false;

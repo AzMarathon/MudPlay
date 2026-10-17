@@ -438,10 +438,6 @@ public sealed partial class ComebackRequester : IDisposable
         }
     }
 
-    // Test seam — a teleport edge takes a room command chain to build, which the
-    // test graph doesn't carry.
-    internal void StampPartyTeleportForTests() => _partyTeleportAt = _now();
-
     // The link dropped. Whatever split there is now is the reconnect's:
     // PartyRejoinCoordinator sends that request, once and inside its own window,
     // so nothing here may add a second one before we follow again.

@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
@@ -158,12 +157,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
         Assert.Equal("n", sent[^1]);
         int reconSearchCount = sent.Count(command => command == "sea");
-
-        // A completed lap with zero pickup/drop progress must not discard the
-        // queue or end the sweep. Transient failures are retried indefinitely.
-        FireSortingLapCompleted(sweep);
-        Assert.Equal(GhSweepManager.SweepPhase.Sorting, sweep.Phase);
-        Assert.Equal(2, sweep.PendingMoveCount);
 
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(5));
@@ -562,7 +555,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // permanently discards items that fit fine once the pack clears. Judged at
         // our emptiest (99 free) the hammer is perfectly carriable, so it stays
         // queued for a later pass.
-        Assert.Equal(99, sweep.BestCaseBudgetForTests);
         Assert.DoesNotContain(sweep.LeftInPlace,
             f => f.ItemName == "war hammer" && f.Reason == GhLeftReason.TooHeavy);
         Assert.Equal(1, sweep.PendingMoveCount);
@@ -670,18 +662,17 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(5));
         Assert.Equal(1, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
-        Assert.Equal(2, sweep.QueuedCommandCountForTests);
 
         // The game says we're going too fast and that the command was dropped —
         // it must be re-sent, not lost.
         string clobbered = sent[^1];
         FeedRouter(router, "You are typing too quickly - command ignored");
-        Assert.Equal(3, sweep.QueuedCommandCountForTests);   // the dropped one is back
 
         // Prompts are ignored while we're deliberately backing off — pushing
         // again the instant the game complained is exactly what got us here.
+        int sentWhileBackingOff = sent.Count;
         _sweepPrompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
-        Assert.Equal(3, sweep.QueuedCommandCountForTests);
+        Assert.Equal(sentWhileBackingOff, sent.Count);
 
         // Backoff over: the same command goes out again.
         _sweepNow += GhSweepManager.RateLimitBackoff;
@@ -700,11 +691,13 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         // Each remaining command waits for its own prompt.
         PaceOut();
         Assert.Equal(3, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
-        Assert.Equal(1, sweep.QueuedCommandCountForTests);
 
         PaceOut();
         Assert.Equal(4, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
-        Assert.Equal(0, sweep.QueuedCommandCountForTests);
+
+        // That was the last of them.
+        PaceOut();
+        Assert.Equal(4, sent.Count(c => c.StartsWith("get ", StringComparison.Ordinal)));
 
         sweep.Dispose();
         ground.Dispose();
@@ -1174,15 +1167,19 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal(1767, h.Sweep.WorkingWeightBudget);
         Assert.Equal(1, h.Sweep.PendingMoveCount);
 
-        // Now the player loots ~1000 of weight Roomba never collected.
-        h.Sweep.SetCarryWeightsForTests(max: 5280, baseWeight: 4508);
-        h.Sweep.StrandUnmovableForTests();
+        // Now the player loots ~1000 of weight Roomba never collected, so the get
+        // at C is refused and the `i` it asks for shows the heavier pack.
+        h.Observe("C", Direction.N, Direction.S);
+        Assert.Equal("get adamantite hauberk", h.Sent[^1]);
+        h.Feed("You cannot carry that much!");
+        Assert.Equal("i", h.Sent[^1]);
+        FeedInventory(h.InventoryFeed, "nothing", currentWeight: 4508, maxWeight: 5280);
 
         // Headroom really has narrowed — that part must stay honest, or we
         // over-fill and earn a capacity refusal.
         Assert.Equal(772, h.Sweep.WorkingWeightBudget);
         // But nothing is written off: "ever" is judged at our emptiest.
-        Assert.Equal(1767, h.Sweep.BestCaseBudgetForTests);
+        Assert.DoesNotContain(h.Sweep.LeftInPlace, l => l.Reason == GhLeftReason.TooHeavy);
         Assert.Equal(1, h.Sweep.PendingMoveCount);
 
         h.Dispose();
@@ -1206,7 +1203,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Observe("A", Direction.N);
 
         // Best case is 380, the hauberk is 800 — unmovable however empty we get.
-        Assert.Equal(380, h.Sweep.BestCaseBudgetForTests);
+        Assert.Equal(380, h.Sweep.WorkingWeightBudget);
         Assert.Equal(0, h.Sweep.PendingMoveCount);
         Assert.Contains(h.Sweep.LeftInPlace, l => l.Reason == GhLeftReason.TooHeavy);
 
@@ -1236,14 +1233,14 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         Assert.Equal(1, h.Sweep.PendingMoveCount);
 
         // First fruitless lap is a grace pass: still sorting, move still queued.
-        FireSortingLapCompleted(h.Sweep);
+        SortLapWithNothingAnswered(h);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
         Assert.Equal(1, h.Sweep.PendingMoveCount);
 
         // Second fruitless lap confirms nothing more can move: the move is stranded
         // and the sweep leaves Sorting (onto its final verification lap) — it does
         // not keep circling.
-        FireSortingLapCompleted(h.Sweep);
+        SortLapWithNothingAnswered(h);
         Assert.NotEqual(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
         Assert.Equal(0, h.Sweep.PendingMoveCount);
         Assert.Contains(h.Sweep.LeftInPlace, l => l.Reason == GhLeftReason.CouldNotComplete);
@@ -1461,7 +1458,6 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
 
         // Base is the player's 2200, not the 3000 that includes our own load.
         Assert.Equal(3080, h.Sweep.WorkingWeightBudget);
-        Assert.Equal(3080, h.Sweep.BestCaseBudgetForTests);
 
         h.Dispose();
     }
@@ -1723,6 +1719,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         public required InventoryManager Inventory { get; init; }
         public required MessageRouter Router { get; init; }
         public required List<string> Sent { get; init; }
+        // The `i` dump lines, as the inventory reads them.
+        public required ServerFeed InventoryFeed { get; init; }
 
         private int _clock;
 
@@ -1814,15 +1812,31 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         return new SweepHarness
         {
             Tracker = tracker, Sweep = sweep, Ground = ground,
-            Inventory = inventory, Router = router, Sent = sent,
+            Inventory = inventory, Router = router, Sent = sent, InventoryFeed = inventoryFeed,
         };
     }
 
     private void FireSearchSettle() => _sweepTimers.RunDue(GhSweepManager.ReconSearchSettle);
 
-    private static void FireSortingLapCompleted(GhSweepManager sweep) =>
-        typeof(GhSweepManager).GetMethod("OnSortingLapCompleted",
-            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(sweep, null);
+    // The sort shuttle goes round once, north to B and back down to A, with nothing
+    // it sends on the way answered.
+    private void SortLapWithNothingAnswered(SweepHarness h)
+    {
+        h.Observe("C", Direction.N, Direction.S);
+        NothingAnswers();
+        h.Observe("B", Direction.S);
+        NothingAnswers();
+        h.Observe("C", Direction.N, Direction.S);
+        NothingAnswers();
+        h.Observe("A", Direction.N);
+        NothingAnswers();
+    }
+
+    private void NothingAnswers()
+    {
+        _sweepNow += TimeSpan.FromSeconds(5);
+        _sweepTimers.Advance(TimeSpan.FromSeconds(5));
+    }
 
     private static void FeedRouter(MessageRouter router, string text) =>
         router.Dispatch(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(),

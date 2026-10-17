@@ -23,7 +23,8 @@ public sealed class HangupSignalTests
     {
         HangupSignal s = new();
         s.SignalHangup();
-        var (disc, supp) = s.PeekForTests();
+        bool disc = s.ConsumeDisconnectIntent();
+        bool supp = s.ConsumeSuppressEntry();
         Assert.True(disc);
         Assert.True(supp);
     }
@@ -104,7 +105,8 @@ public sealed class HangupSignalTests
         HangupSignal s = new();
         s.SignalHangup();
         Assert.True(s.Reset());
-        var (disc, supp) = s.PeekForTests();
+        bool disc = s.ConsumeDisconnectIntent();
+        bool supp = s.ConsumeSuppressEntry();
         Assert.False(disc);
         Assert.False(supp);
     }

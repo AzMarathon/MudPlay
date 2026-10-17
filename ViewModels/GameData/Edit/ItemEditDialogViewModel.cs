@@ -45,10 +45,6 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // container; the runtime resolver enforces the same container gate.
     public bool CanAutoOpen { get; }
 
-    // Non-null only when Auto-open is greyed (non-container) — explains why.
-    public string? AutoOpenTooltip =>
-        CanAutoOpen ? null : "Auto-open applies to container items only.";
-
     // Guards the Auto-buy MaxToGet seed so it fires on a live user tick, not
     // during the ctor's initial load of a saved overlay.
     private readonly bool _initialized;

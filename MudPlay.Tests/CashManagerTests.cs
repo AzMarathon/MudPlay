@@ -10,11 +10,8 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.E — <see cref="CashManager"/> per-currency policy dispatch,
-/// held tally tracking via pick-up / drop lines, and the auto-
-/// deposit threshold trigger.
-/// </summary>
+// CashManager per-currency policy dispatch, the pick-up / drop / hide lines,
+// and the auto-deposit threshold trigger.
 public sealed class CashManagerTests
 {
     private sealed class Harness : IDisposable
@@ -38,7 +35,6 @@ public sealed class CashManagerTests
         // count+denomination heuristic stands alone. Read lazily inside the
         // injected lambda so a test can set it after construction.
         public Func<string, bool>? KnownItem { get; set; }
-        public List<(string Currency, int Count, CashPolicy Policy)> Dispatches { get; } = new();
         public List<long> AutoDeposits { get; } = new();
         public List<(string Currency, int Count)> Collected { get; } = new();
         public List<(string Currency, int Count)> Hidden { get; } = new();
@@ -67,7 +63,6 @@ public sealed class CashManagerTests
                 unansweredClock: () => UnansweredNow(),
                 autoDepositClock: () => AutoDepositNow());
             Cash.SetWireSender(b => Sent.Add(b));
-            Cash.CashDispatched += (c, n, p) => Dispatches.Add((c, n, p));
             Cash.AutoDepositRequested += t => AutoDeposits.Add(t);
             Cash.CoinCollected += (c, n) => Collected.Add((c, n));
             Cash.CoinHidden += (c, n) => Hidden.Add((c, n));
@@ -110,8 +105,6 @@ public sealed class CashManagerTests
 
         Assert.Single(h.Sent);
         Assert.Equal("get 50 gold crown", h.LastSent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
     }
 
     [Fact]
@@ -155,7 +148,6 @@ public sealed class CashManagerTests
 
         Assert.Single(h.Sent);
         Assert.Equal("get 1 gold crown", h.LastSent);
-        Assert.Equal(1, h.Dispatches[0].Count);
     }
 
     // Every get / drop currency command names the coin in full (two words), not
@@ -192,8 +184,6 @@ public sealed class CashManagerTests
         h.Feed("There are 50 copper pieces here.");
 
         Assert.Empty(h.Sent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(CashPolicy.Ignore, h.Dispatches[0].Policy);
     }
 
     [Fact]
@@ -215,8 +205,6 @@ public sealed class CashManagerTests
         h.Feed("There are 50 zorkmid pieces here.");
 
         Assert.Empty(h.Sent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(CashPolicy.Ignore, h.Dispatches[0].Policy);
     }
 
     // ----- master switch ----------------------------------------------
@@ -230,41 +218,43 @@ public sealed class CashManagerTests
         h.Feed("There are 50 gold pieces here.");
 
         Assert.Empty(h.Sent);
-        Assert.Empty(h.Dispatches);
     }
 
-    // ----- held tally + auto-deposit ----------------------------------
+    // ----- pickups, drops + auto-deposit ------------------------------
 
+    // A Discard drop sends nothing more for that coin until the server answers it.
+    // The drop line is the answer, so the next audit drops what's still carried.
     [Fact]
-    public void PickedUp_IncrementsHeldCoin()
+    public void Dropped_AnswersTheDiscardDrop()
     {
         using Harness h = new();
-        h.Feed("You picked up 50 gold pieces.");
+        h.Snapshot = Wealth(5000, gold: 50);
+        h.Settings.GoldPolicy = CashPolicy.Discard;
+        h.Cash.OnSettingsChanged();
+        h.Cash.OnInventoryChanged();             // unanswered: no second drop
+        Assert.Equal(new[] { "drop 50 gold crown" }, h.AllSent);
 
-        Assert.Equal(50, h.Cash.HeldCoin("gold"));
-    }
-
-    [Fact]
-    public void Dropped_DecrementsHeldCoin()
-    {
-        using Harness h = new();
-        h.Feed("You picked up 50 gold pieces.");
         h.Feed("You dropped 20 gold pieces.");
+        h.Cash.OnInventoryChanged();
 
-        Assert.Equal(30, h.Cash.HeldCoin("gold"));
+        Assert.Equal(new[] { "drop 50 gold crown", "drop 50 gold crown" }, h.AllSent);
     }
 
-    // Full coin name on the drop / hide confirmations (live wording), so the
-    // held tally the auto-deposit gates read stays accurate after a stash run.
+    // Full coin name on the drop / hide confirmations (live wording).
     [Fact]
-    public void DroppedAndHidden_FullCoinName_DecrementHeld()
+    public void DroppedAndHidden_FullCoinName_AreCoinLines()
     {
         using Harness h = new();
-        h.Feed("You picked up 30 gold crowns");
+        h.Snapshot = Wealth(5000, gold: 50);
+        h.Settings.GoldPolicy = CashPolicy.Discard;
+        h.Cash.OnSettingsChanged();
+
         h.Feed("You dropped 5 gold crowns.");
         h.Feed("You hid 10 gold crowns.");
+        h.Cash.OnInventoryChanged();
 
-        Assert.Equal(15, h.Cash.HeldCoin("gold"));
+        Assert.Equal(new[] { "drop 50 gold crown", "drop 50 gold crown" }, h.AllSent);
+        Assert.Equal(("gold", 10), Assert.Single(h.Hidden));
     }
 
     [Fact]
@@ -295,22 +285,23 @@ public sealed class CashManagerTests
         h.Feed(line);
 
         Assert.Equal((currency, count), Assert.Single(h.Collected));
-        Assert.Equal(count, h.Cash.HeldCoin(currency));
     }
 
     // Item drops / hides share the "You dropped" / "You hid" verb with coin
     // lines; the coin-noun anchor keeps a colour-adjective item ("a silver
     // key") from being counted as currency.
     [Fact]
-    public void Dropped_ItemNamedLikeCoin_DoesNotAdjustHeld()
+    public void Dropped_ItemNamedLikeCoin_IsNotTheDiscardDrop()
     {
         using Harness h = new();
-        h.Feed("You picked up 10 silver nobles");
-        Assert.Equal(10, h.Cash.HeldCoin("silver"));
+        h.Snapshot = Wealth(1000, silver: 10);
+        h.Settings.SilverPolicy = CashPolicy.Discard;
+        h.Cash.OnSettingsChanged();
 
         h.Feed("You dropped a silver key.");
+        h.Cash.OnInventoryChanged();
 
-        Assert.Equal(10, h.Cash.HeldCoin("silver"));
+        Assert.Equal(new[] { "drop 10 silver noble" }, h.AllSent);
     }
 
     [Fact]
@@ -533,43 +524,35 @@ public sealed class CashManagerTests
 
     // ----- reset tallies ----------------------------------------------
 
+    // A new character starts with the auto-deposit gate armed again.
     [Fact]
-    public void ResetTallies_ClearsHeldCoin()
+    public void ResetTallies_RearmsAutoDeposit()
     {
         using Harness h = new();
-        h.Feed("You picked up 50 gold pieces.");
-        h.Cash.ResetTallies();
+        h.Settings.AutoDepositIfWealthExceeds = 100;
+        h.Settings.BankRoomKey = "bank";
+        h.Snapshot = Wealth(150);
+        h.Cash.OnInventoryChanged();
 
-        Assert.Equal(0, h.Cash.HeldCoin("gold"));
+        h.Cash.ResetTallies();
+        h.Cash.OnInventoryChanged();
+
+        Assert.Equal(2, h.AutoDeposits.Count);
     }
 
     // ----- stash-room foundation (hide pattern) ----------------------
 
     [Fact]
-    public void Hidden_DecrementsHeldCoin()
-    {
-        // Stash room visits run `hide N <coin>` — server replies
-        // "You hid N <coin> pieces.". Without subscribing here the
-        // held tally goes stale and AutoDeposit misfires.
-        using Harness h = new();
-        h.Feed("You picked up 50 gold pieces.");
-        h.Feed("You hid 30 gold pieces.");
-
-        Assert.Equal(20, h.Cash.HeldCoin("gold"));
-    }
-
-    [Fact]
-    public void Hidden_Singular_DecrementsByOne()
+    public void Hidden_Singular_IsOneCoin()
     {
         using Harness h = new();
         h.Feed("You picked up 5 gold pieces.");
         h.Feed("You hid a gold piece.");
 
-        Assert.Equal(4, h.Cash.HeldCoin("gold"));
+        Assert.Equal(("gold", 1), Assert.Single(h.Hidden));
     }
 
-    // The ledger sources coin stashes off the same hide echo the held tally
-    // uses, so a manual `hide N <coin>` (not just an auto stash) reaches the
+    // The ledger sources coin stashes off the hide echo, so a manual `hide N <coin>` (not just an auto stash) reaches the
     // transaction history. CoinHidden carries the normalized currency + count.
     [Fact]
     public void Hidden_RaisesCoinHidden()
@@ -591,18 +574,6 @@ public sealed class CashManagerTests
         h.Feed("You hid 3 iron crown.");
 
         Assert.Empty(h.Hidden);
-        Assert.Equal(50, h.Cash.HeldCoin("gold"));
-    }
-
-    [Fact]
-    public void ItemNamedAfterACoin_Dropped_IsNotCoin()
-    {
-        using Harness h = new();
-        h.Feed("You picked up 50 gold pieces.");
-        h.Feed("You dropped 3 iron crown.");
-
-        Assert.Equal(50, h.Cash.HeldCoin("gold"));
-        Assert.Equal(0, h.Cash.HeldCoin("iron"));
     }
 
     // ----- Discard auto-drop -----------------------------------------
@@ -663,7 +634,6 @@ public sealed class CashManagerTests
         h.Settings.GoldPolicy = CashPolicy.Collect;
         h.Feed("You picked up 100 gold pieces.");
         h.Snapshot = Wealth(100_000, gold: 100);
-        Assert.Equal(100, h.Cash.HeldCoin("gold"));
         h.Sent.Clear();
 
         h.Settings.GoldPolicy = CashPolicy.Discard;
@@ -683,10 +653,8 @@ public sealed class CashManagerTests
     public void Discard_OnSettingsChange_DropsCarriedCoinFromSnapshot()
     {
         using Harness h = new();
-        // Snapshot shows 71 copper on hand, but no CashPickedUp line ever ran,
-        // so the session tally is zero for copper.
+        // Snapshot shows 71 copper on hand, but no CashPickedUp line ever ran.
         h.Snapshot = Wealth(71, copper: 71);
-        Assert.Equal(0, h.Cash.HeldCoin("copper"));
 
         h.Settings.CopperPolicy = CashPolicy.Discard;
         h.Cash.OnSettingsChanged();
@@ -780,9 +748,6 @@ public sealed class CashManagerTests
 
         h.Feed("You notice 56 silver nobles, 198 copper farthings here.");
 
-        Assert.Equal(2, h.Dispatches.Count);
-        Assert.Contains(h.Dispatches, d => d.Currency == "silver" && d.Count == 56);
-        Assert.Contains(h.Dispatches, d => d.Currency == "copper" && d.Count == 198);
         // Silver is Collect → `get 56 silver noble`. Copper is Ignore.
         List<string> lines = h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
         Assert.Contains("get 56 silver noble", lines);
@@ -938,9 +903,7 @@ public sealed class CashManagerTests
 
         h.Feed("You notice 5 gold sovereigns, a longsword, a potion of healing here.");
 
-        Assert.Single(h.Dispatches);
-        Assert.Equal("gold", h.Dispatches[0].Currency);
-        Assert.Equal(5, h.Dispatches[0].Count);
+        Assert.Equal(new[] { "get 5 gold crown" }, h.AllSent);
     }
 
     [Fact]
@@ -958,9 +921,8 @@ public sealed class CashManagerTests
         feed.Line("You notice 5 gold sovereigns, 10 silver nobles, a longsword, a shield, a potion of");
         feed.Line("healing here.");
 
-        Assert.Equal(2, h.Dispatches.Count);
-        Assert.Contains(h.Dispatches, d => d.Currency == "gold" && d.Count == 5);
-        Assert.Contains(h.Dispatches, d => d.Currency == "silver" && d.Count == 10);
+        Assert.Contains("get 5 gold crown", h.AllSent);
+        Assert.Contains("get 10 silver noble", h.AllSent);
     }
 
     // A stacked item whose name starts with a denomination word ("2 gold key")
@@ -977,7 +939,6 @@ public sealed class CashManagerTests
         h.Feed("You notice 2 gold key here.");
 
         Assert.Empty(h.Sent);
-        Assert.Empty(h.Dispatches);
     }
 
     // The tiebreaker must not swallow a real coin pile: a "N <denom> ..." that
@@ -992,8 +953,6 @@ public sealed class CashManagerTests
         h.Feed("You notice 50 gold crowns here.");
 
         Assert.Equal("get 50 gold crown", h.LastSent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
     }
 
     // Report paradigm-20260811-065736: after a kill's corpse-drop is collected, a
@@ -1031,8 +990,6 @@ public sealed class CashManagerTests
 
         h.Feed("You notice 2 gold key, 50 gold crowns here.");
 
-        Assert.Single(h.Dispatches);
-        Assert.Equal(("gold", 50, CashPolicy.Collect), h.Dispatches[0]);
         Assert.Contains("get 50 gold crown", h.AllSent);
     }
 
@@ -1064,7 +1021,6 @@ public sealed class CashManagerTests
         h.Feed("You notice 56 silver nobles here.");
 
         Assert.Empty(h.Sent);
-        Assert.Empty(h.Dispatches);
     }
 
     [Fact]
@@ -1098,8 +1054,6 @@ public sealed class CashManagerTests
 
         Assert.Single(h.Sent);
         Assert.Equal("get 7 silver noble", h.LastSent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(("silver", 7, CashPolicy.Collect), h.Dispatches[0]);
     }
 
     [Fact]
@@ -1111,8 +1065,6 @@ public sealed class CashManagerTests
         h.Feed("11 copper drop to the ground.");
 
         Assert.Empty(h.Sent);
-        Assert.Single(h.Dispatches);
-        Assert.Equal(CashPolicy.Ignore, h.Dispatches[0].Policy);
     }
 
     [Fact]
@@ -1124,7 +1076,6 @@ public sealed class CashManagerTests
         h.Feed("25 gold drop to the ground.");
 
         Assert.Empty(h.Sent);
-        Assert.Empty(h.Dispatches);
     }
 
     [Fact]
@@ -1137,14 +1088,12 @@ public sealed class CashManagerTests
         h.Feed("50 zorkmid drop to the ground.");
 
         Assert.Empty(h.Sent);
-        Assert.Empty(h.Dispatches);
     }
 
     // ----- collect-after-combat defer --------------------------------
 
     // Toggle on + a live hostile: a corpse drop mid-fight must NOT get collected
-    // between kills (that burns the next round's pre-attack). It queues instead —
-    // the dispatch still records the decision so Session Stats / logs see it.
+    // between kills (that burns the next round's pre-attack). It queues instead.
     [Fact]
     public void CollectAfterCombat_DefersCorpseDropWhileHostiles()
     {
@@ -1155,8 +1104,6 @@ public sealed class CashManagerTests
         h.Feed("7 silver drop to the ground.");
 
         Assert.Empty(h.Sent);                       // deferred, not collected
-        Assert.Single(h.Dispatches);                // decision still recorded
-        Assert.Equal(("silver", 7, CashPolicy.Collect), h.Dispatches[0]);
     }
 
     // Once the room clears (no engageable hostiles) the pending collect fires on the

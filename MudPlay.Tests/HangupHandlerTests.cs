@@ -155,7 +155,9 @@ public sealed class HangupHandlerTests
 
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@hangup"));
 
-        var (disc, supp) = signal.PeekForTests();
+        bool disc = signal.ConsumeDisconnectIntent();
+
+        bool supp = signal.ConsumeSuppressEntry();
         Assert.True(disc);
         Assert.True(supp);
     }
@@ -170,7 +172,9 @@ public sealed class HangupHandlerTests
         var (engine, _, _, _, _, signal) = Setup();
         ChatLines.Hear(_routers[engine], Telepath("Stranger", "@hangup"));
 
-        var (disc, supp) = signal.PeekForTests();
+        bool disc = signal.ConsumeDisconnectIntent();
+
+        bool supp = signal.ConsumeSuppressEntry();
         Assert.False(disc);
         Assert.False(supp);
     }
@@ -185,7 +189,8 @@ public sealed class HangupHandlerTests
         handler.SetWireSender(_ => { });   // bind once...
         SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@hangup"));
-        var (disc, supp) = signal.PeekForTests();
+        bool disc = signal.ConsumeDisconnectIntent();
+        bool supp = signal.ConsumeSuppressEntry();
         Assert.True(disc);
         Assert.True(supp);
     }

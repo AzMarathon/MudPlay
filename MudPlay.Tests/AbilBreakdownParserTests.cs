@@ -38,10 +38,10 @@ public sealed class AbilBreakdownParserTests
         AbilBreakdown b = Assert.Single(captured);
         Assert.Equal(145, b.Code);
         Assert.Equal("ManaRegen", b.Label);
-        Assert.Equal(5, b.Granted);
-        Assert.Equal(185, b.Worn);
+        Assert.Equal(5, b.From("granted"));
+        Assert.Equal(185, b.From("worn"));
         Assert.Equal(11, b.Spells);
-        Assert.Equal(10, b.Race);
+        Assert.Equal(10, b.From("race"));
         Assert.Equal(211, b.Total);
     }
 
@@ -68,10 +68,10 @@ public sealed class AbilBreakdownParserTests
         _feed.Prompt();
 
         AbilBreakdown b = Assert.Single(captured);
-        Assert.Equal(185, b.Worn);
+        Assert.Equal(185, b.From("worn"));
         Assert.Equal(0, b.Spells);
-        Assert.Equal(0, b.Granted);
-        Assert.Equal(0, b.Race);
+        Assert.Equal(0, b.From("granted"));
+        Assert.Equal(0, b.From("race"));
         Assert.Equal(185, b.Total);
     }
 
@@ -143,9 +143,9 @@ public sealed class AbilBreakdownParserTests
 
         Assert.Equal(2, captured.Count);
         Assert.Equal(145, captured[0].Code);
-        Assert.Equal(185, captured[0].Worn);
+        Assert.Equal(185, captured[0].From("worn"));
         Assert.Equal(123, captured[1].Code);
-        Assert.Equal(40, captured[1].Worn);
+        Assert.Equal(40, captured[1].From("worn"));
     }
 
     [Fact]

@@ -1,6 +1,4 @@
-using System.Collections;
 using System.Diagnostics;
-using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Conditions;
@@ -166,24 +164,9 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         .Select(e => e.Message)
         .ToList();
 
-    // The sort queue as (item, count, from, to, hidden), read off the sweep's ledger.
-    private List<(string Item, int Count, RoomKey From, RoomKey To, bool Hidden)> Queue()
-    {
-        object pending = typeof(GhSweepManager)
-            .GetField("_pending", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_sweep)!;
-        var queue = new List<(string, int, RoomKey, RoomKey, bool)>();
-        foreach (object move in (IEnumerable)pending)
-        {
-            Type t = move.GetType();
-            queue.Add((
-                (string)t.GetProperty("ItemName")!.GetValue(move)!,
-                (int)t.GetProperty("Count")!.GetValue(move)!,
-                (RoomKey)t.GetProperty("From")!.GetValue(move)!,
-                (RoomKey)t.GetProperty("To")!.GetValue(move)!,
-                (bool)t.GetProperty("RequiresSearch")!.GetValue(move)!));
-        }
-        return queue;
-    }
+    // The sort queue as (item, count, from, to, hidden).
+    private List<(string Item, int Count, RoomKey From, RoomKey To, bool Hidden)> Queue() =>
+        _sweep.PendingMoves.Select(m => (m.ItemName, m.Count, m.From, m.To, m.Hidden)).ToList();
 
     [Fact]
     public void AVaultOfSixHundredStacks_IsQueuedStackForStack_AndLoggedInOneBoundedLine()

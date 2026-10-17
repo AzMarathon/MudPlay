@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
@@ -233,11 +232,7 @@ internal sealed class RoombaHouse : IDisposable
     // The next command the client has sent and the game has not yet answered.
     public string? NextCommand => _answered < Sent.Count ? Sent[_answered] : null;
 
-    public void FireDispatchSettleTimeout() => Invoke("OnDispatchSettleElapsed");
-
-    private void Invoke(string method) =>
-        typeof(GhSweepManager).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(Sweep, null);
+    public void FireDispatchSettleTimeout() => _sweepTimers.RunDue(GhSweepManager.DispatchSettleTimeout);
 
     private static string NameOf(RoomKey room) => room.Equals(A) ? "A" : room.Equals(B) ? "B" : "C";
 
@@ -309,7 +304,7 @@ internal sealed class RoombaHouse : IDisposable
         rows.Add(list ?? "Your search revealed nothing.");
         Wire(rows.ToArray());
         int sent = Sent.Count;
-        Invoke("OnReconSearchSettleElapsed");
+        _sweepTimers.RunDue(GhSweepManager.ReconSearchSettle);
         // A search sent in the middle of a room's batch is paced like the rest of it.
         if (Sweep.Phase == GhSweepManager.SweepPhase.Sorting && Sent.Count == sent)
             PaceOut();

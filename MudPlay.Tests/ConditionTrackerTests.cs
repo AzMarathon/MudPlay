@@ -283,7 +283,7 @@ public sealed class ConditionTrackerTests
 
             h.Feed("You are no longer freezing.");
             Assert.False(h.Tracker.IsConfused);
-            Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+            Assert.DoesNotContain(h.Applied, r => h.Tracker.IsActiveByName(r.Name));
         }
         finally
         {
@@ -457,7 +457,7 @@ public sealed class ConditionTrackerTests
 
         h.Feed("The effect of hypnotic hands wears off.");
         Assert.False(h.Tracker.IsConfused);
-        Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+        Assert.DoesNotContain(h.Applied, r => h.Tracker.IsActiveByName(r.Name));
     }
 
     // The line's own spell has to carry EVERY condition of the record it is read
@@ -509,7 +509,7 @@ public sealed class ConditionTrackerTests
             h.Feed("The effect of hypnotic hands wears off.");
             Assert.Equal(new[] { "hypnotic hands" }, h.Ended.Select(r => r.Name));
             Assert.Equal(MessageFlags.None, h.Tracker.ActiveFlags);
-            Assert.DoesNotContain(h.Applied, h.Tracker.IsActive);
+            Assert.DoesNotContain(h.Applied, r => h.Tracker.IsActiveByName(r.Name));
         }
         finally
         {
@@ -844,12 +844,12 @@ public sealed class ConditionTrackerTests
         // falsely latched buffs on login and suppressed the real cast's confirm.
         h.Feed(readout);
         Assert.Empty(h.Applied);
-        Assert.False(h.Tracker.IsActive(h.Messages.Messages[0]));
+        Assert.False(h.Tracker.IsActiveByName("Bless"));
 
         // The bare effect line — a genuine fresh cast, no parenthetical — still applies.
         h.Feed("You feel lucky!");
         Assert.Single(h.Applied);
-        Assert.True(h.Tracker.IsActive(h.Messages.Messages[0]));
+        Assert.True(h.Tracker.IsActiveByName("Bless"));
     }
 
     // ----- LastActionFailed (confusion fumble) ------------------------

@@ -30,8 +30,6 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         "Given Name", "Family Name", "Gang", "Relationship", "@'s", TogglesColumn, "Last Seen",
     };
 
-    public override string SearchKeyColumn => "Given Name";
-
     // Engine-backed (BBS-tier observations + Char-tier customisations) — see
     // GameDataTableSectionViewModel.ShowUseColumn.
     public override bool ShowUseColumn => false;

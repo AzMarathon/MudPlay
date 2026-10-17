@@ -324,7 +324,6 @@ public sealed class MasterSwitchGateTests
         players.EditCustomization("Bob", new PlayerCustomization(RemoteControls: PlayerRemoteControls.DivertConversations));
         router.Dispatch(new LineExtractor.EmittedLine("Bob telepaths: @divert Raijin",
             new CellAttributes["Bob telepaths: @divert Raijin".Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
-        Assert.Equal("Raijin", handler.TargetForTests);
 
         handler.MasterSwitchOff = () => off;
         router.Dispatch(new LineExtractor.EmittedLine("Ann telepaths: hello there",

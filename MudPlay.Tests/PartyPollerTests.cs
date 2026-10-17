@@ -544,7 +544,7 @@ public sealed class PartyPollerTests
         // Baseline = max half (always positive).
         Assert.Equal(40, m.BaselineHp);
         // Percent reflects the actual negative value (-5/40 = -12).
-        // The ProgressBar control will clamp at 0; HpDisplay surfaces
+        // The ProgressBar control will clamp at 0; HpRichDisplay surfaces
         // the real "-2/40" so the user can see they're dropped.
         Assert.Equal(-12, m.HpPercent);
         Assert.Equal(34, m.BaselineMp);

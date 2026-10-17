@@ -225,14 +225,6 @@ public sealed class CombatCalculatorTests
 
     // ----- Magic resist ----------------------------------------------------
 
-    [Fact]
-    public void CalcMR_WeightsWillpowerTriple()
-    {
-        // (INT + WIL*3)/4 + mods. INT 100, WIL 100 → 400/4 = 100.
-        Assert.Equal(100, CombatCalculator.CalcMR(100, 100));
-        Assert.Equal(110, CombatCalculator.CalcMR(100, 100, 10));
-    }
-
     // ----- Backstab --------------------------------------------------------
 
     [Fact]

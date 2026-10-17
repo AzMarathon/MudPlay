@@ -190,16 +190,9 @@ public sealed class SpellsSettingsTests
 
     // ----- Bless-slot count policy + sparse persistence --------------
 
-    [Theory]
-    [InlineData(RealmType.Stock, SpellsSettings.StockBlessSlotCount)]
-    [InlineData(RealmType.ParaMud, SpellsSettings.ParaMudBlessSlotCount)]
-    public void BlessSlotCountFor_MatchesRealmCap(RealmType realm, int expected)
-        => Assert.Equal(expected, SpellsSettings.BlessSlotCountFor(realm));
-
     [Fact]
-    public void BlessSlotCounts_StockTenParaMudFifteen()
+    public void BlessSlotCount_ParaMudFifteen()
     {
-        Assert.Equal(10, SpellsSettings.StockBlessSlotCount);
         Assert.Equal(15, SpellsSettings.ParaMudBlessSlotCount);
     }
 

@@ -32,15 +32,6 @@ public sealed class CharacterCalculatorTests
     }
 
     [Fact]
-    public void CalcTotalCpAtLevel_SumsTrainingGains_PlusBaseCp()
-    {
-        // Levels 2..10 each give 10 → 90, plus baseCP 5.
-        Assert.Equal(95, CharacterCalculator.CalcTotalCpAtLevel(10, baseCP: 5));
-        // A level-10 Kang (BaseCP 100) spending nothing has 190 CP total.
-        Assert.Equal(190, CharacterCalculator.CalcTotalCpAtLevel(10, baseCP: 100));
-    }
-
-    [Fact]
     public void CalcCpCostForStatPoint_ScalesEveryTenAboveRaceMin()
     {
         // delta 0..9 → cost 1; delta 10..19 → cost 2.

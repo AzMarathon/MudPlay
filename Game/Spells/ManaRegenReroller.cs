@@ -63,12 +63,11 @@ public sealed class ManaRegenReroller : IDisposable
     // signature of nature tap / mana flux (the magnitude is rolled from the
     // level-scaled Min/Max range on each cast). A fixed +N regen buff (AbilVal =
     // N) or a mana HoT (chaos surge, codes 150 / 123) is excluded — rerolling
-    // those is pointless. Thin alias over RegenSpellClassifier.Classify's
-    // ManaRegenRoll trait so the "what counts as a roll spell" rule lives in
-    // exactly one place, shared by the caller's landing classifier and the
-    // Spells tab's range readout.
+    // those is pointless. Thin alias over RegenSpellClassifier.IsManaRegenRoll so
+    // the "what counts as a roll spell" rule lives in exactly one place, shared by
+    // the caller's landing classifier and the Spells tab's range readout.
     public static bool IsRollSpell(in SpellFormulaInput formula)
-        => RegenSpellClassifier.Has(formula, RegenSpellTraits.ManaRegenRoll);
+        => RegenSpellClassifier.IsManaRegenRoll(formula);
 
     private readonly AbilBreakdownParser _parser;
     private readonly Func<ManaRegenRerollConfig> _readConfig;

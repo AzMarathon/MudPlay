@@ -129,18 +129,4 @@ public sealed class AutoLairSettingsTests
         Assert.Equal(TimeSpan.FromSeconds(0.1), model.EstimateTravel(1));
     }
 
-    [Fact]
-    public void EncumbranceGated_TimesProperty_LiveSwap()
-    {
-        // The Settings tab's Apply replaces Times in place — the next
-        // EstimateTravel call must see the new table without a model
-        // re-construct.
-        PlayerState state = new() { Encumbrance = EncumbranceLevel.Medium };
-        EncumbranceGatedTravelCostModel model = new(state,
-            new EncumbranceHopTimes { Medium = 2.0 });
-        Assert.Equal(TimeSpan.FromSeconds(4), model.EstimateTravel(2));
-
-        model.Times = new EncumbranceHopTimes { Medium = 3.0 };
-        Assert.Equal(TimeSpan.FromSeconds(6), model.EstimateTravel(2));
-    }
 }

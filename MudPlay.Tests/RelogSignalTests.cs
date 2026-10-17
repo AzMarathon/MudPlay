@@ -22,7 +22,7 @@ public sealed class RelogSignalTests
     {
         RelogSignal s = new();
         s.SignalRelog();
-        Assert.True(s.PeekForTests());
+        Assert.True(s.ConsumeRelogIntent());
     }
 
     [Fact]

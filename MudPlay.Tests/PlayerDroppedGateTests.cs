@@ -27,6 +27,7 @@ public sealed class PlayerDroppedGateTests
         public MessageRouter Router { get; } = new();
         public PartyManager Party { get; }
         public PlayerDroppedGate Dropped { get; }
+        // Each drop and each recovery, as the program log tells them.
         public int ChangeEvents { get; private set; }
 
         public Harness()
@@ -36,7 +37,12 @@ public sealed class PlayerDroppedGateTests
             PartyState partyState = new();
             Party = new PartyManager(Router, partyState);
             Dropped = new PlayerDroppedGate(State, Gate, Coordinator, Party, Log);
-            Dropped.MortallyWoundedChanged += () => ChangeEvents++;
+            Log.EntryAdded += entry =>
+            {
+                if (entry.Message.StartsWith("Mortally wounded (", StringComparison.Ordinal)
+                    || entry.Message.StartsWith("Recovered from mortal wound", StringComparison.Ordinal))
+                    ChangeEvents++;
+            };
         }
 
         // PromptParser's write order: values first, HasPromptData last.

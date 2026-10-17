@@ -512,7 +512,7 @@ public sealed partial class PartyManager : IDisposable
     //
     // We mirror absolute values into the same observable fields the rest of the
     // roster uses — PartyMember.BaselineHp + HpPercent, etc. — so the
-    // PartyMember.HpDisplay computation works identically for self and others.
+    // PartyMember.HpRichDisplay computation works identically for self and others.
     // For non-self members we only know percent from par + max from the on-join
     // @health round-trip (computed-back current = max × pct / 100); for self we
     // know exact current + max from PromptParser, and the percent is recomputed
@@ -564,9 +564,9 @@ public sealed partial class PartyManager : IDisposable
         foreach (PartyMember m in State.Members)
         {
             if (!m.IsSelf) continue;
-            // Baseline = max (drives HpDisplay's "cur/max" formatting).
+            // Baseline = max (drives HpRichDisplay's "cur/max" formatting).
             // Percent = exact current * 100 / max — int rounding here is
-            // fine because HpDisplay multiplies max back out the same
+            // fine because HpRichDisplay multiplies max back out the same
             // way for non-self members; self always has the precise
             // baseline so the cur it computes lines up.
             m.BaselineHp = _playerState.MaxHp;
@@ -1828,10 +1828,4 @@ public sealed partial class PartyManager : IDisposable
         if (removedSelf) State.SelfIsLeader = false;
     }
 
-    private static PlayerPosition ParsePosition(string raw) => raw.ToLowerInvariant() switch
-    {
-        "resting"    => PlayerPosition.Resting,
-        "meditating" => PlayerPosition.Meditating,
-        _            => PlayerPosition.Standing,
-    };
 }

@@ -64,8 +64,6 @@ public sealed partial class CombatEntryRefusalHandler : IDisposable
         _wireSender = sender;
     }
 
-    internal bool IsSettling => _settling;
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine) return;

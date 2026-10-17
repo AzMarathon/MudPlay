@@ -385,8 +385,6 @@ public sealed class PlayerDatabaseTests
     {
         PlayerDatabase db = new(new ProfileService(), () => null);
         db.RecordObservation("Raijin Storm", null, null, null, null, null, null, DateTime.UtcNow);
-        List<(string Given, PlayerRelationship Relationship)> raised = new();
-        db.RelationshipChanged += (g, rel) => raised.Add((g, rel));
 
         Assert.True(db.SetRelationship("Raijin Storm", PlayerRelationship.Enemy, PvpAction.Flee));
         Assert.False(db.SetRelationship("Raijin", PlayerRelationship.Enemy, PvpAction.Flee));   // unchanged
@@ -395,7 +393,6 @@ public sealed class PlayerDatabaseTests
         PlayerRecord r = db.Find("Raijin")!;
         Assert.Equal(PlayerRelationship.Enemy, r.Relationship);
         Assert.Equal(PvpAction.Flee, r.PvpResponse);
-        Assert.Equal(("Raijin", PlayerRelationship.Enemy), Assert.Single(raised));
     }
 
     [Fact]

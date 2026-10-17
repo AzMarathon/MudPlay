@@ -116,7 +116,7 @@ public sealed class PlayerLookManager : IDisposable
         TryLookBack(match.Groups[0]);
     }
 
-    // Test seam — runs the look-back decision directly.
+    // The look-back decision.
     internal void TryLookBack(string? name)
     {
         if (_wireSender is null) return;
@@ -135,8 +135,8 @@ public sealed class PlayerLookManager : IDisposable
         TryLookAtArrival(e.Name);
     }
 
-    // Test seam — runs the arrival look decision directly (caller has already
-    // filtered to EntityKind.Player).
+    // The arrival look decision (the caller has already filtered to
+    // EntityKind.Player).
     internal void TryLookAtArrival(string? name)
     {
         if (_wireSender is null) return;

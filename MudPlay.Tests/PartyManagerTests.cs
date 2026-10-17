@@ -1278,59 +1278,6 @@ public sealed class PartyManagerTests
         Assert.True(router.TryGetPattern(KnownPatterns.PartyMemberDeath,    out _));
     }
 
-    // ===== PartyMember.HpDisplay / MaDisplay =====
-    //
-    // The PartyWindow row template binds directly to these so the
-    // visual updates without an MVVM-side converter. Before the on-join
-    // @health round-trip completes (BaselineHp == 0), fall back to the
-    // raw "percent%" form so the row still says something useful. After
-    // the baseline arrives, compute current = baseline * percent / 100
-    // and render "current/max".
-
-    [Fact]
-    public void HpDisplay_FallsBackToPercent_WhenBaselineUnknown()
-    {
-        PartyMember m = new() { HpPercent = 75 };
-        Assert.Equal("75%", m.HpDisplay);
-    }
-
-    [Fact]
-    public void HpDisplay_RendersCurOverMax_WhenBaselineKnown()
-    {
-        // 720 max at 90% = 648 current. Integer division matches the
-        // percent display the par poll uses so the numbers don't drift
-        // by ±1 across renders.
-        PartyMember m = new() { BaselineHp = 720, HpPercent = 90 };
-        Assert.Equal("648/720", m.HpDisplay);
-    }
-
-    [Fact]
-    public void HpDisplay_UpdatesWhenPercentChanges()
-    {
-        // Verify the [NotifyPropertyChangedFor(nameof(HpDisplay))]
-        // wiring — changing percent fires PropertyChanged for
-        // HpDisplay so the bound TextBlock refreshes on every par
-        // poll.
-        PartyMember m = new() { BaselineHp = 200, HpPercent = 100 };
-        Assert.Equal("200/200", m.HpDisplay);
-        m.HpPercent = 50;
-        Assert.Equal("100/200", m.HpDisplay);
-    }
-
-    [Fact]
-    public void MaDisplay_FallsBackToPercent_WhenBaselineUnknown()
-    {
-        PartyMember m = new() { MpPercent = 33 };
-        Assert.Equal("33%", m.MaDisplay);
-    }
-
-    [Fact]
-    public void MaDisplay_RendersCurOverMax_WhenBaselineKnown()
-    {
-        PartyMember m = new() { BaselineMp = 300, MpPercent = 66 };
-        Assert.Equal("198/300", m.MaDisplay);
-    }
-
     // ===== PartyMember.HpRichDisplay / MaRichDisplay =====
     //
     // Skeleton-design verbose form for the stacked HP+MA column:
@@ -1422,8 +1369,8 @@ public sealed class PartyManagerTests
         Assert.Equal(60,  self.HpPercent);  // 90/150 = 60%
         Assert.Equal(80,  self.BaselineMp);
         Assert.Equal(50,  self.MpPercent);  // 40/80  = 50%
-        Assert.Equal("90/150", self.HpDisplay);
-        Assert.Equal("40/80",  self.MaDisplay);
+        Assert.Equal("H:90/150 60%", self.HpRichDisplay);
+        Assert.Equal("M:40/80 50%",  self.MaRichDisplay);
     }
 
     [Fact]

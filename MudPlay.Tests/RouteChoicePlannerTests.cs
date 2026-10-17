@@ -576,7 +576,6 @@ public sealed class RouteChoicePlannerTests
             // The orb is genuinely required; the held gate key surfaces as carried.
             RouteRequirement orb = Assert.Single(choice.Requirements,
                 r => r.Kind == RouteRequirementKind.CarryItem && r.ItemIds.SequenceEqual(new[] { 807 }));
-            Assert.False(orb.Optional);
             Assert.False(orb.Carried);
             RouteRequirement key = Assert.Single(choice.Requirements,
                 r => r.Kind == RouteRequirementKind.DoorKey && r.ItemIds.SequenceEqual(new[] { 806 }));

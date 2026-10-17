@@ -389,7 +389,7 @@ public sealed class AutoLairManagerTests : IDisposable
         h.Roam.Mark(new RoomKey(1, 1));
         h.Roam.Mark(new RoomKey(1, 3));
         h.Roam.Start();
-        h.Roam.StartEngagementForTests();
+        h.Tracker.SetLocated(h.Roam.CurrentTarget!.Value);   // walked into the lair
         Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
         return h;
     }
@@ -808,9 +808,9 @@ public sealed class AutoLairManagerTests : IDisposable
 
     // A failed entry for a reason that may pass is retried without end, and each
     // further failure at the same lair waits twice as long, from 2 s to a cap of
-    // 60 s; an entry that works starts the count again.
+    // 60 s, until an entry works.
     [Fact]
-    public void FailedEntries_ToTheSameLair_BackOffToTheCap_AndASuccessResets()
+    public void FailedEntries_ToTheSameLair_BackOffToTheCap_UntilOneWorks()
     {
         (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
         using (h)
@@ -827,7 +827,6 @@ public sealed class AutoLairManagerTests : IDisposable
                 doors.Calls[i].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
 
                 Assert.Contains(TimeSpan.FromSeconds(expected[i]), h.LairTimers.PendingDelays);
-                Assert.Equal(i + 1, h.Roam.FailedEntriesForTests);
                 h.LairTimers.RunDue(TimeSpan.FromSeconds(expected[i]));
                 RunEntry(h);
             }
@@ -839,7 +838,6 @@ public sealed class AutoLairManagerTests : IDisposable
                 new HashSet<Direction> { Direction.E, Direction.U }));
 
             Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
-            Assert.Equal(0, h.Roam.FailedEntriesForTests);
         }
     }
 
@@ -913,7 +911,7 @@ public sealed class AutoLairManagerTests : IDisposable
             h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
             RunEntry(h);
 
-            h.Roam.StartEngagementForTests();           // in the lair, by the user's own steps
+            h.Tracker.SetLocated(new RoomKey(3, 595));   // in the lair, by the user's own steps
             h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
             h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
             Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);

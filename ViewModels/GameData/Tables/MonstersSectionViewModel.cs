@@ -113,8 +113,6 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             "SpellImmu", "Animal", "NonLiving", "CastsSpells", "HasLoot",
         };
 
-    public override string SearchKeyColumn => "Name";
-
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "monster", "mob", "enemy", "creature", "lair", "regen", "respawn",

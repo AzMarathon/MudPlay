@@ -302,10 +302,6 @@ public sealed class RemoteCommandManager : IDisposable
         return _prefixHandlers.TryRemove(prefix, out _);
     }
 
-    // Total handlers currently registered. Useful for tests and the LogService
-    // startup line.
-    public int HandlerCount => _handlers.Count;
-
     // Outcome of TryInvokeLocal, so the caller can map a refusal to the right
     // status rather than guessing from a bool.
     public enum LocalInvokeResult

@@ -192,16 +192,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // inside one second, none of which could have gone differently because nothing
     // about the world changed between them (report stock-20260904-143436). An
     // attempt is only a real chance if something has had time to change.
-    private TimeSpan _recoveryAttemptSpacing = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RecoveryAttemptSpacing = TimeSpan.FromSeconds(2);
     private DateTimeOffset _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
-
-    // Test seam: budget tests fire attempts back-to-back on purpose, which the
-    // spacing would otherwise swallow. Zero here means "every attempt counts",
-    // which is what those tests are actually asserting.
-    internal TimeSpan RecoveryAttemptSpacingForTests
-    {
-        set => _recoveryAttemptSpacing = value;
-    }
 
     // Waypoint the walker is currently approaching during LoopState.Approaching.
     // Null when not approaching.
@@ -2988,10 +2980,6 @@ public sealed class LoopRunner : IRecoverableEngine
         ArmStallWatchdog($"step {_index + 1}: {why}, one more wait");
     }
 
-    // Test seam — the loop NotifyDisconnected captured to resume on the next
-    // in-game prompt, or null if nothing is pending.
-    internal Loop? PendingReconnectResumeForTests => _pendingReconnectResume;
-
     private void Write(byte[] bytes, string reason)
     {
         if (_wireSender is null)
@@ -3312,7 +3300,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // echoing, rather than act on it.
     private bool RecoveryWouldDeclineAsEcho() =>
         !_resumingAfterFlee && _recoverAttempts > 0
-        && _now() - _lastRecoveryAttemptAt < _recoveryAttemptSpacing;
+        && _now() - _lastRecoveryAttemptAt < RecoveryAttemptSpacing;
 
     private void EnterRecovery(string reason)
     {

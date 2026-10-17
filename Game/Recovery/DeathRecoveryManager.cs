@@ -3144,13 +3144,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
     }
 
-    // True when the record names a death-log file that still exists on disk.
-    public bool HasDeathLog(DeathRecord record)
-    {
-        ArgumentNullException.ThrowIfNull(record);
-        return ResolveDeathLogPath(record) is { } path && File.Exists(path);
-    }
-
     // Read a record's captured death log, or null when it has none / the file is
     // gone / unreadable. The "How did I Die?" viewer treats null as "nothing to
     // show".

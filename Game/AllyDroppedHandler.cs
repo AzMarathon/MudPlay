@@ -541,10 +541,6 @@ public sealed partial class AllyDroppedHandler : IDisposable
         return space >= 0 ? name[..space] : name;
     }
 
-    // ----- Test seams ----------------------------------------------------
-
-    internal bool IsTrackingForTests(string given) => _downed.ContainsKey(GivenName(given));
-
     public void Dispose()
     {
         if (_disposed) return;

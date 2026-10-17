@@ -2254,9 +2254,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         Raise(new WalkEvent(WalkEventKind.Stopped, reason, dest, WillResume: willResume));
     }
 
-    public void Pause() => _coordinator.AssertGate(MovementCoordinator.UserGate);
-    public void Resume() => _coordinator.ClearGate(MovementCoordinator.UserGate);
-
     // A move already on the wire carried us out of a room where we'd engaged a
     // hostile (combat gate was held) before it died. The step can't be recalled,
     // but we must not keep walking the route deeper past a fight we committed to.

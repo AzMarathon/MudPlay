@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Reflection;
 using System.Text;
 using MudPlay.Game.Cash;
 using MudPlay.Game.Inventory;
@@ -201,20 +199,8 @@ public sealed class GhSweepSearchCountsTests : IDisposable
 
     private List<(string Item, int Count, RoomKey To, bool Hidden)> Queue()
     {
-        object pending = typeof(GhSweepManager)
-            .GetField("_pending", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_sweep)!;
-        var queue = new List<(string, int, RoomKey, bool)>();
-        foreach (object move in (IEnumerable)pending)
-        {
-            Type t = move.GetType();
-            Assert.Equal(Store, (RoomKey)t.GetProperty("From")!.GetValue(move)!);
-            queue.Add((
-                (string)t.GetProperty("ItemName")!.GetValue(move)!,
-                (int)t.GetProperty("Count")!.GetValue(move)!,
-                (RoomKey)t.GetProperty("To")!.GetValue(move)!,
-                (bool)t.GetProperty("RequiresSearch")!.GetValue(move)!));
-        }
-        return queue;
+        Assert.All(_sweep.PendingMoves, m => Assert.Equal(Store, m.From));
+        return _sweep.PendingMoves.Select(m => (m.ItemName, m.Count, m.To, m.Hidden)).ToList();
     }
 
     [Fact]

@@ -3,7 +3,7 @@ namespace MudPlay.Services;
 // Application-wide log ring buffer with severity tags. Producers call Log
 // (or one of the per-severity shorthands); consumers subscribe to EntryAdded
 // or snapshot the buffer via Snapshot. The LogPaneWindow is the primary
-// consumer; the status bar binds to Latest.
+// consumer.
 //
 // Thread-safety: Log may be called from any thread (e.g., the Telnet read
 // loop). The ring buffer is guarded by an internal lock; the EntryAdded
@@ -33,7 +33,6 @@ public sealed class LogService
     private int _head;          // next write slot
     private int _count;         // live entries in the ring (≤ Capacity)
     private long _totalAppended;  // monotonic append ordinal; see TotalAppended
-    private LogEntry? _latest;
     private readonly LogEntry[] _problems = new LogEntry[ProblemCapacity];
     private int _problemHead;
     private int _problemCount;
@@ -133,12 +132,6 @@ public sealed class LogService
         get { lock (_gate) { return _count; } }
     }
 
-    // Most recently appended entry, or null if nothing has been logged yet.
-    public LogEntry? Latest
-    {
-        get { lock (_gate) { return _latest; } }
-    }
-
     // Count of entries EVER appended, not just those still in the ring. Unlike a
     // ring index it never goes backwards or repeats, so a consumer that polls
     // ("what's new since I last looked?") can hold on to one number across ring
@@ -180,7 +173,6 @@ public sealed class LogService
             _head = (_head + 1) % Capacity;
             if (_count < Capacity) _count++;
             _totalAppended++;
-            _latest = entry;
             if (severity is LogSeverity.Warn or LogSeverity.Error)
             {
                 _problems[_problemHead] = entry;
@@ -284,7 +276,6 @@ public sealed class LogService
             Array.Clear(_ring);
             _head = 0;
             _count = 0;
-            _latest = null;
             Array.Clear(_problems);
             _problemHead = 0;
             _problemCount = 0;
@@ -332,19 +323,4 @@ public sealed class LogService
     public void Warn(string source, string message, string? context)
         => Log(LogSeverity.Warn, source, message, context);
 
-    // Append a Debug entry with a Context payload. Generation-gated on the
-    // Debug toggle.
-    public void Debug(string source, string message, string? context)
-    {
-        if (!IsDebugEnabled) return;
-        Log(LogSeverity.Debug, source, message, context);
-    }
-
-    // Append a Combat entry with a Context payload. Generation-gated on the
-    // Combat toggle.
-    public void Combat(string source, string message, string? context)
-    {
-        if (!IsCombatEnabled) return;
-        Log(LogSeverity.Combat, source, message, context);
-    }
 }

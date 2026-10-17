@@ -99,7 +99,7 @@ public sealed class AllyDroppedHandlerTests
         h.Handler.HoldForMasterSwitch();
         h.Enabled = false;
         Assert.False(h.GateAsserted);
-        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.DoesNotContain("MudPlay", h.Handler.DownedGivenNames);
         h.Wire.Clear();
 
         h.Enabled = true;
@@ -107,7 +107,7 @@ public sealed class AllyDroppedHandlerTests
 
         Assert.True(h.GateAsserted);
         Assert.True(h.WireHas("aid MudPlay\r"));
-        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.Contains("MudPlay", h.Handler.DownedGivenNames);
     }
 
     // One who dropped while the switch was off is owed a rescue too.
@@ -154,7 +154,7 @@ public sealed class AllyDroppedHandlerTests
 
         Assert.True(h.GateAsserted);
         Assert.True(h.WireHas("aid MudPlay\r"));
-        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.Contains("MudPlay", h.Handler.DownedGivenNames);
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public sealed class AllyDroppedHandlerTests
 
         Assert.True(h.GateAsserted);
         Assert.True(h.WireHas("aid MudPlay\r"));
-        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.Contains("MudPlay", h.Handler.DownedGivenNames);
     }
 
     // Aid only stops the bleeding — they can't accept an invite until their HP is
@@ -302,7 +302,7 @@ public sealed class AllyDroppedHandlerTests
         ChatLines.Hear(h.Router, ChatChannel.TelepathIncoming, "MudPlay", "{HP=200/200,MA=100/100}");
 
         Assert.False(h.GateAsserted);
-        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.DoesNotContain("MudPlay", h.Handler.DownedGivenNames);
     }
 
     [Fact]
@@ -317,7 +317,7 @@ public sealed class AllyDroppedHandlerTests
         ChatLines.Hear(h.Router, ChatChannel.TelepathIncoming, "MudPlay", "{HP=20/200}");
 
         Assert.True(h.GateAsserted);
-        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.Contains("MudPlay", h.Handler.DownedGivenNames);
     }
 
     [Fact]
@@ -333,7 +333,7 @@ public sealed class AllyDroppedHandlerTests
         h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
 
         Assert.False(h.GateAsserted);
-        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.DoesNotContain("MudPlay", h.Handler.DownedGivenNames);
     }
 
     [Fact]
@@ -351,7 +351,7 @@ public sealed class AllyDroppedHandlerTests
         h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere", IsInvited = true });
 
         Assert.True(h.GateAsserted);
-        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.Contains("MudPlay", h.Handler.DownedGivenNames);
         Assert.Contains("MudPlay", h.Handler.AidedDownedGivenNames());
     }
 
@@ -425,6 +425,6 @@ public sealed class AllyDroppedHandlerTests
         h.Clock = h.Clock.AddSeconds(1);
         h.Timers.RunAll();
         Assert.False(h.GateAsserted);
-        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        Assert.DoesNotContain("MudPlay", h.Handler.DownedGivenNames);
     }
 }

@@ -1027,9 +1027,6 @@ public sealed class RoomTracker
         _requestRedisplay?.Invoke();
     }
 
-    // Test seam — whether the wait for a room is running.
-    internal bool CastDisplayWaitArmedForTests => _castDisplayTimer is not null;
-
     // We stand in a landing booked off the room passed through. The game shows the
     // landing next; until it has, that display is owed, and when it doesn't come in
     // time the room is asked for instead. Not when the wait for a room had already

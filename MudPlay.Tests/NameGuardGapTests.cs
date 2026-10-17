@@ -75,8 +75,6 @@ public sealed class NameGuardGapTests : IDisposable
 
         Assert.DoesNotContain(refused, new GameDataCache(AppPaths.GameDataRoot).AvailableSets);
         Assert.Contains(Set, new GameDataCache(AppPaths.GameDataRoot).AvailableSets);
-        Assert.DoesNotContain(refused, new MdbImporter().GetGameDataFolders());
-        Assert.Contains(Set, new MdbImporter().GetGameDataFolders());
         Assert.DoesNotContain(refused, _bbs.ListNames());
         Assert.Contains(Bbs, _bbs.ListNames());
         List<ProfileRef> listed = _profiles.ListAll().ToList();

@@ -281,7 +281,11 @@ public sealed class HealthManager : IDisposable
     private int _lastSeenMaxMa = -1;
     private DateTimeOffset _maxHpChangedAt;
     private DateTimeOffset _maxMaChangedAt;
-    private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
+    // True between the run-if-below reaction (a flee for leader / solo, or a
+    // broadcast @heal for a party follower) and the next time
+    // PlayerState.InCombat goes false. Single-shot per combat so a low-HP fight
+    // can't burn the reaction on every HP-changed event.
+    private bool _fledThisCombat;
 
     // The flee move last sent, and the ways out the game refused during this run by
     // the room they were tried from. Dropped when the run ends.
@@ -868,18 +872,12 @@ public sealed class HealthManager : IDisposable
         return waits;
     }
 
-    // True between the run-if-below reaction (a flee for leader / solo, or a
-    // broadcast @heal for a party follower) and the next time
-    // PlayerState.InCombat goes false. Single-shot per combat so a low-HP fight
-    // can't burn the reaction on every HP-changed event.
-    public bool FledThisCombat => _fledThisCombat;
-
     // True while an HP-triggered flee retreat is actively in progress — the
     // engine is paused and we're walking (or parked awaiting HP recovery on) the
     // flee route. Drops back to false once HP climbs above the run-trigger and
     // the engine resumes. The room-entity classifier reads this so a monster that
     // pursues us mid-flee does NOT re-arm the combat gate: we keep running instead
-    // of turning to fight the thing we're fleeing. Distinct from FledThisCombat,
+    // of turning to fight the thing we're fleeing. Distinct from _fledThisCombat,
     // which stays true for the rest of the combat even after the retreat ends.
     public bool IsFleeing => _fleeEngine is not null;
 
@@ -2802,8 +2800,6 @@ public sealed class HealthManager : IDisposable
         _restHeldPendingReconfirm = false;
         Evaluate();
     }
-
-    public void NoteRoomChanged() => NoteRoomChanged(newRoom: null);
 
     // Reset States: drop a flee in progress, and the engine it would resume once HP
     // recovers, so a stopped loop / walk isn't restarted afterwards.

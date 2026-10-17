@@ -199,8 +199,8 @@ public sealed class RemoteCommandCatalogTests
         // @seen / @panic, and @home (mudop-only, won't-wire), and added
         // MudPlay-specific verbs (@help, @atkprio, @atkorder, @lair).
         // 56 is the current floor.
-        Assert.True(RemoteCommandCatalog.Count >= 56,
-            $"Catalog should hold at least 56 entries; has {RemoteCommandCatalog.Count}.");
+        Assert.True(RemoteCommandCatalog.Map.Count >= 56,
+            $"Catalog should hold at least 56 entries; has {RemoteCommandCatalog.Map.Count}.");
     }
 
     // ===== Per-command help (surfaced by @help <command>) =====

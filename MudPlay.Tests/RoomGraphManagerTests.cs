@@ -379,7 +379,7 @@ public sealed class RoomGraphManagerTests : IDisposable
         // of truth; the Rooms table is released, and gone at the cache's
         // next idle sweep since nothing reads it again.
         cache.EvictIdle(GameDataCache.IdleEvictAfter);
-        Assert.DoesNotContain("Rooms", cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Rooms"));
     }
 
     [Fact]
@@ -515,8 +515,17 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 11), both[0]);
     }
 
+    // The room's own name and exits find it and nothing else, as a sighting of it
+    // would.
+    private static bool FoundAlone(RoomGraphManager graph, RoomKey key)
+    {
+        Room room = graph.GetRoom(key)!;
+        return graph.FindCandidates(room.Name, new HashSet<Direction>(room.Exits.Keys))
+            .SequenceEqual(new[] { key });
+    }
+
     [Fact]
-    public void IsUnique_TrueForOneOfOneTuple()
+    public void FindCandidates_OneOfOneTuple_FindsTheRoomAlone()
     {
         SeedRooms("alpha", TwinRoomsJson);
         GameDataCache cache = NewCache();
@@ -526,13 +535,13 @@ public sealed class RoomGraphManagerTests : IDisposable
 
         // All three have distinct (name, exit-mask) tuples even though
         // the names are all identical.
-        Assert.True(graph.IsUnique(new RoomKey(1, 10)));
-        Assert.True(graph.IsUnique(new RoomKey(1, 11)));
-        Assert.True(graph.IsUnique(new RoomKey(1, 12)));
+        Assert.True(FoundAlone(graph, new RoomKey(1, 10)));
+        Assert.True(FoundAlone(graph, new RoomKey(1, 11)));
+        Assert.True(FoundAlone(graph, new RoomKey(1, 12)));
     }
 
     [Fact]
-    public void IsUnique_FalseForAmbiguousTuple()
+    public void FindCandidates_AmbiguousTuple_FindsEveryRoomInIt()
     {
         // Two rooms with same name AND same exit set.
         const string AmbiguousJson = """
@@ -562,28 +571,16 @@ public sealed class RoomGraphManagerTests : IDisposable
         graph.OnActiveSetChanged("beta");
 
         // 2/1 has Hallway + {N}; 2/3 has Hallway + {N}. Ambiguous.
-        Assert.False(graph.IsUnique(new RoomKey(2, 1)));
-        Assert.False(graph.IsUnique(new RoomKey(2, 3)));
+        Assert.False(FoundAlone(graph, new RoomKey(2, 1)));
+        Assert.False(FoundAlone(graph, new RoomKey(2, 3)));
 
         // 2/2 has Hallway + {S}; nothing else collides. Unique.
-        Assert.True(graph.IsUnique(new RoomKey(2, 2)));
-    }
-
-    [Fact]
-    public void IsUnique_FalseForUnknownKey()
-    {
-        SeedRooms("alpha", TwoRoomJson);
-        GameDataCache cache = NewCache();
-        cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
-
-        Assert.False(graph.IsUnique(new RoomKey(999, 999)));
+        Assert.True(FoundAlone(graph, new RoomKey(2, 2)));
     }
 
     // ----- unreachable filter (CannotBeReached) ----------------------
 
-    // Same fixture as IsUnique_FalseForAmbiguousTuple: 2/1 and 2/3 are both
+    // Same fixture as FindCandidates_AmbiguousTuple_FindsEveryRoomInIt: 2/1 and 2/3 are both
     // "Hallway" + {N}, so they share a candidate bucket the ConfigureUnreachable
     // predicate can prune.
     private const string HallwayAmbiguousJson = """

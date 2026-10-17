@@ -143,7 +143,7 @@ public sealed class ToolbarSettingsTests
     }
 
     [Fact]
-    public void ToolbarConfig_Snapshot_RoundTripsThroughDto()
+    public void ToolbarConfig_ApplyFrom_TakesTheDtosLayout()
     {
         ToolbarConfig live = new();
         live.ApplyFrom(new ToolbarSettings
@@ -155,11 +155,9 @@ public sealed class ToolbarSettingsTests
             },
         });
 
-        ToolbarSettings snap = live.Snapshot();
-        Assert.NotNull(snap.Layout);
-        Assert.Equal(2, snap.Layout!.Count);
-        Assert.Equal("OpenSettings",             snap.Layout[0].ActionId);
-        Assert.Equal(ToolbarItemKind.Separator,  snap.Layout[1].Kind);
+        Assert.Equal(2, live.Layout.Count);
+        Assert.Equal("OpenSettings",             live.Layout[0].ActionId);
+        Assert.Equal(ToolbarItemKind.Separator,  live.Layout[1].Kind);
     }
 
     // ===== Visibility + position (Show / Position) =====
@@ -238,7 +236,7 @@ public sealed class ToolbarSettingsTests
     }
 
     [Fact]
-    public void ToolbarConfig_Snapshot_RoundTripsVisibilityAndPosition()
+    public void ToolbarConfig_ApplyFrom_TakesVisibilityAndPosition()
     {
         ToolbarConfig live = new();
         live.ApplyFrom(new ToolbarSettings
@@ -246,9 +244,8 @@ public sealed class ToolbarSettingsTests
             Visible  = false,
             Position = ToolbarPosition.Right,
         });
-        ToolbarSettings snap = live.Snapshot();
-        Assert.False(snap.Visible);
-        Assert.Equal(ToolbarPosition.Right, snap.Position);
+        Assert.False(live.Visible);
+        Assert.Equal(ToolbarPosition.Right, live.Position);
     }
 
     [Fact]

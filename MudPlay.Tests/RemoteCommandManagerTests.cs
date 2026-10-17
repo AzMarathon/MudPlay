@@ -91,15 +91,6 @@ public sealed class RemoteCommandManagerTests
     }
 
     [Fact]
-    public void RegisterHandler_IncrementsHandlerCount()
-    {
-        var (engine, _, _) = Setup();
-        engine.RegisterHandler("@health", PlayerRemoteControls.QueryHealthStatus, _ => { });
-        engine.RegisterHandler("@where",  PlayerRemoteControls.QueryLocation,     _ => { });
-        Assert.Equal(2, engine.HandlerCount);
-    }
-
-    [Fact]
     public void UnregisterHandler_RemovesIt()
     {
         var (engine, _, _) = Setup();

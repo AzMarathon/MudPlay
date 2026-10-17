@@ -56,12 +56,6 @@ public sealed partial class RouteDetailsDialogViewModel : ObservableObject, IDia
     public string BandLegend =>
         $"green ≤ {GreenMax:0}%      yellow ≤ {YellowMax:0}%      red > {YellowMax:0}%";
 
-    public RouteDetailsDialogViewModel(string title, IReadOnlyList<RouteDetailRow> rows)
-        : this(title, rows, false,
-            MonsterHitColorSettings.DefaultGreenMax, MonsterHitColorSettings.DefaultYellowMax, null)
-    {
-    }
-
     public RouteDetailsDialogViewModel(
         string title, IReadOnlyList<RouteDetailRow> rows,
         bool colorByHitPercent, int greenMax, int yellowMax,

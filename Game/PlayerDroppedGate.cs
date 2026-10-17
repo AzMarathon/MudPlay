@@ -65,10 +65,6 @@ public sealed class PlayerDroppedGate : IDisposable
     // Drives the EngineSendGate hold + MortallyWoundedGate + party-state wipe.
     public bool IsMortallyWounded { get; private set; }
 
-    // Fires whenever IsMortallyWounded flips, so a status chip can refresh its
-    // "mortally wounded — waiting to recover" flavour.
-    public event Action? MortallyWoundedChanged;
-
     public PlayerDroppedGate(
         PlayerState state,
         EngineSendGate gate,
@@ -132,7 +128,6 @@ public sealed class PlayerDroppedGate : IDisposable
         }
 
         IsMortallyWounded = dropped;
-        MortallyWoundedChanged?.Invoke();
     }
 
     public void Dispose()

@@ -763,12 +763,12 @@ public sealed class PartyComebackManagerTests : IDisposable
         SeatFollower(h, "Tank");
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Assert.True(h.Walker.WalkTo(new RoomKey(1, 2)));    // the user's own walk-to
-        h.Walker.Pause();
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate);
         ChatLines.Hear(h.Router, Telepath("Tank", "@comeback 1/3"));
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
 
         h.Router.Dispatch(Line("Tank started to follow you."));
-        h.Walker.Resume();
+        h.Coordinator.ClearGate(MovementCoordinator.UserGate);
 
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);   // their walk, not the pickup
@@ -2024,7 +2024,7 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         Assert.DoesNotContain("invite Tank", partyWire);
         Assert.Null(h.Comeback.RecoveringMember);
-        Assert.False(h.Comeback.FollowTimerRunning);
+        Assert.Empty(h.ComebackTimers.PendingDelays);
         Assert.True(h.Lair.IsActive);
         Assert.Equal(new[] { "Tank" }, h.Comeback.AwaitedAfterTrainTrip);
 
@@ -2129,7 +2129,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         ChatLines.Hear(h.Router, Telepath("Tank", "@comeback 1/1"));
         h.Tracker.SetLocated(new RoomKey(1, 1));   // there, and re-invited
 
-        Assert.True(h.Comeback.FollowTimerRunning);
+        Assert.NotEmpty(h.ComebackTimers.PendingDelays);
         h.ComebackTimers.RunAll();
 
         Assert.Null(h.Comeback.RecoveringMember);
@@ -2142,9 +2142,9 @@ public sealed class PartyComebackManagerTests : IDisposable
     public void Dispose_UnregistersHandlers()
     {
         Harness h = NewHarness();
-        Assert.True(h.Engine.HandlerCount > 0);
         h.Comeback.Dispose();
-        Assert.Equal(0, h.Engine.HandlerCount);
+        Assert.False(h.Engine.UnregisterHandler("@comeback"));   // already gone
+        Assert.False(h.Engine.UnregisterHandler("@forget"));
 
         h.Lair.Dispose();
         h.Timers.Dispose();

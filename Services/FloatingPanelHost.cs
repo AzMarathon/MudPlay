@@ -38,58 +38,9 @@ public sealed class FloatingPanelHost
 
     private Window? _ownerWindow;
 
-    // Fired whenever a panel's state transitions (Docked / Floating / Hidden).
-    public event Action? LayoutsChanged;
-
     // Set the parent window for floating panels (the main app window). Called
     // once during startup, alongside DialogService.SetMainWindow.
     public void SetOwnerWindow(Window owner) => _ownerWindow = owner;
-
-    // Register a panel. Idempotent on panelId — re-registering with a different
-    // content control throws. Applies any persisted layout pulled in by an
-    // earlier ApplyLayouts call.
-    public void Register(string panelId, UserControl content, ContentControl dockContainer, string floatingTitle)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(panelId);
-        ArgumentNullException.ThrowIfNull(content);
-        ArgumentNullException.ThrowIfNull(dockContainer);
-
-        if (_panels.TryGetValue(panelId, out Registration? existing))
-        {
-            if (!ReferenceEquals(existing.Content, content) ||
-                !ReferenceEquals(existing.DockContainer, dockContainer))
-            {
-                throw new InvalidOperationException(
-                    $"Panel '{panelId}' is already registered with different content / dock controls.");
-            }
-            return;
-        }
-
-        Registration reg = new()
-        {
-            PanelId = panelId,
-            Content = content,
-            DockContainer = dockContainer,
-            FloatingTitle = floatingTitle ?? panelId,
-        };
-
-        if (_pendingLayouts.Remove(panelId, out PanelLayout? persisted))
-        {
-            reg.Layout = persisted;
-        }
-
-        _panels[panelId] = reg;
-        ApplyState(reg, raiseEvent: false);
-    }
-
-    // Move the panel into the dock container.
-    public void Dock(string panelId) => Transition(panelId, PanelState.Docked);
-
-    // Move the panel into its own floating window.
-    public void Float(string panelId) => Transition(panelId, PanelState.Floating);
-
-    // Hide the panel (closes the floating window if any; clears the dock slot).
-    public void Hide(string panelId) => Transition(panelId, PanelState.Hidden);
 
     // Reset every registered panel to its default state (PanelState.Docked) and
     // forget any pending layouts. Bound to the View → Reset layout menu entry.
@@ -101,14 +52,7 @@ public sealed class FloatingPanelHost
             reg.Layout = new PanelLayout();
             ApplyState(reg, raiseEvent: false);
         }
-        LayoutsChanged?.Invoke();
     }
-
-    // Current state of panelId (throws if not registered).
-    public PanelState GetState(string panelId) => GetRegistration(panelId).Layout.State;
-
-    // Returns true if a panel with this id has been registered.
-    public bool IsRegistered(string panelId) => _panels.ContainsKey(panelId);
 
     // Replace all in-memory layouts with the supplied dictionary. Called by the
     // wiring layer on ProfileService.ProfileLoaded. Layouts for already-registered
@@ -125,7 +69,6 @@ public sealed class FloatingPanelHost
                 reg.Layout = new PanelLayout();
                 ApplyState(reg, raiseEvent: false);
             }
-            LayoutsChanged?.Invoke();
             return;
         }
 
@@ -141,7 +84,6 @@ public sealed class FloatingPanelHost
                 _pendingLayouts[id] = layout;
             }
         }
-        LayoutsChanged?.Invoke();
     }
 
     // Capture every panel's current state into a fresh dictionary suitable for
@@ -176,23 +118,6 @@ public sealed class FloatingPanelHost
 
     // ----- Internals -----------------------------------------------------
 
-    private Registration GetRegistration(string panelId)
-    {
-        if (!_panels.TryGetValue(panelId, out Registration? reg))
-            throw new InvalidOperationException($"Panel '{panelId}' is not registered.");
-        return reg;
-    }
-
-    private void Transition(string panelId, PanelState target)
-    {
-        Registration reg = GetRegistration(panelId);
-        if (reg.Layout.State == target && reg.Layout.State != PanelState.Floating) return;
-
-        CaptureFloatingBounds(reg);
-        reg.Layout.State = target;
-        ApplyState(reg, raiseEvent: true);
-    }
-
     private void ApplyState(Registration reg, bool raiseEvent)
     {
         switch (reg.Layout.State)
@@ -224,7 +149,6 @@ public sealed class FloatingPanelHost
                 break;
         }
 
-        if (raiseEvent) LayoutsChanged?.Invoke();
     }
 
     private void AttachToFloating(Registration reg)
@@ -247,7 +171,6 @@ public sealed class FloatingPanelHost
                 DetachFromAnyParent(reg.Content);
                 reg.FloatingWindow = null;
                 reg.Layout.State = PanelState.Hidden;
-                LayoutsChanged?.Invoke();
             };
 
             reg.FloatingWindow = window;

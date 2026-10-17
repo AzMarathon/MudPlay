@@ -13,10 +13,10 @@ namespace MudPlay.Tests;
 public sealed class RouteEtaEstimatorTests
 {
     private static Room Plain(int room, string name = "room") =>
-        new() { Key = new RoomKey(1, room), Name = name, Exits = Room.EmptyExits };
+        new() { Key = new RoomKey(1, room), Name = name, Exits = RoomExitSet.Empty };
 
     private static Room Lair(int room, string lairTag, string name = "lair") =>
-        new() { Key = new RoomKey(1, room), Name = name, RawLairTag = lairTag, Exits = Room.EmptyExits };
+        new() { Key = new RoomKey(1, room), Name = name, RawLairTag = lairTag, Exits = RoomExitSet.Empty };
 
     // 1 s/hop flat model keeps the travel arithmetic trivial so assertions
     // isolate the lair-dwell accounting.

@@ -146,7 +146,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.Equal(new[] { House }, next.Graph.FindCandidates(HouseName, HouseExits));
         Assert.Equal(new[] { House }, next.Graph.FindByName(HouseName).Select(r => r.Key));
         Assert.Equal(new[] { House }, next.Graph.FindByNameCoveringExits(HouseName, new HashSet<Direction> { Direction.N }));
-        Assert.True(next.Graph.IsUnique(House));
         // The cellar was never named and stays so.
         Assert.True(next.Graph.GetRoom(Cellar)!.HasUnknownName);
 

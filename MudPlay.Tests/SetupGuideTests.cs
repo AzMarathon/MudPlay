@@ -271,6 +271,7 @@ public sealed class SetupGuideTests
         f.Connected = true;
         vm.Refresh();
         Assert.True(vm.IsLastStep);
-        Assert.True(vm.AllDone);
+        Assert.True(vm.CurrentIsDone);
+        Assert.Equal("Finish", vm.NextButtonText);
     }
 }

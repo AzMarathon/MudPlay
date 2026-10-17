@@ -86,7 +86,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
 
         Assert.Equal("break\r", h.LastSent);
         Assert.Equal(1, h.SendCount);
-        Assert.True(h.Handler.IsSettling);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(3) }, h.Settle.PendingDelays);
         // The move is still in flight until the settle beat elapses.
         Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
     }
@@ -100,7 +100,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.Feed.Line(CombatGatedLine);
         h.Settle.RunAll();
 
-        Assert.False(h.Handler.IsSettling);
+        Assert.Empty(h.Settle.PendingDelays);
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), h.Tracker.State.CurrentRoom!.Key);
     }
@@ -127,7 +127,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.Feed.Line(CombatGatedLine);
 
         Assert.Equal(0, h.SendCount);
-        Assert.False(h.Handler.IsSettling);
+        Assert.Empty(h.Settle.PendingDelays);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.Feed.Line(CombatGatedLine);
 
         Assert.Equal(0, h.SendCount);
-        Assert.False(h.Handler.IsSettling);
+        Assert.Empty(h.Settle.PendingDelays);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.Feed.Line("The goblin growls at you.");
 
         Assert.Equal(0, h.SendCount);
-        Assert.False(h.Handler.IsSettling);
+        Assert.Empty(h.Settle.PendingDelays);
     }
 
     [Fact]
@@ -164,6 +164,6 @@ public sealed class CombatEntryRefusalHandlerTests : IDisposable
         h.Feed.Line("[Gossip] Bob: heh 'You may not enter that room while in combat.' noob");
 
         Assert.Equal(0, h.SendCount);
-        Assert.False(h.Handler.IsSettling);
+        Assert.Empty(h.Settle.PendingDelays);
     }
 }

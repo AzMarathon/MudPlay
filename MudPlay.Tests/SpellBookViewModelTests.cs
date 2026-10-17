@@ -258,10 +258,8 @@ public sealed class SpellBookViewModelTests : IDisposable
 
         // Mana cost comes from the cast spell: starlight (100) is free, while
         // high arc (101 → Scroll of Arc) costs 8 mana.
-        Assert.False(wand.CostsMana);
         Assert.Equal("free", wand.ManaText);
         SpellBookItemRowViewModel scroll = vm.CastItems.Single(r => r.ItemName == "Scroll of Arc");
-        Assert.True(scroll.CostsMana);
         Assert.Equal("8 mana", scroll.ManaText);
     }
 

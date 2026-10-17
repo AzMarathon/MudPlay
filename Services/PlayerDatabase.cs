@@ -565,12 +565,8 @@ public sealed class PlayerDatabase
         _observations[given] = existing with { Relationship = relationship, PvpResponse = response };
         Rebuild();
         SaveObservations();
-        RelationshipChanged?.Invoke(given, relationship);
         return true;
     }
-
-    // Raised when a player's relationship or PvP response is set.
-    public event Action<string, PlayerRelationship>? RelationshipChanged;
 
     // Resolve a captured presence-line name (which may be an account name on
     // boards that key logon/logoff lines on the account rather than the

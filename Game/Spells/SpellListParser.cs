@@ -166,9 +166,6 @@ public sealed class SpellListParser : IDisposable
         _state = State.Idle;
     }
 
-    // Number of rows parsed in the most recent / in-progress block. Test/debug aid.
-    internal int LastBlockRowCount => _namesThisBlock.Count;
-
     // ----- line classification -----------------------------------------
 
     private static bool IsHeaderLine(string probe)

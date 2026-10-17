@@ -193,8 +193,6 @@ public sealed class StealthManager : IDisposable
     private bool _settleHold;
     private IDisposable? _settleTimer;
 
-    public bool IsHoldingForSneakAnswer => _settleHold;
-
     // Set when a sneak attempt ends without taking (retries spent, no answer, cooldown
     // cap) — the next step goes unsneaked rather than re-trying forever.
     private bool _moveUnsneakedOnce;

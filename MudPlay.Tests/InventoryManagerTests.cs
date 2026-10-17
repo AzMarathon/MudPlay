@@ -195,7 +195,6 @@ public sealed class InventoryManagerTests
         ReadiedLight light = snap.ReadiedLight!.Value;
         Assert.Equal("lantern", light.Name);
         Assert.Equal(239, light.Readied);
-        Assert.Equal(TimeSpan.FromSeconds(239 * 30), light.RemainingTime);
 
         // The lit light is not double-counted as a plain carried item; the
         // unworn pack still holds the quarterstaff-less bits (dagger).

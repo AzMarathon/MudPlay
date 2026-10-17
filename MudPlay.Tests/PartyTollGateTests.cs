@@ -210,7 +210,6 @@ public sealed class PartyTollGateTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, coordinator, filter);
         if (spellsJson is not null) walker.SetBoatPlanner(new BoatRoutePlanner(graph, bfs));
         LoopRunner runner = new(tracker, coordinator, graph: graph, bfs: bfs, filter: filter, postToUi: act => act());
-        runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
 
         Rig rig = made = new()
         {

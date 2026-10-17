@@ -33,27 +33,6 @@ public sealed class KeybindingStoreTests
     }
 
     [Fact]
-    public void IsConflict_FlagsCollidingChord_ReportsCollidingAction()
-    {
-        KeybindingStore store = new();
-        // F2 is bound to OpenSpellBook by default; rebinding OpenParty
-        // to F2 must flag a conflict.
-        bool collision = store.IsConflict(new KeyChord(Key.F2), excluding: BuiltInAction.OpenParty,
-                                           out BuiltInAction? culprit);
-        Assert.True(collision);
-        Assert.Equal(BuiltInAction.OpenSpellBook, culprit);
-    }
-
-    [Fact]
-    public void IsConflict_ExcludesSpecifiedAction_DuringSelfEdit()
-    {
-        KeybindingStore store = new();
-        // F2 → OpenSpellBook by default. The OpenSpellBook editor
-        // should NOT flag its own current chord as a collision.
-        Assert.False(store.IsConflict(new KeyChord(Key.F2), excluding: BuiltInAction.OpenSpellBook, out _));
-    }
-
-    [Fact]
     public void FindAction_ReturnsBoundAction_ForKnownChord()
     {
         KeybindingStore store = new();
@@ -65,7 +44,6 @@ public sealed class KeybindingStoreTests
     public void Empty_ChordNeverConflicts()
     {
         KeybindingStore store = new();
-        Assert.False(store.IsConflict(KeyChord.Empty, excluding: null, out _));
         Assert.Null(store.FindAction(KeyChord.Empty));
     }
 

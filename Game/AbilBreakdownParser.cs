@@ -47,18 +47,9 @@ public sealed record AbilBreakdown(
         return 0;
     }
 
-    // Quest-awarded contribution (`granted:` line).
-    public int Granted => From("granted");
-
-    // Equipment contribution (`worn:` line).
-    public int Worn => From("worn");
-
     // Live spell contribution (`spells:` line) — the rolled value of a code-145
     // mana-regen buff (nature tap / mana flux), positive or negative.
     public int Spells => From("spells");
-
-    // Racial contribution (`race:` line).
-    public int Race => From("race");
 }
 
 // Stateful parser for `abil <code>` output. The command lists, per source, how

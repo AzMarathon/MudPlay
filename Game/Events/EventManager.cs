@@ -454,7 +454,7 @@ public sealed class EventManager : IDisposable
     // has already been asked about (see the queue choice below).
     private readonly record struct QueuedEvent(ScheduledEvent Event, DateTimeOffset At)
     {
-        public DateTimeOffset FiredAt { get; init; } = At;
+        public DateTimeOffset FiredAt { get; } = At;
         public TimeSpan HeldBySwitch { get; init; }
         public TimeSpan HeldAnswered { get; init; }
     }
@@ -577,8 +577,6 @@ public sealed class EventManager : IDisposable
     // The events the open prompt lists: the answer is about these only, so one
     // that queued after the prompt opened is neither run early nor dropped by it.
     private List<ScheduledEvent>? _offered;
-
-    public bool QueueChoicePending => _choiceSince is not null;
 
     // Open the prompt, or bring the open one forward.
     public event Action? QueueChoiceNeeded;

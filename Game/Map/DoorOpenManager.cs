@@ -237,16 +237,6 @@ public sealed class DoorOpenManager : IDisposable
         TryStartNext();
     }
 
-    // Overload for plain-door callers (no key). Equivalent to the keyed
-    // Enqueue with keyItemId = 0.
-    public void Enqueue(
-        Direction direction,
-        int statRequirement,
-        bool canBash,
-        string sender,
-        Action<DoorOpenResult> reply)
-        => Enqueue(direction, statRequirement, canBash, keyItemId: 0, sender, reply);
-
     // Abort the current request (if any) + drain the queue. Pending
     // callers receive a Failed("flow stopped") reply.
     public void StopAll()

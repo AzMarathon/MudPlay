@@ -25,10 +25,7 @@ public readonly record struct PartyTrainFundingOutcome(
     IReadOnlyList<PartyCoinTransfer> Transfers,
     string? BankName,
     IReadOnlyList<PartyBankWithdrawal> Withdrawals,
-    IReadOnlyList<string> Unfunded)
-{
-    public bool NeedsAnything => Transfers.Count > 0 || Withdrawals.Count > 0;
-}
+    IReadOnlyList<string> Unfunded);
 
 // Decides how the party pays for a trip, in the user's order:
 //

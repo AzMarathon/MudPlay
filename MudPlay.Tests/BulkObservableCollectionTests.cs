@@ -13,7 +13,8 @@ public sealed class BulkObservableCollectionTests
     [Fact]
     public void ReplaceAll_RaisesSingleReset_NotPerItem()
     {
-        BulkObservableCollection<int> col = new(new[] { 1, 2 });
+        BulkObservableCollection<int> col = new();
+        col.ReplaceAll(new[] { 1, 2 });
         List<NotifyCollectionChangedAction> actions = new();
         col.CollectionChanged += (_, e) => actions.Add(e.Action);
 
@@ -26,7 +27,8 @@ public sealed class BulkObservableCollectionTests
     [Fact]
     public void ReplaceAll_WithEmpty_ClearsToOneReset()
     {
-        BulkObservableCollection<int> col = new(new[] { 1, 2, 3 });
+        BulkObservableCollection<int> col = new();
+        col.ReplaceAll(new[] { 1, 2, 3 });
         List<NotifyCollectionChangedAction> actions = new();
         col.CollectionChanged += (_, e) => actions.Add(e.Action);
 

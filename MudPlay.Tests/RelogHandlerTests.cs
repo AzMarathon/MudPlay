@@ -155,7 +155,7 @@ public sealed class RelogHandlerTests
 
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@relog"));
 
-        Assert.True(signal.PeekForTests());
+        Assert.True(signal.ConsumeRelogIntent());
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class RelogHandlerTests
         var (engine, _, _, _, _, signal) = Setup();
         ChatLines.Hear(_routers[engine], Telepath("Stranger", "@relog"));
 
-        Assert.False(signal.PeekForTests());
+        Assert.False(signal.ConsumeRelogIntent());
     }
 
     [Fact]
@@ -180,6 +180,6 @@ public sealed class RelogHandlerTests
         handler.SetWireSender(_ => { });   // bind once...
         SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
         ChatLines.Hear(_routers[engine], Telepath("Trusted", "@relog"));
-        Assert.True(signal.PeekForTests());
+        Assert.True(signal.ConsumeRelogIntent());
     }
 }

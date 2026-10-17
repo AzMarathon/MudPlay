@@ -1650,10 +1650,9 @@ public sealed class BossTimerTests : IDisposable
     [Fact]
     public void SyncWindow_ATypedRequestAmongClientSends_StillAsksThePlayerItReached()
     {
-        var (window, timers) = NewSyncWindow(askedOn: null);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, byUser: false);
         using (window)
         {
-            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
             ClientSends("/Sue @health");
             ClientSends("/Mallory {ok}");
             UserTypes("/bo @timer sync");
@@ -1832,10 +1831,9 @@ public sealed class BossTimerTests : IDisposable
     public void SyncWindow_AConfirmationForAnotherTelepath_AsksNobody(
         string request, bool requestIsUsers, string other, bool otherIsUsers, string confirmed)
     {
-        var (window, timers) = NewSyncWindow(askedOn: null);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, byUser: false);
         using (window)
         {
-            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // listening
             if (requestIsUsers) UserTypes(request); else ClientSends(request);
             if (otherIsUsers) UserTypes(other); else ClientSends(other);
             GameConfirms(confirmed);
@@ -2063,12 +2061,11 @@ public sealed class BossTimerTests : IDisposable
     [InlineData(true)]
     public void SyncWindow_AClientTelepathToAPlayerTheTypedLettersBegin_DoesNotMakeHerTheOneAsked(bool weHoldOne)
     {
-        var (window, timers) = NewSyncWindow(askedOn: null);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, byUser: false);
         using (window)
         {
             DateTimeOffset? ours = weHoldOne ? Held : null;
             if (weHoldOne) timers.MarkKilled("ogre king", Held);
-            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
             UserTypes("/b @timer sync");
             BoardShows("Please be more specific.  You could have meant any of these:");
             ClientSends("/Betty {command invalid or not allowed}");
@@ -2077,7 +2074,6 @@ public sealed class BossTimerTests : IDisposable
             Hears(ChatChannel.TelepathIncoming, "Betty");
 
             Assert.Equal(ours, timers.KilledAt("ogre king"));
-            Assert.False(window.CollectorForTests.OnePlayerAsked);
             BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
             Assert.False(row.WasAutoMerged);
             Assert.False(row.WasSynced);
@@ -2123,7 +2119,6 @@ public sealed class BossTimerTests : IDisposable
             Hears(ChatChannel.TelepathIncoming, "Bob");
 
             Assert.Equal(ours, timers.KilledAt("ogre king"));
-            Assert.False(window.CollectorForTests.OnePlayerAsked);
             BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
             Assert.False(row.WasAutoMerged);
             Assert.False(row.WasSynced);
@@ -2161,7 +2156,6 @@ public sealed class BossTimerTests : IDisposable
             Hears(ChatChannel.TelepathIncoming, "Bella");
 
             Assert.Equal(ours, timers.KilledAt("ogre king"));
-            Assert.False(window.CollectorForTests.OnePlayerAsked);
             BossTimerSyncRowViewModel row = Assert.Single(window.Rows);
             Assert.False(row.WasAutoMerged);
             Assert.False(row.WasSynced);
@@ -2179,17 +2173,14 @@ public sealed class BossTimerTests : IDisposable
     [InlineData(false)]
     public void SyncWindow_AShortenedRequestWithAClientTelepathToTheSamePlayer_StillAsksThatPlayer(bool requestFirst)
     {
-        var (window, timers) = NewSyncWindow(askedOn: null);
+        var (window, timers) = NewSyncWindow(askedOn: RemoteChannel.Telepath, byUser: false);
         using (window)
         {
-            window.CollectorForTests.Begin(RemoteChannel.Telepath, byUser: false);   // open and listening, nobody asked
             if (requestFirst) UserTypes("/bo @timer sync");
             ClientSends("/Bob @health");
             if (!requestFirst) UserTypes("/bo @timer sync");
             GameConfirms("Bob");
-            Assert.False(window.CollectorForTests.OnePlayerAsked);   // the first is the client's own
             GameConfirms("Bob");
-            Assert.True(window.CollectorForTests.OnePlayerAsked);
 
             Hears(ChatChannel.TelepathIncoming, "Bob");
 

@@ -128,9 +128,6 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // alongside any path that mutates the live ring count.
     public string StatusText => $"{MatchCount:N0} / {LogTotalCount:N0} entries";
 
-    public LogPaneViewModel(LogService log, Application app)
-        : this(log, app, diagnostics: null) { }
-
     // Overload that binds the pane to a session-shared LogDiagnosticState so
     // the CombatDiagnostics toggle is the live umbrella for combat-related
     // verbose tracing (consumed by Game.Combat.RoundDamageTracker). Without

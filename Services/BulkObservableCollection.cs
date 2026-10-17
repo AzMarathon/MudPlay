@@ -17,8 +17,6 @@ public sealed class BulkObservableCollection<T> : ObservableCollection<T>
 {
     public BulkObservableCollection() { }
 
-    public BulkObservableCollection(IEnumerable<T> items) : base(items) { }
-
     // Replace the entire contents, raising a single Reset instead of Clear + N Add.
     public void ReplaceAll(IEnumerable<T> items)
     {

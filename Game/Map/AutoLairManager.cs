@@ -160,7 +160,6 @@ public sealed class AutoLairManager : IDisposable
     private static readonly TimeSpan RetryCap = TimeSpan.FromSeconds(60);
     private RoomKey? _failedEntryLair;
     private int _failedEntries;
-    internal int FailedEntriesForTests => _failedEntries;
 
     // Latched entry-arrival instant for the current Waiting cycle. Set
     // once on Approaching→Waiting (and on the "already at wait-room"
@@ -1021,7 +1020,6 @@ public sealed class AutoLairManager : IDisposable
             : $"lair empty after {EmptyLairGrace.TotalSeconds:0}s — nothing to fight");
     }
 
-    internal void StartEngagementForTests() => StartEngagement();
 
     private void FinishEngagement(string why)
     {

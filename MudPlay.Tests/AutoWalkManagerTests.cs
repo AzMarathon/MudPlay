@@ -781,7 +781,7 @@ public sealed class AutoWalkManagerTests : IDisposable
             Assert.Equal(sentBefore, h.Sent.Count);
             Assert.False(health.IsFleeing);
             // No flee took the walk over: lifting the pause sends its next step.
-            h.Walker.Resume();
+            h.Coordinator.ClearGate(MovementCoordinator.UserGate);
             Assert.Equal(WalkState.Walking, h.Walker.State);
             Assert.Equal(sentBefore + 1, h.Sent.Count);
             return;

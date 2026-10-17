@@ -118,7 +118,7 @@ public sealed class MessageCandidateWatcherTests
     public void RouterMatchedLine_DoesNotCreateCandidate()
     {
         Harness h = new();
-        h.Router.RegisterPattern(new PrefixPattern("test.gossip", "*GOSSIP* "));
+        h.Router.RegisterPattern(new RegexPattern("test.gossip", @"^\*GOSSIP\* "));
 
         h.Feed("*GOSSIP* Forged: hello");
 
@@ -953,7 +953,7 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
-    public void PruneRecognized_DropsNowKnownLines_KeepsTheRest()
+    public void PruneIfRecognized_DropsNowKnownLines_KeepsTheRest()
     {
         Harness h = new(seedDefaultPatterns: true);
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -961,7 +961,9 @@ public sealed class MessageCandidateWatcherTests
         h.Candidates.RecordSighting("A shade materializes in the room.", now, null, null);
         h.Candidates.RecordSighting("A shimmering rune flickers and fades.", now, null, null);
 
-        Assert.Equal(2, h.Watcher.PruneRecognized());
+        int pruned = h.Candidates.Candidates.ToList().Count(h.Watcher.PruneIfRecognized);
+
+        Assert.Equal(2, pruned);
         Assert.Equal("A shimmering rune flickers and fades.", Assert.Single(h.Candidates.Candidates).RawText);
     }
 }

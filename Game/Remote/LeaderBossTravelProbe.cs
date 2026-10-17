@@ -41,8 +41,6 @@ public sealed class LeaderBossTravelProbe : IDisposable
     private bool _confirming;
     private bool _disposed;
 
-    public bool WaitingForLeaderToMove => _waitingForLeaderToMove;
-
     // Whether the leader's trip ends at a boss room. Raised once per question.
     public event Action<bool>? Resolved;
 

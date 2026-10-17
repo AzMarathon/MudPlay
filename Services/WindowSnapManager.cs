@@ -36,9 +36,6 @@ public sealed class WindowSnapManager
     // Snap when a dragged edge lands within this many physical pixels of another
     // panel's opposite edge.
     internal const int SnapThreshold = 12;
-    // Two panels count as clustered when their edges sit within this gap (snapping
-    // lands them flush at 0; the slack absorbs rounding + frame-decoration jitter).
-    internal const int AdjacencyTolerance = 4;
     private const string MainId = "main";
 
     private static readonly HashSet<string> Participants = new(StringComparer.OrdinalIgnoreCase)

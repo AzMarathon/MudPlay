@@ -50,7 +50,7 @@ public sealed class LogDiagnosticsTests
         log.Debug("Engine", "trace");
 
         Assert.Equal(1, log.Count);
-        Assert.Equal(LogSeverity.Debug, log.Latest!.Value.Severity);
+        Assert.Equal(LogSeverity.Debug, log.Snapshot()[^1].Severity);
     }
 
     [Fact]
@@ -60,12 +60,10 @@ public sealed class LogDiagnosticsTests
         LogService log = new() { Diagnostics = diag };
 
         Assert.True(log.IsCombatEnabled);
-        log.Combat("Combat", "decision", context: "raw wire line");
+        log.Combat("Combat", "decision");
 
         Assert.Equal(1, log.Count);
-        LogEntry e = log.Latest!.Value;
-        Assert.Equal(LogSeverity.Combat, e.Severity);
-        Assert.Equal("raw wire line", e.Context);
+        Assert.Equal(LogSeverity.Combat, log.Snapshot()[^1].Severity);
     }
 
     [Fact]
@@ -77,7 +75,7 @@ public sealed class LogDiagnosticsTests
         log.Debug("Engine", "trace");   // on
         log.Combat("Combat", "skip");   // off
         Assert.Equal(1, log.Count);
-        Assert.Equal(LogSeverity.Debug, log.Latest!.Value.Severity);
+        Assert.Equal(LogSeverity.Debug, log.Snapshot()[^1].Severity);
     }
 
     [Fact]

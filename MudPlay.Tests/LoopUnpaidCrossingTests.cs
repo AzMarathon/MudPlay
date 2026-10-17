@@ -127,7 +127,6 @@ public sealed class LoopUnpaidCrossingTests : IDisposable
         MovementFilter? filter = otherFilter is null ? new MovementFilter(new ProfileService()) : null;
         LoopRunner runner = new(tracker, new MovementCoordinator(), graph: graph, bfs: new BfsMapper(graph),
             filter: otherFilter ?? filter, postToUi: act => act());
-        runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
         ServerFeed feed = new();
         MovementRefusalDetector detector = new(feed.Lines, tracker);
         Rig rig = new() { Tracker = tracker, Runner = runner, Detector = detector, Feed = feed, Filter = filter, Purse = purse };

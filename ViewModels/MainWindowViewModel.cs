@@ -5052,9 +5052,6 @@ public partial class MainWindowViewModel : ObservableObject
     // switches to the requested section first).
     private Views.CharacterWorkshop.CharacterWorkshopWindow? _workshop;
 
-    [RelayCommand]
-    private void OpenWorkshopDeath() => OpenWorkshopAt("death");
-
     // Terminal right-click "Workshop: <tab>" deep-link — opens the Workshop on a
     // section (string param = the WorkshopSectionViewModel.Id; a sub-tab's id opens
     // the tab that holds it).
@@ -5985,8 +5982,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void MovementStop()
     {
         // The first Stop holds a money or training errand; a second ends it.
-        if (AppServices.Current.MovementControl.HoldErrandOnStop()) return;
-        AppServices.Current.MovementControl.Stop();
+        if (!AppServices.Current.MovementControl.StopByUser()) return;
         OnUserStopped("stopped by the user", endsTheRun: true);
     }
 

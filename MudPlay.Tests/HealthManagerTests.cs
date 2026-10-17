@@ -15,6 +15,11 @@ namespace MudPlay.Tests;
 /// </summary>
 public sealed class HealthManagerTests
 {
+    // Reacted to the run trigger this fight and waiting for it to end, as the bug
+    // report's wait list tells it.
+    private static bool Fled(HealthManager health) =>
+        health.DescribeWaits().Contains("fled this combat (waits for it to end)");
+
     private sealed class Harness : IDisposable
     {
         public PlayerState State { get; } = new();
@@ -22,6 +27,10 @@ public sealed class HealthManagerTests
         public MovementCoordinator Coordinator { get; }
         public HealthManager Health { get; }
         public List<byte[]> Sent { get; } = new();
+
+        // A confirmed arrival in a room the test hasn't been in before.
+        private int _rooms;
+        public void Moved() => Health.NoteRoomChanged(new RoomKey(900, ++_rooms));
         public HealthSettings Settings { get; set; } = new();
         public bool AutoHealRestEnabled { get; set; } = true;
 
@@ -1170,7 +1179,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 50;                      // held
         Assert.False(h.Health.RestInFlight);
 
-        h.Health.NoteRoomChanged();           // a move re-observes
+        h.Moved();           // a move re-observes
         h.Health.Evaluate();
 
         Assert.True(h.Health.RestInFlight);
@@ -1481,7 +1490,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 50;
         Assert.True(h.Health.RestInFlight);
 
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.Health.RestInFlight);
     }
 
@@ -1495,7 +1504,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 180;    // above trigger — no rest started
         Assert.False(h.Health.RestInFlight);
 
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.Health.RestInFlight);
     }
 
@@ -1514,7 +1523,7 @@ public sealed class HealthManagerTests
         int restCount1 = h.SentLines.Count(l => l == "rest");
         Assert.Equal(1, restCount1);
 
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.Health.RestInFlight);
         Assert.True(h.HealthGateHeld);     // still need recovery
 
@@ -1624,7 +1633,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;
 
         Assert.DoesNotContain("flee", h.SentLines);   // engine never sent the bogus command
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
 
         // Drop further → still no spam.
         h.State.Hp = 25;
@@ -1688,7 +1697,7 @@ public sealed class HealthManagerTests
         h.Health.Evaluate();
 
         Assert.False(h.Health.ForceClearForRest);
-        Assert.True(h.Health.FledThisCombat);   // the flee path took over instead
+        Assert.True(Fled(h.Health));   // the flee path took over instead
     }
 
     [Fact]
@@ -1726,7 +1735,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;            // 15% — below run threshold
 
         Assert.DoesNotContain("flee", h.SentLines);
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
     }
 
     [Fact]
@@ -1737,10 +1746,10 @@ public sealed class HealthManagerTests
         h.State.InCombat = true;
         h.State.HasPromptData = true;
         h.State.Hp = 30;
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
 
         h.State.InCombat = false;
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
     }
 
     [Fact]
@@ -1753,15 +1762,15 @@ public sealed class HealthManagerTests
         h.State.InCombat = true;
         h.State.HasPromptData = true;
         h.State.Hp = 30;
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
 
         h.State.InCombat = false;
         h.State.Hp = 100;
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
 
         h.State.InCombat = true;
         h.State.Hp = 25;
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
     }
 
     [Fact]
@@ -1778,7 +1787,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 150;      // healthy HP
         h.State.Ma = 5;        // below the default 10% run trigger
 
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
     }
 
     [Fact]
@@ -1793,7 +1802,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 150;
         h.State.Ma = 0;
 
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
     }
 
     [Fact]
@@ -1811,7 +1820,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 150;      // healthy HP
         h.State.Ma = 0;        // fully out of mana
 
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
     }
 
     [Fact]
@@ -1824,7 +1833,7 @@ public sealed class HealthManagerTests
         h.State.HasPromptData = true;
         h.State.Hp = 30;       // 15% — below the default 20% run trigger, but flee is off
 
-        Assert.False(h.Health.FledThisCombat);
+        Assert.False(Fled(h.Health));
     }
 
     [Fact]
@@ -1835,7 +1844,7 @@ public sealed class HealthManagerTests
         h.State.InCombat = true;
         h.State.HasPromptData = true;
         h.State.Hp = 30;
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
         Assert.DoesNotContain("rest", h.SentLines);
 
         h.State.InCombat = false;
@@ -1862,7 +1871,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;                 // 15% — below default 20% run trigger
 
         Assert.Equal(1, healRequested);
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
 
         // Single-shot per combat — dropping further doesn't re-request.
         h.State.Hp = 25;
@@ -1888,7 +1897,7 @@ public sealed class HealthManagerTests
         h.State.Hp = 30;
 
         Assert.Equal(0, healRequested);
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
         Assert.DoesNotContain("flee", h.SentLines);
     }
 
@@ -1912,7 +1921,7 @@ public sealed class HealthManagerTests
 
         // Flee path taken (still a no-op on the wire without an engine), and
         // the single-shot latch is set.
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
         Assert.DoesNotContain("flee", h.SentLines);
     }
 
@@ -2177,7 +2186,7 @@ public sealed class HealthManagerTests
         h.State.HasPromptData = true;
         h.State.Hp = 30;
 
-        Assert.True(h.Health.FledThisCombat);
+        Assert.True(Fled(h.Health));
         Assert.DoesNotContain("break", h.SentLines);
     }
 
@@ -4053,12 +4062,12 @@ public sealed class HealthManagerTests
         // and the reactive-reconnect path stands down — otherwise the client
         // dials straight back into the danger it just fled.
         using Harness h = new();
-        Assert.False(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.False(h.Hangup.ConsumeDisconnectIntent());
 
         h.SetPrompt(hp: 5, maxHp: 200);   // below default 5% hang threshold — fires
 
         Assert.Contains("=x", h.SentLines);
-        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.True(h.Hangup.ConsumeDisconnectIntent());
     }
 
     [Fact]
@@ -4154,7 +4163,7 @@ public sealed class HealthManagerTests
         Assert.True(acted);
         Assert.Contains("=x", h.SentLines);
         Assert.Equal(1, h.HangupDisconnectCount);
-        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.True(h.Hangup.ConsumeDisconnectIntent());
     }
 
     [Fact]
@@ -4288,7 +4297,7 @@ public sealed class HealthManagerTests
 
         Assert.Contains("=x", h.SentLines);
         Assert.Equal(1, h.HangupDisconnectCount);
-        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.True(h.Hangup.ConsumeDisconnectIntent());
         Assert.Equal(new[] { false }, asked);
     }
 
@@ -4313,7 +4322,7 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("=x", h.SentLines);
         Assert.Null(h.WimpyFiredWith);
         Assert.Equal(0, h.HangupDisconnectCount);
-        Assert.False(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.False(h.Hangup.ConsumeDisconnectIntent());
         Assert.Equal(0, asked);
     }
 
@@ -5412,13 +5421,13 @@ public sealed class HealthManagerTests
         Assert.Equal(1, waits);
 
         h.Clock += TimeSpan.FromSeconds(10);
-        h.Health.NoteRoomChanged();  // the leader walked us on — it isn't waiting
+        h.Moved();  // the leader walked us on — it isn't waiting
         Assert.Equal(2, waits);
-        h.Health.NoteRoomChanged();  // same drag, next room — rate-limited
+        h.Moved();  // same drag, next room — rate-limited
         Assert.Equal(2, waits);
 
         h.Clock += TimeSpan.FromSeconds(10);
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.Equal(3, waits);
     }
 
@@ -5436,7 +5445,7 @@ public sealed class HealthManagerTests
         int afterDrop = waits;
 
         h.Clock += TimeSpan.FromSeconds(10);
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.Equal(afterDrop, waits);
     }
 
@@ -5965,13 +5974,13 @@ public sealed class HealthManagerTests
         Assert.False(h.HealthGateHeld);
 
         // Another damaging room: still nothing, and it says so for this room too.
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.HealthGateHeld);
         Assert.Equal(2, info.Count(l => l.Contains("does damage — not resting here")));
 
         // Out of the heat. Only the room changed; no prompt did.
         hurting = null;
-        h.Health.NoteRoomChanged();
+        h.Moved();
 
         Assert.True(h.HealthGateHeld);
         Assert.Contains("rest", h.SentLines);
@@ -5995,7 +6004,7 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.HpRestDeferredByRoomSpell);
 
         hurting = null;
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.HealthGateHeld);
         Assert.DoesNotContain(info, l => l.Contains("starts here"));
     }
@@ -6066,7 +6075,7 @@ public sealed class HealthManagerTests
         Assert.Equal(0, waits);
 
         hurting = null;
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.Equal(1, waits);
     }
 
@@ -6149,7 +6158,7 @@ public sealed class HealthManagerTests
 
         h.Clock += TimeSpan.FromMinutes(1);   // long past the re-ask interval
         hurting = MagmaHeat;
-        h.Health.NoteRoomChanged();
+        h.Moved();
 
         Assert.Equal((1, 1), (waits, oks));
         Assert.False(h.HealthGateHeld);
@@ -6160,13 +6169,13 @@ public sealed class HealthManagerTests
         h.State.Hp = 28;
         h.Health.Evaluate();
         h.Clock += TimeSpan.FromMinutes(1);
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.Equal((1, 1), (waits, oks));
         Assert.Equal(rests, h.SentLines.Count(l => l == "rest"));
 
         // Out of it: the rest that was owed, and the @wait that goes with it.
         hurting = null;
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.True(h.HealthGateHeld);
         Assert.Equal((2, 1), (waits, oks));
         Assert.Equal(rests + 1, h.SentLines.Count(l => l == "rest"));
@@ -6287,7 +6296,7 @@ public sealed class HealthManagerTests
 
         // The rest that does finish, in the next room, still runs them.
         hurting = null;
-        h.Health.NoteRoomChanged();
+        h.Moved();
         h.State.Hp = 96;
         Assert.Contains("look", h.SentLines);
         Assert.Contains("exits", h.SentLines);
@@ -6417,7 +6426,7 @@ public sealed class HealthManagerTests
 
         // Step OUT into a normal room — only the room change, no new prompt.
         h.SkipRestHere = false;
-        h.Health.NoteRoomChanged();
+        h.Moved();
 
         // The gate re-arms so the loop rests in the next restable room.
         Assert.True(h.ManaGateHeld);
@@ -6434,7 +6443,7 @@ public sealed class HealthManagerTests
         h.Health.Evaluate();
         Assert.False(h.ManaGateHeld);
 
-        h.Health.NoteRoomChanged();
+        h.Moved();
         Assert.False(h.ManaGateHeld);
     }
 

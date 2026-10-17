@@ -47,6 +47,35 @@ public sealed class ComebackRequesterTests : IDisposable
         ]
         """;
 
+    // The same rooms with a hole in 1/1: its command 100 is `go hole`, a teleport
+    // to 1/4, which no exit reaches.
+    private const string HoleGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "CMD": 100, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/3 (Cast: pre-0, post-857)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Below",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private const string HoleTbInfo = """
+        [ { "Number": 100, "LinkTo": 0,
+            "Action": "go hole:teleport 4 1\n",
+            "Called From": "Room 1/1" } ]
+        """;
+
     private const string ItemRefusal = "You do not have the appropriate item to go that direction!";
     private const string ParHeader = "The following people are in your travel party:";
     private const string BossFullRow = "  Boss Hogg                         (Warrior)                 [H:100%]   - Frontrank";
@@ -115,17 +144,20 @@ public sealed class ComebackRequesterTests : IDisposable
 
     // Solo, and not yet located: the state the "no longer following" line alone
     // speaks for.
-    private Harness NewHarness(Func<bool>? isMovementPrevented = null)
+    private Harness NewHarness(Func<bool>? isMovementPrevented = null, bool holeInA = false)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), holeInA ? HoleGraphJson : GraphJson);
+        if (holeInA) File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), HoleTbInfo);
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged("alpha");
+        RoomGraphManager graph = new(cache, log: null, tbinfo);
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         PartyState party = new();
@@ -165,9 +197,9 @@ public sealed class ComebackRequesterTests : IDisposable
     }
 
     // Following Boss, standing in 1/1.
-    private Harness NewFollower(Func<bool>? isMovementPrevented = null)
+    private Harness NewFollower(Func<bool>? isMovementPrevented = null, bool holeInA = false)
     {
-        Harness h = NewHarness(isMovementPrevented);
+        Harness h = NewHarness(isMovementPrevented, holeInA);
         h.Party.IsInParty = true;
         h.Party.SelfIsLeader = false;
         h.Party.LeaderName = "Boss";
@@ -410,9 +442,9 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void FollowShape_BehindARelayedTeleport_IsTheLeadersSplit()
     {
-        using Harness h = NewFollower();
+        using Harness h = NewFollower(holeInA: true);
 
-        h.Requester.StampPartyTeleportForTests();
+        h.Requester.NotePartyRelay("Boss", "go hole");
         h.Advance(TimeSpan.FromSeconds(4));
         h.Feed(" -- Following your Party leader north --");
         h.Feed("The chime's note hangs in the air.");

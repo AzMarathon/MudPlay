@@ -93,7 +93,7 @@ public sealed class GreetManager : IDisposable
         }
     }
 
-    // Test seam — runs the per-player greet decision directly.
+    // The per-player greet decision.
     internal void TryGreet(string? resolvedName)
     {
         if (_wireSender is null) return;

@@ -93,7 +93,7 @@ public sealed class PartyWealthProbeTests
         PartyWealthProbe.PartyWealthResult r = await h.Probe.QueryAsync();
 
         Assert.Equal(0, r.Expected);
-        Assert.False(r.AnyReplied);
+        Assert.Equal(0, r.Replied);
         Assert.Empty(h.Wire);   // no broadcast fired
     }
 
@@ -130,7 +130,7 @@ public sealed class PartyWealthProbeTests
         Assert.Equal(2, r.Replied);
         Assert.Equal(4200, r.WealthByMember["Bob"]);
         Assert.Equal(150, r.WealthByMember["Al"]);
-        Assert.True(r.AnyReplied);
+        Assert.True(r.Replied > 0);
     }
 
     [Fact]
@@ -373,6 +373,6 @@ public sealed class PartyWealthProbeTests
 
         PartyWealthProbe.PartyWealthResult r = await task;
         Assert.Equal(0, r.Expected);
-        Assert.False(r.AnyReplied);
+        Assert.Equal(0, r.Replied);
     }
 }

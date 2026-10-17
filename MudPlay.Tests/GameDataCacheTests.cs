@@ -111,11 +111,11 @@ public sealed class GameDataCacheTests : IDisposable
         cache.SwitchSet("alpha");
         _ = cache.GetTable("Monsters"); // loads + caches
 
-        Assert.Contains("Monsters", cache.LoadedTables);
+        Assert.True(cache.IsTableLoaded("Monsters"));
 
         cache.SwitchSet("beta");
 
-        Assert.Empty(cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Monsters"));
         Assert.Equal("beta", cache.ActiveSet);
     }
 
@@ -126,7 +126,7 @@ public sealed class GameDataCacheTests : IDisposable
         GameDataCache cache = NewCache();
         cache.SwitchSet("alpha");
         _ = cache.GetTable("Monsters");                       // load + cache
-        Assert.Contains("Monsters", cache.LoadedTables);
+        Assert.True(cache.IsTableLoaded("Monsters"));
 
         List<string?> fired = new();
         cache.ActiveSetChanged += s => fired.Add(s);
@@ -135,7 +135,7 @@ public sealed class GameDataCacheTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "Monsters.json"), "[{\"Number\":1,\"Name\":\"Orc\"}]");
         cache.ReloadActiveSet();
 
-        Assert.Empty(cache.LoadedTables);                        // evicted
+        Assert.False(cache.IsTableLoaded("Monsters"));                        // evicted
         Assert.Equal(new[] { "alpha" }, fired);                  // consumers notified, same name
         Assert.Equal("alpha", cache.ActiveSet);                  // still active
         // Next read re-parses the fresh JSON, not the stale cached doc.
@@ -210,7 +210,7 @@ public sealed class GameDataCacheTests : IDisposable
         cache.SwitchSet("alpha");
 
         Assert.Null(cache.GetTable("Monsters"));
-        Assert.Empty(cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Monsters"));
     }
 
     [Fact]
@@ -281,10 +281,10 @@ public sealed class GameDataCacheTests : IDisposable
         _ = cache.GetTable("Monsters");
 
         Assert.True(cache.EvictTable("Monsters"));
-        Assert.Single(cache.LoadedTables);
+        Assert.True(cache.IsTableLoaded("Monsters"));
 
         cache.EvictIdle(GameDataCache.IdleEvictAfter);
-        Assert.Empty(cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Monsters"));
 
         // Subsequent eviction is a no-op return value.
         Assert.False(cache.EvictTable("Monsters"));
@@ -304,7 +304,7 @@ public sealed class GameDataCacheTests : IDisposable
         _ = cache.GetTable("Monsters");
         cache.EvictIdle(GameDataCache.IdleEvictAfter);
 
-        Assert.Single(cache.LoadedTables);
+        Assert.True(cache.IsTableLoaded("Monsters"));
     }
 
     [Fact]
@@ -332,10 +332,10 @@ public sealed class GameDataCacheTests : IDisposable
         _ = cache.GetTable("Rooms");
 
         cache.EvictIdle(TimeSpan.FromHours(1));
-        Assert.Equal(2, cache.LoadedTables.Count);
+        Assert.True(cache.IsTableLoaded("Monsters") && cache.IsTableLoaded("Rooms"));
 
         cache.EvictIdle(TimeSpan.Zero);
-        Assert.Empty(cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Monsters") || cache.IsTableLoaded("Rooms"));
         Assert.NotNull(cache.GetTable("Rooms"));   // a later read re-parses
     }
 
@@ -352,25 +352,6 @@ public sealed class GameDataCacheTests : IDisposable
 
         // Read fresh from disk — the dropped prewarm was not claimed.
         Assert.Equal("New", FirstName(cache.GetTable("Rooms")));
-    }
-
-    [Fact]
-    public void EvictAll_ClearsEveryLoadedTable()
-    {
-        SeedSet("alpha",
-            ("Monsters", "[]"),
-            ("Items",    "[]"),
-            ("Spells",   "[]"));
-        GameDataCache cache = NewCache();
-        cache.SwitchSet("alpha");
-        _ = cache.GetTable("Monsters");
-        _ = cache.GetTable("Items");
-
-        cache.EvictAll();
-
-        Assert.Empty(cache.LoadedTables);
-        // Active set is preserved.
-        Assert.Equal("alpha", cache.ActiveSet);
     }
 
     [Fact]
@@ -453,7 +434,7 @@ public sealed class GameDataCacheTests : IDisposable
         Assert.NotNull(cache.GetTable("Monsters"));
         // Claimed into the live cache, not left sitting in the prewarm bucket —
         // a second read must not re-parse the file.
-        Assert.Contains("Monsters", cache.LoadedTables);
+        Assert.True(cache.IsTableLoaded("Monsters"));
     }
 
     [Fact]
@@ -468,7 +449,7 @@ public sealed class GameDataCacheTests : IDisposable
         await cache.PrewarmAsync("alpha", new[] { "Monsters" });
         cache.SwitchSet("beta");
 
-        Assert.Empty(cache.LoadedTables);
+        Assert.False(cache.IsTableLoaded("Monsters"));
     }
 
     [Fact]

@@ -34,9 +34,6 @@ public sealed class DivertHandler : IDisposable
     private string? _target;
     private bool _disposed;
 
-    // Test seam — current divert target given name (or null).
-    internal string? TargetForTests => _target;
-
     public DivertHandler(RemoteCommandManager engine, ChatRouter chat)
     {
         ArgumentNullException.ThrowIfNull(engine);

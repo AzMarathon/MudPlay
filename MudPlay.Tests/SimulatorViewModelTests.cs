@@ -330,7 +330,7 @@ public sealed class SimulatorViewModelTests : IDisposable
         Assert.StartsWith("400 lairs, 2000 rooms a lap: 17/1200 → 17/1201 → ", route);
         Assert.EndsWith("17/1219 → … (380 more)", route);
         // Notes that named all 400 rooms were refused by the player it was sent to.
-        Loop received = MudPlay.Game.Remote.LoopShareCodec.Decode(MudPlay.Game.Remote.LoopShareCodec.Encode(saved));
+        Loop received = MudPlay.Game.Remote.LoopShareCodec.Decode(MudPlay.Game.Remote.LoopShareCodec.Encode(saved), out _);
         Assert.Equal(saved.Notes, received.Notes);
     }
 

@@ -33,14 +33,6 @@ public sealed class LightModelTests
     }
 
     [Theory]
-    [InlineData(0, -150, true)]    // exactly at the floor → seeable
-    [InlineData(0, -151, false)]
-    [InlineData(175, -300, true)]  // lantern rescues a -300 room
-    [InlineData(100, -300, false)] // torch (100) does not
-    public void CanSee_MatchesSeeThreshold(int charIllu, int roomLight, bool expected)
-        => Assert.Equal(expected, LightModel.CanSee(charIllu, roomLight));
-
-    [Theory]
     [InlineData(0, -150, 0)]      // already visible → no gap
     [InlineData(0, -100, 0)]
     [InlineData(0, -200, 50)]     // need +50 illu to reach -150

@@ -8,13 +8,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="SpellbookState"/> — the available/obtained model that the
-/// Spell Book window binds to — and <see cref="KnownSpellCatalog.GetByName"/>,
-/// the name-keyed lookup the <c>spells</c>/<c>pow</c> list and learn-scroll
-/// signal resolve through. Reuses the same synthetic Mage class + spell rows
-/// shape as <see cref="KnownSpellCatalogTests"/>.
-/// </summary>
+// Pins SpellbookState — the available/obtained model that the Spell Book window
+// binds to. Reuses the same synthetic Mage class + spell rows shape as
+// KnownSpellCatalogTests.
 public sealed class SpellbookStateTests : IDisposable
 {
     private readonly string _root;
@@ -58,20 +54,6 @@ public sealed class SpellbookStateTests : IDisposable
         cache.SwitchSet("set");
         KnownSpellCatalog catalog = new(cache);
         return (catalog, new SpellbookState(catalog));
-    }
-
-    // ----- GetByName ----------------------------------------------------
-
-    [Fact]
-    public void GetByName_ResolvesUsableSpell_NullOtherwise()
-    {
-        KnownSpellCatalog catalog = New().catalog;
-
-        Assert.Equal(100, catalog.GetByName("starlight", 12)!.Value.Number);
-        Assert.Equal(100, catalog.GetByName("  StarLight ", 12)!.Value.Number); // trimmed + case-insensitive
-        Assert.Null(catalog.GetByName("barkskin", 12));   // Druid magery — not a Mage spell
-        Assert.Null(catalog.GetByName("starlight", 1));    // Warrior has no magery
-        Assert.Null(catalog.GetByName("nope", 12));        // unknown name
     }
 
     // ----- Refresh / Available ------------------------------------------

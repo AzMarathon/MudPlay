@@ -22,11 +22,9 @@ namespace MudPlay.Game.Cash;
 //     in-flight delta (60s timeout) projects pickups already dispatched but not
 //     yet confirmed so multi-coin batches and quick re-displays can't
 //     over-collect.
-//   - CashPickedUp / CashDropped → tally update. Held per-currency counts
-//     exposed via HeldCoin feed the stash-room and discard paths.
 //   - AutoDeposit trigger. The gates read the authoritative
-//     InventorySnapshot.Currency (the 'i'-seeded, delta-tracked holdings — not
-//     the local pickup tally): wealth gate against TotalCopperValue (the game's
+//     InventorySnapshot.Currency (the 'i'-seeded, delta-tracked holdings):
+//     wealth gate against TotalCopperValue (the game's
 //     Wealth: line), coin gate against TotalCoinCount. Either crossing fires
 //     AutoDepositRequested once per crossing, but only when a bank / stash
 //     location (BankRoomKey) is configured — no location, no reroute
@@ -94,7 +92,6 @@ public sealed class CashManager : IDisposable
     private Action<byte[]>? _wireSender;
     private Game.Inventory.AcquisitionGate? _gate;
     private Game.Inventory.RoomRedisplayCoordinator? _redisplay;
-    private readonly Dictionary<string, long> _held = new(StringComparer.OrdinalIgnoreCase);
 
     // Collect-after-combat. When CashSettings.CollectAfterCombatFinished is set (the
     // shared Cash + Items timing toggle) and the room still holds engageable
@@ -191,7 +188,7 @@ public sealed class CashManager : IDisposable
     private DispatcherTimer? _resurveyReleaseTimer;
     // Look round-trip hold. Overridable in tests; production waits long enough for
     // the room re-display to arrive and drive the collect.
-    internal int ResurveyReleaseMs { get; set; } = 1500;
+    private const int ResurveyReleaseMs = 1500;
 
     private bool _autoDepositFiredThisCrossing;
     // When a fired gate crossing can't complete a deposit (aborted reroute) the
@@ -303,10 +300,6 @@ public sealed class CashManager : IDisposable
     private static readonly string[] SlotCurrencyNames =
         { "copper", "silver", "gold", "platinum", "runic" };
 
-    // Fires whenever a CashOnGround line resolves the per-currency policy
-    // decision. Args: currency, count, decided action.
-    public event Action<string, int, CashPolicy>? CashDispatched;
-
     // Fires once when the authoritative held wealth crosses
     // AutoDepositIfWealthExceeds or the held coin count crosses
     // AutoDepositIfCoinsExceed — provided a bank / stash location is configured.
@@ -378,10 +371,8 @@ public sealed class CashManager : IDisposable
         _dropRefusedSub = router.Subscribe(KnownPatterns.CashDropRefused, OnDropRefused);
         _trainedSub = router.Subscribe(KnownPatterns.TrainAttainLevel, OnTrained);
         _trainedNextSub = router.Subscribe(KnownPatterns.TrainAttainNextLevel, OnTrained);
-        // `hide N <coin>` is the stash-room verb — same tally semantics
-        // as drop. The item-hide path (UserHides) leaves coin-shaped hides
-        // to this one, so without this subscription the held tally would
-        // go stale and AutoDeposit would misfire on phantom wealth.
+        // `hide N <coin>` is the stash-room verb, answered like a drop. The
+        // item-hide path (UserHides) leaves coin-shaped hides to this one.
         _hiddenSub   = router.Subscribe(KnownPatterns.CashHidden,    OnCashHidden);
         _noticeSub   = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
         _killDropSub = router.Subscribe(KnownPatterns.CashFromKill,  OnCashFromKill);
@@ -414,21 +405,11 @@ public sealed class CashManager : IDisposable
         _redisplay = coordinator;
     }
 
-    // Current held count of currency as observed via CashPickedUp / CashDropped
-    // lines since engine start. Resets on app close; not persisted (the wealth
-    // display is authoritative; tracked here for the auto-deposit threshold).
-    public long HeldCoin(string currency)
-    {
-        return _held.TryGetValue(currency, out long count) ? count : 0;
-    }
-
-    // Reset held counts (called on profile load to drop the prior character's
-    // tallies). Also clears the in-flight coin projection so a pending get/drop
-    // from the prior session can't skew the new character's first gate
-    // evaluation.
+    // Called on profile load: re-arms the auto-deposit gate and clears the
+    // in-flight coin projection so a pending get/drop from the prior session
+    // can't skew the new character's first gate evaluation.
     public void ResetTallies()
     {
-        _held.Clear();
         _autoDepositFiredThisCrossing = false;
         _autoDepositRetryNotBefore = default;
         Array.Clear(_inFlightCoinDelta, 0, _inFlightCoinDelta.Length);
@@ -459,11 +440,10 @@ public sealed class CashManager : IDisposable
     // "drop <amount> <type>" (the MajorMUD syntax for currency drops).
     //
     // Holdings come from the authoritative InventorySnapshot.Currency alone —
-    // the 'i'-seeded, delta-tracked truth. Not the local pickup tally (_held): it
-    // only counts coin observed via CashPickedUp / CashDropped this session, so it
-    // misses a carried-over balance and never learns of coin spent, banked or
-    // miscounted — maxing it in kept dropping 2182 copper after an `i` showed 671
-    // (report paradigm-20260929-183240). A fresh pickup still drops promptly: the
+    // the 'i'-seeded, delta-tracked truth. A count of the coin seen picked up and
+    // dropped this session misses a carried-over balance and never learns of coin
+    // spent, banked or miscounted — maxing it in kept dropping 2182 copper after
+    // an `i` showed 671 (report paradigm-20260929-183240). A fresh pickup still drops promptly: the
     // inventory change it causes re-runs this audit (OnInventoryChanged).
     //
     // One drop per currency at a time: until the server answers it (dropped, or
@@ -489,7 +469,7 @@ public sealed class CashManager : IDisposable
         AuditDenominationForDiscard(settings, "gold",     snap.Gold);
         AuditDenominationForDiscard(settings, "platinum", snap.Platinum);
         // Wire runic word so the emitted `drop N <word>` matches what the server
-        // accepts; ResolvePolicy/HeldCoin recognise it via _naming.IsRunic.
+        // accepts; ResolvePolicy recognises it via _naming.IsRunic.
         AuditDenominationForDiscard(settings, _naming.RunicName, snap.Runic);
     }
 
@@ -520,7 +500,6 @@ public sealed class CashManager : IDisposable
         _log?.Info(LogCategory,
             $"on-ground currency={currency} count={count} policy={policy}");
         NoteSurveyed(currency, count);
-        CashDispatched?.Invoke(currency, count, policy);
 
         switch (policy)
         {
@@ -572,7 +551,6 @@ public sealed class CashManager : IDisposable
 
         _log?.Info(LogCategory,
             $"corpse-drop currency={currency} count={count} policy={policy}");
-        CashDispatched?.Invoke(currency, count, policy);
 
         if (policy == CashPolicy.Collect)
         {
@@ -597,7 +575,6 @@ public sealed class CashManager : IDisposable
         (string? currency, int count) = ParseCashLine(m);
         if (currency is null) return;
 
-        AdjustHeld(currency, count);
         _unansweredGets.Remove(currency);
         CoinCollected?.Invoke(currency, count);
         // Confirm our pending `get` — drain the matching in-flight delta so
@@ -620,7 +597,6 @@ public sealed class CashManager : IDisposable
         // As for a hide: "You dropped 3 iron crown." is an item, not coin.
         if (!IsCashWord(currency)) return;
 
-        AdjustHeld(currency, -count);
         DecayInFlight(currency, -count);
         ClearDropSent(currency);
         CheckAutoDeposit();
@@ -645,7 +621,7 @@ public sealed class CashManager : IDisposable
 
     private bool _purseStale;
 
-    // One `i` per cooldown: its fresh counts replace whatever the running tally held.
+    // One `i` per cooldown: its fresh counts replace the stale ones.
     private bool ReReadInventory(string why)
     {
         DateTime now = DateTime.UtcNow;
@@ -658,9 +634,8 @@ public sealed class CashManager : IDisposable
 
     private void ClearDropSent(string currency) => _dropSentAt.Remove(_naming.Canonicalize(currency));
 
-    // Stash-room confirmation handler — tally identically to drop. The hide wire
-    // shape is what stash-room visits use to dump excess coin / items; without
-    // this the auto-deposit threshold drifts stale after a stash run.
+    // Stash-room confirmation handler — answered like a drop. The hide wire shape
+    // is what stash-room visits use to dump excess coin / items.
     private void OnCashHidden(MatchResult m)
     {
         (string? currency, int count) = ParseCashLine(m);
@@ -670,7 +645,6 @@ public sealed class CashManager : IDisposable
         if (!IsCashWord(currency)) return;
 
         _log?.Debug(LogCategory, $"hidden currency={currency} count={count}");
-        AdjustHeld(currency, -count);
         DecayInFlight(currency, -count);
         CheckAutoDeposit();
         CoinHidden?.Invoke(currency, count);
@@ -758,7 +732,6 @@ public sealed class CashManager : IDisposable
             _log?.Info(LogCategory,
                 $"you-notice cash currency={currency} count={count} policy={policy}");
             NoteSurveyed(currency!, count);
-            CashDispatched?.Invoke(currency!, count, policy);
 
             if (policy == CashPolicy.Collect)
                 CollectOrDeferRoomSurvey(count, currency!);
@@ -1320,14 +1293,6 @@ public sealed class CashManager : IDisposable
         };
     }
 
-    private void AdjustHeld(string currency, int delta)
-    {
-        if (!_held.TryGetValue(currency, out long current)) current = 0;
-        long next = current + delta;
-        if (next < 0) next = 0;
-        _held[currency] = next;
-    }
-
     // Re-evaluate the auto-deposit gates against the latest authoritative
     // InventorySnapshot. Wired to InventoryManager.Changed so a wealth swing the
     // CashManager's own patterns never observe — a buy or sell — still arms the
@@ -1401,8 +1366,7 @@ public sealed class CashManager : IDisposable
 
         // Authoritative holdings: wealth gate against the game's "Wealth:"
         // value (TotalCopperValue), coin gate against the raw coin count —
-        // not the local pickup tally, which never sees the `i`-seeded
-        // starting balance or buy / sell conversions.
+        // the `i`-seeded balance, buy / sell conversions included.
         CurrencyHoldings held = _getSnapshot().Currency;
         long wealthValue = held.TotalCopperValue;
         long coinCount = held.TotalCoinCount;

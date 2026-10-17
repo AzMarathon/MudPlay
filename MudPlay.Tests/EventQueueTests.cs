@@ -584,7 +584,7 @@ public sealed class EventQueueTests : IDisposable
         q.SwitchOn();
 
         Assert.Equal(0, q.Asked);
-        Assert.False(h.Events.QueueChoicePending);
+        Assert.DoesNotContain("waiting for your choice", h.Events.QueueSummary);
         Assert.Contains("'first' WalkTo", h.Events.RunSummary);
         Assert.Contains("'second'", h.Events.QueueSummary);
     }
@@ -602,7 +602,7 @@ public sealed class EventQueueTests : IDisposable
         q.SwitchOn();
 
         Assert.Equal(1, q.Asked);
-        Assert.True(h.Events.QueueChoicePending);
+        Assert.Contains("waiting for your choice", h.Events.QueueSummary);
         Assert.Equal("(none)", h.Events.RunSummary);     // the kept completion ran; nothing took its place
         Assert.Contains("'first'", h.Events.QueueSummary);
         Assert.Contains("waiting for your choice (held 6 min by the master switch)", h.Events.QueueSummary);
@@ -634,7 +634,7 @@ public sealed class EventQueueTests : IDisposable
 
         h.Events.ResolveQueueChoice(new[] { Named(h, "third"), Named(h, "first") });
 
-        Assert.False(h.Events.QueueChoicePending);
+        Assert.DoesNotContain("waiting for your choice", h.Events.QueueSummary);
         Assert.Contains("'first' WalkTo", h.Events.RunSummary);
         Assert.Contains("'third'", h.Events.QueueSummary);
         Assert.DoesNotContain("'second'", h.Events.QueueSummary);
@@ -711,7 +711,7 @@ public sealed class EventQueueTests : IDisposable
 
         h.Events.DropQueueChoice(EventManager.PromptClosedUnanswered);
 
-        Assert.False(h.Events.QueueChoicePending);
+        Assert.DoesNotContain("waiting for your choice", h.Events.QueueSummary);
         Assert.Equal("(empty)", h.Events.QueueSummary);
         Assert.Equal(2, h.EventLog.Count(l => l.Contains("the Waiting Events window was closed without an answer")));
         Assert.Equal("[2 waiting event(s) dropped: the Waiting Events window was closed without an answer]",
@@ -758,7 +758,7 @@ public sealed class EventQueueTests : IDisposable
         h.Events.NoteMasterSwitchChanged(remote: true);
 
         Assert.Equal(0, q.Asked);
-        Assert.False(h.Events.QueueChoicePending);
+        Assert.DoesNotContain("waiting for your choice", h.Events.QueueSummary);
         Assert.Equal("(none)", h.Events.RunSummary);
         Assert.Equal("(empty)", h.Events.QueueSummary);
         Assert.Equal(2, h.EventLog.Count(l => l.Contains("switched back on remotely after more than 5 minutes off")));
@@ -885,11 +885,11 @@ public sealed class EventQueueTests : IDisposable
         q.SwitchOff();
         q.Now += TimeSpan.FromMinutes(10);
         q.SwitchOn();                           // 'running' still walks; 'first' awaits the choice
-        Assert.True(h.Events.QueueChoicePending);
+        Assert.Contains("waiting for your choice", h.Events.QueueSummary);
 
         h.Walker.Stop("user stop from toolbar");
 
-        Assert.False(h.Events.QueueChoicePending);
+        Assert.DoesNotContain("waiting for your choice", h.Events.QueueSummary);
         Assert.Equal(1, q.Withdrawn);
         Assert.Equal("(empty)", h.Events.QueueSummary);
     }
@@ -922,7 +922,7 @@ public sealed class EventQueueTests : IDisposable
 
         Assert.Equal("(none)", h.Events.RunSummary);
         Assert.Contains("'first'", h.Events.QueueSummary);
-        Assert.True(h.Events.QueueChoicePending);
+        Assert.Contains("waiting for your choice", h.Events.QueueSummary);
         Assert.Contains(h.EventLog, l => l.Contains("its Then event 'first' is waiting for the user's choice"));
 
         h.Events.ResolveQueueChoice(new[] { Named(h, "first") });
