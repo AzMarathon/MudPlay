@@ -4153,6 +4153,76 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(1, Punches(h));
     }
 
+    // The production order of a step: the move goes out (NoteMoveSent), the new room's
+    // "Also here:" is read, and only then does the tracker confirm the room on its exits
+    // line (NoteRoomLeft).
+    private static void StepIntoRoom(Harness h, string alsoHere)
+    {
+        DateTimeOffset sentAt = DateTimeOffset.Now;
+        h.Combat.NoteMoveSent();
+        h.Feed(alsoHere);
+        h.Combat.NoteRoomLeft(sentAt);
+    }
+
+    private static void FightInRoomAThenKill(Harness h)
+    {
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+        h.Feed("Also here: tunnel horror.");
+        h.Feed("Thresh moves to attack tunnel horror.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("You gain 100 experience.");
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_TrackerConfirmsAfterTheRoster_DeadlineStillAttacks()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        StepIntoRoom(h, "Also here: tunnel horror.");
+        Assert.Equal(0, Punches(h));
+
+        deadline.Fire();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+    }
+
+    [Fact]
+    public void AttackNotLast_FightInTheRoomWeLeft_NextRoomStillHolds()
+    {
+        using Harness h = new();
+        FightInRoomAThenKill(h);
+
+        StepIntoRoom(h, "Also here: giant skeleton.");
+        Assert.Equal(1, Punches(h));                              // held for the party
+    }
+
+    [Fact]
+    public void AttackNotLast_LateDamageLineFromTheRoomWeLeft_NextRoomStillHolds()
+    {
+        using Harness h = new();
+        bool inFlight = false;
+        h.Combat.SetMoveInFlightProbe(() => inFlight);
+        FightInRoomAThenKill(h);
+
+        DateTimeOffset sentAt = DateTimeOffset.Now;
+        h.Combat.NoteMoveSent();
+        inFlight = true;
+        h.Feed("Thresh stabs tunnel horror for 50 damage!");     // still room A's
+        inFlight = false;
+        h.Feed("Also here: giant skeleton.");
+        h.Combat.NoteRoomLeft(sentAt);
+        Assert.Equal(1, Punches(h));
+    }
+
     [Fact]
     public void AttackNotLast_AnnounceBeforeTheDeadline_DeadlineSendsNothing()
     {

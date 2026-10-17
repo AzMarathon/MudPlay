@@ -283,10 +283,17 @@ public sealed partial class CombatManager : IDisposable
     // fighting there is no announce left to wait for, and waiting would cost a round
     // (user, 2026-10-17: "we should never drop a round because we didn't witness the
     // situations"). _followedTargetHere is the monster the followed player was last
-    // seen hitting here, taken in place of waiting for their announce. Both are reset
-    // when the room changes (NoteRoomLeft).
+    // seen hitting here, taken in place of waiting for their announce.
+    //
+    // Both, with the hold deadline, belong to the room they were seen in, so they are
+    // dropped when our move is sent (NoteMoveSent). The tracker confirms the new room
+    // only on its exits line, after the new room's "Also here:" has been read and
+    // has latched its own hold, so NoteRoomLeft drops only what is older than that
+    // roster read: what a teleport, a drag or a flee left from the room before.
+    // _roomStateAt is when either was last set.
     private bool _fightUnderwayHere;
     private string? _followedTargetHere;
+    private DateTimeOffset _roomStateAt = DateTimeOffset.MinValue;
 
     // The holds' in-round deadline. Attack Order is the ideal place of our announce in
     // the party's order (user, 2026-10-17: "attack order is quite literally the ideal
@@ -304,6 +311,7 @@ public sealed partial class CombatManager : IDisposable
     private Func<TimeSpan?>? _timeToNextRound;
     private Action<TimeSpan, Action>? _scheduleHoldDeadline;
     private bool _holdDeadlineArmed;
+    private DateTimeOffset _holdDeadlineArmedAt = DateTimeOffset.MinValue;
     private int _holdDeadlineGeneration;
     private DateTimeOffset? _holdDeadlineDue;
 
@@ -1769,7 +1777,8 @@ public sealed partial class CombatManager : IDisposable
         TimeSpan wait = toRound is { } r ? r - HoldDeadlineMargin : UnplacedHoldWait;
         if (wait < TimeSpan.Zero) wait = TimeSpan.Zero;
         _holdDeadlineArmed = true;
-        _holdDeadlineDue = DateTimeOffset.Now + wait;
+        _holdDeadlineArmedAt = DateTimeOffset.Now;
+        _holdDeadlineDue = _holdDeadlineArmedAt + wait;
         int generation = ++_holdDeadlineGeneration;
         _log?.Combat(LogCategory,
             $"attack-order / follow hold: engaging in {wait.TotalMilliseconds:F0}ms unless released first ("
@@ -1781,7 +1790,14 @@ public sealed partial class CombatManager : IDisposable
     {
         _holdDeadlineArmed = false;
         _holdDeadlineDue = null;
+        _holdDeadlineArmedAt = DateTimeOffset.MinValue;
         _holdDeadlineGeneration++;
+    }
+
+    private void ForgetRoomFight()
+    {
+        _fightUnderwayHere = false;
+        _followedTargetHere = null;
     }
 
     private void OnHoldDeadline(int generation)
@@ -2748,6 +2764,9 @@ public sealed partial class CombatManager : IDisposable
     // bs fires, so a move that doesn't go through can't backstab from a broken sneak.
     public void NoteMoveSent()
     {
+        // The fight and the hold we leave behind are that room's (see _roomStateAt).
+        ForgetRoomFight();
+        DisarmHoldDeadline();
         if (!_readSettings().DoBackstab) return;
         if (_backstabOpenerConsumed) _openerSpentBeforeMove = true;
         _backstabOpenerConsumed = false;
@@ -3210,6 +3229,8 @@ public sealed partial class CombatManager : IDisposable
     private void OnPartyCombatLine(MatchResult match)
     {
         if (_disposed || !_party.IsInParty || _classifier.Current is not { } obs) return;
+        // With our move in flight the line is the room we're leaving's.
+        if (MoveInFlight()) return;
 
         string? own = _readOwnGivenName();
         List<string> names = new();
@@ -3234,6 +3255,7 @@ public sealed partial class CombatManager : IDisposable
 
         CombatSettings settings = _readSettings();
         _fightUnderwayHere = true;
+        _roomStateAt = DateTimeOffset.Now;
         bool followed = IsFollowedPlayer(settings, member);
         if (followed && monster is not null) _followedTargetHere = monster;
 
@@ -4781,9 +4803,10 @@ public sealed partial class CombatManager : IDisposable
     public void NoteRoomLeft(DateTimeOffset? lastMoveSentAt)
     {
         if (_disposed) return;
-        _fightUnderwayHere = false;
-        _followedTargetHere = null;
-        DisarmHoldDeadline();
+        // The new room's roster may already be read, with its hold armed (see
+        // _roomStateAt): only what is older than that read is the room we left's.
+        if (_roomStateAt < _rosterReadAt) ForgetRoomFight();
+        if (_holdDeadlineArmedAt < _rosterReadAt) DisarmHoldDeadline();
         if (_userBreakHold is { } held && !(lastMoveSentAt >= _userBreakHoldSince))
         {
             _log?.Combat(LogCategory,
@@ -6176,6 +6199,7 @@ public sealed partial class CombatManager : IDisposable
         // observe re-engage happens mid-fight, long after Engaged).
         _lastAttackSentAt = DateTimeOffset.Now;
         _fightUnderwayHere = true;
+        _roomStateAt = _lastAttackSentAt;
         // The fight is underway in this room — closes the AoE debuff's "first round
         // only" window (the pre-attack debuff fires BEFORE this in the same dispatch,
         // so it still gets its entry shot).
