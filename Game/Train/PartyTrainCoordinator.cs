@@ -788,6 +788,20 @@ public sealed class PartyTrainCoordinator : IDisposable
     // it was not.
     private string? _calledOff;
 
+    // Why the last trip was called off, until a caller has named it. One stop can call
+    // it off from two places (the errand's end, then the change of game data), and the
+    // second learns here that it was this stop's doing. Kept apart from _calledOff,
+    // which the trip clears as it unwinds on its own thread.
+    private string? _calledOffUnnamed;
+
+    // True once for the stop that called the trip off for why.
+    public bool TakeCalledOffFor(string why)
+    {
+        if (_calledOffUnnamed != why) return false;
+        _calledOffUnnamed = null;
+        return true;
+    }
+
     private sealed class TripCalledOff(string why) : Exception(why);
 
     // Asked after every wait of a trip, and ahead of each walk and order: a trip
@@ -798,22 +812,24 @@ public sealed class PartyTrainCoordinator : IDisposable
     }
 
     // End the trip running where it stands, from outside: the game data was read in
-    // afresh under it. The trip plans its bank and its trainer stops up front and
-    // then lives for minutes in its waits (the settle after coin changes hands, a
-    // walk, the members' trains), and nothing that stops the engines ends those:
-    // left alone it walked on to its next stop, and told the members to train at
-    // it, by the old data's room numbers. The wait in hand is ended, and the trip
+    // afresh under it, or the user ended it (a second Stop, Reset States). The trip
+    // plans its bank and its trainer stops up front and then lives for minutes in its
+    // waits (the settle after coin changes hands, a walk, the members' trains), and
+    // nothing that stops the engines ends those: left alone it walked on to its next
+    // stop, and told the members to train at it, by the old data's room numbers. The wait in hand is ended, and the trip
     // goes no further: no walk, no withdrawal, no order to a member. The trainer's
     // side goes with it, with nothing put back (TrainerWalkManager.Cancel), and the
     // members are told only that the trip is off. False when no trip is running.
     //
-    // This is the one caller of a trip's end from outside. A Stop, a death or a
-    // drop of the line end a trip only through the walk they stop; in a wait it
-    // goes on as before.
+    // A first Stop, a death or a drop of the line end a trip only through the walk
+    // they stop; in a wait it goes on as before. Left to the trainer's cancel, a
+    // trip waiting on the leader's own train waited for good: the trainer never
+    // answers a train it was told to cancel.
     public bool CallOffTrip(string why)
     {
         if (!_tripRunning || _calledOff is not null) return false;
         _calledOff = why;
+        _calledOffUnnamed = why;
         _tripTakenOver = true;
         _trainer.Cancel(why);
         _delayTcs?.TrySetResult(true);

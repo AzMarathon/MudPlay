@@ -234,12 +234,12 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
     // ----- what tells the kept lists ---------------------------------------
 
     // A name the tracker learns is on the map at once and in the lists that ask
-    // each time. The kept lists are not told: none is rebuilt in the middle of a
-    // walk for it, and one built earlier shows the name when it is next built.
+    // each time. The kept lists are not told at once, so none is rebuilt in the
+    // middle of a walk for it; they hear of it once the walk goes quiet.
     // They are told when the name is kept, and when a realm's names go on or
     // come off.
     [Fact]
-    public void KeptListsAreTold_WhenANameIsKept_OrARealmsNamesGoOnOrComeOff_NotWhenTheTrackerLearnsOne()
+    public void KeptListsAreTold_WhenANameIsKept_OrARealmsNamesGoOnOrComeOff_NotAtOnceWhenTheTrackerLearnsOne()
     {
         IReadOnlyList<TrainerShop> before = TrainerCatalog.Enumerate(_cache);
         long version = _cache.LearnedRoomNamesVersion;
@@ -277,6 +277,71 @@ public sealed class LearnedRoomNameInListsTests : IDisposable
             _store.Keep(House, "Shop Red House Room", _realm, _graph.ActiveSet));
         Assert.Equal(4, _keptListsTold);
         Assert.Equal("Shop Red House Room", TrainerRoom("House Trainer"));
+    }
+
+    // A name the tracker learns and nobody saves reaches the kept lists once no
+    // other has been learned for a few heartbeats.
+    [Fact]
+    public void ANameLearnedMidSession_ShowsInAKeptList_OnceTheWalkGoesQuiet()
+    {
+        Assert.Equal(string.Empty, TrainerRoom("House Trainer"));
+        Assert.NotNull(_graph.LearnRoomName(House, HouseName));
+
+        for (int beat = 1; beat < RoomGraphManager.KeptListsQuietBeats; beat++) _graph.TellKeptListsWhenQuiet();
+        Assert.Equal(0, _keptListsTold);
+        Assert.Equal(string.Empty, TrainerRoom("House Trainer"));
+
+        _graph.TellKeptListsWhenQuiet();
+        Assert.Equal(1, _keptListsTold);
+        Assert.Equal((HouseName, HouseName), (TrainerRoom("House Trainer"), BankRoom("House Bank")));
+        // Told once.
+        for (int beat = 0; beat < 3 * RoomGraphManager.KeptListsQuietBeats; beat++) _graph.TellKeptListsWhenQuiet();
+        Assert.Equal(1, _keptListsTold);
+    }
+
+    // A walk through a house of eight rooms the data leaves unnamed, a room a
+    // heartbeat: the item givers are rebuilt once, after the walk, not per room.
+    [Fact]
+    public void AWalkThroughEightUnnamedRooms_RebuildsTheItemGiversOnce()
+    {
+        System.Text.StringBuilder rooms = new("[");
+        for (int room = 861; room <= 868; room++)
+            rooms.Append($$"""
+                { "Map Number": 15, "Room Number": {{room}}, "Name": null,
+                  "N": "{{(room == 861 ? "1/321" : $"15/{room - 1}")}}", "S": "{{(room == 868 ? "0" : $"15/{room + 1}")}}",
+                  "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+                """);
+        rooms.Append("""
+            { "Map Number": 1, "Room Number": 321, "Name": "Oak Street",
+              "N": "0", "S": "15/861", "E": "0", "W": "0",
+              "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" } ]
+            """);
+        File.WriteAllText(Path.Combine(_gameData, "alpha", "Rooms.json"), rooms.ToString());
+        _cache.ReloadActiveSet();
+
+        LogService log = new();
+        int builds = 0;
+        log.EntryAdded += e => { if (e.Source == "ItemSourceIndex" && e.Message.StartsWith("Indexed", StringComparison.Ordinal)) builds++; };
+        TBInfoStore tb = new(_cache);
+        tb.OnActiveSetChanged(_cache.ActiveSet);
+        ItemSourceIndex sources = new(_cache, tb, log);
+        _graph.LearnedNamesChanged += sources.Warm;
+        sources.Warm();
+        Assert.Equal(1, builds);
+        int told = _keptListsTold;
+
+        for (int room = 861; room <= 868; room++)
+        {
+            Assert.NotNull(_graph.LearnRoomName(new RoomKey(15, room), $"Shop White House Room {room}"));
+            _graph.TellKeptListsWhenQuiet();
+        }
+        Assert.Equal((1, told), (builds, _keptListsTold));
+
+        for (int beat = 0; beat < RoomGraphManager.KeptListsQuietBeats; beat++) _graph.TellKeptListsWhenQuiet();
+
+        Assert.Equal((2, told + 1), (builds, _keptListsTold));
+        Assert.Equal("Shop White House Room 861", Assert.Single(sources.GiversOf(21)).Name);
+        Assert.Equal(2, builds);
     }
 
     // A set load with names on file builds the item givers once: warmed when the

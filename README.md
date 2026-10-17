@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.5**
+> **Version 3.181.23**
 > - Start-up clean-up of saved rankings no longer waits on a ranking file that won't open
 > - A ranked tour on the map is cleared when its ranking is dropped on a game-data reload
 > - Saved rankings ignore a game-data set folder that is a symbolic link

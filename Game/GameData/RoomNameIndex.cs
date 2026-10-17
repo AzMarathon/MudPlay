@@ -13,7 +13,8 @@ namespace MudPlay.Game.GameData;
 // the name the client learned for it (GameDataCache.RoomNameWhenDataHasNone). The
 // index itself holds the table's names only, so it never goes stale with a
 // learned name; a list that keeps NameOf's answers has to be rebuilt when the
-// learned names change (RoomGraphManager.LearnedNamesChanged).
+// learned names change (RoomGraphManager.LearnedNamesChanged, which tells of a name
+// learned on a walk once the walk goes quiet).
 public static class RoomNameIndex
 {
     public static IReadOnlyDictionary<(int Map, int Room), string> For(GameDataCache gameData)

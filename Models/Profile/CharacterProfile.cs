@@ -331,6 +331,10 @@ public sealed class CharacterProfile
     // finished cleanly, which is the normal case.
     public List<GhSuspendedMove>? GhUnfinishedSweep { get; set; }
 
+    // The game-data set GhUnfinishedSweep's rooms are numbers of. Null on a record
+    // saved before it was stamped.
+    public string? GhUnfinishedSweepGameData { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.
