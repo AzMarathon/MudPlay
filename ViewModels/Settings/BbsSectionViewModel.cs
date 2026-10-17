@@ -1438,7 +1438,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     }
 
     // Resolve a landing room's name for a row's read-only preview cell. Reads the
-    // live active-set graph; null-safe for headless / pre-init contexts (the
+    // live active-set graph; null-safe before the services start (the
     // preview binding simply shows "(unknown room)").
     private static string? RoomName(int map, int room)
         => AppServices.Current is { } svc

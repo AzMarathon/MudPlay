@@ -13,24 +13,22 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.E follow-up — <see cref="AutoDepositManager"/> reroute. A wealth /
-/// coin gate crossing (signalled by <see cref="CashManager.AutoDepositRequested"/>)
-/// while a Loop or Auto-Lair is running detours to the configured bank /
-/// stash room, offloads the excess coin (<c>dep</c> for a bank;
-/// per-currency <c>hide</c> via <see cref="StashRoomManager.ExecuteStash"/>
-/// for a stash), walks back to where it left off, and restarts the captured
-/// engine. A bare walk-to (or an idle stack) never reroutes. A stash room
-/// that sits on the active route (a resolved loop circuit room, or a marked
-/// Auto-Lair room) spends no detour — the manager stashes it on pass-through
-/// as the engine walks through; only an off-route stash room detours. A
-/// manual walk-through with no engine running never stashes.
-///
-/// Headless: the gate is driven by mutating the snapshot + settings and
-/// calling <see cref="CashManager.OnInventoryChanged"/>; the walker is
-/// advanced room-by-room via <see cref="RoomTracker.NoteRoomObserved"/>
-/// (the same idiom AutoWalkManagerTests uses).
-/// </summary>
+// AutoDepositManager reroute. A wealth /
+// coin gate crossing (signalled by CashManager.AutoDepositRequested)
+// while a Loop or Auto-Lair is running detours to the configured bank /
+// stash room, offloads the excess coin (dep for a bank;
+// per-currency hide via StashRoomManager.ExecuteStash
+// for a stash), walks back to where it left off, and restarts the captured
+// engine. A bare walk-to (or an idle stack) never reroutes. A stash room
+// that sits on the active route (a resolved loop circuit room, or a marked
+// Auto-Lair room) spends no detour — the manager stashes it on pass-through
+// as the engine walks through; only an off-route stash room detours. A
+// manual walk-through with no engine running never stashes.
+//
+// Headless: the gate is driven by mutating the snapshot + settings and
+// calling CashManager.OnInventoryChanged; the walker is
+// advanced room-by-room via RoomTracker.NoteRoomObserved
+// (the same idiom AutoWalkManagerTests uses).
 public sealed class AutoDepositManagerTests : IDisposable
 {
     private readonly string _root;
@@ -101,6 +99,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required ProfileService Profile { get; init; }
         public required RoomGraphManager Graph { get; init; }
         public required CashManager Cash { get; init; }
+        // The clock behind the auto-deposit cooldown.
+        public Func<DateTime> AutoDepositNow { get; set; } = () => DateTime.UtcNow;
         public required RoomTracker Tracker { get; init; }
         public required AutoWalkManager Walker { get; init; }
         public required LoopRunner Loop { get; init; }
@@ -177,17 +177,17 @@ public sealed class AutoDepositManagerTests : IDisposable
         public IEnumerable<string> StashLines() =>
             Stashed.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'));
 
-        /// <summary>Mutate holdings + fire the inventory-changed re-check
-        /// that arms the auto-deposit gate.</summary>
+        // Mutate holdings + fire the inventory-changed re-check
+        // that arms the auto-deposit gate.
         public void SetWealth(int copper, int silver, int gold, int platinum, int runic, long totalCopperValue)
         {
             SetSnapshotOnly(copper, silver, gold, platinum, runic, totalCopperValue);
             Cash.OnInventoryChanged();
         }
 
-        /// <summary>Set holdings WITHOUT re-firing the Cash gate — models the
-        /// fresh `i` dump that lands at the bank (e.g. a lower figure after an
-        /// unobserved en-route toll).</summary>
+        // Set holdings WITHOUT re-firing the Cash gate — models the
+        // fresh `i` dump that lands at the bank (e.g. a lower figure after an
+        // unobserved en-route toll).
         public void SetSnapshotOnly(int copper, int silver, int gold, int platinum, int runic, long totalCopperValue)
         {
             Snapshot = new InventorySnapshot(
@@ -198,28 +198,14 @@ public sealed class AutoDepositManagerTests : IDisposable
                 DateTimeOffset.UtcNow);
         }
 
-        // Copper values the manager pushed to the on-hand tracker at `dep`
-        // dispatch. Models InventoryManager.NoteAutoDeposit: record the amount and
-        // decrement the snapshot immediately (greedy re-decompose, same as
-        // ApplyTransaction) so the manager's own getSnapshot reads post-deposit
-        // wealth the instant it plans the return leg.
+        // Copper values the manager handed to the on-hand tracker at `dep` dispatch.
+        // The holdings stay what the test last set, as the bank's `i` re-read showed them.
         public List<long> NotedDeposits { get; } = new();
 
         public void NoteAutoDeposit(long copper)
         {
             if (copper <= 0) return;
             NotedDeposits.Add(copper);
-            long wealth = Math.Max(0, Snapshot.Currency.TotalCopperValue - copper);
-            long total = wealth;
-            int runic = (int)(wealth / 1_000_000L); wealth %= 1_000_000L;
-            int plat = (int)(wealth / 10_000L); wealth %= 10_000L;
-            int gold = (int)(wealth / 100L); wealth %= 100L;
-            int silver = (int)(wealth / 10L); wealth %= 10L;
-            int cop = (int)wealth;
-            Snapshot = new InventorySnapshot(
-                new CurrencyHoldings(cop, silver, gold, plat, runic, total),
-                Snapshot.Encumbrance, Snapshot.EquippedItems, Snapshot.CarriedItems,
-                DateTimeOffset.UtcNow);
         }
 
         public void Dispose()
@@ -239,8 +225,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson ?? GraphJson);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
-        ProfileService profile = new();
-        profile.LoadDefaultProfile();
+        ProfileService profile = TestProfiles.Loaded();
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
@@ -271,7 +256,8 @@ public sealed class AutoDepositManagerTests : IDisposable
             isEnabled: () => true,
             collectAfterCombatFinished: () => h.Settings.CollectAfterCombatFinished,
             hasEngageableHostiles: () => false,
-            getSnapshot: () => h.Snapshot);
+            getSnapshot: () => h.Snapshot,
+            autoDepositClock: () => h.AutoDepositNow());
         StashRoomManager stash = new(profile,
             readCash: () => h.Settings,
             getSnapshot: () => h.Snapshot,
@@ -365,8 +351,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Tracker.NoteRoomObserved(new RoomObservation(r.Name, new HashSet<Direction>(r.Exits.Keys)));
     }
 
-    /// <summary>Mark 1/1 + 1/3, locate at 1/1, start Auto-Lair — the
-    /// resumable "running engine" for these tests.</summary>
+    // Mark 1/1 + 1/3, locate at 1/1, start Auto-Lair — the
+    // resumable "running engine" for these tests.
     private static void StartLair(Harness h)
     {
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -376,9 +362,9 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.True(h.Lair.IsActive);
     }
 
-    /// <summary>Locate at 1/1, start a [1/1, 1/3] loop — the line graph
-    /// expands to the circuit 1/1 → 1/2 → 1/3 → 1/2 → 1/1, so every room
-    /// (1/1, 1/2, 1/3) is a guaranteed per-lap visit.</summary>
+    // Locate at 1/1, start a [1/1, 1/3] loop — the line graph
+    // expands to the circuit 1/1 → 1/2 → 1/3 → 1/2 → 1/1, so every room
+    // (1/1, 1/2, 1/3) is a guaranteed per-lap visit.
     private static void StartLoop(Harness h)
     {
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -525,17 +511,23 @@ public sealed class AutoDepositManagerTests : IDisposable
         ArmBankGate(h);
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        int notedWhenTheReturnLegStarted = -1;
+        h.Walker.Event += e =>
+        {
+            if (e.Kind == WalkEventKind.Started && e.Destination == new RoomKey(1, 1))
+                notedWhenTheReturnLegStarted = h.NotedDeposits.Count;
+        };
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
 
         // The dep fired AND the on-hand tracker was decremented by the same value
-        // the moment the command went out — so the return leg (already destined
-        // for the origin) planned against post-deposit wealth, not the stale
-        // pre-deposit purse that would have routed through an unaffordable toll.
+        // before the return leg started — so that leg planned against post-deposit
+        // wealth, not the stale pre-deposit purse that would have routed through an
+        // unaffordable toll.
         Assert.Equal("dep 5000", Assert.Single(h.DepositLines()));
         Assert.Equal(5000L, Assert.Single(h.NotedDeposits));
-        Assert.Equal(0L, h.Snapshot.Currency.TotalCopperValue);
+        Assert.Equal(1, notedWhenTheReturnLegStarted);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
     }
 
@@ -605,32 +597,6 @@ public sealed class AutoDepositManagerTests : IDisposable
     }
 
     [Fact]
-    public void Deposit_NothingAboveKeep_SendsNoCommandButStillResumes()
-    {
-        using Harness h = NewHarness();
-        StartLair(h);
-        // Trip on the coin-count gate (≥1 coin) so the deposit math can still
-        // come out ≤ keep at the bank.
-        h.Settings.BankRoomKey = "1/3";
-        h.Banks.Add(new RoomKey(1, 3));
-        h.Settings.AutoDepositIfCoinsExceed = 1;
-        h.Settings.KeepOnHandWealth = 10_000; // keep 100 gold worth of copper
-
-        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
-        Arrive(h, new RoomKey(1, 2));
-        Arrive(h, new RoomKey(1, 3));
-        DeliverBankInventory(h);
-
-        // 5000 ≤ 10000 keep → nothing to deposit, but the round-trip still
-        // walks back and resumes.
-        Assert.Empty(h.DepositLines());
-        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
-        Arrive(h, new RoomKey(1, 2));
-        Arrive(h, new RoomKey(1, 1));
-        Assert.True(h.Lair.IsActive);
-    }
-
-    [Fact]
     public void StashOffLairRoute_DetoursStashesAndResumes()
     {
         using Harness h = NewHarness();
@@ -659,17 +625,20 @@ public sealed class AutoDepositManagerTests : IDisposable
     }
 
     [Fact]
-    public void GateCross_NoBankConfigured_DoesNotReroute()
+    public void GateCross_UnparseableBankKey_DoesNotReroute()
     {
         using Harness h = NewHarness();
         StartLair(h);
-        // Gate threshold set but no bank/stash location → nothing fires.
+        // The gate fires, but the bank key names no room: the manager can't
+        // resolve a destination, so the lair keeps running and nothing is sent.
         h.Settings.AutoDepositIfWealthExceeds = 1000;
+        h.Settings.BankRoomKey = "nowhere";
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
 
         Assert.True(h.Lair.IsActive);
         Assert.Empty(h.Deposited);
+        Assert.Empty(h.DepositLines());
     }
 
     [Fact]
@@ -709,7 +678,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Cash.AutoDepositRequested += _ => fires++;
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
 
         // Parseable key that is neither a bank nor a marked stash → aborts.
         h.Settings.BankRoomKey = "1/2";
@@ -745,7 +714,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Settings.KeepOnHandWealth = 10_000;      // nothing lands above the floor
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
         int fires = 0;
         h.Cash.AutoDepositRequested += _ => fires++;
 
@@ -782,7 +751,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         ArmBankGate(h);
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
         int fires = 0;
         h.Cash.AutoDepositRequested += _ => fires++;
 
@@ -1114,7 +1083,7 @@ public sealed class AutoDepositManagerTests : IDisposable
     {
         using Harness h = NewHarness(DarkGraphJson);
         BankRunBuyingItsLight(h);
-        h.Walker.Pause();
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController));   // what the user's Stop raises
 
         h.AutoDeposit.NoteDisconnected();
         Assert.False(h.AutoDeposit.IsRerouting);

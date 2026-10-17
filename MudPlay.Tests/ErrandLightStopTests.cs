@@ -67,7 +67,7 @@ public sealed class ErrandLightStopTests : IDisposable
             newDistanceLookup: () => (a, b) => _w.Bfs.DistanceBetween(a, b),
             walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
             send: _w.Sent.Add,
-            armTimer: _w.Schedule,
+            armTimer: _w.Timers.Schedule,
             reconcileStash: (_, _) => { },
             autoGetCash: () => true,
             setAutoGetCash: _ => { },
@@ -87,7 +87,7 @@ public sealed class ErrandLightStopTests : IDisposable
             onHandCopper: () => _w.Inventory.Snapshot.Currency.TotalCopperValue,
             walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
             send: _w.Sent.Add,
-            armTimer: _w.Schedule,
+            armTimer: _w.Timers.Schedule,
             limitCollection: _ => { },
             surveyedCopper: () => 0,
             collectSurveyed: _ => { },
@@ -149,11 +149,11 @@ public sealed class ErrandLightStopTests : IDisposable
             isObtained: _ => false,
             walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
             send: _w.Sent.Add,
-            armTimer: _w.Schedule,
+            armTimer: _w.Timers.Schedule,
             lightStop: _w.NewStop("the spell-shop trip"));
         _w.Walker.Event += spells.OnWalkEvent;
         Assert.True(spells.Begin(5, Start));
-        _w.RunTimers();   // the `sp` read's window: the trip sets out
+        _w.Timers.RunAll();   // the `sp` read's window: the trip sets out
         return new Run(() => spells.IsBusy, () => spells.Cancel("test"));
     }
 
@@ -222,7 +222,7 @@ public sealed class ErrandLightStopTests : IDisposable
         _w.WalkThere();
         Assert.Single(_w.Buys);
 
-        _w.RunTimers();
+        _w.Timers.RunAll();
         Assert.Equal(Far, _w.Walker.Destination);
         Assert.True(run.Busy());
     }
@@ -265,7 +265,7 @@ public sealed class ErrandLightStopTests : IDisposable
 
         Assert.True(_w.Walker.WalkTo(FarWest));
         Assert.False(run.Busy());
-        _w.RunTimers();
+        _w.Timers.RunAll();
         Assert.Equal(FarWest, _w.Walker.Destination);
     }
 
@@ -289,10 +289,10 @@ public sealed class ErrandLightStopTests : IDisposable
     {
         BeginStashTransfer();
         _w.WalkThere();
-        _w.RunTimers();                  // the buy's window passes without a torch
+        _w.Timers.RunAll();                  // the buy's window passes without a torch
         Assert.Equal(Far, _w.Walker.Destination);
         _w.WalkThere();                  // at the stash: the search goes out
-        _w.RunTimers();                  // it shows nothing: the purse goes to the bank
+        _w.Timers.RunAll();                  // it shows nothing: the purse goes to the bank
 
         Assert.Equal(Start, _w.Walker.Destination);
         Assert.Single(_w.Buys);
@@ -351,7 +351,7 @@ public sealed class ErrandLightStopTests : IDisposable
     {
         Run first = BeginStashTransfer();
         _w.WalkThere();
-        _w.RunTimers();                    // the buy window passes: nothing landed
+        _w.Timers.RunAll();                    // the buy window passes: nothing landed
         first.Cancel();
         _w.Walker.Stop();
         _w.Tracker.SetLocated(Start);
@@ -368,7 +368,7 @@ public sealed class ErrandLightStopTests : IDisposable
     {
         Run first = BeginStashTransfer();
         _w.WalkThere();
-        _w.RunTimers();
+        _w.Timers.RunAll();
         first.Cancel();
         _w.Walker.Stop();
         _w.Tracker.SetLocated(Start);
@@ -403,7 +403,7 @@ public sealed class ErrandLightStopTests : IDisposable
             currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
             onHandCopper: () => _w.Inventory.Snapshot.Currency.TotalCopperValue,
             walkTo: k => !k.Equals(Shop) && _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
-            send: _w.Sent.Add, armTimer: _w.Schedule,
+            send: _w.Sent.Add, armTimer: _w.Timers.Schedule,
             limitCollection: _ => { }, surveyedCopper: () => 0, collectSurveyed: _ => { },
             forceAutoGetCash: _ => { }, reconcileStash: (_, _) => { }, notice: _ => { },
             lightStop: _w.NewStop("the stash transfer"));
@@ -447,7 +447,7 @@ public sealed class ErrandLightStopTests : IDisposable
             sources: () => Array.Empty<TrainFundingSource>(),
             newDistanceLookup: () => (a, b) => _w.Bfs.DistanceBetween(a, b),
             walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
-            send: _w.Sent.Add, armTimer: _w.Schedule, reconcileStash: (_, _) => { },
+            send: _w.Sent.Add, armTimer: _w.Timers.Schedule, reconcileStash: (_, _) => { },
             autoGetCash: () => true, setAutoGetCash: _ => { });
         trainer.SetFundingRouter(funding);
 
@@ -476,7 +476,7 @@ public sealed class ErrandLightStopTests : IDisposable
             sources: () => sources,
             newDistanceLookup: () => (a, b) => w.Bfs.DistanceBetween(a, b),
             walkTo: k => w.Walker.WalkTo(k, planThroughAcquirableGates: true),
-            send: w.Sent.Add, armTimer: w.Schedule, reconcileStash: (_, _) => { },
+            send: w.Sent.Add, armTimer: w.Timers.Schedule, reconcileStash: (_, _) => { },
             autoGetCash: () => true, setAutoGetCash: _ => { });
         w.Walker.Event += funding.OnWalkEvent;
         return funding;
@@ -517,7 +517,7 @@ public sealed class ErrandLightStopTests : IDisposable
         Assert.Equal(West, _w.Walker.Destination);   // to the bank first
         _w.WalkThere();
         _w.CarryWith(fees + 500);                    // the withdrawal lands
-        _w.RunTimers();
+        _w.Timers.RunAll();
 
         Assert.Equal(Shop, _w.Walker.Destination);
     }
@@ -597,7 +597,7 @@ public sealed class ErrandLightStopTests : IDisposable
     {
         Run first = BeginStashTransfer();
         _w.WalkThere();
-        _w.RunTimers();
+        _w.Timers.RunAll();
         first.Cancel();
         _w.Walker.Stop();
         _w.Tracker.SetLocated(Start);
@@ -659,7 +659,7 @@ public sealed class ErrandLightStopTests : IDisposable
 
         _w.LastStop!.NoteDisconnected();
         Assert.False(run.Busy());
-        _w.RunTimers();
+        _w.Timers.RunAll();
         Assert.Null(_w.Walker.Destination);
     }
 }

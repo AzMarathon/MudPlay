@@ -2,14 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
-using MudPlay.Terminal;
 using MudPlay.ViewModels;
 using Xunit;
 
@@ -60,7 +58,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
     // construct these three services directly (no isolation ceremony needed;
     // Resolve<T> tolerates a null active profile/BBS via null-conditional).
     private static SettingsResolver NewResolver()
-        => new(new SettingsService(), new BbsProfileStore(), new ProfileService());
+        => new(new SettingsService(), new BbsProfileStore(), TestProfiles.Service());
 
     // Regression: RoundsToKillCap moved from Settings -> Other into Monster
     // Intel's own window. Pins that editing it there actually persists to
@@ -78,8 +76,8 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
         var itemMagic = new ItemMagicIndex(cache);
 
-        var profile = new ProfileService();
-        profile.LoadBlank();   // non-null Current; Save() is a no-op for a blank draft
+        var profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();   // non-null Current; Save() is a no-op for a blank draft
         var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
 
         using (var vm = new MonsterIntelViewModel(
@@ -109,8 +107,8 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
         var itemMagic = new ItemMagicIndex(cache);
 
-        var profile = new ProfileService();
-        profile.LoadBlank();
+        var profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
 
         using (var vm = new MonsterIntelViewModel(
@@ -159,8 +157,8 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         Assert.Equal(1, spellbook.ObtainedCount);
         var itemMagic = new ItemMagicIndex(cache);
 
-        var profile = new ProfileService();
-        profile.LoadBlank();
+        var profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
 
         using var vm = new MonsterIntelViewModel(
@@ -350,20 +348,15 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var catalog = new MonsterCatalog(cache);
         var stats = new PlayerStats { Name = "Tester", Level = 10, ArmourClass = 30, Agility = 50, Charm = 50 };
         using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
-        var lines = new LineExtractor(new TerminalEmulator(80, 24));
-        inventory.AttachLineExtractor(lines);
-        FieldInfo field = typeof(LineExtractor).GetField(
-            "LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var handler = (Action<LineExtractor.EmittedLine>)field.GetValue(lines)!;
-        void Feed(string text) => handler(new LineExtractor.EmittedLine(
-            text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        ServerFeed feed = new();
+        inventory.AttachLineExtractor(feed.Lines);
         // PatchEquipped (which the wearing line below drives) is a no-op
         // until a full 'i' dump sets InventoryManager._loaded -- establish
         // that baseline first, then apply the incremental wear.
-        Feed("You are carrying 0 copper farthings.");
-        Feed("Wealth:    0 copper farthings");
-        Feed("Encumbrance:    0/100  -  Light  [0%]");
-        Feed("You are now wearing wraith ward.");
+        feed.Line("You are carrying 0 copper farthings.");
+        feed.Line("Wealth:    0 copper farthings");
+        feed.Line("Encumbrance:    0/100  -  Light  [0%]");
+        feed.Line("You are now wearing wraith ward.");
         var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
         var itemMagic = new ItemMagicIndex(cache);
 
@@ -431,8 +424,8 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         var spellbook = new SpellbookState(new KnownSpellCatalog(cache));
         var itemMagic = new ItemMagicIndex(cache);
         // A loaded (blank) profile so tests that edit the persisted rounds cap can write it.
-        var profile = new ProfileService();
-        profile.LoadBlank();
+        var profile = TestProfiles.Service();
+        profile.LoadDefaultProfile();
         var resolver = new SettingsResolver(new SettingsService(), new BbsProfileStore(), profile);
 
         var vm = new MonsterIntelViewModel(
@@ -440,16 +433,11 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             observations: null, playerState: null);
         inventory.Dispose();
 
-        // Mutate the VM's backing list in place (same object RowsView was
-        // constructed over) rather than replacing the field -- RowsView
-        // wraps that exact List<T> by reference, so a field swap wouldn't
-        // reach it, but Refresh() re-enumerates its current contents.
-        FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
-        MonsterIntelEntry synthetic = all.First(e => e.Name == "test goblin");
+        // The entry the view lists, given the incoming hit chance under test; the
+        // view re-filters on Refresh.
+        MonsterIntelEntry synthetic = vm.RowsView.SourceCollection.Cast<MonsterIntelEntry>()
+            .First(e => e.Name == "test goblin");
         synthetic.IncomingHitChance = incomingHitPercent;
-        all.Clear();
-        all.Add(synthetic);
         vm.RowsView.Refresh();
         return vm;
     }

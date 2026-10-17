@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Conditions;
 using MudPlay.Game.Inventory;
@@ -17,8 +16,7 @@ using MudPlay.Terminal;
 namespace MudPlay.Tests;
 
 // The pieces an errand's light stop runs on, wired as AppServices wires them: the
-// walker on a small map, the inventory reading server text through a terminal and
-// its line extractor, and the Auto-Light engine (AutoLightProvisioner,
+// walker on a small map, the inventory reading server text through ServerFeed, and the Auto-Light engine (AutoLightProvisioner,
 // AutoLightShopRouter) planning from that inventory.
 //
 //   1/6 Far West ─E─ 1/5 West ─E─ 1/1 Start ─N─ 1/2 Dark (Light -200) ─N─ 1/3 Far
@@ -68,8 +66,7 @@ internal sealed class ErrandLightWorld : IDisposable
         """;
 
     private readonly string _root;
-    private readonly TerminalEmulator _emulator = new(80, 24);
-    private readonly List<(TimeSpan Delay, Action Run)> _timers = new();
+    private readonly ServerFeed _server;
     private readonly List<IDisposable> _dispose = new();
 
     public GameDataCache Cache { get; }
@@ -81,9 +78,11 @@ internal sealed class ErrandLightWorld : IDisposable
     public LoopRunner Loop { get; }
     public AutoLairManager Lair { get; }
     public MessageRouter Router { get; } = new();
-    public LineExtractor Lines { get; }
+    public LineExtractor Lines => _server.Lines;
     public InventoryManager Inventory { get; } = new();
-    public ProfileService Profile { get; } = new();
+    public ProfileService Profile { get; } = TestProfiles.Loaded();
+    // The errand timers and the buy windows: held until the test lets them run.
+    public ManualTimers Timers { get; } = new();
     public AutoLightProvisioner Provisioner { get; }
     public AutoLightShopRouter LightShops { get; }
 
@@ -134,13 +133,10 @@ internal sealed class ErrandLightWorld : IDisposable
         Lair = new AutoLairManager(Walker, Tracker, Graph, Bfs, timers);
         _dispose.Add(Lair);
         _dispose.Add(timers);
-        Profile.LoadDefaultProfile();
 
         // The client dispatches each row to the router, then the inventory reads it.
         DefaultPatterns.Seed(Router);
-        Lines = new LineExtractor(_emulator);
-        Lines.LineEmitted += Router.Dispatch;
-        Lines.ChatLineEmitted += Router.Dispatch;
+        _server = new ServerFeed(Router);
         Inventory.AttachLineExtractor(Lines);
         _dispose.Add(Inventory);
 
@@ -185,7 +181,7 @@ internal sealed class ErrandLightWorld : IDisposable
     // one, its buy window on the test's timers.
     public ErrandLightStop NewStop(string errand)
     {
-        LightShopBuy buyer = new(Carried, ScheduleWindow);
+        LightShopBuy buyer = new(Carried, Timers.Arm);
         ErrandLightStop stop = new(errand, (from, to) => Walker.TryComputeRouteKeys(from, to),
             Provisioner, LightShops, () => Tracker.State.CurrentRoom?.Key, buyer, Sent.Add,
             lastUnpaidFailure: () => UnpaidFailure ?? Walker.LastUnpaidFailure);
@@ -210,28 +206,6 @@ internal sealed class ErrandLightWorld : IDisposable
         return trainer;
     }
 
-    // The errand timers and the buy windows: held until the test lets them run.
-    public void Schedule(TimeSpan delay, Action run) => _timers.Add((delay, run));
-
-    private IDisposable ScheduleWindow(TimeSpan delay, Action run)
-    {
-        (TimeSpan, Action) entry = (delay, run);
-        _timers.Add(entry);
-        return new Unschedule(() => _timers.Remove(entry));
-    }
-
-    public void RunTimers()
-    {
-        (TimeSpan Delay, Action Run)[] due = _timers.ToArray();
-        _timers.Clear();
-        foreach ((TimeSpan _, Action run) in due) run();
-    }
-
-    private sealed class Unschedule(Action undo) : IDisposable
-    {
-        public void Dispose() => undo();
-    }
-
     public void Keep(IDisposable d) => _dispose.Add(d);
 
     // The game shows the room: the step into it lands.
@@ -251,7 +225,7 @@ internal sealed class ErrandLightWorld : IDisposable
     }
 
     // Server rows, as the terminal receives them.
-    public void Line(string text) => _emulator.Feed(Encoding.Latin1.GetBytes(text + "\r\n"));
+    public void Line(string text) => _server.Line(text);
 
     // A full `i`: the items carried and 500 copper.
     public void Carry(params string[] items) => CarryWith(500, items);

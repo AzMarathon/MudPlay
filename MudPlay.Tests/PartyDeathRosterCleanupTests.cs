@@ -5,7 +5,6 @@ using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
-using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -13,14 +12,13 @@ namespace MudPlay.Tests;
 // A party member's death in our room ("<Name> is dead.") asks one `par`; the first
 // reply read afterwards settles it (user, 2026-10-17). Not listed: the roster drops
 // them. Listed [Invited]: a leader uninvites them once combat clears. Every line goes
-// through the terminal emulator, the line extractor and the router, and every send is
-// what the managers put on their wire senders.
+// through ServerFeed and the router, and every send is what the managers put on their
+// wire senders.
 public sealed class PartyDeathRosterCleanupTests
 {
     private sealed class Harness : IDisposable
     {
-        private readonly TerminalEmulator _emulator = new(120, 25);
-        private readonly LineExtractor _extractor;
+        private readonly ServerFeed _server;
         public MessageRouter Router { get; } = new();
         public PartyState Party { get; } = new();
         public PartyManager Manager { get; }
@@ -28,44 +26,39 @@ public sealed class PartyDeathRosterCleanupTests
         public MovementCoordinator Coord { get; } = new();
         public PartyDeathRosterCleanup Cleanup { get; }
         public AutoPartyManager AutoParty { get; }
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(TestProfiles.Service(), () => null);
+        // The poller and auto-party timers: armed, never fired.
+        public ManualTimers Timers { get; } = new();
         public LogService Log { get; } = new();
         public List<string> Wire { get; } = new();
         public DateTime Clock { get; set; } = new(2026, 10, 17, 12, 0, 0, DateTimeKind.Utc);
 
-        public Harness(bool parOnTimer = false, bool withTimer = true)
+        public Harness(bool parOnTimer = false)
         {
             DefaultPatterns.Seed(Router);
-            _extractor = new LineExtractor(_emulator);
-            _extractor.LineEmitted += Router.Dispatch;
+            _server = new ServerFeed(Router);
             Manager = new PartyManager(Router, Party) { LocalCharacterName = "MudPlay" };
-            Manager.AttachLineExtractor(_extractor);
+            Manager.AttachLineExtractor(_server.Lines);
             Manager.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b)));
-            // With the timer on, the poller's own DispatcherTimer: nothing pumps the
-            // dispatcher here, so it never ticks, and its countdown is what counts.
+            // The poller's timers are armed but never fired here: with the par timer
+            // on, its countdown is what counts.
             ChatRouter chat = new(Router);
-            Poller = parOnTimer && withTimer
-                ? new PartyPoller(chat, Party, Manager)
-                : new PartyPoller(chat, Party, Manager, useTimer: false);
+            Poller = new PartyPoller(chat, Party, Manager, schedule: Timers.Arm, now: () => Clock);
             Poller.HealthNagEnabled = false;
-            Poller.NowProvider = () => Clock;
-            // A changed cadence starts the countdown again, from the test's clock.
+            // With the par timer on, its countdown starts here, from the test's clock.
             Poller.ApplyParSettings(new PartySettings { ParPollOnTimer = parOnTimer, ParPollFrequencySec = 10 });
             Poller.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b)));
-            Cleanup = new PartyDeathRosterCleanup(Router, Party, Manager, Coord, Poller, Log)
-            {
-                NowProvider = () => new DateTimeOffset(Clock),
-            };
+            Cleanup = new PartyDeathRosterCleanup(Router, Party, Manager, Coord, Poller, Log,
+                now: () => new DateTimeOffset(Clock));
             // Wired as AppServices wires it.
-            AutoParty = new AutoPartyManager(Router, Players, Party)
+            AutoParty = new AutoPartyManager(Router, Players, Party, schedule: Timers.Arm, now: () => Clock)
             {
-                NowProvider = () => Clock,
                 UninvitedForDeath = given => Cleanup.UninvitedForDeath(given),
             };
             AutoParty.SetWireSender(b => Wire.Add(Encoding.Latin1.GetString(b)));
         }
 
-        public void Line(string text) => _emulator.Feed(Encoding.Latin1.GetBytes(text + "\r\n"));
+        public void Line(string text) => _server.Line(text);
 
         // A `par` reply: the follow line when we follow, the header, the member rows,
         // our own row last, and the prompt that ends it.
@@ -95,9 +88,9 @@ public sealed class PartyDeathRosterCleanupTests
     }
 
     // We lead Raijin (and Bob): both follow us.
-    private static Harness Leading(bool parOnTimer = false, bool withTimer = true)
+    private static Harness Leading(bool parOnTimer = false)
     {
-        Harness h = new(parOnTimer, withTimer);
+        Harness h = new(parOnTimer);
         h.Line("Raijin started to follow you.");
         h.Line("Bob started to follow you.");
         h.Line("Cid started to follow you.");
@@ -260,17 +253,17 @@ public sealed class PartyDeathRosterCleanupTests
         Assert.False(h.OnRoster("Bob"));
     }
 
-    // With the timer box ticked but no timer running it, no `par` is ever due.
+    // A new cadence starts the countdown over: the old one's next `par` was 4 s away,
+    // the new one's is 8 s away, so a death asks its own.
     [Fact]
-    public void NoTimer_NothingIsDue()
+    public void CadenceChanged_CountdownStartsOver()
     {
-        using Harness h = Leading(parOnTimer: true, withTimer: false);
-        h.Line("Raijin is dead.");
-        h.ParReply(null, Harness.Row("Bob"), Harness.Row("Cid"));
-        h.Clock += TimeSpan.FromSeconds(1);
-        h.Line("Bob is dead.");
+        using Harness h = Leading(parOnTimer: true);   // every 10 s, counting from now
+        h.Clock += TimeSpan.FromSeconds(6);
+        h.Poller.ApplyParSettings(new PartySettings { ParPollOnTimer = true, ParPollFrequencySec = 8 });
 
-        Assert.Equal(2, h.Pars);
+        h.Line("Raijin is dead.");
+        Assert.Equal(1, h.Pars);
     }
 
     // A disconnect stops the timer and drops the `par` on its way: back in the game,

@@ -13,8 +13,7 @@ namespace MudPlay.Tests;
 // 2026-10-17: "it should invite, wait for the @join nag to kick in. After the 3
 // nags, if they don't join, then follow the behavior we have in the client").
 // Lines go through the router; sends are what the managers put on their senders.
-// The nag clock is AutoPartyManager's own dispatcher tick, which nothing pumps
-// here, so each tick is run with TickNagsForTests.
+// The nag tick is AutoPartyManager's injected scheduler: the test runs it.
 public sealed class SplitReformJoinNagTests
 {
     private sealed class Harness : IDisposable
@@ -26,15 +25,16 @@ public sealed class SplitReformJoinNagTests
         public MovementCoordinator Coord { get; } = new();
         public List<string> Wire { get; } = new();
         public DateTime Clock { get; set; } = new(2026, 10, 17, 12, 0, 0, DateTimeKind.Utc);
+        private readonly ManualTimers _timers = new();
         private readonly DateTime _start;
 
         public Harness()
         {
             DefaultPatterns.Seed(Router);
             Manager = new PartyManager(Router, Party) { LocalCharacterName = "MudPlay" };
-            AutoParty = new AutoPartyManager(Router, new PlayerDatabase(), Party)
+            AutoParty = new AutoPartyManager(Router, new PlayerDatabase(new ProfileService(), () => null), Party,
+                schedule: _timers.Arm, now: () => Clock)
             {
-                NowProvider = () => Clock,
                 // Shorter than the nags take, so it's the nags that decide.
                 InviteWaitWindow = TimeSpan.FromSeconds(10),
             };
@@ -51,7 +51,7 @@ public sealed class SplitReformJoinNagTests
         public void TickAt(int seconds)
         {
             Clock = _start + TimeSpan.FromSeconds(seconds);
-            AutoParty.TickNagsForTests();
+            _timers.RunDue(AutoPartyManager.NagTick);
         }
 
         public int Nags => Wire.Count(w => w == "/Raijin @join\r");

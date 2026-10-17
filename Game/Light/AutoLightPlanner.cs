@@ -7,9 +7,10 @@ namespace MudPlay.Game.Light;
 // ahead (RouteLightScanner), the character's worn illumination, the currently
 // readied light, the lights carried in the pack, the buyable light catalogue, and
 // the AutoLightSettings knobs, it answers what to do right now as an
-// AutoLightPlan — ready a carried light, buy a provisioning batch, top up a
-// dwindling supply, or nothing. It never touches the wire or the game state; the
-// wiring layer turns the plan into use / buy commands.
+// AutoLightPlan — a carried light already covers (no buy), buy a provisioning
+// batch, top up a dwindling supply, or nothing. It never touches the wire or the
+// game state; the wiring layer turns Buy and Reorder into shop trips, and lights
+// are used room by room, not off this plan.
 //
 // Preferred vs. auto: a named PreferredLightName is used as-is (the user's
 // explicit pick, even if a stronger light would be needed to fully clear the
@@ -104,12 +105,9 @@ public static class AutoLightPlanner
                     buy.Name, CarryCount(settings.CarryHours, buy.BurnTime),
                     $"route dark: provision {buy.Name} (need illu {minStrength})");
 
-            // c. Can't buy (provisioning off / nothing buyable) — ready the
-            //    strongest carried light as a partial mitigation, else nothing.
-            return Strongest(carriedLights) is { } fallback
-                ? AutoLightPlan.ReadyLight(
-                    fallback.Name, $"route dark: ready {fallback.Name} (best carried, may not fully cover)")
-                : AutoLightPlan.Nothing("route dark: no light carried and provisioning off");
+            // c. Can't buy (provisioning off / nothing buyable): nothing to do here;
+            //    the room-by-room path lights the best carried light on the way.
+            return AutoLightPlan.Nothing("route dark: no carried light covers and none can be bought");
         }
 
         return AutoLightPlan.Nothing("route lit");
@@ -137,14 +135,6 @@ public static class AutoLightPlanner
         LightItem? mine = preferred is { } p ? FindByName(p.Name, carried) : null;
         if (mine is { } m && m.Strength >= minStrength) return m;
         return Choose(carried, minStrength, preferred: null) ?? mine;
-    }
-
-    private static LightItem? Strongest(IReadOnlyList<LightItem> lights)
-    {
-        LightItem? best = null;
-        foreach (LightItem l in lights)
-            if (best is not { } b || l.Strength > b.Strength) best = l;
-        return best;
     }
 
     private static LightItem? FindByName(string? name, IReadOnlyList<LightItem> lights)

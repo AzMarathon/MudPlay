@@ -107,7 +107,7 @@ public sealed class AutoDepositManager : IDisposable
     private readonly Func<int, int> _carriedCount;
     private readonly Action<Action> _post;
     // True while we're a party follower (in a party, not leading). Gates the
-    // opt-in follower pass-through stash. Unbound (tests) ⇒ never a follower.
+    // opt-in follower pass-through stash. Unbound ⇒ never a follower.
     private readonly Func<bool> _isFollower;
     // The light buy at a shop the reroute stops at.
     private readonly LightShopBuy _lightBuyer;
