@@ -1,5 +1,6 @@
 using System.IO;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
@@ -50,9 +51,20 @@ public sealed class RoomRenameRelearnTests : IDisposable
           { "Map Number": 15, "Room Number": 960, "Name": null, "N": "15/961 (Key: 1033 [or 301 picklocks])", "S": "15/959", "E": "0", "W": "0", {{Z}} },
           { "Map Number": 15, "Room Number": 961, "Name": null, "N": "0", "S": "15/960 (Key: 1033 [or 301 picklocks])", "E": "0", "W": "0", {{Z}} },
           { "Map Number": 2, "Room Number": 500, "Name": "Kitchen", "N": "2/501", "S": "2/501", "E": "2/501", "W": "0", {{Z}} },
-          { "Map Number": 2, "Room Number": 501, "Name": "Scullery", "N": "0", "S": "2/500", "E": "0", "W": "0", {{Z}} }
+          { "Map Number": 2, "Room Number": 501, "Name": "Scullery", "N": "0", "S": "2/500", "E": "0", "W": "0", {{Z}} },
+          { "Map Number": 3, "Room Number": 1, "Name": "Yard", "N": "3/3", "S": "0", "E": "3/2", "W": "0", {{Z}} },
+          { "Map Number": 3, "Room Number": 2, "Name": "Yard", "N": "3/5", "S": "0", "E": "0", "W": "3/1 (Hidden/Searchable)", {{Z}} },
+          { "Map Number": 3, "Room Number": 3, "Name": null, "N": "3/4", "S": "3/1", "E": "3/5", "W": "0", {{Z}} },
+          { "Map Number": 3, "Room Number": 4, "Name": "Tower", "N": "0", "S": "3/3", "E": "0", "W": "0", {{Z}} },
+          { "Map Number": 3, "Room Number": 5, "Name": "Barn", "N": "0", "S": "3/2", "E": "0", "W": "0", {{Z}} }
         ]
         """;
+
+    // Made up: a yard beside another of the same name, whose way back is hidden,
+    // a gate room the data leaves unnamed north of the first, with a way east to
+    // the barn, and a tower beyond.
+    private static readonly RoomKey Yard = new(3, 1);
+    private static readonly RoomKey GateRoom = new(3, 3);
 
     // The end of another of the set's houses (15/958 to 15/961; 958's way west is
     // left out): two rooms with the same exits, north and south, and beyond them
@@ -692,5 +704,249 @@ public sealed class RoomRenameRelearnTests : IDisposable
         Assert.Empty(learned);
         Assert.Equal("Old Store", graph.GetRoom(StoreRoom)!.Name);
         Assert.NotEqual(StoreRoom, tracker.State.CurrentRoom?.Key);
+    }
+
+    // Two steps north from the entrance, typed together on a statline with no
+    // echo, each room printing the name it bears. The entrance re-looked at once
+    // is held; the landing then shows under its own name, and is its arrival, not
+    // a sign that the held re-look was. Nothing is learned, and the hall is where
+    // we end.
+    [Fact]
+    public void NoEcho_AReLookHeld_ThenTheRoomAheadUnderItsOwnName_IsNotTakenForTheArrival()
+    {
+        RoomKey hall = new(15, 879);
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Entrance);
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1.05));
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(1.1));
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(Landing), Shown(graph.GetRoom(Landing)!)), T0.AddSeconds(1.6));
+        tracker.NoteRoomObserved(new RoomObservation(OwnName(hall), Shown(graph.GetRoom(hall)!)), T0.AddSeconds(2.1));
+
+        Assert.Empty(learned);
+        Assert.Equal((RoomConfidence.Confirmed, hall), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
+    // The same two steps on a statline that echoes: a re-look of the entrance
+    // before the echo is never held for later, so the landing's echoed arrival
+    // names the landing.
+    [Fact]
+    public void WithAnEcho_AReLookBeforeTheEcho_IsNotHeldForLater()
+    {
+        RoomKey hall = new(15, 879);
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Street);
+        tracker.NoteMoveSent(Direction.N, T0);
+        tracker.NoteInboundMoveEcho("n", T0.AddSeconds(0.05));
+        tracker.NoteRoomObserved(new RoomObservation(OwnNewName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(0.1));
+        learned.Clear();
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1.05));
+        tracker.NoteRoomObserved(new RoomObservation(OwnNewName(Entrance), Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(1.1));
+        Assert.Null(tracker.HeldDisplay);
+        tracker.NoteInboundMoveEcho("n", T0.AddSeconds(1.5));
+        tracker.NoteRoomObserved(new RoomObservation(OwnNewName(Landing), Shown(graph.GetRoom(Landing)!)), T0.AddSeconds(1.6));
+
+        Assert.Equal(new[] { new NameLearnedEvent(Landing, OwnNewName(Landing)) }, learned);
+        Assert.Equal(Landing, tracker.State.CurrentRoom!.Key);
+        Assert.Equal(OwnName(hall), graph.GetRoom(hall)!.Name);
+    }
+
+    // With an echo, the entrance re-looked under the name it bears and was shown
+    // with, before the step north into a landing never seen, is the entrance's
+    // display: the landing is not named from it.
+    [Fact]
+    public void WithAnEcho_AReLookOfTheRoomBeingLeft_DoesNotNameANamelessRoomAhead()
+    {
+        RoomGraphManager graph = Map();
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Street);
+        tracker.NoteMoveSent(Direction.N, T0);
+        tracker.NoteInboundMoveEcho("n", T0.AddSeconds(0.05));
+        tracker.NoteRoomObserved(new RoomObservation("The Front Hall", Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(0.1));
+        learned.Clear();
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteRoomObserved(new RoomObservation("The Front Hall", Shown(graph.GetRoom(Entrance)!)), T0.AddSeconds(1.1));
+
+        Assert.Empty(learned);
+        Assert.Equal((RoomConfidence.Pending, Entrance), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
+    // A follow drag is only shown on arrival: the house room the drag reaches
+    // takes the name it prints, though the guard post beside the street could
+    // have shown the same display.
+    [Fact]
+    public void AFollowDrag_IsTheArrival_ThoughANamedNeighbourCouldHaveShownIt()
+    {
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Street);
+
+        tracker.NoteFollowMove(Direction.N);
+        tracker.NoteRoomObserved(new RoomObservation("Guard Post", X(Direction.E)));
+
+        Assert.Equal(new[] { new NameLearnedEvent(Entrance, "Guard Post") }, learned);
+        Assert.Equal((RoomConfidence.Confirmed, Entrance), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
+    // Put in the entrance by hand, never shown it. A display under another name
+    // that fits only the entrance, after the step's echo or on a follow drag, is
+    // no re-look: the step went somewhere the map didn't expect, and the tracker
+    // is unsure, as before.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ADisplayFittingOnlyTheUnshownRoomBeingLeft_AfterTheEchoOrOnADrag_LeavesTheTrackerUnsure(bool drag)
+    {
+        RoomGraphManager graph = Map(stored: OwnName);
+        (RoomTracker tracker, _) = Track(graph, Entrance);
+
+        if (drag) tracker.NoteFollowMove(Direction.E);
+        else
+        {
+            tracker.NoteInboundMoveEcho("stat");
+            tracker.NoteMoveSent(Direction.E);
+            tracker.NoteInboundMoveEcho("e");
+        }
+        tracker.NoteRoomObserved(new RoomObservation("The Front Hall", Shown(graph.GetRoom(Entrance)!)));
+
+        Assert.Equal(RoomConfidence.Suspect, tracker.State.Confidence);
+    }
+
+    // No echo. From the yard, a step north to the gate room; the yard's display
+    // with only its way north comes back too soon, and the other yard beside it,
+    // whose way back is hidden, could have shown it too. It is held. The step on
+    // to the tower shows the tower: the held display is not taken for the gate
+    // room, since the yard beside could have been the one shown.
+    [Fact]
+    public void NoEcho_AHeldDisplayANamedNeighbourCouldHaveShown_DoesNotNameTheRoomAhead()
+    {
+        RoomGraphManager graph = Map();
+        graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [GateRoom] = "Old Gate" });
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, Yard);
+        tracker.NoteRoomObserved(new RoomObservation("Yard", X(Direction.N, Direction.E)), T0);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteRoomObserved(new RoomObservation("Yard", X(Direction.N)), T0.AddSeconds(1.1));
+        Assert.NotNull(tracker.HeldDisplay);
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(3));
+        tracker.NoteRoomObserved(new RoomObservation("Tower", X(Direction.S)), T0.AddSeconds(3.1));
+
+        Assert.DoesNotContain(new NameLearnedEvent(GateRoom, "Yard"), learned);
+    }
+
+    // Put in the yard, which the data names, without its display. The step north
+    // into the gate room is in flight when the yard redisplays: its exits are all
+    // the gate room's. On a statline that echoes, before the echo it is the
+    // yard's display; with none, the gate room, bearing a name, is not named
+    // from a display the yard could have shown. The arrival names it.
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void AReLookOfANamedRoomBeingLeft_NotShownSince_DoesNotNameTheRoomAhead(bool echoes, bool gateSeenBefore)
+    {
+        RoomGraphManager graph = Map();
+        if (gateSeenBefore) graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [GateRoom] = "Old Gate" });
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = PutInTheYardByHand(graph);
+        if (echoes) tracker.NoteInboundMoveEcho("stat", T0);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteRoomObserved(new RoomObservation("Yard", X(Direction.N, Direction.E)), T0.AddSeconds(1.1));
+
+        Assert.Empty(learned);
+        Assert.Equal((RoomConfidence.Pending, Yard), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+
+        if (echoes) tracker.NoteInboundMoveEcho("n", T0.AddSeconds(1.5));
+        tracker.NoteRoomObserved(new RoomObservation("Gatehouse", X(Direction.N, Direction.S, Direction.E)), T0.AddSeconds(1.6));
+
+        Assert.Equal(new[] { new NameLearnedEvent(GateRoom, "Gatehouse") }, learned);
+        Assert.Equal((RoomConfidence.Confirmed, GateRoom), (tracker.State.Confidence, tracker.State.CurrentRoom!.Key));
+    }
+
+    // The last room shown was the tower, and then we were put in the yard by hand.
+    private static (RoomTracker, List<NameLearnedEvent>) PutInTheYardByHand(RoomGraphManager graph)
+    {
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, new RoomKey(3, 4));
+        tracker.NoteRoomObserved(new RoomObservation("Tower", X(Direction.S)), T0.AddSeconds(-2));
+        tracker.SetLocated(Yard, T0.AddSeconds(-1));
+        return (tracker, learned);
+    }
+
+    // No echo: the yard's re-look, held, is not taken for the gate room when the
+    // step after it shows the tower. The yard could have shown it.
+    [Fact]
+    public void NoEcho_AHeldReLookOfANamedRoomBeingLeft_IsNotTakenForTheRoomAhead()
+    {
+        RoomGraphManager graph = Map();
+        graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [GateRoom] = "Old Gate" });
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = PutInTheYardByHand(graph);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteRoomObserved(new RoomObservation("Yard", X(Direction.N, Direction.E)), T0.AddSeconds(1.1));
+        Assert.NotNull(tracker.HeldDisplay);
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(3));
+        tracker.NoteRoomObserved(new RoomObservation("Tower", X(Direction.S)), T0.AddSeconds(3.1));
+
+        Assert.DoesNotContain(new NameLearnedEvent(GateRoom, "Yard"), learned);
+    }
+
+    // ----- a held display and a teleporting exit ----------------------------
+
+    // The stair-and-store shape again, its rooms made up, with one of its two
+    // steps through an exit whose spell sends the walker on to a landing.
+    private RoomGraphManager CastCorridor(bool castOnFirstStep)
+    {
+        string first = castOnFirstStep ? "20/2 (Cast: pre-0, post-858)" : "20/2";
+        string second = castOnFirstStep ? "20/3" : "20/3 (Cast: pre-0, post-858)";
+        string set = Path.Combine(_root, "beta");
+        Directory.CreateDirectory(set);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), $$"""
+            [
+              { "Map Number": 20, "Room Number": 1, "Name": null, "N": "{{first}}", "S": "20/9", "E": "0", "W": "0", {{Z}} },
+              { "Map Number": 20, "Room Number": 2, "Name": null, "N": "{{second}}", "S": "20/1", "E": "0", "W": "0", {{Z}} },
+              { "Map Number": 20, "Room Number": 3, "Name": null, "N": "0", "S": "20/2", "E": "0", "W": "0", {{Z}} },
+              { "Map Number": 20, "Room Number": 4, "Name": "Landing", "N": "0", "S": "0", "E": "0", "W": "20/9", {{Z}} },
+              { "Map Number": 20, "Room Number": 9, "Name": "Porch", "N": "20/1", "S": "0", "E": "20/4", "W": "0", {{Z}} }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(set, "TBInfo.json"),
+            """[ { "Number": 2900, "LinkTo": 0, "Action": "teleport 4 20\n" } ]""");
+        File.WriteAllText(Path.Combine(set, "Spells.json"),
+            """[ { "Number": 858, "Name": "porch teleport", "Short": "", "Abil-0": 148, "AbilVal-0": 2900 } ]""");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("beta");
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged("beta");
+        RoomGraphManager graph = new(cache, log: null, tbinfo, new KnownSpellCatalog(cache));
+        graph.OnActiveSetChanged("beta");
+        graph.ApplyStoredNames(new Dictionary<RoomKey, string>
+        {
+            [new RoomKey(20, 1)] = "Lodge Room", [new RoomKey(20, 2)] = "Old Store", [new RoomKey(20, 3)] = "Vault",
+        });
+        return graph;
+    }
+
+    // The held display is not taken across a teleporting exit on either step:
+    // the cast's own reading of the display settles where it leads.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NoEcho_AHeldDisplay_IsNotTakenAcrossATeleportingExit(bool castOnFirstStep)
+    {
+        RoomGraphManager graph = CastCorridor(castOnFirstStep);
+        RoomKey stair = new(20, 1), store = new(20, 2);
+        Assert.NotNull(graph.GetRoom(castOnFirstStep ? stair : store)!.Exits[Direction.N].CastLandings);
+        (RoomTracker tracker, List<NameLearnedEvent> learned) = Track(graph, stair);
+        tracker.NoteRoomObserved(new RoomObservation("Lodge Room", X(Direction.N, Direction.S)), T0);
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(1));
+        tracker.NoteRoomObserved(new RoomObservation("Lodge Room", X(Direction.N, Direction.S)), T0.AddSeconds(1.1));
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(3));
+        tracker.NoteRoomObserved(new RoomObservation("Vault", X(Direction.S)), T0.AddSeconds(3.1));
+
+        Assert.DoesNotContain(new NameLearnedEvent(store, "Lodge Room"), learned);
     }
 }

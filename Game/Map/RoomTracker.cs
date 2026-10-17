@@ -2118,10 +2118,11 @@ public sealed class RoomTracker
         // back into the game in it, renamed while we were away): nothing says
         // where we are is wrong, and the move's own display is still to come. A
         // Suspect here lost the house until we walked out of it to a room the map
-        // is sure of.
+        // is sure of. Logged at Info: with no echo, a step that landed somewhere
+        // unexpected waits here where it used to go Suspect and ask for a resync.
         if (sourceUnderAnotherName)
         {
-            _log?.Log(LogSeverity.Debug, "RoomTracker",
+            _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Display '{observation.Name}' fits the room being left, {source!.Key}, which has not been shown since we came to it and bears '{source.Name}'; staying Pending.");
             State.LastUpdatedAt = when;
             return;
@@ -2752,7 +2753,9 @@ public sealed class RoomTracker
     //   - a room the data names beside the room being left, whose own display
     //     this could be, is taken to be the one shown (Declined), and the name
     //     re-anchor further down finds it. A `look <dir>` into it is then dropped
-    //     as the look's (ObservationLooksLikePendingMoveOutcome);
+    //     as the look's (ObservationLooksLikePendingMoveOutcome). For a room that
+    //     bears a name, the room being left counts too, when the data names it:
+    //     shown or not since we came to it, its re-look is as near;
     //   - otherwise the display is the arrival, a room with no name taken on its
     //     exits alone as it always was.
     private UnnamedArrival ReadUnnamedArrival(
@@ -2763,11 +2766,13 @@ public sealed class RoomTracker
         {
             bool anotherRoomCouldShowIt = LooksLikeSourceRelook(source, head, observation, when)
                 || MayBeSourceUnderAnotherName(source, observation)
-                || NamedNeighbourCouldShow(source, target, observation);
+                || NamedNeighbourCouldShow(source, target, observation, orTheRoomBeingLeft: true);
             return HeadMoveEchoed(head) || !anotherRoomCouldShowIt ? UnnamedArrival.Taken : UnnamedArrival.NotYet;
         }
         if (!target.HasUnknownName && LooksLikeSourceRelook(source, head, observation, when)) return UnnamedArrival.NotYet;
-        return NamedNeighbourCouldShow(source, target, observation) ? UnnamedArrival.Declined : UnnamedArrival.Taken;
+        return NamedNeighbourCouldShow(source, target, observation, orTheRoomBeingLeft: !target.HasUnknownName)
+            ? UnnamedArrival.Declined
+            : UnnamedArrival.Taken;
     }
 
     // Whether the display could be the room being left under a name it doesn't
@@ -2783,10 +2788,11 @@ public sealed class RoomTracker
         && !(_lastObservation is { } shown && MatchesPredicted(source, shown));
 
     // Whether a room the data names, a neighbour of the room being left other than
-    // the room ahead, could have shown this display as its own
-    // (RoomGraphManager.NamedInDataCouldShow).
-    private bool NamedNeighbourCouldShow(Room source, Room target, RoomObservation observation)
+    // the room ahead (or, orTheRoomBeingLeft, that room itself), could have shown
+    // this display as its own (RoomGraphManager.NamedInDataCouldShow).
+    private bool NamedNeighbourCouldShow(Room source, Room target, RoomObservation observation, bool orTheRoomBeingLeft = false)
     {
+        if (orTheRoomBeingLeft && _graph.NamedInDataCouldShow(source.Key, observation.Name, observation.Exits)) return true;
         foreach (RoomExit exit in source.Exits.Values)
             if (exit.Target != target.Key && _graph.NamedInDataCouldShow(exit.Target, observation.Name, observation.Exits))
                 return true;
@@ -2824,7 +2830,10 @@ public sealed class RoomTracker
         bool heldNamesTarget = !MatchesPredicted(target, held.Display);
         if (heldNamesTarget
             && (!ArrivesInRoomTheDataLeavesUnnamed(target, held.Display)
-                || NamedNeighbourCouldShow(source, target, held.Display))) return false;
+                || NamedNeighbourCouldShow(source, target, held.Display, orTheRoomBeingLeft: true))) return false;
+        // The room ahead shown under the name it bears is its own arrival, and the
+        // held display, under another name, was the room being left re-looked.
+        if (heldNamesTarget && MatchesPredicted(target, observation)) return false;
         if (!MatchesPredicted(beyond, observation) && !ArrivesInRoomTheDataLeavesUnnamed(beyond, observation)) return false;
 
         _heldDisplay = null;
