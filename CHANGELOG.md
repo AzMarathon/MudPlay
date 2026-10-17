@@ -11,6 +11,14 @@
 - Auto-Light: bank and training trips stock up at a light shop within 25 steps of the way back
 - Auto-Light: a light lying on the floor is picked up, up to the Carry-hours shortfall, unless its item rules say otherwise
 
+## 3.183.39
+
+- Your own death is read from `You have been killed!`: the death sound, the death-floor refinement (now only ever lowered) and the round reset now run
+- A party member's death is read from `<Name> is dead.`; the `has been slain by` and `has died` lines were never sent by the game
+- A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited (never without a seen death line, nor after a re-invite)
+- After a party-splitting teleport, a member is sent 3 `@join` nags before the wait for them can end
+- The `@join` nag is no longer stopped by the game's echo of the invite it follows
+
 ## 3.183.34
 
 - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
