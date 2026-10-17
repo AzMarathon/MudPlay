@@ -49,7 +49,9 @@ public static class AutoLightPlanner
             double remainingMinutes = rl.Readied * SecondsPerReadiedPoint / 60.0;
             if (remainingMinutes < settings.ReorderThresholdMinutes)
             {
-                LightItem? restock = FindByName(rl.Name, catalogue) ?? preferred;
+                // The Preferred light, as for any buy; under Automatic, more of
+                // the kind that is lit.
+                LightItem? restock = preferred ?? FindByName(rl.Name, catalogue);
                 if (restock is { } rs)
                     return AutoLightPlan.ReorderLight(
                         rs.Name, CarryCount(settings.CarryHours, rs.BurnTime),
@@ -87,9 +89,12 @@ public static class AutoLightPlanner
                 return AutoLightPlan.Nothing(
                     $"route dark: readied {lit.Name} already covers (illu {litLight.Strength} >= need {minStrength})");
 
-            // a. Ready a carried light — no shop trip. Preferred if carried, else
-            //    the weakest carried light that reaches the darkest room.
-            if (Choose(carriedLights, minStrength, preferred) is { } carried)
+            // a. Ready a carried light — no shop trip. The Preferred light decides
+            //    what is bought, not whether a carried light is used: the preferred
+            //    one when carried and strong enough, else the weakest carried light
+            //    that reaches the darkest room, else a carried preferred light (the
+            //    user's pick, as a buy would be).
+            if (CoveringCarried(carriedLights, minStrength, preferred) is { } carried)
                 return AutoLightPlan.ReadyLight(
                     carried.Name, $"route dark: ready {carried.Name} (need illu {minStrength})");
 
@@ -125,6 +130,13 @@ public static class AutoLightPlanner
             if (best is not { } b || l.Strength < b.Strength) best = l;
         }
         return best;
+    }
+
+    private static LightItem? CoveringCarried(IReadOnlyList<LightItem> carried, int minStrength, LightItem? preferred)
+    {
+        LightItem? mine = preferred is { } p ? FindByName(p.Name, carried) : null;
+        if (mine is { } m && m.Strength >= minStrength) return m;
+        return Choose(carried, minStrength, preferred: null) ?? mine;
     }
 
     private static LightItem? Strongest(IReadOnlyList<LightItem> lights)

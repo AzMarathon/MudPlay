@@ -4369,7 +4369,7 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
     All three apply to **every cast of that buff**, solo or in a party: the Self cast, a cast on a party member, a whole-party spell, and a mana-regen reroll. They replaced the shared *Bless if above* (Settings → Health), *Bless self while resting / during combat* (Settings → Spells) and *Bless party while resting / during combat* (Settings → Party); each buff you already had took the values you had there.
   - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
-  - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
+  - **Only when the room is dark** — shown for a **light** spell (one that adds light, or Stock's *illuminate*, which makes a light ball). Ticked on a slot cast on yourself, it becomes your room-light spell: Auto-Light casts it one step before a dark room, or when the game says the room is dark, and not otherwise (see *Auto-Light*). Unticked, the light is maintained like any ordinary buff. Before 3.184.0 saving a light-spell slot cleared this tick; if yours has lost it, tick it again.
   - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, the buff is only kept up **while you're resting for mana**: it's (re)cast when your mana drops below its rest threshold and recast on expiry through the whole rest — including if a fight interrupts the rest — and stops once your mana tops back up. Unticked, it's kept up all the time like a normal buff. (It also carries the reroll knobs, below.)
   - **Keep these when drawn** — shown for a **draw item**, one whose use deals one of several buffs at random. On Paradigm that is the Gypsy's **deck of cards** (Stock's deck can't be redrawn, so it has no tick boxes; see *How a deck slot runs*). There is one tick box per buff it can deal, each with its chance; hover a box to see what that buff applies and how long it lasts. A ticked buff is kept when it is drawn. An unticked one makes MudPlay use the item again on the next between-round cast, and the next, until a ticked one lands. At least one box has to stay ticked.
 - **OK** adds it as a slot.
@@ -4781,7 +4781,7 @@ Each of the three made choices keeps every colour near its usual hue, so red is 
 ### Auto-Engines base modes (12 checkboxes)
 
 **Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
-**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
+**What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (lighting dark rooms with your light spell and lights, and keeping lights stocked), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
 **When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
 **Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run, when a walk-to arrives, and when you stop movement yourself (Stop, or a party member's `@stop`) — so you can flip an engine off to travel somewhere and have it return to your baseline when you get there, stop, or the circuit begins. See **Automation → Base modes** for the full picture.
 
@@ -5693,7 +5693,7 @@ During a fight a cure is cast between rounds like any other spell in the priorit
 
 ### Room light — moved to the Buff Watchdog
 
-The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
+The room-light spell is configured in the **Buff Watchdog** now. Add it there, cast on yourself, and tick **Only when the room is dark** on the slot: with Auto-Light on it is cast one step before a dark room, or when the game says the room is dark (see *Auto-Light*). Leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
 
 ### Self-bless — moved to the Buff Watchdog
 
@@ -6338,28 +6338,40 @@ Applied emotes live in the **Emotes** folder inside that BBS's folder (`BBS/<bbs
 
 ## Auto-Light
 
-Settings → Auto-Light. Everything here only matters once the master **Auto-Light** engine toggle (Settings → General, or the toolbar) is turned on — these fields tune its behavior, they don't turn it on by themselves.
+Settings → Auto-Light. Everything here only matters once the master **Auto-Light** engine toggle (Settings → General, or the toolbar) is turned on — these fields tune its behavior, they don't turn it on by themselves. Auto-Light is off until you turn it on.
+
+**What Auto-Light does, with it on:**
+
+- **Lights a dark room one step ahead.** As a walk or a loop is about to step into a room the map says you can't see in, MudPlay lights it first, so the room shows when you arrive. A room the map doesn't know is lit when the game says *The room is pitch black* or *very dark*, and the room is shown again (a bare Enter) so a monster standing there is seen.
+- **Your room-light spell goes first.** That is a **Buff Watchdog** slot cast on yourself and ticked **Only when the room is dark**. On Paradigm every light spell is a buff that adds to a lit light, and on Stock *starlight* is; the buff goes up, and a light from your pack is lit only when the buff alone is not enough. Stock's *illuminate* instead makes a light ball: MudPlay casts it first too, reads your inventory once the game says *You cast illuminate!*, and lights the ball — no light from your pack on top of it. It isn't cast while you carry a ball or have one lit, nor when a ball would be no brighter than the light you have lit. A cast in the room you're standing in is followed by a bare Enter, since casting doesn't show the room again by itself; a cast a step ahead needs none. If the game never confirms an *illuminate* cast, your carried lights light the room meanwhile; after a few seconds, or as soon as you move on, MudPlay reads your inventory once in case the ball came anyway, and only then may the spell be tried again. A spell that was up while the room still couldn't be seen is not cast again for a room that dark or darker until you step into a room you can see in (or your worn light gear gets better, or a brighter light is lit), so it doesn't cast it over and over; your pack's lights take over there. While you're blind or under a spell that takes light away (*globe of darkness* and the like), lights are still lit and the spell still cast, but a room staying dark doesn't count against the spell.
+- **Fix for slots saved before 3.184.0:** an earlier bug cleared **Only when the room is dark** whenever a light-spell slot was saved. If your light spell slot no longer shows the tick, edit the slot and tick it again.
+- **Puts the light away** once you step into a room you can see in without it (worn gear, plus the light buff while it is up). A light you lit yourself is left alone.
+- **Buys lights before a walk that needs them.** When you start a walk that crosses dark rooms your gear, spell and pack can't light, MudPlay first walks to the shop selling your **Preferred light** that adds the fewest steps to the trip, buys enough for **Carry (hours)**, and walks on. A route item the walk needs is fetched first, then the light. If the shop is past dark rooms, it walks through them as they are, then buys. An auto-train walk to a trainer does the same before it sets out.
+- **Keeps a loop lit.** On a loop or an Auto-Lair run it lights rooms the same way from what you carry. When the loop goes through dark rooms you have no light for — when it starts, or later, say when your last light burns out — it stops the run, walks to the shop selling your Preferred light that adds the fewest steps, buys enough for Carry hours, walks back and carries on (the navigation chip reads *Light Trip*). A trip that couldn't buy isn't tried again for that loop until the lights you carry change, you can now pay for one when you couldn't before, or you start a run yourself; otherwise it waits 10 minutes, then twice as long after each try that fails, up to 2 hours. A Roomba sweep is never stopped for a light trip. When the lit light drops below **Reorder at**, it makes the same trip to restock.
+- **Stocks up on the way past a shop.** When an auto-deposit bank run or an auto-train trip heads back to the loop and a shop selling your light is at most 25 steps out of the way, it stops there to bring your pack up to Carry hours. It only buys whole lights that fit under the target, and only when there's a dark room ahead or a light lit right now.
+- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. The light's own item rules win: one marked *cannot be taken*, with **Auto-collect** turned off, or set to be auto-discarded or auto-sold, stays on the floor.
+- MudPlay never asks party members for lights.
 
 ### Preferred light
 
 **Default:** `Automatic (per route)`
 **Available options:** `Automatic (per route)`, `Only use my room-light spell (no items)`, or the name of any purchasable light item.
-**What it does:** Chooses what light source MudPlay buys and lights when it needs one. "Automatic" picks whatever's strong enough to cover the route ahead. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). "Only use my room-light spell" tells MudPlay to never buy or ready a light item at all — it relies purely on your gear and the room-light spell you've configured in the Buff Watchdog.
+**What it does:** Chooses what light source MudPlay buys and lights when it needs one — before a walk, on a light trip, on a reorder and on a stock-up. "Automatic" picks the weakest light strong enough for the walk's darkest room, and a reorder or stock-up buys more of the light you have lit. Choosing a specific item pins it to that light (falling back to auto-pick if it's unavailable in your current game data). **"Only use my room-light spell"** uses that spell and nothing else: no light from your pack is lit (except a light ball the spell itself made), nothing is bought from a shop and nothing is picked up off the floor. If the spell isn't enough, the room stays dark.
 **When you might change it:** Pin a specific light for predictable weight/cost; use spell-only mode if you're a caster who never wants automation touching your light inventory.
 
 ### Carry (hours)
 
 **Default:** `6`
 **Available options:** 0–48
-**What it does:** How many hours of burn time you want stocked up before committing to a dark route — MudPlay divides this by your chosen light's burn time to figure out how many to buy.
-**When you might change it:** Raise it before a long session in a dark area; set to 0 if you'd rather just light what's needed on the spot without stockpiling.
+**What it does:** How many hours of burn time you want stocked up — MudPlay divides this by your chosen light's burn time to figure out how many to buy before a dark walk, on a reorder, or on a stock-up. A light in your pack counts at its full burn time; the lit one counts what it has left. It is also the most light Auto-Light picks up off the floor.
+**When you might change it:** Raise it before a long session in a dark area; set to 0 if you'd rather just light what you carry without buying any.
 
 ### Reorder at (min left)
 
 **Default:** `60` minutes
 **Available options:** 0–600
-**What it does:** When your lit light's remaining burn time drops below this, MudPlay detours to a shop, restocks back to your Carry-hours target, and returns to what it was doing.
-**When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour.
+**What it does:** When your lit light's remaining burn time drops below this, MudPlay restocks back to your Carry-hours target: on a walk it detours to a shop on the way, and on a loop or Auto-Lair run it makes a light trip to the nearest shop and comes back. Once per light: the next one lit can trigger it again.
+**When you might change it:** Lower it to squeeze more use out of what you're carrying before triggering a resupply detour; `0` turns reordering off.
 **Important notes:** A live readout at the bottom of the tab summarizes the current plan (e.g. how many of your chosen light it will stock for your Carry-hours target), or says provisioning is off.
 
 ---

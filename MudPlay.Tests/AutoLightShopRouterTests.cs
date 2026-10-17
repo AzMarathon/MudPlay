@@ -429,4 +429,30 @@ public sealed class AutoLightShopRouterTests
         Assert.Empty(h.Walks);
         Assert.False(r.DetourActive);
     }
+
+    // "Near" for a stock-up in passing: the shop may add at most the allowance to
+    // the walk from `from` to `to` (3 + 4 − a direct 5 = 2 added steps here).
+    [Fact]
+    public void TrySelectNearbyShop_TakesAShopWithinTheAddedStepAllowance_Only()
+    {
+        var h = new Harness().WithSingleShop();
+        h.Dist[(Cur, Dest)] = 5;
+        AutoLightShopRouter r = h.Build();
+
+        Assert.True(r.TrySelectNearbyShop(Cur, Dest, LanternId, maxAddedSteps: 2, out RoomKey shop));
+        Assert.Equal(ShopA, shop);
+        Assert.False(r.TrySelectNearbyShop(Cur, Dest, LanternId, maxAddedSteps: 1, out _));
+        Assert.Empty(h.Walks);
+    }
+
+    [Fact]
+    public void Describe_NamesTheDetourInFlight()
+    {
+        var h = new Harness().WithSingleShop();
+        AutoLightShopRouter r = h.Build();
+        Assert.Equal("idle", r.Describe());
+
+        r.OnBuyRequested(Buy(3));
+        Assert.Contains("'lantern' x3", r.Describe());
+    }
 }

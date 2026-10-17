@@ -208,6 +208,32 @@ public sealed class AutoLightPlannerTests
         Assert.Equal(6, plan.BuyCount);
     }
 
+    // A carried light that reaches the room is used though the Preferred light
+    // isn't carried: the Preferred light decides what is bought, not whether to buy.
+    [Fact]
+    public void PreferredNotCarried_ACarriedLightCovers_ReadiesItNoBuy()
+    {
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            new RouteLightScan(1, -300, null, 150), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
+            carriedLights: new[] { Lantern }, Catalogue, Settings(preferred: "torch"));
+
+        Assert.Equal(AutoLightAction.Ready, plan.Action);
+        Assert.Equal("lantern", plan.LightName);
+    }
+
+    [Fact]
+    public void Reorder_BuysThePreferredLight_NotTheKindLit()
+    {
+        // A torch the character picked up is lit and dwindling; the Preferred light
+        // is the lantern, so the reorder buys lanterns.
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            Lit, wornIllu: 0, roomLightSpellIllu: 0, readied: new ReadiedLight("torch", Readied: 50),
+            carriedLights: System.Array.Empty<LightItem>(), Catalogue, Settings(carry: 12, reorder: 60, preferred: "lantern"));
+
+        Assert.Equal(AutoLightAction.Reorder, plan.Action);
+        Assert.Equal("lantern", plan.LightName);
+    }
+
     [Fact]
     public void Reorder_ReadiedLightAboveThreshold_DoesNotFire()
     {

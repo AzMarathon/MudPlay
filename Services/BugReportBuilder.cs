@@ -2127,6 +2127,11 @@ public static class BugReportBuilder
         Kv(sb, "Travel per-hop estimate",
             $"{svc.AutoLair.TravelCostModel.EstimateTravel(1).TotalSeconds:0.00} s");
         Kv(sb, "Auto-deposit reroute", svc.AutoDeposit.RerouteStatus);
+        // What Auto-Light has lit and is waiting on, whether its room-light spell
+        // was found not enough, and the last buy it planned — a "walked blind" /
+        // "kept casting" / "bought too many" report reads these first.
+        Kv(sb, "Auto-light", svc.AutoLightProvisioner.DescribeState());
+        Kv(sb, "Auto-light shop detour", svc.AutoLightShopRouter.Describe());
         Kv(sb, "Sell detour", svc.SellDetour.Status);
         Kv(sb, "Default-gear pool baseline", svc.PoolBaseline.Current is { } pb
             ? $"HP {pb.MaxHp}, pool {pb.MaxMa} at level {pb.Level} (gear +{pb.DefaultGearHp}/+{pb.DefaultGearMa}, {pb.RecordedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss})"
@@ -2598,7 +2603,7 @@ public static class BugReportBuilder
                 ? $" — waiting on {sm}"
                 : string.Empty));
 
-        IReadOnlyList<Need> needs = svc.Needs.Outstanding(NeedKind.PathItem);
+        IReadOnlyList<Need> needs = svc.Needs.Outstanding();
         sb.Append("\nOutstanding path-item needs (").Append(needs.Count).Append(")\n\n");
         if (needs.Count == 0) sb.Append("_(none)_\n");
         else foreach (Need n in needs)

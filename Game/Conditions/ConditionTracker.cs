@@ -191,6 +191,15 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // fired without a matching ends-with).
     public bool IsActive(MessageRecord r) => _active.Contains(r.Id);
 
+    // True when any currently-active record satisfies match.
+    public bool AnyActive(Func<MessageRecord, bool> match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        foreach (MessageRecord r in _messages.Messages)
+            if (_active.Contains(r.Id) && match(r)) return true;
+        return false;
+    }
+
     // True when any currently-active record's Name matches name
     // (case-insensitive). Lets CastingDirector ask "is the 'bless' buff still on
     // me?" without holding a record reference. Matches by name rather than by

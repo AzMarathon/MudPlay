@@ -73,7 +73,8 @@ public sealed class LoopWalkHandoff
                 Entry = null;
                 Changed?.Invoke();
                 _log?.Info("LoopRunner", $"the walk reached {entry}; starting loop '{loop.Name}'");
-                _post(() => _loops.Start(loop));
+                // Still the user's Start, held for the walk there.
+                _post(() => _loops.Start(loop, userStarted: true));
                 break;
             case WalkEventKind.Failed:
                 Cancel($"the walk there failed ({e.Detail})");
