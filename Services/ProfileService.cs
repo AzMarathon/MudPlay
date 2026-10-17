@@ -85,6 +85,21 @@ public sealed class ProfileService
 
     private const string LogCategory = "Profile";
 
+    // The default profile's template and the marker of its one-time reset.
+    private readonly string _defaultProfileFile;
+    private readonly string _defaultProfileResetMarker;
+
+    public ProfileService() : this(AppPaths.DefaultProfileFile, AppPaths.DefaultProfileResetMarker) { }
+
+    // A template of a test's own: the Global one is what every profile created in
+    // the process starts from, so a template one test wrote would be handed to the
+    // characters other tests create alongside it.
+    internal ProfileService(string defaultProfileFile, string defaultProfileResetMarker)
+    {
+        _defaultProfileFile = defaultProfileFile;
+        _defaultProfileResetMarker = defaultProfileResetMarker;
+    }
+
     // Fired after a profile becomes Current. Per-character services rebind
     // their state inside the handler.
     public event Action<CharacterProfile>? ProfileLoaded;
@@ -396,18 +411,18 @@ public sealed class ProfileService
     // when there was nothing to reset, or it was done before.
     public CharacterProfile? ResetDefaultProfileOnce()
     {
-        string marker = AppPaths.DefaultProfileResetMarker;
+        string marker = _defaultProfileResetMarker;
         if (File.Exists(marker)) return null;
 
         CharacterProfile? held = null;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
-            if (File.Exists(AppPaths.DefaultProfileFile))
+            if (File.Exists(_defaultProfileFile))
             {
                 held = ReadDefaultProfileFile();
                 bool animate = ReadGeneralSection(held).ShowStartupMudAnimation;
-                File.Delete(AppPaths.DefaultProfileFile);
+                File.Delete(_defaultProfileFile);
                 if (animate != ReadGeneralSection(new CharacterProfile()).ShowStartupMudAnimation)
                     WriteDefaultProfileStartupAnimation(animate);
                 Log?.Info(LogCategory,
@@ -466,10 +481,10 @@ public sealed class ProfileService
     // must never block startup.
     private CharacterProfile ReadDefaultProfileFile()
     {
-        if (!File.Exists(AppPaths.DefaultProfileFile)) return new CharacterProfile();
+        if (!File.Exists(_defaultProfileFile)) return new CharacterProfile();
         try
         {
-            CharacterProfile template = JsonStore.Load<CharacterProfile>(AppPaths.DefaultProfileFile)
+            CharacterProfile template = JsonStore.Load<CharacterProfile>(_defaultProfileFile)
                                         ?? new CharacterProfile();
             // An empty favourites list on the template is what a session left
             // there while new profiles started with none (3.147 to 3.180.20), and
@@ -485,7 +500,7 @@ public sealed class ProfileService
         catch (Exception ex)
         {
             Log?.Warn(LogCategory,
-                $"Default profile at '{AppPaths.DefaultProfileFile}' was unreadable ({ex.Message}); using installed defaults.");
+                $"Default profile at '{_defaultProfileFile}' was unreadable ({ex.Message}); using installed defaults.");
             return new CharacterProfile();
         }
     }
@@ -518,8 +533,8 @@ public sealed class ProfileService
         GeneralSettings general = ReadGeneralSection(profile);
         general.ShowStartupMudAnimation = value;
         WriteGeneralSection(profile, general);
-        Directory.CreateDirectory(Path.GetDirectoryName(AppPaths.DefaultProfileFile)!);
-        JsonStore.Save(AppPaths.DefaultProfileFile, profile);
+        Directory.CreateDirectory(Path.GetDirectoryName(_defaultProfileFile)!);
+        JsonStore.Save(_defaultProfileFile, profile);
     }
 
     private static GeneralSettings ReadGeneralSection(CharacterProfile profile)
