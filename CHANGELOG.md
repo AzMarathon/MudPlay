@@ -11,6 +11,13 @@
 - Auto-Light: bank and training trips stock up at a light shop within 25 steps of the way back
 - Auto-Light: a light lying on the floor is picked up, up to the Carry-hours shortfall, unless its item rules say otherwise
 
+## 3.183.41
+
+- Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
+- Combat: "Attack Not Last" and follow Target Priority never cost a round; unanswered, they attack before the round fires
+- Combat: a party member seen fighting releases those holds, and the followed player's hits set the target
+- bug reports addressed: paradigm-20261017-050150
+
 ## 3.183.39
 
 - Your own death is read from `You have been killed!`: the death sound, the death-floor refinement (now only ever lowered) and the round reset now run
