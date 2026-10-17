@@ -2275,6 +2275,11 @@ public static class BugReportBuilder
             svc.RoomTracker.LastInboundMoveEcho is { } echo
                 ? $"'{echo.Command}' @ {echo.At.ToLocalTime():HH:mm:ss}"
                 : "(none)");
+        // With no echo seen, arrivals go by timing, and a display that looks like
+        // the room being left is held as a re-look of it: a "fell a step behind"
+        // report shows here which display that was.
+        Kv(sb, "Command echo seen on the statline", svc.RoomTracker.MoveEchoSeen.ToString());
+        Kv(sb, "Display held as a possible re-look", svc.RoomTracker.HeldDisplay ?? "(none)");
         // Passive grid re-localiser: whether the engine-independent same-name-grid
         // recovery is mid-narrow and how ambiguous it still is. A "stuck Lost with
         // automation off" report shows here whether that path was even running.
