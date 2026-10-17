@@ -218,6 +218,6 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         server.Line(line, at);
         server.Line("The game goes on.", at.AddMinutes(1));
 
-        Assert.DoesNotContain(candidates.Candidates, c => c.RawText == line);
+        Assert.Empty(candidates.Candidates);
     }
 }

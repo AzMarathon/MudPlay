@@ -1388,8 +1388,8 @@ public sealed class AutoPartyManagerTests
         Dispatch(router, "Raijin has been removed from your followers.");
         _sent.Clear();
 
-        // 10 min later — still inside the suppression window.
-        _partyNow = () => t0.AddMinutes(10);
+        // A second short of an hour — still inside the suppression window.
+        _partyNow = () => t0.AddHours(1).AddSeconds(-1);
         Dispatch(router, "Also here: Raijin.");
 
         Assert.Empty(_sent);
@@ -1406,9 +1406,9 @@ public sealed class AutoPartyManagerTests
         Dispatch(router, "Raijin has been removed from your followers.");
         _sent.Clear();
 
-        // Past the suppression window AND past the regular 60s
-        // re-invite cooldown.
-        _partyNow = () => t0.AddMinutes(61);
+        // An hour on, the suppression window is over (and the regular 60s
+        // re-invite cooldown long past).
+        _partyNow = () => t0.AddHours(1);
         Dispatch(router, "Also here: Raijin.");
 
         byte[] sent = Assert.Single(_sent);

@@ -1136,7 +1136,6 @@ public sealed class EngineRecoveryGate
         {
             _tracker.LocateDeduced(recovered, "tier-2 forward footprint converged");
         }
-
     }
 
     private void FinishTier3Success(RoomKey recovered)

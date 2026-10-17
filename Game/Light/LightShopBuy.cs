@@ -43,8 +43,6 @@ public sealed class LightShopBuy : IDisposable
         return (delay, action) => new Timer(_ => post(action), null, delay, Timeout.InfiniteTimeSpan);
     }
 
-    public bool IsBuying => _buy is not null;
-
     // The buy in progress, for the owner's status line.
     public AutoLightBuyRequest? Buying => _buy;
 

@@ -15745,8 +15745,8 @@ public sealed class AppServices
         int obtainable = 0;
         foreach (RouteRequirement req in requirements)
         {
-            // Already satisfied (carried) or an optional shortcut → nothing to source;
-            // don't let it veto the auto-obtain, and never source it.
+            // Already carried → nothing to source; don't let it veto the auto-obtain,
+            // and never source it.
             if (req.Carried) continue;
             if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 or RouteRequirementKind.DoorKey))

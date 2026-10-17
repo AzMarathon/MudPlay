@@ -198,28 +198,14 @@ public sealed class AutoDepositManagerTests : IDisposable
                 DateTimeOffset.UtcNow);
         }
 
-        // Copper values the manager pushed to the on-hand tracker at `dep`
-        // dispatch. Models InventoryManager.NoteAutoDeposit: record the amount and
-        // decrement the snapshot immediately (greedy re-decompose, same as
-        // ApplyTransaction) so the manager's own getSnapshot reads post-deposit
-        // wealth the instant it plans the return leg.
+        // Copper values the manager handed to the on-hand tracker at `dep` dispatch.
+        // The holdings stay what the test last set, as the bank's `i` re-read showed them.
         public List<long> NotedDeposits { get; } = new();
 
         public void NoteAutoDeposit(long copper)
         {
             if (copper <= 0) return;
             NotedDeposits.Add(copper);
-            long wealth = Math.Max(0, Snapshot.Currency.TotalCopperValue - copper);
-            long total = wealth;
-            int runic = (int)(wealth / 1_000_000L); wealth %= 1_000_000L;
-            int plat = (int)(wealth / 10_000L); wealth %= 10_000L;
-            int gold = (int)(wealth / 100L); wealth %= 100L;
-            int silver = (int)(wealth / 10L); wealth %= 10L;
-            int cop = (int)wealth;
-            Snapshot = new InventorySnapshot(
-                new CurrencyHoldings(cop, silver, gold, plat, runic, total),
-                Snapshot.Encumbrance, Snapshot.EquippedItems, Snapshot.CarriedItems,
-                DateTimeOffset.UtcNow);
         }
 
         public void Dispose()
@@ -239,8 +225,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson ?? GraphJson);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
-        ProfileService profile = TestProfiles.Service();
-        profile.LoadDefaultProfile();
+        ProfileService profile = TestProfiles.Loaded();
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");

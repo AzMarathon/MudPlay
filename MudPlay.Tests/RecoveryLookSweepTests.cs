@@ -94,6 +94,27 @@ public sealed class RecoveryLookSweepTests
         Assert.False(result!.ContainsKey(Direction.N));
     }
 
+    // A render stops that look's timeout: the time north was given running out
+    // after north rendered doesn't skip east, which has its own full timeout.
+    [Fact]
+    public void Rendered_arm_cancels_its_timeout_and_the_next_look_gets_its_own()
+    {
+        RecoveryLookSweep sweep = NewSweep(out List<string> sent);
+        IReadOnlyDictionary<Direction, RoomObservation>? result = null;
+
+        sweep.Begin(new HashSet<Direction> { Direction.N, Direction.E }, r => result = r);
+        _timers.Advance(RecoveryLookSweep.LookTimeout / 2);
+        sweep.OnRoomObserved(Obs("Northern Glade", Direction.S));
+        Assert.Equal("look east\r", sent[1]);
+
+        _timers.Advance(RecoveryLookSweep.LookTimeout * 0.75);   // past north's limit, inside east's
+        Assert.Null(result);                                        // east still awaited
+        Assert.Equal(2, sent.Count);
+
+        sweep.OnRoomObserved(Obs("Eastern Path", Direction.W));
+        Assert.Equal(2, result!.Count);
+    }
+
     [Fact]
     public void Cancel_drops_the_sweep_without_invoking_the_callback()
     {

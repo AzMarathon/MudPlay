@@ -142,19 +142,21 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void Disabled_SendsNothing()
+    public void Disabled_RequestsNoBuy()
     {
-        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "lantern" }) };
+        // The same torch-only pack and dark route that hand off a lantern buy when
+        // enabled (BuyPlan_HandsOffToProvisioner_NoWireSend).
+        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "torch" }) };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
     public void DarkRoute_CoveringCarry_SuppressesPredictiveReady()
     {
         // -300 room, worn 0, carried lantern covers — the planner returns a Ready
-        // verdict, but predictive readying is suppressed: a light is `use`d only on
-        // the server's live can't-see line, never ahead of a route.
+        // verdict, but the route-wide ready is suppressed: only the one-room
+        // lookahead or the can't-see line lights.
         Harness h = new() { Snapshot = Snap(carried: new[] { "lantern" }) };
         h.Plan(A);
         Assert.Empty(h.Sent);
@@ -178,37 +180,39 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void WornIlluCoversRoute_SendsNothing()
+    public void WornIlluCoversRoute_RequestsNoBuy()
     {
         // +250 worn illu against a -300 room clears the see threshold on its own
-        // (worn 250 + room -300 = -50 >= -150) → no light to ready.
-        Harness h = new() { WornIllu = 250, Snapshot = Snap(carried: new[] { "lantern" }) };
+        // (worn 250 + room -300 = -50 >= -150) → no light to buy, though only a
+        // torch is carried.
+        Harness h = new() { WornIllu = 250, Snapshot = Snap(carried: new[] { "torch" }) };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
-    public void LitRoute_SendsNothing()
+    public void LitRoute_RequestsNoBuy()
     {
         Harness h = new()
         {
             Graph = GraphOf(RoomAt(A, 0)),
-            Snapshot = Snap(carried: new[] { "lantern" }),
+            Snapshot = Snap(carried: new[] { "torch" }),
         };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
-    public void ReadiedLightAlreadyCovers_SendsNothing()
+    public void ReadiedLightAlreadyCovers_RequestsNoBuy()
     {
-        // Lantern (175) lit and healthy covers the -300 room → leave it be.
+        // Lantern (175) lit and healthy covers the -300 room → nothing to buy,
+        // though the carried torch alone wouldn't cover it.
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "torch" }, readied: new ReadiedLight("lantern", 200)),
         };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
@@ -364,7 +368,7 @@ public sealed class AutoLightProvisionerTests
     public void Reactive_DarkObserved_NothingCarried_SendsNothing()
     {
         // No light in the pack and no room-light spell → nothing to light the room
-        // with here (buying is the route planner's); nothing is cast either.
+        // with; the can't-see line never buys, and nothing is cast either.
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 dagger" }) };
         h.Dark();
         Assert.Empty(h.Sent);
@@ -789,11 +793,14 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void RoomEntered_Disabled_SendsNothing()
+    public void RoomEntered_Disabled_DoesNotRemTheLight()
     {
-        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "5 torch" }) };
+        // Lit by this engine, then the toggle turned off: the light stays readied.
+        Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
+        h.Dark();
+        h.Enabled = false;
         h.Enter(0);
-        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
