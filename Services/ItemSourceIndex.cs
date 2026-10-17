@@ -324,9 +324,10 @@ public sealed class ItemSourceIndex
                 // the same line ("give blade:takeitem 20:giveitem 22"); a
                 // multi-block give leads with the directive ("giveitem 807:...")
                 // and takes its keyword from the parent menu (root.Keyword). The
-                // leading token is a keyword only when it isn't itself a directive.
+                // leading token is a keyword only when it isn't itself a directive
+                // or a roll-table band (see IsTypedTrigger).
                 string[] toks = line.Split(':');
-                string lineKeyword = toks.Length > 0 && !LooksLikeDirective(toks[0].Trim())
+                string lineKeyword = toks.Length > 0 && IsTypedTrigger(toks[0].Trim())
                     ? toks[0].Trim()
                     : string.Empty;
 
@@ -774,6 +775,13 @@ public sealed class ItemSourceIndex
         return TBInfoActionResolver.IsDirectiveHead(head);
     }
 
+    // A line's leading token is something a player types only when it is neither a
+    // directive nor a bare number: a `random` table's lines lead with the roll band the
+    // draw compares against (`100:giveitem 1830`), which is never typed.
+    private static bool IsTypedTrigger(string tok) =>
+        tok.Length > 0 && !LooksLikeDirective(tok)
+        && !int.TryParse(tok, NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+
     // How many of a block's lines one trigger runs: the lines led by that keyword,
     // or for the empty keyword the directive-led lines the block's menu key reaches.
     private static int LinesSharingTrigger(string[] lines, string keyword)
@@ -784,7 +792,7 @@ public sealed class ItemSourceIndex
             string line = raw.Trim();
             if (line.Length == 0) continue;
             string head = line.Split(':', 2)[0].Trim();
-            string trigger = LooksLikeDirective(head) ? string.Empty : head;
+            string trigger = IsTypedTrigger(head) ? head : string.Empty;
             if (string.Equals(trigger, keyword, StringComparison.OrdinalIgnoreCase)) count++;
         }
         return count;

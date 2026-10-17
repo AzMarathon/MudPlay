@@ -148,11 +148,11 @@ internal static partial class QuestTextFormatter
         int monster = 0;
         bool monsterLoc = TryMonsterRef(s.Location, out monster);
         bool hasCommand = !string.IsNullOrWhiteSpace(s.Command);
-        List<int> killTargets = hasCommand ? new List<int>() : KillTargets(gameData, s.Location);
+        List<int> killTargets = hasCommand ? new List<int>() : QuestDeathSpells.KilledAt(gameData, s.Location);
         if (killTargets.Count > 0 && sameStep is not null)
             foreach (QuestStep other in sameStep)
                 if (string.IsNullOrWhiteSpace(other.Command))
-                    foreach (int id in KillTargets(gameData, other.Location))
+                    foreach (int id in QuestDeathSpells.KilledAt(gameData, other.Location))
                         if (!killTargets.Contains(id)) killTargets.Add(id);
 
         // Room link(s): a kill step links where its target stands, an ask step the NPC
@@ -218,22 +218,6 @@ internal static partial class QuestTextFormatter
                 string.Create(CultureInfo.InvariantCulture, $"({k.Map}/{k.Room})")))
             : string.Empty;
 
-    // The monsters whose death runs the step's script: its Called-From names the spell
-    // at the end of their death-spell chain. Empty for any other step — a script that
-    // hangs off a monster itself is that NPC's dialogue, not its death (GAME_MECHANICS
-    // "Quest kill steps & monster placement").
-    private static List<int> KillTargets(GameDataCache gameData, string? location)
-    {
-        List<int> targets = new();
-        if (string.IsNullOrWhiteSpace(location)) return targets;
-        IReadOnlyDictionary<int, IReadOnlyList<int>> deaths = QuestDeathSpells.For(gameData);
-        foreach (Match m in SpellRef().Matches(location))
-            if (int.TryParse(m.Groups[1].Value, out int spell) && deaths.TryGetValue(spell, out IReadOnlyList<int>? monsters))
-                foreach (int id in monsters)
-                    if (!targets.Contains(id)) targets.Add(id);
-        return targets;
-    }
-
     // The step's monster anchor, if any: a "Monster #N" location. A monster step
     // carrying an "ask <npc> ..." command is an NPC dialogue step re-anchored on that
     // NPC by QuestStepGraph so the guide can link its room.
@@ -298,7 +282,7 @@ internal static partial class QuestTextFormatter
         ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
     {
         IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue);
-        foreach (QuestStep s in QuestItemGathering.Draft(steps, q.ProgressByValue, itemSources, itemDrops))
+        foreach (QuestStep s in QuestItemGathering.Draft(gameData, steps, q.ProgressByValue, itemSources, itemDrops))
         {
             if (q.StepRangeEnd > 0 && (s.Order < q.StepRangeStart || s.Order > q.StepRangeEnd)) continue;
             IEnumerable<QuestStep>? sameStep = q.ProgressByValue || s.Gathers
@@ -433,10 +417,6 @@ internal static partial class QuestTextFormatter
     // "Room 9/1259" inside a Called-From string — a location's room reference.
     [GeneratedRegex(@"Room\s+(\d+)/(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex RoomRef();
-
-    // "Spell #604" inside a Called-From string — a script a spell runs.
-    [GeneratedRegex(@"Spell\s+#(\d+)", RegexOptions.IgnoreCase)]
-    private static partial Regex SpellRef();
 
     // "Monster #39" inside a Called-From string — a monster-sourced chain.
     [GeneratedRegex(@"Monster\s+#(\d+)", RegexOptions.IgnoreCase)]

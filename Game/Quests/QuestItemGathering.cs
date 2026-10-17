@@ -9,15 +9,19 @@ namespace MudPlay.Game.Quests;
 // of the quest hands it over: a hand-written guide lists "kill the metallic monstrosity
 // (gleaming shard)" ahead of "ask martok forge (gleaming shard required)", and the draft
 // would otherwise name the shard with nowhere to fetch it. Each such item gets one
-// gather step, ahead of the first step that needs it, drawn from the set's own records
-// in this order: an NPC or room that hands it over through a textblock (ItemSourceIndex),
-// a room command that summons a monster which always drops it, the monsters whose drop
-// slots carry it (MonsterDropIndex), then a chest that can hold it. An item none of them
-// yields is left as the step's own note.
+// gather step, ahead of the first step that needs it, drawn from the set's own records,
+// sure sources first: a room command that summons a monster which always drops it, the
+// monsters whose drop slot holds it at 100 (MonsterDropIndex), an NPC or room that hands
+// it over through a textblock (ItemSourceIndex), any other monster that drops it, then a
+// chest that can hold it. An item none of them yields is left as the step's own note.
+// A drop off a monster an earlier line already kills is noted on that line instead.
 internal static class QuestItemGathering
 {
     // Monsters named on one kill line; a common drop can come off dozens.
     private const int MaxDroppers = 3;
+
+    // A drop slot at this chance always drops (MonsterDropIndex: 0 is unset).
+    private const int SureDropPercent = 100;
 
     // The checklist a quest's steps (QuestStepGraph.Build, in its order) draft to. On the
     // give-step axis one step stands for each give-step — the first, the same chain echoed
@@ -27,9 +31,10 @@ internal static class QuestItemGathering
     // there yields the same: so a lost-item reissue (`failitem 622:giveitem 622`), a gather
     // for a step that folded away, and the other wordings or sources of one fetch drop
     // out. Then the items still unaccounted for get their gather lines from the indexes.
-    public static IReadOnlyList<QuestStep> Draft(
+    public static IReadOnlyList<QuestStep> Draft(GameDataCache cache,
         IReadOnlyList<QuestStep> steps, bool byAbilityValue, ItemSourceIndex? givers, MonsterDropIndex? drops)
     {
+        ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(steps);
         var seenOrders = new HashSet<int>();
         List<QuestStep> kept = steps
@@ -46,51 +51,78 @@ internal static class QuestItemGathering
                 continue;
             drafted.Add(step);
         }
-        return WithSources(drafted, givers, drops);
+        return WithSources(cache, drafted, givers, drops);
     }
 
     private static bool Needs(QuestStep step, IReadOnlyList<int> items) =>
         items.Any(i => step.TurnInItems.Contains(i) || step.RequiredItems.Contains(i));
 
-    private static IReadOnlyList<QuestStep> WithSources(
+    private static IReadOnlyList<QuestStep> WithSources(GameDataCache cache,
         IReadOnlyList<QuestStep> steps, ItemSourceIndex? givers, MonsterDropIndex? drops)
     {
         if (givers is null && drops is null) return steps;
 
         var result = new List<QuestStep>(steps.Count);
         var gathered = new HashSet<int>();
-        for (int i = 0; i < steps.Count; i++)
+        foreach (QuestStep step in steps)
         {
-            QuestStep step = steps[i];
             if (!step.Gathers)
                 foreach (int item in step.TurnInItems.Concat(step.RequiredItems).Distinct())
                 {
-                    if (!gathered.Add(item) || YieldedBefore(steps, i, item)) continue;
-                    if (SourceStep(step.Order, item, givers, drops) is { } gather) result.Add(gather);
+                    if (!gathered.Add(item) || result.Any(s => s.GrantedItems.Contains(item))) continue;
+                    if (SourceStep(step.Order, item, givers, drops) is not { } gather) continue;
+
+                    // The monster is killed on an earlier line anyway (the quest's own
+                    // kill, or the fetch of another of its drops): the item comes with it.
+                    int killer = gather.Command is null && gather.Droppers is { } droppers
+                        ? result.FindIndex(s => Kills(cache, s).Intersect(droppers).Any())
+                        : -1;
+                    if (killer >= 0)
+                        result[killer] = result[killer] with
+                        {
+                            GrantedItems = result[killer].GrantedItems.Append(item).ToArray(),
+                        };
+                    else
+                        result.Add(gather);
                 }
             result.Add(step);
         }
         return result;
     }
 
-    private static bool YieldedBefore(IReadOnlyList<QuestStep> steps, int index, int item)
-    {
-        for (int i = 0; i < index; i++)
-            if (steps[i].GrantedItems.Contains(item)) return true;
-        return false;
-    }
+    // The monsters a drafted line has the player kill: a drop fetch's droppers, or the
+    // monsters whose death runs a command-less step.
+    private static IEnumerable<int> Kills(GameDataCache cache, QuestStep s) =>
+        s.Command is not null ? Enumerable.Empty<int>()
+        : s.Droppers is { Count: > 0 } droppers ? droppers
+        : QuestDeathSpells.KilledAt(cache, s.Location);
 
     private static QuestStep? SourceStep(int order, int item, ItemSourceIndex? givers, MonsterDropIndex? drops)
     {
         int[] granted = { item };
+
+        if (givers?.SummonDropsOf(item) is { Count: > 0 } summons)
+        {
+            SummonDropSource s = summons[0];
+            return new QuestStep(order, s.Command,
+                string.Create(CultureInfo.InvariantCulture, $"Room {s.Map}/{s.Room}"),
+                Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true, Droppers: new[] { s.MonsterId });
+        }
+
+        IReadOnlyList<MonsterDropIndex.MonsterDrop> droppers =
+            drops?.DroppersOf(item) ?? Array.Empty<MonsterDropIndex.MonsterDrop>();
+        if (DropStep(order, granted, droppers.Where(d => d.DropPercent >= SureDropPercent)) is { } sure)
+            return sure;
+
         if (givers is not null)
         {
-            foreach (ItemGiver g in givers.GiversOf(item))
+            // A line that also sets a flag ("quest reward") is another quest's step,
+            // gated on that quest: Stock's Good 1 box give refuses an evil character, who
+            // takes the box off Commander Markus instead.
+            List<ItemGiver> usable = givers.GiversOf(item).Where(g => g.Requirement != "quest reward").ToList();
+            foreach (ItemGiver g in usable.Where(g => IsTyped(g.Keyword)))
             {
-                // A give reached from a greeting keyword has nothing to type.
-                if (g.Keyword.Length == 0 || QuestStepGraph.IsAutoShownKeyword(g.Keyword)) continue;
-                // "quest reward" says only that the line also sets a flag.
-                string? note = g.Requirement.Length > 0 && g.Requirement != "quest reward" ? g.Requirement : null;
+                string? note = g.Requirement.Length > 0 ? g.Requirement : null;
                 if (g.Kind == ItemGiverKind.Monster)
                     return new QuestStep(order, $"ask {g.Name.ToLowerInvariant()} {g.Keyword}",
                         string.Create(CultureInfo.InvariantCulture, $"Monster #{g.Number}"),
@@ -100,32 +132,40 @@ internal static class QuestItemGathering
                         string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"),
                         Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true, Note: note);
             }
-
-            if (givers.SummonDropsOf(item) is { Count: > 0 } summons)
-            {
-                SummonDropSource s = summons[0];
-                return new QuestStep(order, s.Command,
-                    string.Create(CultureInfo.InvariantCulture, $"Room {s.Map}/{s.Room}"),
-                    Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true, Droppers: new[] { s.MonsterId });
-            }
+            // A room that gives it with nothing to type for it (a draw of a room's roll
+            // table): where to go, not what to type.
+            foreach (ItemGiver g in usable.Where(g => g.Kind == ItemGiverKind.Room && g.Map > 0 && g.Room > 0))
+                return new QuestStep(order, null,
+                    string.Create(CultureInfo.InvariantCulture, $"Room {g.Map}/{g.Room}"),
+                    Array.Empty<int>(), Array.Empty<int>(), granted, Gathers: true,
+                    Note: g.Requirement.Length > 0 ? g.Requirement : null);
         }
 
-        if (drops?.DroppersOf(item) is { Count: > 0 } droppers)
-        {
-            int[] best = droppers
-                .OrderByDescending(d => d.DropPercent)
-                .Select(d => d.MonsterId)
-                .Distinct()
-                .Take(MaxDroppers)
-                .ToArray();
-            return new QuestStep(order, null, null, Array.Empty<int>(), Array.Empty<int>(), granted,
-                Gathers: true, Droppers: best);
-        }
+        if (DropStep(order, granted, droppers) is { } drop) return drop;
 
         if (givers?.ContainersOf(item) is { Count: > 0 } chests)
             return new QuestStep(order, null, null, Array.Empty<int>(), Array.Empty<int>(), granted,
                 Gathers: true, Note: "from " + chests[0].ContainerName);
 
         return null;
+    }
+
+    // A keyword the player types to get the give: not one an NPC shows by itself, and
+    // not a roll-table band.
+    private static bool IsTyped(string keyword) =>
+        keyword.Length > 0 && !QuestStepGraph.IsAutoShownKeyword(keyword)
+        && !int.TryParse(keyword, NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+
+    private static QuestStep? DropStep(int order, int[] granted, IEnumerable<MonsterDropIndex.MonsterDrop> droppers)
+    {
+        int[] best = droppers
+            .OrderByDescending(d => d.DropPercent)
+            .Select(d => d.MonsterId)
+            .Distinct()
+            .Take(MaxDroppers)
+            .ToArray();
+        return best.Length == 0 ? null
+            : new QuestStep(order, null, null, Array.Empty<int>(), Array.Empty<int>(), granted,
+                Gathers: true, Droppers: best);
     }
 }

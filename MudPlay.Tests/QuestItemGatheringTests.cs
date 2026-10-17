@@ -41,7 +41,9 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 684, "Name": "gleaming shard" },
           { "Number": 700, "Name": "orc-head" },
           { "Number": 701, "Name": "quest token" },
-          { "Number": 702, "Name": "Darkbane" }
+          { "Number": 702, "Name": "Darkbane" },
+          { "Number": 703, "Name": "adamant ore" },
+          { "Number": 931, "Name": "iron crown" }
         ]
         """;
 
@@ -51,14 +53,17 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 51, "Name": "stone giant chieftain", "DeathSpell": 5521 },
           { "Number": 60, "Name": "renfry", "DeathSpell": 0 },
           { "Number": 61, "Name": "metallic monstrosity", "DeathSpell": 0, "DropItem-0": 684, "DropItem%-0": 25 },
-          { "Number": 62, "Name": "aldreth", "DeathSpell": 0 }
+          { "Number": 62, "Name": "aldreth", "DeathSpell": 0 },
+          { "Number": 63, "Name": "Commander Markus", "DeathSpell": 0, "DropItem-0": 622, "DropItem%-0": 100 },
+          { "Number": 64, "Name": "kobold king", "DeathSpell": 574, "DropItem-0": 931, "DropItem%-0": 100 }
         ]
         """;
 
     private const string SpellsJson = """
         [
           { "Number": 5519, "Name": "hill chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5211 },
-          { "Number": 5521, "Name": "stone chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5212 }
+          { "Number": 5521, "Name": "stone chieftan text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 5212 },
+          { "Number": 574, "Name": "kobold king text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1400 }
         ]
         """;
 
@@ -79,7 +84,17 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 900, "Action": "heads:910\n", "Called From": "Monster #62" },
           { "Number": 910, "Action": "takeitem 700:giveitem 701\n", "Called From": "Textblock #900" },
           { "Number": 920, "Action": "return:takeitem 701:giveability 300 1\n", "Called From": "Room 1/2305" },
-          { "Number": 930, "Action": "100:giveitem 702:giveability 300 2\n", "Called From": "Room 15/183" }
+          { "Number": 930, "Action": "100:giveitem 702:giveability 300 2\n", "Called From": "Room 15/183" },
+
+          { "Number": 1300, "Action": "salute:takeitem 622:giveability 128 1\n", "Called From": "Room 2/2577" },
+
+          { "Number": 1390, "Action": "kneel:failability 129:giveability 129 1\n", "Called From": "Room 6/833" },
+          { "Number": 1400, "Action": "checkability 129 1:testability 129 1:giveability 129 2\n", "Called From": "Spell #574" },
+          { "Number": 1410, "Action": "crown:checkability 129 2:takeitem 931:giveability 129 3\n", "Called From": "Room 1/723" },
+
+          { "Number": 4999, "Action": "mine vein:nomonsters:random 5000\n", "Called From": "Room 14/7127" },
+          { "Number": 5000, "Action": "100:giveitem 703\n", "Called From": "Textblock(rndm) #4999" },
+          { "Number": 5010, "Action": "forge ore:takeitem 703:giveability 301 1\n", "Called From": "Room 14/7225" }
         ]
         """;
 
@@ -112,6 +127,8 @@ public sealed class QuestItemGatheringTests : IDisposable
         [60] = new[] { new RoomKey(14, 247) },
         [61] = new[] { new RoomKey(6, 76) },
         [62] = new[] { new RoomKey(1, 2305) },
+        [63] = new[] { new RoomKey(2, 2518) },
+        [64] = new[] { new RoomKey(6, 834) },
     };
 
     private static CrawledQuest Quest(GameDataCache cache, int flag) =>
@@ -181,5 +198,67 @@ public sealed class QuestItemGatheringTests : IDisposable
         Assert.Equal(new[] { 0, 3 }, profile.QuestLog[0].CheckedSteps);
         Assert.Equal(QuestTickMigration.CurrentDraftRevision, profile.QuestDraftRevision);
         Assert.False(QuestTickMigration.Apply(profile, cache, (f, s) => new QuestDefinition(f, s), out _, givers, drops));
+    }
+
+    [Fact]
+    public void AnotherQuestsGatedGive_LosesToASureDrop()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+
+        // Stock's Evil 2 shape: the box is also handed out by the Good quest's own `bow`
+        // line, which an evil character is refused; Commander Markus always drops it.
+        Assert.Equal(new[]
+        {
+            "[] (2/2518) kill Commander Markus (locked wooden box)",
+            "[] (2/2577) `salute` (turn in locked wooden box)",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 128), Placement, givers, drops));
+    }
+
+    [Fact]
+    public void DropOffAMonsterTheQuestKillsAnyway_IsNotedOnThatKill()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+
+        Assert.Equal(new[]
+        {
+            "[] (6/833) `kneel`",
+            "[] (6/834) kill kobold king (iron crown)",
+            "[] (1/723) `crown` (turn in iron crown)",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 129), Placement, givers, drops));
+    }
+
+    [Fact]
+    public void RoomRollTableGive_IsWhereToGo_NotANumberToType()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+
+        // `mine vein` draws from table 5000, whose line leads with its roll band.
+        Assert.DoesNotContain(givers.GiversOf(703), g => g.Keyword == "100");
+        Assert.Equal(new[]
+        {
+            "[] (14/7127) obtain adamant ore",
+            "[] (14/7225) `forge ore` (turn in adamant ore)",
+        }, QuestTextFormatter.StepLines(cache, Quest(cache, 301), Placement, givers, drops));
+    }
+
+    [Fact]
+    public void DropIndexStillOnTheLastSet_LeavesTheTicksForLater()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, _) = Indexes(cache);
+        MonsterDropIndex stale = new(cache);
+        stale.OnActiveSetChanged("beta");
+        CharacterProfile profile = new()
+        {
+            QuestLog = new List<QuestProgress> { new(208, 0) { CheckedSteps = new List<int> { 0, 1 } } },
+        };
+
+        Assert.False(QuestTickMigration.Apply(profile, cache, (f, s) => new QuestDefinition(f, s), out _, givers, stale));
+
+        Assert.Equal(0, profile.QuestDraftRevision);
+        Assert.Equal(new[] { 0, 1 }, profile.QuestLog[0].CheckedSteps);
     }
 }

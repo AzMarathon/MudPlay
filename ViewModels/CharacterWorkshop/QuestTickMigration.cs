@@ -40,6 +40,11 @@ internal static class QuestTickMigration
         // is no draft to place the ticks on, so the marks stay for the next time.
         IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(gameData, null);
         if (crawled.Count == 0) return false;
+        // Mid set switch the quest overlay reloads (and rebuilds the tab) before the drop
+        // index has read the new set, so a draft then would number the gather lines off
+        // the old set's drops; the marks stay until both are on the same set.
+        if (itemDrops is not null && !string.Equals(itemDrops.ActiveSet, gameData.ActiveSet, System.StringComparison.Ordinal))
+            return false;
 
         foreach (QuestProgress progress in profile.QuestLog ?? Enumerable.Empty<QuestProgress>())
         {
