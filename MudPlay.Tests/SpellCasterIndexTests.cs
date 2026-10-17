@@ -81,6 +81,32 @@ public sealed class SpellCasterIndexTests : IDisposable
             "Casted By": "Monster #108, Textblock #2500(8%)" },
           { "Number": 9102, "Name": "(9199 with its list cut off)", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #108, Mons+\u0000" },
+          { "Number": 9107, "Name": "(9199, an item casts it, its list cut off before the item)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108, Ite+\u0000" },
+          { "Number": 9108, "Name": "(9199, an item teaches it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9109, "Name": "(9199, a room command's textblock casts it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9110, "Name": "(9199, a textblock teaches it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9111, "Name": "(9199, an exit casts it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9112, "Name": "(9199, a spell trap casts it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9113, "Name": "(9199, another spell's enchantment casts it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9114, "Name": "(an enchantment)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "\u0000", "Abil-0": 43, "AbilVal-0": 9113, "Abil-1": 160, "AbilVal-1": 9115 },
+          { "Number": 9115, "Name": "(9199, another spell grants it, unlisted)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108" },
+          { "Number": 9120, "Name": "(the ice sorceress's, lasting three rounds)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 3, "Abil-0": 151, "AbilVal-0": 9121 },
+          { "Number": 9121, "Name": "(cast when 9120 runs out)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Spell #9120" },
+          { "Number": 9122, "Name": "(the ice sorceress's, gone at once)", "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #108", "Dur": 0, "Abil-0": 151, "AbilVal-0": 9123 },
+          { "Number": 9123, "Name": "(cast as 9122 lands)", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Spell #9122" },
           { "Number": 9103, "Name": "(9199 and a room whose own spell it is not)", "Learnable": 0,
             "Learned From": "\u0000", "Casted By": "Monster #108, Room 6/1138" },
           { "Number": 9104, "Name": "(9199 and an enchantment's on-hit spell)", "Learnable": 0,
@@ -94,11 +120,12 @@ public sealed class SpellCasterIndexTests : IDisposable
 
     // The monsters those lists name, with the slots that carry these spells; the
     // storm giant king's spell slot can land (Att% 100) and his death spell is #5522.
-    // The "sleeper" is not from the set: a spell slot that can never land.
+    // The "sleeper" is not from the set: a spell slot that can never land, nor is the
+    // ogre-mage's second slot, which carries the cut-off #9102.
     internal const string Monsters = """
         [
           { "Number": 108,  "Name": "ice sorceress", "MidSpell-0": 1363 },
-          { "Number": 297,  "Name": "ogre-mage", "MidSpell-0": 1363 },
+          { "Number": 297,  "Name": "ogre-mage", "MidSpell-0": 1363, "MidSpell-1": 9102 },
           { "Number": 311,  "Name": "Goru-Nezar", "MidSpell-3": 1363 },
           { "Number": 176,  "Name": "dark wizard", "MidSpell-3": 5027 },
           { "Number": 833,  "Name": "vampire magus", "MidSpell-2": 135 },
@@ -113,11 +140,30 @@ public sealed class SpellCasterIndexTests : IDisposable
         ]
         """;
 
+    // Not from the set: an item that casts #9107 on a third of its swings, and one
+    // that teaches #9108.
+    internal const string Items = """
+        [
+          { "Number": 9301, "Name": "(swings 9107)", "Abil-0": 114, "AbilVal-0": 33, "Abil-1": 43, "AbilVal-1": 9107 },
+          { "Number": 9302, "Name": "(teaches 9108)", "Abil-0": 42, "AbilVal-0": 9108 }
+        ]
+        """;
+
+    // Not from the set: a room command that casts #9109, and a roll that teaches #9110.
+    internal const string Textblocks = """
+        [
+          { "Number": 9401, "LinkTo": 0, "Action": "pull lever:message 1:cast 9109\n", "Called From": "Room 6/1138" },
+          { "Number": 9402, "LinkTo": 0, "Action": "40:message 2\n100:learnspell 9110\n", "Called From": "Textblock #9401" }
+        ]
+        """;
+
     internal static readonly Room[] Rooms =
     {
         RoomAt(6, 1139, "Underwater Passage", 511),
+        RoomAt(6, 1140, "Underwater Passage", 511),
         RoomAt(6, 1209, "Ice Jewel Cave", 512),
-        RoomAt(6, 1138, "Icy Lake", 0),
+        // Not the set's exits: a post-cast of #9111 and a spell trap of #9112.
+        RoomAt(6, 1138, "Icy Lake", 0, "6/1139 (Cast: pre-0, post-9111)", "6/1209 (Spell Trap: 9112)"),
         RoomAt(12, 72, "Desert", 515),
         RoomAt(16, 498, "Training Grounds", 829),
         RoomAt(16, 519, "Training Grounds", 829),
@@ -127,22 +173,34 @@ public sealed class SpellCasterIndexTests : IDisposable
         RoomAt(14, 497, "Chaos Storm", 212),
     };
 
-    private static Room RoomAt(int map, int room, string name, int spell) => new()
+    // exits: MDB exit cells, given the directions east, west, north in that order.
+    private static Room RoomAt(int map, int room, string name, int spell, params string[] exits)
     {
-        Key = new RoomKey(map, room), Name = name, Spell = spell,
-        Exits = new Dictionary<Direction, RoomExit>(),
-    };
+        Dictionary<Direction, RoomExit> byDirection = new();
+        Direction[] directions = { Direction.E, Direction.W, Direction.N };
+        for (int i = 0; i < exits.Length; i++)
+            if (RoomExit.TryParseWire(exits[i], out RoomExit exit)) byDirection[directions[i]] = exit;
+        return new Room { Key = new RoomKey(map, room), Name = name, Spell = spell, Exits = byDirection };
+    }
 
     internal static (GameDataCache Cache, SpellCasterIndex Index) NewIndex(
-        string root, string spells = Spells, string monsters = Monsters, string set = "alpha")
+        string root, string spells = Spells, string monsters = Monsters, string set = "alpha",
+        string items = Items, string textblocks = Textblocks, IReadOnlyList<Room>? rooms = null)
     {
         string dir = Path.Combine(root, set);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "Spells.json"), spells);
         File.WriteAllText(Path.Combine(dir, "Monsters.json"), monsters);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), items);
+        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), textblocks);
         GameDataCache cache = new(root);
+        // As the app has it: the textblocks reload with the set, before the index
+        // is built.
+        TBInfoStore store = new(cache);
+        cache.ActiveSetChanged += store.OnActiveSetChanged;
         cache.SwitchSet(set);
-        SpellCasterIndex index = new(cache, () => Rooms);
+        IReadOnlyList<Room> map = rooms ?? Rooms;
+        SpellCasterIndex index = new(cache, () => map, textblocks: store);
         index.Warm();
         return (cache, index);
     }
@@ -185,11 +243,19 @@ public sealed class SpellCasterIndexTests : IDisposable
     [Theory]
     [InlineData(179)]    // an item casts it too (the heavy black rod, beside Jareth)
     [InlineData(9101)]   // a textblock casts it too
-    [InlineData(9102)]   // its list was cut off at the column's 250 characters
     [InlineData(9103)]   // a room is listed whose own spell it is not: an exit's or a command's cast
     [InlineData(9104)]   // another spell casts it otherwise than by ending in it
     [InlineData(9105)]   // a player can learn it
     [InlineData(9106)]   // an item teaches it
+    [InlineData(9107)]   // an item casts it, where the list was cut off
+    [InlineData(9108)]   // an item teaches it, and "Learned From" doesn't say so
+    [InlineData(9109)]   // a room command's textblock casts it, unlisted
+    [InlineData(9110)]   // a textblock teaches it, unlisted
+    [InlineData(9111)]   // an exit casts it as it is walked, unlisted
+    [InlineData(9112)]   // a spell trap casts it, unlisted
+    [InlineData(9113)]   // another spell's enchantment casts it, unlisted
+    [InlineData(9115)]   // another spell grants it to whoever it lands on, unlisted
+    [InlineData(9121)]   // it lands when a spell with a duration runs out
     [InlineData(9100)]   // it lists a monster the set has no row for
     [InlineData(5522)]   // a death spell: its caster is gone from the roster when it lands
     public void AMonstersSpell_WithOneCasterNotInView_IsNeverClosed(int spell)
@@ -201,16 +267,102 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.False(index.Of(spell)!.OnlyMonstersAndRooms);
     }
 
-    // The set's own rows: an item alone, a textblock and a foreign room together, a
-    // list cut off, nothing listed, a spell tied to another that doesn't end in it.
+    // The set's own rows: an item alone, a textblock and a foreign room together,
+    // nothing listed, a spell tied to another that doesn't end in it.
     [Theory]
     [InlineData(156)]
     [InlineData(512)]
-    [InlineData(511)]
     [InlineData(5257)]
     [InlineData(5536)]
     public void ASpellWithNoMonsterOrRoomOfItsOwnToGoBy_IsNeverClosed(int spell)
         => Assert.False(Of(spell).OnlyMonstersAndRooms);
+
+    // A list cut off at the column's 250 characters says nothing of what it lost: the
+    // tables stand for it. #9102's second caster is the ogre-mage, by the Monsters
+    // table; freezing water's list ends "R+", and its rooms are on the map.
+    [Fact]
+    public void AListCutOff_WithItsCastersInTheirOwnTables_IsClosed()
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root);
+
+        SpellCasterIndex.Casters cut = index.Of(9102)!;
+        Assert.Equal(new[] { "ice sorceress", "ogre-mage" }, cut.Monsters.Order(StringComparer.Ordinal));
+        Assert.True(cut.OnlyMonstersAndRooms);
+        Assert.True(index.Of(511)!.OnlyMonstersAndRooms);
+    }
+
+    // An EndCast from a spell with no duration lands as that spell does, its caster
+    // still there; from one with a duration, when it runs out.
+    [Fact]
+    public void AnEndCastOfASpellGoneAtOnce_KeepsItsCasters()
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root);
+
+        Assert.Equal(new[] { "ice sorceress" }, index.Of(9123)!.Monsters);
+        Assert.True(index.Of(9123)!.OnlyMonstersAndRooms);
+        Assert.True(index.Of(9120)!.OnlyMonstersAndRooms);
+        Assert.False(index.Of(9121)!.OnlyMonstersAndRooms);
+    }
+
+    // Stock 1.11p's blazing comet (#420): "Casted By" names only the diamond guardian,
+    // whose on-hit spell it is, but the starhammer casts it on a third of its swings.
+    private const string StockBlazingComet = """
+        [ { "Number": 420, "Name": "blazing comet", "Dur": 0, "AttType": 4, "Abil-0": 17, "Learnable": 0,
+            "Learned From": "\u0000", "Casted By": "Monster #537" } ]
+        """;
+
+    private const string StockDiamondGuardian = """
+        [ { "Number": 537, "Name": "diamond guardian", "DeathSpell": 0, "CreateSpell": 0,
+            "AttType-0": 1, "AttAcc-0": 200, "Att%-0": 90, "AttHitSpell-0": 420,
+            "AttType-1": 2, "AttAcc-1": 430, "Att%-1": 100 } ]
+        """;
+
+    private const string StockStarhammer = """
+        [ { "Number": 1245, "Name": "starhammer", "Abil-0": 116, "AbilVal-0": -35, "Abil-1": 142, "AbilVal-1": 5,
+            "Abil-2": 135, "AbilVal-2": 50, "Abil-3": 114, "AbilVal-3": 33, "Abil-4": 43, "AbilVal-4": 420 } ]
+        """;
+
+    [Fact]
+    public void StockBlazingComet_TheStarhammerCastsIt()
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root, StockBlazingComet, StockDiamondGuardian,
+            items: StockStarhammer, textblocks: "[]", rooms: Array.Empty<Room>());
+
+        Assert.Equal(new[] { "diamond guardian" }, index.Of(420)!.Monsters);
+        Assert.False(index.Of(420)!.OnlyMonstersAndRooms);
+    }
+
+    [Fact]
+    public void StockBlazingComet_WithoutTheStarhammer_IsTheGuardiansAlone()
+    {
+        (_, SpellCasterIndex index) = NewIndex(_root, StockBlazingComet, StockDiamondGuardian,
+            items: "[]", textblocks: "[]", rooms: Array.Empty<Room>());
+
+        Assert.True(index.Of(420)!.OnlyMonstersAndRooms);
+    }
+
+    // Paradigm 1.9.1's clean room (#5841) is the spell of The Clean Room, and its
+    // east exit casts it too, before the move; "Casted By" names the room once.
+    private const string ParadigmCleanRoom = """
+        [ { "Number": 5841, "Name": "clean room", "Dur": 0, "AttType": 4,
+            "Abil-0": 148, "AbilVal-0": 10229, "Abil-1": 144, "Abil-2": 115, "AbilVal-2": 66,
+            "Abil-3": 153, "AbilVal-3": 5838, "Abil-4": 153, "AbilVal-4": 5842,
+            "Abil-5": 122, "AbilVal-5": 5838, "Abil-6": 122, "AbilVal-6": 5842,
+            "Learnable": 0, "Learned From": "\u0000", "Casted By": "Room 17/10691" } ]
+        """;
+
+    [Theory]
+    [InlineData("17/10689 (Cast: pre-5841, post-0)", false)]
+    [InlineData("17/10689", true)]
+    public void ParadigmCleanRoom_IsOpenForItsExitsCast(string eastExit, bool closed)
+    {
+        Room[] rooms = { RoomAt(17, 10691, "The Clean Room", 5841, eastExit) };
+        (_, SpellCasterIndex index) = NewIndex(_root, ParadigmCleanRoom, "[]",
+            items: "[]", textblocks: "[]", rooms: rooms);
+
+        Assert.Equal(new[] { 5841 }, index.Of(5841)!.RoomSpells);
+        Assert.Equal(closed, index.Of(5841)!.OnlyMonstersAndRooms);
+    }
 
     // Chaos storm is the spell of seven rooms and of the high druid.
     [Fact]
@@ -310,6 +462,49 @@ public sealed class SpellCasterIndexTests : IDisposable
         index.Warm();
         Assert.False(index.Of(1363)!.OnlyMonstersAndRooms);
         Assert.Null(index.Of(1336));
+    }
+
+    // The items and textblocks are read again with the rest.
+    [Fact]
+    public void ASetImportedAgain_ItsItemsAndTextblocksAreFollowed()
+    {
+        (GameDataCache cache, SpellCasterIndex index) = NewIndex(_root);
+        Assert.True(index.Of(1363)!.OnlyMonstersAndRooms);
+        Assert.True(index.Of(9199)!.OnlyMonstersAndRooms);
+
+        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
+            """ [ { "Number": 9403, "LinkTo": 0, "Action": "cast 1363\n" } ] """);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"),
+            """ [ { "Number": 9303, "Name": "(uses 9199)", "Abil-0": 43, "AbilVal-0": 9199 } ] """);
+        cache.ReloadActiveSet();
+        index.Warm();
+
+        Assert.False(index.Of(1363)!.OnlyMonstersAndRooms);
+        Assert.False(index.Of(9199)!.OnlyMonstersAndRooms);
+        Assert.True(index.Of(9109)!.OnlyMonstersAndRooms);
+    }
+
+    // The cache's load moves before the textblocks reload. A build in between would
+    // go by the last set's, so none is made until they are this set's.
+    [Fact]
+    public void BeforeTheTextblocksAreThisSets_NothingIsBuilt()
+    {
+        string dir = Path.Combine(_root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), Spells);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), Monsters);
+        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), Textblocks);
+        GameDataCache cache = new(_root);
+        TBInfoStore store = new(cache);
+        cache.SwitchSet("alpha");
+        SpellCasterIndex index = new(cache, () => Rooms, textblocks: store);
+
+        index.Warm();
+        Assert.Null(index.Of(9109));
+
+        store.OnActiveSetChanged("alpha");
+        index.Warm();
+        Assert.False(index.Of(9109)!.OnlyMonstersAndRooms);
     }
 
     [Fact]

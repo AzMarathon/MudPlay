@@ -1,5 +1,11 @@
 # Version history
 
+## 3.181.5
+
+- Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
+- Spells cast by an item, a textblock or an exit that the caster list missed are never ruled out (Stock's blazing comet, Paradigm's clean room)
+- A spell that lands when another spell with a duration runs out is never ruled out by who is in the room
+
 ## 3.181.2
 
 - Deaths remember the game data they were recorded on, shown in a new Game data column
