@@ -107,6 +107,9 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _roomPoisedSub;
     private readonly IDisposable _partyCombatSub;
     private readonly IDisposable _followDragSub;
+    private readonly IDisposable _exitFoundSub;
+    private readonly IDisposable _exitOpenedOrClosedSub;
+    private readonly IDisposable _concealedPassageSub;
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
@@ -291,9 +294,22 @@ public sealed partial class CombatManager : IDisposable
     // has latched its own hold, so NoteRoomLeft drops only what is older than that
     // roster read: what a teleport, a drag or a flee left from the room before.
     // _roomStateAt is when either was last set.
+    //
+    // A room changed with no move of ours sent and no drag line (a teleport, a drag
+    // through a text exit, a fear run) shows its roster before anything says it is
+    // another room, so a fight seen before a fresh roster read belongs to no known
+    // room until that display's exits line places it (_rosterRoomPlaced,
+    // PlaceRoomFight): the room shown last, shown again, keeps it; any other room
+    // drops it. Until then the holds wait as at any opening, with their deadline, so
+    // the round is never lost to not knowing which room this is. Leaving the game
+    // drops the fight outright (NoteGameLeft), since a relog can land in the same room.
     private bool _fightUnderwayHere;
     private string? _followedTargetHere;
     private DateTimeOffset _roomStateAt = DateTimeOffset.MinValue;
+    private bool _rosterRoomPlaced = true;
+
+    private bool FightRoomUnplaced =>
+        _fightUnderwayHere && !_rosterRoomPlaced && _roomStateAt < _rosterReadAt;
 
     // The holds' in-round deadline. Attack Order is the ideal place of our announce in
     // the party's order (user, 2026-10-17: "attack order is quite literally the ideal
@@ -1094,6 +1110,14 @@ public sealed partial class CombatManager : IDisposable
         _partyCombatSub = router.Subscribe(KnownPatterns.UserHits, OnPartyCombatLine);
         // A follower is dragged with no move of its own sent (FollowMoveObserver).
         _followDragSub = router.Subscribe(KnownPatterns.PartyFollowMove, _ => { if (!_disposed) LeaveRoomFight(); });
+        // The lines that change the room's exit list in place (PlaceRoomFight).
+        _exitFoundSub = router.Subscribe(KnownPatterns.UserSearchSucceeded,
+            m => NoteExitChangedHere(m, opened: true));
+        _exitOpenedOrClosedSub = router.Subscribe(KnownPatterns.RoomExitOpenedOrClosed,
+            m => NoteExitChangedHere(m, opened: m.Groups.Count > 1
+                && string.Equals(m.Groups[1], "opened", StringComparison.OrdinalIgnoreCase)));
+        _concealedPassageSub = router.Subscribe(KnownPatterns.RoomConcealedPassageOpened,
+            m => NoteExitChangedHere(m, opened: true));
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
@@ -1764,7 +1788,10 @@ public sealed partial class CombatManager : IDisposable
     // For the bug report: what the holds read in this room.
     public string AttackOrderRoomState =>
         $"hold deadline {(_holdDeadlineDue is { } due ? $"due {due:HH:mm:ss.fff}" : "not armed")}"
-        + $"{(_scheduleHoldDeadline is null ? " (not wired)" : "")}; fight under way here: {(_fightUnderwayHere ? "yes" : "no")}"
+        + $"{(_scheduleHoldDeadline is null ? " (not wired)" : "")}; fight under way here: "
+        + (FightRoomUnplaced
+            ? "seen before the room was last read, not yet placed in this room (holds wait as at an opening)"
+            : _fightUnderwayHere ? "yes" : "no")
         + $"; followed player last seen fighting: {_followedTargetHere ?? "(nobody seen)"}";
 
     private void ArmHoldDeadline()
@@ -1802,13 +1829,16 @@ public sealed partial class CombatManager : IDisposable
         _followedTargetHere = null;
     }
 
-    // We are leaving the room: our move went out, or the game is dragging us behind
-    // the party leader (a follower sends no move; the drag line comes before the new
-    // room's display). The fight and the hold's deadline we leave are that room's
-    // (see _roomStateAt).
+    // We are leaving the room: our move went out, the game is dragging us behind the
+    // party leader (a follower sends no move; the drag line comes before the new
+    // room's display), or the character left the game (NoteGameLeft). The fight and
+    // the hold's deadline we leave are that room's (see _roomStateAt).
     private void LeaveRoomFight()
     {
         _lastRoomLeaveAt = DateTimeOffset.Now;
+        _lastShownRoom = null;
+        _exitsOpenedSinceShown.Clear();
+        _exitsClosedSinceShown.Clear();
         ForgetRoomFight();
         DisarmHoldDeadlineKeepingHeldPick();
     }
@@ -1829,6 +1859,18 @@ public sealed partial class CombatManager : IDisposable
         _holdDeadlineDue = null;
         if (!_awaitingNotLast && !_awaitingFollowAnnounce) return;
         if (!Fighting() || _currentTarget is not null || _classifier.Current is not { } obs) return;
+        // A follow hold mid-fight (one that waited on a room display nothing placed)
+        // still goes onto the monster the followed player was last seen hitting.
+        CombatSettings settings = _readSettings();
+        if (_awaitingFollowAnnounce && _fightUnderwayHere && _followedTargetHere is { } followed
+            && obs.FindMonster(followed) is not null && FollowedPlayerName(settings) is { } followName)
+        {
+            _log?.Combat(LogCategory,
+                $"target-priority follow — nobody released the hold before the round; following "
+                + $"{GivenName(followName)} onto {followed}, seen fighting it, so the round isn't lost");
+            TryFollowTargetPriority(settings, GivenName(followName), followed);
+            return;
+        }
         string hold = _awaitingFollowAnnounce ? "target-priority follow" : "attack-not-last";
         _log?.Combat(LogCategory,
             $"{hold} — nobody released the hold before the round; engaging our own pick so the round isn't lost");
@@ -1884,6 +1926,7 @@ public sealed partial class CombatManager : IDisposable
         if (freshRead)
         {
             _rosterReadAt = obs.At;
+            _rosterRoomPlaced = false;
             _expGainsSinceRosterRead = 0;
             _heldRoomLookPending = false;
             if (_guardBlockedTarget is { } guarded) JudgeGuardBlockByRoster(obs, guarded);
@@ -2336,7 +2379,14 @@ public sealed partial class CombatManager : IDisposable
             ShouldWaitForFollow(settings, engageable.Count, obs);
         bool holdNotLast = !_notLastDeferBypass && _currentTarget is null &&
             ShouldWaitForNotLast(settings);
-        if ((holdForFollow || holdNotLast) && _fightUnderwayHere)
+        if ((holdForFollow || holdNotLast) && FightRoomUnplaced)
+        {
+            _log?.Combat(LogCategory,
+                "a fight was seen before this room was read, and nothing has placed it here yet "
+                + "(a teleport or drag sends no move of ours) — holding as at an opening until "
+                + "the display's exits line says which room this is");
+        }
+        else if ((holdForFollow || holdNotLast) && _fightUnderwayHere)
         {
             // The holds order only the room's opening (_fightUnderwayHere). Mid-fight a
             // pick goes out now: onto the followed player's target when they've been
@@ -2742,6 +2792,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _userAttackedLast = null;
         EndUserBreakHold("the connection dropped");
+        NoteGameLeft();
         if (_currentTarget is not null || _spellAttackOwed)
             _log?.Combat(LogCategory,
                 $"disconnect cleared stale combat state — target={_currentTarget ?? "(none)"}, "
@@ -4806,6 +4857,20 @@ public sealed partial class CombatManager : IDisposable
 
     private static string WhoseCommand(string? askedBy) => askedBy ?? "the user's";
 
+    // The character left the game: out to the board's menu, or the link dropped.
+    // There is no room left to hold in, and the room shown on the way back in is a
+    // new opening, even when it is the same room: a relog that lands where we were
+    // reads as the room shown again.
+    public void NoteGameLeft()
+    {
+        if (_disposed) return;
+        if (_fightUnderwayHere || _awaitingNotLast || _awaitingFollowAnnounce)
+            _log?.Combat(LogCategory, "the game was left — dropping the attack-order / follow room state");
+        _awaitingNotLast = false;
+        _awaitingFollowAnnounce = false;
+        LeaveRoomFight();
+    }
+
     // The room the tracker has us in changed (RoomTracker.StateChanged), and
     // lastMoveSentAt is when a move of ours last went out (our own step, a flee's,
     // a follow behind the leader). Leaving the room ends the hold. A change of
@@ -5012,9 +5077,12 @@ public sealed partial class CombatManager : IDisposable
     // no "Also here:" read since lists nobody, the priority included. That's how the
     // room answers when the priority's kill emptied it (JudgeGuardBlockByRoster only
     // hears from a display that lists someone).
-    public void NoteRoomDisplayed()
+    //
+    // The display also says which room the fight on record belongs to (PlaceRoomFight).
+    public void NoteRoomDisplayed(RoomObservation shown)
     {
         if (_disposed) return;
+        PlaceRoomFight(shown);
         if (_guardBlockedTarget is { } guarded && _guardFightKillAt > _rosterReadAt)
             DropGuardBlock(guarded, "is gone: the room re-displayed after the kill with nobody in it");
         if (_userBreakHold is not { } held || !_heldRoomLookPending) return;
@@ -5022,6 +5090,116 @@ public sealed partial class CombatManager : IDisposable
             $"the room re-displayed with nobody in it — '{held}' is gone; dropping the stale roster");
         EndUserBreakHold("the room it was read in lists nobody");
         _classifier.NoteRoomChanged();
+    }
+
+    // The last room display we were shown, not counting a `look <direction>` peek.
+    // Null once we've left the room it showed (LeaveRoomFight); the room we then
+    // stand in is the tracker's to say (_confirmedRoom).
+    private RoomObservation? _lastShownRoom;
+
+    // The exits of the room we stand in that a line said opened or shut since its
+    // last display: a search's find, a timed exit, a hidden exit opened by its
+    // actions (GAME_MECHANICS "Hidden exits — `sea <dir>` reveal wording", "Door and
+    // gate barriers in the room display").
+    private readonly HashSet<Direction> _exitsOpenedSinceShown = new();
+    private readonly HashSet<Direction> _exitsClosedSinceShown = new();
+
+    // The room the tracker has us in while it is sure of it, else null. Unset, a room
+    // shown after we left the last one is taken for another room.
+    private Func<Room?>? _confirmedRoom;
+
+    public void SetConfirmedRoomProbe(Func<Room?> confirmedRoom) => _confirmedRoom = confirmedRoom;
+
+    private void NoteExitChangedHere(MatchResult m, bool opened)
+    {
+        if (_disposed || m.Groups.Count == 0) return;
+        // A find says "upwards" / "downwards" for the vertical exits.
+        string word = m.Groups[0].EndsWith("wards", StringComparison.OrdinalIgnoreCase)
+            ? m.Groups[0][..^5] : m.Groups[0];
+        if (!DirectionExtensions.TryFromLongName(word, out Direction dir)) return;
+        (opened ? _exitsOpenedSinceShown : _exitsClosedSinceShown).Add(dir);
+    }
+
+    // Whether this display shows the room shown last. The same name, and every
+    // difference in the exits explained: one added was announced opened since or is
+    // listed as a `secret passage` (another member's search tells us only that they
+    // searched), one gone was announced shut or was a `secret passage`, which hides
+    // again with no line. Any other display is another room. A room of the same name
+    // whose exits differ only in those ways can't be told from it, and is read as the
+    // same.
+    private bool ShowsTheRoomShownLast(RoomObservation before, RoomObservation shown)
+    {
+        if (!string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        foreach (Direction d in shown.Exits)
+            if (!before.Exits.Contains(d) && !_exitsOpenedSinceShown.Contains(d)
+                && shown.SecretPassageDirections?.Contains(d) != true) return false;
+        foreach (Direction d in before.Exits)
+            if (!shown.Exits.Contains(d) && !_exitsClosedSinceShown.Contains(d)
+                && before.SecretPassageDirections?.Contains(d) != true) return false;
+        return true;
+    }
+
+    // With no display since we left the room shown last (a dark room we stepped into,
+    // lit later), the room we stand in is the one the tracker is sure of: this
+    // display is it when the name is its name and every exit shown is one of its
+    // exits. A tracker unsure of the room (a death, a teleport out of the dark, an
+    // unmapped area) says nothing, and the display is taken for another room. The
+    // tracker is asked before it takes this display, and before or after SysopGoto
+    // commits a `sys goto` landing off the same RoomParsed, by subscription order.
+    private bool ShowsTheRoomWeSteppedInto(RoomObservation shown)
+        => _confirmedRoom?.Invoke() is { } room
+        && string.Equals(room.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
+        && shown.Exits.All(room.Exits.ContainsKey);
+
+    // A display decides which room the fight on record belongs to (see
+    // _rosterRoomPlaced). This places it without needing the tracker to place the
+    // room, which it can't do in a grid of like rooms or in an unmapped area.
+    private void PlaceRoomFight(RoomObservation shown)
+    {
+        RoomObservation? last = _lastShownRoom;
+        _lastShownRoom = shown;
+        // Unplaced only between an "Also here:" read and the end of its display.
+        bool rosterReadHere = !_rosterRoomPlaced;
+        _rosterRoomPlaced = true;
+        bool sameRoom = last is { } before ? ShowsTheRoomShownLast(before, shown) : ShowsTheRoomWeSteppedInto(shown);
+        _exitsOpenedSinceShown.Clear();
+        _exitsClosedSinceShown.Clear();
+        if (!_fightUnderwayHere) return;
+        if (sameRoom)
+        {
+            if (rosterReadHere) ReleaseHoldForFightHere();
+            return;
+        }
+        // Another room: the fight is the room before's, whether or not this display
+        // lists anyone (a monster walking into a room shown empty after a death or a
+        // teleport opens it).
+        _log?.Combat(LogCategory,
+            $"'{shown.Name}' shown with no move of ours, unlike the room before — the fight seen there isn't this room's");
+        ForgetRoomFight();
+    }
+
+    // The room was shown again: a hold latched on its roster only because the fight
+    // on record wasn't yet placed here is let go, and the pick goes out as mid-fight
+    // picks do. Posted, as NoteRoomLeft's re-look is, so the tracker and the roster
+    // finish with this display before the pick reads them. A roster read since (the
+    // next room's, in the same flush) has a hold of its own, which this doesn't end.
+    private void ReleaseHoldForFightHere()
+    {
+        if (!_awaitingNotLast && !_awaitingFollowAnnounce) return;
+        DateTimeOffset releasedFor = _rosterReadAt;
+        _post(() =>
+        {
+            if (_disposed || _rosterReadAt != releasedFor || !_fightUnderwayHere
+                || (!_awaitingNotLast && !_awaitingFollowAnnounce)) return;
+            if (!Fighting() || _currentTarget is not null || _classifier.Current is not { } obs) return;
+            _log?.Combat(LogCategory,
+                "the room was shown again with no move of ours — the fight seen here is this room's; "
+                + "the attack-order / follow hold isn't needed, picking now");
+            _awaitingNotLast = false;
+            _awaitingFollowAnnounce = false;
+            DisarmHoldDeadline();
+            OnEntitiesObserved(obs);
+        });
     }
 
     private void EndUserBreakHold(string why)
@@ -6274,6 +6452,9 @@ public sealed partial class CombatManager : IDisposable
         _roomPoisedSub.Dispose();
         _partyCombatSub.Dispose();
         _followDragSub.Dispose();
+        _exitFoundSub.Dispose();
+        _exitOpenedOrClosedSub.Dispose();
+        _concealedPassageSub.Dispose();
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();

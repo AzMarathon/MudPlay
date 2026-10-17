@@ -60,6 +60,11 @@ public static class KnownPatterns
     // ----- Searching -----------------------------------------------------
     public const string UserSearchFailed     = "search.user-search-failed";
     public const string UserSearchSucceeded  = "search.user-search-succeeded";
+    // An exit of the room we stand in opened or shut in place: a timed exit's
+    // "The exit to the <dir> just opened!" / "…just closed!", and the line a
+    // hidden exit opened by its actions prints when it has none of its own.
+    public const string RoomExitOpenedOrClosed     = "search.room-exit-opened-or-closed";  // (?<direction>) (?<what>opened|closed)
+    public const string RoomConcealedPassageOpened = "search.room-concealed-passage-opened";
 
     // ----- Combat --------------------------------------------------------
     public const string CombatStatus         = "combat.status";   // captures (?<status>Engaged|Off)

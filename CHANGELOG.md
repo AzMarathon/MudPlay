@@ -1,6 +1,6 @@
 # Version history
 
-## 3.184.13
+## 3.184.14
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
@@ -9,6 +9,12 @@
 - Clear all also shows while building an Auto-Lair setup, and clears its lair markers
 - View → Reset layout, which had no panels to reset, is gone from the menu
 - Settings search no longer offers "Bless 1" to "Bless 15"; a search for bless finds the Spells tab note that points to the Buff Watchdog
+
+## 3.184.7
+
+- Combat: after a teleport, a drag with no follow line or a fear run, "Attack Not Last" and follow Target Priority hold the new room's first attack again
+- Combat: a relog or reconnect starts the room's attack order afresh, even in the same room
+- Combat: after a death or teleport into an empty room, a monster that walks in waits for the party's opening too
 
 ## 3.184.6
 
