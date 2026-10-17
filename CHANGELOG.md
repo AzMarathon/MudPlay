@@ -4,6 +4,7 @@
 
 - Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do
 - Auto-Light: a trip's light stop checks the whole trip, is made once a trip, skips the buy when a light was picked up on the way, and buys on arrival when the destination sells the light
+- Auto-Light: a bank run whose way back runs dark buys its light at the shop nearest the bank before setting off back
 
 ## 3.184.0
 
