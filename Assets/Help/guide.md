@@ -2815,6 +2815,8 @@ Copies **the sender's own query, Roomba and quest permissions** onto another pla
 
 The ailment broadcasts `@blind` / `@confused` / `@diseased` / `@held` look like `@`-commands but aren't — they're state announcements the party window reads to mirror a member's condition, governed by your cure/ailment settings rather than the remote-control grid. (Poison isn't broadcast — a member's **poison** chip is read from the `par` party screen's `P` flag, so it lights even for a partymate on another client.)
 
+Your client says the word once when the ailment lands, and **again when you start following a leader while it is still on you**. A held or knocked-down follower drops out of the party when the leader moves on; when the leader comes back and you follow again, your client says `@held` again and telepaths the leader `@wait (can't move)`, so a party member with a cure for holds (Settings → Spells, the cure spells) can free you instead of the party waiting for it to wear off. The same goes for being blind, confused or diseased (and the `@wait` for poison). It follows the same rules as the first announce: nothing is said for an ailment you have your own cure set for or have told it to ignore, and nothing at all with the master switch off. The program log shows it under `Ailment`.
+
 A member's chip clears on the first of:
 
 - the member broadcasting they're clear (`@ok`);

@@ -395,4 +395,160 @@ public sealed class AilmentSyncEngineTests
 
         Assert.Single(h.Telepath);
     }
+
+    // ===== Following a leader while still afflicted =====
+    //
+    // A held follower drops out of the party when the leader moves on. When the
+    // leader comes back and we follow again, the say and the @wait are given again
+    // so the party can cure us (report paradigm-20261014-214037).
+
+    // Left behind: out of the party, as PartyManager leaves it.
+    private static void LeaveParty(Harness h)
+    {
+        h.Party.IsInParty = false;
+        h.Party.LeaderName = null;
+    }
+
+    // "You are now following X." — the state PartyManager.OnYouFollowing sets, then
+    // its FollowingLeader event.
+    private static void Follow(Harness h, string leader)
+    {
+        h.Party.IsInParty = true;
+        h.Party.LeaderName = leader;
+        h.Party.SelfIsLeader = false;
+        h.Engine.NoteFollowingLeader(leader);
+    }
+
+    [Fact]
+    public void Held_RejoiningTheLeader_SaysHeldAndWaitsAgain()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You cannot move!");
+        LeaveParty(h);
+        h.Say.Clear();
+        h.Telepath.Clear();
+
+        Follow(h, "Leader");
+
+        Assert.Equal(".@held\r", Assert.Single(h.Say));
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
+        Assert.NotNull(h.Engine.LastFollowAnnounce);
+    }
+
+    // Held and poisoned: the @wait carries the hold's note, the reason we stand there.
+    [Fact]
+    public void HeldAndPoisoned_FollowingAgain_WaitsWithTheHoldsNote()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You have been poisoned!");
+        h.Feed("You cannot move!");
+        LeaveParty(h);
+        h.Telepath.Clear();
+
+        Follow(h, "Leader");
+
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
+    }
+
+    [Fact]
+    public void HoldClearedBeforeRejoining_SendsNothing()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You cannot move!");
+        LeaveParty(h);
+        h.Feed("You can move again.");
+        h.Say.Clear();
+        h.Telepath.Clear();
+
+        Follow(h, "Leader");
+
+        Assert.Empty(h.Say);
+        Assert.Empty(h.Telepath);
+        Assert.Null(h.Engine.LastFollowAnnounce);
+    }
+
+    [Fact]
+    public void Held_WithOwnCureConfigured_RejoiningWaitsButDoesNotSay()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.CureConfigured = MessageFlags.MovementPrevented;
+        h.Feed("You cannot move!");
+        LeaveParty(h);
+        h.Telepath.Clear();
+
+        Follow(h, "Leader");
+
+        Assert.Empty(h.Say);
+        Assert.Equal($"/Leader @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
+    }
+
+    [Fact]
+    public void PoisonedAndBlind_Rejoining_SaysBlindOnly_OneWait()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You have been poisoned!");
+        h.Feed("You have been blinded!");
+        LeaveParty(h);
+        h.Say.Clear();
+        h.Telepath.Clear();
+
+        Follow(h, "Leader");
+
+        // Poison is never said (par carries it); one @wait with the first reason's note.
+        Assert.Equal(".@blind\r", Assert.Single(h.Say));
+        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
+    }
+
+    [Fact]
+    public void IgnoredAilment_Rejoining_SendsNothing()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Spells = new SpellsSettings { IgnoreBlindness = true };
+        h.Feed("You have been blinded!");
+        LeaveParty(h);
+
+        Follow(h, "Leader");
+
+        Assert.Empty(h.Say);
+        Assert.Empty(h.Telepath);
+    }
+
+    [Fact]
+    public void MasterSwitchOff_Rejoining_SendsNothing()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You cannot move!");
+        LeaveParty(h);
+        h.Say.Clear();
+        h.Telepath.Clear();
+        h.Engine.MasterSwitchOff = () => true;
+        h.Rest.MasterSwitchOff = () => true;
+
+        Follow(h, "Leader");
+
+        Assert.Empty(h.Say);
+        Assert.Empty(h.Telepath);
+    }
+
+    [Fact]
+    public void Held_FollowingANewLeader_TellsThem()
+    {
+        using Harness h = new();
+        SeedAll(h);
+        h.Feed("You cannot move!");
+        h.Say.Clear();
+        h.Telepath.Clear();
+
+        Follow(h, "Other");
+
+        Assert.Equal(".@held\r", Assert.Single(h.Say));
+        Assert.Equal($"/Other @wait {PartyRestSync.HeldNote}\r", Assert.Single(h.Telepath));
+    }
 }
