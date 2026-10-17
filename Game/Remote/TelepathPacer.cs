@@ -17,8 +17,9 @@ namespace MudPlay.Game.Remote;
 // So telepath lines (`/<name> …`) are held in a queue and written at least Gap
 // apart, and each is kept "in flight" until its acknowledgement comes back. A
 // "Not Sent" puts the oldest in-flight telepath back at the head of the queue
-// (MaxAttempts total); a "Sent to X" retires it. Everything else — movement,
-// combat, casts — is written straight through, never delayed behind a telepath.
+// (MaxAttempts total, after which GaveUp is told); a "Sent to X" retires it.
+// Everything else — movement, combat, casts — is written straight through,
+// never delayed behind a telepath.
 //
 // Acks are matched in order, which holds for everything that passes through here.
 // A telepath that didn't (typed key-by-key in direct-input mode) can still produce
@@ -68,6 +69,10 @@ public sealed partial class TelepathPacer
     // Nothing leaves the outbox while this is set (Hold / Release). Under _lock
     // like the outbox it stops.
     private bool _held;
+    // The telepath line last put on the wire, while nothing else has gone out
+    // after it (LastWrittenTelepath). Any other line clears it, so nothing else
+    // written, a password included, is ever kept here.
+    private string? _lastWrittenTelepath;
 
     public TelepathPacer(Action<TimeSpan, Action> armTimer, Func<DateTimeOffset>? now = null, LogService? log = null)
     {
@@ -116,6 +121,29 @@ public sealed partial class TelepathPacer
     public int Resends { get { lock (_lock) return _resends; } }
     public int GivenUp { get { lock (_lock) return _givenUp; } }
 
+    // The telepath line (`/<name> <text>`, no line end) that was the last line
+    // written to the wire, while it is the only telepath awaiting the game's
+    // answer; null when anything else has been written since, or another
+    // telepath is still unanswered (the reply may be that one's). A reply the
+    // game gives to whatever was sent last is that telepath's only when this is
+    // set.
+    public string? LastWrittenTelepath
+    {
+        get
+        {
+            lock (_lock)
+            {
+                ExpireUnacked();
+                return _inFlight.Count == 1 ? _lastWrittenTelepath : null;
+            }
+        }
+    }
+
+    // Told the line (no line end) of a telepath the game refused with "--- Telepath
+    // Not Sent ---" on every try: it reached nobody, and nothing more of it will
+    // go out. A refusal that is resent is not told; the resend may yet go through.
+    public event Action<string>? GaveUp;
+
     // Hand an outbound buffer to the wire: complete telepath lines are queued and
     // paced, everything else is written at once, in order.
     public void Send(byte[] data)
@@ -146,6 +174,7 @@ public sealed partial class TelepathPacer
                 start = end;
             }
             if (start < data.Length) passThrough.AddRange(data[start..]);   // a partial line (direct input)
+            if (passThrough.Count > 0) _lastWrittenTelepath = null;
         }
         if (passThrough.Count > 0) _write?.Invoke(passThrough.ToArray());
         Pump();
@@ -183,6 +212,7 @@ public sealed partial class TelepathPacer
                 next.SentAt = now;
                 _inFlight.Enqueue(next);
                 _lastSent = now;
+                _lastWrittenTelepath = LineText(next.Bytes);
                 if (_outbox.First is not null)
                 {
                     wait = Gap;
@@ -211,6 +241,7 @@ public sealed partial class TelepathPacer
         else return;
 
         bool resend = false;
+        string? gaveUpOn = null;
         lock (_lock)
         {
             ExpireUnacked();
@@ -227,20 +258,26 @@ public sealed partial class TelepathPacer
             {
                 _givenUp++;
                 _log?.Info("Telepath", $"Telepath to {oldest.Target} not sent after {MaxAttempts} tries — giving up.");
-                return;
+                gaveUpOn = LineText(oldest.Bytes);
             }
-            _resends++;
-            // Ahead of anything never sent, behind resends already waiting.
-            LinkedListNode<Telepath>? after = null;
-            for (int i = 0; i < _resendsQueued; i++) after = after is null ? _outbox.First : after.Next;
-            if (after is null) _outbox.AddFirst(oldest);
-            else _outbox.AddAfter(after, oldest);
-            _resendsQueued++;
-            _log?.Info("Telepath", $"Telepath to {oldest.Target} not sent (throttled) — resending (try {oldest.Attempts + 1}/{MaxAttempts}).");
-            resend = true;
+            else
+            {
+                _resends++;
+                // Ahead of anything never sent, behind resends already waiting.
+                LinkedListNode<Telepath>? after = null;
+                for (int i = 0; i < _resendsQueued; i++) after = after is null ? _outbox.First : after.Next;
+                if (after is null) _outbox.AddFirst(oldest);
+                else _outbox.AddAfter(after, oldest);
+                _resendsQueued++;
+                _log?.Info("Telepath", $"Telepath to {oldest.Target} not sent (throttled) — resending (try {oldest.Attempts + 1}/{MaxAttempts}).");
+                resend = true;
+            }
         }
+        if (gaveUpOn is not null) GaveUp?.Invoke(gaveUpOn);
         if (resend) Pump();
     }
+
+    private static string LineText(byte[] line) => Encoding.Latin1.GetString(line).TrimEnd('\r', '\n');
 
     private void ExpireUnacked()
     {

@@ -1408,6 +1408,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Death-recovery watches for `You pick up ...` confirmations
         // to drive the deathpile Partial → Recovered transition + re-equip.
         AppServices.Current.DeathRecovery.AttachLineExtractor(Lines);
+        // Another player's corpse recovered for them: its lines fill the handoff record.
+        AppServices.Current.CorpseHandoff.AttachLineExtractor(Lines);
         // The Emulator lives here, so hand death-recovery a provider for the
         // backscroll tail it snapshots at each death ("How did I Die?").
         AppServices.Current.DeathRecovery.AttachTranscriptTail(
@@ -2294,7 +2296,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-            WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
+            WriteTerminalStatus(report.StoppedBecause is { } why
+                ? $"[Ganghouse roomba stopped: {why}]"
+                : "[Ganghouse roomba complete]", TerminalStatusKind.Notice));
 
     private static void LogSlowLine(LineExtractor.EmittedLine line, TimeSpan took)
         => AppServices.Current.Log.Warn("Lines", LineExtractor.SlowLineNotice(line, took));
@@ -3579,6 +3583,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // A Stock spill sweep would time out stop after stop against the dead
                 // wire, or set off again on reconnect.
                 AppServices.Current.DeathRecovery.NotifyDisconnected();
+                AppServices.Current.CorpseHandoff.NotifyDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.
@@ -3878,6 +3883,9 @@ public partial class MainWindowViewModel : ObservableObject
     // other observer these lines are the user's own, as before.
     private SentCommandTrail.Origin? _userLineOrigin;
 
+    // True while a line typed in the Conversation window's input is going out.
+    private bool _conversationLine;
+
     // SendUserInput for a line the user sent some other way than by typing it at
     // the terminal, so the trail can say which.
     private void SendUserInputAs(SentCommandTrail.Origin origin, byte[] data)
@@ -3926,6 +3934,12 @@ public partial class MainWindowViewModel : ObservableObject
             else
                 AppServices.Current.SentCommands.ObserveTyped(data);
         }
+        // A `recover corpse <name> <password>` for another player arms the record of
+        // what comes out of their corpse, when the user typed it: at the terminal or
+        // in the Conversation window's input.
+        bool typedInConversation = _conversationLine && _userLineOrigin == SentCommandTrail.Origin.Window
+            && !sendGate.SendingClientCommand && sendGate.CurrentSender is null;
+        AppServices.Current.CorpseHandoff.ObserveOutbound(data, usersOwn: typedAtTerminal || typedInConversation);
         // Stat-screen parser — gates on outbound `stat` so chat lines
         // containing "Strength: 60" or similar can't bleed into the
         // PlayerStats snapshot.
@@ -4552,7 +4566,12 @@ public partial class MainWindowViewModel : ObservableObject
             DataContext = new ConversationViewModel(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
-                text => SendUserText(text, SentCommandTrail.Origin.Window),
+                text =>
+                {
+                    _conversationLine = true;
+                    try { SendUserText(text, SentCommandTrail.Origin.Window); }
+                    finally { _conversationLine = false; }
+                },
                 ClearChatlog,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),

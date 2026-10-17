@@ -108,8 +108,9 @@ public sealed class RoomEntityClassifier : IDisposable
     // nobody. False again as soon as someone may be here that Current doesn't name:
     // an arrival line that names nobody (a follow, a directionless spawn, a summon),
     // an arrival under a name the game data can't place, a swing from nobody listed,
-    // a room entered unseen, or the roster emptied on some other ground than a
-    // display. The next read of the room sets it again.
+    // a cast line naming a caster it doesn't list, a room entered unseen, or the
+    // roster emptied on some other ground than a display. The next read of the room
+    // sets it again.
     //
     // For whoever has to rule a monster OUT by its absence (CastReach). The combat
     // gate asks who is here to fight, and a roster that is short does it no harm.
@@ -121,6 +122,14 @@ public sealed class RoomEntityClassifier : IDisposable
         if (!RosterIsWhole) return;
         RosterIsWhole = false;
         _log?.Debug(LogCategory, $"roster no longer known to be whole — {why}");
+    }
+
+    // A cast line named who cast it, and a caster has to be in the room: one the
+    // roster doesn't list is someone it is short of.
+    public void NoteCasterNamed(string caster, string line)
+    {
+        if (!RosterIsWhole || Current is not { } room || room.Lists(caster)) return;
+        NoteUnlistedArrival($"a cast line names '{caster}', who is not on the roster: '{line}'");
     }
 
     public RoomEntityClassifier(

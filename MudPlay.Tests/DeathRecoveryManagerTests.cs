@@ -28,6 +28,8 @@ public sealed partial class DeathRecoveryManagerTests
     private sealed class GraphHarness : IDisposable
     {
         private readonly string _root;
+        private readonly GameDataCache _cache;
+        private readonly string _graphJson;
         private readonly MessageRouter _router;
         public ProfileService Profile { get; } = new();
         public RoomTracker Tracker { get; }
@@ -93,6 +95,8 @@ public sealed partial class DeathRecoveryManagerTests
             File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson);
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
+            _cache = cache;
+            _graphJson = graphJson;
             RoomGraphManager graph = new(cache);
             graph.OnActiveSetChanged("alpha");
             Graph = graph;
@@ -175,6 +179,20 @@ public sealed partial class DeathRecoveryManagerTests
                 DateTimeOffset.UtcNow, IsPromptLine: false));
 
         public DeathRecord Latest => Profile.Current!.DeathHistory![^1];
+
+        // Make another game-data set the active one, its rooms the same as alpha's,
+        // and read the graph in from it as the app does on a switch.
+        public void SwitchGameData(string set)
+        {
+            string folder = Path.Combine(_root, set);
+            if (!Directory.Exists(folder))
+            {
+                Directory.CreateDirectory(folder);
+                File.WriteAllText(Path.Combine(folder, "Rooms.json"), _graphJson);
+            }
+            _cache.SwitchSet(set);
+            Graph.OnActiveSetChanged(set);
+        }
 
         public void Dispose()
         {

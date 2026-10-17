@@ -43,14 +43,18 @@ public sealed class GhSuspendedSweepStore
 
     public bool Any => _profile.Current?.GhUnfinishedSweep is { Count: > 0 };
 
+    // The game-data set the record's rooms are numbers of; null for none recorded.
+    public string? GameData => _profile.Current?.GhUnfinishedSweepGameData;
+
     // Items still in the pack — the half a fresh Start also has to honour, since
     // they're the player's property sitting in their inventory either way.
     public IReadOnlyList<GhSuspendedMove> LoadCarried()
         => Load().Where(m => m.Carried).ToList();
 
-    // Record what's left. Called on every sweep end, normal or not: a clean finish
-    // saves an empty list, which is what clears a previous one.
-    public void Save(IEnumerable<GhSuspendedMove> unfinished)
+    // Record what's left, and the game-data set its rooms are of. Called on every
+    // sweep end, normal or not: a clean finish saves an empty list, which is what
+    // clears a previous one.
+    public void Save(IEnumerable<GhSuspendedMove> unfinished, string? gameData = null)
     {
         ArgumentNullException.ThrowIfNull(unfinished);
         if (_profile.Current is not { } current) return;
@@ -60,6 +64,7 @@ public sealed class GhSuspendedSweepStore
         if (moves.Count == 0 && !had) return;   // nothing to write, nothing to clear
 
         current.GhUnfinishedSweep = moves.Count > 0 ? moves : null;
+        current.GhUnfinishedSweepGameData = moves.Count > 0 ? gameData : null;
         _profile.Save();
 
         if (moves.Count > 0)

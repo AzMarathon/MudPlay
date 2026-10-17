@@ -726,6 +726,41 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return _walker is not null && _walker.WalkTo(room, preferTeleportFree: false);
     }
 
+    // Why this death's pile can't be gone for right now, or null: it was recorded on
+    // another game-data set than the one whose rooms the map holds, and the same
+    // room number there is another room. Nothing walks to it, arms a grab in it or
+    // sweeps from it until that set is back. A record from before the set was kept
+    // has no stamp and is taken as the active set's, as it always was. So is one
+    // whose set is no longer installed (deleted, or renamed in Manage Sets), which
+    // could never be switched back to (user, 2026-10-17). The record itself is left
+    // as it is.
+    public string? OtherGameDataRefusal(DeathRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.GameData is not { } set) return null;
+        string? refusal = new OpenedOnGameData(set).Refusal("death", _roomTracker.RoomsGameData, "recover it");
+        return refusal is not null && GameDataInstalled(set) ? refusal : null;
+    }
+
+    // Whether the named game-data set is still installed. Unbound (tests), every set is.
+    public bool GameDataInstalled(string set) => _gameDataInstalled?.Invoke(set) ?? true;
+
+    private Func<string, bool>? _gameDataInstalled;
+
+    // Bind the probe that says whether a game-data set is still installed, for a
+    // death stamped with one that has since gone. Wired by AppServices.
+    public void SetGameDataInstalledProbe(Func<string, bool> installed)
+    {
+        ArgumentNullException.ThrowIfNull(installed);
+        _gameDataInstalled = installed;
+    }
+
+    private bool OnActiveGameData(DeathRecord record) => OtherGameDataRefusal(record) is null;
+
+    private void NoteOtherGameData(DeathRecord record, string what) =>
+        _log?.Info(LogCategory, $"{what} for death #{record.RecordNumber} at {record.RoomKeyText}: "
+            + new OpenedOnGameData(record.GameData).LogReason(_roomTracker.RoomsGameData));
+
     // Demand signal to recover a deathpile. If we're already standing in the
     // death room, grab every recorded pile item in place (and re-equip the worn
     // ones when Auto-Equip is on); otherwise start walking there and grab on
@@ -735,6 +770,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(record);
         if (record.Room is not { } target) return false;
+        if (OtherGameDataRefusal(record) is not null)
+        {
+            NoteOtherGameData(record, "Recover Now refused");
+            return false;
+        }
         if (SweepRunning)
         {
             _log?.Info(LogCategory, "recover-now: a spill sweep is already under way — left to finish");
@@ -854,8 +894,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // one is the user asking for the room to be looked at again: its arrival is
         // judged like any other, off the room's own display.
         if (rec is null && _pendingRecoverNow is { Status: DeathRecoveryStatus.Missing, Room: { } asked } again
-            && asked.Map == room.Key.Map && asked.Room == room.Key.Room)
+            && asked.Map == room.Key.Map && asked.Room == room.Key.Room && OnActiveGameData(again))
             rec = again;
+        if (rec is null && !sameRoom && FindRecoverableAt(room.Key, otherGameData: true) is { } elsewhere)
+            NoteOtherGameData(elsewhere, "recovery not started here");
         if (rec is not null && !ReferenceEquals(_activeRecovery, rec))
         {
             bool force = ReferenceEquals(_pendingRecoverNow, rec);
@@ -973,7 +1015,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
             // Nothing item-worthy left (empty or only coins) → nothing to grab in passing.
-            if (FullyRecovered(r) || r.Room is not { } rr) continue;
+            if (FullyRecovered(r) || r.Room is not { } rr || !OnActiveGameData(r)) continue;
             bool borders = room.Exits.Values.Any(e => e.Target.Map == rr.Map && e.Target.Room == rr.Room);
             if (borders && (best is null || r.RecordNumber > best.RecordNumber)) best = r;
         }
@@ -993,8 +1035,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             && rec.Room is { } r && dest.Map == r.Map && dest.Room == r.Room;
     }
 
-    // Newest un-recovered record whose death room matches key.
-    private DeathRecord? FindRecoverableAt(RoomKey key)
+    // Newest un-recovered record whose death room matches key, of those recorded on
+    // the active game data (or, with otherGameData, of those recorded on another).
+    private DeathRecord? FindRecoverableAt(RoomKey key, bool otherGameData = false)
     {
         if (_profile.Current?.DeathHistory is not { } list) return null;
         DeathRecord? best = null;
@@ -1005,6 +1048,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             // The user re-tries a Missing pile explicitly via Recover Now.
             if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
             if (r.Room is not { } room || room.Map != key.Map || room.Room != key.Room) continue;
+            if (OnActiveGameData(r) == otherGameData) continue;
             if (best is null || r.RecordNumber > best.RecordNumber) best = r;
         }
         return best;
@@ -1223,6 +1267,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _grabOnSurvey = false;   // one shot per arming — never loop
         _lookExitsOwed = false;
         _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
+        _corpseAskedFor = _activeRecovery is { } asking ? (asking, corpse) : null;
         Send($"recover corpse {corpse}");
     }
 
@@ -2211,11 +2256,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private string? FindOurCorpse()
     {
         if (_groundItems is not { } ground) return null;
-        // Prefer the live in-game name over the profile's stored name, which a copied
-        // profile can leave stale (report stock-20260828-104653) — matching another
-        // player's corpse would be a serious mis-recovery.
-        string? live = _liveSelfName?.Invoke();
-        string ourGiven = FirstToken(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
+        string ourGiven = OurGivenName();
         string? loneCorpse = null;
         int corpseCount = 0;
         foreach (string item in ground.Items)
@@ -2231,8 +2272,39 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return ourGiven.Length == 0 && corpseCount == 1 ? loneCorpse : null;
     }
 
-    private static string FirstToken(string? name) =>
-        string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
+    // The corpse our own `recover corpse` named, and the live in-game name, both
+    // say the corpse is ours. The profile's stored name is asked only when neither
+    // is known: a copied profile can leave it stale (report stock-20260828-104653),
+    // and a stale name taken alone would leave our recovered pile open.
+    private bool IsOurCorpse(string whose)
+    {
+        string given = CorpseRecoveryLines.GivenName(whose);
+        string asked = _corpseAskedFor is { } a && ReferenceEquals(a.Record, _activeRecovery)
+            ? CorpseRecoveryLines.GivenName(a.Name)
+            : string.Empty;
+        string live = CorpseRecoveryLines.GivenName(_liveSelfName?.Invoke());
+        if (asked.Length == 0 && live.Length == 0)
+        {
+            string stored = CorpseRecoveryLines.GivenName(_profile.Current?.Name);
+            return stored.Length == 0 || string.Equals(given, stored, StringComparison.OrdinalIgnoreCase);
+        }
+        return string.Equals(given, asked, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(given, live, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The corpse name the last `recover corpse` we sent asked for, and the recovery
+    // it was sent for: it speaks for that recovery only, so a finished or replaced
+    // one leaves it unread.
+    private (DeathRecord Record, string Name)? _corpseAskedFor;
+
+    // Prefer the live in-game name over the profile's stored name, which a copied
+    // profile can leave stale (report stock-20260828-104653) — matching another
+    // player's corpse would be a serious mis-recovery.
+    private string OurGivenName()
+    {
+        string? live = _liveSelfName?.Invoke();
+        return CorpseRecoveryLines.GivenName(!string.IsNullOrWhiteSpace(live) ? live : _profile.Current?.Name);
+    }
 
     private List<string> PileNames(DeathRecord record)
     {
@@ -2351,16 +2423,23 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Pass-through spillover "You took" is independent of any death-room
         // recovery (we're standing in a NEIGHBOUR of the death room, not it), so it
         // runs before the _activeRecovery guard below.
-        if (_spilloverRecovering && YouTookRegex().Match(line.Text) is { Success: true } spill)
+        if (_spilloverRecovering && CorpseRecoveryLines.Took(line.Text) is { } spill)
         {
-            OnSpilloverItemTaken(spill.Groups["item"].Value);
+            OnSpilloverItemTaken(spill);
             return;
         }
 
         if (_activeRecovery is null) return;
 
-        if (!line.IsPromptLine && CorpseRecoveredRegex().IsMatch(line.Text))
+        if (!line.IsPromptLine && CorpseRecoveryLines.Completed(line.Text) is { } whose)
         {
+            // Another player's corpse prints the same line, and it is theirs, not
+            // ours (CorpseHandoffManager keeps it to hand back).
+            if (!IsOurCorpse(whose))
+            {
+                _log?.Debug(LogCategory, $"paradigm: recovered {whose}'s corpse, not ours — our pile stays open");
+                return;
+            }
             DeathRecord record = _activeRecovery;
             int total = PileNames(record).Count;
             _log?.Info(LogCategory, $"paradigm: corpse recovered ({total} item(s)) — re-equipping worn gear");
@@ -2371,8 +2450,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
 
-        if (_stockRecovering && YouTookRegex().Match(line.Text) is { Success: true } took)
-            OnStockItemTaken(took.Groups["item"].Value);
+        if (_stockRecovering && CorpseRecoveryLines.Took(line.Text) is { } took)
+            OnStockItemTaken(took);
     }
 
     // A "You took <item>." landed while grabbing spillover in a room next to a death
@@ -2778,6 +2857,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         DropSweep("the character was changed");
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _pendingRecoverNow = null;
         _recoverNowWalking = false;
         _grabOnSurvey = false;
@@ -2871,6 +2951,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         _log?.Info(LogCategory, $"recovery complete: {record.RoomKeyText} — {message}");
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _grabOnSurvey = false;
         _stockRecovering = false;
         _stockSweepPending = false;
@@ -2927,6 +3008,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             RecordNumber = p.DeathHistory.Count + 1,
             RoomName = here?.Name,
+            GameData = _roomTracker.RoomsGameData,
             Status = DeathRecoveryStatus.Active,
         };
         if (_inventorySnapshot is { } provider)
@@ -2965,6 +3047,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // followed while a sweep runs, so the one that took us out of the room (the
         // death) didn't clear this.
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _grabOnSurvey = false;
         _stockRecovering = false;
         _stockSweepPending = false;
@@ -3132,21 +3215,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     [GeneratedRegex(@"^corpse of (?<name>.+?)\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex CorpseRegex();
-
-    // "You have recovered the corpse of <name>." — the single line that ends a
-    // successful `recover corpse`, after which the whole pile (items + coins) is
-    // back in the pack. A realm that phrases this differently simply leaves the
-    // record Partial (the user can Mark Recovered); no false transition occurs.
-    [GeneratedRegex(@"^You have recovered the corpse of .+?\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex CorpseRecoveredRegex();
-
-    // "You took <item>." — the own-pickup confirmation for a Stock ground `get`
-    // (matches KnownPatterns.PlayerGets' own branch; the "<player> picks up" form
-    // is another player and never reaches here). Drives the per-item Stock
-    // deathpile decrement. "You took N damage." is the engine's damage report,
-    // not a pickup.
-    [GeneratedRegex(@"^You took (?!\d+ damage\.$)(?<item>.+?)\.$", RegexOptions.CultureInvariant)]
-    private static partial Regex YouTookRegex();
 
     // "Your <item> has returned to its rightful place." — printed to the dying
     // player for an item the engine found no room for anywhere (GAME_MECHANICS

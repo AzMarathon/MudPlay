@@ -458,16 +458,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             RenameSelected(oldName, Name.Trim());
         }
 
-        foreach (BbsProfile profile in _loaded.Values)
-        {
-            // The website is now edited under Settings → Toolbar + Shortcuts and
-            // may have just been written there in the same OK. Re-read the
-            // on-disk value into this cached copy so our save folds it in rather
-            // than clobbering it with the WebsiteUrl loaded at selection time.
-            if (_bbsStore.Get(profile.Name) is { WebsiteUrl: var url })
-                profile.WebsiteUrl = url;
-            _bbsStore.Save(profile);
-        }
+        foreach (BbsProfile profile in _loaded.Values) SaveLoaded(profile);
 
         ApplyToCurrentProfile();
         bool realmMoved = ApplyCharacterRealm();
@@ -996,14 +987,29 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     }
 
     // OK: carry out the realm renames / removals — before a BBS rename, while the
-    // folders still sit under the names they were made with.
+    // folders still sit under the names they were made with. A renamed realm's BBS
+    // is saved first, as RealmCatalog.Rename does: from the moment its folder
+    // moves, the realm in play and the stores that follow it read the new name.
     private void ApplyRealmChanges()
     {
         if (AppServices.CurrentOrNull?.Realms is not { } realms) return;
+        foreach (string bbs in _realmRenames.Select(r => r.Bbs).Distinct(StringComparer.OrdinalIgnoreCase))
+            if (_loaded.TryGetValue(bbs, out BbsProfile? renamedIn)) SaveLoaded(renamedIn);
         foreach ((string bbs, string oldName, string newName) in _realmRenames)
             realms.MoveData(bbs, oldName, newName);
         foreach ((string bbs, string name, IReadOnlyList<ProfileRef> characters) in _realmRemovals)
             realms.DeleteContents(bbs, name, characters);
+    }
+
+    private void SaveLoaded(BbsProfile profile)
+    {
+        // The website is now edited under Settings → Toolbar + Shortcuts and
+        // may have just been written there in the same OK. Re-read the
+        // on-disk value into this cached copy so our save folds it in rather
+        // than clobbering it with the WebsiteUrl loaded at selection time.
+        if (_bbsStore.Get(profile.Name) is { WebsiteUrl: var url })
+            profile.WebsiteUrl = url;
+        _bbsStore.Save(profile);
     }
 
     // OK: put the loaded character on the realm picked for it.

@@ -784,9 +784,10 @@ public static class RouteChoicePrompt
         {
             previewSink?.Invoke(null);
         }
-        // A change of game data closes the cards without a pick. A pick that got in
-        // ahead of that is of the old data's rooms all the same.
-        if (result is not null && PlanOvertaken(services, inFlight, calcVm: null)) return false;
+        // A change of game data closes the cards without a pick, and says so here: the
+        // stop's own notice names only what was running. A pick that got in ahead of
+        // the change is of the old data's rooms all the same.
+        if (PlanOvertaken(services, inFlight, calcVm: null)) return false;
         if (result is not null)
             ApplyStartMode(services, vm.StartMode != RunStartMode.Normal ? vm.StartMode : startMode);
         else

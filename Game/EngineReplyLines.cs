@@ -13,9 +13,14 @@ namespace MudPlay.Game;
 // fills in. Wording is the Stock engine's; a realm that rewords a line simply misses.
 public static partial class EngineReplyLines
 {
+    // The reply to a name that fits more than one thing (`look`, `ask`, a telepath's
+    // letters that fit two players): this line, then one row per match.
+    public const string AmbiguousName = "Please be more specific.  You could have meant any of these:";
+    public const string AmbiguousNameRow = "-- ";
+
     private static readonly string[] Formats =
     {
-        "-- %s",
+        AmbiguousNameRow + "%s",
         "--- Message Not Sent ---",
         "--- Telepath Not Sent ---",
         "A concealed passage opens to the %s.",
@@ -34,7 +39,7 @@ public static partial class EngineReplyLines
         "No more new items may be stocked in this shop.",
         "Paging is now set to %s",
         "Perhaps you should invite %s into your gang first.",
-        "Please be more specific.  You could have meant any of these:",
+        AmbiguousName,
         "Please specify a more reasonable amount.",
         "Quiet mode set",
         "Someone yells from above \"%s\"",

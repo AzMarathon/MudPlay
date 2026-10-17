@@ -39,6 +39,12 @@ public sealed class DeathRecord
     // death.
     public string? RoomName { get; set; }
 
+    // The game-data set whose room numbers Room and Trail are in. Another set's room
+    // of the same number is another room, so a pile is only gone for under this set
+    // (DeathRecoveryManager.OtherGameDataRefusal). null on records from before it was
+    // kept, and on a death with no set active: those are taken as the active set's.
+    public string? GameData { get; set; }
+
     public int LivesRemaining { get; set; }
     public string? MessageText { get; set; }
 
@@ -117,6 +123,11 @@ public sealed class DeathRecord
     [JsonIgnore]
     public string RoomKeyText => Room is null ? "—" : $"{Room.Map}/{Room.Room}";
 
+    // The DEATH grid's "Game data" column: the set the room numbers are of, or "—"
+    // for a record from before the set was kept. Display-only — not persisted.
+    [JsonIgnore]
+    public string GameDataText => GameData ?? "—";
+
     // Local-time "yyyy-MM-dd HH:mm:ss" for the DEATH grid's "Died" column — date
     // AND time, shown in the player's local zone (records persist At as UTC).
     // Display-only — not persisted.
@@ -163,7 +174,7 @@ public sealed class DeathRecord
     // CurrencyNaming (reserved for the Game/ layer), and the record is a frozen
     // historical snapshot, so the board word isn't threaded in here. The other
     // four denominations are never renameable, so only this one rung is affected.
-    private static IEnumerable<string> DescribeCoins(CurrencyHoldings? coins)
+    internal static IEnumerable<string> DescribeCoins(CurrencyHoldings? coins)
     {
         if (coins is not { } c) yield break;
         if (c.Runic > 0)    yield return Coin(c.Runic,    "runic coin");

@@ -14,7 +14,8 @@ namespace MudPlay.Services;
 // beside the imported tables, and every board and character on the set shares
 // it. Two clients on one set take in each other's readings the way the realm's
 // other shared files are followed (SharedFileStamp, on the heartbeat and before a
-// write), and a write merges with what is on file rather than replacing it.
+// write), and a write is made under a hold on the file (SharedFileWrite), laid over
+// what is on file at that moment rather than replacing it.
 //
 // Each room has one assigned room for its dead, so two readings of one room mean
 // one of them was misread (the owner, 2026-10-11): a display of the wrong room, a
@@ -41,6 +42,9 @@ public sealed class LearnedArrivalRoomStore
     // client's: it is neither read nor written over.
     private const int FileVersion = 1;
 
+    // A wait for another client's hold longer than this is logged.
+    private static readonly TimeSpan SlowHold = TimeSpan.FromMilliseconds(50);
+
     private readonly LogService? _log;
     private readonly Func<string, string> _fileFor;
     private readonly SharedFileStamp _stamp = new();
@@ -53,10 +57,13 @@ public sealed class LearnedArrivalRoomStore
     // whatever another client has written since.
     private readonly List<(RoomKey DiedIn, RoomKey Arrival, bool Nearby)> _unwritten = new();
     // How the file on disk stands. Each is said once, when it becomes so.
-    //   _unparsed   — it can't be read: set aside before anything is written.
+    //   _unparsed   — it was read and doesn't parse: set aside before anything is
+    //                 written.
+    //   _unread     — it couldn't be opened: nothing is known of what it holds, so
+    //                 nothing is written until it has been read.
     //   _newer      — a later client's format: neither read nor written.
     //   _unwritable — the last write failed.
-    private bool _unparsed, _newer, _unwritable;
+    private bool _unparsed, _unread, _newer, _unwritable;
 
     //   fileFor — a set's file; AppPaths.LearnedArrivalRoomsFile unless a test
     //             keeps its sets somewhere else.
@@ -152,9 +159,11 @@ public sealed class LearnedArrivalRoomStore
         _set = string.IsNullOrWhiteSpace(setName) ? null : setName;
         _seen.Clear();
         _unwritten.Clear();
-        _unparsed = _newer = _unwritable = false;
+        _unparsed = _unread = _newer = _unwritable = false;
         Revision++;
         if (_set is null) return;
+        foreach (string temp in SharedFileWrite.RemoveStaleTemps(_fileFor(_set)))
+            _log?.Info(LogCategory, $"removed '{temp}', left by a write that never finished");
         if (TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)) Take(onFile);
         if (_seen.Count > 0)
             _log?.Info(LogCategory,
@@ -163,23 +172,18 @@ public sealed class LearnedArrivalRoomStore
 
     // Re-read the file when another client on the set has written it, and write
     // what an earlier write couldn't. Called on the heartbeat and before a
-    // sighting is added. A file that can't be read is left for the next call, what
-    // is held kept. True when what is held changed.
+    // sighting is added. A file that couldn't be opened last time is tried again
+    // whether or not it has changed; one that can't be read is left for the next
+    // call, what is held kept. True when what is held changed.
     public bool TakeInOutsideChanges()
     {
         if (_set is null) return false;
         bool changed = false;
-        if (_stamp.ChangedOutside(_fileFor(_set)) && TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile))
+        if ((_unread || _stamp.ChangedOutside(_fileFor(_set)))
+            && TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile))
         {
-            _seen.Clear();
-            Take(onFile);
-            // What this client saw and couldn't write is not in that file.
-            foreach ((RoomKey diedIn, RoomKey arrival, bool nearby) in _unwritten)
-            {
-                if (nearby) AddNearby(diedIn, arrival);
-                else Add(diedIn, arrival, quiet: true);
-            }
-            _log?.Debug(LogCategory, "re-read: another client on this set learned something");
+            TakeWithUnwritten(onFile);
+            _log?.Debug(LogCategory, "re-read: another client on this set learned something, or the file opened again");
             changed = true;
         }
         TryWrite();
@@ -302,6 +306,19 @@ public sealed class LearnedArrivalRoomStore
         Revision++;
     }
 
+    // Hold what is on file, with what this client saw and hasn't written laid
+    // over it: that is not in the file.
+    private void TakeWithUnwritten(Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)
+    {
+        _seen.Clear();
+        Take(onFile);
+        foreach ((RoomKey diedIn, RoomKey arrival, bool nearby) in _unwritten)
+        {
+            if (nearby) AddNearby(diedIn, arrival);
+            else Add(diedIn, arrival, quiet: true);
+        }
+    }
+
     // ----- the file ------------------------------------------------------
 
     private sealed class FileShape
@@ -326,9 +343,13 @@ public sealed class LearnedArrivalRoomStore
         public int Nearby { get; set; }
     }
 
-    // Read the set's file. False when it is there but can't be read, doesn't
-    // parse, or is a later client's. The stamp is marked either way, so a file
-    // that stays bad is looked at, and said, once.
+    // Read the set's file. False when it is there but couldn't be opened,
+    // doesn't parse, or is a later client's.
+    //   - One that doesn't parse is damaged: the stamp is marked, so it is looked
+    //     at, and said, once, and it is set aside before the next write.
+    //   - One that couldn't be opened (another program holds it, no permission)
+    //     may be whole. Nothing is known of it: it is tried again on every
+    //     heartbeat, and nothing is written over it meanwhile.
     private bool TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)
     {
         onFile = new Dictionary<RoomKey, List<(RoomKey, int, int)>>();
@@ -339,10 +360,13 @@ public sealed class LearnedArrivalRoomStore
             {
                 _stamp.Mark(path);
                 _unparsed = _newer = false;
+                Opened(path);
                 return true;
             }
-            FileShape? file = JsonSerializer.Deserialize<FileShape>(File.ReadAllText(path));
+            string text = File.ReadAllText(path);
             _stamp.Mark(path);
+            Opened(path);
+            FileShape? file = JsonSerializer.Deserialize<FileShape>(text);
             if (file is null || file.Version < 1) throw new JsonException("no version");
             if (file.Version > FileVersion)
             {
@@ -383,9 +407,8 @@ public sealed class LearnedArrivalRoomStore
             _unparsed = _newer = false;
             return true;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException ex)
         {
-            _stamp.Mark(path);
             if (!_unparsed)
                 _log?.Warn(LogCategory,
                     $"'{path}' can't be read ({ex.Message}). It is left as it is; if something is learned before it reads "
@@ -393,18 +416,44 @@ public sealed class LearnedArrivalRoomStore
             _unparsed = true;
             return false;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (!_unread)
+                _log?.Warn(LogCategory,
+                    $"'{path}' can't be opened ({ex.Message}). It is tried again each second, and nothing is written to "
+                    + "it until it has been read: what is learned meanwhile is held and written then.");
+            _unread = true;
+            return false;
+        }
+    }
+
+    private void Opened(string path)
+    {
+        if (!_unread) return;
+        _unread = false;
+        _log?.Info(LogCategory, $"'{path}' could be opened again.");
     }
 
     // Write what is held, when there is something the disk doesn't have. A failure
     // is said once and tried again on the next sighting or heartbeat; what was
     // seen stays in memory meanwhile.
+    //
+    // The file is read again and written under one hold, so no other client
+    // writes in between: what this client saw goes over everything on file, a
+    // write made within the file clock's step of this client's last read too,
+    // which the stamp can't tell from that read.
     private void TryWrite()
     {
-        if (_set is null || _unwritten.Count == 0 || _newer) return;
+        if (_set is null || _unwritten.Count == 0 || _newer || _unread) return;
         string path = _fileFor(_set);
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using IDisposable hold = SharedFileWrite.Hold(path, out TimeSpan waited);
+            if (waited > SlowHold)
+                _log?.Debug(LogCategory, $"waited {waited.TotalMilliseconds:0} ms for another client's write of '{path}'");
+            if (TryRead(out Dictionary<RoomKey, List<(RoomKey, int, int)>> onFile)) TakeWithUnwritten(onFile);
+            else if (_newer || _unread) return;
             // A file that doesn't parse may hold everything learned so far, one
             // slip of a hand edit away from reading again. It is moved aside, under
             // a name nothing else has, before anything is written in its place.
@@ -435,7 +484,7 @@ public sealed class LearnedArrivalRoomStore
             };
             // Written beside the file and moved over it, so another client reading
             // at this moment sees the old list or the new, never half of one.
-            string temp = $"{path}.{Environment.ProcessId}.tmp";
+            string temp = SharedFileWrite.TempFor(path);
             File.WriteAllText(temp, JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true }));
             File.Move(temp, path, overwrite: true);
             _stamp.Mark(path);

@@ -176,8 +176,22 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _profile.ProfileLoaded += OnProfileLoaded;
         _spellbook.Changed += OnSpellbookChanged;
         AppServices.Current.Inventory.FullInventoryParsed += OnInventoryReloaded;
+        AppServices.Current.CastDirector.BuffNegated += OnBuffNegated;
 
         Load();
+    }
+
+    // The casting engine marked a member as negating a buff: tint their box at once.
+    private void OnBuffNegated(string _, string __)
+    {
+        if (_disposed) return;
+        if (Dispatcher.UIThread.CheckAccess()) RefreshNegatedMarks();
+        else Dispatcher.UIThread.Post(() => { if (!_disposed) RefreshNegatedMarks(); });
+    }
+
+    private void RefreshNegatedMarks()
+    {
+        foreach (BuffSlotRowViewModel row in Slots) row.RefreshNegatedMarks();
     }
 
     // Config-list order: buffs you aim (self / single-target) first, then whole-party
@@ -760,6 +774,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // Apply the dialog's result onto a slot DTO (shared by add + edit).
     private void ApplyResult(BuffSlot dto, AddBuffResult r)
     {
+        // A mark says who negated THIS spell; another spell starts with none.
+        if (!string.Equals(dto.Spell?.Trim(), r.Spell?.Trim(), StringComparison.OrdinalIgnoreCase))
+            dto.NegatedTargets.Clear();
         dto.Spell = r.Spell;
         dto.RecastMarginSec = r.RecastMarginSec;
         dto.OnlyWhenHpFull = r.OnlyWhenHpFull;
@@ -1013,5 +1030,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _profile.ProfileLoaded -= OnProfileLoaded;
         _spellbook.Changed -= OnSpellbookChanged;
         AppServices.Current.Inventory.FullInventoryParsed -= OnInventoryReloaded;
+        AppServices.Current.CastDirector.BuffNegated -= OnBuffNegated;
     }
 }

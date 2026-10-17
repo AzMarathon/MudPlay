@@ -166,12 +166,14 @@ public sealed class LogService
     // copies to the clipboard. See LogEntry.Context for the convention.
     public void Log(LogSeverity severity, string source, string message, string? context)
     {
+        // Another player's corpse password, quoted by a relayed `@do` or any other
+        // line, never reaches the log or its files.
         LogEntry entry = new(
             DateTimeOffset.Now,
             severity,
             source ?? string.Empty,
-            message ?? string.Empty,
-            context);
+            Game.Recovery.CorpseRecoveryLines.Redact(message ?? string.Empty),
+            context is null ? null : Game.Recovery.CorpseRecoveryLines.Redact(context));
 
         lock (_gate)
         {

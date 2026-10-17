@@ -82,6 +82,12 @@ public sealed class BuffSlot
     // the party it was built for.
     public System.Collections.Generic.List<string> Targets { get; set; } = new();
 
+    // Single-target slots: lower-cased given names of members who negated this buff
+    // when we cast it on them. The game gives the same answer every time (something
+    // they wear stops it), so they are never offered it again, across sessions, until
+    // the user unticks and re-ticks their box in the Buff Watchdog (user, 2026-10-17).
+    public System.Collections.Generic.List<string> NegatedTargets { get; set; } = new();
+
     // ----- Conditions (per-slot gates) -------------------------------
 
     // Cast this buff only while mana is at or above this much: a percent of max

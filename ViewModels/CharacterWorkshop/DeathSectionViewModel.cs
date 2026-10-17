@@ -20,6 +20,8 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     private readonly DeathRecoveryManager _recovery;
     private readonly ProfileService _profile;
     private readonly LogDiagnosticState _diagnostics;
+    private readonly Game.Map.RoomGraphManager _graph;
+    private readonly CorpseHandoffManager _handoff;
     private Control? _view;
 
     public override string Id => "death";
@@ -35,6 +37,29 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(HowDidIDieCommand))]
     private DeathRecord? _selectedRecord;
 
+    // Other players' corpses recovered for them and not yet handed back.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHandoffs))]
+    private IReadOnlyList<CorpseHandoffRecord> _handoffs = Array.Empty<CorpseHandoffRecord>();
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CorpseHandoffCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearHandoffCommand))]
+    private CorpseHandoffRecord? _selectedHandoff;
+
+    // Who the handoff gives to: the corpse's owner unless the user types another name.
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CorpseHandoffCommand))]
+    private string _handoffRecipient = string.Empty;
+
+    // Why a handoff couldn't start, or how the selected record's last one went.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasHandoffStatus))]
+    private string _handoffStatus = string.Empty;
+
+    public bool HasHandoffs => Handoffs.Count > 0;
+    public bool HasHandoffStatus => HandoffStatus.Length > 0;
+
     public DeathSectionViewModel(DeathRecoveryManager recovery, ProfileService profile)
     {
         ArgumentNullException.ThrowIfNull(recovery);
@@ -45,8 +70,47 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         _recovery.PropertyChanged += OnRecoveryChanged;
         _profile.ProfileLoaded += OnProfileChanged;
         _diagnostics.Changed += OnDiagnosticsChanged;
+        // Which records Recover Now may go for turns on the game data the map holds.
+        _graph = AppServices.Current.RoomGraph;
+        _graph.GraphReloaded += OnGraphReloaded;
+        _handoff = AppServices.Current.CorpseHandoff;
+        _handoff.Changed += OnHandoffChanged;
         Refresh();
+        RefreshHandoffs();
     }
+
+    private void OnHandoffChanged() => Dispatcher.UIThread.Post(RefreshHandoffs);
+
+    private void RefreshHandoffs()
+    {
+        CorpseHandoffRecord? prev = SelectedHandoff;
+        Handoffs = _handoff.Records;
+        SelectedHandoff = prev is not null && Handoffs.Contains(prev) ? prev : Handoffs.FirstOrDefault();
+        HandoffStatus = SelectedHandoff?.Note ?? string.Empty;
+        CorpseHandoffCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnSelectedHandoffChanged(CorpseHandoffRecord? value)
+    {
+        HandoffRecipient = value is null ? string.Empty : CorpseRecoveryLines.GivenName(value.Owner);
+        HandoffStatus = value?.Note ?? string.Empty;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanHandOff))]
+    private void CorpseHandoff()
+    {
+        if (SelectedHandoff is not { } r) return;
+        if (_handoff.StartHandoff(r, HandoffRecipient) is { } refusal) HandoffStatus = refusal;
+    }
+
+    [RelayCommand(CanExecute = nameof(HasHandoffSelection))]
+    private void ClearHandoff() { if (SelectedHandoff is { } r) _handoff.Clear(r); }
+
+    private bool CanHandOff() => SelectedHandoff is not null && !_handoff.HandoffActive
+        && !string.IsNullOrWhiteSpace(HandoffRecipient);
+    private bool HasHandoffSelection() => SelectedHandoff is not null;
+
+    private void OnGraphReloaded() => Dispatcher.UIThread.Post(Refresh);
 
     // Reveal the test-only "Simulate Death" button — gated by the Log pane's
     // "Simulate Death button" toggle so a normal user never sees it. Hidden by
@@ -82,6 +146,13 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         {
             if (SelectedRecord is not { } r) return string.Empty;
             var parts = new List<string>();
+            // The map is the active set's, so a double-click shows that set's room of
+            // the number, not where this death was.
+            if (r.Status != DeathRecoveryStatus.Recovered && _recovery.OtherGameDataRefusal(r) is { } refusal)
+                parts.Add(refusal + " The map shows this game data's room of that number.");
+            else if (r.Status != DeathRecoveryStatus.Recovered && r.GameData is { } gone && !_recovery.GameDataInstalled(gone))
+                parts.Add($"Recorded on game data '{gone}', which is no longer installed: taken as this game data's, "
+                    + "like a death from before the game data was kept.");
             if (!string.IsNullOrWhiteSpace(r.RecoveryMessage)) parts.Add(r.RecoveryMessage!);
             if (r.Status == DeathRecoveryStatus.Partial && r.UnrecoveredItems is { Count: > 0 })
                 parts.Add("Still to recover: " + string.Join(", ", r.UnrecoveredItems));
@@ -116,6 +187,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         OnPropertyChanged(nameof(RecoveryDetailText));
         OnPropertyChanged(nameof(HasRecoveryDetail));
         ClearAllRecoveredCommand.NotifyCanExecuteChanged();
+        RecoverNowCommand.NotifyCanExecuteChanged();
     }
 
     // Open the death-log replay for the selected record — the backscroll tail
@@ -146,6 +218,9 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
     // Double-clicking a death row opens/focuses the Navigation window and centres
     // the map on the death's map/room. No-op when the death room was unknown at
     // capture (Room is null — the grid shows "—" and there's nowhere to centre).
+    // The map is the active game data's: a death recorded on another set is shown
+    // at this set's room of that number, which the grid's Game data column and the
+    // detail panel say.
     public void ShowSelectedOnMap()
     {
         if (SelectedRecord?.Room is not { } room) return;
@@ -169,7 +244,8 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
 
     private bool HasSelection() => SelectedRecord is not null;
     private bool CanShowDeathLog() => SelectedRecord?.DeathLogFile is { Length: > 0 };
-    private bool CanRecoverSelected() => SelectedRecord is { Room: not null } r && r.Status != DeathRecoveryStatus.Recovered;
+    private bool CanRecoverSelected() => SelectedRecord is { Room: not null } r && r.Status != DeathRecoveryStatus.Recovered
+        && _recovery.OtherGameDataRefusal(r) is null;
     private bool CanMarkRecovered() => SelectedRecord is { } r && r.Status != DeathRecoveryStatus.Recovered;
     private bool CanClearAllRecovered() => Records.Any(r => r.Status == DeathRecoveryStatus.Recovered);
 
@@ -181,5 +257,7 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
         _recovery.PropertyChanged -= OnRecoveryChanged;
         _profile.ProfileLoaded -= OnProfileChanged;
         _diagnostics.Changed -= OnDiagnosticsChanged;
+        _graph.GraphReloaded -= OnGraphReloaded;
+        _handoff.Changed -= OnHandoffChanged;
     }
 }

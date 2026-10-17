@@ -331,6 +331,10 @@ public sealed class CharacterProfile
     // finished cleanly, which is the normal case.
     public List<GhSuspendedMove>? GhUnfinishedSweep { get; set; }
 
+    // The game-data set GhUnfinishedSweep's rooms are numbers of. Null on a record
+    // saved before it was stamped.
+    public string? GhUnfinishedSweepGameData { get; set; }
+
     // Recent walk-to destinations, newest first, capped at 10. Each entry is a
     // "map/room" coordinate string. Maintained by GotoHistoryStore; drives the
     // Navigation goto-button dropdown. null or empty = no history yet.
@@ -375,6 +379,10 @@ public sealed class CharacterProfile
     // arrives; consumed by the Workshop DEATH section. null / empty means no
     // deaths yet (the lucky case).
     public List<DeathRecord>? DeathHistory { get; set; }
+
+    // Other players' corpses this character recovered and has not handed back yet
+    // (Game.Recovery.CorpseHandoffManager). null / empty when there are none.
+    public List<CorpseHandoffRecord>? CorpseHandoffs { get; set; }
 
     // Per-character log of players this character has seen — one aggregated row
     // per player (given name), each carrying the last-seen time, the last room

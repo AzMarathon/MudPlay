@@ -59,13 +59,17 @@ public sealed class AreaRankingFiles
     //
     // The Simulator folder and the BBS folders in it are made here, as folders. One
     // that is a link was put there by something else and leads wherever it likes:
-    // it is not followed, written through or emptied.
+    // it is not followed, written through or emptied. A set folder that is itself a
+    // link is treated the same way, as a set with no rankings (user, 2026-10-17),
+    // though its tables are read through it: a sweep or a set's delete would
+    // otherwise reach outside the app folder.
 
     // A set's Simulator folder as a full path, or null when the set's name does not
-    // name a folder directly inside the game-data folder.
+    // name a folder directly inside the game-data folder, or that folder or its
+    // Simulator folder is a link.
     private static string? SimulatorFolder(string? set)
     {
-        if (PathGuard.Child(AppPaths.GameDataRoot, set) is null) return null;
+        if (PathGuard.Child(AppPaths.GameDataRoot, set) is not { } setFolder || IsLink(setFolder)) return null;
         string folder = Path.GetFullPath(AppPaths.SimulatorRankingsFolder(set!));
         return IsLink(folder) ? null : folder;
     }
@@ -402,7 +406,10 @@ public sealed class AreaRankingFiles
                 // A link is somebody else's file under one of our names.
                 if (!info.Exists || info.LinkTarget is not null) continue;
                 DateTime writtenAt = info.LastWriteTimeUtc;
-                if (JsonStore.LoadStream<StampOnly>(file, Form)?.MadeAt is not { } madeAt)
+                // Without the wait a read gives a file being replaced: the sweep runs at
+                // every start, the first listing of a ranking queues behind it, and a
+                // file that would not open cost each start that wait.
+                if (JsonStore.LoadStreamNoWait<StampOnly>(file, Form)?.MadeAt is not { } madeAt)
                 {
                     skipped?.Invoke($"{file}: it carries no made-at stamp");
                     continue;
