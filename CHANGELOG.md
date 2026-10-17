@@ -7,7 +7,7 @@
 - Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
 - Unsure of your room, moves typed together are each matched to their own room display
 - Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
-- A walk's forward re-locate reads every step's landing in order, and the room it settles on is kept as a deduction, not a sure fix
+- A walk's forward re-locate reads every step's landing in order; the room it or the walk-back settles on is kept as a deduction, and a relog after one replays from it
 
 ## 3.183.34
 

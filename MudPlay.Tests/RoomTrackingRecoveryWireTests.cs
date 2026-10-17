@@ -157,28 +157,24 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // A move the game answers with nothing the tracker can read: a typed command
     // that prints only the prompt, or a line no refusal detector knows. It must be
-    // retired, or every later display is read against the move before its own. Where
-    // an echo marks the command being run (Stock), the next command's echo retires it
-    // (it was echoed and no display came before the next one). With no echo, or on a
-    // realm whose echo timing isn't recorded (Paradigm), a next move after a pause
-    // longer than the bound (3.5 s at least) does.
+    // retired, or every later display is read against the move before its own. With
+    // an echo, the next command's echo retires it: the game echoes a command when it
+    // runs it, so it was echoed and no display came before the next one. With no echo,
+    // a next move after a pause longer than the bound (3.5 s at least) does.
     [Theory]
-    [InlineData("enter portal", null, true, true)]
-    [InlineData("climb rope", null, true, true)]
-    [InlineData("enter portal", null, false, true)]
-    [InlineData("enter portal", null, true, false)]
-    [InlineData("e", "Something unseen stops you.", true, true)]
-    [InlineData("e", "Something unseen stops you.", false, true)]
-    [InlineData("e", "Something unseen stops you.", true, false)]
-    public void PassiveLocate_AMoveWithNoAnswerTheTrackerReads_IsRetired(string command, string? answer, bool echo, bool stockEcho)
+    [InlineData("enter portal", null, true)]
+    [InlineData("climb rope", null, true)]
+    [InlineData("enter portal", null, false)]
+    [InlineData("e", "Something unseen stops you.", true)]
+    [InlineData("e", "Something unseen stops you.", false)]
+    public void PassiveLocate_AMoveWithNoAnswerTheTrackerReads_IsRetired(string command, string? answer, bool echo)
     {
         using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
         rig.Echo = echo;
-        rig.EchoMarksExecution = stockEcho;
         if (answer is not null) rig.NextAnswers.Enqueue(answer);
 
         rig.Do(command);
-        if (!echo || !stockEcho) rig.Clock.Advance(TimeSpan.FromSeconds(4));   // the player waits, then walks on
+        if (!echo) rig.Clock.Advance(TimeSpan.FromSeconds(4));   // the player waits, then walks on
         for (int step = 0; step < 4; step++) rig.Do(Token(step));
 
         AssertLocatedAt(rig, A(4));
@@ -238,13 +234,13 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, A(3));
     }
 
-    // The same where an echo marks nothing (Paradigm): the move the display answered
-    // went out more than a hop before it, so its display has come, and it is dropped.
+    // The same with no echo: the move the display answered went out more than a hop
+    // before it, so its display has come, and it is dropped.
     [Fact]
     public void PassiveLocate_AnExhaustedFootprint_DropsAMoveOlderThanAHop()
     {
         using TrackerWireRig rig = StartInPair(PairWorld(split: 2));
-        rig.EchoMarksExecution = false;
+        rig.Echo = false;
         rig.AnswerDelay = TimeSpan.FromSeconds(1.5);
         rig.Do("enter portal");   // the game prints only the prompt
 
@@ -333,21 +329,23 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, A(2));
     }
 
-    // On a realm where the game might echo a command as it's typed (Paradigm isn't
-    // recorded), echoes of moves typed together arrive before either is answered.
-    // There the echo retires nothing, so the moves still fold in order.
-    [Fact]
-    public void PassiveLocate_EchoesAtTypingOnAnUnrecordedRealm_RetireNothing()
+    // Moves typed together on a statline that echoes: the game echoes each when it
+    // runs it, just before its display, so the second move's echo always follows the
+    // first move's display and retires nothing, however slow the hops.
+    [Theory]
+    [InlineData(0.4)]
+    [InlineData(2.5)]
+    public void PassiveLocate_TypedAheadMovesWithEcho_FoldInOrder(double hopSeconds)
     {
         using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
-        rig.EchoWhenTyped = true;
-        rig.EchoMarksExecution = false;
+        rig.AnswerDelay = TimeSpan.FromSeconds(hopSeconds);
 
         rig.Type(Token(0));
         rig.Type(Token(1));
         rig.Pump();
 
         AssertLocatedAt(rig, A(2));
+        Assert.DoesNotContain(rig.Log.Snapshot(), e => e.Message.Contains("not counted as a move"));
     }
 
     // c. Down to one room, waiting on a move that never got an answer: past the bound
@@ -589,21 +587,31 @@ public sealed class RoomTrackingRecoveryWireTests
     private static RoomKey CorridorB(int i) => new(1, 2000 + i);
     private static readonly RoomKey Gate = new(1, 1);
 
-    private static string TwinCorridors()
+    // cellarWestOf sends corridor B's room there west into a Cellar instead of B's
+    // room before it, so a walk-back footprint stepping west from it can tell the
+    // corridors apart; B's room before it, reached only from the Cellar, still reads
+    // like A's. byPosition names each room by its place along the corridor, so a
+    // display fits only it and its twin.
+    private static readonly RoomKey CorridorCellar = new(1, 3);
+
+    private static string TwinCorridors(int cellarWestOf = -1, bool byPosition = false)
     {
         List<string> rooms = new()
         {
             TrackerWireRig.Room(1, 1, "Gate", ("E", Ref(CorridorA(0)))),
             TrackerWireRig.Room(1, 2, "Postern", ("E", Ref(CorridorB(0)))),
+            TrackerWireRig.Room(CorridorCellar.Map, CorridorCellar.Room, "Cellar", ("E", Ref(CorridorB(Math.Max(0, cellarWestOf))))),
         };
         (Func<int, RoomKey> At, RoomKey End)[] corridors = { (CorridorA, Gate), (CorridorB, new RoomKey(1, 2)) };
         foreach ((Func<int, RoomKey> at, RoomKey end) in corridors)
             for (int i = 0; i < CorridorLength; i++)
             {
-                List<(string, string)> exits = new() { ("W", Ref(i == 0 ? end : at(i - 1))) };
-                if (i < CorridorLength - 1) exits.Add(("E", Ref(at(i + 1))));
                 RoomKey me = at(i);
-                rooms.Add(TrackerWireRig.Room(me.Map, me.Room, "Hall", exits.ToArray()));
+                RoomKey west = me == CorridorB(cellarWestOf) ? CorridorCellar : i == 0 ? end : at(i - 1);
+                List<(string, string)> exits = new() { ("W", Ref(west)) };
+                if (i < CorridorLength - 1) exits.Add(("E", Ref(at(i + 1))));
+                string name = "Hall" + (byPosition ? $" {i}" : "");
+                rooms.Add(TrackerWireRig.Room(me.Map, me.Room, name, exits.ToArray()));
             }
         return TrackerWireRig.Rooms(rooms);
     }
@@ -636,5 +644,125 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Contains($"cap of {EngineRecoveryGate.Tier3DepthCeiling} reverse moves", failed.Detail);
         Assert.Contains(terminalAsks, r => r.Contains($"cap of {EngineRecoveryGate.Tier3DepthCeiling} reverse moves"));
         Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Tier3.cap:"));
+    }
+
+    // ----- deduced locates: a guess, and a relog after one -----------------
+
+    // A relog: the profile closes and loads again, and the game shows the room the
+    // character stands in. The tracker comes back sure of the saved room with the
+    // saved trail, and the display is checked against that trail's end.
+    private static void Relog(TrackerWireRig rig, CharacterProfile profile)
+    {
+        rig.Tracker.OnProfileClosed();
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+    }
+
+    private static RoomKey Saved(CharacterProfile profile) => new(profile.LastKnownRoom!.Map, profile.LastKnownRoom.Room);
+
+    // B. A position the tier-3 walk-back works out is a guess (user, 2026-10-17): the
+    // tracker is confirmed there, but the saved room stays the last one it knew. C. A
+    // relog afterwards replays the trail from where it starts and lands where the
+    // character is, not in a room the steps never left. The engine walks twenty rooms
+    // down twin corridors (every room fits itself and its twin), fails a step, then
+    // reports a stall, as its watchdog does; the walk-back settles where corridor B
+    // turns off into its Cellar, which no display alone tells apart.
+    [Fact]
+    public void Tier3_AConvergedWalkBackIsAGuess_AndARelogAfterItReplaysTheTrail()
+    {
+        using TrackerWireRig rig = new(TwinCorridors(cellarWestOf: 6, byPosition: true)) { Position = Gate };
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(Gate.Map, Gate.Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        for (int i = 0; i < 20; i++)
+        {
+            engine.Plan.Enqueue(Direction.E);
+            Assert.True(engine.Step());
+            rig.Pump();
+        }
+        Assert.Equal(CorridorA(19), rig.Position);
+        // The next step fails as a jump does: the character stays put and the map,
+        // no longer sure, holds the room it stands in.
+        engine.Plan.Enqueue(Direction.E);
+        rig.NextAnswers.Enqueue("You fall to the ground with a thud, taking 3 damage!");
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        RoomKey? recovered = null;
+        bool savedStayed = false;
+        rig.Gate.Recovered += key =>
+        {
+            recovered = key;
+            savedStayed = Saved(profile) == Gate && rig.Tracker.State.Confidence == RoomConfidence.Confirmed;
+        };
+
+        rig.Gate.NoteEngineStalled("the step's watchdog gave up");
+        rig.Pump();
+
+        Assert.Equal(CorridorA(5), recovered);
+        Assert.Equal(CorridorA(5), rig.Position);
+        Assert.True(savedStayed, "the walk-back's room was saved as the known room, or not confirmed");
+        rig.Gate.Detach();
+
+        rig.Do("e");
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, CorridorA(6));
+        Assert.Equal(Gate, Saved(profile));
+    }
+
+    // C. A room settled on without saving it as known (here the passive locate's
+    // convergence) starts a new trail there. The trail's start is saved with it, so
+    // a relog replays from that room, not from the saved one the trail never left.
+    [Fact]
+    public void ARelogAfterAnUnsavedReanchor_ReplaysFromWhereTheTrailStarts()
+    {
+        using TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        rig.NextAnswers.Enqueue("You fall to the ground with a thud, taking 3 damage!");
+        rig.Do(Token(0));                          // the step fails; the map is unsure
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        rig.Do(Token(0));
+        rig.Do(Token(1));                          // the passive locate settles on A(2)
+        AssertLocatedAt(rig, A(2));
+        rig.Do(Token(2));
+
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, A(3));
+        Assert.Equal(A(0), Saved(profile));
+    }
+
+    // C. The same after a tier-2 deduced locate: the trail starts at the room the
+    // footprint settled on, and a relog replays it from there.
+    [Fact]
+    public void Tier2Forward_ARelogAfterADeducedLocate_ReplaysFromWhereTheTrailStarts()
+    {
+        TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
+        using TrackerWireRig _ = rig;
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        rig.Gate.NoteSuspectedMismatch("landed somewhere the plan didn't expect");
+        engine.Plan.Enqueue(Walk[0]);
+        engine.Plan.Enqueue(Walk[1]);
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(A(2), rig.Gate.Anchor);   // the forward footprint's deduced locate
+        rig.Gate.Detach();
+
+        rig.Do(Token(2));
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, A(3));
+        Assert.Equal(A(0), Saved(profile));
     }
 }

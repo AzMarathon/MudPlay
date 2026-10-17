@@ -69,13 +69,6 @@ internal sealed class TrackerWireRig : IDisposable
     // read does. Off, the tracker never sees an echo and times arrivals instead.
     public bool Echo { get; set; } = true;
 
-    // Whether the game echoes a command as it is typed rather than when it runs it.
-    // Stock's is recorded as when it runs; this models a realm where it isn't.
-    public bool EchoWhenTyped { get; set; }
-
-    // What the tracker is told about the realm's echo timing (Stock by default).
-    public bool EchoMarksExecution { get; set; } = true;
-
     // How long after a command the game answers it: one hop, for a move.
     public TimeSpan AnswerDelay { get; set; } = TimeSpan.FromMilliseconds(400);
 
@@ -103,7 +96,6 @@ internal sealed class TrackerWireRig : IDisposable
         Tracker = new RoomTracker(Graph, Log, () => Clock.Now);
         Gate = new EngineRecoveryGate(Graph, Tracker, Log);
         Tracker.SetEngineAttachedProbe(() => Gate.HasAttachedEngine);
-        Tracker.SetEchoMarksExecutionProbe(() => EchoMarksExecution);
         Gate.RecoveryFailed += Failures.Add;
 
         // The same subscriptions AppServices makes for the tracker.
@@ -133,7 +125,6 @@ internal sealed class TrackerWireRig : IDisposable
         Sent.Add(command);
         _outbound.ObserveOutbound(bytes);
         _toGame.Enqueue(command);
-        if (Echo && EchoWhenTyped) Feed(command + "\r\n" + Prompt);
     }
 
     // A command typed at the keyboard, a moment after whatever was shown last.
@@ -177,7 +168,7 @@ internal sealed class TrackerWireRig : IDisposable
     private void Answer(string command)
     {
         StringBuilder text = new();
-        if (Echo && !EchoWhenTyped) text.Append(command);   // the echo, on the prompt row
+        if (Echo) text.Append(command);         // the echo, on the prompt row
         text.Append("\r\n");
         if (NextAnswers.TryDequeue(out string? scripted))
             text.Append(scripted).Append("\r\n");

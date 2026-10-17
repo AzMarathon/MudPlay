@@ -1160,12 +1160,14 @@ public sealed class EngineRecoveryGate
         // Re-confirm the tracker at the room the footprint resolved — unless it
         // already agrees (the tracker-1-of-1 fast path lands here with the
         // tracker Confirmed at `recovered`, and re-locating would needlessly
-        // re-enter StateChanged). SetLocated promotes to Confirmed so the next
-        // observation reconciles against the right room.
+        // re-enter StateChanged). It is confirmed so the next observation reconciles
+        // against that room, but as a guess (user, 2026-10-17): a walk-back footprint
+        // can settle on the wrong twin, as the forward one can, so it doesn't become
+        // the persisted anchor.
         if (_tracker.State.Confidence != RoomConfidence.Confirmed
             || _tracker.State.CurrentRoom?.Key != recovered)
         {
-            _tracker.SetLocated(recovered);
+            _tracker.LocateDeduced(recovered, "tier-3 walk-back footprint converged");
         }
 
         Recovered?.Invoke(recovered);

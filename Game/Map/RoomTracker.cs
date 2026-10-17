@@ -141,19 +141,6 @@ public sealed class RoomTracker
         _expectedHop = probe;
     }
 
-    // Whether the game echoes a typed-ahead command when it runs it, so an echo
-    // means every command before it has been answered. Recorded for Stock
-    // (GAME_MECHANICS "Command rate limit (typing/sending too fast)"); Paradigm is
-    // not recorded, and there an echo retires nothing. Unset: false.
-    private Func<bool>? _echoMarksExecution;
-
-    public void SetEchoMarksExecutionProbe(Func<bool> probe)
-    {
-        ArgumentNullException.ThrowIfNull(probe);
-        _echoMarksExecution = probe;
-    }
-
-    private bool EchoMarksExecution => _echoMarksExecution?.Invoke() == true;
 
     // The time of the latest send, display, dark line or blind line the tracker was
     // given: what MovesInFlight ages moves against, on the same clock they were sent on.
@@ -495,8 +482,12 @@ public sealed class RoomTracker
 
         _recentSteps.Clear();
         if (profile.RecentSteps is { } steps) _recentSteps.AddRange(steps);
-        // The persisted steps project from the room we're hydrating as Confirmed.
-        _stepsAnchor = room.Key;
+        // The persisted steps project from the room we're hydrating as Confirmed,
+        // or from the room they were saved as starting in when that's another one
+        // (a trail begun where the tracker settled without saving the room as known).
+        _stepsAnchor = profile.RecentStepsFrom is { } from && _graph.GetRoom(new RoomKey(from.Map, from.Room)) is { } start
+            ? start.Key
+            : room.Key;
         // A relog lands sure of the saved room; nothing from an unsure spell before
         // it may fold into a later footprint.
         ResetPassiveLocate();
@@ -1867,9 +1858,10 @@ public sealed class RoomTracker
     }
 
     // A room worked out from a walked footprint (the recovery gate's tier-2 forward
-    // localiser). It lands Confirmed like SetLocated, but as a deduction it doesn't
-    // become the persisted LastKnownRoom: a footprint can converge on the wrong twin,
-    // and the saved anchor must stay something we knew.
+    // localiser and tier-3 walk-back). It lands Confirmed like SetLocated, but as a
+    // deduction it doesn't become the persisted LastKnownRoom: a footprint can
+    // converge on the wrong twin, and the saved anchor must stay something we knew.
+    // The new trail starts here, and RecentStepsFrom says so for a relog.
     public void LocateDeduced(RoomKey key, string reason, DateTimeOffset? whenUtc = null)
     {
         DateTimeOffset when = whenUtc ?? _now();
@@ -2617,13 +2609,15 @@ public sealed class RoomTracker
     }
 
     // After an exhausted footprint, the waiting moves whose own display must already
-    // have been read against an older move. Where an echo marks a command being run
-    // (Stock), that is a move already echoed: its display came. Elsewhere it is a move
-    // older than one expected hop. A move not yet echoed, or sent within a hop, may be
-    // a real move still out (moves typed together), and stays for the age rule.
+    // have been read against an older move. The game echoes a typed-ahead command
+    // when it runs it (GAME_MECHANICS "Command rate limit (typing/sending too fast)"),
+    // so on a statline that echoes, that is a move already echoed: its display came.
+    // With no echo it is a move older than one expected hop. A move not yet echoed,
+    // or sent within a hop, may be a real move still out (moves typed together), and
+    // stays for the age rule.
     private int DropMovesAlreadyAnswered(DateTimeOffset when)
     {
-        bool byEcho = EchoMarksExecution && _everReceivedEcho;
+        bool byEcho = _everReceivedEcho;
         return _unsureMoves.RemoveAll(u => byEcho ? u.Echoed : when - u.Move.SentAt > _expectedHopNow);
     }
 
@@ -2709,24 +2703,23 @@ public sealed class RoomTracker
         return oldest;
     }
 
-    // Drop the leading unsure moves that will never get a display. Where an echo
-    // marks a command being run (EchoMarksExecution), that is a move echoed before a
-    // later one with no display read in between (NoteUnsureEcho does it as the later
-    // echo arrives). Any other move (no echo seen, or a realm whose echo timing isn't
-    // recorded) is one past UnansweredMoveAge with a later move behind it: the
-    // display now being read is that later move's.
+    // Drop the leading unsure moves that will never get a display. A move echoed
+    // before a later one with no display read in between is retired by NoteUnsureEcho
+    // as the later echo arrives. A move with no echo seen is one past UnansweredMoveAge
+    // with a later move behind it: the display now being read is that later move's.
     private void RetireUnansweredMoves(DateTimeOffset when)
     {
         while (_unsureMoves.Count >= 2
-               && (!_unsureMoves[0].Echoed || !EchoMarksExecution)
+               && !_unsureMoves[0].Echoed
                && !StillAwaited(_unsureMoves[0].Move, when))
             RetireOldestUnsureMove($"nothing for {UnansweredMoveAge.TotalSeconds:0.#} s, and a later move is out");
     }
 
     // The game echoed a command while we're unsure of the room: mark the unsure move
-    // it names, and, where the echo marks the command being run, retire the moves
-    // before it that were echoed already. Their displays would have come before this
-    // echo, and none did.
+    // it names, and retire the moves before it that were echoed already. The game
+    // echoes a typed-ahead command when it runs it, on Stock and Paradigm alike
+    // (GAME_MECHANICS "Command rate limit (typing/sending too fast)"), so their
+    // displays would have come before this echo, and none did.
     private void NoteUnsureEcho(string echoed)
     {
         int at = _unsureMoves.FindIndex(u => !u.Echoed
@@ -2734,7 +2727,6 @@ public sealed class RoomTracker
                 || (u.Move.Command is { } cmd && string.Equals(echoed, cmd, StringComparison.OrdinalIgnoreCase))));
         if (at < 0) return;
         _unsureMoves[at].Echoed = true;
-        if (!EchoMarksExecution) return;
         for (int i = at - 1; i >= 0; i--)
         {
             if (!_unsureMoves[i].Echoed) continue;
@@ -3457,6 +3449,7 @@ public sealed class RoomTracker
         _recentSteps.Clear();
         _stepsAnchor = null;
         _profile.RecentSteps = null;
+        _profile.RecentStepsFrom = null;
         _ = when;                                                // reserved for future per-step timestamp persistence
     }
 
@@ -3466,6 +3459,16 @@ public sealed class RoomTracker
         _profile.RecentSteps = _recentSteps.Count == 0
             ? null
             : new List<DirectionDto>(_recentSteps);
+        // A trail can start somewhere other than the saved room: every settling that
+        // isn't saved as known (a re-confirm while unsure, a footprint, a name
+        // re-anchor) begins a new trail where it settled. Saving that start lets a
+        // relog replay the trail from it, not from a room the steps never left.
+        RoomRef? known = _profile.LastKnownRoom;
+        _profile.RecentStepsFrom =
+            _recentSteps.Count > 0 && _stepsAnchor is { } from
+            && (known is null || known.Map != from.Map || known.Room != from.Room)
+                ? new RoomRef(from.Map, from.Room)
+                : null;
     }
 }
 
