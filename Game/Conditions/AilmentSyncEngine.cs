@@ -38,6 +38,13 @@ namespace MudPlay.Game.Conditions;
 //
 // The say wire format prefixes the token with a period — MajorMUD's say-channel
 // prefix — so .@poisoned is what lands on the wire.
+//
+// Following a leader while still afflicted says the tokens again and re-asks the
+// @wait (NoteFollowingLeader). A held follower drops out of the party when the
+// leader moves, and the leader's party loses our chip with us; once the leader
+// comes back and we follow again, nobody in the party knows we are held unless we
+// say so, and they sit out a hold a cure would end (report
+// paradigm-20261014-214037).
 public sealed class AilmentSyncEngine : IDisposable
 {
     // LogService category — appears as [Ailment] rows.
@@ -121,7 +128,7 @@ public sealed class AilmentSyncEngine : IDisposable
         {
             if (added.HasFlag(flag))
             {
-                // Bare apply-only announce (MegaMUD parity): '.@blind', no 'on'/'off'
+                // Bare announce (MegaMUD parity): '.@blind', no 'on'/'off'
                 // suffix. The receiver clears the chip via a witnessed cure, the
                 // spell-data duration timing out, the par `P` flag (poison), or a
                 // @status reconcile (PartyAilmentTracker) — never an 'off' say.
@@ -145,6 +152,44 @@ public sealed class AilmentSyncEngine : IDisposable
         }
     }
 
+    // We have just started following leader (PartyManager.FollowingLeader). With an
+    // ailment still on us the say goes out under the apply-time rules
+    // (ShouldAnnounce), so the leader lights our chip again (another member does
+    // once its roster has us back), and one @wait goes out, a hold's note first
+    // since that's what keeps us standing: PartyRestSync telepaths
+    // only on a fresh hold, and this leader may never have been told. With the
+    // master switch off nothing is sent; PartyRestSync asks the @wait again when it
+    // comes back on.
+    public void NoteFollowingLeader(string leader)
+    {
+        MessageFlags active = _conditions.ActiveFlags;
+        if (active == MessageFlags.None || MasterSwitchOff?.Invoke() == true) return;
+        SpellsSettings spells = _readSpells();
+        bool inParty = _isInParty();
+        List<string>? said = null;
+        WaitReason? wait = null;
+        foreach ((MessageFlags flag, string token, WaitReason reason, bool verbose) in Ailments)
+        {
+            if (!active.HasFlag(flag) || IsWaitSuppressed(flag, spells)) continue;
+            if (flag == MessageFlags.MovementPrevented) wait = reason;
+            else wait ??= reason;
+            if (verbose && ShouldAnnounce(flag, spells, inParty))
+            {
+                Say(token);
+                (said ??= new()).Add(token);
+            }
+        }
+        if (wait is not { } first) return;
+        _restSync.RequestWait(first, resend: true);
+        string what = (said is null ? "nothing said" : "said " + string.Join(" ", said))
+            + $", @wait for {first}";
+        LastFollowAnnounce = $"{DateTime.Now:HH:mm:ss} on following {leader}: {what}";
+        _log?.Info(LogCategory, $"following {leader} while still afflicted — {what}");
+    }
+
+    // The last follow that told the leader of an ailment again, for the bug report.
+    public string? LastFollowAnnounce { get; private set; }
+
     // Reconcile the @wait state of every ailment against the CURRENT settings.
     // Called when the user toggles an Ignore<X> gate mid-affliction: the onset-time
     // decision is latched (OnConditionsChanged only fires on a flag transition), so
@@ -167,8 +212,8 @@ public sealed class AilmentSyncEngine : IDisposable
         }
     }
 
-    // The master switch (true = off): off, no ailment is announced on say. The
-    // announce is apply-only, so one skipped is not said later.
+    // The master switch (true = off): off, no ailment is announced on say. One
+    // skipped is said later only if we follow a leader again while it lasts.
     public Func<bool>? MasterSwitchOff { get; set; }
 
     // Whether to say-announce flag. Three gates apply to every ailment: we must be

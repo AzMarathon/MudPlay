@@ -206,15 +206,25 @@ public sealed record MonsterCatalogEntry(
         get
         {
             List<(int, double)> list = new();
-            foreach (MonsterAttackSlot a in Attacks)
-            {
-                if (a.Type != 1 && a.Type != 3) continue;
-                if (a.Percent <= 0) continue;
-                list.Add((a.Accuracy, a.TruePercent > 0 ? a.TruePercent : a.Percent));
-            }
+            foreach (MonsterAttackSlot a in PhysicalAttackSlots)
+                list.Add((a.Accuracy, UseWeight(a)));
             return list;
         }
     }
+
+    // The slots behind PhysicalAttacks, for a per-attack breakdown of the blend.
+    public IReadOnlyList<MonsterAttackSlot> PhysicalAttackSlots
+    {
+        get
+        {
+            List<MonsterAttackSlot> list = new();
+            foreach (MonsterAttackSlot a in Attacks)
+                if ((a.Type == 1 || a.Type == 3) && a.Percent > 0) list.Add(a);
+            return list;
+        }
+    }
+
+    public static double UseWeight(MonsterAttackSlot a) => a.TruePercent > 0 ? a.TruePercent : a.Percent;
 
     // The physical/rob slot (Type 1 or 3) with the highest TruePercent chance —
     // the same "majority" slot PhysicalAccuracy tracks — exposed on its own so

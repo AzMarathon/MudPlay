@@ -447,7 +447,7 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
         MonsterIntelEntry synthetic = all.First(e => e.Name == "test goblin");
-        synthetic.IncomingHitPercent = incomingHitPercent;
+        synthetic.IncomingHitChance = incomingHitPercent;
         all.Clear();
         all.Add(synthetic);
         vm.RowsView.Refresh();

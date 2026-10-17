@@ -14,14 +14,26 @@ namespace MudPlay.Tests;
 public sealed class MonsterMatchupCalculatorTests
 {
     private static PlayerMatchupProfile Player(
-        int accuracy = 200, int avgDmg = 10, double swings = 2.0, bool hasWeapon = true,
-        int ac = 60, int dodge = 0, int protEvil = 0, int protGood = 0, int dr = 0) =>
-        new(RealmType.ParaMud, accuracy, avgDmg, swings, hasWeapon, ac, dodge, protEvil, protGood, dr);
+        int accuracy = 200, int avgDmg = 10, double swings = 2.0, bool hasWeapon = true, int dr = 0) =>
+        new(RealmType.ParaMud, accuracy, avgDmg, swings, hasWeapon, dr);
 
     private static MonsterMatchupProfile Monster(
-        int ac = 50, int dr = 2, int hp = 100, int dodge = 0, bool hasAttack = true,
-        int attackAcc = 120, int avgAttack = 8, bool isEvil = false, bool isGood = false) =>
-        new(ac, dr, hp, dodge, hasAttack, attackAcc, avgAttack, isEvil, isGood);
+        int ac = 50, int dr = 2, int hp = 100, int dodge = 0, bool hasAttack = true, int avgAttack = 8) =>
+        new(ac, dr, hp, dodge, hasAttack, avgAttack);
+
+    // A monster has no class armour type, so a swing at it floors at the realm's
+    // default (Paradigm 2%, Stock 9%), and its dodge still comes off that. Dodge 80
+    // dodges 40% of 150 accuracy on Paradigm (6400/160), and 72 does on Stock
+    // (720/(150/8)); the whole-percent net hit read 2 − 2·40/100 = 2 and 9 − 3 = 6.
+    [Theory]
+    [InlineData(RealmType.ParaMud, 80, 2 * 0.6)]
+    [InlineData(RealmType.Stock, 72, 9 * 0.6)]
+    public void PlayerToMonster_DodgeCountsAtTheRealmFloor(RealmType realm, int dodge, double expected)
+    {
+        PlayerMatchupProfile p = new(realm, 150, 10, 1.0, true, 0);
+        MonsterMatchupResult r = MonsterMatchupCalculator.Compute(p, Monster(ac: 9999, dodge: dodge));
+        Assert.Equal(expected, r.PlayerHitChance, 6);
+    }
 
     [Fact]
     public void PlayerToMonster_MatchesHitFormula_AndProjectsDps()
@@ -29,16 +41,16 @@ public sealed class MonsterMatchupCalculatorTests
         PlayerMatchupProfile p = Player(accuracy: 200, avgDmg: 10, swings: 2.0, dr: 0);
         MonsterMatchupProfile m = Monster(ac: 50, dr: 2, hp: 100);
 
-        int expectedHit = CombatCalculator.CalculateHitChance(
+        double expectedHit = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 200, defenderAC: 50, defenderDodge: 0,
-            realmType: RealmType.ParaMud).OverallHitPercent;
+            realmType: RealmType.ParaMud).OverallHitChance;
         int expectedDmg = 10 - 2;
         double expectedDps = expectedHit / 100.0 * expectedDmg * 2.0;
         int expectedRounds = (int)Math.Ceiling(100 / expectedDps);
 
         MonsterMatchupResult r = MonsterMatchupCalculator.Compute(p, m);
 
-        Assert.Equal(expectedHit, r.PlayerHitPercent);
+        Assert.Equal(expectedHit, r.PlayerHitChance, 6);
         Assert.Equal(expectedDmg, r.PlayerDamagePerHit);
         Assert.Equal(expectedDps, r.PlayerDps, 5);
         Assert.Equal(expectedRounds, r.RoundsToKill);
@@ -77,15 +89,15 @@ public sealed class MonsterMatchupCalculatorTests
         MonsterMatchupProfile noDodge = Monster(ac: 50, dr: 2, hp: 100, dodge: 0);
         MonsterMatchupProfile withDodge = Monster(ac: 50, dr: 2, hp: 100, dodge: 70);
 
-        int expected = CombatCalculator.CalculateHitChance(
+        double expected = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 200, defenderAC: 50, defenderDodge: 70,
-            realmType: RealmType.ParaMud).OverallHitPercent;
+            realmType: RealmType.ParaMud).OverallHitChance;
 
         MonsterMatchupResult rNo = MonsterMatchupCalculator.Compute(p, noDodge);
         MonsterMatchupResult rDodge = MonsterMatchupCalculator.Compute(p, withDodge);
 
-        Assert.Equal(expected, rDodge.PlayerHitPercent);
-        Assert.True(rDodge.PlayerHitPercent <= rNo.PlayerHitPercent);
+        Assert.Equal(expected, rDodge.PlayerHitChance, 6);
+        Assert.True(rDodge.PlayerHitChance < rNo.PlayerHitChance);
     }
 
     [Fact]
@@ -117,7 +129,7 @@ public sealed class MonsterMatchupCalculatorTests
 
         double hit = CombatCalculator.CalculateHitChance(
             attackerAccuracy: 9999, defenderAC: 1, defenderDodge: 0,
-            realmType: RealmType.ParaMud).OverallHitPercent / 100.0;
+            realmType: RealmType.ParaMud).OverallHitChance / 100.0;
         Assert.Equal(hit * 30.0 * 1.0, r.PlayerDps, 5);
     }
 
@@ -151,36 +163,7 @@ public sealed class MonsterMatchupCalculatorTests
             Player(), Monster(hasAttack: false));
 
         Assert.False(r.MonsterHasPhysicalAttack);
-        Assert.Equal(0, r.MonsterHitPercent);
         Assert.Equal(0, r.MonsterDamagePerHit);
-    }
-
-    [Fact]
-    public void ProtEvil_AppliesOnlyWhenMonsterIsEvil()
-    {
-        PlayerMatchupProfile p = Player(ac: 60, protEvil: 40);
-
-        MonsterMatchupResult evil = MonsterMatchupCalculator.Compute(p, Monster(isEvil: true));
-        MonsterMatchupResult neutral = MonsterMatchupCalculator.Compute(p, Monster(isEvil: false));
-
-        // The ward raises our effective defense against an evil monster, so its
-        // hit chance must be no higher than against a neutral monster (and
-        // strictly lower here, since 40 prot-evil meaningfully shifts defense).
-        Assert.True(evil.MonsterHitPercent < neutral.MonsterHitPercent);
-    }
-
-    [Fact]
-    public void ProtGood_IsIgnored_AgainstNonGoodMonster()
-    {
-        PlayerMatchupProfile withWard = Player(ac: 60, protGood: 40);
-        PlayerMatchupProfile noWard = Player(ac: 60, protGood: 0);
-
-        // Monster is neither good nor evil → the prot-good ward must not change
-        // the monster's hit chance.
-        int warded = MonsterMatchupCalculator.Compute(withWard, Monster(isGood: false)).MonsterHitPercent;
-        int plain = MonsterMatchupCalculator.Compute(noWard, Monster(isGood: false)).MonsterHitPercent;
-
-        Assert.Equal(plain, warded);
     }
 
     [Fact]
@@ -211,31 +194,19 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     public void WeaponMeetsMagical_ComparesHitMagicToMonsterMagical(int weaponHitMagic, int monsterMagical, bool expected)
         => Assert.Equal(expected, MonsterMatchupCalculatorSpells.WeaponMeetsMagical(weaponHitMagic, monsterMagical));
 
-    // Backs Monster Intel's "Hits You %" column / Safe filter — every catalog
-    // row needs this, not just one picked monster, so it's a standalone
-    // function rather than folded into Compute().
-    [Fact]
-    public void IncomingHitPercent_NoPhysicalAccuracy_ReturnsNull()
-    {
-        Assert.Null(MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            physicalAccuracy: null, alignment: 0,
-            defenderAc: 50, defenderDodge: 10, protEvil: 20, protGood: 20,
-            realm: RealmType.ParaMud));
-    }
-
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(5)]
     [InlineData(6)]
-    public void IncomingHitPercent_EvilAlignment_AppliesProtEvilNotProtGood(int evilAlign)
+    public void AttackHitChance_EvilAlignment_AppliesProtEvilNotProtGood(int evilAlign)
     {
-        int withProtEvil = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.ParaMud)!.Value;
-        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
-        int protGoodOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud)!.Value;
+        double withProtEvil = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.ParaMud);
+        double noWard = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud);
+        double protGoodOnly = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, evilAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud);
 
         Assert.True(withProtEvil < noWard);
         Assert.Equal(noWard, protGoodOnly);
@@ -244,16 +215,16 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
-    public void IncomingHitPercent_GoodAlignment_AppliesProtGoodNotProtEvil_OnStock(int goodAlign)
+    public void AttackHitChance_GoodAlignment_AppliesProtGoodNotProtEvil_OnStock(int goodAlign)
     {
         // Prot-Good is a STOCK-only ward (ability 25). Against a good monster it
         // lowers incoming hits; Prot-Evil (an evil-only ward) does nothing.
-        int withProtGood = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.Stock)!.Value;
-        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.Stock)!.Value;
-        int protEvilOnly = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.Stock)!.Value;
+        double withProtGood = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.Stock);
+        double noWard = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.Stock);
+        double protEvilOnly = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 20, protGood: 0, RealmType.Stock);
 
         Assert.True(withProtGood < noWard);
         Assert.Equal(noWard, protEvilOnly);
@@ -262,25 +233,25 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     [Theory]
     [InlineData(0)]
     [InlineData(4)]
-    public void IncomingHitPercent_GoodAlignment_ProtGoodIgnoredOnParaMud(int goodAlign)
+    public void AttackHitChance_GoodAlignment_ProtGoodIgnoredOnParaMud(int goodAlign)
     {
         // Paradigm dropped Prot-Good for VileWard: a Prot-Good value must not
         // change a good monster's hit chance on ParaMUD.
-        int withProtGood = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud)!.Value;
-        int noWard = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
+        double withProtGood = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 20, RealmType.ParaMud);
+        double noWard = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, goodAlign, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud);
 
         Assert.Equal(noWard, withProtGood);
     }
 
     [Fact]
-    public void IncomingHitPercent_NeutralAlignment_IgnoresBothWards()
+    public void AttackHitChance_NeutralAlignment_IgnoresBothWards()
     {
-        int withWards = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (120, 120), alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 50, protGood: 50, RealmType.ParaMud)!.Value;
-        int noWards = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (120, 120), alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud)!.Value;
+        double withWards = MonsterMatchupCalculatorSpells.AttackHitChance(
+            120, alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 50, protGood: 50, RealmType.ParaMud);
+        double noWards = MonsterMatchupCalculatorSpells.AttackHitChance(
+            120, alignment: 3, defenderAc: 100, defenderDodge: 0, protEvil: 0, protGood: 0, RealmType.ParaMud);
 
         Assert.Equal(noWards, withWards);
     }
@@ -291,44 +262,44 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     // monster (evil-only ward), and the higher the alignment tier the bigger the
     // AC it converts to (villain/fiend > outlaw/criminal).
     [Fact]
-    public void IncomingHitPercent_VileWard_EvilOnly_ScalesWithEvilTier()
+    public void AttackHitChance_VileWard_EvilOnly_ScalesWithEvilTier()
     {
-        int noVile = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Saint)!.Value;
-        int halfTier = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Criminal)!.Value;
-        int fullTier = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend)!.Value;
-        int neutralFull = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend)!.Value;
-        int neutralNone = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            RealmType.ParaMud, hasShadow: false, vileWard: 0, defenderEvil: EvilLevel.Fiend)!.Value;
+        double noVile = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Saint);
+        double halfTier = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Criminal);
+        double fullTier = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 1, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend);
+        double neutralFull = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 500, defenderEvil: EvilLevel.Fiend);
+        double neutralNone = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 3, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, hasShadow: false, vileWard: 0, defenderEvil: EvilLevel.Fiend);
 
         Assert.True(halfTier < noVile);        // "not evil" tier converts nothing; Criminal halves the ward to AC
         Assert.True(fullTier < halfTier);      // Fiend converts the full ward → more AC → fewer hits
         Assert.Equal(neutralNone, neutralFull); // evil-only: no effect on a neutral monster
     }
 
-    // Regression: an earlier version of IncomingHitPercent never passed
+    // Regression: an earlier version of the incoming hit chance never passed
     // hasShadow through to CombatCalculator, silently ignoring the flat
     // +10 AC Shadow (Abil 9) grants against every attacker regardless of
     // alignment (unlike Prot Evil/Good, which are alignment-conditional).
     // Caught via a live character's own @st readout: AC vs Evil and AC vs
     // Good both included the same Shadow bonus on top of bare AC.
     [Fact]
-    public void IncomingHitPercent_HasShadow_LowersHitChance()
+    public void AttackHitChance_HasShadow_LowersHitChance()
     {
-        int withShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            realm: RealmType.ParaMud, hasShadow: true)!.Value;
-        int noShadow = MonsterMatchupCalculatorSpells.IncomingHitPercent(
-            (140, 140), alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
-            realm: RealmType.ParaMud, hasShadow: false)!.Value;
+        double withShadow = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: true);
+        double noShadow = MonsterMatchupCalculatorSpells.AttackHitChance(
+            140, alignment: 2, defenderAc: 60, defenderDodge: 0, protEvil: 0, protGood: 0,
+            realm: RealmType.ParaMud, hasShadow: false);
 
         Assert.True(withShadow < noShadow);
     }
@@ -486,72 +457,96 @@ public sealed class MonsterMatchupCalculatorSpellsTests
     // ----- Weighted "Hits You %" across all physical attacks -----
 
     [Fact]
-    public void WeightedIncomingHitPercent_NullForNoAttacks()
-        => Assert.Null(MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+    public void WeightedIncomingHitChance_NullForNoAttacks()
+        => Assert.Null(MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(
             Array.Empty<(int, double)>(), accuracyDelta: 0, alignment: 3,
             defenderAc: 30, defenderDodge: 0, protEvil: 0, protGood: 0, realm: RealmType.Stock));
 
     [Fact]
-    public void WeightedIncomingHitPercent_SingleAttack_EqualsThatAttack()
+    public void WeightedIncomingHitChance_SingleAttack_EqualsThatAttack()
     {
-        int single = MonsterMatchupCalculatorSpells.AttackHitPercent(
+        double single = MonsterMatchupCalculatorSpells.AttackHitChance(
             60, 3, 40, 0, 0, 0, RealmType.Stock);
-        int? weighted = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+        double? weighted = MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(
             new (int, double)[] { (60, 100.0) }, 0, 3, 40, 0, 0, 0, RealmType.Stock);
         Assert.Equal(single, weighted);
     }
 
     [Fact]
-    public void WeightedIncomingHitPercent_BlendsByUseWeight()
+    public void WeightedIncomingHitChance_BlendsByUseWeight()
     {
-        int hitA = MonsterMatchupCalculatorSpells.AttackHitPercent(80, 3, 30, 0, 0, 0, RealmType.Stock);
-        int hitB = MonsterMatchupCalculatorSpells.AttackHitPercent(40, 3, 30, 0, 0, 0, RealmType.Stock);
-        int expected = (int)Math.Round((75.0 * hitA + 25.0 * hitB) / 100.0);
-        int? actual = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+        double hitA = MonsterMatchupCalculatorSpells.AttackHitChance(80, 3, 30, 0, 0, 0, RealmType.Stock);
+        double hitB = MonsterMatchupCalculatorSpells.AttackHitChance(40, 3, 30, 0, 0, 0, RealmType.Stock);
+        double? actual = MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(
             new (int, double)[] { (80, 75.0), (40, 25.0) }, 0, 3, 30, 0, 0, 0, RealmType.Stock);
-        Assert.Equal(expected, actual);
+        Assert.Equal((75.0 * hitA + 25.0 * hitB) / 100.0, actual!.Value, 6);
     }
 
     [Fact]
-    public void WeightedIncomingHitPercent_AllZeroWeights_FallsBackToMean()
+    public void WeightedIncomingHitChance_AllZeroWeights_FallsBackToMean()
     {
-        int hitA = MonsterMatchupCalculatorSpells.AttackHitPercent(80, 3, 30, 0, 0, 0, RealmType.Stock);
-        int hitB = MonsterMatchupCalculatorSpells.AttackHitPercent(40, 3, 30, 0, 0, 0, RealmType.Stock);
-        int? actual = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(
+        double hitA = MonsterMatchupCalculatorSpells.AttackHitChance(80, 3, 30, 0, 0, 0, RealmType.Stock);
+        double hitB = MonsterMatchupCalculatorSpells.AttackHitChance(40, 3, 30, 0, 0, 0, RealmType.Stock);
+        double? actual = MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(
             new (int, double)[] { (80, 0.0), (40, 0.0) }, 0, 3, 30, 0, 0, 0, RealmType.Stock);
-        Assert.Equal((int)Math.Round((hitA + hitB) / 2.0), actual);
+        Assert.Equal((hitA + hitB) / 2.0, actual!.Value, 6);
     }
 
     [Fact]
-    public void WeightedIncomingHitPercent_AccuracyDelta_LowersOrHolds()
+    public void WeightedIncomingHitChance_AccuracyDelta_LowersOrHolds()
     {
         var attacks = new (int, double)[] { (80, 100.0) };
-        int? baseHit = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(attacks, 0, 3, 50, 0, 0, 0, RealmType.Stock);
-        int? debuffed = MonsterMatchupCalculatorSpells.WeightedIncomingHitPercent(attacks, 40, 3, 50, 0, 0, 0, RealmType.Stock);
+        double? baseHit = MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(attacks, 0, 3, 50, 0, 0, 0, RealmType.Stock);
+        double? debuffed = MonsterMatchupCalculatorSpells.WeightedIncomingHitChance(attacks, 40, 3, 50, 0, 0, 0, RealmType.Stock);
         Assert.True(debuffed <= baseHit, "an accuracy debuff must not raise the hit chance");
+    }
+
+    // Report paradigm-20261014-121847: a Paradigm Mage (Silk, ArmourType 1) with raw
+    // dodge 79 against a brute zombie's 150-accuracy fists. The whole-percent figure
+    // truncated the dodge share away (2 − 2·39/100 = 2), so dodge never showed at the
+    // floor; the unrounded chance keeps it: 1% floor × (100 − 39)% = 0.61%.
+    [Fact]
+    public void AttackHitChance_KeepsDodgeAtTheFloor()
+    {
+        int dodgePct = CombatCalculator.CalcDodgeVSAccuracy(79, 150, RealmType.ParaMud);
+        Assert.Equal(39, dodgePct);
+        double chance = MonsterMatchupCalculatorSpells.AttackHitChance(
+            150, 2, defenderAc: 9999, defenderDodge: 79, protEvil: 0, protGood: 0,
+            RealmType.ParaMud, defenderArmourType: 1);
+        Assert.Equal(1 * (100 - dodgePct) / 100.0, chance, 6);
+    }
+
+    // Away from the floor too, the net chance is the hit × (1 − dodge) product.
+    [Fact]
+    public void AttackHitChance_IsHitTimesMissedDodge()
+    {
+        HitCalcResult r = CombatCalculator.CalculateHitChance(
+            attackerAccuracy: 150, defenderAC: 90, defenderDodge: 60, realmType: RealmType.ParaMud);
+        Assert.True(r.DodgePercent > 0);
+        Assert.Equal(r.HitPercent * (100 - r.DodgePercent) / 100.0, r.OverallHitChance, 6);
     }
 
     // The class ArmourType only moves the ParaMUD hit FLOOR: light-armour classes
     // (1..6) drop to 1%, everyone else stays at 2%; Stock ignores it (flat 8%).
     // A huge AC forces the raw chance far below the floor so only GetHitMin decides.
     [Fact]
-    public void AttackHitPercent_ParaMudFloor_IsClassArmourTypeAware()
+    public void AttackHitChance_ParaMudFloor_IsClassArmourTypeAware()
     {
         // Light-armour ParaMUD class (ArmourType 3 = Leather) → 1%.
-        Assert.Equal(1, MonsterMatchupCalculatorSpells.AttackHitPercent(
+        Assert.Equal(1.0, MonsterMatchupCalculatorSpells.AttackHitChance(
             accuracy: 100, alignment: 3, defenderAc: 9999, defenderDodge: 0,
             protEvil: 0, protGood: 0, realm: RealmType.ParaMud, defenderArmourType: 3));
 
         // Heavy-armour ParaMUD class (ArmourType 9 = Platemail) → 2%.
-        Assert.Equal(2, MonsterMatchupCalculatorSpells.AttackHitPercent(
+        Assert.Equal(2.0, MonsterMatchupCalculatorSpells.AttackHitChance(
             100, 3, 9999, 0, 0, 0, RealmType.ParaMud, defenderArmourType: 9));
 
         // Unknown armour type (0) keeps the ParaMUD default floor of 2%.
-        Assert.Equal(2, MonsterMatchupCalculatorSpells.AttackHitPercent(
+        Assert.Equal(2.0, MonsterMatchupCalculatorSpells.AttackHitChance(
             100, 3, 9999, 0, 0, 0, RealmType.ParaMud));
 
         // Stock ignores ArmourType entirely — 9% floor for every class.
-        Assert.Equal(9, MonsterMatchupCalculatorSpells.AttackHitPercent(
+        Assert.Equal(9.0, MonsterMatchupCalculatorSpells.AttackHitChance(
             100, 3, 9999, 0, 0, 0, RealmType.Stock, defenderArmourType: 3));
     }
 }

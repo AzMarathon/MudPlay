@@ -97,8 +97,7 @@ public sealed class CharacterCalculatorMatchupProfileTests : IDisposable
             NewStats(), worn, encum, cache);
         var monsterProfile = new MonsterMatchupProfile(
             ArmourClass: 5, DamageResist: 0, Hp: 30, Dodge: 0,
-            HasPhysicalAttack: true, AttackAccuracy: 40, AvgAttackDamage: 3,
-            IsEvil: false, IsGood: false);
+            HasPhysicalAttack: true, AvgAttackDamage: 3);
 
         MonsterMatchupResult result = MonsterMatchupCalculator.Compute(playerProfile, monsterProfile);
 

@@ -235,6 +235,12 @@ public sealed partial class PartyManager : IDisposable
     // back under our lead and the paused movement engine can resume.
     public event Action<string>? MemberFollowConfirmed;
 
+    // Fires with the leader's name when we start following someone ("You are now
+    // following X."), after the roster and leader state are set. Raised from the
+    // game's line rather than read off PartyState changes, which pass through
+    // half-set states (in a party, with the last leader's name still on it).
+    public event Action<string>? FollowingLeader;
+
     // Fires with the given name of a party FOLLOWER who just dropped connection
     // while WE lead — the leader-side signal PartyDisconnectMovementGate rides to
     // hold movement through the reconnect grace window. Not fired for a leader
@@ -693,6 +699,7 @@ public sealed partial class PartyManager : IDisposable
         AddSelfIfKnown(isLeader: false);
         // Initial-join edge — see OnFollowsYou for the rationale.
         if (!wasInParty) SendRankPreferenceCommand();
+        FollowingLeader?.Invoke(leaderName);
     }
 
     // The master switch (true = off): off, no rank command and no re-invite of a

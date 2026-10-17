@@ -1,12 +1,28 @@
 # Version history
 
-## 3.180.45
+## 3.180.47
 
 - Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks
-- Drafted quest checklists add a line to fetch each item a step turns in: the kill, the NPC to ask, the monsters that drop it, or the chest
-- Drafted checklists no longer offer a roll-table number as a command to type
-- A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest, Tarl, Luca Prodigio)
+- Drafted quest checklists add a line to fetch each item a step turns in: a sure drop first, then the NPC or room that gives it, other drops, or the chest; a drop off a monster the quest already kills is noted on that kill
+- Drafted checklists never offer a roll-table number as a command to type
+- A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest 1 and 2, Tarl, Luca Prodigio)
 - bug reports addressed: paradigm-20261011-230844
+
+## 3.180.46
+
+- Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
+- Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
+- Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
+- Your Matchup lists each of a monster's physical attacks under the Melee line
+- Your hit % on a monster counts its dodge too, in Monster Intel, the Workshop Calculators and the Item Finder; the Calculators' monster attack rows use your class floor
+- Bug reports carry the AC, dodge and class floor the hit chances are worked from
+- Loop simulator rolls swings both ways at the same chances, so dodge counts there too (area rankings saved before are dropped)
+- bug reports addressed: paradigm-20261014-121847
+
+## 3.180.43
+
+- A follower still held (knocked down) when it follows the leader again says `@held` and re-sends its `@wait`, so the party can cure it instead of waiting it out; the same for blind, confused, diseased and poisoned
+- bug reports addressed: paradigm-20261014-214037
 
 ## 3.180.42
 

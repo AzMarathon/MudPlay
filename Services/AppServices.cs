@@ -5368,9 +5368,10 @@ public sealed class AppServices
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token
-        // ".@blind" etc. on say at apply only (MegaMUD parity — no 'on'/'off'),
-        // so other MudPlay clients mirror our state and a cure-holds caster can
-        // free us, and for the four curable ailments @waits the leader. POISON is
+        // ".@blind" etc. on say at apply (MegaMUD parity — no 'on'/'off'), and
+        // again on following a leader while still afflicted, so other MudPlay
+        // clients mirror our state and a cure-holds caster can free us, and
+        // @waits the leader for each. POISON is
         // never announced on say — it's par-owned (PartyManager). On CLEAR nothing
         // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
         // leader's wait. The say only fires when we're in a party AND have no cure
@@ -5385,6 +5386,7 @@ public sealed class AppServices
             isInParty: () => PartyState.IsInParty,
             hasCureConfigured: HasCureConfigured,
             log: Log);
+        Party.FollowingLeader += AilmentSync.NoteFollowingLeader;
 
         // PartyAilmentTracker — inbound counterpart. Mirrors a member's
         // ".@poisoned" / ".@held" etc. say announce onto their party chip (via
@@ -11942,6 +11944,23 @@ public sealed class AppServices
     // For the bug report: why a kept ranking says "not checked against the character yet".
     public string SimulatorCharacterReads =>
         $"`stat` {(_simulatorStatRead ? "read" : "not read")}, inventory {(_simulatorInventoryRead && Inventory.IsLoaded ? "read" : "not read")}";
+
+    // The player's live defence against a monster's swing, from the live loadout by the
+    // shared IncomingHitEstimator — what route Details colours monsters by and the bug
+    // report prints. Null before a `stat` capture.
+    public Game.Calculators.PlayerDefenseProfile? LiveIncomingHitDefense()
+    {
+        Game.PlayerStats stats = PlayerStats;
+        if (stats is null || stats.Level <= 0) return null;
+        Game.Inventory.InventorySnapshot snapshot = Inventory.Snapshot;
+        Models.Profile.CharacterProfile? profile = Profile.Current;
+        int? classId = Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, stats.Class);
+        IReadOnlyList<Game.Quests.QuestBonus> quests =
+            Game.Quests.CompletedQuestBonuses.Resolve(GameData, classId, profile?.QuestLog);
+        return Game.Calculators.IncomingHitEstimator.BuildLiveDefense(
+            stats, snapshot.EquippedItems, snapshot.Encumbrance, GameData,
+            profile?.PartyBuffs, Spellbook?.Available, quests);
+    }
 
     // The live character and game data a loop simulation plays, read the same way the
     // combat and casting engines read them (the Combat / Health / Spells sections, the

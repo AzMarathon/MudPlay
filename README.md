@@ -1,11 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.45**
+> **Version 3.180.47**
 > - Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks
-> - Drafted quest checklists add a line to fetch each item a step turns in: the kill, the NPC to ask, the monsters that drop it, or the chest
-> - Drafted checklists no longer offer a roll-table number as a command to type
-> - A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest, Tarl, Luca Prodigio)
+> - Drafted quest checklists add a line to fetch each item a step turns in: a sure drop first, then the NPC or room that gives it, other drops, or the chest; a drop off a monster the quest already kills is noted on that kill
+> - Drafted checklists never offer a roll-table number as a command to type
+> - A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest 1 and 2, Tarl, Luca Prodigio)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

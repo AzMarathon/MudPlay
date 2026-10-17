@@ -11,23 +11,23 @@ public static class AttackEstimator
     {
         var monster = new MonsterMatchupProfile(
             ArmourClass: target.ArmourClass, DamageResist: target.DamageResist, Hp: 0, Dodge: target.Dodge,
-            HasPhysicalAttack: false, AttackAccuracy: 0, AvgAttackDamage: 0, IsEvil: false, IsGood: false);
+            HasPhysicalAttack: false, AvgAttackDamage: 0);
 
         if (type == MudAttackType.Backstab)
         {
             BackstabMatchup stab = BackstabMatchupCalculator.Evaluate(attacker, monster, target.BsDefense, seesHidden: false);
             return new AttackEstimate(
-                attacker.NormalAccuracy, stab.HitPercent,
+                attacker.NormalAccuracy, stab.HitChance,
                 attacker.MinDamage, attacker.MaxDamage, stab.MinDamage, stab.MaxDamage,
                 SwingsPerRound: 1, CritChance: 0, QuickAndDeadlyBonus: 0,
-                DamagePerRound: stab.HitPercent / 100.0 * (stab.MinDamage + stab.MaxDamage) / 2.0,
+                DamagePerRound: stab.HitChance / 100.0 * (stab.MinDamage + stab.MaxDamage) / 2.0,
                 CanAttack: attacker.HasWeapon);
         }
 
         MonsterMatchupResult r = MonsterMatchupCalculator.Compute(attacker, monster);
         int dr = target.DamageResist * attacker.MonsterDrMultiplier;
         return new AttackEstimate(
-            attacker.NormalAccuracy, r.PlayerHitPercent,
+            attacker.NormalAccuracy, r.PlayerHitChance,
             attacker.MinDamage, attacker.MaxDamage,
             System.Math.Max(0, attacker.MinDamage - dr), System.Math.Max(0, attacker.MaxDamage - dr),
             r.PlayerSwingsPerRound, attacker.CritChancePercent, attacker.QuickAndDeadlyBonus,

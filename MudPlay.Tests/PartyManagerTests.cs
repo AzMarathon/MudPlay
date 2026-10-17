@@ -120,6 +120,26 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void YouFollowing_RaisesFollowingLeader_WithTheStateSet()
+    {
+        // The ailment re-announce reads the party state when this fires, so it must
+        // come after the leader is set, never in between.
+        var (router, p) = Setup(localCharacterName: "Raijin");
+        string? leader = null;
+        bool consistent = false;
+        p.FollowingLeader += name =>
+        {
+            leader = name;
+            consistent = p.State.IsInParty && !p.State.SelfIsLeader && p.State.LeaderName == name;
+        };
+
+        router.Dispatch(Line("You are now following MudPlay."));
+
+        Assert.Equal("MudPlay", leader);
+        Assert.True(consistent);
+    }
+
+    [Fact]
     public void StopsFollowing_RemovesMemberAndClearsPartyWhenEmpty()
     {
         // Solo test path — no self in roster, so removing the only
