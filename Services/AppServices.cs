@@ -8556,6 +8556,7 @@ public sealed class AppServices
         // without it (worn gear, and the room-light buff while it is up).
         RoomTracker.StateChanged += t =>
         {
+            if (!Equals(t.NewRoom?.Key, t.PreviousRoom?.Key)) AutoLightProvisioner.OnRoomChanged();
             if (RoomTracker.IsInDarkRoom) return;
             if (t.NewRoom is { } room)
                 AutoLightProvisioner.OnRoomEntered(room);
@@ -10032,7 +10033,8 @@ public sealed class AppServices
             defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         LoopRunner.Event += e =>
         {
-            if (e.Kind == Game.Map.LoopEventKind.Started) AutoLightProvisioner.OnEngineStarted();
+            if (e.Kind == Game.Map.LoopEventKind.Started)
+                AutoLightProvisioner.OnEngineStarted(userStarted: !AutoDeposit.ResumingEngine);
         };
         // A split-teleport reform waits for the leader to leave the room it started in.
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);

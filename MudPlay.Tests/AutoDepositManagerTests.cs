@@ -1057,7 +1057,7 @@ public sealed class AutoDepositManagerTests : IDisposable
             restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
             engineRooms: h.Loop.ResolveLoopRoomKeys);
 
-        h.Provisioner.OnEngineStarted();
+        h.Provisioner.OnEngineStarted(userStarted: false);
 
         Assert.True(h.AutoDeposit.IsLightTrip);
         Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
@@ -1067,7 +1067,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         Arrive(h, new RoomKey(1, 1));
         Assert.Equal(LoopState.Running, h.Loop.State);
 
-        h.Provisioner.OnEngineStarted();
+        h.Provisioner.OnEngineStarted(userStarted: false);
         Assert.False(h.AutoDeposit.IsRerouting);
         Assert.Single(h.BuyLines());
     }

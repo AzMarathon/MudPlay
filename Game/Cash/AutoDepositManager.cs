@@ -245,6 +245,10 @@ public sealed class AutoDepositManager : IDisposable
     // The reroute is a light restock trip rather than a bank run.
     public bool IsLightTrip => _busy && _lightTrip;
 
+    // True while a finished reroute restarts the engine it stopped: a loop start
+    // seen then is the reroute's resume, not a run the user started.
+    public bool ResumingEngine { get; private set; }
+
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
@@ -923,7 +927,9 @@ public sealed class AutoDepositManager : IDisposable
         }
         DetourResume r = _resume;
         GoIdle();
-        r.Resume(_walker, _loopRunner, _autoLair);
+        ResumingEngine = true;
+        try { r.Resume(_walker, _loopRunner, _autoLair); }
+        finally { ResumingEngine = false; }
     }
 
     // Reset States: stand down without resuming the walk it was part of.

@@ -657,13 +657,30 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (_lightStopTried || _lightBuyer is null || PlanLightStop?.Invoke(from, trainerRoom) is not { } stop) return false;
         _lightStopTried = true;
-        if (!_walker.WalkTo(stop.Shop, planThroughAcquirableGates: true)) return false;
-        _lightStop = (t, stop.Shop, stop.Buy);
-        _phase = Phase.LightShop;
         _log?.Info("AutoTrain",
             $"The walk to {t.Name} runs dark — buying '{stop.Buy.LightName}' x{stop.Buy.Count} at {stop.Shop} first.");
+        // The stop is set before the walk: a walk that has nowhere to go (already
+        // there, or one room short of a stop-before boss room) finishes inside
+        // WalkTo, and that Finished has to find the stop.
+        Phase before = _phase;
+        _lightStop = (t, stop.Shop, stop.Buy);
+        _phase = Phase.LightShop;
         StateChanged?.Invoke();
-        return true;
+        if (_walker.WalkTo(stop.Shop, planThroughAcquirableGates: true)) return true;
+        _lightStop = null;
+        _phase = before;
+        StateChanged?.Invoke();
+        return false;
+    }
+
+    private void BeginLightBuy()
+    {
+        if (_lightStop is not { } stop || _lightBuyer is null) return;
+        _phase = Phase.LightBuying;
+        _lightBuyer.Begin(stop.Buy, cmd => _wire.Send(cmd), _ =>
+        {
+            if (_phase == Phase.LightBuying) ContinueFromLightStop();
+        });
     }
 
     // The light stop is over, bought or not: on to the trainer from here.
@@ -1007,17 +1024,15 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (_phase == Phase.LightShop && _lightStop is { } stop)
         {
-            bool toShop = e.Destination is null || e.Destination == stop.Shop;
+            // A walk re-pointed one room short of a stop-before boss room names the
+            // shop as the room it was asked for.
+            bool toShop = e.Destination is null || e.Destination == stop.Shop || e.Requested == stop.Shop;
             if (e.Kind == WalkEventKind.Finished && _tracker.State.CurrentRoom?.Key == stop.Shop)
+                BeginLightBuy();
+            else if (e.Kind is WalkEventKind.Failed or WalkEventKind.Finished && toShop)
             {
-                _phase = Phase.LightBuying;
-                _lightBuyer?.Begin(stop.Buy, cmd => _wire.Send(cmd), _ =>
-                {
-                    if (_phase == Phase.LightBuying) ContinueFromLightStop();
-                });
-            }
-            else if (e.Kind == WalkEventKind.Failed && toShop)
-            {
+                // A walk that ended short of the shop (one room before a stop-before
+                // boss room) is as good as one that couldn't get there.
                 _log?.Info("AutoTrain", $"Couldn't reach the light shop at {stop.Shop} — walking on to {stop.Trainer.Name}.");
                 ContinueFromLightStop();
             }
@@ -1028,6 +1043,17 @@ public sealed class TrainerWalkManager : IDisposable
                 _runTakenOver = true;
                 Finish($"Walk to the light shop stopped ({e.Detail}) — run cancelled; the loop stays stopped.");
             }
+            return;
+        }
+        if (_phase == Phase.LightBuying && e.Kind == WalkEventKind.Started)
+        {
+            // Nothing of this run walks while it buys: a walk starting is the user's.
+            // Let it run, and end the run where it stands.
+            _lightBuyer?.Cancel();
+            _lightStop = null;
+            _resume = default;
+            _runTakenOver = true;
+            Finish($"A walk started during the light stop ({e.Detail}) — run cancelled; the loop stays stopped.");
             return;
         }
         if (_phase != Phase.Walking) return;

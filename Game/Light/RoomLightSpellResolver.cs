@@ -77,10 +77,11 @@ public sealed class RoomLightSpellResolver
     // dialog asks before it offers "Only when the room is dark".
     public bool IsLightCastCode(string? castCode) => ForCastCode(castCode) is not null;
 
-    // True when the spell takes light away: an Illu (13) or IlluTarget (54) ability
-    // with a negative value (globe of darkness −9999, darkness hits −999, plague
-    // −200 and the like). While one is on the character, what lighting does or
-    // doesn't do says nothing about the room-light spell.
+    // True when the spell takes light away: its Illu (13) and IlluTarget (54)
+    // abilities add up to less than nothing (globe of darkness −9999, darkness hits
+    // −999, plague −200 and the like). Summed, so a self-cancelling pair (Stock's
+    // `out archway temp`: Illu 1 and Illu −1) is no darkness. While one is on the
+    // character, a dark room says nothing about the room-light spell.
     public bool IsDarkeningSpell(int spellNumber)
     {
         _darkening ??= BuildDarkening();
@@ -93,15 +94,17 @@ public sealed class RoomLightSpellResolver
         if (_cache.GetTable("Spells") is not { } doc) return map;
         foreach (GameRow row in doc.Rows)
         {
-            bool dark = false;
-            for (int i = 0; i < AbilitySlots && !dark; i++)
+            long sum = 0;
+            bool any = false;
+            for (int i = 0; i < AbilitySlots; i++)
             {
                 int code = ReadInt(row, $"Abil-{i}");
                 if (code != IlluCode && code != IlluTargetCode) continue;
                 int val = ReadInt(row, $"AbilVal-{i}");
-                dark = (val != 0 ? val : ReadInt(row, "MinBase")) < 0;
+                sum += val != 0 ? val : ReadInt(row, "MinBase");
+                any = true;
             }
-            if (dark) map[ReadInt(row, "Number")] = true;
+            if (any && sum < 0) map[ReadInt(row, "Number")] = true;
         }
         return map;
     }

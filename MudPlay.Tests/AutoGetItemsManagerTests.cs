@@ -244,6 +244,19 @@ public sealed class AutoGetItemsManagerTests
         Assert.Equal(new[] { "get torch", "get torch" }, h.SentText);
     }
 
+    // Two entries of one light on a floor share the count asked for.
+    [Fact]
+    public void TwoEntriesOfOneLight_ShareTheCountWanted()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch, a torch here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
     [Fact]
     public void ALightThatCannotBeTaken_IsNotGotForAutoLight()
     {

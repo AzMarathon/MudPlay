@@ -204,6 +204,15 @@ public sealed class RoomLightSpellResolverTests : IDisposable
         Assert.False(r.IsDarkeningSpell(26));
     }
 
+    // Stock's `out archway temp` carries Illu 1 and Illu −1: no darkness.
+    [Fact]
+    public void IsDarkeningSpell_ASelfCancellingPair_IsNot()
+    {
+        RoomLightSpellResolver r = Build(
+            "[{\"Number\":734,\"Name\":\"out archway temp\",\"MinBase\":0,\"Abil-0\":13,\"AbilVal-0\":1,\"Abil-1\":13,\"AbilVal-1\":-1}]");
+        Assert.False(r.IsDarkeningSpell(734));
+    }
+
     private RoomLightSpellResolver BuildWithBook(string spells, Func<string, string?> book)
     {
         string dir = Path.Combine(_root, "gamma");

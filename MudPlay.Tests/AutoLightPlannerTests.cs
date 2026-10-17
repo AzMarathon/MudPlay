@@ -208,6 +208,19 @@ public sealed class AutoLightPlannerTests
         Assert.Equal(6, plan.BuyCount);
     }
 
+    // A carried light that reaches the room is used though the Preferred light
+    // isn't carried: the Preferred light decides what is bought, not whether to buy.
+    [Fact]
+    public void PreferredNotCarried_ACarriedLightCovers_ReadiesItNoBuy()
+    {
+        AutoLightPlan plan = AutoLightPlanner.Plan(
+            new RouteLightScan(1, -300, null, 150), wornIllu: 0, roomLightSpellIllu: 0, readied: null,
+            carriedLights: new[] { Lantern }, Catalogue, Settings(preferred: "torch"));
+
+        Assert.Equal(AutoLightAction.Ready, plan.Action);
+        Assert.Equal("lantern", plan.LightName);
+    }
+
     [Fact]
     public void Reorder_BuysThePreferredLight_NotTheKindLit()
     {

@@ -64,6 +64,14 @@ public sealed class AutoLightProvisioner
     // routers pick a shop — dist(from, shop) + dist(shop, to) − dist(from, to).
     public const int StockUpMaxAddedSteps = 25;
 
+    // How long a light-making cast is waited on (its caster line, then the `i`
+    // that finds the item) before lighting goes on without it.
+    public static readonly TimeSpan MadeItemWait = TimeSpan.FromSeconds(6);
+
+    // How long a light trip off a loop that couldn't buy is held back before the
+    // same loop is tried again.
+    public static readonly TimeSpan EngineTripRetry = TimeSpan.FromMinutes(10);
+
     private readonly Func<bool> _isEnabled;
     private readonly Func<InventorySnapshot> _snapshot;
     private readonly Func<IReadOnlyList<LightItem>> _catalogue;
@@ -77,6 +85,7 @@ public sealed class AutoLightProvisioner
     private readonly Func<bool> _inDarkRoom;
     private readonly Func<string, string?> _castLineFor;
     private readonly Func<bool> _sightTakenAway;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
 
@@ -95,9 +104,11 @@ public sealed class AutoLightProvisioner
     private Action<Action> _defer = static a => a();
 
     // A light trip already tried for the engine's route: which route (its rooms'
-    // count and first room) and how many lights were carried. A failed buy is not
-    // tried again until a different loop runs or the lights carried change.
-    private (string Route, int Lights)? _engineBuyTried;
+    // count and first room), how many lights were carried, the wealth carried and
+    // when. A trip that couldn't buy is not tried again for that route until the
+    // lights carried change, wealth rises, EngineTripRetry passes, or the user
+    // starts a run.
+    private (string Route, int Lights, long Wealth, DateTimeOffset At)? _engineBuyTried;
 
     // The light we last asked to ready, and the snapshot it was decided against.
     // Guards a re-send of `use` before the readied light shows up in a later `i`
@@ -136,7 +147,7 @@ public sealed class AutoLightProvisioner
     // first newer dump after the `i` retires it either way.
     // ForDarkAhead: it was cast one room ahead of a dark room, so the item is lit
     // when it shows up even before the step lands.
-    private (string Name, string Spell, CasterMessageMatcher? Line, DateTimeOffset Stamp, bool ReadSent, bool ForDarkAhead)? _madeItem;
+    private (string Name, string Spell, CasterMessageMatcher? Line, DateTimeOffset Stamp, bool ReadSent, bool ForDarkAhead, DateTimeOffset CastAt)? _madeItem;
 
     // The room-light spell proved not enough: it was in effect and the room still
     // printed its can't-see line. Cast code, the room's Light there, the room, and
@@ -164,7 +175,8 @@ public sealed class AutoLightProvisioner
         Func<bool>? inDarkRoom = null,
         Func<string, string?>? castLineFor = null,
         Func<bool>? sightTakenAway = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(isEnabled);
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -191,8 +203,10 @@ public sealed class AutoLightProvisioner
         // empty, a light-making cast reads the inventory at once.
         _castLineFor = castLineFor ?? (static _ => null);
         // Blind, or under a spell that takes light away (globe of darkness and the
-        // like): lighting can't show the room, so nothing is lit, cast or latched.
+        // like): a dark room then says nothing about the room-light spell, so it
+        // isn't latched as not enough. Lighting and casting go on as usual.
         _sightTakenAway = sightTakenAway ?? (static () => false);
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _log = log;
     }
 
@@ -249,7 +263,7 @@ public sealed class AutoLightProvisioner
         if (!matcher.TryMatch(line.Text, out IReadOnlyList<string> captures)) return;
         if (captures.Count > 0 && !captures.Any(c => string.Equals(c.Trim(), made.Spell, StringComparison.OrdinalIgnoreCase)))
             return;
-        _madeItem = made with { ReadSent = true };
+        _madeItem = made with { ReadSent = true, CastAt = _now() };
         _log?.Info(LogCategory, $"{made.Spell} cast — reading the inventory for the {made.Name}");
         _wire.Send("i");
     }
@@ -296,7 +310,7 @@ public sealed class AutoLightProvisioner
         return $"lit {lit}; auto-readied {_autoReadiedName ?? "none"}; pending use {_pendingReadyName ?? "none"}; "
             + $"spell {spellText}; spell latched short: {shortText}; "
             + $"awaiting made item {(_madeItem is { } a ? $"{a.Name} ({(a.ReadSent ? "inventory read sent" : "awaiting the cast line")})" : "none")}; "
-            + $"engine light trip tried {(_engineBuyTried is { } t ? $"for {t.Route}" : "no")}; "
+            + $"engine light trip tried {(_engineBuyTried is { } t ? $"for {t.Route} at {t.At.ToLocalTime():HH:mm:ss}" : "no")}; "
             + $"reorder latched {(_reorderRequestedFor is { } ro ? ro.Name : "no")}; "
             + $"last planned buy {_lastPlannedBuy ?? "none"}";
     }
@@ -439,8 +453,14 @@ public sealed class AutoLightProvisioner
 
     private bool EngineRunning => _loopRestock is not null && _engineRunning?.Invoke() == true;
 
-    // A loop or Auto-Lair run started: check its circuit for dark rooms.
-    public void OnEngineStarted() => RequestEngineCheck(null, "the run started");
+    // A loop or Auto-Lair run started: check its circuit for dark rooms. A run the
+    // user started (not a trip's own resume) gets a fresh try at a light trip that
+    // couldn't buy before.
+    public void OnEngineStarted(bool userStarted)
+    {
+        if (userStarted) _engineBuyTried = null;
+        RequestEngineCheck(null, "the run started");
+    }
 
     private void RequestEngineCheck(IReadOnlyList<RoomKey>? leg, string why) => _defer(() => CheckEngineRoute(leg, why));
 
@@ -467,7 +487,11 @@ public sealed class AutoLightProvisioner
 
         string route = circuit.Count == 0 ? "the lair run" : $"the loop at {circuit[0]} ({circuit.Count} rooms)";
         int lights = CarriedLights(snap.CarriedItems, catalogue).Count + (snap.ReadiedLight is null ? 0 : 1);
-        if (_engineBuyTried is { } tried && tried.Route == route && tried.Lights == lights) return;
+        long wealth = snap.Currency.TotalCopperValue;
+        DateTimeOffset now = _now();
+        if (_engineBuyTried is { } tried && tried.Route == route && tried.Lights == lights
+            && wealth <= tried.Wealth && now - tried.At < EngineTripRetry)
+            return;
         if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
 
         LightRestockOutcome outcome = restock(req);
@@ -476,7 +500,7 @@ public sealed class AutoLightProvisioner
             _log?.Debug(LogCategory, $"light trip for {route} waits — another trip has the walker ({plan.Reason})");
             return;
         }
-        _engineBuyTried = (route, lights);
+        _engineBuyTried = (route, lights, wealth, now);
         if (outcome == LightRestockOutcome.Started)
         {
             NotePlannedBuy($"{req.LightName} x{req.Count} on a light trip off {route} ({plan.Reason})");
@@ -505,18 +529,14 @@ public sealed class AutoLightProvisioner
     // A live "can't see" line — the server saying this room is unseeable right now.
     // The fallback for a room the graph can't score (an unmapped next room never
     // reaches OnApproachingRoom), and the check that what was lit ahead worked.
-    // Whatever goes out — a cast or a `use` — is followed by a bare CR: neither
-    // shows the room again by itself (GAME_MECHANICS "Light sources", "Room-light
-    // spells — buff or light item"), and the CR is what lists a monster standing
-    // here unseen.
+    // Whatever goes out in this room — a cast or a `use` — is followed by a bare CR:
+    // neither shows the room again by itself (GAME_MECHANICS "Light sources",
+    // "Room-light spells — buff or light item"), and the CR is what lists a monster
+    // standing here unseen (and, after a fizzle, brings the can't-see line back so
+    // the spell is tried again).
     private void OnDarkRoomObserved()
     {
         if (!_isEnabled()) return;
-        if (_sightTakenAway())
-        {
-            _log?.Debug(LogCategory, "dark room line while blind or darkened — nothing lit, cast or latched");
-            return;
-        }
         RoomLightSpell? spell = _roomLightSpell();
         bool spellOnly = _settings().UseRoomLightSpellOnly;
         Room? here = _currentRoom();
@@ -529,9 +549,9 @@ public sealed class AutoLightProvisioner
             return;
         }
 
-        if (spell is { Kind: RoomLightSpellKind.MakesLightItem } maker)
+        if (spell is { Kind: RoomLightSpellKind.MakesLightItem } maker && !MakerCastUnconfirmed())
         {
-            if (MakerInFlight(maker)) return;   // its light is being made or lit: wait for it
+            if (MakerInFlight(maker)) return;   // its light is on its way: wait for it
             if (SpellInEffect(maker))
             {
                 // Its light is lit and the room is still dark: not enough here.
@@ -546,6 +566,7 @@ public sealed class AutoLightProvisioner
                         if (_readyJustSentUse) _wire.Send(string.Empty);
                         return;
                     case MakerResult.Cast:
+                        _wire.Send(string.Empty);
                         return;
                 }
             }
@@ -577,7 +598,6 @@ public sealed class AutoLightProvisioner
         if (_resolveRoom(target) is not { } room) return;   // unmapped — reactive path covers it
         int worn = _wornIllu();
         if (LightModel.IlluGapToSee(worn, room.Light) == 0) return;   // seeable on worn gear
-        if (_sightTakenAway()) return;
 
         InventorySnapshot snap = _snapshot();
         RetirePendingReady(snap);
@@ -593,7 +613,8 @@ public sealed class AutoLightProvisioner
             && LightModel.IlluGapToSee(worn + buff.Strength + lit, room.Light) == 0)
             return;   // the buff alone will cover it
 
-        if (spell is { Kind: RoomLightSpellKind.MakesLightItem } maker && !SpellShortFor(maker, room))
+        if (spell is { Kind: RoomLightSpellKind.MakesLightItem } maker && !SpellShortFor(maker, room)
+            && !MakerCastUnconfirmed())
         {
             // Its light is lit or on its way: no carried light on top of it.
             if (MakerInFlight(maker) || SpellInEffect(maker)) return;
@@ -621,11 +642,39 @@ public sealed class AutoLightProvisioner
         return CastLightMakingSpell(maker, reason, forDarkAhead) ? MakerResult.Cast : MakerResult.Nothing;
     }
 
-    // The item a light-making spell gives is being made (cast sent, item not yet
-    // read) or its `use` hasn't been confirmed by a dump yet.
+    // The item a light-making spell gives is on its way (its cast was confirmed and
+    // the `i` that finds it is out) or its `use` hasn't been confirmed by a dump yet.
     private bool MakerInFlight(RoomLightSpell maker)
-        => _madeItem is not null
+        => (MadeItemAwaited() && _madeItem is { ReadSent: true })
            || (maker.MadeItem is { } made && string.Equals(_pendingReadyName, made.Name, StringComparison.OrdinalIgnoreCase));
+
+    // A light-making cast went out and its caster line hasn't come: no second cast,
+    // and the carried lights light the room meanwhile, so a line that never comes
+    // can't leave the character in the dark.
+    private bool MakerCastUnconfirmed() => MadeItemAwaited() && _madeItem is { ReadSent: false };
+
+    // Whether a light-making cast is still waited on. The wait ends after
+    // MadeItemWait, and — while the caster line is still awaited — at a dump newer
+    // than the cast (the line didn't come before it) or a room change.
+    private bool MadeItemAwaited()
+    {
+        if (_madeItem is not { } m) return false;
+        bool over = _now() - m.CastAt > MadeItemWait
+            || (!m.ReadSent && _snapshot().LastUpdated > m.Stamp);
+        if (!over) return true;
+        _madeItem = null;
+        _log?.Info(LogCategory, $"no word of the {m.Name} from {m.Spell} — lighting goes on without it");
+        return false;
+    }
+
+    // A room change (dark or not): a light-making cast whose caster line hasn't come
+    // by now isn't coming.
+    public void OnRoomChanged()
+    {
+        if (_madeItem is not { ReadSent: false } m) return;
+        _madeItem = null;
+        _log?.Info(LogCategory, $"{m.Spell}'s cast line didn't come before the room changed — lighting goes on without it");
+    }
 
     // Stepping into a room the graph knows the light level of — one the game showed,
     // so a dark stretch is over: if THIS engine has a light readied and the room is
@@ -708,11 +757,11 @@ public sealed class AutoLightProvisioner
     // No second cast while one is awaited.
     private bool CastLightMakingSpell(RoomLightSpell spell, string reason, bool forDarkAhead)
     {
-        if (_madeItem is not null || spell.MadeItem is not { } made) return false;
+        if (MadeItemAwaited() || spell.MadeItem is not { } made) return false;
         DateTimeOffset stamp = _snapshot().LastUpdated;
         if (!CastRoomLightSpell(spell, reason)) return false;
         CasterMessageMatcher? line = CasterMessageMatcher.TryCreate(_castLineFor(spell.CastCode));
-        _madeItem = (made.Name, spell.Name, line, stamp, ReadSent: line is null, forDarkAhead);
+        _madeItem = (made.Name, spell.Name, line, stamp, ReadSent: line is null, forDarkAhead, _now());
         if (line is null) _wire.Send("i");
         return true;
     }
@@ -757,9 +806,14 @@ public sealed class AutoLightProvisioner
     // stretch. The spell running out doesn't end it: a buff is never cast while it
     // is up, so a latch that ended with it would never hold back a cast. A brighter
     // room can still be lit by it. An unknown room sets nothing, nor does a dark
-    // line while blind or darkened (the callers skip those).
+    // line while blind or darkened.
     private void LatchSpellShort(RoomLightSpell spell, Room? here)
     {
+        if (_sightTakenAway())
+        {
+            _log?.Debug(LogCategory, $"room-light spell '{spell.CastCode}' in effect and still dark while blind or darkened — not latched");
+            return;
+        }
         if (here is null)
         {
             _log?.Debug(LogCategory, $"room-light spell '{spell.CastCode}' in effect and still dark in an unknown room");

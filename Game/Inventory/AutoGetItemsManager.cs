@@ -469,6 +469,10 @@ public sealed class AutoGetItemsManager : IDisposable
         }
         long projectedWeight = enc.CurrentWeight;
 
+        // Copies taken for the extra reason in this survey, by item name, so two
+        // entries of one light share its count instead of each taking all of it.
+        Dictionary<string, int>? extraThisSurvey = null;
+
         foreach (string entry in SplitEntries(list))
         {
             ResolvedItem? item = _resolve(entry);
@@ -485,7 +489,8 @@ public sealed class AutoGetItemsManager : IDisposable
             if (extra)
             {
                 if (_extraWanted is null || item.AutoCollectSet == false || item.AutoDiscard || item.AutoSell) continue;
-                extraLeft = _extraWanted(item) - _floorInFlight.GetValueOrDefault(item.Name);
+                extraLeft = _extraWanted(item) - _floorInFlight.GetValueOrDefault(item.Name)
+                    - (extraThisSurvey?.GetValueOrDefault(item.Name) ?? 0);
                 if (extraLeft <= 0) continue;
             }
 
@@ -580,6 +585,10 @@ public sealed class AutoGetItemsManager : IDisposable
                     allowedThisEntry++;
                 }
             }
+
+            if (extra && acceptedThisEntry > 0)
+                (extraThisSurvey ??= new(StringComparer.OrdinalIgnoreCase))[item.Name] =
+                    extraThisSurvey.GetValueOrDefault(item.Name) + acceptedThisEntry;
 
             if (!deferMode && allowedThisEntry > 0)
             {
