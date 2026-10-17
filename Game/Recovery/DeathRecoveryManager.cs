@@ -730,14 +730,29 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // another game-data set than the one whose rooms the map holds, and the same
     // room number there is another room. Nothing walks to it, arms a grab in it or
     // sweeps from it until that set is back. A record from before the set was kept
-    // has no stamp and is taken as the active set's, as it always was. The record
-    // itself is left as it is.
+    // has no stamp and is taken as the active set's, as it always was. So is one
+    // whose set is no longer installed (deleted, or renamed in Manage Sets), which
+    // could never be switched back to (user, 2026-10-17). The record itself is left
+    // as it is.
     public string? OtherGameDataRefusal(DeathRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        return record.GameData is { } set
-            ? new OpenedOnGameData(set).Refusal("death", _roomTracker.RoomsGameData, "recover it")
-            : null;
+        if (record.GameData is not { } set) return null;
+        string? refusal = new OpenedOnGameData(set).Refusal("death", _roomTracker.RoomsGameData, "recover it");
+        return refusal is not null && GameDataInstalled(set) ? refusal : null;
+    }
+
+    // Whether the named game-data set is still installed. Unbound (tests), every set is.
+    public bool GameDataInstalled(string set) => _gameDataInstalled?.Invoke(set) ?? true;
+
+    private Func<string, bool>? _gameDataInstalled;
+
+    // Bind the probe that says whether a game-data set is still installed, for a
+    // death stamped with one that has since gone. Wired by AppServices.
+    public void SetGameDataInstalledProbe(Func<string, bool> installed)
+    {
+        ArgumentNullException.ThrowIfNull(installed);
+        _gameDataInstalled = installed;
     }
 
     private bool OnActiveGameData(DeathRecord record) => OtherGameDataRefusal(record) is null;
@@ -846,10 +861,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         Room? room = t.NewRoom;
 
-        // A pile of another game data's is left too: its room number is another room
-        // now, whatever the map says.
-        if (_activeRecovery is { Room: { } ar } active
-            && (room is null || ar.Map != room.Key.Map || ar.Room != room.Key.Room || !OnActiveGameData(active)))
+        if (_activeRecovery is { Room: { } ar }
+            && (room is null || ar.Map != room.Key.Map || ar.Room != room.Key.Room))
         {
             // Stock's grab is left armed on purpose after an empty floor has settled.
             if (_grabOnSurvey && !IsStock)

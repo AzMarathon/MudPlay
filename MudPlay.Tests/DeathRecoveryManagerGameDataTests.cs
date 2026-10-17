@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
+using MudPlay.Game.Recovery;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
@@ -93,6 +94,54 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
 
         Assert.Contains("recover corpse Ermias", h.Sent);
+    }
+
+    // A hang-up death worked out under another set than the one its held list was
+    // written on keeps the list's set, and its room isn't named from this graph.
+    [Fact]
+    public void AnUnwitnessedDeath_KeepsTheGameDataOfItsHeldList()
+    {
+        using GraphHarness h = new();
+        h.SwitchGameData("beta");
+        h.EnterGates();
+
+        DeathRecord? record = h.Tracker.NoteUnwitnessedDeath(new UnwitnessedDeath(
+            new RoomRef(1, 1), DateTimeOffset.UtcNow.AddMinutes(-3), LivesRemaining: 6,
+            "Killed by the hang-up penalty (not seen: worked out on entering the game).",
+            Equipped: null, Lost: [new DeathItem("torch")], Coins: null, GameData: "alpha"));
+
+        Assert.Equal("alpha", record!.GameData);
+        Assert.Null(record.RoomName);
+        Assert.NotNull(h.Recovery.OtherGameDataRefusal(record));
+
+        // A list from before the stamp was kept gives an unstamped record, named here.
+        DeathRecord? older = h.Tracker.NoteUnwitnessedDeath(new UnwitnessedDeath(
+            new RoomRef(1, 1), DateTimeOffset.UtcNow.AddMinutes(-2), LivesRemaining: 5,
+            "Killed by the hang-up penalty (not seen: worked out on entering the game).",
+            Equipped: null, Lost: [new DeathItem("torch")], Coins: null));
+        Assert.Null(older!.GameData);
+        Assert.Equal("Town Gates", older.RoomName);
+    }
+
+    // A set that is no longer installed can't be switched back to, so its deaths are
+    // taken as the active set's, like a record from before the stamp (user, 2026-10-17).
+    [Fact]
+    public void ADeathOfAGameDataNoLongerInstalled_IsTakenAsTheActiveOnes()
+    {
+        using GraphHarness h = DiedAtTheGatesOnAlpha(autoRecover: false);
+        HashSet<string> installed = new(StringComparer.OrdinalIgnoreCase) { "alpha", "beta" };
+        h.Recovery.SetGameDataInstalledProbe(installed.Contains);
+        h.SwitchGameData("beta");
+        h.EnterGates();
+        Assert.NotNull(h.Recovery.OtherGameDataRefusal(h.Latest));
+
+        installed.Remove("alpha");            // deleted, or renamed in Manage Sets
+        h.Sent.Clear();
+
+        Assert.Null(h.Recovery.OtherGameDataRefusal(h.Latest));
+        Assert.False(h.Recovery.GameDataInstalled("alpha"));
+        Assert.True(h.Recovery.RecoverNow(h.Latest));
+        Assert.Contains("look", h.Sent);
     }
 
     [Fact]

@@ -92,6 +92,9 @@ public sealed partial class DeathSectionViewModel : WorkshopSectionViewModel
             // the number, not where this death was.
             if (r.Status != DeathRecoveryStatus.Recovered && _recovery.OtherGameDataRefusal(r) is { } refusal)
                 parts.Add(refusal + " The map shows this game data's room of that number.");
+            else if (r.Status != DeathRecoveryStatus.Recovered && r.GameData is { } gone && !_recovery.GameDataInstalled(gone))
+                parts.Add($"Recorded on game data '{gone}', which is no longer installed: taken as this game data's, "
+                    + "like a death from before the game data was kept.");
             if (!string.IsNullOrWhiteSpace(r.RecoveryMessage)) parts.Add(r.RecoveryMessage!);
             if (r.Status == DeathRecoveryStatus.Partial && r.UnrecoveredItems is { Count: > 0 })
                 parts.Add("Still to recover: " + string.Join(", ", r.UnrecoveredItems));

@@ -6493,6 +6493,8 @@ public sealed class AppServices
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        DeathRecovery.SetGameDataInstalledProbe(set =>
+            GameData.AvailableSets.Contains(set, StringComparer.OrdinalIgnoreCase));
         // Match our own corpse by the LIVE in-game name, not a copied profile's stale
         // Current.Name (report stock-20260828-104653).
         DeathRecovery.AttachLiveSelfName(() => Party.LocalCharacterName);
@@ -10635,7 +10637,8 @@ public sealed class AppServices
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
                 hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion,
                 LearnedArrivalLands.For),
-            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}",
+            roomsGameData: () => RoomTracker.RoomsGameData);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a
