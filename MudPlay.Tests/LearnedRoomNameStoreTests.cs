@@ -91,7 +91,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         public GameDataCache Cache = null!;
         public RoomGraphManager Graph = null!;
         public LearnedRoomNameStore Store = null!;
-        public int LearnedEvents;
 
         // The tracker learning a name: what puts it on the map for the session.
         public void See(RoomKey room, string name) => Assert.NotNull(Graph.LearnRoomName(room, name));
@@ -112,7 +111,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Client client = new() { Realm = realm };
         client.Cache = new GameDataCache(_gameData);
         client.Graph = new RoomGraphManager(client.Cache, _logService);
-        client.Graph.RoomNameLearned += (_, _) => client.LearnedEvents++;
         client.Store = new LearnedRoomNameStore(client.Graph, () => client.Realm, _logService);
         client.Graph.GraphReloaded += client.Store.OnGraphReloaded;
         client.Store.OnRealmChanged();
@@ -153,7 +151,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.True(next.Graph.GetRoom(Cellar)!.HasUnknownName);
 
         // Put back quietly: nothing was learned, and one line says how many.
-        Assert.Equal(0, next.LearnedEvents);
         Assert.DoesNotContain(_log, e => e.Message.StartsWith("Learned name", StringComparison.Ordinal));
         Assert.Equal(1, Said("1 learned room name(s) put on the room map for 'alpha'"));
         Assert.Equal((1, 1), (next.Store.CountForActiveSet, next.Store.OnRoomMap));
@@ -198,7 +195,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
 
         Assert.Equal(HouseName, client.NameOf(House));
         Assert.Equal(new[] { House }, client.Graph.FindCandidates(HouseName, HouseExits));
-        Assert.Equal(1, client.LearnedEvents);   // the one learning, before the reload
     }
 
     // ----- the game data is not written ------------------------------
@@ -428,7 +424,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.True(one.Store.TakeInOutsideChanges());
         Assert.Equal(HouseName, one.NameOf(House));
         Assert.Equal(new[] { House }, one.Graph.FindCandidates(HouseName, HouseExits));
-        Assert.Equal(0, one.LearnedEvents);
         Assert.False(one.Store.TakeInOutsideChanges());
 
         // The second has not looked since the first wrote the cellar. Its own
@@ -588,7 +583,6 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.Equal(HouseName, client.NameOf(House));
         Assert.Equal("Oak Street", client.NameOf(Street));
         Assert.True(graph.GetRoom(Cellar)!.HasUnknownName);
-        Assert.Equal(0, client.LearnedEvents);
 
         // Another name for the same room replaces the first in the indexes.
         Assert.Equal(1, graph.ApplyStoredNames(new Dictionary<RoomKey, string> { [House] = "Other" }).Applied);

@@ -10,10 +10,9 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Navigation;
 
-// Modeless editor for a saved LairSetup — rename, edit notes, remove
-// markers, adjust per-marker respawn overrides. Adding a marker requires
-// picking a room on the map; that's the rail's job (right-click → "Add to
-// Auto-Lair"), not the editor's.
+// Modeless editor for a saved LairSetup — rename, edit notes, add and remove
+// markers, adjust per-marker respawn overrides. Markers are placed by clicking
+// rooms on the map in Lair mode; the editor's own search box adds more.
 //
 // Save persists via LairManager.Save, which fires LairManager.SetupsChanged
 // so the rail refreshes. Cancel / X discards every edit; the dialog works

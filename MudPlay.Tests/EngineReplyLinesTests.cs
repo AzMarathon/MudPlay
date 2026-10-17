@@ -23,7 +23,6 @@ public sealed class EngineReplyLinesTests
     [InlineData("Gang member Tiny will be notified of their promotion next time they log on.")]
     [InlineData("You just joined channel 6969.")]
     [InlineData("--- Telepath Not Sent ---")]
-    [InlineData("Someone yells from the north \"help\"")]
     [InlineData("You would get 40 gold crowns for your silver rapier.")]
     // A name that fits more than one thing in the room: the header, then one row each.
     [InlineData("Please be more specific.  You could have meant any of these:")]

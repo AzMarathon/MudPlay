@@ -59,9 +59,8 @@
                        Margin="0,4,0,0"
                        Foreground="{StaticResource ChromeFgMutedBrush}"/>
 
-            <!-- Marker list. Right-click → "Add to Auto-Lair" on the
-                 map adds rows; the editor is read-only for marker
-                 placement. Override-seconds is editable inline. -->
+            <!-- Marker list. Rows come from Lair mode on the map or the
+                 add box below. Override-seconds is editable inline. -->
             <ListBox Grid.Row="3"
                      ItemsSource="{Binding Markers}"
                      Background="Transparent"

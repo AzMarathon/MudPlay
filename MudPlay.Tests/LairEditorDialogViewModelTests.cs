@@ -7,13 +7,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 7.20 — LairEditorDialogViewModel save / cancel / validation flow.
-/// Drives the VM headlessly; the ConfirmService overwrite path uses a
-/// real DialogService but no main window is set (the path returns
-/// silently when the overwrite confirm fires, which is fine because the
-/// tests below don't trip a rename collision).
-/// </summary>
+// LairEditorDialogViewModel's save / cancel / validation flow, driven
+// headlessly. The ConfirmService overwrite path uses a real DialogService
+// with no main window set, so it returns silently if the overwrite confirm
+// fires; no test here trips a rename collision.
 public sealed class LairEditorDialogViewModelTests : IDisposable
 {
     private readonly string _bbs;
