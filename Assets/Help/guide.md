@@ -1629,7 +1629,7 @@ Two commands under one name. Bare, it asks what your party standing is. Said alo
 **Forms:**
 
 - `@party`: are you solo, following or leading?
-- `.@party rest` (on **say** only): your client sends `rest` to the game. Whatever follows `@party` is sent as typed, so `.@party use chime` sends `use chime`.
+- `.@party rest` (on **say** only): your client sends `rest` to the game. Whatever follows `@party` is sent as typed, so `.@party use chime` sends `use chime`, except that a character outside plain ASCII goes out as `?`, as `@do`'s do.
 
 Two rewrites are made before sending. `@party meditate` sends `medi`. `@party go <direction>` sends the direction alone (`@party go n` sends `n`); `@party go hole` keeps its `go` and sends `go hole`.
 
@@ -2730,7 +2730,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 
 **Forms:**
 
-- `@do rest`: your client sends `rest`. Everything after `@do` is sent, with single spaces between the words.
+- `@do rest`: your client sends `rest`. Everything after `@do` is sent, with single spaces between the words, in plain text: a character outside plain ASCII (an accented letter, a box-drawing line) goes out as `?`, as it does in every reply.
 
 **Who may send it:** a player with **Execute commands**, on any channel remote commands are read on.
 
@@ -2745,7 +2745,7 @@ Sends a command to the game as if you had typed it. This is the highest-trust co
 **Situations:**
 
 - **`reroll` is dropped for anyone,** with or without the box, before anything else is looked at. It is matched anywhere, inside a longer word too.
-- **The `suicide` refusal is for a sender who holds the box.** The permission is checked first, so a player without Execute commands gets the Failure message whatever followed `@do`, and learns nothing else. The word must be `suicide` itself, anywhere after `@do`; punctuation or quotes around it don't hide it (`suicide!`, `"suicide"`, `suicide;`). A longer word is not it: `@do say suicidal` is sent like any other command.
+- **The `suicide` refusal is for a sender who holds the box.** The permission is checked first, so a player without Execute commands gets the Failure message whatever followed `@do`, and learns nothing else. The word must be `suicide` itself, anywhere after `@do`; punctuation or quotes around it don't hide it (`suicide!`, `"suicide"`, `suicide;`), and nor does a letter outside plain ASCII next to it, which would go out as `?`. A longer word is not it: `@do say suicidal` is sent like any other command.
 - **Master switch off:** ignored, no answer.
 - **`@do break` holds your attack.** A `break` sent this way puts the attack hold on your character exactly as a `break` you type does: Auto-Combat stops attacking the monster it was fighting and attacks nothing else in the room. An attack sent the same way (`@do a orc`) lifts the hold, as an attack of your own would. Your terminal shows `[Attack on <monster> held by Leader's @do break: attack to carry on]` when the hold goes on and `[Attack hold on <monster> ended: …]` when it ends, and the program log and a bug report name Leader as the one who asked. What the hold does and how it ends is under *Combat → The round loop*, **Stopping the fight yourself**.
 - **On your own screen:** each `@do` is written to the program log with the sender's name and the command.

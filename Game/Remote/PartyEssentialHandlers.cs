@@ -554,12 +554,13 @@ public sealed class PartyEssentialHandlers : IDisposable
     // refuses — `set suicide` (arms unattended auto-suicide) and `reroll` (wipes
     // the build) — are stopped at engine level before this handler runs
     // (RemoteCommandManager.IsHardBlocked); a plain `suicide` relays like anything
-    // else.
+    // else. Verbatim stops at plain ASCII: anything outside it goes out as every
+    // reply's text does (WireText).
     private void DispatchPartySubCommand(RemoteCommandContext ctx)
     {
         if (_wireSender is null) return;
         string sub = ctx.Args[0].ToLowerInvariant();
-        string local = sub switch
+        string local = WireText.Ascii(sub switch
         {
             "meditate" => "medi",                                  // MajorMUD's canonical short form
             // @party go <dir> — a CARDINAL direction moves on the bare token, so drop
@@ -571,7 +572,7 @@ public sealed class PartyEssentialHandlers : IDisposable
                      && DirectionExtensions.TryFromToken(ctx.Args[1], out _)
                 => string.Join(" ", ctx.Args.Skip(1)),
             _ => string.Join(" ", ctx.Args),
-        };
+        });
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
         RelayingFor = GivenName(ctx.Sender);
         try { _wireSender(bytes); }

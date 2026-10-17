@@ -1,5 +1,10 @@
 # Version history
 
+## 3.181.34
+
+- `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?`, as in every reply
+- The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
+
 ## 3.181.32
 
 - Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list

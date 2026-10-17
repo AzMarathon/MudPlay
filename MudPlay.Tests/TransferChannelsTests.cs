@@ -1119,7 +1119,8 @@ public sealed class TransferChannelsTests
     [InlineData(RemoteChannel.Broadcast, "br ")]
     public void ARelayBackOfSuicide_IsRefusedAsDoIs_OnEveryChannel(RemoteChannel channel, string verb)
     {
-        foreach (string line in new[] { "&@suicide", "&@suicide!", "&@do suicide", "&@do br @suicide", "&@do /Friend \"suicide\"" })
+        // `suicideé` would be relayed as `suicide?`, so it counts as the word.
+        foreach (string line in new[] { "&@suicide", "&@suicide!", "&@do suicide", "&@do br @suicide", "&@do /Friend \"suicide\"", "&@do suicideé" })
         {
             Engine e = new(everyCommand: true);
             e.Commands.DispatchForTests(On(channel, "Friend", line));
