@@ -168,6 +168,13 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _castReach = reach;
     }
 
+    // One applied line KeepWhatCouldBeCastHere left records out of: the records
+    // cast here, with what casts them, and the ones left out, with their flags.
+    public sealed record Narrowing(DateTimeOffset At, string Line, string Kept, string LeftOut);
+
+    // The last such line, for the bug report; null until one is narrowed.
+    public Narrowing? LastNarrowed { get; private set; }
+
     // Bind to the per-session LineExtractor so every inbound line is scanned.
     // Idempotent — re-attaching to the same extractor is a no-op.
     public void AttachLineExtractor(LineExtractor lines)
@@ -597,7 +604,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 ? OutrankedByAnnouncedCast(matched, line.Timestamp) : null;
             if (outranked is not null) matched = matched.FindAll(r => !outranked.Contains(r.Id));
             if (matched.Count > 1 && _castReach is { } reach)
-                matched = KeepWhatCouldBeCastHere(matched, reach, line.Timestamp);
+                matched = KeepWhatCouldBeCastHere(matched, reach, text, line.Timestamp);
             foreach (MessageRecord r in matched)
             {
                 // Capture a LastActionFailed match BEFORE the active-set dedup below —
@@ -640,14 +647,18 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             ActionFailed?.Invoke(af);
     }
 
-    // Says in the log which spell a negated cast was, by the message records of the
-    // spell's name and the spells they are for; a name no record has is said so.
+    // Says in the log which spell a negated cast was, by the message record of the
+    // spell's name and the spells it is for; a name no record has is said so. A name
+    // several records carry (hundreds do, on either realm) is only counted: listing
+    // them all says no more of which one was cast.
     private void LogNegatedCast(NegatedCastLine.Cast cast)
     {
         if (_log is not { IsDebugEnabled: true }) return;
-        string records = _recordsByName.TryGetValue(cast.Spell.Trim(), out List<MessageRecord>? named)
-            ? "spell record " + string.Join(", ", named.Select(DescribeRecordSpells).Distinct())
-            : "no spell record of that name";
+        string records = !_recordsByName.TryGetValue(cast.Spell.Trim(), out List<MessageRecord>? named)
+            ? "no spell record of that name"
+            : named.Count == 1
+                ? "spell record " + DescribeRecordSpells(named[0])
+                : $"{named.Count} spell records carry that name";
         _log.Debug(LogCategory,
             $"negated cast — {cast.Caster} cast '{cast.Spell}' at {cast.Target} and it did nothing "
             + $"({records}); no condition applied");
@@ -922,8 +933,11 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // seen while another's was not: the line says which was cast, and that outweighs
     // who is listed. A cast line every one of them shares says nothing of which, so
     // it protects none of them (the three plagues print one line).
+    //
+    // A narrowed line is logged at Info, once for the line: what it leaves out is a
+    // condition the client then does not hold, and a report has to show why.
     private List<MessageRecord> KeepWhatCouldBeCastHere(
-        List<MessageRecord> matched, CastReach reach, DateTimeOffset when)
+        List<MessageRecord> matched, CastReach reach, string text, DateTimeOffset when)
     {
         if (reach.Now() is not { } here) return matched;
 
@@ -945,11 +959,13 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             }
         if (castHere is null || outOfReach is null) return matched;
 
-        if (_log is { IsDebugEnabled: true })
-            _log.Debug(LogCategory,
-                $"applied line shared by several spells — cast here: {string.Join(", ", castHere.Distinct())}; "
-                + "not applying, no monster, room or player outside the party that casts them being here: "
-                + string.Join(", ", outOfReach.Select(r => $"'{r.Name}' ({r.Flags})").Distinct()));
+        Narrowing narrowed = new(when, text,
+            string.Join(", ", castHere.Distinct()),
+            string.Join(", ", outOfReach.Select(r => $"'{r.Name}' ({r.Flags})").Distinct()));
+        LastNarrowed = narrowed;
+        _log?.Info(LogCategory,
+            $"applied line '{text}' shared by several spells — cast here: {narrowed.Kept}; "
+            + $"not applying, no monster, room or player outside the party that casts them being here: {narrowed.LeftOut}");
         return matched.FindAll(r => !outOfReach.Contains(r));
     }
 

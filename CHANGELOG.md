@@ -1,5 +1,13 @@
 # Version history
 
+## 3.181.36
+
+- A line whose condition was left out by who can cast it here is logged at Info, naming both sides
+- Bug report shows the who-casts index's load, why the room list isn't whole, and the last narrowed line
+- A failed who-casts index build is logged as a warning and shown in the bug report
+- Bug report shows the broadcast channel's answer and refusal counts this minute, without names
+- A negated cast's log line counts the records sharing the spell's name instead of listing them
+
 ## 3.181.32
 
 - Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list

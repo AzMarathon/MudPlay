@@ -615,4 +615,75 @@ public sealed class SpellCasterIndexTests : IDisposable
         Assert.Null(index.Of(1363));
         Assert.False(index.KnowsMonster("ice sorceress"));
     }
+
+    // ----- what the log and the bug report say of it -------------------
+
+    [Fact]
+    public void TheBugReport_SaysWhichLoadItIsBuiltFor()
+    {
+        (GameDataCache cache, SpellCasterIndex index) = NewIndex(_root);
+
+        string said = index.Describe();
+        Assert.StartsWith($"built for 'alpha' (load {cache.ActiveLoad.Generation}):", said);
+        Assert.DoesNotContain("failed", said);
+    }
+
+    [Fact]
+    public void TheBugReport_SaysItIsNotBuilt_ForALoadItWasNotBuiltFor()
+    {
+        (GameDataCache cache, SpellCasterIndex index) = NewIndex(_root);
+        long first = cache.ActiveLoad.Generation;
+        string dir = Path.Combine(_root, "beta");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), "[]");
+
+        cache.SwitchSet("beta");
+
+        Assert.Equal(
+            $"not built for 'beta' (load {cache.ActiveLoad.Generation}); last built for 'alpha' (load {first}): nothing is ruled out",
+            index.Describe());
+    }
+
+    // A fault in the build is on a worker nobody awaits. It is logged at Warn where
+    // it happens, the load stays unbuilt, and the bug report says why.
+    [Theory]
+    [InlineData(typeof(IOException))]
+    [InlineData(typeof(InvalidOperationException))]
+    public void ABuildThatThrows_LogsAWarn_AndLeavesTheIndexUnbuilt(Type thrown)
+    {
+        (GameDataCache cache, _) = NewIndex(_root);
+        LogService log = new();
+        SpellCasterIndex index = new(cache,
+            () => throw (Exception)Activator.CreateInstance(thrown, "the room graph broke")!, log);
+
+        index.Warm();
+
+        Assert.Null(index.Of(1363));
+        Assert.False(index.KnowsMonster("ice sorceress"));
+        Assert.Contains(log.Snapshot(), e =>
+            e.Severity == LogSeverity.Warn && e.Message.Contains("the room graph broke", StringComparison.Ordinal));
+        Assert.Contains($"the last build failed ({thrown.Name}: the room graph broke)", index.Describe());
+    }
+
+    // A switch that clears the room graph under the walk is no fault: that load
+    // warms its own.
+    [Fact]
+    public void ABuildOvertakenByASetSwitch_IsNoWarn()
+    {
+        (GameDataCache cache, _) = NewIndex(_root);
+        string dir = Path.Combine(_root, "beta");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), "[]");
+        LogService log = new();
+        SpellCasterIndex index = new(cache, () =>
+        {
+            cache.SwitchSet("beta");
+            throw new InvalidOperationException("Collection was modified");
+        }, log);
+
+        index.Warm();
+
+        Assert.DoesNotContain(log.Snapshot(), e => e.Severity == LogSeverity.Warn);
+        Assert.DoesNotContain("failed", index.Describe());
+    }
 }

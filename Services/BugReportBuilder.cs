@@ -1685,10 +1685,27 @@ public static class BugReportBuilder
         // What an applied line several spells share is read by: a record none of
         // these can have cast is left out (ConditionTracker.KeepWhatCouldBeCastHere).
         Kv(sb, "Who can cast here", Game.Conditions.CastReach.Describe(svc.CastReach.Now()));
+        AppendCastReachState(sb, svc);
         sb.Append('\n');
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));
         return sb.ToString();
+    }
+
+    // What "Who can cast here" stands on: the who-casts index and the room list. A
+    // shared applied line is read by them only when the index is built for the load
+    // in use and the list is whole, so a condition held or missed is explained here.
+    private static void AppendCastReachState(StringBuilder sb, AppServices svc)
+    {
+        Kv(sb, "Who-casts index", svc.SpellCasters.Describe());
+        string? notWhole = Game.Conditions.CastReach.WhyRosterNotWhole(
+            svc.RoomClassifier.Current, svc.RoomTracker.IsInDarkRoom, svc.RoomTracker.EnteredBlind,
+            svc.Conditions.IsBlinded, svc.RoomClassifier.RosterIsWhole, svc.RoomClassifier.RosterNotWholeBecause,
+            svc.SpellCasters.KnowsMonster);
+        Kv(sb, "Room list whole", notWhole is null ? "yes" : "no — " + notWhole);
+        Kv(sb, "Last line narrowed by who can cast here", svc.Conditions.LastNarrowed is { } n
+            ? $"{n.At.ToLocalTime():HH:mm:ss} '{n.Line}' — cast here: {n.Kept}; left out: {n.LeftOut}"
+            : "none this session");
     }
 
     // Editor statline vs what the game actually prints. A prompt the parser can't
