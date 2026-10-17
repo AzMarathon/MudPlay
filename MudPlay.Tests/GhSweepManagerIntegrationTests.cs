@@ -1527,6 +1527,31 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Dispose();
     }
 
+    // A fresh sweep under another set leaves that set's record alone: switched back,
+    // what the pack held for it is still there to deliver.
+    [Fact]
+    public void AFreshSweepUnderAnotherSet_KeepsThatSetsRecord()
+    {
+        ProfileService profile = new();
+        profile.LoadBlank();
+        GhSuspendedSweepStore store = new(profile);
+        store.Save(new[] { new GhSuspendedMove("1/3", "1/1", "mace", 1, carried: true, hidden: false) }, "alpha");
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs, store, activeGameData: () => "beta");
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, h.Sweep.Phase);
+
+        Assert.Equal("alpha", store.GameData);
+        Assert.Equal("mace", Assert.Single(store.Load()).Item);
+
+        h.Dispose();
+    }
+
     [Fact]
     public void Resume_FromThePersistedQueue_IsRefused_UnderAnotherGameDataSet()
     {

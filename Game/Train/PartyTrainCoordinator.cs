@@ -788,6 +788,20 @@ public sealed class PartyTrainCoordinator : IDisposable
     // it was not.
     private string? _calledOff;
 
+    // Why the last trip was called off, until a caller has named it. One stop can call
+    // it off from two places (the errand's end, then the change of game data), and the
+    // second learns here that it was this stop's doing. Kept apart from _calledOff,
+    // which the trip clears as it unwinds on its own thread.
+    private string? _calledOffUnnamed;
+
+    // True once for the stop that called the trip off for why.
+    public bool TakeCalledOffFor(string why)
+    {
+        if (_calledOffUnnamed != why) return false;
+        _calledOffUnnamed = null;
+        return true;
+    }
+
     private sealed class TripCalledOff(string why) : Exception(why);
 
     // Asked after every wait of a trip, and ahead of each walk and order: a trip
@@ -815,6 +829,7 @@ public sealed class PartyTrainCoordinator : IDisposable
     {
         if (!_tripRunning || _calledOff is not null) return false;
         _calledOff = why;
+        _calledOffUnnamed = why;
         _tripTakenOver = true;
         _trainer.Cancel(why);
         _delayTcs?.TrySetResult(true);

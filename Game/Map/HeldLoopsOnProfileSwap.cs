@@ -45,6 +45,11 @@ public sealed class HeldLoopsOnProfileSwap
         _heldFor = now;
     }
 
+    // The loaded profile came to be known by another name without a close and a load
+    // (Save As naming the draft, a re-home, its BBS renamed): the same character,
+    // which a later load under the new name must not take for another.
+    public void OnProfileRenamed() => _heldFor = _character();
+
     public void OnProfileClosed()
     {
         int close = ++_events;

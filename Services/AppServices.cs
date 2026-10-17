@@ -1457,7 +1457,9 @@ public sealed class AppServices
         // members' trains), and walks on to the next trainer it planned when the
         // wait ends. The errand hook has named it ("the training trip") and ended
         // the trainer's side; this ends the trip itself.
-        if (PartyTrain.CallOffTrip(reason) && !stopped.Contains("the training trip"))
+        // The errand's end, ahead of this, may have called it off for the same stop.
+        if ((PartyTrain.CallOffTrip(reason) | PartyTrain.TakeCalledOffFor(reason))
+            && !stopped.Contains("the training trip"))
             stopped.Add("the party training trip");
         // Detours that hold a room to walk to, or back to, afterwards.
         MonsterDropRouter.Cancel();
@@ -3623,6 +3625,7 @@ public sealed class AppServices
             action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         Profile.ProfileLoaded += _ => heldLoopsOnSwap.OnProfileLoaded();
         Profile.ProfileClosed += heldLoopsOnSwap.OnProfileClosed;
+        Profile.ProfileRenamed += (_, _) => heldLoopsOnSwap.OnProfileRenamed();
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
         // A `par` asked for to check who is in the party isn't a health read, so
         // the auto-heal toggle doesn't hold it. The master switch does.

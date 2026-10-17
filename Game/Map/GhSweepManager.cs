@@ -745,8 +745,8 @@ public sealed class GhSweepManager : IDisposable
         StrandUnmovableItems();
         // The live queue now owns this work; the persisted copy would otherwise let
         // a later Start adopt the carried half a second time. It's rewritten at the
-        // next sweep end either way.
-        _suspendedStore?.Clear();
+        // next sweep end either way. One kept for another set is not this queue.
+        if (!StoredRecordIsOtherSets) _suspendedStore?.Clear();
 
         _log?.Info(LogCategory,
             $"sweep resumed: {_pending.Count} move(s) carried over, recon skipped");
@@ -1011,9 +1011,14 @@ public sealed class GhSweepManager : IDisposable
         // what lets Resume skip the scan even after the client restarts. Always
         // written, including empty, so a clean finish clears the last record
         // rather than leaving it to be re-delivered forever.
-        _suspendedStore?.Save((_suspended ?? new List<PendingSortMove>()).Select(m =>
-            new GhSuspendedMove($"{m.From.Map}/{m.From.Room}", $"{m.To.Map}/{m.To.Room}",
-                m.ItemName, m.Count, m.IsCarried, m.RequiresSearch)), _suspendedGameData);
+        if (StoredRecordIsOtherSets)
+            _log?.Info(LogCategory,
+                $"the unfinished sweep saved on game data '{_suspendedStore!.GameData}' is kept for when it is active again; "
+                + "this sweep's leftovers are not saved over it");
+        else
+            _suspendedStore?.Save((_suspended ?? new List<PendingSortMove>()).Select(m =>
+                new GhSuspendedMove($"{m.From.Map}/{m.From.Room}", $"{m.To.Map}/{m.To.Room}",
+                    m.ItemName, m.Count, m.IsCarried, m.RequiresSearch)), _suspendedGameData);
 
         if (stillCarried.Count > 0)
         {
@@ -1304,6 +1309,11 @@ public sealed class GhSweepManager : IDisposable
     // "3x torch, mace" for the first few of a pass's stacks, then how many more.
     private static string NameStacks(IReadOnlyList<PendingSortMove> stacks) =>
         NameFew(stacks.Take(StacksNamedPerLogLine + 1).Select(Stack).ToList(), stacks.Count);
+
+    // The record on disk is another set's: what the pack holds for that set, and its
+    // rooms, are kept for when it is active again, not saved or cleared over.
+    private bool StoredRecordIsOtherSets
+        => _suspendedStore is { Any: true } store && OtherGameDataRefusal(store.GameData) is not null;
 
     // An unfinished queue saved on another game-data set than the active one: its
     // rooms are that set's numbers, other rooms here. Null when it may be used (the

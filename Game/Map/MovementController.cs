@@ -473,8 +473,8 @@ public sealed class MovementController : IDisposable
             try
             {
                 if (held() is not { } heldStart) continue;
-                dropped.Add(heldStart);
                 drop(reason);
+                dropped.Add(heldStart);
             }
             catch (Exception ex)
             {

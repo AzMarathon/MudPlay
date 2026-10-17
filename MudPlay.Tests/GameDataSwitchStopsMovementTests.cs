@@ -1026,6 +1026,13 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
             RunPosted();
         }
 
+        // Save As naming the draft, a re-home, its BBS renamed: ProfileRenamed.
+        public void Rename(string character)
+        {
+            Character = character;
+            Guard.OnProfileRenamed();
+        }
+
         public void Close()
         {
             Character = null;
@@ -1076,6 +1083,25 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         swap.Load("bbs/Alice");
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Empty(swap.Notices);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    // Named after its loop was set aside, the character loaded again under that name
+    // is the same one.
+    [Fact]
+    public void ALoopHeldForAReconnect_IsKept_WhenTheRenamedCharacterIsLoadedAgain()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(Ab());
+        h.Runner.NotifyDisconnected();
+
+        swap.Rename("bbs/Alicia");
+        swap.Load("bbs/Alicia");
         h.Runner.FirePromptObservedForTests();
 
         Assert.Empty(swap.Notices);
