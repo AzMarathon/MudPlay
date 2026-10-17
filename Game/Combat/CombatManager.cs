@@ -645,8 +645,7 @@ public sealed partial class CombatManager : IDisposable
     // next-round tick is never itself rejected.
     private static readonly TimeSpan AttackTallyMinGap = AlternationAdvanceMinGap;
 
-    // The one clock every timestamp and window in this engine reads, so a
-    // synchronous burst of combat ticks can carry multi-round timing.
+    // The clock every timestamp and window in this engine reads.
     private readonly Func<DateTimeOffset> _now;
 
     private string? _lastAttackCommand;

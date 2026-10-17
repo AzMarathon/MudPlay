@@ -19,11 +19,13 @@ public sealed class CastCoordinatorTests
         public List<byte[]> Sent { get; } = new();
         public List<(CastFailureReason Reason, string Detail, string? Spell)> Failures { get; } = new();
         public List<string> Casts { get; } = new();
+        // The coordinator's clock: it moves only when a test moves it.
+        public ManualClock Clock { get; } = new();
 
         public Harness()
         {
             DefaultPatterns.Seed(Router);
-            Cast = new CastCoordinator(Router, Log);
+            Cast = new CastCoordinator(Router, Log, now: () => Clock.Now);
             Cast.SetWireSender(b => Sent.Add(b));
             Cast.CastSent += line => Casts.Add(line);
             Cast.CastFailed += (r, d, s) => Failures.Add((r, d, s));
@@ -141,6 +143,23 @@ public sealed class CastCoordinatorTests
         Assert.Equal(2, h.Sent.Count);
     }
 
+    // With no combat tick (out of combat), the cooldown runs out on its own.
+    [Fact]
+    public void Cooldown_RunsOutWithoutACombatTick()
+    {
+        using Harness h = new();
+        Assert.True(h.Cast.TryCast("heal"));
+
+        h.Clock.Advance(CastCoordinator.CastCommandCooldown - TimeSpan.FromMilliseconds(1));
+        Assert.True(h.Cast.IsCastBlocked);
+        Assert.False(h.Cast.TryCast("heal"));
+
+        h.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.False(h.Cast.IsCastBlocked);
+        Assert.True(h.Cast.TryCast("heal"));
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     // ----- server-driven block latch ----------------------------------
 
     [Fact]
@@ -152,6 +171,22 @@ public sealed class CastCoordinatorTests
         Assert.True(h.Cast.IsCastBlocked);
         Assert.Single(h.Failures);
         Assert.Equal(CastFailureReason.Fizzled, h.Failures[0].Reason);
+    }
+
+    // Out of combat no tick clears the latch, so it expires on its own or a buff
+    // that fizzled would never be cast again.
+    [Fact]
+    public void Fizzle_LatchExpiresWithoutACombatTick()
+    {
+        using Harness h = new();
+        h.Feed("You attempt to cast heal, but fail.");
+
+        h.Clock.Advance(CastCoordinator.CastBlockExpiry - TimeSpan.FromMilliseconds(1));
+        Assert.True(h.Cast.IsCastBlocked);
+
+        h.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.False(h.Cast.IsCastBlocked);
+        Assert.True(h.Cast.TryCast("heal"));
     }
 
     [Fact]

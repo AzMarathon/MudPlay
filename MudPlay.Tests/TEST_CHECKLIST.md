@@ -543,7 +543,7 @@ How to keep it current:
 
 ### CastCoordinatorTests.cs
 - Covers: Game/Spells/CastCoordinator
-- Checks: wire emission; cooldown; failure latches; independent attack vs between-round slots; already-cast attribution.
+- Checks: wire emission; cooldown; failure latches; the cooldown and a fizzle's latch running out on a `ManualClock` with no combat tick; independent attack vs between-round slots; already-cast attribution.
 - Why: reports paradigm-20260923-103506, -20260916-113009, -20260831-091839.
 
 ### CastWalkTeleportTests.cs
@@ -692,7 +692,7 @@ How to keep it current:
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
 - Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths.
-- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live.
+- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live.
 - Why: dozens of paradigm reports cited inline.
 
 ### CombatManagerTests.cs
@@ -2105,7 +2105,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 5 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays) used by 6 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 

@@ -240,11 +240,12 @@ public sealed class CombatManagerSpellsTests
             Feed("*Combat Off*");
         }
 
-        /// <summary>One combat round. Mirrors the AppServices tick-subscription
-        /// order: the coordinator clears its cooldown first, then the combat
-        /// heartbeat re-decides. (CastingDirector sits between them in production but
-        /// isn't under test here.) Advances the fake clock a full round first, so
-        /// AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.</summary>
+        // One combat round. Mirrors the AppServices tick-subscription order: the
+        // coordinator clears its cooldown first, then the combat heartbeat
+        // re-decides. (CastingDirector sits between them in production but isn't
+        // under test here.) The clock moves a full round first, and every engine
+        // window reads it: the alternation and tally gaps, the resume and death
+        // guards, the room-refresh cooldown and the engage-verify window among them.
         public void Tick()
         {
             Clock.Advance(TimeSpan.FromSeconds(5));
@@ -2792,12 +2793,12 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat.");
         Assert.Contains("curse", h.AllSent);
         Assert.Equal("blast", h.LastSent);
-        h.Feed("*Combat Engaged*");
 
         // The debuff's own *Combat Off* must NOT fire the attack a SECOND time —
         // the immediate dispatch already sent it this round.
         h.Feed("*Combat Off*");
         Assert.Single(h.AllSent, s => s == "blast");
+        h.Feed("*Combat Engaged*");                  // the game takes up the attack sent behind it
 
         // Once per room: later rounds keep attacking and never re-fire the debuff.
         h.Tick();
@@ -3002,7 +3003,8 @@ public sealed class CombatManagerSpellsTests
         using Harness h = new(wireDeathWatcher: true);
         MovementCoordinator coordinator = new(h.Log);
         using CombatStateTracker tracker = new(
-            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true,
+            resolveOverlay: null, h.Log, clock: () => h.Clock.Now);
         bool GateHeld() => coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate);
         int emptyRosters = 0;
         h.Classifier.EntitiesObserved += o =>
@@ -3105,7 +3107,8 @@ public sealed class CombatManagerSpellsTests
         using Harness h = new();
         MovementCoordinator coordinator = new(h.Log);
         using CombatStateTracker tracker = new(
-            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true,
+            resolveOverlay: null, h.Log, clock: () => h.Clock.Now);
         bool GateHeld() => coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate);
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
         h.AddMonster(1, "brute zombie");
@@ -3137,7 +3140,8 @@ public sealed class CombatManagerSpellsTests
         using Harness h = new(wireDeathWatcher: true);
         MovementCoordinator coordinator = new(h.Log);
         using CombatStateTracker tracker = new(
-            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true,
+            resolveOverlay: null, h.Log, clock: () => h.Clock.Now);
         RoomSpellKillsThreeOfFour_SurvivorAttacked(h, landingLineRead: false);
 
         h.Feed("<724hp 343ma> aslt brute zombie");
@@ -3189,7 +3193,8 @@ public sealed class CombatManagerSpellsTests
         using Harness h = new(wireDeathWatcher: true);
         MovementCoordinator coordinator = new(h.Log);
         using CombatStateTracker tracker = new(
-            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true, h.Log);
+            h.Router, coordinator, h.Classifier, h.Monsters, new PlayerState(), () => true,
+            resolveOverlay: null, h.Log, clock: () => h.Clock.Now);
         h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
         h.AddMonster(1, "brute zombie");
         KnowTheRoomSpellsLandingLine(h);
@@ -3442,9 +3447,8 @@ public sealed class CombatManagerSpellsTests
 
         // Three are left and the room is read again: the spell still covers them.
         h.Feed("Also here: brute zombie, brute zombie, brute zombie.");
-        // The re-attack after a *Combat Off* stands behind two guards (an attack
-        // sent in the last 1.5 s, a kill in the last 2 s); the next round, five
-        // seconds on, is past both.
+        // Neither the next round's tick nor a combat line casts it again on
+        // Stock; elsewhere either does.
         h.Tick();
         h.Feed("The brute zombie swings at you with its arm!");
 
