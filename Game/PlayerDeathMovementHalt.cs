@@ -9,15 +9,13 @@ namespace MudPlay.Game;
 // graveyard we respawn into instead of a still-running loop / walk-to / Auto-Lair
 // marching us straight back out before we've recovered.
 //
-// It reacts to OUR own death via RoomTracker.PlayerDeathObserved — the ONE signal
-// that fires for both death phrasings. An earlier version keyed off
-// DeathLineWatcher's "You have been slain by <killer>." line, but a miracle-save
-// death ("You have been killed! / … saved. / You have N lives left.") never prints
-// "slain by", so it silently missed every miracle death and the loop kept
-// rerouting out of the graveyard. RoomTracker.NoteDeath fires the universal signal
-// for both forms, so both now stop. A party member's death is a different room line
-// handled elsewhere. The stop is unconditional because any death lands us alone in
-// the graveyard regardless of prior party role: a leader's party disbands on death
+// It reacts to OUR own death via RoomTracker.PlayerDeathObserved, the lives
+// readout every death that leaves a character prints: a death by damage
+// ("You have been killed! / … saved. / You have N lives left.") and a suicide
+// ("You now have N lives remaining.") alike. A party member's death is a
+// different room line handled elsewhere. The stop is unconditional because any
+// death lands us alone in the graveyard regardless of prior party role: a
+// leader's party disbands on death
 // and a dead follower is dropped from the group, so after death we are always the
 // one who would drive movement.
 //
