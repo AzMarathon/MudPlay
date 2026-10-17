@@ -318,6 +318,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // leg's flee anchors on that leg's own start. Null while Idle.
     public RoomKey? JourneyOrigin => _origin;
 
+    // The room the move on the wire is entering, while one is (also while paused mid-move).
+    public RoomKey? InFlightMoveTarget =>
+        _stepInFlight && _path is { } p && _index < p.Count && p[_index] is MoveStep m ? m.ExpectedTarget : null;
+
     public Direction? PeekNextPlannedDirection()
     {
         if (_path is null || _index >= _path.Count) return null;

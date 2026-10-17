@@ -112,8 +112,14 @@ public sealed class PlayerSightingTracker : IDisposable
         bool any = false;
         foreach (RoomEntity e in obs.Entities)
         {
-            if (e.Kind != EntityKind.Player) continue;
-            (string given, _) = PlayerObservation.SplitName(e.ResolvedName);
+            // A player is known as one only once `who` or `look` has recorded them;
+            // until then they list as unknown. One whose name reads as a player's is
+            // counted too, so a player beside us is seen without a `who` (report
+            // paradigm-20261013-173152; user, 2026-10-16).
+            bool player = e.Kind == EntityKind.Player
+                || (e.Kind == EntityKind.Unknown && PlayerObservation.LooksLikePlayerName(e.RawName));
+            if (!player) continue;
+            (string given, _) = PlayerObservation.SplitName(e.Kind == EntityKind.Player ? e.ResolvedName : e.RawName);
             if (string.IsNullOrEmpty(given)) continue;
             if (IsSelf(given) || _isPartyMember(given)) continue;
             if (!_countedThisVisit.Add(given)) continue; // already counted this visit

@@ -232,10 +232,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // picker labels; a bundled
     // face persists as its avares:// URI while a system font persists as its
     // bare family name (both are valid FontFamily inputs).
-    public IReadOnlyList<FontFamilyOption> FontFamilyOptions { get; } = BuildFontFamilyOptions();
+    // Mutable so a stored font or size the lists don't offer is added and shown, not
+    // swapped for the default (see SelectFamily / SelectSize).
+    public ObservableCollection<FontFamilyOption> FontFamilyOptions { get; } = new(BuildFontFamilyOptions());
 
-    public IReadOnlyList<FontSizeOption> FontSizeOptions { get; } =
-        FontSizeOption.Standard(DisplayConfig.DefaultFontSize);
+    public ObservableCollection<FontSizeOption> FontSizeOptions { get; } =
+        new(FontSizeOption.Standard(DisplayConfig.DefaultFontSize));
 
     [ObservableProperty] private FontFamilyOption? _selectedFontFamily;
     [ObservableProperty] private FontSizeOption? _selectedFontSize;
@@ -246,8 +248,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // tagged "{default}"); the size list tags 13 instead of 16 as the default.
     // Independent selections so the tooltip can be tuned separately from the
     // terminal canvas.
-    public IReadOnlyList<FontSizeOption> NavTooltipFontSizeOptions { get; } =
-        FontSizeOption.Standard(DisplayConfig.DefaultNavTooltipFontSize);
+    public ObservableCollection<FontSizeOption> NavTooltipFontSizeOptions { get; } =
+        new(FontSizeOption.Standard(DisplayConfig.DefaultNavTooltipFontSize));
 
     [ObservableProperty] private FontFamilyOption? _selectedNavTooltipFontFamily;
     [ObservableProperty] private FontSizeOption? _selectedNavTooltipFontSize;
@@ -530,6 +532,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         _suppressDirty = true;
         LoadFromProfile();
         _suppressDirty = false;
+        // Undo a font previewed on the terminal and not saved.
+        AppServices.Current.Display.FontFamily = SelectedFontFamily?.Uri ?? DisplayConfig.DefaultFontFamily;
+        AppServices.Current.Display.FontSize = SelectedFontSize?.Value ?? DisplayConfig.DefaultFontSize;
         ClearDirty();
     }
 
@@ -595,18 +600,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         SelectedBuffWatchdogLayout = BuffWatchdogLayoutOptions.FirstOrDefault(o => o.Value == layout)
                                      ?? BuffWatchdogLayoutOptions[0];
 
-        SelectedFontFamily = FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.TerminalFontFamily)
-                             ?? FontFamilyOptions[0];
-        double size = dto.TerminalFontSize ?? DisplayConfig.DefaultFontSize;
-        SelectedFontSize = FontSizeOptions.FirstOrDefault(o => o.Value == size)
-                           ?? FontSizeOptions.First(o => o.Value == DisplayConfig.DefaultFontSize);
-
-        SelectedNavTooltipFontFamily =
-            FontFamilyOptions.FirstOrDefault(o => o.Uri == dto.NavTooltipFontFamily)
-            ?? FontFamilyOptions[0];
-        double navSize = dto.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize;
-        SelectedNavTooltipFontSize = NavTooltipFontSizeOptions.FirstOrDefault(o => o.Value == navSize)
-                           ?? NavTooltipFontSizeOptions.First(o => o.Value == DisplayConfig.DefaultNavTooltipFontSize);
+        SelectedFontFamily = SelectFamily(dto.TerminalFontFamily);
+        SelectedFontSize = SelectSize(FontSizeOptions, dto.TerminalFontSize ?? DisplayConfig.DefaultFontSize);
+        SelectedNavTooltipFontFamily = SelectFamily(dto.NavTooltipFontFamily);
+        SelectedNavTooltipFontSize = SelectSize(NavTooltipFontSizeOptions,
+            dto.NavTooltipFontSize ?? DisplayConfig.DefaultNavTooltipFontSize);
 
         // The checkboxes show the BASE modes. A character from before the
         // base/live split has no AutoModeBase yet — fall back to the live AutoMode
@@ -643,6 +641,29 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // then guarantee the passed-in saved selections are present so the ComboBox
     // can hold a reference that outlives the active set (a per-character default
     // may point at a loop from a set that isn't currently loaded).
+    // The stored font, added to the list when the list doesn't offer it (a font not
+    // found on this machine, a size typed into the file). Falling back to the default
+    // instead put a different font on the terminal and saved it over the stored one.
+    private FontFamilyOption SelectFamily(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored)) return FontFamilyOptions[0];
+        if (FontFamilyOptions.FirstOrDefault(o => o.Uri == stored) is { } listed) return listed;
+        FontFamilyOption kept = new(stored, stored);
+        FontFamilyOptions.Add(kept);
+        AppServices.Current?.Log.Info("Settings", $"Font '{stored}' isn't installed here; kept as the saved choice");
+        return kept;
+    }
+
+    private static FontSizeOption SelectSize(ObservableCollection<FontSizeOption> options, double stored)
+    {
+        if (options.FirstOrDefault(o => o.Value == stored) is { } listed) return listed;
+        FontSizeOption kept = new($"{stored:0.#}", stored);
+        int at = 0;
+        while (at < options.Count && options[at].Value < stored) at++;
+        options.Insert(at, kept);
+        return kept;
+    }
+
     private void PopulateTaskNameLists(string? loopSelection, string? autoLairSelection)
     {
         LoopNames.Clear();
@@ -743,18 +764,18 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnMapOtherFloorsMaxOverlapPercentChanged(int value) => Dirty();
     partial void OnMapRouteLinesOnOtherFloorsChanged(bool value)     => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
-    // Live preview: push straight to the terminal canvas as the picker
-    // changes, before Save/Cancel commit the choice. Discard reverts by
-    // reloading from disk (LoadFromProfile), which re-fires these handlers
-    // with the saved value and so un-previews it.
+    // Live preview: push straight to the terminal canvas as the user picks,
+    // before Save/Cancel commit the choice; Discard puts the saved font back.
+    // Not while loading: opening Settings put the stored font on the terminal,
+    // which showed as the terminal resizing when the window closed.
     partial void OnSelectedFontFamilyChanged(FontFamilyOption? value)
     {
-        AppServices.Current.Display.FontFamily = value?.Uri ?? DisplayConfig.DefaultFontFamily;
+        if (!_suppressDirty && value is not null) AppServices.Current.Display.FontFamily = value.Uri;
         Dirty();
     }
     partial void OnSelectedFontSizeChanged(FontSizeOption? value)
     {
-        AppServices.Current.Display.FontSize = value?.Value ?? DisplayConfig.DefaultFontSize;
+        if (!_suppressDirty && value is not null) AppServices.Current.Display.FontSize = value.Value;
         Dirty();
     }
     partial void OnSelectedNavTooltipFontFamilyChanged(FontFamilyOption? value) => Dirty();

@@ -3718,6 +3718,7 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("nuke giant rat", h.LastSent);        // engaged, spell mode
         int before = h.Sent.Count;
 
@@ -3737,6 +3738,7 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("blast", h.LastSent);                 // AoE, cast bare
         int before = h.Sent.Count;
 
@@ -3758,6 +3760,7 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("blast", h.LastSent);
         int before = h.Sent.Count;
 
@@ -3777,6 +3780,7 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("blast", h.LastSent);
         int before = h.Sent.Count;
 
@@ -3795,6 +3799,7 @@ public sealed class CombatManagerSpellsTests
         h.AddMonster(1, "giant rat");
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("a giant rat", h.LastSent);
         int before = h.Sent.Count;
 

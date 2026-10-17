@@ -1310,6 +1310,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         h.Feed("Bob moves to attack giant rat.");
@@ -1326,6 +1327,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
 
         // Party member — re-fire.
         h.Feed("Bob moves to attack giant rat.");
@@ -1350,6 +1352,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         h.Feed("Raijin moves to attack giant rat.");
@@ -1374,6 +1377,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");        // initial swing (synchronous)
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         // Burst of party announces on our target — one round. The duplicated
@@ -1385,6 +1389,7 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);                  // flush deferred — nothing sent yet
 
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(2, h.Sent.Count);          // exactly one coalesced re-fire
         Assert.Equal("a giant rat", h.LastSent);
 
@@ -1393,6 +1398,7 @@ public sealed class CombatManagerTests
         h.Combat.OnCombatTick();
         h.Feed("Suijin moves to attack giant rat.");
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(3, h.Sent.Count);
     }
 
@@ -1412,6 +1418,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "obsidian demon", killable: true);
 
         h.Feed("Also here: obsidian demon.");   // initial swing
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         h.Feed("Nineteen moves to attack obsidian demon.");
@@ -1419,6 +1426,7 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);                  // still waiting for the announces to settle
 
         foreach (Action a in settle) a();       // only the newest window fires
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("a obsidian demon", h.LastSent);
     }
@@ -1437,17 +1445,71 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "fat greater wyvern", killable: true);
 
         h.Feed("Also here: fat greater wyvern.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         h.Feed("Nineteen moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(2, h.Sent.Count);
 
         h.Feed("Cidir moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(3, h.Sent.Count);           // back behind Cidir
 
         h.Feed("Nineteen moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(4, h.Sent.Count);           // and again — no per-round cap
+    }
+
+    // Another MudPlay member's own re-fire crosses ours on the wire. Read before the
+    // game answered our re-fire, it was handled ahead of it, so ours already lands
+    // last: no third attack (report paradigm-20261013-153710).
+    [Fact]
+    public void AttackTimingLastParty_AnnounceBeforeOurAttackIsAnswered_IsNotAnswered()
+    {
+        using Harness h = new();
+        List<Action> settle = new();
+        h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
+        h.Settings.AttackTiming = AttackTiming.AttackLastParty;
+        h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
+        h.Party.Members.Add(new PartyMember { Name = "Thresh" });
+        h.AddMonster(1, "large giant hellhound", killable: true);
+
+        h.Feed("Also here: large giant hellhound.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("Nineteen moves to attack large giant hellhound.");
+        h.Feed("Thresh moves to attack large giant hellhound.");
+        settle[^1]();
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Feed("Thresh moves to attack large giant hellhound.");   // before our Engaged
+        foreach (Action a in settle) a();
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    [Fact]
+    public void AttackTimingLastParty_AnnounceAfterOurAttackIsAnswered_IsAnswered()
+    {
+        using Harness h = new();
+        List<Action> settle = new();
+        h.Combat.SetRefireSettleScheduler((_, a) => settle.Add(a));
+        h.Settings.AttackTiming = AttackTiming.AttackLastParty;
+        h.Party.Members.Add(new PartyMember { Name = "Nineteen" });
+        h.Party.Members.Add(new PartyMember { Name = "Thresh" });
+        h.AddMonster(1, "large giant hellhound", killable: true);
+
+        h.Feed("Also here: large giant hellhound.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("Nineteen moves to attack large giant hellhound.");
+        settle[^1]();
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Feed("*Combat Off*");
+        h.Feed("*Combat Engaged*");
+        h.Feed("Thresh moves to attack large giant hellhound.");   // behind our re-fire
+        settle[^1]();
+        Assert.Equal(3, h.Sent.Count);
     }
 
     // Attack last room: anyone in the room announcing after us — party or not — gets
@@ -1462,12 +1524,16 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "fat greater wyvern", killable: true);
 
         h.Feed("Also here: fat greater wyvern.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         h.Feed("Stranger moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         h.Feed("Drifter moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         h.Feed("Stranger moves to attack fat greater wyvern.");
         settle[^1]();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
 
         Assert.Equal(4, h.Sent.Count);
     }
@@ -1481,6 +1547,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
 
         // Wrong player — no re-fire.
         h.Feed("Bob moves to attack giant rat.");
@@ -1544,6 +1611,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         h.Feed("[HP=100/MA=50]:Bob moves to attack giant rat.");
 
         Assert.Equal(2, h.Sent.Count);
@@ -1570,6 +1638,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -1595,6 +1664,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
@@ -1621,6 +1691,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");            // initial swing (synchronous)
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         h.Feed("Boss moves to attack giant rat.");
@@ -1628,6 +1699,7 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);                       // flush deferred
 
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(2, h.Sent.Count);               // one coalesced re-fire
         Assert.Equal("a giant rat", h.LastSent);
     }
@@ -1666,6 +1738,7 @@ public sealed class CombatManagerTests
         h.AddMonster(1, "giant rat", killable: true);
 
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         h.Feed("Priest moves to cast lightning bolt upon giant rat.");
@@ -1724,6 +1797,7 @@ public sealed class CombatManagerTests
             "angry", "large");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("a angry kobold thief", h.LastSent);
         Assert.Equal("angry kobold thief", h.Combat.CurrentTarget);
 
@@ -1751,6 +1825,7 @@ public sealed class CombatManagerTests
             "angry", "large");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("a angry kobold thief", h.LastSent);
 
         // Different monster — ignored.
@@ -2089,6 +2164,7 @@ public sealed class CombatManagerTests
             "angry", "large");
 
         h.Feed("Also here: angry kobold thief, large kobold thief.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("a angry kobold thief", h.LastSent);    // own pick
 
         // Named player, different monster — ignored.
@@ -3519,6 +3595,53 @@ public sealed class CombatManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // A resume that stands down for a run keeps the interrupt armed: a run that finds
+    // no way out (knocked flat) leaves us fighting back on the next swing, not
+    // standing there until the hang-up (report paradigm-20261013-092344).
+    [Fact]
+    public void ResumeHeldByAFlee_FightsBackOnceTheRunHasNowhereToGo()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "cave bear", killable: false);
+        bool fleeing = false;
+        h.Combat.SetFleeInFlightProbe(() => fleeing);
+
+        h.Feed("Also here: cave bear.");
+        Assert.Equal("a cave bear", h.LastSent);
+        BackdateLastAttack(h.Combat);
+
+        fleeing = true;
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Single(h.Sent);                     // the run holds the resume
+
+        fleeing = false;                           // every way out was refused
+        h.Feed("The cave bear claws you for 5 damage!");
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a cave bear", h.LastSent);
+    }
+
+    // A move refused in the room (knocked flat, a bonk) didn't leave it, so the
+    // surprise the fight there spent stays spent.
+    [Fact]
+    public void Backstab_MoveRefused_KeepsTheOpenerSpent()
+    {
+        using Harness h = new();
+        h.Settings.DoBackstab = true;
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
+
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("bs giant rat", h.LastSent);
+        Assert.False(h.Combat.IsBackstabOpenerPending());
+
+        h.Combat.NoteMoveSent();
+        Assert.True(h.Combat.IsBackstabOpenerPending());
+        h.Combat.NoteMoveRefused();
+
+        Assert.False(h.Combat.IsBackstabOpenerPending());
+    }
+
     [Fact]
     public void HitAndRun_SettingOff_FightsNormally()
     {
@@ -3588,11 +3711,13 @@ public sealed class CombatManagerTests
         h.Combat.SetBackstabHooks(isStealthed: () => true, hasSeeHidden: _ => false);
 
         h.Feed("Also here: giant rat.");          // opener: bs (synchronous)
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         // Announce during the pending surprise round — no re-fire scheduled.
         h.Feed("Bob moves to attack giant rat.");
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Single(h.Sent);
 
         // The surprise round resolves (success) — re-fire suppression lifts.
@@ -3601,6 +3726,7 @@ public sealed class CombatManagerTests
         // A later announce now re-fires normally.
         h.Feed("Bob moves to attack giant rat.");
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("a giant rat", h.LastSent);
     }
@@ -3623,6 +3749,7 @@ public sealed class CombatManagerTests
 
         // Opener fires bs and is consumed; the target is held.
         h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");   // the game answers our attack
         Assert.Equal("bs giant rat", h.LastSent);
 
         // Opener lands — the surprise-resolution watch clears so the re-fire
@@ -3638,6 +3765,7 @@ public sealed class CombatManagerTests
         // opener is armed, so the re-fire opens with bs, never `pu`.
         h.Feed("Bob moves to attack giant rat.");
         h.PumpUi();
+        h.Feed("*Combat Engaged*");   // the game answers our attack
 
         Assert.Equal(before + 1, h.Sent.Count);
         Assert.Equal("bs giant rat", h.LastSent);

@@ -69,7 +69,16 @@ public static class LoopSignature
             WriteInt(form, room.Map);
             WriteInt(form, room.Room);
             WriteText(form, w.Command ?? string.Empty);
-            WriteInt(form, w.DelayMs);
+            // A delay that fits an int is written as it always was, so a loop's
+            // signature doesn't change; a longer one (minutes, past ~24 days of ms)
+            // follows a -1 no stored delay can be.
+            if (w.DelayMs <= int.MaxValue) WriteInt(form, (int)w.DelayMs);
+            else
+            {
+                WriteInt(form, -1);
+                WriteInt(form, (int)(w.DelayMs >> 32));
+                WriteInt(form, (int)w.DelayMs);
+            }
             form.WriteByte((byte)((w.DoNotRest ? 1 : 0) | (w.DoNotAttack ? 2 : 0)
                                   | (w.RestHereHp ? 4 : 0) | (w.RestHereMana ? 8 : 0)));
         }

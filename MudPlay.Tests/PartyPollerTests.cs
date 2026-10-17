@@ -487,6 +487,22 @@ public sealed class PartyPollerTests
         Assert.Equal(66, m.MpPercent);
     }
 
+    [Theory]
+    [InlineData("{HP=878/878,MA=132/132, Losing HPs}")]
+    [InlineData("{HP=878/878,MA=132/132, Resting, Cant move}")]
+    public void HealthReply_WithSeveralWordsOfStatusAfterTheNumbers_StillSetsTheBaselines(string reply)
+    {
+        // A MegaMUD member's status suffix can run to several words; the numbers
+        // still have to land or the roster never shows that member's mana.
+        var (_, _, state, _, router, _) = Setup();
+        state.Members.Add(new PartyMember { Name = "Tomoe" });
+        DispatchTelepath(router, "Tomoe", reply);
+
+        PartyMember m = state.Members[0];
+        Assert.Equal(878, m.BaselineHp);
+        Assert.Equal(132, m.BaselineMp);
+    }
+
     [Fact]
     public void HealthReply_FullHealth_PercentsAreHundred()
     {

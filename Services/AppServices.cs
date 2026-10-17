@@ -6949,6 +6949,7 @@ public sealed class AppServices
         Alignment.Refreshed += Equipment.ReevaluateAllBlocks;
         Equipment.BlocksChanged += AlignmentCheck.RequestCheck;
         Equipment.SetsEdited += AlignmentCheck.RequestCheck;
+        Equipment.SetsEdited += CombatProfiles.SyncActiveWeaponsFromGear;
         Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
         // A dark cloud out of Good blocks Good-only gear at once and asks where we
         // landed; one from Neutral or worse changes nothing.
@@ -7422,7 +7423,8 @@ public sealed class AppServices
             // copy to the game, though the listing sets it apart; it is known from
             // the last full read only.
             wornItems: () => Inventory.Snapshot.EquippedItems.Select(e => e.Name),
-            litLight: () => Inventory.Snapshot.ReadiedLight?.Name);
+            litLight: () => Inventory.Snapshot.ReadiedLight?.Name,
+            carriedForJourney: id => PartyPathItemGate is { } gate ? gate.CopiesToCarryFor(id) : 0);
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
@@ -8197,10 +8199,14 @@ public sealed class AppServices
         // (no-substitute) items always announce; an any-of group's counter
         // announces only when the user forced one via the route picker's "obtain
         // then cross" choice (otherwise the group stays a manual counter choice).
-        Walker.SetHazardItemResolver(HazardAnnounceItems);
+        Walker.SetHazardItemResolver(key => HazardAnnounceItems(key, stage: true));
         // The same list tells route planning which hazard rooms an unpicked
         // through-gates walk will have a counter for by the time it gets there.
-        Movement.HazardProvisionProbe = HazardAnnounceItems;
+        // Planning explores rooms the walk may never enter, so it reads the list
+        // without staging substitutes: a staged any-of group (a climbing harness for
+        // a rope and grapple) would otherwise reach the party count of a route whose
+        // gates take only the one item.
+        Movement.HazardProvisionProbe = key => HazardAnnounceItems(key, stage: false);
 
         // Admit a locked door's key into that same announce, but ONLY when a room
         // command can summon a guaranteed dropper for it — the one key-acquisition
@@ -8548,7 +8554,9 @@ public sealed class AppServices
             // tail, not a new one.
             restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)),
             // The Bossing set's "keep on between bosses": is this trip to another boss?
-            bossTravel: BossTravelNow);
+            bossTravel: BossTravelNow,
+            resumeRest: Health.ResendRestAfterGearSwap,
+            healthOwnsRest: () => Health.RestInFlight);
         // A set held from the Equip menu belongs to the character that picked it, and
         // any other equip asked for by hand (Workshop Equip Now, @equip, Equip All)
         // replaces it: the hold drops and that set goes on.
@@ -11777,11 +11785,39 @@ public sealed class AppServices
             evalIsLair = false;
         }
 
+        bool heldByUser = MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate);
+        bool following = MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate);
+
+        // A bank or sell trip stops the loop it will resume, and may walk out and back
+        // through that loop's rooms: the loop's own room settings still apply there.
+        if (LoopRunner.State == Game.Map.LoopState.Idle
+            && Game.Map.LoopCombatSuppression.DetourLoop(
+                AutoDeposit.IsRerouting, AutoDeposit.ResumePlan,
+                SellDetour.IsDetouring, SellDetour.ResumePlan) is { } detourLoop)
+        {
+            // The trip's walker has the same lag the loop's moves do: judge the room
+            // its move in flight is entering.
+            if (RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+                && Walker.InFlightMoveTarget is { } walkTarget)
+            {
+                evalKey = walkTarget;
+                evalIsLair = RoomGraph.GetRoom(walkTarget)?.HasLair ?? false;
+                entering = true;
+            }
+            // Lair-only belongs to the loop's own rooms: the rest of the way to the
+            // bank isn't a non-lair room of the loop.
+            bool detourSuppressed = !heldByUser && !following
+                && evalKey is { } room
+                && DetourCombat.InLoopArea(detourLoop, room)
+                && Game.Map.LoopCombatSuppression.IsSuppressed(detourLoop, room, evalIsLair);
+            return (evalKey, detourSuppressed, entering);
+        }
+
         bool suppressed =
             Game.Map.LoopCombatSuppression.LoopIsDriving(
                 LoopRunner.State,
-                heldByUser: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
-                following: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+                heldByUser: heldByUser,
+                following: following,
                 standingForMana: LairDebuffHold is { WaitingForMana: true })
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
@@ -15480,7 +15516,7 @@ public sealed class AppServices
     // Items to provision for entering a hazard room: its single-counter mandatory
     // items always, plus any any-of counter the user forced via the route picker's
     // "obtain then cross" choice (so that one counter is sourced like a gate item).
-    private System.Collections.Generic.IReadOnlyList<int> HazardAnnounceItems(Game.Map.RoomKey key)
+    private System.Collections.Generic.IReadOnlyList<int> HazardAnnounceItems(Game.Map.RoomKey key, bool stage)
     {
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
@@ -15498,7 +15534,7 @@ public sealed class AppServices
                     {
                         // Every hazard room the forced counter is announced for
                         // narrows what may stand in for it on this route.
-                        PathItemSubstitutes.Record(id, group);
+                        if (stage) PathItemSubstitutes.Record(id, group);
                         if (!items.Contains(id)) items.Add(id);
                     }
         return items;

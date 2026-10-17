@@ -110,6 +110,43 @@ public sealed class PartyInventoryProbeTests
         Assert.Equal(1, r.TotalCount);
     }
 
+    // Every remote-command reply comes back brace-wrapped on the wire; the probe
+    // counted none of them, so a party holding ropes was taken for one holding none.
+    [Theory]
+    [InlineData("{yes - 1x 'rope and grapple'}", 1)]
+    [InlineData("{no - nothing matching 'rope and grapple'}", 0)]
+    [InlineData("{yes: 1}", 1)]                       // MegaMUD's reply, no item echo
+    public async Task BraceWrappedReplies_AreCounted(string reply, int held)
+    {
+        var h = new Harness();
+        h.AddMember("Placido");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(191, "rope and grapple");
+        h.Reply("Placido", reply);
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, r.Replied);
+        Assert.Equal(held, r.TotalCount);
+        Assert.Empty(r.Unanswered);
+    }
+
+    [Fact]
+    public async Task CountOnlyReplies_AreCreditedToTheQueriesInTheOrderAsked()
+    {
+        var h = new Harness();
+        h.AddMember("Gronx");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> rope = h.Probe.QueryAsync(191, "rope and grapple");
+        Task<PartyInventoryProbe.PartyItemResult> torch = h.Probe.QueryAsync(52, "torch");
+        h.Reply("Gronx", "{yes: 2}");
+        h.Reply("Gronx", "{yes: 5}");
+
+        Assert.Equal(2, (await rope.WaitAsync(TimeSpan.FromSeconds(5))).TotalCount);
+        Assert.Equal(5, (await torch.WaitAsync(TimeSpan.FromSeconds(5))).TotalCount);
+    }
+
     // The walk a count holds is let go when the probe's reply window closes on a
     // member who never answers: the one release that rests on the probe's own timer.
     [Fact]

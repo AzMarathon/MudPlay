@@ -51,6 +51,16 @@ internal static class LoopCombatSuppression
     public static bool LoopIsDriving(LoopState state, bool heldByUser, bool following, bool standingForMana) =>
         state != LoopState.Idle && !heldByUser && !following && !standingForMana;
 
+    // The loop a bank or sell trip will resume, whose rooms the trip may walk out
+    // and back through. The grind carries on there (DetourCombatHold), so that loop's
+    // own room settings still apply; with the loop stopped for the trip, nothing
+    // applied them, and the trip's first step fought in the loop's no-attack room
+    // (report paradigm-20261015-160835).
+    public static Loop? DetourLoop(bool depositing, DetourResume deposit, bool selling, DetourResume sell) =>
+        depositing && deposit.Kind == DetourResumeKind.Loop ? deposit.Loop
+        : selling && sell.Kind == DetourResumeKind.Loop ? sell.Loop
+        : null;
+
     public static bool IsSuppressed(Loop loop, RoomKey current, bool currentIsLair)
     {
         if (loop.OnlyAttackInLairRooms && !currentIsLair)

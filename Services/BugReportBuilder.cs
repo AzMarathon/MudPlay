@@ -538,6 +538,8 @@ public static class BugReportBuilder
             ((svc.Profile.Current?.Equipment?.KeepBossingBetweenBosses ?? false) ? "on" : "off")
             + (svc.AutoEquip.IsKeepingBossing ? ", kept on right now" : string.Empty)
             + $"; last leader answer: {svc.LeaderBossTravel.LastOutcome}");
+        Kv(sb, "Hand-typed rest to resume after its gear",
+            svc.AutoEquip.ReRestOwed ? "yes (rest goes out again once the pre-rest set has streamed)" : "no");
         // Non-zero while an in-combat recovery is still pacing its re-equip across
         // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
         if (svc.DeathRecovery.PendingReequipCount > 0)
@@ -1973,6 +1975,15 @@ public static class BugReportBuilder
                 curLoop.Waypoints.Count(w => w.DoNotRest).ToString());
             Kv(sb, "Loop rest-up-here waypoints (HP / mana)",
                 $"{curLoop.Waypoints.Count(w => w.RestHereHp)} / {curLoop.Waypoints.Count(w => w.RestHereMana)}");
+            // What each room command waits, and how long the one under way has left:
+            // a "the delay is off" report otherwise has to infer both from timings.
+            string[] delays = curLoop.Waypoints
+                .Where(w => !string.IsNullOrWhiteSpace(w.Command) && w.DelayMs > 0)
+                .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
+                .ToArray();
+            Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
+            Kv(sb, "Command delay under way",
+                loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
             // room an in-flight loop move is entering, or the tracker's current room.
             (Game.Map.RoomKey? judged, bool suppressedNow, bool entering) = svc.CombatSuppressionVerdict();

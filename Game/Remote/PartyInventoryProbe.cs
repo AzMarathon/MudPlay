@@ -98,6 +98,11 @@ public sealed partial class PartyInventoryProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HaveNoReply();
 
+    // A MegaMUD member answers `@have` with a bare count and no item echo.
+    [GeneratedRegex(@"^yes:\s*(\d+)\s*$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex HaveCountOnlyReply();
+
     public PartyInventoryProbe(
         PartyBroadcaster broadcaster, ChatRouter chat, PartyState party, LogService? log = null)
         : this(broadcaster, chat, party, armWindow: null, log) { }
@@ -165,9 +170,22 @@ public sealed partial class PartyInventoryProbe : IDisposable
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
-        if (!TryParseHaveReply(entry.Message, out int count, out string echoedQuery)) return;
+        if (!TryParseHaveReply(entry.Message, out int count, out string? echoedQuery)) return;
 
         string given = GivenName(entry.Speaker);
+
+        if (echoedQuery is null)
+        {
+            // No echo to match by name: credit the oldest query still waiting on
+            // this member, on the reading that a member answers in the order asked.
+            PendingQuery? oldest = _pending.FirstOrDefault(p => !p.Completed && p.Remaining.Contains(given));
+            if (oldest is null) return;
+            oldest.Remaining.Remove(given);
+            oldest.Counts[given] = count;
+            if (oldest.Remaining.Count == 0) Complete(oldest);
+            return;
+        }
+
         string norm = Normalize(echoedQuery);
 
         // Snapshot: Complete mutates _pending. A reply satisfies more than one
@@ -210,8 +228,20 @@ public sealed partial class PartyInventoryProbe : IDisposable
         timer.Start();
     }
 
-    private static bool TryParseHaveReply(string message, out int count, out string query)
+    // Every remote-command reply travels brace-wrapped (`{yes - 1x 'rope'}`), so
+    // the braces come off before the body is matched.
+    private static bool TryParseHaveReply(string message, out int count, out string? query)
     {
+        message = message.Trim();
+        if (message.Length >= 2 && message[0] == '{' && message[^1] == '}') message = message[1..^1].Trim();
+
+        Match countOnly = HaveCountOnlyReply().Match(message);
+        if (countOnly.Success)
+        {
+            count = int.Parse(countOnly.Groups[1].Value, CultureInfo.InvariantCulture);
+            query = null;
+            return true;
+        }
         Match yes = HaveYesReply().Match(message);
         if (yes.Success)
         {

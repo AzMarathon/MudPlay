@@ -86,14 +86,18 @@ public sealed class DetourCombatHold
         return InsideLoopArea(resume) ? null : what;
     }
 
-    private bool InsideLoopArea(DetourResume resume)
+    private bool InsideLoopArea(DetourResume resume) =>
+        resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop
+        && _currentRoom() is { } here && InLoopArea(loop, here);
+
+    // Whether a room is one of the loop's own (on its cycle, legs included).
+    public bool InLoopArea(Loop loop, RoomKey room)
     {
-        if (resume.Kind != DetourResumeKind.Loop || resume.Loop is not { } loop) return false;
         if (!ReferenceEquals(loop, _areaLoop))
         {
             _areaLoop = loop;
             _area = new HashSet<RoomKey>(_loopRooms(loop));
         }
-        return _currentRoom() is { } here && _area.Contains(here);
+        return _area.Contains(room);
     }
 }

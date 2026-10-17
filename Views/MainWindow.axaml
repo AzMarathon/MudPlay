@@ -275,7 +275,7 @@
         <Border DockPanel.Dock="Top" Classes="Toolbar"
                 IsVisible="{Binding Toolbar.ShowTop}">
             <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                <ItemsControl Grid.Column="0"
+                <ItemsControl x:Name="TopToolbarItems" Grid.Column="0"
                               ItemsSource="{Binding ToolbarItems}"
                               VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
@@ -461,7 +461,7 @@
         <Border DockPanel.Dock="Bottom" Classes="Toolbar"
                 IsVisible="{Binding Toolbar.ShowBottom}">
             <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-                <ItemsControl Grid.Column="0"
+                <ItemsControl x:Name="BottomToolbarItems" Grid.Column="0"
                               ItemsSource="{Binding ToolbarItems}"
                               VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>

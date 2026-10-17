@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
 
 namespace MudPlay.Services;
 
@@ -18,8 +19,12 @@ namespace MudPlay.Services;
 //     from live positions every move, so a window dragged away simply stops being
 //     part of the cluster. There is no snap graph to maintain.
 //
-// Avalonia only surfaces post-move PositionChanged (no drag-in-progress hook), so
-// a snap is a small correction after the OS finishes the move, not a live pull.
+// On Linux the window manager reports a drag once it ends; on Windows every step
+// of the drag raises PositionChanged. A snap therefore waits until the panel has
+// stopped moving (SettleMs): snapping mid-drag moved the window under the cursor and
+// pinned it to whatever edge the drag passed, so it could hardly be pulled away. A
+// snap is a small correction after the move, not a live pull, and never one that
+// leaves the panel's title bar off the screen's working area (behind the taskbar).
 // Positions are physical desktop pixels; sizes are device-independent, so a rect
 // is built by scaling the frame size to the window's screen — the same convention
 // WindowLayoutStore uses.
@@ -54,7 +59,14 @@ public sealed class WindowSnapManager
         // PositionChanged that matches it is swallowed so our own moves don't
         // recurse into snapping / group logic.
         public PixelPoint? Expected;
+        public DispatcherTimer? Settle;
     }
+
+    // A dragged panel snaps once it has gone this long without moving.
+    private const int SettleMs = 200;
+    // The top strip of a panel that must stay on a screen's working area after a snap,
+    // so the title bar can still be grabbed.
+    private const int TitleStrip = 32;
 
     private readonly Dictionary<string, Panel> _open = new(StringComparer.OrdinalIgnoreCase);
 
@@ -100,7 +112,10 @@ public sealed class WindowSnapManager
         window.Closed += (_, _) =>
         {
             if (_open.TryGetValue(id, out Panel? p) && ReferenceEquals(p.Window, window))
+            {
+                p.Settle?.Stop();
                 _open.Remove(id);
+            }
         };
         window.PositionChanged += (_, e) => OnMoved(window, id, e.Point);
     }
@@ -148,10 +163,22 @@ public sealed class WindowSnapManager
             && (DateTime.UtcNow - _lastClusterMoveAt).TotalMilliseconds < DragGapMs)
             return;
 
-        // On a snap, MoveTo already recorded the SNAPPED position as LastPos — don't
-        // clobber it with the raw drop position, or the cluster offset later captured
-        // from it would be off by the snap correction (a jump on the next main drag).
-        if (!SnapAndSettle(p, newPos)) p.LastPos = newPos;
+        p.LastPos = newPos;
+        ScheduleSettle(p);
+    }
+
+    private void ScheduleSettle(Panel p)
+    {
+        p.Settle ??= new DispatcherTimer(TimeSpan.FromMilliseconds(SettleMs), DispatcherPriority.Background,
+            (_, _) =>
+            {
+                p.Settle!.Stop();
+                if (_open.TryGetValue(p.Id, out Panel? cur) && ReferenceEquals(cur, p)
+                    && _enabled() && p.Window.WindowState == WindowState.Normal)
+                    SnapAndSettle(p, p.Window.Position);
+            });
+        p.Settle.Stop();
+        p.Settle.Start();
     }
 
     // Main moved by the user. On the first move of a drag, capture the snapped cluster
@@ -206,7 +233,8 @@ public sealed class WindowSnapManager
             others.Add(RectOf(v));   // intended position — a reference window isn't being dragged
         }
 
-        (int axis, int shift) = ComputeSnap(cr, others, SnapThreshold);
+        PixelRect[] workAreas = c.Window.Screens?.All.Select(s => s.WorkingArea).ToArray() ?? [];
+        (int axis, int shift) = ComputeSnap(cr, others, SnapThreshold, workAreas);
         if (axis == 0) return false;
 
         PixelPoint snapped = axis == 1
@@ -230,15 +258,25 @@ public sealed class WindowSnapManager
     // within threshold. axis 1 = adjust X, 2 = adjust Y; shift is the signed delta.
     // Adjacency only (opposite edges touch), so panels tile beside/above each other
     // rather than overlapping — and only one axis moves (no perpendicular align).
+    // With workAreas given, an edge that would put c's title strip off every screen's
+    // working area is passed over, so the next-closest edge can still win.
     internal static (int Axis, int Shift) ComputeSnap(
-        PixelRect c, IReadOnlyList<PixelRect> others, int threshold)
+        PixelRect c, IReadOnlyList<PixelRect> others, int threshold,
+        IReadOnlyList<PixelRect>? workAreas = null)
     {
         int bestAxis = 0, bestShift = 0, bestAbs = threshold + 1;
 
         void Consider(int shift, int axis)
         {
             int abs = Math.Abs(shift);
-            if (abs < bestAbs) { bestAbs = abs; bestShift = shift; bestAxis = axis; }
+            if (abs >= bestAbs) return;
+            if (workAreas is { Count: > 0 })
+            {
+                PixelPoint at = axis == 1 ? new PixelPoint(c.X + shift, c.Y) : new PixelPoint(c.X, c.Y + shift);
+                PixelRect strip = new(at, new PixelSize(c.Width, Math.Min(TitleStrip, c.Height)));
+                if (!workAreas.Any(a => a.Intersect(strip) == strip)) return;
+            }
+            bestAbs = abs; bestShift = shift; bestAxis = axis;
         }
 
         foreach (PixelRect v in others)

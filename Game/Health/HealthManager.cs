@@ -3112,6 +3112,15 @@ public sealed class HealthManager : IDisposable
             SendCommand(part);
     }
 
+    // A hand-typed rest stood up by its own pre-rest gear (AutoEquipCoordinator):
+    // sit again. The health engine never owned that rest, so its in-flight state
+    // is left alone.
+    public void ResendRestAfterGearSwap()
+    {
+        SendCommand("rest");
+        _log?.Info(LogCategory, "rest re-sent after the pre-rest gear stood a hand-typed rest up");
+    }
+
     private void SendCommand(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;

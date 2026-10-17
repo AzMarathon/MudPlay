@@ -72,7 +72,7 @@ public sealed class PvpStrangerLookup : IDisposable
         if (!_pvpEnabled()) return;
         foreach (RoomEntity e in obs.Entities)
         {
-            if (e.Kind != EntityKind.Unknown || !LooksLikeAPlayer(e.RawName)) continue;
+            if (e.Kind != EntityKind.Unknown || !PlayerObservation.LooksLikePlayerName(e.RawName)) continue;
             Ask(PlayerObservation.SplitName(e.RawName).Given, inTheRoom: true);
         }
     }
@@ -135,18 +135,6 @@ public sealed class PvpStrangerLookup : IDisposable
     private void OnPlayerRecorded(string given)
     {
         if (_pending.Remove(given)) _classifier.ReclassifyUnknown();
-    }
-
-    // Player names are capitalised, one or two words of letters; monsters are listed
-    // in lower case.
-    private static bool LooksLikeAPlayer(string rawName)
-    {
-        string[] words = rawName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length is < 1 or > 2 || !char.IsUpper(words[0][0])) return false;
-        foreach (string word in words)
-            foreach (char c in word)
-                if (!char.IsLetter(c) && c != '\'' && c != '-') return false;
-        return true;
     }
 
     public void Dispose()

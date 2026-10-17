@@ -5,15 +5,14 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.Navigation;
 
 // Small modeless dialog for editing a single loop waypoint's per-row action
-// — a free-form Command to send at the waypoint and a Delay in milliseconds
-// before the loop resumes walking. Spawned from the Loop editor's per-row ✎
-// button.
+// — a free-form Command to send at the waypoint and a Delay (stored in
+// milliseconds, edited as minutes and seconds) before the loop resumes walking.
+// Spawned from the Loop editor's per-row ✎ button.
 //
 // The dialog doesn't write to LoopWaypointRowViewModel directly — it bubbles
 // the committed values up via a LairTimerEditDialogResult-shaped result so
-// the Loop editor can decide how to apply them (same shape both fields are
-// nullable: Command empty = "no command", Delay 0 = "default per-step
-// delay").
+// the Loop editor can decide how to apply them (Command empty = "no command",
+// Delay 0 = "move on once the command is answered").
 public sealed partial class WaypointActionEditDialogViewModel : ObservableObject, IDialogViewModel<WaypointActionEditResult?>
 {
     public event Action<WaypointActionEditResult?>? CloseRequested;
@@ -22,7 +21,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
     public string WaypointLabel { get; }
 
     [ObservableProperty] private string? _command;
-    [ObservableProperty] private int _delayMs;
+    [ObservableProperty] private long _delayMs;
 
     // Never rest in this room — the loop advances even below the rest-if-below
     // gates. Independent of Command (a dangerous room may have no command).
@@ -37,7 +36,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
     [ObservableProperty] private bool _restHereHp;
     [ObservableProperty] private bool _restHereMana;
 
-    public WaypointActionEditDialogViewModel(string waypointLabel, string? command, int delayMs, bool doNotRest, bool doNotAttack,
+    public WaypointActionEditDialogViewModel(string waypointLabel, string? command, long delayMs, bool doNotRest, bool doNotAttack,
         bool restHereHp = false, bool restHereMana = false)
     {
         _restHereHp = restHereHp;
@@ -53,7 +52,7 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
     private void Save()
     {
         string? trimmed = string.IsNullOrWhiteSpace(Command) ? null : Command.Trim();
-        int delay = Math.Max(0, DelayMs);
+        long delay = Math.Max(0, DelayMs);
         // Convention: clearing the command also clears the delay —
         // delay-without-command would never fire because the loop only
         // pauses around the command step.
@@ -66,5 +65,5 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
 }
 
 // Committed payload — null Command means "no command attached".
-public sealed record WaypointActionEditResult(string? Command, int DelayMs, bool DoNotRest, bool DoNotAttack,
+public sealed record WaypointActionEditResult(string? Command, long DelayMs, bool DoNotRest, bool DoNotAttack,
     bool RestHereHp, bool RestHereMana);

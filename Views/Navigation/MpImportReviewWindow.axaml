@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Navigation"
+        xmlns:ctl="using:MudPlay.Controls"
         x:Class="MudPlay.Views.Navigation.MpImportReviewWindow"
         x:DataType="vm:MpImportReviewViewModel"
         Title="{Binding FileName, StringFormat='Import MegaMUD loop — {0}'}"
@@ -166,7 +167,7 @@
 
             <!-- ============ Column headers ============ -->
             <Border Grid.Row="1" Padding="6,4" Background="#18FFFFFF" CornerRadius="3">
-                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22,92">
+                <Grid ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,132,26,26,26,26,22,92">
                     <TextBlock Grid.Column="0" Classes="Head" Text="#"/>
                     <TextBlock Grid.Column="1" Classes="Head" Text="Room hash"/>
                     <TextBlock Grid.Column="2" Classes="Head" Text="Rooms.md"/>
@@ -180,8 +181,8 @@
                     <TextBlock Grid.Column="10" Classes="HeadCenter" Text="Stash"
                                ToolTip.Tip="Add this room to your stash rooms when you accept the loop. Ticked where MegaMUD marked a stash point."/>
                     <TextBlock Grid.Column="11" Classes="Head" Text="Command"/>
-                    <TextBlock Grid.Column="12" Classes="Head" Text="Delay ms"
-                               ToolTip.Tip="Milliseconds to wait after the command before moving on. Ignored with no command."/>
+                    <TextBlock Grid.Column="12" Classes="Head" Text="Delay (min / s)"
+                               ToolTip.Tip="Minutes and seconds to wait after the command before moving on, in real time from the command. Ignored with no command."/>
                     <TextBlock Grid.Column="13" Classes="HeadCenter" Text="NR" ToolTip.Tip="Do not rest in this room"/>
                     <TextBlock Grid.Column="14" Classes="HeadCenter" Text="NA" ToolTip.Tip="Do not attack in this room"/>
                     <TextBlock Grid.Column="15" Classes="HeadCenter" Text="RH" ToolTip.Tip="Rest up here — HP"/>
@@ -196,7 +197,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:MpTranslatedRowViewModel">
                         <Grid Classes="StepRow" Classes.Removed="{Binding IsRemoved}"
-                              ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,64,26,26,26,26,22,92">
+                              ColumnDefinitions="34,74,150,64,*,130,9,20,84,1.4*,44,130,132,26,26,26,26,22,92">
                             <TextBlock Grid.Column="0" Classes="Cell" Text="{Binding NumberText}"/>
                             <TextBlock Grid.Column="1" Classes="Cell" Text="{Binding Source.Hash}" FontFamily="monospace"/>
                             <TextBlock Grid.Column="2" Classes="Cell" Text="{Binding Source.RoomsMdName}"
@@ -222,14 +223,12 @@
                                      Text="{Binding Command, Mode=TwoWay}"
                                      PlaceholderText="command"
                                      ToolTip.Tip="Sent when the loop reaches this room."/>
-                            <NumericUpDown Grid.Column="12"
-                                           Value="{Binding DelayMs, Mode=TwoWay}"
-                                           Minimum="0" Maximum="600000" Increment="100"
-                                           FormatString="0" ShowButtonSpinner="False"
-                                           FontSize="11" Height="22" MinHeight="22" Padding="4,0"
-                                           Margin="0,0,6,0" VerticalAlignment="Center"
-                                           VerticalContentAlignment="Center"
-                                           ToolTip.Tip="Milliseconds to wait after the command before moving on. Ignored with no command."/>
+                            <ctl:LoopDelayEditor Grid.Column="12"
+                                                 DelayMs="{Binding DelayMs, Mode=TwoWay}"
+                                                 ShowSpinners="False"
+                                                 FontSize="11" Margin="0,0,6,0"
+                                                 VerticalAlignment="Center"
+                                                 ToolTip.Tip="Minutes and seconds to wait after the command before moving on, in real time from the command. Ignored with no command."/>
                             <CheckBox Grid.Column="13" Classes="Cell" IsChecked="{Binding DoNotRest, Mode=TwoWay}"
                                       ToolTip.Tip="Do not rest in this room"/>
                             <CheckBox Grid.Column="14" Classes="Cell" IsChecked="{Binding DoNotAttack, Mode=TwoWay}"

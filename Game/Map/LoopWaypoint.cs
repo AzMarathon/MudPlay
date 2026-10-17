@@ -27,7 +27,7 @@ public sealed class LoopWaypoint
     // Delay in milliseconds after sending Command before advancing to the
     // next waypoint. Ignored when Command is null / empty. 0 means "advance
     // on the next prompt" (same contract as v2 CommandLoopStep.DelayMs == 0).
-    public int DelayMs { get; set; }
+    public long DelayMs { get; set; }
 
     // When true, the loop must NOT rest in THIS room even if HP/MA drop below
     // the "rest if below" gates — it advances instead (a room too dangerous to
@@ -57,7 +57,7 @@ public sealed class LoopWaypoint
 
     public LoopWaypoint() { }
 
-    public LoopWaypoint(RoomKey key, string? command = null, int delayMs = 0, bool doNotRest = false, bool doNotAttack = false)
+    public LoopWaypoint(RoomKey key, string? command = null, long delayMs = 0, bool doNotRest = false, bool doNotAttack = false)
     {
         Room        = key.ToString();
         Command     = command;

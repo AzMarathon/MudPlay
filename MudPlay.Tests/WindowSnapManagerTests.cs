@@ -25,6 +25,33 @@ public sealed class WindowSnapManagerTests
         Assert.Equal(10, shift);    // move right so c.Right meets v.Left
     }
 
+    // A full-height main window's bottom is the taskbar's top: snapping a panel
+    // below it put the panel behind the taskbar, where it could hardly be grabbed.
+    [Fact]
+    public void ComputeSnap_NeverPutsTheTitleBarOffTheWorkingArea()
+    {
+        PixelRect work = new(0, 0, 1920, 1040);
+        PixelRect main = new(0, 0, 900, 1040);
+        PixelRect nav = new(100, 1030, 600, 400);   // top 10px above main's bottom
+
+        (int axis, _) = WindowSnapManager.ComputeSnap(nav, new[] { main }, Threshold, new[] { work });
+
+        Assert.Equal(0, axis);
+    }
+
+    [Fact]
+    public void ComputeSnap_AnEdgeInsideTheWorkingArea_StillSnaps()
+    {
+        PixelRect work = new(0, 0, 1920, 1040);
+        PixelRect main = new(0, 0, 900, 600);
+        PixelRect nav = new(100, 608, 600, 400);
+
+        (int axis, int shift) = WindowSnapManager.ComputeSnap(nav, new[] { main }, Threshold, new[] { work });
+
+        Assert.Equal(2, axis);
+        Assert.Equal(-8, shift);
+    }
+
     [Fact]
     public void ComputeSnap_BottomEdgeNearTopEdge_SnapsY()
     {

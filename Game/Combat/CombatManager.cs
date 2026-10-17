@@ -502,6 +502,12 @@ public sealed partial class CombatManager : IDisposable
 
     public void NoteMoveRefused()
     {
+        // A refused move never left the room (knocked flat, a bonk), so the surprise
+        // spent here stays spent. Re-opened, it held every heal for a backstab that
+        // could never come and would have opened the fight back up with `bs` (report
+        // paradigm-20261013-092344).
+        if (_openerSpentBeforeMove) _backstabOpenerConsumed = true;
+        _openerSpentBeforeMove = false;
         if (_disposed || (!_arrivalHeldForMove && _moveHoldSince is null)) return;
         EndMoveHoldInThisRoom("the move was refused");
     }
@@ -986,6 +992,7 @@ public sealed partial class CombatManager : IDisposable
     // attack-last member swung before the attack-after one). Every qualifying announce
     // that lands after ours is answered — there's no per-round cap (user, 2026-09-28).
     private static readonly TimeSpan RefireSettle = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan RefireAnswerWindow = TimeSpan.FromSeconds(2);
     private int _refireGeneration;
     private Action<TimeSpan, Action>? _scheduleRefireSettle;
 
@@ -1747,7 +1754,11 @@ public sealed partial class CombatManager : IDisposable
         // Only a room read anew says we've landed: the old roster is dispatched again
         // by several paths while the move is still in flight.
         bool landed = freshRead || obs.Source == RoomObservationSource.RoomChange;
-        if (landed) DropMoveHold();
+        if (landed)
+        {
+            DropMoveHold();
+            _openerSpentBeforeMove = false;
+        }
 
         // The roster says whether the monster a break holds the attack on has died
         // or gone. When the hold ends here the rest of this pass engages whatever
@@ -2205,16 +2216,22 @@ public sealed partial class CombatManager : IDisposable
         // with a normal attack (the chooser's BS gate suppresses the bs there).
         // Mid-flee: don't open anything in the room we're leaving (a swipe on the way
         // out would draw an attack — or a `bs` — that lands in the next room).
+        // A resume that stands down for the run leaves the interrupt armed: when the
+        // run finds no way out (every move refused while knocked flat), the next swing
+        // at us is what brings the attack back. Cleared, nothing re-engaged until the
+        // room changed, and the fight was never answered (report paradigm-20261013-092344).
         if (_isFleeInFlight?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "fleeing — not engaging on the way out");
             _currentTarget = null;
+            if (_resumeBypassEngagedGuard) _combatOff = true;
             return;
         }
         if (_keepRunning?.Invoke() == true)
         {
             _log?.Combat(LogCategory, "still below the run trigger — running on, not turning to fight");
             _currentTarget = null;
+            if (_resumeBypassEngagedGuard) _combatOff = true;
             return;
         }
 
@@ -2597,8 +2614,15 @@ public sealed partial class CombatManager : IDisposable
     // bs fires, so a move that doesn't go through can't backstab from a broken sneak.
     public void NoteMoveSent()
     {
-        if (_readSettings().DoBackstab) _backstabOpenerConsumed = false;
+        if (!_readSettings().DoBackstab) return;
+        if (_backstabOpenerConsumed) _openerSpentBeforeMove = true;
+        _backstabOpenerConsumed = false;
     }
+
+    // Set while a move that re-opened the surprise round hasn't landed yet: the
+    // opener was spent in the room it left.
+    private bool _openerSpentBeforeMove;
+
 
     public void PrepBackstabForMove()
     {
@@ -2609,6 +2633,7 @@ public sealed partial class CombatManager : IDisposable
         // about to enter — the next action there is a genuine backstab opener
         // again. Reset before the early-return so it still fires when we backstab
         // with the equipped weapon (no dedicated BackstabWeapon configured).
+        if (_backstabOpenerConsumed) _openerSpentBeforeMove = true;
         _backstabOpenerConsumed = false;
 
         if (string.IsNullOrWhiteSpace(settings.BackstabWeapon)) return;
@@ -3279,6 +3304,19 @@ public sealed partial class CombatManager : IDisposable
             _                            => false,
         };
         if (!fire) return;
+
+        // The game prints lines in the order it handled the commands, and answers each
+        // attack with its own *Combat Engaged* (GAME_MECHANICS "Non-swing actions break
+        // combat"). An announce read before our last attack was answered was handled
+        // ahead of it, so ours already lands after it: a re-fire there was the extra
+        // attack every fight sent (report paradigm-20261013-153710). The window lets a
+        // refused attack, which never gets its Engaged, stop blocking re-fires.
+        if (!_engagedSinceLastAttack && DateTimeOffset.Now - _lastAttackSentAt < RefireAnswerWindow)
+        {
+            _log?.Combat(LogCategory,
+                $"{settings.AttackTiming}: {announcer}'s announce came before our attack was answered — ours already lands after it, no re-fire");
+            return;
+        }
 
         // Coalesce the round's burst: record this as the pending re-fire and flush once
         // the announces go quiet (see RefireSettle), so several party announces collapse

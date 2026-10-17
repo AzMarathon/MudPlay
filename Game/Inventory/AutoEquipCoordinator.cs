@@ -152,6 +152,18 @@ public sealed class AutoEquipCoordinator : IDisposable
 
     public bool IsKeepingBossing => _keptBossing;
 
+    // A rest typed by hand gets its pre-rest gear only after the sit, and wearing
+    // gear stands a resting character up (GAME_MECHANICS "Gear swaps interrupt
+    // resting, not meditating"). So once that gear has gone out, `rest` is sent
+    // again, and the stand the wear causes isn't taken for the end of the rest.
+    private readonly Action? _resumeRest;
+    private readonly Func<bool>? _healthOwnsRest;
+    private DateTimeOffset? _reRestOwedSince;
+    private DateTimeOffset _lastReRestAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan ReRestWindow = TimeSpan.FromSeconds(5);
+
+    public bool ReRestOwed => _reRestOwedSince is not null;
+
     public AutoEquipCoordinator(
         PlayerState player,
         Func<EquipmentSettings> readEquipment,
@@ -169,7 +181,9 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<bool>? navIdle = null,
         Func<TimeSpan, Action, IDisposable>? scheduleAfter = null,
         Func<bool>? restJustEnded = null,
-        Func<Game.Map.RoomKey?, BossTravel>? bossTravel = null)
+        Func<Game.Map.RoomKey?, BossTravel>? bossTravel = null,
+        Action? resumeRest = null,
+        Func<bool>? healthOwnsRest = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -193,6 +207,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         _navIdle = navIdle;
         _scheduleAfter = scheduleAfter;
         _bossTravel = bossTravel;
+        _resumeRest = resumeRest;
+        _healthOwnsRest = healthOwnsRest;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
@@ -255,6 +271,7 @@ public sealed class AutoEquipCoordinator : IDisposable
     // fight and reverts to Default only once recovered, the long-standing rule.
     private void OnCombatChanged(bool inCombat)
     {
+        if (inCombat) ForgetReRest();
         // A *Combat Off* cancels a deferred travelling→Default swap — the engage
         // that armed it was flicker, so we stay in the movement set.
         if (!inCombat) CancelPendingMovingCombatSwap();
@@ -424,6 +441,7 @@ public sealed class AutoEquipCoordinator : IDisposable
     // OnMovementStarted / Stopped own that gear.
     public void OnMoveSent()
     {
+        ForgetReRest();   // a typed move stands us up on purpose
         EquipmentSettings cfg = _readEquipment();
         if (!cfg.WhileMovingOnManualMoves) { EndManualMovement(); return; }
         if (_navIdle?.Invoke() != true) return;
@@ -815,6 +833,18 @@ public sealed class AutoEquipCoordinator : IDisposable
     // the stand instead.
     public void OnPreRestSetStreamed()
     {
+        if (_reRestOwedSince is { } owedSince)
+        {
+            _reRestOwedSince = null;
+            if (!_player.InCombat && _now() - owedSince <= ReRestWindow)
+            {
+                _lastReRestAt = _now();
+                _log?.Info(EquipmentManager.LogCategory,
+                    "the rest gear's wear stood a hand-typed rest up — resting again");
+                _resumeRest!();
+                return;
+            }
+        }
         if (_hpGateAsserted() || _maGateAsserted()) return;
         if (_restJustEnded?.Invoke() != true) return;
         _log?.Info(EquipmentManager.LogCategory,
@@ -850,8 +880,15 @@ public sealed class AutoEquipCoordinator : IDisposable
             _inMovementSet = false;
             bool ungated = !(_hpGateAsserted() || _maGateAsserted());
             if (Fire(restType) && ungated)
+            {
                 _log?.Info(EquipmentManager.LogCategory,
                     $"sat down with no rest gate held — '{restType}' stays on until the stand");
+                // One re-rest per sit: the sit it brings finds the gear already on.
+                if (to == PlayerPosition.Resting && _resumeRest is not null
+                    && _healthOwnsRest?.Invoke() != true
+                    && _now() - _lastReRestAt > ReRestWindow)
+                    _reRestOwedSince = _now();
+            }
         }
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
         {
@@ -860,6 +897,15 @@ public sealed class AutoEquipCoordinator : IDisposable
             // rest never left Default (or the user hand-equipped some other set),
             // so a Default fire here would clobber that loadout for nothing.
             if (!UsingRestingSwapSets()) return;
+            // The rest gear's own wear stood a hand-typed rest up, and `rest` is (or
+            // is about to be) sent again: the rest isn't over.
+            if ((_reRestOwedSince is { } owed && _now() - owed <= ReRestWindow)
+                || _now() - _lastReRestAt <= ReRestWindow)
+            {
+                _log?.Debug(EquipmentManager.LogCategory,
+                    "auto-equip 'Default' held: the rest gear's wear stood us up and the rest is being resumed");
+                return;
+            }
             // Standing up mid-recovery is transient — a between-round cast, a loot
             // grab, or the pre-rest swap's own wear breaks rest, and the
             // HealthManager immediately re-issues it. Reverting to Default here
@@ -898,6 +944,12 @@ public sealed class AutoEquipCoordinator : IDisposable
         EquipmentSettings cfg = _readEquipment();
         return cfg.Sets.Any(s => s.Enabled
             && (s.Trigger == EquipTriggerType.PreRestHp || s.Trigger == EquipTriggerType.PreRestMana));
+    }
+
+    private void ForgetReRest()
+    {
+        _reRestOwedSince = null;
+        _lastReRestAt = DateTimeOffset.MinValue;
     }
 
     private static bool IsRestPosture(PlayerPosition p) =>

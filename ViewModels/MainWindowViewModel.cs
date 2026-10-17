@@ -2807,6 +2807,8 @@ public partial class MainWindowViewModel : ObservableObject
         // (mis-authored / MegaMUD-holdover) step never matches and LoggedIntoGame
         // never comes — the reported "did not re-enter on disconnect" case.
         automator.StepAdvanced += () => AppServices.Current.MainMenuEntry.KeepArmed();
+        automator.StepSkipped += reason => AppServices.Current.Log.Info("LoginAuto",
+            $"'{bbsName}': {reason} — type it at the prompt; the rest of the logon steps carry on");
         automator.Aborted += reason =>
         {
             AppServices.Current.Log.Warn("LoginAuto", $"'{bbsName}': {reason}");

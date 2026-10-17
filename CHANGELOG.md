@@ -1,5 +1,23 @@
 # Version history
 
+## 3.180.42
+
+- Logon steps run without a saved username or password: that step is left for you to type, the menu steps after it still go
+- The active combat profile's weapons follow the Default gear set when the Workshop changes it
+- A run that finds no way out (knocked flat) fights back instead of standing there; a refused move no longer re-opens the backstab
+- Attack last: no third attack when another member's re-fire crosses ours
+- Players Seen counts a player beside you before any `who`
+- Party window shows mana for a MegaMUD member whose health reply carries status text
+- Route items: party members' `@have` answers are counted (MudPlay and MegaMUD), the climbing harness isn't asked about for a rope-and-grapple route, and a rope fetched for a member isn't auto-dropped
+- Bank and sell trips keep the loop's own no-attack and lair-only rooms on the way out and back
+- After a bank trip the loop's step counter keeps the numbers it had
+- Loop room-command delays are set in minutes and seconds and run in real time from the command, fights included
+- A typed `rest` rests again after its pre-rest gear, instead of standing up and going back to Default
+- Window snapping waits for the drag to end and never pins a window behind the taskbar
+- Settings no longer changes the terminal font on open, or swaps a font it doesn't list for the default
+- Adding a toolbar button widens the window to show it
+- bug reports addressed: paradigm-20261012-134537, paradigm-20261012-134718, paradigm-20261013-092344, paradigm-20261013-153710, paradigm-20261013-173152, paradigm-20261015-085123, paradigm-20261015-095304, paradigm-20261016-031735, paradigm-20261015-160835, paradigm-20261014-180148, paradigm-20261015-202943
+
 ## 3.180.27
 
 - Importing game data with Profile Management open no longer looks frozen: the import closes that window first

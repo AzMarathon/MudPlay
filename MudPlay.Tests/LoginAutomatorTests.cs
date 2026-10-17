@@ -286,49 +286,77 @@ public sealed class LoginAutomatorTests
     }
 
     [Fact]
-    public async Task UsernamePlaceholder_NoUsernameConfigured_Aborts()
+    public async Task UsernamePlaceholder_NoUsernameSaved_SkipsTheStep_WithoutAborting()
     {
         AutomationStep s = new("Login:", "{username}");
-        (LoginAutomator a, _) = Build(username: null, steps: s);
-        string? abortReason = null;
+        (LoginAutomator a, ConcurrentQueue<string> sent) = Build(username: null, steps: s);
+        string? abortReason = null, skipReason = null;
         a.Aborted += r => abortReason = r;
+        a.StepSkipped += r => skipReason = r;
         a.Start();
         a.Feed(Ascii("Login:"));
 
         await Task.Delay(20);
-        Assert.NotNull(abortReason);
-        Assert.Contains("{username}", abortReason);
+        Assert.Null(abortReason);
+        Assert.Contains("no username", skipReason);
+        Assert.False(sent.TryDequeue(out _));
     }
 
     [Fact]
-    public async Task PasswordPlaceholder_NoResolverConfigured_Aborts()
+    public async Task PasswordPlaceholder_NoPasswordSaved_SkipsTheStep_WithoutAborting()
     {
         AutomationStep s = new("Password:", "{password}");
-        (LoginAutomator a, _) = Build(resolvePassword: null, steps: s);
-        string? abortReason = null;
+        (LoginAutomator a, ConcurrentQueue<string> sent) = Build(resolvePassword: null, steps: s);
+        string? abortReason = null, skipReason = null;
         a.Aborted += r => abortReason = r;
+        a.StepSkipped += r => skipReason = r;
         a.Start();
         a.Feed(Ascii("Password:"));
 
         await Task.Delay(20);
-        Assert.NotNull(abortReason);
-        Assert.Contains("{password}", abortReason);
+        Assert.Null(abortReason);
+        Assert.Contains("no password", skipReason);
+        Assert.False(sent.TryDequeue(out _));
     }
 
     [Fact]
-    public async Task PasswordPlaceholder_ResolverReturnsNull_Aborts()
+    public async Task PasswordPlaceholder_SavedPasswordUnreadable_SkipsTheStep_WithoutAborting()
     {
         AutomationStep s = new("Password:", "{password}");
-        (LoginAutomator a, _) = Build(
+        (LoginAutomator a, ConcurrentQueue<string> sent) = Build(
             resolvePassword: () => Task.FromResult<string?>(null), steps: s);
-        string? abortReason = null;
+        string? abortReason = null, skipReason = null;
         a.Aborted += r => abortReason = r;
+        a.StepSkipped += r => skipReason = r;
         a.Start();
         a.Feed(Ascii("Password:"));
 
         await Task.Delay(20);
-        Assert.NotNull(abortReason);
-        Assert.Contains("not found", abortReason);
+        Assert.Null(abortReason);
+        Assert.Contains("can't be read", skipReason);
+        Assert.False(sent.TryDequeue(out _));
+    }
+
+    [Fact]
+    public async Task NoCredentialsSaved_TheMenuStepsAfterTheLoginStillRun()
+    {
+        (LoginAutomator a, ConcurrentQueue<string> sent) = Build(
+            username: null, resolvePassword: null,
+            steps: [new("Login:", "{username}"), new("Password:", "{password}"), new("Menu:", "E")]);
+        bool loggedIn = false;
+        a.LoggedIntoGame += () => loggedIn = true;
+        a.Start();
+        a.Feed(Ascii("Login:"));
+        await Task.Delay(20);
+        a.Feed(Ascii("Password:"));
+        await Task.Delay(20);
+        Assert.False(sent.TryDequeue(out _));
+
+        a.Feed(Ascii("Menu:"));
+        await Task.Delay(20);
+        Assert.True(sent.TryDequeue(out string? menu));
+        Assert.Equal("E\r", menu);
+        Assert.True(loggedIn);
     }
 
     private static PasswordProtector NewProtector()

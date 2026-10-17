@@ -18,6 +18,30 @@ public sealed class LoopCombatSuppressionTests
         return loop;
     }
 
+    // A bank trip stops the loop, but the loop it will resume still decides its own
+    // rooms: its no-attack room isn't fought in on the way out (report
+    // paradigm-20261015-160835).
+    [Fact]
+    public void DepositTrip_ResumingALoop_ItsRoomSettingsStillApply()
+    {
+        Loop loop = LoopWith(onlyLair: false, (2155, false), (2150, true));
+        DetourResume none = default;
+
+        Loop? judged = LoopCombatSuppression.DetourLoop(
+            depositing: true, new DetourResume(DetourResumeKind.Loop, loop), selling: false, none);
+
+        Assert.Same(loop, judged);
+        Assert.True(LoopCombatSuppression.IsSuppressed(judged!, K(2150), currentIsLair: false));
+    }
+
+    [Fact]
+    public void Trips_NotResumingALoop_HaveNoLoopToJudgeBy()
+    {
+        Loop loop = LoopWith(onlyLair: false, (1, true));
+        Assert.Null(LoopCombatSuppression.DetourLoop(false, new DetourResume(DetourResumeKind.Loop, loop), false, default));
+        Assert.Null(LoopCombatSuppression.DetourLoop(true, new DetourResume(DetourResumeKind.Lair), false, default));
+    }
+
     [Fact]
     public void NeitherFlag_NotSuppressed()
     {
