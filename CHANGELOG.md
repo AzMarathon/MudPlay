@@ -1,5 +1,10 @@
 # Version history
 
+## 3.180.44
+
+- A follower still held (knocked down) when it follows the leader again says `@held` and re-sends its `@wait`, so the party can cure it instead of waiting it out; the same for blind, confused, diseased and poisoned
+- bug reports addressed: paradigm-20261014-214037
+
 ## 3.180.42
 
 - Logon steps run without a saved username or password: that step is left for you to type, the menu steps after it still go

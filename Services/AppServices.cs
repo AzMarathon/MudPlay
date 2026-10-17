@@ -5368,9 +5368,9 @@ public sealed class AppServices
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token
-        // ".@blind" etc. on say at apply only (MegaMUD parity — no 'on'/'off'),
-        // so other MudPlay clients mirror our state and a cure-holds caster can
-        // free us, and for the four curable ailments @waits the leader. POISON is
+        // ".@blind" etc. on say at apply (MegaMUD parity — no 'on'/'off'), and
+        // again on following a leader while still afflicted, so other MudPlay
+        // clients mirror our state and a cure-holds caster can free us, and for the four curable ailments @waits the leader. POISON is
         // never announced on say — it's par-owned (PartyManager). On CLEAR nothing
         // is said (MegaMUD sends no 'off'); only the @ok telepath releases the
         // leader's wait. The say only fires when we're in a party AND have no cure
@@ -5385,6 +5385,7 @@ public sealed class AppServices
             isInParty: () => PartyState.IsInParty,
             hasCureConfigured: HasCureConfigured,
             log: Log);
+        Party.FollowingLeader += AilmentSync.NoteFollowingLeader;
 
         // PartyAilmentTracker — inbound counterpart. Mirrors a member's
         // ".@poisoned" / ".@held" etc. say announce onto their party chip (via
