@@ -99,6 +99,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms =
             AppServices.Current?.RoomSearch?.QuestKillRooms();
         ItemSourceIndex? itemSources = AppServices.Current?.ItemSources;
+        MonsterDropIndex? itemDrops = AppServices.Current?.MonsterDrops;
+        string TierTitle(CrawledQuest c) => quests.Resolve(c.Flag, c.Step).Name is { } n && !string.IsNullOrWhiteSpace(n)
+            ? n : QuestTextFormatter.FallbackTitle(c);
 
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {
@@ -108,7 +111,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             Quests.Add(new QuestEditRowViewModel(
                 q.Flag, q.Step,
                 QuestTextFormatter.FallbackTitle(q),
-                string.Join("\n", QuestTextFormatter.StepLines(gameData, q, monsterRooms, itemSources)),
+                string.Join("\n", new[] { QuestTextFormatter.PriorTierLine(gameData, q, TierTitle) }
+                    .OfType<string>()
+                    .Concat(QuestTextFormatter.StepLines(gameData, q, monsterRooms, itemSources, itemDrops))),
                 QuestTextFormatter.Awards(gameData, q),
                 QuestTextFormatter.Bonuses(q.Bonuses),
                 QuestTextFormatter.Level(q.RequiredLevel),

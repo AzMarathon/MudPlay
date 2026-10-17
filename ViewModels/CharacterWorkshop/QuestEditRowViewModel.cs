@@ -105,7 +105,7 @@ public sealed partial class QuestEditRowViewModel : ObservableObject
     // The classes this quest is restricted to, one checkable row per class in the active
     // set. IsSelected persists as class Numbers on QuestDefinition.ClassRestrict — the
     // editor VM builds these (it owns the Classes table). The explicit override for the
-    // genuinely class-locked quests the crawl can't detect (Magebane, Tarl).
+    // genuinely class-locked quests the crawl can't detect (Magebane).
     public ObservableCollection<ClassRestrictOption> ClassOptions { get; } = new();
 
     public QuestEditRowViewModel(int flag, int step, string fallbackLabel,

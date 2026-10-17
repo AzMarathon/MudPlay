@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.48**
+> **Version 3.181.1**
 > - Settings search highlights matching tabs like Help's search, and no longer hides the rest
 > - It searches what each tab shows, tooltips included, with a match count under the tab list
 > - The open tab highlights its matching settings and scrolls to the first

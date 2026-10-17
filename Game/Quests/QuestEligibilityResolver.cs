@@ -11,7 +11,7 @@ namespace MudPlay.Game.Quests;
 // Beyond the crawl's own class/race guards it applies two player-facing gates:
 //   • an explicit per-quest class restriction (QuestDefinition.ClassRestrict) — the
 //     hand-set override for genuinely class-locked quests the crawl can't detect
-//     reliably (Magebane, Tarl), and
+//     reliably (Magebane), and
 //   • the character's alignment-quest checkboxes — an alignment-gated quest
 //     (CrawledQuest.RequiredAlignment) is eligible only when its bucket is enabled.
 // A null classId (the classless default profile) never triggers the class gates —

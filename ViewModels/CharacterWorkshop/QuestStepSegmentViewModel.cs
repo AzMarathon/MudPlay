@@ -8,12 +8,12 @@ public enum QuestStepLinkKind
 {
     None,   // plain prose — not clickable
     Walk,   // a (map/room) coordinate — walks there
-    Send,   // a 'command' — sends the text to the game as if typed
+    Send,   // a quoted command — sends the text to the game as if typed
 }
 
 // One inline run of a quest step row: either plain prose (Command null) or a
 // clickable token — a (map/room) coordinate that walks there (Kind Walk) or a
-// single-quoted command that gets typed at the game (Kind Send). The view renders
+// quoted command that gets typed at the game (Kind Send). The view renders
 // link runs as underlined hot-text (cyan for walk, green for send) and plain runs
 // as ordinary prose, so a single wrapped line can mix all three.
 public sealed class QuestStepSegmentViewModel
