@@ -9,16 +9,13 @@ namespace MudPlay.Terminal;
 // subscribes here — MessageRouter, ChatRouter, the Trigger engine, the prompt
 // parser, etc.
 //
-// Completion paths (in order of how the screen typically finishes a line):
-//   1. Scrolled off the top. The row left the live screen and landed in
-//      ScrollbackBuffer. This is the BBS-typical case (a server-sent LF at the
-//      bottom of the screen pushes the top row into history).
-//   2. Cursor moved off the row via \n or an explicit cursor-position change.
-//   3. Quiet-window timeout — any cell on the row gets overwritten after
-//      >50 ms of no further writes to it (the "row went quiet, treat as
-//      complete" rule).
+// Completion paths, both raised as TerminalEmulator.LineCompleted:
+//   1. A line feed: a server LF, or the wrap at the right margin, whose
+//      fragments are held and stitched onto the row that ends the line.
+//   2. The cursor leaving a written row by a vertical move. MajorMUD paints
+//      some screens with cursor positioning, and those rows never get an LF.
 //
-// Threading: LineEmitted fires on whatever thread bumped the scrollback (the
+// Threading: LineEmitted fires on whatever thread fed the emulator (the
 // emulator's Feed path, already on the UI dispatcher in production).
 // Subscribers that hand off to background work should Task.Run from their
 // handler.

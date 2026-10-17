@@ -1,6 +1,7 @@
 namespace MudPlay.Models.Settings;
 
-// UX-confirmation preferences shown in Settings → BBS's Display group.
+// UX-confirmation preferences: the "Show confirmations" boxes in Settings →
+// BBS + Display's Global client settings group.
 // Each flag governs whether the corresponding action prompts the user
 // before proceeding. Defaults are all false so the historical no-prompt
 // behaviour is preserved until the user opts in.

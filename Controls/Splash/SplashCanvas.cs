@@ -23,33 +23,24 @@ public sealed class SplashCanvas
 
     public SplashCanvas(TerminalScreen screen) => Screen = screen;
 
-    // ----- dirty-cell frame tracking ----------------------------------------
+    // ----- frame footprint tracking -----------------------------------------
     // Every Put records the cell it touched into _footprint; BeginFrame rolls that
     // into _prevFootprint and clears those cells back to background before the next
     // frame draws — so a frame only ever repaints its own moving footprint instead
-    // of the whole lens re-cleared every tick. _dirty is the union of the cells this
-    // frame cleared and freshly drew — the exact set a partial repaint must touch.
+    // of the whole lens re-cleared every tick.
     private HashSet<int> _footprint = new();
     private HashSet<int> _prevFootprint = new();
-    private readonly HashSet<int> _dirty = new();
     private static readonly Cell BlankCell = new(' ', BgAttr);
-
-    // Cell indices (y * Cols + x) that changed this frame.
-    public IReadOnlyCollection<int> DirtyCells => _dirty;
 
     // Start a fresh animation frame: clear the previous frame's scene footprint back
     // to background (the header and untouched background persist), then let the scene
     // draw. Call once before scene.Render each tick.
     public void BeginFrame()
     {
-        _dirty.Clear();
         (_prevFootprint, _footprint) = (_footprint, _prevFootprint);
         _footprint.Clear();
         foreach (int idx in _prevFootprint)
-        {
             Screen.Put(idx % Cols, idx / Cols, BlankCell);
-            _dirty.Add(idx);
-        }
     }
 
     // Drop all footprint state — used after a full redraw (init / resize) where the
@@ -58,7 +49,6 @@ public sealed class SplashCanvas
     {
         _footprint.Clear();
         _prevFootprint.Clear();
-        _dirty.Clear();
     }
 
     // ----- palette (shared mud tones) ---------------------------------------
@@ -81,9 +71,7 @@ public sealed class SplashCanvas
         if (ch == ' ') return;
         if (x < 0 || x >= Cols || y < TitleRows || y >= Rows) return;
         Screen.Put(x, y, new Cell(ch, attr));
-        int idx = y * Cols + x;
-        _footprint.Add(idx);
-        _dirty.Add(idx);
+        _footprint.Add(y * Cols + x);
     }
 
     // Draw a string left-to-right from (x, y). Spaces leave the underlying cell
@@ -97,8 +85,8 @@ public sealed class SplashCanvas
     // colour) rather than a foreground block glyph. A '█' block and a bg-filled cell
     // look identical, and the softer dither shades flatten to solid colour — the win
     // is that a run of same-colour mud renders as ONE batched rectangle with no
-    // per-cell FormattedText, which is what made the whole-band mud fills (cover /
-    // slide) throttle the splash. Colour still varies by intensity + noise (MudAttr),
+    // glyphs to draw, which keeps the whole-band mud fills (cover / slide) cheap.
+    // Colour still varies by intensity + noise (MudAttr),
     // so the mud keeps its shading; only the fine ░▒▓ grain is gone. Unlike Put, this
     // writes an opaque cell even though the glyph is a space, so it can't be skipped.
     public void PutMud(int x, int y, double it, int sx, int sy)
@@ -111,9 +99,7 @@ public sealed class SplashCanvas
     {
         if (x < 0 || x >= Cols || y < TitleRows || y >= Rows) return;
         Screen.Put(x, y, new Cell(' ', attr));
-        int idx = y * Cols + x;
-        _footprint.Add(idx);
-        _dirty.Add(idx);
+        _footprint.Add(y * Cols + x);
     }
 
     // Flat background-colour rectangle (inclusive bounds) — cheap batched fill.
@@ -124,14 +110,7 @@ public sealed class SplashCanvas
             PutBg(x, y, attr);
     }
 
-    // Draw each line of a multi-line sprite (rows split on '\n') anchored at
-    // (x, y). Spaces are transparent — see Str.
-    public void Sprite(int x, int y, string[] rows, CellAttributes attr)
-    {
-        for (int r = 0; r < rows.Length; r++) Str(x, y + r, rows[r], attr);
-    }
-
-    // A rough integer line (Bresenham) — used for arms, ropes, wiper blades.
+    // A rough integer line (Bresenham) for limbs and other thin strokes.
     public void Line(int x0, int y0, int x1, int y1, char ch, CellAttributes attr)
     {
         int dx = Math.Abs(x1 - x0), dy = Math.Abs(y1 - y0);
@@ -145,14 +124,6 @@ public sealed class SplashCanvas
             if (e2 > -dy) { err -= dy; x0 += sx; }
             if (e2 < dx) { err += dx; y0 += sy; }
         }
-    }
-
-    // Fill a solid rectangle of one glyph (inclusive bounds).
-    public void FillRect(int x0, int y0, int x1, int y1, char ch, CellAttributes attr)
-    {
-        for (int y = y0; y <= y1; y++)
-        for (int x = x0; x <= x1; x++)
-            Put(x, y, ch, attr);
     }
 
     // ----- mud language -----------------------------------------------------
@@ -339,26 +310,9 @@ public sealed class SplashCanvas
         }
     }
 
-    // Clear a caked lens from the CENTRE OUT: a growing (ragged) clear disc reveals
-    // the empty lens, mud only surviving outside it, until p=1 clears everything.
-    // An alternative ending to the slide, for scenes that read better opening up.
-    public void ClearFromCenter(double p)
-    {
-        int cx = Cols / 2, cy = (Rows + TitleRows) / 2;
-        double r = EaseIn(p) * MaxRadius() * 1.45;
-        for (int y = TitleRows; y < Rows; y++)
-        for (int x = 0; x < Cols; x++)
-        {
-            double dx = x - cx, dy = (y - cy) * 2.0;
-            double edge = r * (0.85 + 0.3 * Noise(x, y));
-            if (Math.Sqrt(dx * dx + dy * dy) < edge) continue;   // cleared
-            PutSheet(x, y, x, y);
-        }
-    }
-
     // Clear a caked lens from the EDGES IN: the surviving mud is a shrinking central
-    // island, the outer ring clearing first, until p=1 clears everything. The mirror
-    // of ClearFromCenter, for scenes that read better closing in than opening up.
+    // island, the outer ring clearing first, until p=1 clears everything. An
+    // alternative ending to the slide, for scenes that read better closing in.
     public void ClearFromEdges(double p)
     {
         int cx = Cols / 2, cy = (Rows + TitleRows) / 2;

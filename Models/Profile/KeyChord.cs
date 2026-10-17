@@ -18,9 +18,8 @@ public readonly record struct KeyChord(
     // True when no key is set.
     public bool IsEmpty => Key == Key.None;
 
-    // Display label like "Ctrl+Shift+F1" — used by menu InputGesture text and
-    // the toolbar tooltip. Empty chord renders as an empty string so callers can
-    // fall back to a placeholder.
+    // Display label like "Ctrl+Shift+F1", as menus and tooltips show it. Empty
+    // chord renders as an empty string so callers can fall back to a placeholder.
     public string Label
     {
         get

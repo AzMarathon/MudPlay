@@ -189,12 +189,7 @@ public sealed class CombatLineClassifierTests
         LineExtractor extractor = new(emulator);
         var router = new MudPlay.Services.MessageRouter();
         using var classifier = new CombatLineClassifier(router);
-        Dictionary<string, CombatLineKind> kinds = new();
-        extractor.LineEmitted += line =>
-        {
-            router.Dispatch(line);
-            kinds[line.Text.Trim()] = classifier.LastKind;
-        };
+        extractor.LineEmitted += router.Dispatch;
 
         void Feed(string text) => emulator.Feed(System.Text.Encoding.Latin1.GetBytes(text));
         Feed($"{esc}[0;37m*Combat Engaged*\r\n");
@@ -204,11 +199,7 @@ public sealed class CombatLineClassifierTests
         Feed($"{esc}[0;32mObvious exits: south, east, west\r\n");
         Feed($"{esc}[0;37m[HP=724/MA=518]:");
 
-        Assert.Equal(CombatLineKind.PlayerHit,
-            kinds["A hellish storm of fire and brimstone scorches your foes for 773 damage!"]);
-        Assert.Equal(CombatLineKind.MonsterMissYou, kinds["The brute zombie swings at you with its arm!"]);
-        Assert.Equal(CombatLineKind.None, kinds["Smoldering Fields"]);
-
+        // The combat log (the bug report's Combat lines) is what shows each judgement.
         string log = classifier.RenderLog();
         Assert.Contains("The brute zombie swings at you with its arm!    [Combat: Monster Miss (you)]\n", log);
         Assert.Contains("\nSmoldering Fields\n", log);

@@ -122,9 +122,9 @@ public sealed class ChatRouterTests
         var (router, chat, entries) = Setup();
         // LineExtractor's prompt-split can re-emit an engine-fired reply's own
         // text as an ordinary content line when it lands on the same row as the
-        // still-displayed prompt — so the exact same text can reach
-        // TryCaptureTelepath twice for one physical send: once via
-        // ObserveOutbound (the raw bytes), once via the on-screen echo dispatch.
+        // still-displayed prompt — so the exact same text can reach the pending
+        // telepath queue twice for one physical send: once via ObserveOutbound
+        // (the raw bytes), once via the on-screen echo (TryCaptureShownTelepath).
         // Without a dedup guard this leaves one stale entry in the queue per
         // send, permanently drifting every later pairing for the rest of the
         // session (the reported bug: a bloodstone-brooch answer surfacing on an

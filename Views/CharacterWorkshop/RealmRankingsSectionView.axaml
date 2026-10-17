@@ -66,10 +66,11 @@
                 Background="#000000"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="1" CornerRadius="4">
-            <!-- Columns auto-size to their widest value (header or
-                 cell), so nothing truncates and no column carries
-                 dead buffer; the grid is Left-aligned to the same end
-                 as the Border. -->
+            <!-- Columns start Auto, then SizeLeaderboardColumns pins
+                 each to the widest value across the whole capture
+                 (header or cell), so nothing truncates and the widths
+                 don't creep as rows scroll in. The grid is Left-aligned
+                 to the same end as the Border. -->
             <DataGrid Classes="Leaderboard"
                       x:Name="LeaderboardGrid"
                       ItemsSource="{Binding LeaderboardView}"

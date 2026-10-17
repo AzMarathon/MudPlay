@@ -145,13 +145,14 @@ Top-level folders, each with one responsibility (no catch-all `Util/` / `Common/
 
 All app data lives directly under the app folder, resolved per-platform by `AppPaths` (Linux `~/.local/share/MudPlay/`, Windows `%AppData%\MudPlay\`, macOS `~/Library/Application Support/MudPlay/`) — no nested `Data/` level (older installs are lifted out of it on first launch by `FlattenDataSubfolder`). Files store **deltas only**, stacked per the 4-tier hierarchy:
 
-- `game data/{set}/*.json` — imported MDB tables (Defaults tier, read-only base).
+- `game data/{set}/*.json` — imported MDB tables (Defaults tier, read-only base); `game data/{set}/Loops/` holds the set's loops and Auto-Lair setups.
 - `Global/global.json` — Global-tier setting + game-data deltas, default active set.
-- `BBS/{bbs}.json` — BBS-tier deltas + connection info (host / port / accounts).
-- `profiles/{char}.json` — character workspace + Char-tier deltas (auth, macros / triggers / events, equipment sets, favorites, quest state, death history, statline).
+- `BBS/{bbs}/bbs.json` — BBS-tier setting deltas + connection info (host / port / accounts) and the BBS's realms.
+- `BBS/{bbs}/Realms/{realm}/` — the BBS tier's game-data overrides (they follow the active realm) and the realm's shared files: players seen, bosses and boss timers, learned room names, staged message candidates, Roomba data.
+- `BBS/{bbs}/profiles/{char}/profile.json` — character workspace + Char-tier deltas (auth, macros / triggers / events, equipment sets, favorites, quest state, death history, statline); the character's side files (e.g. `DeathLogs/`) sit in the same folder.
 - `Logs/` — debug logs.
 
-Merge order, first hit wins: `profiles/{char}` → `BBS/{bbs}` → `Global/global` → app Defaults → game-data Defaults.
+Merge order, first hit wins: `BBS/{bbs}/profiles/{char}` → `BBS/{bbs}` (settings) / `Realms/{realm}` (game data) → `Global/global` → app Defaults → game-data Defaults.
 
 ## Architecture rules (cross-cutting)
 

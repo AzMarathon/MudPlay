@@ -26,7 +26,7 @@ public sealed class LeaderboardSnapshotStore
     private readonly List<LeaderboardSnapshot> _snapshots = new();
 
     // Fires on load against a new realm and on every capture / clear. The
-    // Calculators tab rebuilds its table from this.
+    // Workshop's Realm Rankings section rebuilds its table from this.
     public event Action? Changed;
 
     // Raised for every listing captured from the game, kept or not: a capture that

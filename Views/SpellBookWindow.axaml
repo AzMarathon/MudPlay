@@ -36,7 +36,7 @@
     <DockPanel LastChildFill="True">
 
         <!-- ============ Category tabs ============ -->
-        <!-- All / Heals / Buffs / Attacks / Party+AoE. A spell can satisfy more
+        <!-- All / Heals / Buffs / Attacks / Party/AoE. A spell can satisfy more
              than one non-All tab (SpellBookCategoryClassifier), so this just
              re-filters the one Rows grid below rather than swapping content
              per tab — TabStrip is the header-only Avalonia control for exactly
@@ -191,10 +191,8 @@
 
         <!-- ============ Spell rows ============ -->
         <!-- DataGrid for user-adjustable columns (resize / reorder / sort).
-             ReflectionBinding: column bindings resolve against the row item
-             (SpellBookRowViewModel); the DataGrid's auto-wrapped collection
-             view defeats compiled-binding item-type inference, matching the
-             SpellCoverageReportWindow pattern. -->
+             Each column is a typed template so its bindings stay compiled
+             despite the DataGrid's wrapped collection view. -->
         <DataGrid ItemsSource="{Binding Rows}"
                   DoubleTapped="OnSpellRowDoubleTapped"
                   Background="{StaticResource ChromeBgSunkenBrush}"

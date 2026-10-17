@@ -104,10 +104,11 @@ public sealed class SpellsSettings
     // 3.
     public int ManaRegenRerollCap { get; set; } = 3;
 
-    // Cast when HP is full and we're between actions (room spell, debuff, etc.).
+    // LEGACY: the old dedicated "cast when HP / mana is full" picks. A buff slot's
+    // OnlyWhenHpFull / OnlyWhenMaFull does this now; the profile migration folds
+    // these into such a slot. Kept so an older profile (or a MegaMUD import) still
+    // loads and migrates.
     public string? WhenHpFullSpell { get; set; }
-
-    // Cast when MA is full and we're between actions.
     public string? WhenMaFullSpell { get; set; }
 
     // ----- Cures ----------------------------------------------------
@@ -134,8 +135,9 @@ public sealed class SpellsSettings
 
     // ----- Utility --------------------------------------------------
 
-    // Cast when entering a dark room (pairs with the future Settings.Other
-    // "Provide light in dimly lit rooms" toggle).
+    // LEGACY: the old room-light spell pick. A self buff slot flagged OnlyWhenDark
+    // is what Auto-Light casts now; the profile migration folds this into such a
+    // slot. Kept so an older profile (or a MegaMUD import) still loads and migrates.
     public string? RoomLightSpell { get; set; }
 
     // ----- Bless slots (sparse) -------------------------------------
@@ -159,8 +161,8 @@ public sealed class SpellsSettings
     public Dictionary<int, int> BlessSlotRecastMargins { get; set; } = new();
 
     // Default recast lead when a bless slot (self or party) doesn't override it.
-    // Shared with PartyBlessSlot and the CastingDirector so the "15s before
-    // expiry" default lives in one place.
+    // Shared with BuffSlot and the CastingDirector so the "15s before expiry"
+    // default lives in one place.
     public const int DefaultBlessRecastMarginSec = 15;
 
     // Self-bless slots the Spells tab shows on a Stock realm. Stock MajorMUD

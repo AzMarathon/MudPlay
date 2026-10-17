@@ -124,7 +124,7 @@ public sealed class Loop
     [JsonIgnore]
     public int RoomCount => Waypoints.Count;
 
-    // ----- helpers (used by LoopManager + tests) ---------------------
+    // ----- constructors ---------------------
 
     [SetsRequiredMembers]
     public Loop() { Name = ""; }

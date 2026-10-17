@@ -37,7 +37,7 @@ namespace MudPlay.Game.Conditions;
 // in-party / no-cure rule applies to its say, and its @wait is never suppressible.
 //
 // The say wire format prefixes the token with a period — MajorMUD's say-channel
-// prefix — so .@poisoned is what lands on the wire.
+// prefix — so .@blind is what lands on the wire.
 //
 // Following a leader while still afflicted says the tokens again and re-asks the
 // @wait (NoteFollowingLeader). A held follower drops out of the party when the
@@ -243,7 +243,7 @@ public sealed class AilmentSyncEngine : IDisposable
     {
         if (_wireSender is null) return;
         // MajorMUD say channel — a line prefixed with '.' is spoken to
-        // the room. ".@poisoned" lets other MudPlay clients mirror us.
+        // the room. ".@blind" lets other MudPlay clients mirror us.
         byte[] bytes = Encoding.Latin1.GetBytes("." + token + "\r");
         _wireSender(bytes);
         _log?.Info(LogCategory, $"announced '{token}' on say");

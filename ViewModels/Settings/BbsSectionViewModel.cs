@@ -19,9 +19,9 @@ namespace MudPlay.ViewModels.Settings;
 // then commits the credential edits staged for every board the user touched —
 // both halves of the tab honour edits made across several boards in one visit,
 // not just the one selected when OK was pressed. Discard drops both caches and
-// reloads the currently-selected BBS from disk. Adding / deleting a BBS commits
-// immediately (those are structural, not field-level edits — the OK / Cancel
-// commit only covers field tweaks).
+// reloads the currently-selected BBS from disk. Adding / removing a BBS lives in
+// Profile Management; realm add / rename / remove here is staged and carried out
+// on OK.
 public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 {
     private readonly BbsProfileStore _bbsStore;
@@ -250,7 +250,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // death by the penalty is looked for after a hang-up outside a fight.
     [ObservableProperty] private bool _hangupOutsideFightPenaltyEnabled;
 
-    // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
+    // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZoneId) + its zone.
     // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
     // Default 21:00 in the computer's own zone (auto-detected); the zone is a
     // dropdown the user can override.
@@ -640,7 +640,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             return;
         }
 
-        // Move the whole Data/BBS/{old}/ subtree — bbs.json, side-files, and
+        // Move the whole BBS/{old}/ subtree — bbs.json, side-files, and
         // every nested character profile — to the new name. The old
         // Delete+Save pair recursively destroyed the nested profiles and left
         // every reference to the BBS name (credentials, recent list) dangling.

@@ -129,8 +129,8 @@ public sealed record MonsterOverlay
 
 // How the automation engines treat a monster on sight.
 //   Enemy — kill on sight.
-//   Neutral — don't attack unless attacked first (or unless "attack all
-//     monsters" is on in Combat settings).
+//   Neutral — don't attack unless attacked first (or unless the monster's
+//     Kill on sight box is ticked).
 //   Friend — never attack.
 //   Flee — actively run from on sight.
 //   Hangup — disconnect from the BBS on sight.

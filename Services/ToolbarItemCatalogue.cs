@@ -8,8 +8,8 @@ namespace MudPlay.Services;
 // Themes/Icons.axaml), tooltip, optional shortcut hint, and the
 // MainWindowViewModel command name to bind against.
 //
-// Both the Settings → Toolbar editor and the live MainWindow.axaml dynamic
-// toolbar read from this catalogue, so adding a new toolbar action is a one-line
+// Both the Settings → Toolbar + Shortcuts editor and the live MainWindow.axaml
+// dynamic toolbar read from this catalogue, so adding a new toolbar action is a one-line
 // entry plus a glyph in the icons theme — the editor surfaces it automatically
 // and the rendered toolbar resolves it through the same lookup.
 public static class ToolbarItemCatalogue
@@ -100,13 +100,13 @@ public static class ToolbarItemCatalogue
         new("OpenLogPane",        "Program Log",          "IconLog",
             "OpenLogPaneCommand",      ShortcutHint: "F4"),
         new("OpenMonsterIntel",   "Monster Intel",        "IconSearch",
-            "OpenMonsterIntelCommand", Tooltip: "Monster Intel — searchable monster reference: stats, elemental resists, attacks, loot, automation"),
+            "OpenMonsterIntelCommand", Tooltip: "Monster Intel — can you safely fight it? Hit chances, attacks, abilities and resistances"),
 
         // ----- Action menu surface -------------------------------------------
         // These mirror the Action menu in MainWindow.axaml. The CommandName
         // resolves by reflection to the matching [RelayCommand] on
         // MainWindowViewModel. Adding an entry here also makes the action
-        // available in the Settings → Toolbar picker.
+        // available in the Settings → Toolbar + Shortcuts picker.
 
         // Bulk one-shot actions.
         new("ActionGetAll",       "Get All",              "IconGetAll",

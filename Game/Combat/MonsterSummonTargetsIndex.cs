@@ -14,7 +14,7 @@ namespace MudPlay.Game.Combat;
 // a same-named record in another zone.
 //
 // The AbilVal/MinBase extraction mirrors the Game-Data browser's outgoing-summon
-// reader (MonstersSectionViewModel.SummonTargets); it's duplicated here rather
+// reader (MonsterMdbInfoBuilder.SummonTargets); it's duplicated here rather
 // than shared so the Game layer stays independent of the ViewModels layer. Built
 // lazily by joining the raw Monsters table to the raw Spells table, cached, and
 // dropped on game-data set switch — mirrors MonsterDeathSummonIndex.

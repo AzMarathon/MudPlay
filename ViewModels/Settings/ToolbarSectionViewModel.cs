@@ -182,7 +182,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(ChangeShortcutKeybindCommand))]
     private ToolbarRowViewModel? _selectedShortcutRow;
 
-    // Inline result notice for the most recent "Copy from profile" run —
+    // Inline result notice for the most recent "Import toolbar + Keybinds" run —
     // surfaced in the tab (never as a system toast). Lists keybinds that were
     // skipped because they clash with this profile's macros.
     [ObservableProperty] private string? _copyStatus;
@@ -468,7 +468,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
             ShortcutRows.Add(row);
         }
         // Keybind-only actions (no catalogue entry ⇒ no toolbar button, e.g. the
-        // File-menu New/Open/Save/Save As/Quit) surface here so their chords are
+        // File-menu Save profile / Quit) surface here so their chords are
         // still editable. Absorbs any future menu-only action automatically.
         foreach (BuiltInAction action in Enum.GetValues<BuiltInAction>())
         {
@@ -1201,7 +1201,7 @@ public sealed partial class ToolbarRowViewModel : ObservableObject
         }
         else if (BoundAction is { } keybindOnly)
         {
-            // Keybind-only action (File-menu New/Open/Save/Save As/Quit): no
+            // Keybind-only action (File-menu Save profile / Quit): no
             // catalogue entry, so no toolbar button and no icon, but it's still
             // rebindable from the Shortcuts list.
             DisplayLabel = KeybindingStore.ActionLabel(keybindOnly);

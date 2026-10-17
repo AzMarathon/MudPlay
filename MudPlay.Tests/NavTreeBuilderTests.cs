@@ -59,12 +59,14 @@ public sealed class NavTreeBuilderTests
         var target = new ObservableCollection<object>();
         var folders = new[] { "Cities", "Cities/Silvermere" };
 
-        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: false);
+        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: false,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), harvest: true, forceExpandAll: false);
         // User expands one folder against the collapse-by-default grain.
         FolderAt(target, "Cities").IsExpanded = true;
 
         // A rebuild (loop/lair/folder change) must not snap it back shut.
-        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: false);
+        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: false,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), harvest: true, forceExpandAll: false);
 
         Assert.True(FolderAt(target, "Cities").IsExpanded);
         Assert.False(FolderAt(target, "Cities/Silvermere").IsExpanded);
@@ -76,10 +78,12 @@ public sealed class NavTreeBuilderTests
         var target = new ObservableCollection<object>();
         var folders = new[] { "Cities", "Cities/Silvermere" };
 
-        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders);
+        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: true,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), harvest: true, forceExpandAll: false);
         FolderAt(target, "Cities").IsExpanded = false;
 
-        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders);
+        NavTreeBuilder.Sync<string>(target, System.Array.Empty<string>(), s => s, folders, defaultExpanded: true,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase), harvest: true, forceExpandAll: false);
 
         Assert.False(FolderAt(target, "Cities").IsExpanded);
         Assert.True(FolderAt(target, "Cities/Silvermere").IsExpanded);

@@ -87,8 +87,8 @@ public sealed class PlayerDeathMovementHalt : IDisposable
     }
 
     // Bind the engine full-stop invoked on death (Walker/LoopRunner/AutoLair Stop).
-    // Until set, death only asserts the pause gate (older behaviour); the stop is
-    // what guarantees no engine's retained destination can re-drive us afterward.
+    // Until set, death only clears the user gate; the stop is what guarantees no
+    // engine's retained destination can re-drive us afterward.
     public void SetEngineStopper(Action stopEngines)
     {
         ArgumentNullException.ThrowIfNull(stopEngines);

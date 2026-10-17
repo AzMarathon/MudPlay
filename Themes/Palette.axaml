@@ -1,15 +1,14 @@
 <!--
-  Palette tokens — ported verbatim from docs/skeleton/main-shell.jsx (the `C`
-  object). Chrome-only colours; terminal canvas CGA palette is owned by
-  Terminal/Palette.cs and is not part of this dictionary.
+  Palette tokens. Chrome-only colours; the terminal canvas palette is owned
+  by Terminal/AnsiPalette.cs (and the user's AnsiColorSchemes) and is not
+  part of this dictionary.
 
   Per-color tokens live as two keys: the raw `Color` (for transparency math
   or programmatic blending) and a matching `SolidColorBrush` keyed
   `<token>Brush`. XAML that binds Background / Foreground reaches for the
   brush form; styles that need alpha-blending use the color form.
 
-  Issue #4 tracks moving these values into a user-editable palette JSON
-  loaded at startup. Until then the values here are authoritative.
+  Chrome colours aren't user-editable; the values here are authoritative.
 -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -70,9 +69,9 @@
     <SolidColorBrush x:Key="AccentVioletBrush"     Color="{StaticResource AccentVioletColor}"/>
 
     <!-- ============ Severity mapping ============ -->
-    <!-- Used by LogService consumers (Phase 1 LogPane, status-bar latest).
-         Mirrors WireFormatter's caret-rendered output and the skeleton's
-         SeverityBadge component. -->
+    <!-- Log-severity colours: LogPaneViewModel maps each LogSeverity to one
+         of these for the Program Log rows. A few windows also borrow them as
+         plain accents. -->
     <SolidColorBrush x:Key="SeverityDebugBrush"    Color="{StaticResource ChromeFgMutedColor}"/>
     <SolidColorBrush x:Key="SeverityInfoBrush"     Color="{StaticResource AccentCyanColor}"/>
     <SolidColorBrush x:Key="SeverityWarnBrush"     Color="{StaticResource AccentYellowColor}"/>

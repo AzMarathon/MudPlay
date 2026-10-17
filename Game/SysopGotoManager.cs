@@ -91,7 +91,8 @@ public sealed class SysopGotoManager
     // A row's destination is safe to reach at the current level. A row with no gate
     // (MinLevel <= 0) always passes; a gated row passes when the level is known and
     // high enough. Level UNKNOWN passes for a manual fire (the user asked explicitly);
-    // the router (PR 2) treats unknown-level differently and must not rely on this.
+    // the route planner (SysopGotoRoutePlanner) skips an unknown level and must not
+    // rely on this.
     public bool MeetsLevel(SysopGotoLocation loc)
     {
         if (loc.MinLevel <= 0) return true;

@@ -10,15 +10,15 @@ namespace MudPlay.Services;
 //     punctuation).
 //   Excluded keys — keys that can never be bound regardless of modifier
 //     (Enter / Escape / Tab / Backspace / Delete / pure modifier keys).
-//   Reserved combos — chord+modifier combinations hardcoded elsewhere (the
-//     F2 / F3 / ... open-window shortcuts in Views.GlobalHotkeys, the
-//     Ctrl+C / Ctrl+V copy/paste keys in Controls.TerminalControl). Macro
-//     binding to a reserved combo would silently steal the keystroke from
-//     the built-in handler.
+//   Reserved combos — the user's built-in-action chords (read live from
+//     KeybindingStore) plus the OS / terminal chords nobody can rebind
+//     (Ctrl+C / Ctrl+V copy/paste in Controls.TerminalControl, Alt+F4).
+//     Macro binding to a reserved combo would silently steal the keystroke
+//     from the built-in handler.
 //
 // The excluded/bindable/reserved split enforces one threat model: don't let
 // a user-bound macro accidentally hijack copy/paste or the OS close-window
-// shortcut. Reserved-combo list mirrors what Views.GlobalHotkeys wires up.
+// shortcut.
 public static class KeybindRegistry
 {
     // Avalonia Key values offered in the edit dialog's picker. Display name

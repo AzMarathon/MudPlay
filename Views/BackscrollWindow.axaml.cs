@@ -17,11 +17,10 @@ namespace MudPlay.Views;
 // scrolling the viewer, and hosts the right-click Copy / Select-all menu.
 public partial class BackscrollWindow : Window
 {
-    // Named controls resolved from the XAML name scope after load. This project
-    // hand-rolls InitializeComponent, so Avalonia's generated x:Name fields are
-    // never populated — every window pulls its controls via FindControl (see
-    // LogPaneWindow / ConversationWindow). Accessing the generated fields
-    // directly leaves them null and faults on first use.
+    // Named controls resolved from the XAML name scope after load. This window
+    // hand-rolls InitializeComponent (AvaloniaXamlLoader.Load), so the generated
+    // x:Name fields are never populated and would be null; resolve via
+    // FindControl instead.
     private readonly ScrollViewer _scroll;
     private readonly BackscrollView _view;
 

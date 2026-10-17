@@ -5,9 +5,9 @@ using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
 
-// Modeless Spell Book window. Bound to SpellBookViewModel;
-// code-behind only attaches the persisted window-layout, wires the
-// global-hotkeys handler, and disposes the VM on close.
+// Modeless Spell Book window. Bound to SpellBookViewModel; code-behind
+// attaches the persisted window-layout and global hotkeys, opens a spell's
+// teaching record on double-click, and disposes the VM on close.
 public partial class SpellBookWindow : Window
 {
     public SpellBookWindow()
@@ -29,7 +29,7 @@ public partial class SpellBookWindow : Window
     // Reach the grid via `sender`, NOT an x:Name field: this window's own
     // InitializeComponent (=> AvaloniaXamlLoader.Load) doesn't populate the
     // generated named-control fields (only the Avalonia-generated
-    // InitializeComponent does), so a `SpellGrid` field reference would be null.
+    // InitializeComponent does), so a named-control field would be null.
     private void OnSpellRowDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (sender is not DataGrid grid

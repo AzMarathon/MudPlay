@@ -61,7 +61,6 @@ public sealed class AutoTrainManager : IDisposable
 
     private Phase _phase = Phase.Idle;
     private int _sessionId;
-    private int _lastLevel;
     private IReadOnlyList<string> _sequence = Array.Empty<string>();
 
     // The pass in flight (STR/INT/WIL/AGL/HEA/CHM): the plan row it is working
@@ -143,8 +142,6 @@ public sealed class AutoTrainManager : IDisposable
         _trainer = trainer;
         _listedEffects = listedEffects;
         _log = log;
-        _lastLevel = stats.Level;
-
         _stats.PropertyChanged += OnStatsChanged;
         _trainer.MenuEntered += OnMenuEntered;
         _trainer.InputMenuEntered += OnManualTrainStatsEntered;
@@ -708,9 +705,7 @@ public sealed class AutoTrainManager : IDisposable
 
     private void OnStatsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Track level for the (future) loop/auto-lair auto-fire; refresh
-        // CanTrainNow for the CP Allocation tab's manual Train Now.
-        if (_stats.Level != _lastLevel) _lastLevel = _stats.Level;
+        // Refresh CanTrainNow for the CP Allocation tab's Train Now.
         StateChanged?.Invoke();
     }
 

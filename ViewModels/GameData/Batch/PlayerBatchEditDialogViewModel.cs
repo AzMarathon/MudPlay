@@ -17,7 +17,7 @@ public sealed class PlayerBatchChanges
     public BatchToggle JoinPartyIfInvited { get; init; } = BatchToggle.Leave;
     public BatchToggle DontAutoDelete { get; init; } = BatchToggle.Leave;
 
-    // Each of the 15 remote-control categories, in the same order the single editor
+    // Each of the 16 remote-control categories, in the same order the single editor
     // and the flags enum use. On = grant the bit, Off = revoke it, Leave = keep.
     public IReadOnlyList<(PlayerRemoteControls Flag, BatchToggle Toggle)> Permissions { get; init; }
         = Array.Empty<(PlayerRemoteControls, BatchToggle)>();

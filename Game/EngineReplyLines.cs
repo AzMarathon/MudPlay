@@ -7,7 +7,9 @@ namespace MudPlay.Game;
 // — that no spell record will ever describe and no parser reads. The unrecognized-line
 // watcher skips them. Only lines that can't be taken for a spell message are listed:
 // nothing with a spell's or an effect's flavour ("You feel …", "… glows …", a cast
-// result) belongs here, even when the engine prints it itself.
+// result) belongs here, even when the engine prints it itself. Chat shapes (a yell
+// included) are not listed either: LineExtractor sends chat down its own lane, so the
+// watcher never sees them.
 //
 // Each entry is the engine's own format string: %s / %d / %u stand for whatever it
 // fills in. Wording is the Stock engine's; a realm that rewords a line simply misses.
@@ -27,7 +29,6 @@ public static partial class EngineReplyLines
         "Are you sure you want to disband %s?",
         "Banking services:",
         "Cannot find user!",
-        "From %s (Yelling): \"%s\"",
         "Gang member %s has been notified of their demotion.",
         "Gang member %s has been notified of their promotion.",
         "Gang member %s is already a lieutenant in your gang.",
@@ -42,9 +43,6 @@ public static partial class EngineReplyLines
         AmbiguousName,
         "Please specify a more reasonable amount.",
         "Quiet mode set",
-        "Someone yells from above \"%s\"",
-        "Someone yells from below \"%s\"",
-        "Someone yells from the %s \"%s\"",
         "Such an action would result in a very unbalanced game.",
         "Such an attack would result in a very unbalanced combat round.",
         "Talk syntax is TALK {Fast/Slow}",

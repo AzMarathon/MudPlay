@@ -21,17 +21,18 @@ namespace MudPlay.Controls;
 // so selecting and copying stay flat no matter how deep the scrollback runs.
 //
 // Rendering mirrors TerminalControl: the same CP437 cell grid and per-font
-// antialiasing choice (TerminalControl.ApplyCellRenderMode), the same
-// per-run background fill + cell-aligned glyph run, the same AnsiPalette colour
-// resolution — so history looks identical to the live screen. Scrolling is
+// antialiasing choice (TerminalControl.ApplyCellRenderMode), the same per-run
+// background fill and one glyph run per colour run (CellRunText), the same
+// AnsiPalette colour resolution — so history looks identical to the live
+// screen. Scrolling is
 // handed to the host ScrollViewer through ILogicalScrollable, which keeps only
 // the visible slice realized (the control reports Extent/Viewport/Offset and
 // interprets the offset itself rather than being translated as one tall bitmap).
 public sealed class BackscrollView : Control, ILogicalScrollable
 {
     // Timestamp gutter: "HH:mm:ss" is 8 chars, drawn left of the transcript in
-    // muted grey and excluded from selection/copy (matches the old sibling
-    // gutter column). GutterGap separates it from the first transcript cell.
+    // muted grey and excluded from selection/copy. GutterGap separates it from
+    // the first transcript cell.
     private const int TimestampChars = 8;
     private const double GutterGap = 12;
 
@@ -119,10 +120,6 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         RecalculateMetrics();
     }
 
-    // Height of one row in pixels — the window uses it to scroll a Find hit
-    // into view.
-    public double LineHeight => _cellH;
-
     // Top pixel (in content space) of the given row.
     public double RowTop(int row) => row * _cellH;
 
@@ -141,8 +138,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         InvalidateVisual();
     }
 
-    // Select the [col, col+length) span on row (used by Find-next), leaving the
-    // scroll to the caller.
+    // Select the [col, col+length) span on row, leaving the scroll to the caller.
     public void SelectMatch(int row, int col, int length)
     {
         if ((uint)row >= (uint)_rows.Count) return;

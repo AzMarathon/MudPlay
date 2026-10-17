@@ -64,7 +64,7 @@
 
                 <RadioButton Content="Hang up immediately" GroupName="PvpAction"
                              IsChecked="{Binding IsHangUp, Mode=TwoWay}"
-                             ToolTip.Tip="Send the exit command and drop the connection at once. Honours 'Disable hangups' on the General tab, and the sysop wimpy jump on the Health tab stands in for the hang-up when it is set up."/>
+                             ToolTip.Tip="Send the exit command and drop the connection at once. Honours the 'Disable hangups' toggle (toolbar or File menu), and the sysop wimpy jump on the Health tab stands in for the hang-up when it is set up."/>
                 <RadioButton Content="Flee, then hang up" GroupName="PvpAction"
                              IsChecked="{Binding IsFleeThenHangUp, Mode=TwoWay}"
                              ToolTip.Tip="Start a flee, then hang up once the Flee hangup delay has passed. With nowhere to flee it hangs up at once."/>

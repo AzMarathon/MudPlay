@@ -3,10 +3,10 @@ using System.Runtime.CompilerServices;
 
 namespace MudPlay.Models.Profile;
 
-// One entry in a BBS's room-blacklist side-file. Hides the targeted room from
+// One entry in a realm's room-blacklist side-file. Hides the targeted room from
 // the navigation map render and the search box (typical for ganghouse /
 // sysop-only rooms behind dead-end doors that clutter the layout). Storage:
-// Data/BBS/{bbs}/room_blacklist.json.
+// the realm's room_blacklist.json (AppPaths.RealmRoomBlacklistFile).
 //
 // Name is captured at add-time from the room's Rooms.json entry
 // (Game.Map.Room.DisplayName) so the Modify-Blacklist dialog can render a

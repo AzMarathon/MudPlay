@@ -53,10 +53,9 @@ public sealed class GhSweepManager : IDisposable
 {
     public const string LogCategory = "GhSweep";
 
-    // Same settle window AutoSearchManager uses for its own single-fire `sea`
-    // (Game/Map/AutoSearchManager.cs) — the reply is just command→reply
-    // latency (~150ms, no server-side delay), this only needs to outlast that
-    // round-trip plus a little parse margin before the NEXT `sea` goes out.
+    // Settle after a recon `sea` before the next one goes out: the reply is just
+    // command→reply latency (~150ms, no server-side delay), so this only needs to
+    // outlast that round-trip plus a little parse margin.
     private static readonly TimeSpan ReconSearchSettle = TimeSpan.FromMilliseconds(350);
 
     // Backstop for a dispatched get/drop that never confirms — e.g. a get for
@@ -80,8 +79,9 @@ public sealed class GhSweepManager : IDisposable
     // command, which earns another nudge. Observed live as bursts of five nudges
     // inside 200ms, repeating every backoff.
     //
-    // 800ms is the one interval known to be safe on this realm (GAME_MECHANICS:
-    // the paced @roomba sync uses it), so it's the floor rather than a guess. The
+    // 800ms is the one interval known to be safe on this realm (GAME_MECHANICS
+    // "Command rate limit (typing/sending too fast)": the paced @roomba sync uses
+    // it), so it's the floor rather than a guess. The
     // prompt still gates — it just can't release EARLY.
     private static readonly TimeSpan MinCommandInterval = TimeSpan.FromMilliseconds(800);
 
@@ -95,7 +95,7 @@ public sealed class GhSweepManager : IDisposable
     // rather than retry forever. Four shapes (GAME_MECHANICS "`get` failure responses"):
     //   "You don't see <echo> here."  — the item is genuinely gone (recon's snapshot
     //       went stale, or another player took it); <echo> is whatever followed `get`.
-    //   "Syntax: GET [Amount] [Currency]" — the game misparsed the item name as a
+    //   "Syntax: GET {Amount} {Currency}" — the game misparsed the item name as a
     //       currency get; retrying the same name can't help.
     //   "You cannot carry that much!" — a capacity refusal; the item is still there,
     //       our tracked working-weight drifted low, so resync (not strand).
@@ -104,13 +104,9 @@ public sealed class GhSweepManager : IDisposable
     private static readonly Regex GetNotHereRegex = new(
         @"^\s*You don't see (?<echo>.+?) here\.\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    // Both bracket and brace forms. GAME_MECHANICS recorded this as
-    // "Syntax: GET [Amount] [Currency]" and the pattern faithfully implemented
-    // that — but the live realm emits BRACES, so it never matched a single one.
-    // The cost was invisible and large: an item the game won't take by that name
-    // failed silently, was never stranded, and got retried every lap forever
-    // (one capture shows `get piece of amber` sent 42 times), which also pinned
-    // the sweep ping-ponging between the two rooms holding them.
+    // Both bracket and brace forms; the live realm prints braces (GAME_MECHANICS
+    // "`get` failure responses"). A miss here isn't harmless: an item the game
+    // won't take by that name is never stranded and gets retried every lap.
     private static readonly Regex GetCurrencySyntaxRegex = new(
         @"^\s*Syntax:\s*GET\s*[\[{]Amount[\]}]\s*[\[{]Currency[\]}]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -1856,9 +1852,8 @@ public sealed class GhSweepManager : IDisposable
         // RoomTransition that triggered this call, which should already
         // match the tracker's live current room by construction — but this
         // gang house's rooms all display identically ("Bronze House Room"
-        // repeated across the whole map), a known room-identity ambiguity
-        // (see GAME_MECHANICS.md-adjacent RoomTracker non-strict-match
-        // logging), and a mis-fired dispatch here sends a whole room's worth
+        // repeated across the whole map), a known room-identity ambiguity,
+        // and a mis-fired dispatch here sends a whole room's worth
         // of commands that all fail against wherever the player actually is.
         // Refuse rather than trust the parameter blindly.
         if (_tracker.State.CurrentRoom?.Key.Equals(room) != true)

@@ -73,7 +73,7 @@ public sealed class BbsProfileStore
         return profile;
     }
 
-    // Persist a BBS profile to Data/BBS/{Name}/bbs.json, creating the folder on
+    // Persist a BBS profile to BBS/{Name}/bbs.json, creating the folder on
     // first save.
     public void Save(BbsProfile profile)
     {
@@ -141,7 +141,7 @@ public sealed class BbsProfileStore
         !string.IsNullOrWhiteSpace(bbsName) && Usable("Looking for a BBS", bbsName)
         && Directory.Exists(AppPaths.BbsFolder(bbsName));
 
-    // Delete a BBS — removes the entire Data/BBS/{name}/ folder (primary file +
+    // Delete a BBS — removes the entire BBS/{name}/ folder (primary file +
     // all side-files). No-op if the folder doesn't exist, or the name is not one a
     // BBS can have. The folder is checked once more as a path before it goes: only
     // ever a folder inside the BBS folder, never that folder or one above it.
@@ -153,7 +153,7 @@ public sealed class BbsProfileStore
         PathGuard.DeleteTree(AppPaths.BbsFolder(bbsName), AppPaths.BbsDir, operation);
     }
 
-    // Rename a BBS in place: move the whole Data/BBS/{old}/ folder — bbs.json,
+    // Rename a BBS in place: move the whole BBS/{old}/ folder — bbs.json,
     // every override side-file, AND every nested character profile — to the new
     // name, then rewrite the primary file's Name field. A folder move keeps the
     // nested profiles intact; a Delete(old)+Save(new) would recursively destroy

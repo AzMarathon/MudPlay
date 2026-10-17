@@ -100,7 +100,7 @@
                         <TextBlock Grid.Column="0" Classes="ColumnHeader" Text="NAME"/>
                         <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="WHEN"/>
                         <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="NEXT"
-                                   ToolTip.Tip="Time until the next scheduled fire. Counts down only for At-time / Every events while connected and in-game; lifecycle events show —."/>
+                                   ToolTip.Tip="Time until the next scheduled fire. Counts down for At-time, Every and Boss events while connected and in-game; the others show —."/>
                         <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="WHAT"/>
                     </Grid>
                     <Border Grid.Row="1" Background="{StaticResource ChromeBorderSoftBrush}"/>

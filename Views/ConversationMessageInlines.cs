@@ -15,7 +15,7 @@ namespace MudPlay.Views;
 
 // Attached behaviour that renders a conversation message into a TextBlock's inline
 // runs with clickable web links: plain spans stay text Runs (so the line still
-// wraps and the non-link text stays selectable) and http/https URLs become
+// wraps) and http/https URLs become
 // underlined hot-text that opens in the OS default browser via ShellLaunch.OpenUrl.
 // Bind MessageProperty in XAML instead of Text; the handler rebuilds the inlines
 // whenever the text changes. Mirrors the CharacterWorkshop QuestStepInlines pattern.
@@ -136,8 +136,8 @@ public static class ConversationMessageInlines
             : wanted;
     }
 
-    // Loads + caches emote bitmaps by avares:// URI so a repeated emote reuses one
-    // decode. A missing / unreadable asset caches null so the renderer falls back to
+    // Loads + caches emote bitmaps by avares:// URI or file path so a repeated
+    // emote reuses one decode. A missing / unreadable asset caches null so the renderer falls back to
     // literal text without retrying every row.
     private static class EmoteImages
     {
@@ -150,7 +150,7 @@ public static class ConversationMessageInlines
             try
             {
                 // Built-in emotes are avares:// resources; user emotes are absolute
-                // file paths under AppPaths.EmotesDir.
+                // file paths (the shared or a BBS's emote folder).
                 bmp = path.StartsWith("avares://", StringComparison.OrdinalIgnoreCase)
                     ? new Bitmap(AssetLoader.Open(new Uri(path)))
                     : new Bitmap(path);
@@ -197,7 +197,7 @@ public static class ConversationMessageInlines
 
     private static InlineUIContainer LinkInline(string url)
     {
-        // Font is left to inherit from the host SelectableTextBlock so the link
+        // Font is left to inherit from the host TextBlock so the link
         // tracks the user's message font size / family; only colour + underline
         // come from the ChatLinkText style.
         var button = new Button

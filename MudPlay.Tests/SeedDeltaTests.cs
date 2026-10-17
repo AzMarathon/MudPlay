@@ -439,7 +439,7 @@ public sealed class SeedDeltaTests : IDisposable
 
         MessageRecord SaveVia(Action<MessageEditDialogViewModel> edit)
         {
-            MessageEditDialogViewModel vm = new(stale, SettingsTier.Defaults, new[] { stale }, isNew: false, cache: null);
+            MessageEditDialogViewModel vm = new(stale, new[] { stale }, isNew: false, cache: null);
             MessageEditResult? result = null;
             vm.CloseRequested += r => result = r;
             edit(vm);

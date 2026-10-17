@@ -6,9 +6,8 @@ namespace MudPlay.Game.Inventory;
 // flagged as no-go, it returns the tightest weight the character may carry
 // without tipping into a gated bracket.
 //
-// The bracket start percentages are Stock-calibrated — the same limitation the
-// coin gate shipped with (no per-realm branching yet). Both engines read the
-// same numbers here so a future realm-aware table only changes one place.
+// The bracket start percentages are Stock-calibrated, with no per-realm table;
+// both engines read them here so they agree.
 public static class EncumbranceGate
 {
     // Stock bracket start percentages: at/above each, the displayed

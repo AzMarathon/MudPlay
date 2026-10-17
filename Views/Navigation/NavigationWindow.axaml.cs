@@ -57,7 +57,7 @@ public partial class NavigationWindow : Window
         // Bounds are 0 until then). No-op when the legend starts hidden.
         Opened    += (_, _) => Dispatcher.UIThread.Post(ApplyLegendPosition, DispatcherPriority.Background);
 
-        // Building-loop ListBox — click row to remove, drag to reorder.
+        // Building-loop ListBox — click a row to edit that waypoint's action.
         if (this.FindControl<ListBox>("BuilderClicksList") is { } builderList)
             WireBuilderClicksList(builderList);
 
@@ -77,8 +77,8 @@ public partial class NavigationWindow : Window
         // the command can sit on the VM (where the rest of the context-
         // menu commands live) while the actual centring + suppression
         // clear lives on the MapControl. DataContextChanged is the only
-        // safe time to subscribe — DataContext is set externally after
-        // the ctor by DialogService / App.OnFrameworkInitialization.
+        // safe time to subscribe — MainWindowViewModel sets DataContext in
+        // its object initializer, after the ctor has run.
         DataContextChanged += (_, _) =>
         {
             if (DataContext is NavigationViewModel vm)
@@ -288,8 +288,8 @@ public partial class NavigationWindow : Window
         e.Handled = true;
         if (sender is not Border legend) return;
         // Persist the dropped position (install-wide, Global tier). Save fires
-        // GlobalSettingsChanged — harmless here (the map only re-reads nav-line
-        // styles from it, which are unchanged).
+        // GlobalSettingsChanged — harmless here: its listeners re-read settings
+        // the legend drag didn't change.
         var store = MudPlay.Services.AppServices.Current.Settings;
         store.Current.MapLegendX = legend.Margin.Left;
         store.Current.MapLegendY = legend.Margin.Top;
@@ -409,10 +409,9 @@ public partial class NavigationWindow : Window
     {
         // Single-click any row (outside the per-row buttons) opens that
         // waypoint's action editor so a command can be attached while
-        // building — the ✕ button removes, ↑ / ↓ reorder. (Left-click used
-        // to delete; that was a foot-gun once actions became editable in
-        // place — the delete now lives on the roomier ✕ box.) Drag-and-drop
-        // reorder is a known follow-up.
+        // building; ✕ removes and ↑ / ↓ reorder. Delete sits on the ✕ box,
+        // not the row click, so editing an action can't drop a waypoint by
+        // accident.
         list.AddHandler(PointerReleasedEvent, BuilderRowPointerReleased);
     }
 
@@ -501,7 +500,7 @@ public partial class NavigationWindow : Window
     private void WireRowDragDrop(Control tree)
     {
         // Tunnel so we record the pressed row before inner controls
-        // (the Load / Run / ✎ / ✕ buttons) get a chance to handle it.
+        // (the Load / Go / ✎ / ✕ buttons) get a chance to handle it.
         tree.AddHandler(PointerPressedEvent, OnRailRowPointerPressed, RoutingStrategies.Tunnel);
         tree.AddHandler(PointerMovedEvent, OnRailRowPointerMoved, RoutingStrategies.Tunnel);
         tree.AddHandler(DragDrop.DragOverEvent, OnRailDragOver);

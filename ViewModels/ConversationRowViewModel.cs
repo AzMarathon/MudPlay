@@ -62,8 +62,8 @@ public sealed class ConversationRowViewModel
         if (entry.Channel == ChatChannel.Social) return string.Empty;
 
         // Speaker is null for self-actions whose regex didn't capture a
-        // name (e.g. "You yell ..." — the Megamind regex matches the verb
-        // shape literally). Surface those as "You" so every chat row has
+        // name (e.g. "You yell ..." — the pattern matches the verb shape
+        // literally). Surface those as "You" so every chat row has
         // a consistent "<who>" prefix.
         string speaker = string.IsNullOrEmpty(entry.Speaker) ? "You" : entry.Speaker!;
 

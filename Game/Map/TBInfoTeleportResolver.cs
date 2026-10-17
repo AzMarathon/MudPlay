@@ -42,10 +42,9 @@ public static class TBInfoTeleportResolver
     }
 
     // Walk every teleport <room> <map> directive in the CMD's Action chain and
-    // yield (keyword, destination, minLevel) for each one. Used by the room
-    // tooltip to surface "use chime → 1/65" style commands (and any "Level 20+"
-    // gate) so the user can see how to traverse a teleport-bypassed door without
-    // opening the game data browser.
+    // yield (keyword, destination, minLevel) for each one, so a teleport-bypassed
+    // door can be routed and shown ("use chime → 1/65", with any "Level 20+"
+    // gate).
     //
     // A "minlevel N [failMessage]" directive anywhere in the same line gates the
     // teleport: the player must be level ≥ N or the game prints the fail message

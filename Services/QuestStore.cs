@@ -11,7 +11,7 @@ namespace MudPlay.Services;
 //      kept on the character (CharacterProfile.QuestLog). The overlay was kept per
 //      realm for a while: a set takes in each realm's old file once, as that realm
 //      loads (the first one whole, later ones for the quests the set lacks);
-//   2. the universal read-only seed QuestDefs.seed.json in Data/Global, built
+//   2. the universal read-only seed QuestDefs.seed.json in Global, built
 //      from the bundled Defaults seed, keyed by game-data flag numbers (custom
 //      realms reuse the numbers) so a curated default ports across every board;
 //   3. an auto-draft (blank name, shown, no edited steps) for any quest the
@@ -42,7 +42,7 @@ public sealed class QuestStore
     // another client's save) so consumers re-resolve their displayed quest text.
     public event Action? Reloaded;
 
-    // Production ctor: seed from Data/Global; the overlay tracks the profile's
+    // Production ctor: seed from Global; the overlay tracks the profile's
     // game-data set, reloading on ProfileService.ProfileLoaded / BbsPinApplied /
     // ProfileClosed. The providers are parameterized so tests can drive the store
     // without a live ProfileService (pass none and call OnActiveSetChanged

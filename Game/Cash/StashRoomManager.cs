@@ -92,7 +92,7 @@ public sealed class StashRoomManager : IDisposable
         // Unbound (tests) → Stock behaviour: one `hide` per item, never batched.
         _isParadigm = isParadigm ?? (static () => false);
         _log = log;
-        // Resolves the per-BBS runic word; unbound (tests) falls back to stock
+        // Resolves the per-realm runic word; unbound (tests) falls back to stock
         // "runic" so the stable-realm behaviour is unchanged.
         _naming = naming ?? new CurrencyNaming();
     }
@@ -150,7 +150,7 @@ public sealed class StashRoomManager : IDisposable
             // get / drop paths — a bare denomination adjective binds
             // ambiguously (MajorMUD hides a "silver" ring instead of silver
             // nobles), so WireNoun forces a currency match (and maps runic to
-            // the per-BBS word). The dispatched record keeps the canonical
+            // the per-realm word). The dispatched record keeps the canonical
             // denom key.
             Send($"hide {count} {_naming.WireNoun(denom)}");
             dispatched.Add((denom, count));

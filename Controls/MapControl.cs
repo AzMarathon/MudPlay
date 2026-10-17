@@ -80,8 +80,8 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> WalkPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(WalkPath));
 
-    // Preview polyline for a queued (but not yet running) walk. Drawn in red
-    // beneath any live WalkPath so an active walk overlays its target without
+    // Preview polyline for a queued (but not yet running) walk, in the preview
+    // nav pen. Drawn beneath any live WalkPath so an active walk overlays its target without
     // flicker. NavigationViewModel sets this when a search-result selection
     // arms a destination.
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> PreviewPathProperty =
@@ -104,11 +104,6 @@ public sealed class MapControl : Control
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopPath));
 
-    // Live BFS-expanded preview of the loop the user is currently building in
-    // the Navigation window's loop-builder strip. Drawn underneath any active
-    // LoopPath / WalkPath so an active automation always overlays the build
-    // preview when both share a segment. Pen is dashed cyan to distinguish from
-    // the solid red preview and the blue active-loop pens.
     // The .mp import review's map comparison (Services.MapComparisonOverlay): the
     // recording's moves followed literally on our map, and the loop as converted.
     // Drawn over every other route in two fixed colours the review window's legend
@@ -148,6 +143,10 @@ public sealed class MapControl : Control
     private static readonly IPen ComparisonStuckPen =
         new Pen(new SolidColorBrush(Color.Parse("#FF3B3B")), 2.5) { LineCap = PenLineCap.Round };
 
+    // Live BFS-expanded preview of the loop being built in the Navigation
+    // window's loop-builder strip. Drawn underneath any active LoopPath /
+    // WalkPath so a running automation always overlays the build preview where
+    // the two share a segment.
     public static readonly StyledProperty<IReadOnlyList<RoomKey>?> LoopBuilderPathProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyList<RoomKey>?>(nameof(LoopBuilderPath));
 
@@ -875,8 +874,8 @@ public sealed class MapControl : Control
     // each map reflects the live Global settings; cached and rebuilt only when the
     // bound styles instance changes, so Render allocates no pens per frame. Default
     // colour rationale lives in NavLineDefaults — the engine schema is walk-to blue,
-    // loop green, preview / loop-builder red, auto-lair orange, a followed leader's
-    // route cyan, and the loop colour is echoed by the Navigation rail headers +
+    // loop green, preview amber, loop-builder red, auto-lair orange, a followed
+    // leader's route cyan, and the loop colour is echoed by the Navigation rail headers +
     // Loops/Auto-Lairs list rows.
     private NavLineStyles? _navPensBuiltFrom;
     private bool _navPensReady;
@@ -962,7 +961,7 @@ public sealed class MapControl : Control
     // Golden X for stash rooms — matches the shape of the avoid-X so the two
     // map markers read as a pair ("flagged room") with colour carrying the
     // action: red = avoid, gold = stash. Distinct from the amber current-room
-    // ring + the white selection ring so the user can scan for stashes at a
+    // ring + the cyan selection ring so the user can scan for stashes at a
     // glance.
     private static readonly IPen   StashXPen      = new Pen(new SolidColorBrush(Color.Parse("#FFFFD24E")), 2.5)
     {
@@ -970,7 +969,7 @@ public sealed class MapControl : Control
     };
     // @where target flash — a translucent green fill under a bright green ring, so an
     // answered "where are you?" reads as a lit-up marked square the moment it lands.
-    // Cleared by the VM's ~12s timer.
+    // Cleared when the VM's per-room highlight timer expires.
     private static readonly IBrush WhereTargetFill = new SolidColorBrush(Color.Parse("#8833DD66"));
     private static readonly IPen   WhereTargetPen  = new Pen(new SolidColorBrush(Color.Parse("#FF33DD66")), 2.5);
 
@@ -1004,7 +1003,7 @@ public sealed class MapControl : Control
     private static readonly IPen   StopRingPen     = new Pen(new SolidColorBrush(Color.Parse("#E64545")), 2.0);
     private static readonly IPen   StopRingEdgePen = new Pen(new SolidColorBrush(Color.Parse("#141414")), 3.6);
 
-    // Trainer-room "level up here" double up-chevron — a bright level-up green over a
+    // Trainer-room "level up here" triple up-chevron — a bright level-up green over a
     // dark edge so the carets read on any cell fill. Distinct from crown gold, shop
     // cyan and lair magenta.
     private static readonly IPen   TrainerChevronPen = new Pen(new SolidColorBrush(Color.Parse("#3FD07A")), 2.4)
@@ -1063,7 +1062,7 @@ public sealed class MapControl : Control
         // Auto-centre on the player's current room every time it
         // changes — but only when the
         // user isn't actively browsing. Drag-pan, zoom, and crawler
-        // steps all arm a 15-second suppression window during which
+        // steps all arm the AutoFollowHoldSeconds suppression window during which
         // CurrentRoomKey updates are visually ignored.
         CurrentRoomKeyProperty.Changed.AddClassHandler<MapControl>((c, a) =>
         {
@@ -1236,7 +1235,7 @@ public sealed class MapControl : Control
 
                 // Arm the auto-follow suppression window — the user
                 // is actively browsing; don't yank back to live
-                // player position for the next 15 s.
+                // player position for the AutoFollowHoldSeconds hold.
                 SuppressAutoFollow();
 
                 // Hide any open tooltip while dragging — the room
@@ -1430,7 +1429,7 @@ public sealed class MapControl : Control
             if (TryHitTestRoom(releasePos, out RoomKey hit))
             {
                 // Move the crawler selection to the clicked room and keep
-                // the click sticky for the next 15 s by arming auto-follow
+                // the click sticky for the hold by arming auto-follow
                 // suppression, instead of bouncing back to live player
                 // position on the next in-game move.
                 SuppressAutoFollow();
@@ -1544,14 +1543,14 @@ public sealed class MapControl : Control
     private double _staticPanX, _staticPanY, _staticZoom;
     private double _staticMargin;
 
-    // A quarter of the longer side: a 1920x1080 map caches about 24 MB, and a pan that
-    // uses the margin up costs one static redraw (about 10 ms on a 6,500-room layout).
     // How strongly the other floors show under the current one.
     private const double OtherLevelsOpacity = 0.26;
     // A shadow room's markers fade further than its node: a red halt ring or a
     // skull at the floor's shade still out-shouts the dim rooms around it.
     private const double OtherLevelsMarkerOpacity = 0.6;
 
+    // A quarter of the longer side: a 1920x1080 map caches about 24 MB, and a pan that
+    // uses the margin up costs one static redraw (about 10 ms on a 6,500-room layout).
     private static double MarginFor(Size size) => Math.Round(Math.Max(size.Width, size.Height) * 0.25);
 
     protected override Size ArrangeOverride(Size finalSize)
@@ -1715,9 +1714,6 @@ public sealed class MapControl : Control
         _staticRedrawTimer.Start();
     }
 
-    // Redraw the static layer at the view as it is now. The view it is drawn at is
-    // taken here, not in the render: a visual can't change its own transform while
-    // it renders, and a pan before that render lands as a shift from this view.
     // A room set or count map republished with the same contents: the overlays are
     // rebuilt from scratch on every change of what they mirror, and each one used to
     // cost a full redraw of the map even when nothing in it had changed.
@@ -1736,6 +1732,9 @@ public sealed class MapControl : Control
     // Why the static layer is being redrawn, for the performance log.
     private string _staticCause = "first draw";
 
+    // Redraw the static layer at the view as it is now. The view it is drawn at is
+    // taken here, not in the render: a visual can't change its own transform while
+    // it renders, and a pan before that render lands as a shift from this view.
     private void InvalidateStatic(string cause)
     {
         _staticCause = cause;
@@ -1888,7 +1887,7 @@ public sealed class MapControl : Control
         if (CurrentRoomKey is { } current) DrawOnTop(current);
         if (DestinationRoomKey is { } destination && !destination.Equals(CurrentRoomKey)) DrawOnTop(destination);
 
-        // @where target — a transient green flash the VM clears after ~12s.
+        // @where target — a transient green flash the VM clears when its timer expires.
         // Drawn right on the node so it reads as a marked square.
         if (WhereTargetRooms is { Count: > 0 } whereRooms)
             foreach (RoomKey key in whereRooms)
@@ -1903,11 +1902,11 @@ public sealed class MapControl : Control
             context.DrawRectangle(null, SelectionPen, ComputeCellRect(selCoord, tilePixels, cx, cy).Deflate(1));
 
         // Pass 4: top-of-stack polylines. Loop-builder preview and the
-        // loop-approach preview both draw in red with the same pen
-        // (they're semantically distinct but visually identical:
-        // "this is a planned cycle"). Walk preview red on top of those.
-        // Running loop / walk in blue on top of everything so the
-        // user's primary signal is the active automation.
+        // loop-approach preview share one pen (semantically distinct,
+        // visually identical: "this is a planned cycle"); the walk
+        // preview, a followed leader's route, the running loop and the
+        // walk go on top of those so the user's primary signal is the
+        // active automation.
         EnsureNavPens();
         DrawPathPolyline(context, LoopBuilderPath,        _loopBuilderPen, tilePixels, cx, cy);
         DrawPathPolyline(context, LoopApproachPreviewPath, _loopBuilderPen, tilePixels, cx, cy);
@@ -1917,9 +1916,9 @@ public sealed class MapControl : Control
         // When AutoLair is driving the walker, the dedicated approach
         // path renders the FULL leg in orange and stays stable across
         // walker sub-step shrinkage — suppress the per-step WalkPath
-        // so the two layers don't fight. WalkPathIsAutoLair stays as
-        // a fallback for environments that haven't wired the new
-        // property.
+        // so the two layers don't fight. WalkPathIsAutoLair still
+        // colours the plain WalkPath orange for auto-lair walks outside
+        // the approach phases, when there's no approach path to draw.
         if (AutoLairApproachPath is { Count: > 1 })
         {
             DrawPathPolyline(context, AutoLairApproachPath, _autoLairWalkPen, tilePixels, cx, cy);
@@ -2008,19 +2007,9 @@ public sealed class MapControl : Control
             tilePixels);
     }
 
-    // Walks RoomLayout.EdgesFromCoord once and draws each connection exactly
-    // once. Three cases per exit, resolved against the exit's REAL target room
-    // (not just the grid-adjacent cell):
-    //   - Grid-adjacent — target sits on the expected neighbouring cell: a
-    //     clean continuous line between the two centres (no overlap seam, no
-    //     thickness bump).
-    //   - Gap-bridge — target is placed but NOT adjacent (the map data
-    //     wouldn't tile flat): a dashed direct line between the two room
-    //     centres, up to BridgeMaxCells apart, so the connection is visible
-    //     instead of vanishing into a stub-to-nowhere.
-    //   - Stub — target genuinely unplaced (dropped collision / blacklisted)
-    //     or beyond the bridge distance: a short stub from the source centre
-    //     to its cell edge.
+    // Draws every connector of the layout (classified once per layout by
+    // ClassifyConnectors): adjacent as a solid line, bridge as a dashed line,
+    // stub to the cell edge.
     // trapOverlay: draw ONLY the red trap segments (skipping base lines, arrows, spell
     // walls) so this can be re-run on top of the travel polylines to keep a trapped exit
     // visible under a route. The full pass (trapOverlay false) draws everything.
@@ -2331,10 +2320,9 @@ public sealed class MapControl : Control
     // True when the exit at coord heading dir is a
     // RoomExitHint.MultiActionHidden — i.e. one or more in-room actions
     // (lever, switch, button …) must execute before the walker can traverse.
-    // Queried at render time rather than pre-computed because action-required
-    // edges are sparse and the visible-viewport edge count is bounded; doing a
-    // dictionary hop per edge is fine and avoids dragging another pre-computed
-    // set through RoomLayout.
+    // Looked up from the graph during connector classification rather than
+    // carried as another pre-computed set on RoomLayout: action-required edges
+    // are sparse and the result is cached per layout.
     private bool IsActionRequiredEdge((int X, int Y) coord, Direction dir)
     {
         if (Graph is null || DrawLayout is not { } layout) return false;
@@ -2501,7 +2489,7 @@ public sealed class MapControl : Control
     }
 
     // Green flash for the room an @where reply located — a translucent fill + ring
-    // over the whole cell so it stands out at a glance; the VM clears it after ~12s.
+    // over the whole cell so it stands out at a glance; the VM clears it when its timer expires.
     private static void DrawWhereHighlight(DrawingContext ctx, Rect cell)
         => ctx.DrawRectangle(WhereTargetFill, WhereTargetPen, new RoundedRect(cell.Deflate(1), cell.Width * 0.14));
 
@@ -2723,10 +2711,6 @@ public sealed class MapControl : Control
         }
     }
 
-    // Draws a half-line from the cell centre to one edge. Only used by the
-    // dangling-exit branch in DrawAllExitLines — full lines between two placed
-    // cells are drawn end-to-end without overlap. No StubOverlap here: there's
-    // no adjacent stub to meet, so the segment ends flush at the cell edge.
     // Where a stub connector from the cell centre (mx, my) meets the cell edge
     // for a planar direction. Null for U / D (not rendered as stubs). Shared by
     // the stub line and the spell-wall placement so both agree on the stub geometry.
@@ -2953,7 +2937,8 @@ public sealed class MapControl : Control
 
     // The current / destination "thick perimeter ring + centre dot" marker — same shape
     // for both so the destination reads as "the other end of the pair", not a room class.
-    // Drawn inside DrawRoomNode (Pass 3) AND re-drawn on top of the route polylines later,
+    // Drawn inside DrawRoomNode (the dynamic layer's current / destination nodes) AND
+    // re-drawn on top of the route polylines later,
     // because a walk-to line ends at the destination and would otherwise cover its dot.
     private static void DrawEndpointMarker(DrawingContext ctx, Rect cell, bool current)
     {
@@ -2971,8 +2956,8 @@ public sealed class MapControl : Control
     }
 
     // Re-draw the current + destination markers on top of the route polylines so the
-    // walk-to line ending at the destination doesn't hide its centre dot (Pass 3 already
-    // drew them under the routes; this lifts them back above).
+    // walk-to line ending at the destination doesn't hide its centre dot (DrawDynamicLayer
+    // already drew them under the routes; this lifts them back above).
     private void DrawEndpointMarkersOnTop(DrawingContext ctx, double tilePixels, double cx, double cy, Rect viewport)
     {
         if (Layout is null) return;
@@ -2993,10 +2978,9 @@ public sealed class MapControl : Control
     // indicate U/D exits:
     //   - top-right green triangle when the room has an Up exit;
     //   - bottom-right yellow triangle when it has a Down exit;
-    //   - both triangles when both exits are present (Up+Down rooms get the
-    //     green corner on top of the existing UpDownFill or the classification
-    //     fill — orange/green/yellow stay distinct).
-    // Triangle size scales with the node so it stays glanceable on small cells
+    //   - both triangles for Up+Down.
+    // Only drawn when another class claimed the node fill, so the up/down hint
+    // still shows. Triangle size scales with the node so it stays glanceable on small cells
     // without crowding the centre dot of the player / destination marker.
     private static void DrawVerticalCornerBadge(DrawingContext ctx, Rect node, VerticalHint hint)
     {

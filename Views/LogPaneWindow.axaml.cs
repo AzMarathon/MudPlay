@@ -10,10 +10,10 @@ using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
 
-// Modeless system-event log pane. Bound to LogPaneViewModel;
-// code-behind handles two concerns XAML can't express cleanly: scrolling
-// the newest row into view when AutoScroll is on, and disposing the VM
-// on close.
+// Modeless system-event log pane. Bound to LogPaneViewModel; code-behind
+// scrolls the newest row into view when AutoScroll is on, routes a row
+// double-click to its source's detail handler (copying any context payload),
+// and disposes the VM on close.
 public partial class LogPaneWindow : Window
 {
     private ListBox? _rowsList;

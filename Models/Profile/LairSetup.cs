@@ -38,7 +38,7 @@ public sealed class LairSetup
 
     public List<LairMarker> Markers { get; set; } = new();
 
-    // Folder this setup lives under inside the BBS Loops directory, relative to
+    // Folder this setup lives under inside the game-data set's Loops folder, relative to
     // it, using / separators (e.g. "Sewers/Lower"). Empty = the Loops root. Not
     // serialised — the on-disk subdirectory is the source of truth;
     // Game.Map.LairManager sets this from the file's location on load and writes

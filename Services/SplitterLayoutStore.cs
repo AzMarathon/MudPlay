@@ -4,8 +4,8 @@ using MudPlay.Models.Profile;
 namespace MudPlay.Services;
 
 // Per-character splitter-position memory for two-pane resizable dialogs.
-// Parallels WindowLayoutStore for the horizontal split inside a window (e.g. the
-// MonsterEditDialog's editable-vs-MDB pane split).
+// Parallels WindowLayoutStore for the split inside a window or tab (e.g. the
+// Monster Intel window's two panes).
 //
 // Each dialog calls AttachGrid once during construction with a stable id + the
 // Grid whose ColumnDefinitions to drive + the two column indexes (LEFT and
@@ -89,7 +89,7 @@ public sealed class SplitterLayoutStore
         };
     }
 
-    // Snapshot every known ratio — used by ProfileSaving.
+    // Snapshot every known ratio, for the profile save.
     public Dictionary<string, double> Snapshot()
         => new(_ratios, StringComparer.OrdinalIgnoreCase);
 

@@ -16,9 +16,8 @@ namespace MudPlay.Game.Spells;
 // Classes.Number (and its MageryType / MageryLVL) before filtering.
 //
 // Two realm-global flags default to false here: Kai-autolearn disable (Kai
-// classes auto-learn unless the realm disables it; maps to the game-data
-// Info.DisableKai flag, wired in a follow-up) and GreaterMUD mode. The data-set
-// version is assumed >= 1.7 (modern MajorMUD / MegaMUD data), so the
+// classes auto-learn unless the realm disables it) and GreaterMUD mode. The
+// data-set version is assumed >= 1.7 (modern MajorMUD / MegaMUD data), so the
 // explicit-class-token check always applies.
 public sealed class KnownSpellCatalog
 {
@@ -30,10 +29,9 @@ public sealed class KnownSpellCatalog
 
     private readonly GameDataCache _cache;
 
-    // Realm-global learnability flags. Not yet wired to game data
-    // (Info.DisableKai → DisableKaiAutolearn is a planned follow-up); both
-    // default false, matching a stock realm. Non-const so the branches
-    // that read them don't trip unreachable-code analysis.
+    // Realm-global learnability flags, both false (a stock realm): nothing reads
+    // them from game data. Non-const so the branches that read them don't trip
+    // unreachable-code analysis.
     private readonly bool _disableKaiAutolearn = false;
     private readonly bool _greaterMud = false;
 
@@ -60,17 +58,6 @@ public sealed class KnownSpellCatalog
                 return ReadInt(row, "Number");
         }
         return null;
-    }
-
-    // Reverse of ResolveClassNumber: resolve a Classes.Number to its display
-    // Name. Returns null when the active set has no class with that number.
-    // Used by the party-bless picker to compare a slot's stored class numbers
-    // against a PartyMember.Class name.
-    public string? ResolveClassName(int classNumber)
-    {
-        if (classNumber < 1) return null;
-        GameRow? row = _cache.FindRowByNumber("Classes", classNumber);
-        return row is null ? null : ReadString(row.Value, "Name");
     }
 
     // Returns the class's magery type (the Magery enum value) and emits its
@@ -263,9 +250,8 @@ public sealed class KnownSpellCatalog
     }
 
     // Resolve a Spells.Number to its SpellFormulaInput across the entire Spells
-    // table (no class / magery / learnable filter). Used by the Game Data Items
-    // pane to render a weapon's use-cast / proc spell effect without depending
-    // on a class spell book. Returns null when no row has that number.
+    // table (no class / magery / learnable filter), for rendering any spell's effect
+    // without a class spell book. Returns null when no row has that number.
     public SpellFormulaInput? GetFormulaByNumber(int spellNumber)
     {
         if (spellNumber < 1) return null;

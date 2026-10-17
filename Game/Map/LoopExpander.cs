@@ -53,9 +53,9 @@ public static class LoopExpander
 
     // Walk the expanded cycle from the first waypoint and accumulate every
     // room visited (start, each intermediate hop, every waypoint, ending
-    // back at the start). Used by the map overlay to render the closed-loop
-    // polyline anchored at the rotation entry. Returns empty when the cycle
-    // can't be resolved (too few waypoints, unreachable legs).
+    // back at the start) — the whole ring, wherever a run enters it. Returns
+    // empty when the cycle can't be resolved (too few waypoints, unreachable
+    // legs).
     public static IReadOnlyList<RoomKey> ResolveCycleRoomKeys(
         IReadOnlyList<LoopWaypoint> waypoints,
         BfsMapper bfs,

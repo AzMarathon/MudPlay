@@ -625,9 +625,8 @@ public sealed class LoopManager
     // ----- builder helpers -------------------------------------------
 
     // Convenience wrapper around LoopExpander.Expand pre-bound to this
-    // manager's BfsMapper. Used by the builder for the live-preview step
-    // count + unreachable summary; the runner expands directly via
-    // LoopExpander at start time.
+    // manager's BfsMapper, for callers that preview a loop's steps and
+    // unreachable legs without running it.
     public (IReadOnlyList<LoopStep> Steps, IReadOnlyList<(RoomKey From, RoomKey To)> UnreachableSegments)
         ExpandWaypoints(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
         => LoopExpander.Expand(waypoints, _bfs, filter);

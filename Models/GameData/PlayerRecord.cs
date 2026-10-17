@@ -1,29 +1,28 @@
 namespace MudPlay.Models.GameData;
 
 // Observation-only fields for one player — what the server told us via
-// who / look. Lives at the BBS tier: every player observed on a given BBS
-// is stored under Data/BBS/{bbs-name}/players.json. Same display name on a
-// different BBS represents a different person, so the per-BBS scope matches
-// the social reality.
+// who / look. Kept per realm (AppPaths.RealmPlayersFile): every character
+// we play on the realm shares it, and the same name on another realm is a
+// different person.
 //
 // Mutations to this record come from the server-output parsers
-// (WhoListParser and the planned look-on-player parser). User-authored
+// (WhoListParser and LookParser). User-authored
 // per-character fields live separately on PlayerCustomization at the
 // Character tier. The one authored field stored HERE is AccountName: it's
-// BBS-scoped truth (an account belongs to a BBS, shared across all our
-// alts on that realm), so it belongs at the BBS tier next to the
-// observation rather than in the per-character customization layer — and
+// realm-scoped truth (an account belongs to a BBS, shared across all our
+// alts on that realm), so it is stored with the observation rather than in
+// the per-character customization layer — and
 // there's no wire source for the account→character link, so the user
 // authors it via the edit dialog. PlayerDatabase merges both layers for
 // display.
 //
 // GivenName is the first word of the in-game name (the "Forged" in "Forged
 // Paradigm"), may be empty for legacy records; FamilyName is the remainder
-// after the first space, empty for single-word names. Class comes from a
-// future look / @health parser (who doesn't carry it); Race is the same
-// source. Alignment is the most recent seen on who ("Neutral" when the
+// after the first space, empty for single-word names. Class and Race come from
+// a look at the player (LookParser) or what their client states (who doesn't
+// carry them). Alignment is the most recent seen on who ("Neutral" when the
 // column was blank). Title is the most recent seen on who; class + level
-// range can be inferred from it via the future class-titles table. Gang is
+// range can be inferred from it via GameData.ClassTitleTable. Gang is
 // the most recent gang/guild name ("of …" suffix on who), empty when
 // ungang'd. Role is the MegaMUD-style trailing marker — M mudop, S sysop,
 // V visitor, null for regular players. Equipment is the most recent
@@ -59,7 +58,7 @@ public sealed record PlayerObservation(
     // When the exact Level was recorded (UTC), for the party level-gate
     // staleness re-probe. null whenever Level is null.
     DateTime? LevelAt = null,
-    // Authored BBS-tier override: the player's BBS account name, when it
+    // Authored realm-tier override: the player's BBS account name, when it
     // differs from their in-game given name. Some boards key their presence
     // lines (logon / logoff) on the account name instead of the character
     // name; the disconnect-watcher matches a captured name against this
@@ -92,17 +91,11 @@ public sealed record PlayerObservation(
     PlayerRelationship Relationship = PlayerRelationship.Neutral,
     PvpAction? PvpResponse = null)
 {
-    // Combined display name — "GivenName FamilyName", trimmed. Used by the
-    // database's case-insensitive lookup and by the customization
-    // dictionary as the key.
+    // Combined display name — "GivenName FamilyName", trimmed: the key players
+    // are looked up and customised by (case-insensitive).
     public string DisplayName =>
         string.IsNullOrEmpty(FamilyName) ? GivenName : $"{GivenName} {FamilyName}";
 
-    // Split a wire-format name (e.g. "Forged Paradigm") into given + family
-    // on the first whitespace. Multi-space names treat everything after the
-    // first space as the family name; single-word names get an empty
-    // family. null / empty input returns empty strings so observation
-    // writes don't fail on garbage.
     // A room-listing name with no record that reads as a player's: capitalised, one
     // or two words of letters, where monsters are listed in lower case. A client
     // heuristic, not engine data.
@@ -116,6 +109,11 @@ public sealed record PlayerObservation(
         return true;
     }
 
+    // Split a wire-format name (e.g. "Forged Paradigm") into given + family
+    // on the first whitespace. Multi-space names treat everything after the
+    // first space as the family name; single-word names get an empty
+    // family. null / empty input returns empty strings so observation
+    // writes don't fail on garbage.
     public static (string Given, string Family) SplitName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return (string.Empty, string.Empty);
@@ -201,11 +199,11 @@ public sealed record PlayerRecord(
     int? Level = null,
     // When the exact Level was recorded (UTC) — see PlayerObservation.LevelAt.
     DateTime? LevelAt = null,
-    // Mirrors PlayerObservation.AccountName (BBS tier) into the merged row so
+    // Mirrors PlayerObservation.AccountName (realm tier) into the merged row so
     // the edit dialog can show + author it. null = account name equals the
     // in-game name.
     string? AccountName = null,
-    // Mirror of PlayerObservation.Version / VersionAt / LastPartiedUtc (BBS tier)
+    // Mirror of PlayerObservation.Version / VersionAt / LastPartiedUtc (realm tier)
     // so the edit dialog + Players tab can display them.
     string? Version = null,
     DateTime? VersionAt = null,
@@ -227,7 +225,7 @@ public sealed record PlayerRecord(
     public static (string Given, string Family) SplitName(string? name)
         => PlayerObservation.SplitName(name);
 
-    // Combine a BBS-tier observation with the loaded character's
+    // Combine a realm-tier observation with the loaded character's
     // customization (if any) into a single display row.
     public static PlayerRecord Merge(PlayerObservation obs, PlayerCustomization cust) => new(
         GivenName:           obs.GivenName,
@@ -257,7 +255,8 @@ public sealed record PlayerRecord(
         Relationship:        obs.Relationship,
         PvpResponse:         obs.PvpResponse);
 
-    // Pull just the customization slice off this merged row (used by the edit dialog Save path).
+    // The customization slice of this merged row, for writing back to the
+    // Character layer.
     public PlayerCustomization ToCustomization() => new(
         RemoteControls:      RemoteControls,
         InviteToPartyIfSeen: InviteToPartyIfSeen,
@@ -268,9 +267,9 @@ public sealed record PlayerRecord(
         DupedPlayer:         DupedPlayer);
 }
 
-// Per-player allowed remote-command categories. Matches MegaMUD's "Allowed
-// Remote Control" panel layout — 12 grouped categories that span the
-// individual @-command set. RemoteCommandManager consults this bitmask
+// Per-player allowed remote-command categories: MegaMUD's "Allowed Remote
+// Control" panel's 12 grouped categories, plus four MudPlay query categories
+// (@timer, @death, @roomba, @quest). RemoteCommandManager consults this bitmask
 // before dispatching any @-command from a non-party player.
 //
 // Empty (None) means "deny every category" — the default for

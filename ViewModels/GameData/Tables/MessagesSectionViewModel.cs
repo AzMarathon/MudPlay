@@ -10,11 +10,11 @@ using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// Game Data Browser → Messages tab. Surfaces the active game-data set's Messages/Responses
-// catalogue from MessageStore. Records are paired per set: seeded from the wcc-derived
-// universal seed (Data/Global/Messages.seed.json), with the user's edits kept per set as a
-// delta over it at Data/game data/{set}/messages.json. Switching the active set swaps the
-// catalogue in real time.
+// Game Data Browser → Incomplete Messages tab. Surfaces the records of the active
+// set's Messages catalogue (MessageStore) that need attention — see BannerText. The
+// catalogue is the realm's seed (Global/Messages.{stock|paradigm}.seed.json) with
+// the user's edits kept per set as a delta at game data/{set}/messages.json.
+// Switching the active set swaps the catalogue in real time.
 public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IEditableTableSectionViewModel
 {
     private readonly MessageStore _store;
@@ -283,7 +283,6 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
         MessageEditDialogViewModel vm = new(
             original,
-            row.SourceTier,
             _store.Messages,
             isNew: false,
             cache: _cache,
@@ -349,7 +348,6 @@ public sealed class MessagesSectionViewModel : GameDataTableSectionViewModel, IE
 
         MessageEditDialogViewModel vm = new(
             blank,
-            currentTier:     SettingsTier.Defaults,
             existingRecords: _store.Messages,
             isNew:           true,
             cache:           _cache);

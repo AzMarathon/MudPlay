@@ -6,9 +6,9 @@ namespace MudPlay.Models.GameData;
 // than auto-committed (a bare line can't say which perspective slot it
 // belongs in or what MessageFlags apply — that's always a person's call).
 //
-// Storage lives at Data/game data/{set}/message-candidates.json — pure
-// runtime-observed state, not curated data, so unlike MessageRecord there is
-// no seed-file fallback (see Services.MessageCandidateStore).
+// Storage lives in the realm's folder (AppPaths.RealmMessageCandidatesFile) —
+// pure runtime-observed state, not curated data, so unlike MessageRecord there
+// is no seed-file fallback (see Services.MessageCandidateStore).
 //
 // Identity rule: Id is ComputeId(RawText), mirroring MessageRecord.ComputeId's
 // SHA1-truncated-to-16-hex-chars shape but over the single RawText field —

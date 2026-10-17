@@ -7,10 +7,9 @@ namespace MudPlay.Models.GameData;
 // One user-defined scheduled / lifecycle event. Per-character; persisted
 // on CharacterProfile.Events and consumed at runtime by EventManager.
 //
-// Flat shape: exactly one trigger-side field (AtTime, EveryAmount /
-// EveryUnit) and exactly one action-side field (WalkToTarget, LoopName,
-// AutoLairSetupName, or CommandText) is populated depending on TriggerType
-// + ActionType. Other fields stay null so JSON round-tripping doesn't carry
+// Flat shape: only the fields of the chosen TriggerType and ActionType are
+// populated (plus the Stop-after rules for a Loop / AutoLair action and the
+// Then step). Other fields stay null so JSON round-tripping doesn't carry
 // stale params from a previous trigger / action shape.
 //
 // JSON-friendly mutable POCO (settable properties) so System.Text.Json
@@ -155,8 +154,8 @@ public sealed class ScheduledEvent
             : null;
 
     // Materialise the EveryAmount + EveryUnit pair as a TimeSpan. Returns
-    // null when either field is unset or amount <= 0. Clamps amount to a
-    // minimum of 1 to avoid degenerate zero-tick timers.
+    // null when either field is unset or amount <= 0, so a zero cadence never
+    // becomes a zero-tick timer.
     public TimeSpan? TryParseEvery()
     {
         if (EveryAmount is not { } amount || amount <= 0) return null;

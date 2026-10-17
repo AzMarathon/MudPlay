@@ -12,8 +12,7 @@ namespace MudPlay.Models.GameData;
 // pacing matters use the triggers system instead.
 //
 // Key is the literal key captured by the editor (e.g. "F1", "NumPad8",
-// "A"), mapping to Avalonia's Key enum names. Command supports variable
-// substitution shared with Trigger and Alias, applied at fire time.
+// "A"), mapping to Avalonia's Key enum names.
 public sealed record Macro(
     string Key,
     bool Ctrl,

@@ -66,7 +66,8 @@ public sealed class AutoSearchManager : IDisposable
     private readonly Func<bool> _isCombatEngaging;
     private readonly Func<bool> _hasGetEngineArmed;
     private readonly Func<bool> _hasQueuedMoves;
-    // SneakGuard.Holds — a search ends a sneak (GAME_MECHANICS "What ends a sneak").
+    // SneakGuard.Holds — a search ends a sneak (GAME_MECHANICS "Sneaking — commands,
+    // equip order, and the sneak state machine", its What ends a sneak list).
     private Func<bool>? _sneakKept;
 
     public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;

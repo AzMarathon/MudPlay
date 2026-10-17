@@ -439,7 +439,7 @@ public sealed class CombatManagerBreakHoldTests
 
         Assert.Equal(sent, h.Sent.Count);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
     }
 
     // A room attack broken off: the room is read again with every monster still in

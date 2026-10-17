@@ -9,8 +9,9 @@ namespace MudPlay.ViewModels;
 // raw "Also Here:" wire line. Surfaces the offending entry name + the parsed
 // list and lets the user pick a fix action.
 //
-// Game.Combat.RoomEntityClassifier opens the dialog when it emits the
-// underlying Warn row, and the caller (App startup) wires the chosen action to
+// Game.Combat.RoomEntityClassifier emits the underlying Warn row; the Log-pane
+// double-click handler registered at App startup opens this dialog and wires the
+// chosen action to
 // the MonsterMessageStore (add-as-monster placeholder), the per-set
 // FlavorPrefixStore (add-flavor-prefix), or the PlayerDatabase (player
 // observation). The dialog itself doesn't touch the data layer — it only
@@ -49,7 +50,7 @@ public sealed partial class UnknownEntityFixDialogViewModel : ObservableObject,
         "monster — a placeholder record lands in the catalogue immediately so the " +
         "classifier recognises it next time. If it's a flavor variant of an existing " +
         "species (e.g. \"stinking\" → giant rat), add it as a flavor prefix: the leading " +
-        "word joins this realm's shared adjective vocabulary, so every monster resolves " +
+        "word joins the game data set's shared adjective vocabulary, so every monster resolves " +
         "it. If it's a player the database hasn't observed via `who`, add a placeholder " +
         "observation now and let the next `who` enrich it. Cancel leaves nothing changed.";
 
@@ -84,7 +85,7 @@ public enum UnknownEntityFixAction
     AddFlavorPrefix,
 
     // Treat the unknown name as a player and add a placeholder observation to
-    // the per-BBS player database.
+    // the realm's player database.
     AddPlayerObservation,
 }
 
