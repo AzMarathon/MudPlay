@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.0**
-> - Help → Visual Guides: step-by-step guides to loops, Auto-Lair, walking, loop settings, MegaMUD imports, macros, aliases, triggers, events, Monster Intel, the Workshop, Item Finder, the Game Data Browser, player permissions, buffs, gear and combat profiles, Settings and bug reports
-> - Each guide ticks its steps as you really do them, keeps your place, and can be restarted
-> - The first-time setup tour is one of them and still opens on its own on a new install
+> **Version 3.183.3**
+> - `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?` or its plain spelling, as in every reply
+> - `@divert` forwards telepaths as plain text too
+> - The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

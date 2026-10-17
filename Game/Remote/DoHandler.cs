@@ -79,8 +79,9 @@ public sealed class DoHandler : IDisposable
         // the original message collapse to one space here. That's fine
         // for MUD commands (any modern MUD parses ' '+ between tokens
         // identically), and matters less than the safety of NOT
-        // round-tripping arbitrary bytes from a remote source.
-        string command = string.Join(" ", ctx.Args);
+        // round-tripping arbitrary bytes from a remote source. For the same reason
+        // nothing outside plain ASCII goes out as given (WireText).
+        string command = WireText.Ascii(string.Join(" ", ctx.Args));
         byte[] bytes = Encoding.Latin1.GetBytes(command + "\r");
         LastSentForTests.Add(bytes);
         SendingFor = ctx.Sender;
