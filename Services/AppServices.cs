@@ -5000,6 +5000,10 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); callback(); };
                 timer.Start();
             });
+        // Which room the holds' room display belongs to, when no display has been seen
+        // since we left the last one (a dark room lit after a fight).
+        Combat.SetConfirmedRoomProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed ? RoomTracker.State.CurrentRoom : null);
 
         // Attack-order re-fire quiet window: a UI-thread one-shot so attack-last /
         // attack-after re-fire once the party's staggered announces have gone quiet.

@@ -179,6 +179,11 @@ public static class DefaultPatterns
         // capture group hold the direction word either way.
         yield return new RegexPattern(KnownPatterns.UserSearchSucceeded,
             @"^You found an exit (?:to the )?(?<direction>\w+)!");
+        // GAME_MECHANICS "Door and gate barriers in the room display".
+        yield return new RegexPattern(KnownPatterns.RoomExitOpenedOrClosed,
+            @"^The exit to the (?<direction>\w+) just (?<what>opened|closed)!");
+        yield return new RegexPattern(KnownPatterns.RoomConcealedPassageOpened,
+            @"^A concealed passage opens to the (?<direction>\w+)\.");
         // A room-wide `sea` that turns up nothing concealed. AutoSearch releases
         // its walker hold on this instead of waiting out the settle window; a
         // fruitful search surfaces "You notice … here." (the room survey) instead.

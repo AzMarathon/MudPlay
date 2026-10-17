@@ -49,7 +49,19 @@ public sealed class CombatManagerRoomChangeHoldTests
           { "Map Number": 1, "Room Number": 7, "Name": "Crater Floor",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
             "N": "0", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/3" }
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "1/3" },
+          { "Map Number": 1, "Room Number": 8, "Name": "Dark Forest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "1/9", "S": "1/1", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dark Forest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "1/8", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 10, "Name": "Obsidian Hall",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
 
@@ -84,24 +96,24 @@ public sealed class CombatManagerRoomChangeHoldTests
         public TimeSpan? ToRound { get; set; } = TimeSpan.FromSeconds(3);
         private Action? _deadline;
         public int DeadlinesScheduled { get; private set; }
-        public void FireDeadline() => _deadline?.Invoke();
 
-        // With deferPost, what the combat engine posts waits in Posted until the test
-        // runs it (DrainPosted), as the UI dispatcher runs it after the current flush.
-        public List<Action> Posted { get; } = new();
-        private readonly bool _deferPost;
-        public void DrainPosted()
+        // What the combat engine posts waits until the flush being fed is done, as
+        // AppServices posts it through the UI dispatcher.
+        private readonly List<Action> _posted = new();
+        private void DrainPosted()
         {
-            List<Action> due = new(Posted);
-            Posted.Clear();
-            foreach (Action a in due) a();
+            while (_posted.Count > 0)
+            {
+                List<Action> due = new(_posted);
+                _posted.Clear();
+                foreach (Action a in due) a();
+            }
         }
 
         public DarkRoomCombatWatcher DarkRoom { get; }
 
-        public Harness(string rooms = Rooms, bool deferPost = false)
+        public Harness(string rooms = Rooms)
         {
-            _deferPost = deferPost;
             _root = Path.Combine(Path.GetTempPath(), "mudplay-roomchange-hold-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
             File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
@@ -136,7 +148,7 @@ public sealed class CombatManagerRoomChangeHoldTests
                 readSettings: () => Settings,
                 isEnabled: () => true,
                 readOwnGivenName: () => "MudPlay",
-                post: a => { if (_deferPost) Posted.Add(a); else a(); },
+                post: _posted.Add,
                 log: Log);
             DarkRoom = new DarkRoomCombatWatcher(Router, Tracker, Classifier,
                 currentTarget: () => Combat.CurrentTarget, log: Log);
@@ -145,6 +157,8 @@ public sealed class CombatManagerRoomChangeHoldTests
             Combat.RoomSpellKill += MonsterDeaths.NoteRoomSpellKill;
             Combat.SetFearGate(() => Feared);
             Combat.SetHoldDeadline(() => ToRound, (_, due) => { _deadline = due; DeadlinesScheduled++; });
+            Combat.SetConfirmedRoomProbe(() =>
+                Tracker.State.Confidence == RoomConfidence.Confirmed ? Tracker.State.CurrentRoom : null);
             // As AppServices and the main window wire them.
             Tracker.StateChanged += t =>
             {
@@ -154,8 +168,8 @@ public sealed class CombatManagerRoomChangeHoldTests
             {
                 if (!Tracker.IsPeekSuppressed()) Combat.NoteRoomDisplayed(obs);
             };
-            Tracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
             Tracker.PlayerDeathObserved += () => Classifier.NoteRoomChanged();
+            Tracker.PlayerDeathObserved += () => Combat.OnPlayerDeath();
 
             Party.IsInParty = true;
             foreach (string n in new[] { "MudPlay", "Cidir NineteenTr", "Thresh II" })
@@ -172,8 +186,18 @@ public sealed class CombatManagerRoomChangeHoldTests
             => Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
 
+        // One flush from the server; what it posted runs once it has been read.
         public void Wire(params string[] lines)
-            => _terminal.Feed(Encoding.Latin1.GetBytes(string.Concat(lines.Select(l => l + "\r\n"))));
+        {
+            _terminal.Feed(Encoding.Latin1.GetBytes(string.Concat(lines.Select(l => l + "\r\n"))));
+            DrainPosted();
+        }
+
+        public void FireDeadline()
+        {
+            _deadline?.Invoke();
+            DrainPosted();
+        }
 
         // A room display as the game prints it: the bright-cyan name, who is here,
         // and the exits line the tracker places the room on.
@@ -550,13 +574,16 @@ public sealed class CombatManagerRoomChangeHoldTests
         Assert.Equal(1, h.Punches);
     }
 
-    // The exits a room lists change in place (GAME_MECHANICS "Hidden exits — `sea
-    // <dir>` reveal wording", "Door and gate barriers in the room display"): the room
-    // shown again with more or fewer of them is still this room.
+    // The exits a room lists change in place, each with the line the game prints
+    // for it (GAME_MECHANICS "Hidden exits — `sea <dir>` reveal wording", "Door and
+    // gate barriers in the room display"), or as a `secret passage` that hides again
+    // with no line: the room shown again with them changed is still this room.
     [Theory]
-    [InlineData("north", "north, secret passage east", null)]                      // a search found it
-    [InlineData("north, secret passage east", "north", null)]                      // it hid again
-    [InlineData("north", "north, south", "The exit to the south just opened!")]   // a timed exit
+    [InlineData("north", "north, secret passage east", "You found an exit to the east!")]   // a search found it
+    [InlineData("north, secret passage east", "north", null)]                                // it hid again
+    [InlineData("north", "north, south", "The exit to the south just opened!")]              // a timed exit opened
+    [InlineData("north, south", "north", "The exit to the south just closed!")]              // and shut
+    [InlineData("north", "north, south", "A concealed passage opens to the south.")]         // a lever's passage
     public void SameRoomShownAgain_ExitsChangedInPlace_FollowTakesTheLeadersTargetAtOnce(
         string before, string after, string? line)
     {
@@ -569,19 +596,84 @@ public sealed class CombatManagerRoomChangeHoldTests
         Assert.Equal(2, h.Punches);
     }
 
-    [Fact]
-    public void DarkRoomLitAfterTheFight_IsThisRoomsFight()
+    // The same name with exits nothing announced changing is another room.
+    [Theory]
+    [InlineData("north", "north, south")]                       // one more, nothing opened
+    [InlineData("north, south", "north")]                       // one fewer, nothing shut
+    [InlineData("north, secret passage east", "north, south")]  // the passage hid, but south is new
+    public void SameName_ExitsChangedUnannounced_Holds(string before, string after)
     {
-        // We step into a room too dark to show, fight there, and it's lit: the display
-        // that finally shows is the room we stepped into, not the room shown before it.
         using Harness h = new();
+        FollowFightInTheTunnel(h, before);
+
+        h.ShowRoom("Volcano Tunnel", "cave bear, giant skeleton, Cidir", after);
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu cave bear", h.LastSent);                 // a new opening: our own pick
+    }
+
+    [Fact]
+    public void DraggedBetweenLikeNamedRooms_Holds()
+    {
+        // Pulled through a text exit from one "Dark Forest" to another whose exits are
+        // among the first's: no line says an exit changed, so it's another room.
+        using Harness h = new();
+        h.ShowRoom("Lava Chamber", null, "south");
+        h.SendMove(Direction.S);
+        h.ShowRoom("Volcano Tunnel", null, "north");
+        h.SendMove(Direction.N);
+        h.ShowRoom("Dark Forest", "tunnel horror", "north, south, east");
+        h.Wire("Thresh moves to attack tunnel horror.", "*Combat Engaged*", "You gain 100 experience.",
+            "*Combat Off*");
+        Assert.Equal(1, h.Punches);
+
+        h.Wire("You push through the dense foliage, and walk onto a small path.");
+        h.ShowRoom("Dark Forest", "giant skeleton", "north");
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void TeleportIntoADeadEndOfTheSameName_Holds()
+    {
+        // A room with no exits lists "Obvious exits: NONE!!!" (GAME_MECHANICS "Room
+        // display parsing — the room title is positional, not just bright cyan").
+        using Harness h = new();
+        h.ShowRoom("Lava Chamber", null, "south");
+        h.SendMove(Direction.S);
+        h.ShowRoom("Obsidian Hall", "tunnel horror", "east");
+        h.Wire("Thresh moves to attack tunnel horror.", "*Combat Engaged*", "You gain 100 experience.",
+            "*Combat Off*");
+        Assert.Equal(1, h.Punches);
+
+        h.Wire("\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton.", "Obvious exits: NONE!!!");
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    // We step into a room too dark to show and fight there. The reveal's announce
+    // can latch a not-last hold or end one, by which handler reads it first; the
+    // deadline fired once covers both.
+    private static void FightInTheDark(Harness h)
+    {
         h.ShowRoom("Volcano Tunnel", null, "north");
         h.SendMove(Direction.N);
         h.Wire("The room is very dark - you can't see anything.");
         h.Wire("Thresh moves to attack tunnel horror.");           // reveals it in the dark
-        h.FireDeadline();                                           // the hold its reveal latched
+        h.FireDeadline();
         Assert.Equal("pu tunnel horror", h.LastSent);
         h.Wire("*Combat Engaged*", "You gain 100 experience.", "*Combat Off*");
+    }
+
+    [Fact]
+    public void DarkRoomLitAfterTheFight_IsThisRoomsFight()
+    {
+        // The display that finally shows is the room the tracker has us in, not the
+        // room shown before it.
+        using Harness h = new();
+        FightInTheDark(h);
 
         h.ShowRoom("Lava Chamber", "giant skeleton", "south");
         Assert.Equal("pu giant skeleton", h.LastSent);
@@ -589,22 +681,47 @@ public sealed class CombatManagerRoomChangeHoldTests
     }
 
     [Fact]
+    public void TeleportOutOfADarkFight_NextRoomHolds()
+    {
+        using Harness h = new();
+        FightInTheDark(h);
+
+        h.ShowRoom("Ash Pit", "giant skeleton", "west");
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void DeathInADarkFight_AWalkInAtTheTempleHolds()
+    {
+        using Harness h = new();
+        FightInTheDark(h);
+
+        h.Wire("You have been killed!", "But, due to a miracle, you have been saved.", "You have 7 lives left.");
+        h.ShowRoom("Temple, Halls of the Dead", null, "up");
+        h.Wire("A giant skeleton stomps in from above.");
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
     public void ReleaseForARoomShownAgain_DoesNotEndTheNextRoomsHold()
     {
         // The room is shown again and its release is posted; in the same flush we're
         // teleported, and the next room's roster latches a hold of its own. The posted
-        // release is for the room before: it leaves that hold and its deadline alone.
-        using Harness h = new(deferPost: true);
+        // release, run after the flush, is for the room before: it leaves that hold and
+        // its deadline alone.
+        using Harness h = new();
         FightInTheTunnel(h);
-        h.Wire("\u001b[1;36mVolcano Tunnel\u001b[0m", "Also here: cave bear.", "Obvious exits: north.");
-        h.Wire("\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton.");
         int scheduled = h.DeadlinesScheduled;
 
-        h.DrainPosted();
+        h.Wire("\u001b[1;36mVolcano Tunnel\u001b[0m", "Also here: cave bear.", "Obvious exits: north.",
+            "\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton.");
         Assert.Equal(1, h.Punches);
-        Assert.Equal(scheduled, h.DeadlinesScheduled);              // not ended and re-armed
+        Assert.Equal(scheduled + 1, h.DeadlinesScheduled);          // the one hold's, not ended and re-armed
         h.Wire("Obvious exits: east.");
-        h.DrainPosted();
         Assert.Equal(1, h.Punches);
         h.FireDeadline();
         Assert.Equal("pu giant skeleton", h.LastSent);

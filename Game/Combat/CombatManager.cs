@@ -107,6 +107,9 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _roomPoisedSub;
     private readonly IDisposable _partyCombatSub;
     private readonly IDisposable _followDragSub;
+    private readonly IDisposable _exitFoundSub;
+    private readonly IDisposable _exitOpenedOrClosedSub;
+    private readonly IDisposable _concealedPassageSub;
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
@@ -1108,6 +1111,13 @@ public sealed partial class CombatManager : IDisposable
         _partyCombatSub = router.Subscribe(KnownPatterns.UserHits, OnPartyCombatLine);
         // A follower is dragged with no move of its own sent (FollowMoveObserver).
         _followDragSub = router.Subscribe(KnownPatterns.PartyFollowMove, _ => { if (!_disposed) LeaveRoomFight(); });
+        // The lines that change the room's exit list in place (PlaceRoomFight).
+        _exitFoundSub = router.Subscribe(KnownPatterns.UserSearchSucceeded,
+            m => NoteExitChangedHere(m, opened: true));
+        _exitOpenedOrClosedSub = router.Subscribe(KnownPatterns.RoomExitOpenedOrClosed,
+            m => NoteExitChangedHere(m, opened: m.Groups.Count > 1 && m.Groups[1] == "opened"));
+        _concealedPassageSub = router.Subscribe(KnownPatterns.RoomConcealedPassageOpened,
+            m => NoteExitChangedHere(m, opened: true));
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
@@ -1835,6 +1845,8 @@ public sealed partial class CombatManager : IDisposable
     {
         _lastRoomLeaveAt = DateTimeOffset.Now;
         _lastShownRoom = null;
+        _exitsOpenedSinceShown.Clear();
+        _exitsClosedSinceShown.Clear();
         ForgetRoomFight();
         DisarmHoldDeadlineKeepingHeldPick();
     }
@@ -5092,19 +5104,63 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // The last room display we were shown, not counting a `look <direction>` peek.
-    // Null once we've left the room it showed (LeaveRoomFight): the display of a room
-    // we stepped into, read later (a dark room lit, a move's display hidden as a
-    // peek), is that room's, and the move already dropped the fight before it.
+    // Null once we've left the room it showed (LeaveRoomFight); the room we then
+    // stand in is the tracker's to say (_confirmedRoom).
     private RoomObservation? _lastShownRoom;
 
-    // A display with the room's name, whose exits either take in all of those shown
-    // last or are all among them, is taken for the room shown last: the exits listed
-    // change in place (a search reveals a secret passage, a found exit hides again, a
-    // timed exit or a lever opens one), and the tracker's own match lets them differ
-    // the same way. Any other display is another room. Rooms alike that way can't be
-    // told apart, and are read as one. This places the fight on record (see
-    // _rosterRoomPlaced) without the tracker, which can't place a room in a grid of
-    // like rooms or in an unmapped area.
+    // The exits of the room we stand in that a line said opened or shut since its
+    // last display: a search's find, a timed exit, a hidden exit opened by its
+    // actions (GAME_MECHANICS "Hidden exits — `sea <dir>` reveal wording", "Door and
+    // gate barriers in the room display").
+    private readonly HashSet<Direction> _exitsOpenedSinceShown = new();
+    private readonly HashSet<Direction> _exitsClosedSinceShown = new();
+
+    // The room the tracker has us in while it is sure of it, else null. Wired in
+    // AppServices; unwired, a room shown after we left the last one is taken for
+    // another room.
+    private Func<Room?>? _confirmedRoom;
+
+    public void SetConfirmedRoomProbe(Func<Room?> confirmedRoom) => _confirmedRoom = confirmedRoom;
+
+    private void NoteExitChangedHere(MatchResult m, bool opened)
+    {
+        if (_disposed || m.Groups.Count == 0) return;
+        // A find says "upwards" / "downwards" for the vertical exits.
+        string word = m.Groups[0].EndsWith("wards", StringComparison.OrdinalIgnoreCase)
+            ? m.Groups[0][..^5] : m.Groups[0];
+        if (!DirectionExtensions.TryFromLongName(word, out Direction dir)) return;
+        (opened ? _exitsOpenedSinceShown : _exitsClosedSinceShown).Add(dir);
+    }
+
+    // Whether this display shows the room shown last. The same name, and every
+    // difference in the exits explained: one added was announced opened since, one
+    // gone was announced shut or was a `secret passage`, which hides again with no
+    // line. Any other display is another room. A room of the same name whose exits
+    // differ only in those ways can't be told from it, and is read as the same.
+    private bool ShowsTheRoomShownLast(RoomObservation before, RoomObservation shown)
+    {
+        if (!string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)) return false;
+        foreach (Direction d in shown.Exits)
+            if (!before.Exits.Contains(d) && !_exitsOpenedSinceShown.Contains(d)) return false;
+        foreach (Direction d in before.Exits)
+            if (!shown.Exits.Contains(d) && !_exitsClosedSinceShown.Contains(d)
+                && before.SecretPassageDirections?.Contains(d) != true) return false;
+        return true;
+    }
+
+    // With no display since we left the room shown last (a dark room we stepped into,
+    // lit later), the room we stand in is the one the tracker is sure of: this
+    // display is it when the name is its name and every exit shown is one of its
+    // exits. A tracker unsure of the room (a death, a teleport out of the dark, an
+    // unmapped area) says nothing, and the display is taken for another room.
+    private bool ShowsTheRoomWeSteppedInto(RoomObservation shown)
+        => _confirmedRoom?.Invoke() is { } room
+        && string.Equals(room.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
+        && shown.Exits.All(room.Exits.ContainsKey);
+
+    // A display decides which room the fight on record belongs to (see
+    // _rosterRoomPlaced). This places it without needing the tracker to place the
+    // room, which it can't do in a grid of like rooms or in an unmapped area.
     private void PlaceRoomFight(RoomObservation shown)
     {
         RoomObservation? last = _lastShownRoom;
@@ -5112,10 +5168,11 @@ public sealed partial class CombatManager : IDisposable
         // Unplaced only between an "Also here:" read and the end of its display.
         bool rosterReadHere = !_rosterRoomPlaced;
         _rosterRoomPlaced = true;
+        bool sameRoom = last is { } before ? ShowsTheRoomShownLast(before, shown) : ShowsTheRoomWeSteppedInto(shown);
+        _exitsOpenedSinceShown.Clear();
+        _exitsClosedSinceShown.Clear();
         if (!_fightUnderwayHere) return;
-        if (last is not { } before
-            || (string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
-                && (before.Exits.IsSubsetOf(shown.Exits) || shown.Exits.IsSubsetOf(before.Exits))))
+        if (sameRoom)
         {
             if (rosterReadHere) ReleaseHoldForFightHere();
             return;
@@ -6402,6 +6459,9 @@ public sealed partial class CombatManager : IDisposable
         _roomPoisedSub.Dispose();
         _partyCombatSub.Dispose();
         _followDragSub.Dispose();
+        _exitFoundSub.Dispose();
+        _exitOpenedOrClosedSub.Dispose();
+        _concealedPassageSub.Dispose();
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
