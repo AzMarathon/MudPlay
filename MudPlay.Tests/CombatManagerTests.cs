@@ -771,36 +771,56 @@ public sealed class CombatManagerTests
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
     }
 
-    // With no room read at all after the kill (a dark room), the wait ends after 2 s
-    // and a roster the kills emptied ends the chase.
+    // In a dark room no re-display can come to judge the kill, and the last guard's
+    // removal empties the roster (it drops the chief's slot). Holding the retry
+    // there left the chief alive and never attacked; it goes out at once.
     [Fact]
-    public void GuardBlock_KillUnjudgedPastTheWait_EmptiedRoster_DropsBlock()
+    public void GuardBlock_DarkRoom_LastGuardKilled_RetriesAtOnce()
     {
         using Harness h = new(wireDeathWatcher: true);
         h.AddMonster(1, "brigand chief", killable: true);
         h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
 
-        h.Feed("Also here: brigand chief, large brigand.");
-        h.Feed("large brigand moves to protect brigand chief");
-        BackdateLastAttack(h.Combat);
-        h.Feed("You gain 10 experience.");                       // the guard
-        h.Feed("*Combat Off*");
         h.Feed("Also here: brigand chief.");
-
+        h.Feed("large brigand moves to protect brigand chief");
         h.Dark = true;
-        NewExpRound(h.Combat);
+
         BackdateLastAttack(h.Combat);
-        h.Feed("You gain 10 experience.");                       // the chief
-        h.Feed("*Combat Off*");
-        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
-
-        SetStamp(h.Combat, "_rosterReadAt", DateTimeOffset.Now - TimeSpan.FromSeconds(4));
-        SetStamp(h.Combat, "_guardFightKillAt", DateTimeOffset.Now - TimeSpan.FromSeconds(3));
         int sentBefore = h.Sent.Count;
+        h.Feed("You gain 10 experience.");                       // the last guard
         h.Feed("*Combat Off*");
 
-        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
-        Assert.Equal(sentBefore, h.Sent.Count);
+        Assert.Equal(0, h.CrRefreshSends);
+        Assert.Contains(h.Sent.Skip(sentBefore),
+            b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
+    }
+
+    // Lit, the re-display is asked for and never answered, and no other *Combat
+    // Off* comes: the wait's own timer sends the retry.
+    [Fact]
+    public void GuardBlock_ReDisplayNeverAnswered_RetriesWhenTheWaitIsUp()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        List<Action> timers = new();
+        h.Combat.SetArrivalSettleScheduler((_, cb) => timers.Add(cb));
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+
+        h.Feed("Also here: brigand chief.");
+        h.Feed("large brigand moves to protect brigand chief");
+
+        BackdateLastAttack(h.Combat);
+        int sentBefore = h.Sent.Count;
+        h.Feed("You gain 10 experience.");                       // the last guard
+        h.Feed("*Combat Off*");
+        Assert.Equal(1, h.CrRefreshSends);
+        Assert.DoesNotContain(h.Sent.Skip(sentBefore),
+            b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
+
+        foreach (Action fire in timers.ToList()) fire();
+
+        Assert.Equal("a brigand chief", h.LastSent);
+        Assert.Equal("brigand chief", h.Combat.CurrentTarget);
     }
 
     // A monster a party member killed (no exp for us, so no death seen) stays on the

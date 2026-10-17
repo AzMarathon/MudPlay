@@ -242,9 +242,10 @@ public sealed partial class CombatManager : IDisposable
     // target-not-here reply, and on room change.
     private string? _guardBlockedTarget;
 
-    // The last kill while _guardBlockedTarget was set. Until a room read newer than
-    // it says whether the priority still stands, the guard retry waits, for at most
-    // GuardKillJudgeWait: a kill can be the priority's own.
+    // The last kill while _guardBlockedTarget was set with a room re-display coming.
+    // Until a room read newer than it says whether the priority still stands, the
+    // guard retry waits, for at most GuardKillJudgeWait: a kill can be the
+    // priority's own.
     private DateTimeOffset _guardFightKillAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan GuardKillJudgeWait = TimeSpan.FromSeconds(2);
 
@@ -4053,19 +4054,32 @@ public sealed partial class CombatManager : IDisposable
         // A kill in a guard fight: ask for the room, whose re-display says whether the
         // guarded priority still stands (JudgeGuardBlockByRoster). The removal below
         // can't: it drops our target's slot, which through the redirect is usually the
-        // priority's, whichever of them died. The guard retry waits for that read
-        // (TryGuardRetry), so it's asked for even inside the cooldown once the last
-        // re-display has been read: that one came before this kill.
+        // priority's, whichever of them died. It's asked for even inside the cooldown
+        // once the last re-display has been read: that one came before this kill.
+        //
+        // The guard retry waits for that read (TryGuardRetry), but only while one is
+        // coming: this CR, or one sent and not read yet. With none (a dark room) the
+        // retry goes out at once, as a stall with the priority alive and unattacked
+        // costs more than a retry at a corpse, which its "You don't see" reply clears.
+        // The wait ends by itself after GuardKillJudgeWait: the retry runs on a
+        // *Combat Off*, and none may come.
         if (_guardBlockedTarget is { } guarded)
         {
-            _guardFightKillAt = DateTimeOffset.Now;
-            if (TrySendRoomRefresh("kill in a guard fight", askAgainOnceRead: true))
-                _log?.Combat(LogCategory,
-                    $"kill while '{guarded}' is guard-blocked — re-displaying the room to see whether it still stands");
+            bool sent = TrySendRoomRefresh("kill in a guard fight", askAgainOnceRead: true);
+            bool reDisplayComing = sent
+                || (_isInDarkRoom?.Invoke() != true && _lastRoomRefreshAt > _rosterReadAt);
+            if (reDisplayComing)
+            {
+                DateTimeOffset killAt = DateTimeOffset.Now;
+                _guardFightKillAt = killAt;
+                _scheduleArrivalSettle?.Invoke(GuardKillJudgeWait, () => OnGuardKillWaitElapsed(killAt));
+                _log?.Combat(LogCategory, sent
+                    ? $"kill while '{guarded}' is guard-blocked — re-displaying the room to see whether it still stands"
+                    : $"kill while '{guarded}' is guard-blocked — the re-display already asked for will say whether it still stands");
+            }
             else
                 _log?.Combat(LogCategory,
-                    $"kill while '{guarded}' is guard-blocked — no re-display sent for it; the guard retry waits "
-                    + $"up to {GuardKillJudgeWait.TotalSeconds:F0}s for a room read");
+                    $"kill while '{guarded}' is guard-blocked — no re-display can come; the guard retry isn't held");
         }
 
         // Normally the corpse's identity is the still-set _currentTarget. But a prompt
@@ -5759,23 +5773,31 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // A guard fight's kill that no room read has judged yet holds the guard retry
-    // (true while it waits). With no read in GuardKillJudgeWait (a dark room, a
-    // re-display that never came) the roster the kills left decides: emptied, the
-    // priority fell with the rest; otherwise the chase goes on.
+    // (true while it waits), for at most GuardKillJudgeWait.
     private bool HoldGuardRetryForUnjudgedKill(string priority, DateTimeOffset now)
     {
-        if (_guardFightKillAt <= _rosterReadAt) return false;
-        if (now - _guardFightKillAt < GuardKillJudgeWait)
-        {
-            _log?.Combat(LogCategory,
-                $"guard retry at '{priority}' held — the kill at {_guardFightKillAt:HH:mm:ss.fff} may have been "
-                + "its own; waiting for the room read");
-            return true;
-        }
-        if (_classifier.Current is { } room && room.Entities.Any(e => e.Kind == EntityKind.Monster))
-            return false;
-        DropGuardBlock(priority, "taken for dead: no room read came after the last kill, and the roster lists no monster");
+        if (_guardFightKillAt <= _rosterReadAt || now - _guardFightKillAt >= GuardKillJudgeWait) return false;
+        _log?.Combat(LogCategory,
+            $"guard retry at '{priority}' held — the kill at {_guardFightKillAt:HH:mm:ss.fff} may have been "
+            + "its own; waiting for the room read");
         return true;
+    }
+
+    // The wait for a guard fight's kill to be judged is up with no room read. Nothing
+    // else would retry: the retry runs on a *Combat Off*, and with the roster
+    // emptied by the kill's removal (which drops the priority's slot whichever of
+    // them died) none may come. So retry now; at a corpse, the "You don't see"
+    // reply ends the block.
+    private void OnGuardKillWaitElapsed(DateTimeOffset killAt)
+    {
+        if (_disposed || _guardBlockedTarget is not { } priority) return;
+        if (_guardFightKillAt != killAt || killAt <= _rosterReadAt) return;
+        _guardFightKillAt = DateTimeOffset.MinValue;
+        _lastGuardRosterCheck = (DateTimeOffset.Now,
+            $"no room read within {GuardKillJudgeWait.TotalSeconds:F0}s of the kill at {killAt:HH:mm:ss.fff} — block kept, retried");
+        _log?.Combat(LogCategory,
+            $"no room read came within {GuardKillJudgeWait.TotalSeconds:F0}s of the kill — guard retry at '{priority}'");
+        TryGuardRetry();
     }
 
     // What the last room read made of a guard block, for the bug report, led by a
