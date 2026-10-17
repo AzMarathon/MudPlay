@@ -20,9 +20,13 @@ namespace MudPlay.Tests;
 // The game's world is the room graph itself unless a test says otherwise: a room
 // shows its name and its exits other than text exits, a move with no exit is
 // refused, and an exit leads where the graph says.
+//
+// Each chunk the game sends is handled as MainWindowViewModel handles one: the
+// prompt scanner reads it first, then the terminal, then whatever was posted to the
+// UI thread meanwhile (Post) runs.
 internal sealed class TrackerWireRig : IDisposable
 {
-    private const string Prompt = "[HP=100/100]:";
+    private readonly string _prompt;
 
     private readonly string _root;
     private readonly Queue<string> _toGame = new();
@@ -35,10 +39,13 @@ internal sealed class TrackerWireRig : IDisposable
     public AutoWalkManager Walker { get; }
     public List<string> Sent { get; } = new();
     public List<RecoveryFailedEvent> Failures { get; } = new();
+    public MovementCoordinator Coordinator { get; }
+    public MessageRouter Router { get; } = new();
+    public WirePromptScanner Prompts { get; } = new();
+    private readonly Queue<Action> _posted = new();
 
     private readonly TerminalEmulator _emulator;
     private readonly LineExtractor _lines;
-    private readonly MessageRouter _router = new();
     private readonly RoomDisplayParser _display;
     private readonly MovementRefusalDetector _refusals;
     private readonly InboundMoveEchoScanner _echoes;
@@ -73,8 +80,11 @@ internal sealed class TrackerWireRig : IDisposable
     // How long after a command the game answers it: one hop, for a move.
     public TimeSpan AnswerDelay { get; set; } = TimeSpan.FromMilliseconds(400);
 
-    public TrackerWireRig(string roomsJson)
+    // prompt: the statline the game prints; the default isn't one the prompt
+    // scanner's class-default pattern reads.
+    public TrackerWireRig(string roomsJson, string prompt = "[HP=100/100]:")
     {
+        _prompt = prompt;
         _root = Path.Combine(Path.GetTempPath(), "mudplay-wire-rig-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
@@ -91,8 +101,8 @@ internal sealed class TrackerWireRig : IDisposable
             return Clock.Now;
         });
         _lines = new LineExtractor(_emulator, Clock.Timestamp);
-        DefaultPatterns.Seed(_router);
-        _lines.LineEmitted += _router.Dispatch;
+        DefaultPatterns.Seed(Router);
+        _lines.LineEmitted += Router.Dispatch;
 
         Tracker = new RoomTracker(Graph, Log, () => Clock.Now);
         Gate = new EngineRecoveryGate(Graph, Tracker, Log);
@@ -101,11 +111,11 @@ internal sealed class TrackerWireRig : IDisposable
         Gate.RecoveryFailed += Failures.Add;
 
         // The same subscriptions AppServices makes for the tracker.
-        _router.Subscribe(KnownPatterns.DirectionFailed, _ => Tracker.NoteDirectionFailed());
-        _router.Subscribe(KnownPatterns.RoomPitchBlack, _ => Tracker.NoteDarkRoomEntered());
-        _router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
-        _router.Subscribe(KnownPatterns.BlindMoveStarved, _ => Tracker.NoteBlindMove());
-        _follow = new FollowMoveObserver(_router, Tracker, Log);
+        Router.Subscribe(KnownPatterns.DirectionFailed, _ => Tracker.NoteDirectionFailed());
+        Router.Subscribe(KnownPatterns.RoomPitchBlack, _ => Tracker.NoteDarkRoomEntered());
+        Router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
+        Router.Subscribe(KnownPatterns.BlindMoveStarved, _ => Tracker.NoteBlindMove());
+        _follow = new FollowMoveObserver(Router, Tracker, Log);
 
         _display = new RoomDisplayParser(_lines, Tracker, Log);
         _display.RoomParsed += Gate.OnRoomObserved;
@@ -115,10 +125,11 @@ internal sealed class TrackerWireRig : IDisposable
         _deaths = new Game.DeathDetector(Tracker, Log);
         _deaths.AttachLineExtractor(_lines);
 
-        Walker = new AutoWalkManager(Graph, new BfsMapper(Graph), Tracker, new MovementCoordinator(Log), log: Log, recovery: Gate);
+        Coordinator = new MovementCoordinator(Log);
+        Walker = new AutoWalkManager(Graph, new BfsMapper(Graph), Tracker, Coordinator, log: Log, recovery: Gate);
         Walker.SetWireSender(Send);
 
-        _emulator.Feed(Encoding.Latin1.GetBytes(Prompt));
+        _emulator.Feed(Encoding.Latin1.GetBytes(_prompt));
     }
 
     // What the client puts on the wire, typed or an engine's: the outbound observer
@@ -162,12 +173,21 @@ internal sealed class TrackerWireRig : IDisposable
     {
         Clock.Advance(TimeSpan.FromMilliseconds(400));
         if (!TryMove(dir)) throw new InvalidOperationException($"no {dir} exit from {Position}");
-        Feed($"\r\n -- Following your Party leader {dir.ToLongName()} --\r\n" + RoomText(Position) + Prompt);
+        Feed($"\r\n -- Following your Party leader {dir.ToLongName()} --\r\n" + RoomText(Position) + _prompt);
     }
 
     // The room we stand in, shown with nothing typed (logging in, a respawn). It
     // starts on a line of its own: on the prompt row it would read as an echo.
-    public void ShowRoom() => Feed("\r\n" + RoomText(Position) + Prompt);
+    public void ShowRoom() => Feed("\r\n" + RoomText(Position) + _prompt);
+
+    // A line of the game's with nothing typed, and a prompt after it.
+    public void Show(string line) => Feed("\r\n" + line + "\r\n" + _prompt);
+
+    // The link drops: the game answers nothing more of what was sent.
+    public void DropLink() => _toGame.Clear();
+
+    // Work for the UI thread, run once the chunk being handled is done.
+    public void Post(Action action) => _posted.Enqueue(action);
 
     private void Answer(string command)
     {
@@ -182,7 +202,7 @@ internal sealed class TrackerWireRig : IDisposable
             text.Append(TryMove(dir) ? Arrival() : "There is no exit in that direction!\r\n");
         else if (TryTextMove(command))
             text.Append(Arrival());
-        text.Append(Prompt);
+        text.Append(_prompt);
         Feed(text.ToString());
     }
 
@@ -221,7 +241,13 @@ internal sealed class TrackerWireRig : IDisposable
         return $"\u001b[1;36m{room.Name}\u001b[0m\r\nObvious exits: {(exits.Length == 0 ? "NONE!" : exits)}\r\n";
     }
 
-    private void Feed(string text) => _emulator.Feed(Encoding.Latin1.GetBytes(text));
+    private void Feed(string text)
+    {
+        byte[] chunk = Encoding.Latin1.GetBytes(text);
+        Prompts.Append(chunk);
+        _emulator.Feed(chunk);
+        for (int limit = 1000; _posted.Count > 0 && limit-- > 0;) _posted.Dequeue()();
+    }
 
     public RoomKey? Believed => Tracker.State.CurrentRoom?.Key;
 

@@ -86,7 +86,7 @@ public sealed class MovementControllerTests : IDisposable
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
-        LoopRunner loops = new(tracker, coord, graph: graph, bfs: bfs);
+        LoopRunner loops = new(tracker, coord, graph: graph, bfs: bfs, postToUi: a => a());
         loops.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers, log: null, coordinator: coord);

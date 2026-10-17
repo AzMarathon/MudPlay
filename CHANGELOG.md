@@ -1,5 +1,10 @@
 # Version history
 
+## 3.184.10
+
+- A loop restarted after a reconnect plans its first step from the room the reconnect shows, not the room before the drop
+- Unsure of that room, the restart waits until the map is sure of it; Stop calls it off
+
 ## 3.184.9
 
 - Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do

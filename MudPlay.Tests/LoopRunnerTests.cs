@@ -1199,8 +1199,9 @@ public sealed class LoopRunnerTests : IDisposable
         h.Events.Clear();
 
         // First in-game prompt after reconnect — the same trigger
-        // DeferredCollectReconnectReleaser uses. Tracker is still located at 1/1
-        // (a real reconnect would have re-established it via the login sequence).
+        // DeferredCollectReconnectReleaser uses — with the room display that came
+        // with it: back at 1/1.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.FirePromptObservedForTests();
 
         Assert.Null(h.Runner.PendingReconnectResumeForTests);   // one-shot, consumed
@@ -1223,6 +1224,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         h.Runner.NotifyDisconnected();
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // the reconnect's room display
         h.Events.Clear();
         int sent = h.Sent.Count;
 
@@ -1256,7 +1258,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.FirePromptObservedForTests();
         h.Events.Clear();
 
-        h.Runner.DropResumeHeldForMasterSwitch("user stop from toolbar");
+        h.Runner.DropHeldReconnectResume("user stop from toolbar");
         off = false;
         h.Runner.ResumeAfterMasterSwitch();
         h.Runner.FirePromptObservedForTests();
@@ -1285,6 +1287,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.ResumeAfterMasterSwitch();
         Assert.Equal(LoopState.Idle, h.Runner.State);
 
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // the next reconnect's room display
         h.Runner.FirePromptObservedForTests();
         Assert.Equal(LoopState.Running, h.Runner.State);
     }
@@ -1335,10 +1338,10 @@ public sealed class LoopRunnerTests : IDisposable
     // game, the loop restarted on the first prompt and sent its first step in the
     // same second, before the party reform (which fires off the room display that
     // prompt came with) had put its hold up — and the followers were left in the
-    // room. With a reform pending the loop is restarted behind a hold of its own,
-    // which lasts until the reform has seen the room and its holds are up.
+    // room. The restart waits for the lines that came with the prompt, so the reform
+    // has had its look and its holds are up by then: the loop restarts behind them.
     [Fact]
-    public void FirstPromptAfterDisconnect_WithAPartyReformPending_StartsHeldUntilTheReformHasSeenTheRoom()
+    public void FirstPromptAfterDisconnect_WithAPartyReformPending_RestartsBehindTheReformsHolds()
     {
         Harness h = NewHarness(deferResume: true);
         bool reformPending = true;
@@ -1349,22 +1352,19 @@ public sealed class LoopRunnerTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         h.Runner.FirePromptObservedForTests();     // the prompt, read ahead of its lines
-
-        Assert.Null(h.Runner.PendingReconnectResumeForTests);
-        Assert.Equal(LoopState.Paused, h.Runner.State);         // a paused run, not an idle one
-        Assert.True(h.Runner.ReconnectResumeHeldForReform);
-        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.ReconnectReformGate));
-        Assert.Single(h.Sent);                      // no step
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
 
         // The room display's lines are handled: the reform fires and holds movement.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
         reformPending = false;
         h.Coordinator.AssertGate(MovementCoordinator.PartyInviteGate);
-        h.Drain();                                  // the look after this prompt's lines
+        h.Drain();                                  // the restart, after this prompt's lines
 
-        Assert.False(h.Runner.ReconnectResumeHeldForReform);
-        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.ReconnectReformGate));
-        Assert.Equal(LoopState.Paused, h.Runner.State);
-        Assert.Single(h.Sent);                      // still no step: the reform holds it
+        Assert.Null(h.Runner.PendingReconnectResumeName);
+        Assert.Equal(LoopState.Paused, h.Runner.State);         // a paused run, not an idle one
+        Assert.False(h.Runner.ReconnectResumeHeldForReform);    // the reform's own hold is up
+        Assert.Single(h.Sent);                      // no step: the reform holds it
 
         h.Coordinator.ClearGate(MovementCoordinator.PartyInviteGate);   // the party is back
         h.Drain();
@@ -1388,6 +1388,8 @@ public sealed class LoopRunnerTests : IDisposable
         h.Coordinator.AssertGate(MovementCoordinator.HangupItemCheckGate);   // the reconnect
 
         h.Runner.FirePromptObservedForTests();
+        h.Tracker.SetLocated(new RoomKey(1, 1));    // the prompt's room display
+        h.Drain();                                  // the restart, after the prompt's lines
 
         Assert.Null(h.Runner.PendingReconnectResumeForTests);
         Assert.Equal(LoopState.Paused, h.Runner.State);
@@ -1408,6 +1410,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         h.Runner.NotifyDisconnected();
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // back in the room, which shows nothing to the reform
         h.Runner.FirePromptObservedForTests();
         Assert.Equal(LoopState.Paused, h.Runner.State);
         Assert.True(h.Runner.ReconnectResumeHeldForReform);

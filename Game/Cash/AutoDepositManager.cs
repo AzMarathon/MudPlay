@@ -578,8 +578,8 @@ public sealed class AutoDepositManager : IDisposable
     // link from the shop. A loop it came off is handed to LoopRunner's own restart
     // after a reconnect (LoopRunner.ResumeOnReconnect), as a loop running at the drop
     // is, with the guards that has (the master switch, a party reform): it restarts on
-    // the reconnect's first prompt, its first step planned from the room last known,
-    // and its own planning takes up any light still wanted. Not when the user's Stop
+    // the reconnect's first prompt, its first step planned from the room that prompt's
+    // display shows, and its own planning takes up any light still wanted. Not when the user's Stop
     // held the trip (the user gate is up): that stays a stop. An Auto-Lair run has no
     // such restart and stays stopped.
     public void NoteDisconnected()

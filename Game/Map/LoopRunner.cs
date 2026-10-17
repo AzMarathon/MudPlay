@@ -3029,6 +3029,12 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void OnTrackerStateChanged(RoomTransition t)
     {
+        // The restart after a reconnect was waiting for a room the tracker is sure of.
+        // Posted, so the rest of the display (and the party reform reading it) is
+        // handled before the loop plans its first step.
+        if (_reconnectResumeAwaitsRoom && t.NewConfidence == RoomConfidence.Confirmed)
+            _postToUi(TryRestartAfterReconnect);
+
         // While recovering we're waiting for the tracker to (re)confirm a room so
         // we can reroute onto the nearest loop segment. Handle that before the
         // normal running-step confirmation logic (which gates on Running).
@@ -3155,6 +3161,11 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _reconnectResumeHeldBySwitch;
     public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
 
+    // Back in the game, but the tracker isn't sure of the room yet: the restart waits
+    // for the next prompt or a room it is sure of.
+    private bool _reconnectResumeAwaitsRoom;
+    public bool ReconnectResumeAwaitsRoom => _reconnectResumeAwaitsRoom;
+
     // A loop an errand stopped (a bank run's light buy) when the connection dropped:
     // restart it on the first prompt after the reconnect, as one running at the drop
     // is, with the same guards.
@@ -3171,30 +3182,27 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         _pendingReconnectResume = null;
         _reconnectResumeHeldBySwitch = false;
+        _reconnectResumeAwaitsRoom = false;
     }
 
-    // A restart kept waiting on the master switch is the user's to call off: a
-    // Stop, or another character loaded. One still waiting for the reconnect's
-    // first prompt is left as it always was.
-    public void DropResumeHeldForMasterSwitch(string why)
+    // A restart already back in the game, kept waiting on the master switch or on the
+    // room, is the user's to call off: a Stop, or another character loaded. One still
+    // waiting for the reconnect's first prompt is left as it always was.
+    public void DropHeldReconnectResume(string why)
     {
-        if (!_reconnectResumeHeldBySwitch) return;
+        if (!_reconnectResumeHeldBySwitch && !_reconnectResumeAwaitsRoom) return;
         _log?.Info("LoopRunner",
-            $"reconnect: loop '{_pendingReconnectResume?.Name}' will not be restarted when the master switch is back on ({why})");
+            $"reconnect: loop '{_pendingReconnectResume?.Name}' will not be restarted ({why})");
         ClearPendingReconnectResume();
     }
 
     // The master switch is back on, in the game: restart the loop the reconnect
-    // set aside.
+    // set aside, once the room is known.
     public void ResumeAfterMasterSwitch()
     {
         if (!_reconnectResumeHeldBySwitch) return;
         _reconnectResumeHeldBySwitch = false;
-        if (_pendingReconnectResume is not { } loop) return;
-        _pendingReconnectResume = null;
-        _log?.Info("LoopRunner",
-            $"reconnect: resuming loop '{loop.Name}' now the master switch is back on");
-        RestartAfterReconnect(loop);
+        TryRestartAfterReconnect();
     }
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
@@ -3211,9 +3219,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // no stale recovery state left to misread.
     public void NotifyDisconnected()
     {
-        // A restart held for the master switch goes back to waiting for the next
-        // stay's first prompt, which asks the switch again.
+        // A restart held for the master switch or the room goes back to waiting for
+        // the next stay's first prompt, which asks both again.
         _reconnectResumeHeldBySwitch = false;
+        _reconnectResumeAwaitsRoom = false;
         if (State != LoopState.Idle)
         {
             _pendingReconnectResume = _loop;
@@ -3249,33 +3258,13 @@ public sealed class LoopRunner : IRecoverableEngine
     private void OnPromptObserved(PromptObservation _)
     {
         // The first genuine in-game prompt after a reconnect restarts the loop
-        // NotifyDisconnected set aside.
-        //
-        // A leader's party reform fires off the first room display, and the prompt
-        // that came with that display is read off the wire before its lines are
-        // handled: started bare, the loop sent its first step before the reform's
-        // hold went up and walked the leader out on the followers (report
-        // paradigm-20260923-092317). So when a reform has yet to see the room, the
-        // loop is started behind a hold of its own, dropped once the reform has
-        // had its look, by which time the reform's own holds are up. Started and
-        // held, rather than left waiting to start, the loop is a paused run like
-        // any other: Stop stops it, and a member's @comeback finds an engine to
-        // resume.
-        if (_pendingReconnectResume is { } loop)
+        // NotifyDisconnected set aside. The prompt is read off the wire ahead of the
+        // lines that came with it, the room display among them, so the restart waits
+        // until they have been handled: planned at the prompt, the first step would go
+        // out from the room known before the drop, wherever the reconnect put us.
+        if (_pendingReconnectResume is not null)
         {
-            if (MasterSwitchOff?.Invoke() == true)
-            {
-                if (!_reconnectResumeHeldBySwitch)
-                    _log?.Info("LoopRunner",
-                        $"reconnect: loop '{loop.Name}' is not restarted with the master switch off; it restarts when the switch is back on");
-                _reconnectResumeHeldBySwitch = true;
-                return;
-            }
-            _pendingReconnectResume = null;
-            _reconnectResumeHeldBySwitch = false;
-            _log?.Info("LoopRunner",
-                $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
-            RestartAfterReconnect(loop);
+            _postToUi(TryRestartAfterReconnect);
             return;
         }
         ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
@@ -3288,11 +3277,63 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi(() => { if (_index == step) FinishCommandWaitIfAnswered(); });
     }
 
+    // Run once the lines of a prompt's chunk have been handled, or when the master
+    // switch comes back on. Restarts the loop set aside at the drop when the switch is
+    // on and the tracker is sure of the room the reconnect showed; otherwise it stays
+    // owed (to the switch, or to the next prompt or a room the tracker is sure of).
+    private void TryRestartAfterReconnect()
+    {
+        if (_pendingReconnectResume is not { } loop) return;
+        // A loop started meanwhile (the user's, while this one was still owed)
+        // is the run now: restarted, the old one would supersede it.
+        if (State != LoopState.Idle)
+        {
+            _log?.Info("LoopRunner",
+                $"reconnect: loop '{loop.Name}' is not restarted; loop '{_loop?.Name ?? "?"}' was started meanwhile");
+            ClearPendingReconnectResume();
+            return;
+        }
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            if (!_reconnectResumeHeldBySwitch)
+                _log?.Info("LoopRunner",
+                    $"reconnect: loop '{loop.Name}' is not restarted with the master switch off; it restarts when the switch is back on");
+            _reconnectResumeHeldBySwitch = true;
+            _reconnectResumeAwaitsRoom = false;
+            return;
+        }
+        if (!RoomKnownForRestart())
+        {
+            if (!_reconnectResumeAwaitsRoom)
+                _log?.Info("LoopRunner",
+                    $"reconnect: loop '{loop.Name}' waits for the room to be known (tracker {_tracker.State.Confidence} at "
+                    + $"{_tracker.State.CurrentRoom?.Key.ToString() ?? "(none)"})");
+            _reconnectResumeAwaitsRoom = true;
+            return;
+        }
+        _pendingReconnectResume = null;
+        _reconnectResumeHeldBySwitch = false;
+        _reconnectResumeAwaitsRoom = false;
+        _log?.Info("LoopRunner",
+            $"reconnect: resuming loop '{loop.Name}' from {_tracker.State.CurrentRoom!.Key}");
+        RestartAfterReconnect(loop);
+    }
+
+    private bool RoomKnownForRestart() =>
+        _tracker.State.Confidence == RoomConfidence.Confirmed && _tracker.State.CurrentRoom is not null;
+
+    // A leader's party reform fires off the first room display. The restart runs
+    // after the lines that came with its prompt, so a reform whose display was among
+    // them has already put its own holds up. One still waiting for its room (a room
+    // too dark to display) would see the loop walk the leader out on the followers
+    // (report paradigm-20260923-092317), so the loop is started behind a hold of its
+    // own, dropped once the reform has had its look. Started and held, rather than
+    // left waiting to start, the loop is a paused run like any other: Stop stops it,
+    // and a member's @comeback finds an engine to resume.
     private void RestartAfterReconnect(Loop loop)
     {
         if (_reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
         Start(loop);
-        ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
     }
 
     private void BeginReconnectReformHold()

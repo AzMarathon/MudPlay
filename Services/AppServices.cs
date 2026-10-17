@@ -11362,7 +11362,7 @@ public sealed class AppServices
         _collectOwedInRoom = null;
         _masterSwitchSettleOwed = false;
         _masterSwitchEventsOwed = false;
-        LoopRunner.DropResumeHeldForMasterSwitch("another profile was loaded");
+        LoopRunner.DropHeldReconnectResume("another profile was loaded");
         MovementControl.ReleaseFromAutoAll();
     }
 

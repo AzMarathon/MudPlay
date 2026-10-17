@@ -408,7 +408,7 @@ public sealed class MovementController : IDisposable
         Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop(reason);
         if (_loops.State != LoopState.Idle) _loops.Stop(reason);
-        _loops.DropResumeHeldForMasterSwitch(reason);
+        _loops.DropHeldReconnectResume(reason);
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
         _walker.Stop(reason);

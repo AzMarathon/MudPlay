@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.9**
-> - Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do
-> - Auto-Light: a trip's light stop checks the whole trip, buys at the closest shop it can reach before the dark, checks the purse first, and skips a shop that didn't sell for a while
-> - Auto-Light: a bank or stash run whose way back runs dark keeps the light's price, buys at the shop nearest it, then sets off back
+> **Version 3.184.10**
+> - A loop restarted after a reconnect plans its first step from the room the reconnect shows, not the room before the drop
+> - Unsure of that room, the restart waits until the map is sure of it; Stop calls it off
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -140,7 +140,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
-        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
+        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker, postToUi: a => a());
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
         MonsterMessageStore monsters = new();
