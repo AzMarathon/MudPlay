@@ -11,24 +11,31 @@ namespace MudPlay.Game.Light;
 // Before a leg, the leg and the legs the errand plans after it are scanned
 // (AutoLightProvisioner.PlanRouteBuy): spell first, a carried light only for what it
 // leaves short, nothing bought in spell-only mode or with Carry hours 0. When they
-// cross a dark room nothing covers, the walk goes by the shop selling the light that
-// adds the fewest steps to the leg (AutoLightShopRouter.TrySelectShop), buys the
-// Carry-hours batch (LightShopBuy) and walks on to the leg's room. A shop past dark
-// rooms is walked to through them as they are, and a light found on the way is used:
-// at the shop the walk on is scanned again and nothing is bought when it is covered
-// now (user, 2026-10-17). When the leg's own room is the shop, the light is bought
-// there on arrival, alongside the errand's own work in it.
+// cross a dark room nothing covers, the walk goes by a light shop, buys the
+// Carry-hours batch (LightShopBuy) and walks on to the leg's room. The shop is the
+// closest one the walk there needs no light for, else the closest of all
+// (AutoLightProvisioner.TrySelectErrandShop, the bank run's choice too): lights
+// before the dark where that can be done, and through the dark as it is where it
+// can't (user, 2026-10-17). A light found on the way is used: at the shop the walk
+// on is scanned again and nothing is bought when it is covered now. When the leg's
+// own room is the shop, the light is bought there on arrival, alongside the
+// errand's own work in it.
+//
+// The purse is checked first (AutoLightProvisioner.AffordableBuy), leaving what
+// the errand holds back (a training trip's bill). A shop whose buy came to nothing
+// for any errand is passed over for a while (AutoLightProvisioner.NoteErrandShop),
+// so the next errand or the next run doesn't walk back to it.
 //
 // The errand sees one walk. While the stop has it, the stop takes the walker's
 // events; the walk on to the leg's room reports to the errand as any walk of its
 // own does. A shop that can't be reached, or a buy that doesn't land, walks on
-// without the light. A walk stopped from outside on the way to the shop, or one
-// started while the stop buys, is the errand's stopped walk: the stop hands it
-// over through the errand's callback and lets the walk be.
+// without the light. A walk stopped from outside on the way to the shop, one
+// started while the stop buys, or the connection dropping then, is the errand's
+// stopped walk: the stop hands it over through the errand's callback.
 //
-// One stop per errand run (BeginRun): a stop that couldn't buy isn't tried again on
-// the run's later legs. UI thread only, like the walker events that drive it.
-public sealed class ErrandLightStop : IDisposable
+// One stop per errand run (BeginRun). UI thread only, like the walker events that
+// drive it.
+public sealed class ErrandLightStop
 {
     private enum Phase { Idle, ToShop, Buying }
 
@@ -42,7 +49,7 @@ public sealed class ErrandLightStop : IDisposable
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
-    // This run has had its stop (or found no shop to make one at).
+    // This run has had its stop (or found nowhere to make one).
     private bool _tried;
     // Set while the stop starts the walk to the shop itself: a walk that ends inside
     // that call (already there, one room short of a stop-before boss room) is
@@ -54,8 +61,8 @@ public sealed class ErrandLightStop : IDisposable
     // The leg's own room sells the light: the buy goes out on arrival there.
     private (RoomKey Room, AutoLightBuyRequest Buy)? _buyOnArrival;
 
-    private sealed record Leg(RoomKey Target, IReadOnlyList<RoomKey> Ahead, RoomKey Shop, AutoLightBuyRequest Buy,
-        Func<RoomKey, bool> Walk, Action<string> Stopped);
+    private sealed record Leg(RoomKey Target, IReadOnlyList<RoomKey> Ahead, long Keep, RoomKey Shop,
+        AutoLightBuyRequest Buy, Func<RoomKey, bool> Walk, Action<string> Stopped);
 
     // errand names the errand in the log ("the stash transfer"). route is the walk
     // the walker would plan between two rooms (AutoWalkManager.TryComputeRouteKeys).
@@ -80,9 +87,6 @@ public sealed class ErrandLightStop : IDisposable
         _log = log;
     }
 
-    // The stop has the walk (on the way to the shop, or buying there).
-    public bool Active => _phase != Phase.Idle;
-
     // A new run of the errand: it may make its one stop again.
     public void BeginRun()
     {
@@ -94,27 +98,29 @@ public sealed class ErrandLightStop : IDisposable
     // the leg and the rooms ahead (the errand's later legs, in order) run dark. True
     // when a walk is under way (or the buy, standing in the shop), as the errand's
     // walk would answer. stopped(detail) is called when the errand's walk is
-    // stopped while the stop has it.
-    public bool Walk(RoomKey target, Func<RoomKey, bool> walk, Action<string> stopped, IReadOnlyList<RoomKey>? ahead = null)
+    // stopped while the stop has it. keepCopper is what the buy must leave in the
+    // purse.
+    public bool Walk(RoomKey target, Func<RoomKey, bool> walk, Action<string> stopped,
+        IReadOnlyList<RoomKey>? ahead = null, long keepCopper = 0)
     {
         ArgumentNullException.ThrowIfNull(walk);
         ArgumentNullException.ThrowIfNull(stopped);
         Cancel();
         ahead ??= Array.Empty<RoomKey>();
         if (_tried || _currentRoom() is not { } from || from.Equals(target)) return walk(target);
-        if (PlanStop(from, target, ahead) is not { } stop) return walk(target);
+        if (PlanStop(from, target, ahead, keepCopper) is not { } stop) return walk(target);
 
         if (stop.Shop.Equals(target))
         {
             _log?.Info(AutoLightProvisioner.LogCategory,
-                $"{_errand}: the walk to {target} runs dark and {target} sells '{stop.Buy.LightName}' — buying x{stop.Buy.Count} there");
+                $"{_errand}: the walk on from {target} runs dark and {target} sells '{stop.Buy.LightName}' — buying x{stop.Buy.Count} there");
             _buyOnArrival = (target, stop.Buy);
             return walk(target);
         }
 
         _log?.Info(AutoLightProvisioner.LogCategory,
             $"{_errand}: the walk to {target} runs dark — buying '{stop.Buy.LightName}' x{stop.Buy.Count} at {stop.Shop} first");
-        _leg = new Leg(target, ahead, stop.Shop, stop.Buy, walk, stopped);
+        _leg = new Leg(target, ahead, keepCopper, stop.Shop, stop.Buy, walk, stopped);
         if (from.Equals(stop.Shop))
         {
             BeginBuy();
@@ -134,6 +140,7 @@ public sealed class ErrandLightStop : IDisposable
         }
         if (started) return true;
         _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: can't walk to the light shop at {stop.Shop} — walking on without it");
+        _provisioner.NoteErrandShop(stop.Shop, stop.Buy, bought: false);
         return WalkOn();
     }
 
@@ -143,11 +150,13 @@ public sealed class ErrandLightStop : IDisposable
     {
         if (_phase == Phase.Idle)
         {
-            if (_buyOnArrival is { } here && e.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
+            // Only the end of the walk to the leg's own room settles a buy there.
+            if (_buyOnArrival is { } here && (e.Destination == here.Room || e.Requested == here.Room)
+                && e.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
             {
                 _buyOnArrival = null;
                 if (e.Kind == WalkEventKind.Finished && _currentRoom() is { } room && room.Equals(here.Room))
-                    _buyer.Begin(here.Buy, _send, _ => { });
+                    _buyer.Begin(here.Buy, _send, bought => _provisioner.NoteErrandShop(here.Room, here.Buy, bought));
             }
             return false;
         }
@@ -179,6 +188,15 @@ public sealed class ErrandLightStop : IDisposable
     // The buy's inventory poll (InventoryManager.Changed).
     public void OnInventoryChanged() => _buyer.OnInventoryChanged();
 
+    // The connection dropped: a stop under way is over, and so is the errand's walk
+    // it held, rather than walking on in whatever session comes next.
+    public void NoteDisconnected()
+    {
+        if (_phase != Phase.Idle && _leg is { } leg) HandOver(leg, "the connection dropped during the light stop");
+        _buyer.Cancel();
+        _buyOnArrival = null;
+    }
+
     // The errand is over or torn down: stand down, leave the walker alone.
     public void Cancel()
     {
@@ -187,12 +205,6 @@ public sealed class ErrandLightStop : IDisposable
         _leg = null;
         _heldEnd = null;
         _buyOnArrival = null;
-    }
-
-    public void Dispose()
-    {
-        Cancel();
-        _buyer.Dispose();
     }
 
     // One line for the bug report.
@@ -204,15 +216,25 @@ public sealed class ErrandLightStop : IDisposable
 
     // The light to buy for the walk from `from` to target and on through ahead, and
     // the shop to buy it at; null when the walk is covered or nothing is to be
-    // bought. A buy with no shop that sells it is this run's stop too.
-    private (RoomKey Shop, AutoLightBuyRequest Buy)? PlanStop(RoomKey from, RoomKey target, IReadOnlyList<RoomKey> ahead)
+    // bought. A buy with nowhere to make it is this run's stop too.
+    private (RoomKey Shop, AutoLightBuyRequest Buy)? PlanStop(RoomKey from, RoomKey target, IReadOnlyList<RoomKey> ahead, long keep)
     {
-        if (RoomsAhead(from, target, ahead) is not { } rooms) return null;
-        if (_provisioner.PlanRouteBuy(rooms) is not { } buy) return null;
+        if (RoomsAhead(from, target, ahead) is not { } rooms)
+        {
+            _log?.Info(AutoLightProvisioner.LogCategory,
+                $"{_errand}: no plain route from {from} to {target} to read for darkness — no light check for this walk");
+            return null;
+        }
+        if (_provisioner.PlanRouteBuy(rooms) is not { } wanted) return null;
         _tried = true;
-        if (_shops.TrySelectShop(from, target, buy.ItemId, out RoomKey shop)) return (shop, buy);
+        if (_provisioner.AffordableBuy(wanted, keep) is not { } buy)
+        {
+            _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: the walk to {target} runs dark but the purse can't pay for '{wanted.LightName}' — walking on with what is carried");
+            return null;
+        }
+        if (_provisioner.TrySelectErrandShop(_shops, _route, from, buy, out RoomKey shop)) return (shop, buy);
         _log?.Info(AutoLightProvisioner.LogCategory,
-            $"{_errand}: the walk to {target} runs dark but no reachable shop sells '{buy.LightName}' — walking on with what is carried");
+            $"{_errand}: the walk to {target} runs dark but no reachable shop sells '{buy.LightName}' (or each one let an errand down lately) — walking on with what is carried");
         return null;
     }
 
@@ -238,16 +260,23 @@ public sealed class ErrandLightStop : IDisposable
         if (_leg is not { } leg) return false;
         if (e.Kind == WalkEventKind.Finished && _currentRoom() is { } here && here.Equals(leg.Shop))
         {
-            if (RoomsAhead(here, leg.Target, leg.Ahead) is { } rooms && _provisioner.PlanRouteBuy(rooms) is { } still)
+            if (!_provisioner.Enabled)
             {
-                _leg = leg with { Buy = still };
+                _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: Auto-Light was turned off on the way — nothing bought, walking on to {leg.Target}");
+                return WalkOn();
+            }
+            if (RoomsAhead(here, leg.Target, leg.Ahead) is { } rooms && _provisioner.PlanRouteBuy(rooms) is { } still
+                && _provisioner.AffordableBuy(still, leg.Keep) is { } buy)
+            {
+                _leg = leg with { Buy = buy };
                 BeginBuy();
                 return true;
             }
-            _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: at the light shop, the walk on to {leg.Target} is covered now — nothing bought");
+            _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: at the light shop, the walk on to {leg.Target} is covered now (or the purse can't pay) — nothing bought");
             return WalkOn();
         }
         _log?.Info(AutoLightProvisioner.LogCategory, $"{_errand}: couldn't reach the light shop at {leg.Shop} — walking on to {leg.Target}");
+        _provisioner.NoteErrandShop(leg.Shop, leg.Buy, bought: false);
         return WalkOn();
     }
 
@@ -258,6 +287,7 @@ public sealed class ErrandLightStop : IDisposable
         _buyer.Begin(leg.Buy, _send, bought =>
         {
             if (_phase != Phase.Buying) return;
+            _provisioner.NoteErrandShop(leg.Shop, leg.Buy, bought);
             _log?.Info(AutoLightProvisioner.LogCategory, bought
                 ? $"{_errand}: '{leg.Buy.LightName}' bought — walking on to {leg.Target}"
                 : $"{_errand}: the light buy didn't land — walking on to {leg.Target} with what is carried");

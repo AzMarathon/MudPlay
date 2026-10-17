@@ -29,8 +29,8 @@ public sealed class ErrandLightStopTests : IDisposable
 
     public static TheoryData<Errand> Errands() => new(Enum.GetValues<Errand>());
 
-    // A started errand: whether it is still under way.
-    private sealed record Run(Func<bool> Busy);
+    // A started errand: whether it is still under way, and its own teardown.
+    private sealed record Run(Func<bool> Busy, Action Cancel);
 
     private Run Begin(Errand errand) => errand switch
     {
@@ -47,17 +47,19 @@ public sealed class ErrandLightStopTests : IDisposable
     {
         TrainerWalkManager trainer = _w.NewTrainer();
         trainer.TrainNow();
-        return new Run(() => trainer.IsBusy);
+        return new Run(() => trainer.IsBusy, () => trainer.Cancel("test"));
     }
 
     // A train the purse can't pay: the funding errand's leg to the bank at 1/3, the
     // walk on to the trainer back at the start.
-    private Run BeginFunding()
+    private Run BeginFunding() => BeginFunding(Far, Start);
+
+    private Run BeginFunding(RoomKey bank, RoomKey trainerRoom)
     {
         TrainFundingRouter funding = new(
             currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
             onHandCopper: () => _w.Inventory.Snapshot.Currency.TotalCopperValue,
-            sources: () => new[] { new TrainFundingSource(TrainFundingSourceKind.Bank, Far, "Far Bank", 100_000) },
+            sources: () => new[] { new TrainFundingSource(TrainFundingSourceKind.Bank, bank, "Bank", 100_000) },
             newDistanceLookup: () => (a, b) => _w.Bfs.DistanceBetween(a, b),
             walkTo: k => _w.Walker.WalkTo(k, planThroughAcquirableGates: true),
             send: _w.Sent.Add,
@@ -67,12 +69,14 @@ public sealed class ErrandLightStopTests : IDisposable
             setAutoGetCash: _ => { },
             lightStop: _w.NewStop("the funding errand"));
         _w.Walker.Event += funding.OnWalkEvent;
-        Assert.Equal(TrainFundingStart.Collecting, funding.Begin(10_000, Start));
-        return new Run(() => funding.IsBusy);
+        Assert.Equal(TrainFundingStart.Collecting, funding.Begin(10_000, trainerRoom));
+        return new Run(() => funding.IsBusy, () => funding.Cancel("test"));
     }
 
     // The map's Transfer Stash to Bank: the stash at 1/3, the bank at the start.
-    private Run BeginStashTransfer()
+    private Run BeginStashTransfer() => BeginStashTransfer(Far, Start);
+
+    private Run BeginStashTransfer(RoomKey stash, RoomKey bank)
     {
         StashTransferRunner runner = new(
             currentRoom: () => _w.Tracker.State.CurrentRoom?.Key,
@@ -88,8 +92,8 @@ public sealed class ErrandLightStopTests : IDisposable
             notice: _ => { },
             lightStop: _w.NewStop("the stash transfer"));
         _w.Walker.Event += runner.OnWalkEvent;
-        Assert.Null(runner.Start(Far, Start, "Bank"));
-        return new Run(() => runner.IsBusy);
+        Assert.Null(runner.Start(stash, bank, "Bank"));
+        return new Run(() => runner.IsBusy, () => runner.Cancel("test"));
     }
 
     // A walk to Far West, a dagger due to sell at the shop at 1/3: the detour from
@@ -121,7 +125,7 @@ public sealed class ErrandLightStopTests : IDisposable
         _w.Arrive(West);
         detour.Evaluate();
         Assert.True(detour.IsDetouring);
-        return new Run(() => detour.IsDetouring);
+        return new Run(() => detour.IsDetouring, detour.Cancel);
     }
 
     // After a level, a scroll to buy at the shop at 1/3, the trip back to the start.
@@ -144,7 +148,7 @@ public sealed class ErrandLightStopTests : IDisposable
         _w.Walker.Event += spells.OnWalkEvent;
         Assert.True(spells.Begin(5, Start));
         _w.RunTimers();   // the `sp` read's window: the trip sets out
-        return new Run(() => spells.IsBusy);
+        return new Run(() => spells.IsBusy, () => spells.Cancel("test"));
     }
 
     [Theory]
@@ -286,5 +290,139 @@ public sealed class ErrandLightStopTests : IDisposable
 
         Assert.Equal(Start, _w.Walker.Destination);
         Assert.Single(_w.Buys);
+    }
+
+    // The shop is the closest one reached without crossing the dark (user,
+    // 2026-10-17): Far West, two rooms behind the start, over a shop in the dark room
+    // itself (one room away, on the way) and Far East past it.
+    [Theory]
+    [MemberData(nameof(Errands))]
+    public void ALitShopBehindTheStart_BeatsAShopPastTheDark(Errand errand)
+    {
+        _w.LightShopRooms.Clear();
+        _w.LightShopRooms.AddRange(new[] { Dark, FarEast, FarWest });
+        Begin(errand);
+        Assert.Equal(FarWest, _w.Walker.Destination);
+    }
+
+    // Every shop lies past the dark: the closest of them, walked to as it is.
+    [Fact]
+    public void EveryShopIsPastTheDark_TheClosestIsTaken()
+    {
+        _w.LightShopRooms.Clear();
+        _w.LightShopRooms.AddRange(new[] { FarthestEast, FarEast });
+        BeginStashTransfer();
+        Assert.Equal(FarEast, _w.Walker.Destination);
+
+        _w.WalkThere();
+        Assert.Equal("buy torch", Assert.Single(_w.Buys));
+        _w.TorchBought();
+        Assert.Equal(Far, _w.Walker.Destination);
+    }
+
+    // The first leg is lit and a later one dark: the light is bought before setting
+    // out. The funding errand's bank is behind the start, the trainer past the dark;
+    // the stash transfer's stash behind the start, its bank past the dark.
+    [Theory]
+    [InlineData(Errand.Funding)]
+    [InlineData(Errand.StashTransfer)]
+    public void ALaterLegRunsDark_TheLightIsBoughtFirst(Errand errand)
+    {
+        Run run = errand == Errand.Funding ? BeginFunding(West, Far) : BeginStashTransfer(West, Far);
+        Assert.Equal(Shop, _w.Walker.Destination);
+
+        _w.WalkThere();
+        _w.TorchBought();
+        Assert.Equal(West, _w.Walker.Destination);
+        Assert.True(run.Busy());
+    }
+
+    // A shop whose buy came to nothing is passed over by the next errand, whichever
+    // it is (the next sell detour too), until the back-off passes.
+    [Theory]
+    [MemberData(nameof(Errands))]
+    public void AShopThatDidNotSell_IsPassedOverByTheNextErrand(Errand next)
+    {
+        Run first = BeginStashTransfer();
+        _w.WalkThere();
+        _w.RunTimers();                    // the buy window passes: nothing landed
+        first.Cancel();
+        _w.Walker.Stop();
+        _w.Tracker.SetLocated(Start);
+
+        Begin(next);
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Single(_w.Buys);
+    }
+
+    [Fact]
+    public void AShopThatDidNotSell_IsTriedAgainOnceTheBackOffPasses()
+    {
+        Run first = BeginStashTransfer();
+        _w.WalkThere();
+        _w.RunTimers();
+        first.Cancel();
+        _w.Walker.Stop();
+        _w.Tracker.SetLocated(Start);
+
+        _w.Now += AutoLightProvisioner.EngineTripRetry + TimeSpan.FromSeconds(1);
+        BeginFunding();
+        Assert.Equal(Shop, _w.Walker.Destination);
+    }
+
+    // A purse that can't pay for one light walks on without the stop.
+    [Theory]
+    [MemberData(nameof(Errands))]
+    public void ThePurseCannotPayForALight_NothingIsBought(Errand errand)
+    {
+        _w.TorchPrice = 1000;               // the purse holds 500 copper
+        Begin(errand);
+        Assert.Equal(Far, _w.Walker.Destination);
+        Assert.Empty(_w.Buys);
+    }
+
+    // An errand torn down while its stop buys: the buy landing walks nobody on.
+    [Theory]
+    [InlineData(Errand.Funding)]
+    [InlineData(Errand.StashTransfer)]
+    [InlineData(Errand.SellDetour)]
+    [InlineData(Errand.SpellShops)]
+    [InlineData(Errand.Training)]
+    public void AnErrandCancelledDuringTheBuy_DoesNotWalkOn(Errand errand)
+    {
+        Run run = Begin(errand);
+        _w.WalkThere();
+        Assert.Single(_w.Buys);
+
+        run.Cancel();
+        _w.TorchBought();
+        Assert.NotEqual(Far, _w.Walker.Destination);
+        Assert.False(run.Busy());
+    }
+
+    // The sell detour's walk to the light shop is stopped: the detour is over.
+    [Fact]
+    public void TheSellDetoursWalkToTheShopIsStopped_TheDetourEnds()
+    {
+        Run run = BeginSellDetour();
+        Assert.Equal(Shop, _w.Walker.Destination);
+
+        _w.Walker.Stop();
+        Assert.False(run.Busy());
+    }
+
+    // The connection drops while the stop buys: the errand's walk is over, and the
+    // buy's window ending in the next session walks nobody on.
+    [Fact]
+    public void TheConnectionDropsDuringTheBuy_TheErrandEnds()
+    {
+        _w.LightShopRooms[0] = Start;
+        Run run = BeginStashTransfer();
+        Assert.Single(_w.Buys);
+
+        _w.LastStop!.NoteDisconnected();
+        Assert.False(run.Busy());
+        _w.RunTimers();
+        Assert.Null(_w.Walker.Destination);
     }
 }

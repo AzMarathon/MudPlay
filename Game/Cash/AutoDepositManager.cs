@@ -52,8 +52,8 @@ namespace MudPlay.Game.Cash;
 // provisioning itself as an extra phase: after offloading at the bank it scans the
 // bank -> origin leg (AutoLightProvisioner.PlanRouteBuy), and if that leg runs dark
 // with no carried light to cover it, detours through the light shop nearest the
-// bank (AutoLightShopRouter.TrySelectShop) — bank -> shop -> buy -> origin — before
-// resuming the loop. When the leg is covered but the pack holds less than Carry
+// bank (AutoLightProvisioner.TrySelectErrandShop) — bank -> shop -> buy -> origin —
+// before resuming the loop. When the leg is covered but the pack holds less than Carry
 // hours of light (AutoLightProvisioner.PlanStockUp), the same stop is made if a
 // shop selling the light adds at most AutoLightProvisioner.StockUpMaxAddedSteps
 // (AutoLightShopRouter.TrySelectNearbyShop). The whole light detour rides the
@@ -728,15 +728,21 @@ public sealed class AutoDepositManager : IDisposable
         if (_provisioner.PlanRouteBuy(route) is not { } req)
             return TryPlanLightStockUp(back, route, out shop, out buy);
         // The light is bought in town before the walk back sets out (user,
-        // 2026-10-17): the shop nearest the bank, there and back, not the one adding
-        // the fewest steps, which can lie along the dark way home or at its end.
-        if (!_lightShop.TrySelectShop(_destination, _destination, req.ItemId, out shop))
+        // 2026-10-17): the shop nearest the bank, as an errand's stop picks it
+        // (one reached without the dark first), not the one adding the fewest
+        // steps, which can lie along the dark way home or at its end.
+        if (_provisioner.AffordableBuy(req) is not { } affordable)
         {
-            _log?.Info(LogCategory,
-                $"return leg dark but no reachable shop stocks '{req.LightName}' — returning without light");
+            _log?.Info(LogCategory, $"return leg dark but the purse can't pay for '{req.LightName}' — returning without light");
             return false;
         }
-        buy = req;
+        if (!_provisioner.TrySelectErrandShop(_lightShop, (a, b) => _walker.TryComputeRouteKeys(a, b), _destination, affordable, out shop))
+        {
+            _log?.Info(LogCategory,
+                $"return leg dark but no reachable shop stocks '{req.LightName}' (or each one let an errand down lately) — returning without light");
+            return false;
+        }
+        buy = affordable;
         return true;
     }
 
@@ -774,6 +780,7 @@ public sealed class AutoDepositManager : IDisposable
         _lightBuyer.Begin(buy, Send, bought =>
         {
             if (_phase != DepositPhase.BuyingLight) return;
+            if (_tracker.State.CurrentRoom?.Key is { } shop) _provisioner.NoteErrandShop(shop, buy, bought);
             _log?.Info(LogCategory, bought
                 ? $"'{buy.LightName}' acquired — returning to origin"
                 : "light buy did not complete in time — returning to origin");

@@ -22,8 +22,10 @@ namespace MudPlay.Tests;
 // AutoLightShopRouter) planning from that inventory.
 //
 //   1/6 Far West ─E─ 1/5 West ─E─ 1/1 Start ─N─ 1/2 Dark (Light -200) ─N─ 1/3 Far
-//                                     └─E─ 1/4 Light Shop
+//                                     └─E─ 1/4 Light Shop          1/3 ─E─ 1/7 ─E─ 1/8
 //
+// Only 1/4 sells the torch unless a test lists more (LightShopRooms): 1/6 lies
+// behind the start, 1/7 and 1/8 past the dark.
 // The torch (Strength 100, 6 h) lights the dark room from nothing worn; with Carry
 // hours 6 one copy is the batch. 1/3 is also a trainer for the training walk.
 internal sealed class ErrandLightWorld : IDisposable
@@ -34,6 +36,8 @@ internal sealed class ErrandLightWorld : IDisposable
     public static readonly RoomKey Shop = new(1, 4);
     public static readonly RoomKey West = new(1, 5);
     public static readonly RoomKey FarWest = new(1, 6);
+    public static readonly RoomKey FarEast = new(1, 7);
+    public static readonly RoomKey FarthestEast = new(1, 8);
 
     public const int TorchId = 100;
 
@@ -44,13 +48,17 @@ internal sealed class ErrandLightWorld : IDisposable
           { "Map Number": 1, "Room Number": 2, "Name": "Dark", "Light": -200, "Shop": 0, "Lair": "", "Delay": 0,
             "N": "1/3", "S": "1/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 3, "Name": "Far", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/2", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+            "N": "0", "S": "1/2", "E": "1/7", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 4, "Name": "Light Shop", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
             "N": "0", "S": "0", "E": "0", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 5, "Name": "West", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
             "N": "0", "S": "0", "E": "1/1", "W": "1/6", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 6, "Name": "Far West", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "1/5", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            "N": "0", "S": "0", "E": "1/5", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "Far East", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/8", "W": "1/3", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "Farthest East", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/7", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
 
@@ -89,6 +97,9 @@ internal sealed class ErrandLightWorld : IDisposable
     public int WornIllu { get; set; }
     public RoomLightSpell? Spell { get; set; }
     public List<RoomKey> LightShopRooms { get; } = new() { Shop };
+    // What one torch costs (null: not known), and the clock the back-off reads.
+    public long? TorchPrice { get; set; }
+    public DateTimeOffset Now { get; set; } = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
 
     public IReadOnlyList<LightItem> Catalogue { get; } = new[] { new LightItem(TorchId, "torch", 100, 7200) };
 
@@ -134,7 +145,9 @@ internal sealed class ErrandLightWorld : IDisposable
             castRoomLightSpell: _ => false,
             roomLightSpellUp: _ => false,
             settings: () => LightSettings,
-            currentRoom: () => Tracker.State.CurrentRoom);
+            currentRoom: () => Tracker.State.CurrentRoom,
+            now: () => Now,
+            lightPrice: id => id == TorchId ? TorchPrice : null);
         LightShops = new AutoLightShopRouter(
             shopRoomsSellingItem: id => id == TorchId ? LightShopRooms : Array.Empty<RoomKey>(),
             currentRoom: () => Tracker.State.CurrentRoom?.Key,
@@ -155,13 +168,16 @@ internal sealed class ErrandLightWorld : IDisposable
 
     // A light stop for one errand, built as AppServices.NewErrandLightStop builds
     // one, its buy window on the test's timers.
+    // The stop NewStop built last.
+    public ErrandLightStop? LastStop { get; private set; }
+
     public ErrandLightStop NewStop(string errand)
     {
         LightShopBuy buyer = new(Carried, ScheduleWindow);
         ErrandLightStop stop = new(errand, (from, to) => Walker.TryComputeRouteKeys(from, to),
             Provisioner, LightShops, () => Tracker.State.CurrentRoom?.Key, buyer, Sent.Add);
         Inventory.Changed += stop.OnInventoryChanged;
-        _dispose.Add(stop);
+        LastStop = stop;
         return stop;
     }
 

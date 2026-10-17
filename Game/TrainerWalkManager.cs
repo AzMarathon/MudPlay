@@ -99,6 +99,7 @@ public sealed class TrainerWalkManager : IDisposable
     private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
     private RoomKey _runFrom;         // where a walk run started — the shop leg plans its way back here
     private bool _spellTripTried;     // the shop leg has had its one go this run
+    private long _trainBill;          // the run's training fees, priced when it set out
     private bool _spellsOnly;         // a shop leg started by hand: no training, no train report
     private bool _fundingWithSpells;  // the funding errand in flight is collecting scroll money too
 
@@ -640,8 +641,11 @@ public sealed class TrainerWalkManager : IDisposable
     // multi-action gates — that a plain walk can't route through (report
     // paradigm-20260913-022254, same class of strand as the bank run). A walk that
     // runs dark goes by a light shop first (ErrandLightStop), once per run.
+    // The walk back to where the run started is looked at too, and the buy leaves
+    // the training bill in the purse.
     private bool WalkToTrainerRoom(RoomKey room) =>
-        _lightStop?.Walk(room, WalkThroughGates, LightStopTakenOver) ?? WalkThroughGates(room);
+        _lightStop?.Walk(room, WalkThroughGates, LightStopTakenOver,
+            ahead: _walkRun ? [_runFrom] : null, keepCopper: _trainBill) ?? WalkThroughGates(room);
 
     private bool WalkThroughGates(RoomKey room) => _walker.WalkTo(room, planThroughAcquirableGates: true);
 
@@ -722,6 +726,7 @@ public sealed class TrainerWalkManager : IDisposable
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return Game.Train.TrainFundingHandoff.Proceed;
         ReserveForTraining?.Invoke(cost);
+        _trainBill = cost;
 
         Game.Train.ShopSpellPlan? spells = withSpells ? ShopSpellsFor(itinerary, levels) : null;
         long scrolls = spells?.CostCopper ?? 0;
@@ -974,6 +979,7 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _trainBill = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
         _alteredStats.Reset();
@@ -1476,6 +1482,7 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _trainBill = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
 

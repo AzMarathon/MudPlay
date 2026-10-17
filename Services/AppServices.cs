@@ -8389,7 +8389,9 @@ public sealed class AppServices
             sightTakenAway: () => Conditions.IsBlinded
                 || Conditions.AnyActive(r => r.Links?.Any(l => string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)
                     && RoomLightSpell.IsDarkeningSpell(l.Number)) == true),
-            log:         Log);
+            log:         Log,
+            // A light trip, and an errand's stop, checks the purse against it.
+            lightPrice:  CheapestPrice);
         Profile.ProfileLoaded += _ => AutoLightProvisioner.Forget("profile loaded");
         GameData.ActiveSetChanged += _ => AutoLightProvisioner.Forget("game data changed");
         RoomTracker.PlayerDeathObserved += () => AutoLightProvisioner.Forget("death");
@@ -10031,8 +10033,7 @@ public sealed class AppServices
             engineRunning: () => (LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive) && !GhSweep.IsActive,
             restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
             engineRooms: LoopRunner.ResolveLoopRoomKeys,
-            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            lightPrice: CheapestPrice);
+            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         LoopRunner.Event += e =>
         {
             if (e.Kind == Game.Map.LoopEventKind.Started)
@@ -15485,6 +15486,12 @@ public sealed class AppServices
     }
 
     private readonly List<(string Errand, Game.Light.ErrandLightStop Stop)> _errandLightStops = new();
+
+    // The connection dropped: no errand's light stop walks on in the next session.
+    public void NotifyErrandLightStopsDisconnected()
+    {
+        foreach ((string _, Game.Light.ErrandLightStop stop) in _errandLightStops) stop.NoteDisconnected();
+    }
 
     // Each errand's light stop, for the bug report.
     public string DescribeErrandLightStops() => _errandLightStops.Count == 0

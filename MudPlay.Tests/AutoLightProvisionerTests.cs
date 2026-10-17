@@ -87,6 +87,8 @@ public sealed class AutoLightProvisionerTests
         public DateTimeOffset Now = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
         // The light-making spell's caster line, as the Messages data gives it.
         public string? CastLine;
+        // What one copy of a light costs at the cheapest shop (null: not known).
+        public long? LightPrice;
         public readonly List<AutoLightBuyRequest> BuyRequests = new();
         public readonly List<string> Sent = new();
         public readonly MessageRouter Router = new();
@@ -115,7 +117,8 @@ public sealed class AutoLightProvisionerTests
                 inDarkRoom:  () => InDark,
                 castLineFor: _ => CastLine,
                 sightTakenAway: () => SightTakenAway,
-                now: () => Now);
+                now: () => Now,
+                lightPrice: _ => LightPrice);
             Engine.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.SetProvisioner(req => { BuyRequests.Add(req); return true; });
             Engine.AttachRouter(Router);
@@ -1437,10 +1440,10 @@ public sealed class AutoLightProvisionerTests
     [InlineData("back-off")]
     public void Loop_TripThatCouldNotBuy_TriedAgain(string how)
     {
-        Harness h = new();
+        Harness h = new() { LightPrice = 1000 };
         int asks = 0;
         h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
-            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
+            engineRooms: () => new[] { A });
         h.Engine.OnEngineStarted(userStarted: false);
         h.Engine.OnEngineStarted(userStarted: false);   // a trip's resume: held back
         Assert.Equal(1, asks);
@@ -1465,10 +1468,10 @@ public sealed class AutoLightProvisionerTests
     [Fact]
     public void Loop_TripThatCouldNotBuy_WealthCountsOnlyWhenItNowPaysForOne()
     {
-        Harness h = new();
+        Harness h = new() { LightPrice = 1000 };
         int asks = 0;
         h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
-            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
+            engineRooms: () => new[] { A });
         h.Engine.OnEngineStarted(userStarted: false);
         h.Snapshot = h.Snapshot with { Currency = new CurrencyHoldings(12, 0, 0, 0, 0, 12) };
         h.Poll();
