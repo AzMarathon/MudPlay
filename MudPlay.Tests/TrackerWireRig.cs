@@ -13,8 +13,8 @@ namespace MudPlay.Tests;
 // observer, and the game answers in text fed to a real terminal emulator: the
 // echo on the prompt row, then a room display or a refusal, then a new prompt.
 // The lines reach the tracker the way they do live: LineExtractor into
-// RoomDisplayParser, MovementRefusalDetector, InboundMoveEchoScanner, and the
-// MessageRouter patterns AppServices subscribes it to. Rows are stamped on a
+// RoomDisplayParser, MovementRefusalDetector, InboundMoveEchoScanner, DeathDetector,
+// and the MessageRouter patterns AppServices subscribes it to. Rows are stamped on a
 // manual clock, which moves on between commands.
 //
 // The game's world is the room graph itself unless a test says otherwise: a room
@@ -44,6 +44,7 @@ internal sealed class TrackerWireRig : IDisposable
     private readonly InboundMoveEchoScanner _echoes;
     private readonly OutboundMovementObserver _outbound;
     private readonly FollowMoveObserver _follow;
+    private readonly Game.DeathDetector _deaths;
 
     // Where the character really is.
     public RoomKey Position { get; set; }
@@ -96,6 +97,7 @@ internal sealed class TrackerWireRig : IDisposable
         Tracker = new RoomTracker(Graph, Log, () => Clock.Now);
         Gate = new EngineRecoveryGate(Graph, Tracker, Log);
         Tracker.SetEngineAttachedProbe(() => Gate.HasAttachedEngine);
+        Graph.GraphReloaded += () => Tracker.OnGraphReloaded();
         Gate.RecoveryFailed += Failures.Add;
 
         // The same subscriptions AppServices makes for the tracker.
@@ -110,6 +112,8 @@ internal sealed class TrackerWireRig : IDisposable
         _refusals = new MovementRefusalDetector(_lines, Tracker, Log);
         _echoes = new InboundMoveEchoScanner(_lines, Tracker);
         _outbound = new OutboundMovementObserver(Tracker, Log);
+        _deaths = new Game.DeathDetector(Tracker, Log);
+        _deaths.AttachLineExtractor(_lines);
 
         Walker = new AutoWalkManager(Graph, new BfsMapper(Graph), Tracker, new MovementCoordinator(Log), log: Log, recovery: Gate);
         Walker.SetWireSender(Send);
@@ -224,6 +228,7 @@ internal sealed class TrackerWireRig : IDisposable
     public void Dispose()
     {
         _follow.Dispose();
+        _deaths.Dispose();
         _display.Dispose();
         _refusals.Dispose();
         _echoes.Dispose();

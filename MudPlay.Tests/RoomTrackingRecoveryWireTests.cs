@@ -654,8 +654,8 @@ public sealed class RoomTrackingRecoveryWireTests
     private static void Save(TrackerWireRig rig) => rig.Tracker.PersistCurrentRoomForSave();
 
     // A relog: the profile saves, closes and loads again, and the game shows the
-    // room the character stands in. The tracker comes back at the saved trail's
-    // start, and the display is checked against that trail's end.
+    // room the character stands in. The tracker comes back at the room the save
+    // left it: the known one, or a guess saved as where the trail starts.
     private static void Relog(TrackerWireRig rig, CharacterProfile profile)
     {
         Save(rig);
@@ -668,13 +668,13 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // B. A position the tier-3 walk-back works out is a guess (user, 2026-10-17): the
     // tracker is confirmed there, but the saved room stays the last one it knew. C. A
-    // relog afterwards replays the trail from where it starts and lands where the
-    // character is, not in a room the steps never left. The engine walks twenty rooms
+    // relog afterwards lands where the character is, still a guess, not in the saved
+    // room the steps since never left. The engine walks twenty rooms
     // down twin corridors (every room fits itself and its twin), fails a step, then
     // reports a stall, as its watchdog does; the walk-back settles where corridor B
     // turns off into its Cellar, which no display alone tells apart.
     [Fact]
-    public void Tier3_AConvergedWalkBackIsAGuess_AndARelogAfterItReplaysTheTrail()
+    public void Tier3_AConvergedWalkBackIsAGuess_AndARelogAfterItLandsOnTheRoomHeld()
     {
         using TrackerWireRig rig = new(TwinCorridors(cellarWestOf: 6, byPosition: true)) { Position = Gate };
         CharacterProfile profile = new() { LastKnownRoom = new RoomRef(Gate.Map, Gate.Room) };
@@ -716,14 +716,16 @@ public sealed class RoomTrackingRecoveryWireTests
         Relog(rig, profile);
 
         AssertLocatedAt(rig, CorridorA(6));
+        Assert.True(rig.Tracker.PositionIsGuess);
         Assert.Equal(Gate, Saved(profile));
     }
 
     // C. A room settled on without saving it as known (here the passive locate's
-    // convergence) starts a new trail there. The trail's start is saved with it, so
-    // a relog replays from that room, not from the saved one the trail never left.
+    // convergence) is a guess, and so is the room a step from it reaches. The save
+    // keeps the known room and saves that one as where the trail starts, so a relog
+    // lands on it, not on the saved room the character left.
     [Fact]
-    public void ARelogAfterAnUnsavedReanchor_ReplaysFromWhereTheTrailStarts()
+    public void ARelogAfterAnUnsavedReanchor_LandsOnTheRoomHeld()
     {
         using TrackerWireRig rig = new(PairWorld(split: 1)) { Position = A(0) };
         CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
@@ -746,9 +748,9 @@ public sealed class RoomTrackingRecoveryWireTests
     // C. The same after a tier-2 deduced locate. The map holds A(0), really in its
     // twin B(0); B's room 2 shows an exit A's lacks (shared with a decoy), so the
     // tracker can't place that landing and the forward footprint settles on B(2).
-    // The trail starts there, and a save on the way to the relog keeps A(0).
+    // A save on the way to the relog keeps A(0).
     [Fact]
-    public void Tier2Forward_ARelogAfterADeducedLocate_ReplaysFromWhereTheTrailStarts()
+    public void Tier2Forward_ARelogAfterADeducedLocate_LandsOnTheRoomHeld()
     {
         TrackerWireRig rig = new(PairWorld(split: 6, decoyAt: 2)) { Position = B(0) };
         using TrackerWireRig _ = rig;
@@ -856,5 +858,147 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Null(profile.RecentSteps);
         Assert.Null(profile.RecentStepsFrom);
         Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Hydrate: the saved trail starts at 9/999"));
+    }
+
+    // A guess saved at A(5) of twin corridors where every room reads alike (a save
+    // right after a footprint settled there leaves this), the known room the Gate.
+    private static TrackerWireRig GuessInCorridor(out CharacterProfile profile)
+    {
+        TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(5) };
+        profile = new()
+        {
+            LastKnownRoom = new RoomRef(Gate.Map, Gate.Room),
+            RecentStepsFrom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room),
+        };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        AssertLocatedAt(rig, CorridorA(5));
+        Assert.True(rig.Tracker.PositionIsGuess);
+        return rig;
+    }
+
+    // Every room of the walk reads like the one it started in, so nothing on the
+    // relog's first display could tell a trail's start from its end: the save keeps
+    // the room held as where the relog lands, and the saved trail never grows past
+    // what one save to the next walks.
+    [Fact]
+    public void ARelogAfterALongWalkOnFromAGuess_LandsOnTheRoomHeld_InRoomsThatReadAlike()
+    {
+        using TrackerWireRig rig = GuessInCorridor(out CharacterProfile profile);
+        for (int step = 1; step <= 30; step++)
+        {
+            rig.Do("e");
+            if (step % 10 != 0) continue;
+            Save(rig);
+            Assert.Null(profile.RecentSteps);
+            Assert.Equal(CorridorA(5 + step).Room, profile.RecentStepsFrom!.Room);
+        }
+
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, CorridorA(35));
+        Assert.True(rig.Tracker.PositionIsGuess);
+        Assert.Equal(Gate, Saved(profile));
+    }
+
+    // A character loaded with no saved room keeps the tracker where it was, but
+    // neither the last character's trail nor its guess goes along to be saved.
+    [Fact]
+    public void AProfileSwap_ToOneWithNoSavedRoom_TakesNoTrailOrGuessAlong()
+    {
+        using TrackerWireRig rig = GuessInCorridor(out _);
+        for (int step = 0; step < 3; step++) rig.Do("e");
+
+        rig.Tracker.OnProfileClosed();
+        CharacterProfile next = new();
+        rig.Tracker.Hydrate(next);
+        Save(rig);
+
+        Assert.False(rig.Tracker.PositionIsGuess);
+        Assert.Null(next.RecentSteps);
+        Assert.Null(next.RecentStepsFrom);
+    }
+
+    // The map, unsure of the room it holds, sees it again. A display only that room
+    // fits makes it known; one its look-alikes fit as well leaves it a guess.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASuspectRoomShownAgain_IsKnownOnlyWhenNoOtherRoomReadsLikeIt(bool unique)
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = unique ? Gate : CorridorA(10) };
+        RoomKey other = unique ? CorridorA(10) : Gate;
+        CharacterProfile profile = new()
+        {
+            LastKnownRoom = new RoomRef(other.Map, other.Room),
+            RecentStepsFrom = new RoomRef(rig.Position.Map, rig.Position.Room),
+        };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        Assert.True(rig.Tracker.PositionIsGuess);
+        // An exit the map doesn't have shows: no room fits, and the map goes unsure of
+        // the room it holds.
+        rig.ExtraShownExits[rig.Position] = new[] { Direction.N };
+        rig.Do("l");
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        rig.ExtraShownExits.Clear();
+
+        rig.Do("l");
+        Save(rig);
+
+        RoomKey here = rig.Position;
+        AssertLocatedAt(rig, here);
+        Assert.Equal(!unique, rig.Tracker.PositionIsGuess);
+        Assert.Equal(unique ? here : other, Saved(profile));
+    }
+
+    // Holding no room ends a guess: a death, Lost, or the room graph built again.
+    [Theory]
+    [InlineData("death")]
+    [InlineData("lost")]
+    [InlineData("reload")]
+    public void AGuess_EndsWhenNoRoomIsHeld(string how)
+    {
+        using TrackerWireRig rig = GuessInCorridor(out _);
+        switch (how)
+        {
+            case "death":
+                rig.NextAnswers.Enqueue("You have 8 lives left.");
+                rig.Do("l");
+                Assert.Equal(RoomConfidence.PendingRespawn, rig.Tracker.State.Confidence);
+                break;
+            case "lost":
+                for (int step = 0; step < 8 && rig.Tracker.State.Confidence != RoomConfidence.Lost; step++)
+                {
+                    rig.NextMoveShows.Enqueue("\u001b[1;36mNowhere\u001b[0m\r\nObvious exits: east, west");
+                    rig.Do("e");
+                }
+                Assert.Equal(RoomConfidence.Lost, rig.Tracker.State.Confidence);
+                break;
+            default:
+                rig.Graph.OnActiveSetChanged("alpha");
+                Assert.Equal(RoomConfidence.Unknown, rig.Tracker.State.Confidence);
+                break;
+        }
+
+        Assert.False(rig.Tracker.PositionIsGuess);
+    }
+
+    // A trail saved as starting in the known room starts from nothing worked out.
+    [Fact]
+    public void ARelog_WhoseTrailStartsInTheKnownRoom_IsNoGuess()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(5) };
+        CharacterProfile profile = new()
+        {
+            LastKnownRoom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room),
+            RecentStepsFrom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room),
+        };
+
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+
+        AssertLocatedAt(rig, CorridorA(5));
+        Assert.False(rig.Tracker.PositionIsGuess);
     }
 }

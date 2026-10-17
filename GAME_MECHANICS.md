@@ -4890,24 +4890,38 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Client policy** *(user, 2026-10-17)*: a room the tier-3 walk-back settles on is a guess too.
     `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`. The walker and the loop runner
     resume from the key either way, and the bug report's *Recovery anchor* is the gate's own walk-back anchor.
-  - **Client policy** *(user, 2026-10-17; held to every save in the PR #1091 review)*: **a room worked out while unsure is never saved
-    as the known room, by any save.** That covers the tier-2 and tier-3 footprints (`LocateDeduced`), the
-    passive locate's convergence, a name or trail re-match (`TryReanchorByName`, `TryReplayRecover`) and a
-    re-confirm of the room held while Suspect. Each sets `RoomTracker.PositionIsGuess`, and so does every
-    move predicted on from one. Only a strict anchor (a 1-of-1 match, a manual locate, `rm` or `sys st`)
-    clears it.
-    - The profile saves all through play (a buff dropping, an equipment change, a settings apply) as well
-      as on close. Each save runs `RoomTracker.PersistCurrentRoomForSave`. While the flag is set, it keeps
-      `LastKnownRoom` and writes the trail from the guess instead.
-    - Otherwise it still saves the room held as known, with the trail cleared: a run of moves through rooms
-      that read alike, such as Paradigm's ~100 `Graveyard` rooms, confirms every room by prediction and
-      never by a 1-of-1 match.
-  - A room settled on without saving it as known starts a new step trail there. The trail's start is saved
-    with it (`CharacterProfile.RecentStepsFrom`), a guess with no step taken from it yet as a trail of none.
-    `RoomTracker.Hydrate` lands a relog at that start, still a guess, and replays the trail from it rather
-    than from `LastKnownRoom`. A start no longer in the active game data drops the trail (logged), and the
-    relog lands on `LastKnownRoom`. Before, a relog after such a settling replayed the new steps from the
-    old anchor, as if they had been taken there.
+  - **Client policy** *(user, 2026-10-17; held to every save in the PR #1091 review)*: **a room worked out
+    while unsure is never saved as the known room, by any save.**
+    - **What sets `RoomTracker.PositionIsGuess`:**
+      - the tier-2 and tier-3 footprints (`LocateDeduced`);
+      - the passive locate's convergence;
+      - a name or trail re-match (`TryReanchorByName`, `TryReplayRecover`);
+      - a re-confirm of the room held while Suspect, when rooms other than it fit the display;
+      - every move predicted on from a guess.
+    - **What clears it:**
+      - a strict anchor: a 1-of-1 match (a re-confirm from Suspect whose display only that room fits
+        included), a manual locate, `rm` or `sys st`;
+      - holding no room: Lost, a Suspect with no room, a death, a graph reload;
+      - the profile closing (`OnProfileClosed`, which drops the trail too).
+    - **Each save runs `RoomTracker.PersistCurrentRoomForSave`.** The profile saves all through play (a buff
+      dropping, an equipment change, a settings apply) as well as on close.
+      - While the flag is set, the save keeps `LastKnownRoom`. It saves the room held as
+        `CharacterProfile.RecentStepsFrom`, a trail of none, and clears the steps.
+      - Otherwise it still saves the room held as known, with the trail cleared. A run of moves through rooms
+        that read alike, such as Paradigm's ~100 `Graveyard` rooms, confirms every room by prediction and
+        never by a 1-of-1 match.
+  - **A room settled on without saving it as known starts a new step trail there.** The trail's start is
+    saved with it (`CharacterProfile.RecentStepsFrom`).
+    - **On a relog,** `RoomTracker.Hydrate` lands at that start, still a guess, unless it is `LastKnownRoom`
+      itself. After a save while Confirmed, that is the room held, with no steps to replay.
+    - **A trail saved while the tracker wasn't Confirmed** (Suspect at the save) still has steps. Those
+      replay from the start when the first display disagrees with it.
+    - **Why the save saves the room held, not the trail to it:** in rooms that read alike no display
+      disagrees with the start, so a replay would never run, and the relog would sit at the start.
+    - **A start no longer in the active game data** drops the trail (logged), and the relog lands on
+      `LastKnownRoom`.
+    - (Before 2026-10-17, a relog after such a settling replayed the new steps from the old anchor, as if
+      they had been taken there.)
 
 ### Dark rooms — no name, no exits, traversal inferred from no bonk
 *Status: CONFIRMED*

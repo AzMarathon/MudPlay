@@ -69,10 +69,12 @@ public sealed class RoomTracker
     private RoomKey? _stepsAnchor;
 
     // The room held was worked out while unsure (a footprint, a walk-back, a name or
-    // trail re-match, a re-confirm from Suspect), or follows on from one. It is a
-    // guess (user, 2026-10-17), so a profile save keeps the room last known and the
-    // trail from the guess rather than saving the guess as known. Only a strict
-    // anchor (a 1-of-1 match, a manual locate) ends it.
+    // trail re-match, a re-confirm from Suspect of a room others read like), or
+    // follows on from one. It is a guess (user, 2026-10-17), so a profile save keeps
+    // the room last known and saves the room held as where the trail starts, never as
+    // known. A strict anchor (a 1-of-1 match, a manual locate) ends it, and so does
+    // holding no room at all (Lost, a room-less Suspect, a death, a graph reload) or
+    // the profile closing.
     public bool PositionIsGuess { get; private set; }
 
     // Passive, engine-independent grid re-localiser. When we're stuck Lost /
@@ -496,7 +498,7 @@ public sealed class RoomTracker
             if (_graph.GetRoom(new RoomKey(from.Map, from.Room)) is { } start)
             {
                 room = start;
-                guess = true;
+                guess = start.Key != known.Key;
             }
             else
             {
@@ -547,7 +549,10 @@ public sealed class RoomTracker
     // the position is Confirmed; a Suspect/Unknown view leaves the existing anchor
     // untouched so we never overwrite a good anchor with a guess. A position worked
     // out while unsure is a guess too, however Confirmed (PositionIsGuess): the save
-    // keeps the room last known and writes the trail from the guess instead.
+    // keeps the room last known and saves the room held as a trail of none, where a
+    // relog lands still a guess. Saving the trail to it instead would leave the relog
+    // at the trail's start in rooms that read alike, as no display there disagrees
+    // with it to set the replay off.
     public void PersistCurrentRoomForSave()
     {
         if (_profile is null) return;
@@ -555,6 +560,8 @@ public sealed class RoomTracker
         if (State.CurrentRoom is not { } room) return;
         if (PositionIsGuess)
         {
+            _recentSteps.Clear();
+            _stepsAnchor = null;
             PersistSteps();
             return;
         }
@@ -565,6 +572,11 @@ public sealed class RoomTracker
     public void OnProfileClosed()
     {
         _profile = null;
+        // The trail and a guess are the closing character's: a profile loaded with no
+        // room of its own to land on must not save them as its own.
+        _recentSteps.Clear();
+        _stepsAnchor = null;
+        PositionIsGuess = false;
         ResetPassiveLocate();
     }
 
@@ -2331,14 +2343,22 @@ public sealed class RoomTracker
         Room? current = State.CurrentRoom;
         if (current is not null && MatchesPredicted(current, observation))
         {
-            // Glitch resolved — server caught up. Back to Confirmed.
-            // No PersistConfirmedAnchor — the room held while unsure is
-            // re-confirmed by a display that fits it, which in look-alike
-            // rooms says nothing about which one: a guess, saved as none.
+            // Glitch resolved — server caught up. Back to Confirmed. A display
+            // only this room fits makes it known, as any 1-of-1 match does; one
+            // that look-alike rooms fit as well says nothing about which of them
+            // we're in: a guess, not saved as known.
+            IReadOnlyList<RoomKey> fitting = _graph.FindCandidates(observation.Name, observation.Exits);
+            bool unique = fitting.Count == 1 && fitting[0] == current.Key;
             State.SuspectStrikes = 0;
             ClearPendingAndSteps();
-            SetConfidence(RoomConfidence.Confirmed, when, "suspect resolved (current room re-confirmed)");
-            MarkGuess();
+            SetConfidence(RoomConfidence.Confirmed, when,
+                unique ? "suspect resolved (current room re-confirmed, 1-of-1)" : "suspect resolved (current room re-confirmed)");
+            if (unique)
+            {
+                PersistConfirmedAnchor(current, when);
+                PositionIsGuess = false;
+            }
+            else MarkGuess();
             return;
         }
 
