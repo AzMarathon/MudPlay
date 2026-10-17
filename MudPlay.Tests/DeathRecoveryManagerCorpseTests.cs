@@ -73,6 +73,31 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
+    public void Paradigm_TheCorpseAskedForBeforeADeath_DoesNotCloseTheNextPile()
+    {
+        using GraphHarness h = DiedAtTheGates();
+        string? live = null;
+        h.Recovery.AttachLiveSelfName(() => live);
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
+        Assert.Contains("recover corpse Ermias", h.Sent);
+
+        // No closing line came; the character died again, and is back in a dark
+        // death room with the grab armed and nothing sent.
+        Die(h, new[] { new EquippedItem("longsword", "Weapon Hand") }, new[] { "rope" });
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Tracker.NoteDarkRoomEntered();
+        live = "Raijin";
+
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.NotEqual(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        h.Recovery.FeedTestLine("You have recovered the corpse of Raijin.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
+    [Fact]
     public void Paradigm_WalkIn_ThenWalkingOn_TheNextRoomsFloorDoesNotMarkThePileMissing()
     {
         // The corpse is there and asked for. The walk goes on into a room with a

@@ -1267,7 +1267,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _grabOnSurvey = false;   // one shot per arming — never loop
         _lookExitsOwed = false;
         _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
-        _corpseAskedFor = corpse;
+        _corpseAskedFor = _activeRecovery is { } asking ? (asking, corpse) : null;
         Send($"recover corpse {corpse}");
     }
 
@@ -2279,7 +2279,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool IsOurCorpse(string whose)
     {
         string given = CorpseRecoveryLines.GivenName(whose);
-        string asked = CorpseRecoveryLines.GivenName(_corpseAskedFor);
+        string asked = _corpseAskedFor is { } a && ReferenceEquals(a.Record, _activeRecovery)
+            ? CorpseRecoveryLines.GivenName(a.Name)
+            : string.Empty;
         string live = CorpseRecoveryLines.GivenName(_liveSelfName?.Invoke());
         if (asked.Length == 0 && live.Length == 0)
         {
@@ -2290,8 +2292,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             || string.Equals(given, live, StringComparison.OrdinalIgnoreCase);
     }
 
-    // The corpse name the last `recover corpse` we sent asked for.
-    private string? _corpseAskedFor;
+    // The corpse name the last `recover corpse` we sent asked for, and the recovery
+    // it was sent for: it speaks for that recovery only, so a finished or replaced
+    // one leaves it unread.
+    private (DeathRecord Record, string Name)? _corpseAskedFor;
 
     // Prefer the live in-game name over the profile's stored name, which a copied
     // profile can leave stale (report stock-20260828-104653) — matching another
@@ -2853,6 +2857,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         DropSweep("the character was changed");
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _pendingRecoverNow = null;
         _recoverNowWalking = false;
         _grabOnSurvey = false;
@@ -2946,6 +2951,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         _log?.Info(LogCategory, $"recovery complete: {record.RoomKeyText} — {message}");
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _grabOnSurvey = false;
         _stockRecovering = false;
         _stockSweepPending = false;
@@ -3041,6 +3047,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // followed while a sweep runs, so the one that took us out of the room (the
         // death) didn't clear this.
         _activeRecovery = null;
+        _corpseAskedFor = null;
         _grabOnSurvey = false;
         _stockRecovering = false;
         _stockSweepPending = false;

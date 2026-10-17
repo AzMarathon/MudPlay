@@ -144,11 +144,11 @@ public sealed class CorpseHandoffManager
         if (!usersOwn) return;
         if (IsSelf(name))
         {
-            _log?.Debug(LogCategory, "recover corpse names this character: our own corpse is not handed back");
+            _log?.Debug(LogCategory, "the corpse named is this character's own: not handed back");
             return;
         }
         _armed.Add((name, _now()));
-        _log?.Debug(LogCategory, $"recover corpse {name} sent: waiting for the recovery lines");
+        _log?.Debug(LogCategory, $"{name}'s corpse: recovery sent, waiting for its lines");
     }
 
     // Bound per connection, so the previous extractor is let go.
@@ -430,6 +430,8 @@ public sealed class CorpseHandoffManager
     // handed back. Names and items only.
     public string? DescribePending()
     {
+        DateTimeOffset now = _now();
+        _armed.RemoveAll(a => now - a.At > ArmWindow);
         List<string> parts = new();
         foreach ((string name, DateTimeOffset at) in _armed)
             parts.Add($"waiting for the recovery lines of {name}'s corpse (sent {at.LocalDateTime:HH:mm:ss})");

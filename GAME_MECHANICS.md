@@ -9184,6 +9184,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
   - **The coins come to the recoverer**, on the `You picked up N <denom>.` lines, and can be given away like any coins.
   - **Loyal items never appear on a corpse.** What goes into a corpse follows the rules in *Death threshold & consequences*.
   - **The game never echoes the command or its password**; a recovery that goes through goes straight into the lines above.
+  - **A recover password is a single word, with no spaces** *([CONFIRMED] 2026-10-17, user)*. `CorpseRecoveryLines` reads the command as `recover corpse <name> <one word>` and masks that one word wherever a line quotes it.
   - What the game prints for a wrong password is not recorded, and nothing depends on it.
 - **`look <name>` at a corpse lists what it holds, coins first** *([OBSERVED] 2026-10-09, report `paradigm-20261009-001932`, Paradigm)*. The output is a header `[ corpse of <Name> ](<Gang>)`, a description (`The decimated remains of the <title> <Name> lie before you. … The corpse is fresh.`), a blank line, then `You notice the following on the corpse:` and a wrapped, comma-separated list ending in a full stop, e.g. `51 platinum pieces, 53 gold crowns, thorned whip, rope and grapple, …, spiked leather gauntlets.`
   - The list opens with the same words as the room's floor survey (`You notice <list> here.`) but is not it: it ends without `here.`, and its header line ends in a colon.

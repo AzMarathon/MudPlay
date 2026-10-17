@@ -8,12 +8,13 @@ namespace MudPlay.Game.Recovery;
 // (GAME_MECHANICS "Corpse recovery (`recover corpse`)").
 public static partial class CorpseRecoveryLines
 {
-    // `recover corpse <name> <password>`: the form for another player's corpse. The
-    // password is the rest of the line, so one with a space in it is taken whole.
+    // `recover corpse <name> <password>`: the form for another player's corpse, one
+    // line holding just the command. A password is one word (GAME_MECHANICS
+    // "Corpse recovery (`recover corpse`)").
     public static bool TryParseRecoverWithPassword(string? command, out string name, out string password)
     {
         name = password = string.Empty;
-        if (command is null) return false;
+        if (command is null || command.IndexOf('\n') >= 0) return false;
         Match m = RecoverWithPasswordRegex().Match(command);
         if (!m.Success) return false;
         name = m.Groups["name"].Value;
@@ -21,24 +22,25 @@ public static partial class CorpseRecoveryLines
         return true;
     }
 
-    // The command with its password masked, for anything that keeps what was sent
-    // or seen (the sent-command trail, the program log, the chat log). A line that
-    // only quotes the command (`/raijin @do recover corpse …`) is masked as
-    // RedactAnywhere does; any other line comes back as it was.
-    public static string Redact(string command) =>
-        TryParseRecoverWithPassword(command, out string name, out _)
-            ? $"recover corpse {name} {Services.BugReportScrub.Mask}"
-            : RedactAnywhere(command);
-
-    // Every `recover corpse <name> <password>` inside a longer text (a log line that
-    // quotes a relayed `@do`, a telepath in the chat log) with its password masked.
-    // Inside other text the password is taken to be one word, ending at a space or
-    // a quote.
-    private static string RedactAnywhere(string text)
+    // The text with every corpse password masked, for anything that keeps what was
+    // sent or seen (the sent-command trail, the program log, the chat log, a bug
+    // report). Taken a line at a time, so a `recover corpse <name>` with no password
+    // never reaches into the line after it. A line that is the command is masked
+    // whole; one that only quotes it (`/raijin @do recover corpse …`, a log line)
+    // has the word after the name masked.
+    public static string Redact(string text)
     {
         if (string.IsNullOrEmpty(text) || text.IndexOf("corpse", StringComparison.OrdinalIgnoreCase) < 0) return text;
-        return EmbeddedRecoverRegex().Replace(text, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
+        if (text.IndexOf('\n') < 0) return RedactLine(text);
+        string[] lines = text.Split('\n');
+        for (int i = 0; i < lines.Length; i++) lines[i] = RedactLine(lines[i]);
+        return string.Join('\n', lines);
     }
+
+    private static string RedactLine(string line) =>
+        TryParseRecoverWithPassword(line, out string name, out _)
+            ? $"recover corpse {name} {Services.BugReportScrub.Mask}"
+            : EmbeddedRecoverRegex().Replace(line, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
 
     // The command with its password left off, for the Up-arrow recall: a mask sent
     // back to the game would be taken as the password.
@@ -67,11 +69,13 @@ public static partial class CorpseRecoveryLines
     public static string GivenName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
 
-    [GeneratedRegex(@"^\s*recover\s+corpse\s+(?<name>\S+)\s+(?<password>\S.*?)\s*$",
+    [GeneratedRegex(@"^[ \t]*recover[ \t]+corpse[ \t]+(?<name>\S+)[ \t]+(?<password>\S+)[ \t\r]*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex RecoverWithPasswordRegex();
 
-    [GeneratedRegex(@"(?<lead>\brecover\s+corpse\s+[^\s'"";]+\s+)(?!\[redacted\])[^\s'"";]+",
+    // The password runs to the next space or separator, a quote inside it included:
+    // `pa'ss` must not leave `'ss` standing.
+    [GeneratedRegex(@"(?<lead>\brecover[ \t]+corpse[ \t]+[^\s'"";|`]+[ \t]+)(?!\[redacted\])[^\s;|`]+",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex EmbeddedRecoverRegex();
 

@@ -92,7 +92,9 @@ public sealed class CorpseHandoffTests
 
     [Theory]
     [InlineData("recover corpse raijin secret", true, "raijin", "secret")]
-    [InlineData("RECOVER CORPSE Raijin two words", true, "Raijin", "two words")]
+    [InlineData("RECOVER CORPSE Raijin secret", true, "Raijin", "secret")]
+    [InlineData("recover corpse raijin two words", false, "", "")]           // a password is one word
+    [InlineData("recover corpse raijin\nsecret", false, "", "")]
     [InlineData("recover corpse raijin", false, "", "")]
     [InlineData("recover raijin secret", false, "", "")]
     public void Command_ParsesNameAndPassword(string command, bool ok, string name, string password)
@@ -109,6 +111,35 @@ public sealed class CorpseHandoffTests
         Assert.Equal("recover corpse raijin", CorpseRecoveryLines.WithoutPassword($"recover corpse raijin {Password}"));
         Assert.Equal("recover corpse raijin", CorpseRecoveryLines.Redact("recover corpse raijin"));
         Assert.Equal("look", CorpseRecoveryLines.Redact("look"));
+        Assert.Equal("@do from Raijin: 'recover corpse raijin [redacted]",
+            CorpseRecoveryLines.Redact("@do from Raijin: 'recover corpse raijin pa'ss'"));
+    }
+
+    [Fact]
+    public void Redact_StaysOnItsOwnLine()
+    {
+        const string withoutPassword = "12:00:01 recover corpse Aldric\n12:00:02 You begin to pick through the corpse of Aldric...";
+        Assert.Equal(withoutPassword, CorpseRecoveryLines.Redact(withoutPassword));
+        Assert.Equal("recover corpse Aldric\r\nYou begin to pick through the corpse of Aldric...",
+            CorpseRecoveryLines.Redact("recover corpse Aldric\r\nYou begin to pick through the corpse of Aldric..."));
+
+        const string withPassword = "recover corpse Aldric secret\nYou begin to pick through the corpse of Aldric...";
+        Assert.Equal("recover corpse Aldric [redacted]\nYou begin to pick through the corpse of Aldric...",
+            CorpseRecoveryLines.Redact(withPassword));
+
+        BugReportScrub.Scrubber scrub = BugReportScrub.Build([], Array.Empty<string?>());
+        Assert.Equal(withoutPassword, scrub.Apply(withoutPassword));
+    }
+
+    [Fact]
+    public void OurOwnLogLines_AreNotMasked()
+    {
+        Harness h = new();
+        h.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        h.Manager.ObserveCommand($"recover corpse aldric {Password}", usersOwn: true);
+        h.Manager.ObserveCommand($"recover corpse fujin {Password}", usersOwn: true);
+        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Message.Contains(BugReportScrub.Mask));
+        Assert.Contains(h.Log.Snapshot(), e => e.Message == "aldric's corpse: recovery sent, waiting for its lines");
     }
 
     // ----- recording -----------------------------------------------------
