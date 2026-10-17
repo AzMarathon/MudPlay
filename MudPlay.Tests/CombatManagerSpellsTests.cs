@@ -4088,9 +4088,11 @@ public sealed class CombatManagerSpellsTests
     // ----- attack-not-last + follow-leader: one wait for both -----------
 
     // Leader Cidir stands in the room with two monsters, so both holds apply on entry.
-    private static void EnterUnderNotLastAndFollowLeader(Harness h)
+    private static void EnterUnderNotLastAndFollowLeader(Harness h,
+        string alsoHere = "Also here: tunnel horror, giant skeleton, Cidir.",
+        AttackTiming timing = AttackTiming.AttackNotLast)
     {
-        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.AttackTiming = timing;
         h.Settings.TargetPriority = TargetPriority.FollowLeader;
         h.Settings.NormalAttackCommand = "pu";
         h.Players.RecordObservation("Cidir", "Priest", null, null, null, null, null, DateTime.UtcNow);
@@ -4098,10 +4100,206 @@ public sealed class CombatManagerSpellsTests
         h.Party.LeaderName = "Cidir NineteenTr";
         h.AddMonster(635, "tunnel horror");
         h.AddMonster(636, "giant skeleton");
-        h.Feed("Also here: tunnel horror, giant skeleton, Cidir.");
+        h.Feed(alsoHere);
     }
 
     private static int Punches(Harness h) => h.AllSent.Count(s => s.StartsWith("pu "));
+
+    // The holds' in-round deadline, wired as AppServices wires it, with the projected
+    // round a test value and the one-shot held until the test fires it.
+    private sealed class HoldDeadline
+    {
+        public TimeSpan? ToRound { get; set; } = TimeSpan.FromSeconds(3);
+        public TimeSpan? Wait { get; private set; }
+        private Action? _due;
+        public HoldDeadline(Harness h)
+            => h.Combat.SetHoldDeadline(() => ToRound, (wait, due) => { Wait = wait; _due = due; });
+        public void Fire() => _due?.Invoke();
+    }
+
+    [Fact]
+    public void AttackNotLast_NoAnnounce_AttacksOnceBeforeTheProjectedRound()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        h.Feed("Also here: tunnel horror.");
+        Assert.Equal(0, Punches(h));
+        Assert.Equal(TimeSpan.FromSeconds(2), deadline.Wait);   // a second ahead of the round
+
+        deadline.Fire();                                        // still inside the round
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_NoAnnounce_AttacksOnceBeforeTheProjectedRound()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        EnterUnderNotLastAndFollowLeader(h);
+        Assert.Equal(TimeSpan.FromSeconds(2), deadline.Wait);
+
+        deadline.Fire();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        h.Tick();
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_AnnounceBeforeTheDeadline_DeadlineSendsNothing()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        h.Feed("Also here: tunnel horror.");
+        h.Feed("Thresh moves to attack tunnel horror.");
+        Assert.Equal(1, Punches(h));
+
+        deadline.Fire();
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_NoRoundPlaced_WaitsOneSecond()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h) { ToRound = null };
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+
+        h.Feed("Also here: tunnel horror.");
+        Assert.Equal(TimeSpan.FromSeconds(1), deadline.Wait);
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_MemberWalksInBehindUs_LeaderAttack_FollowsTheLeader()
+    {
+        // The walk-in's observation used to clear the follow half of the hold, so the
+        // leader's attack then released the not-last half onto our own pick.
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        EnterUnderNotLastAndFollowLeader(h);
+        FeedPlayerLine(h, "Thresh walks into the room from the northwest.");
+
+        h.Feed("Cidir moves to attack giant skeleton.");
+        h.FireSettle();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_LeaderWalksInBehindUs_LeaderAttack_FollowsTheLeader()
+    {
+        // Only the not-last half was latched (the leader wasn't in the room yet).
+        using Harness h = new();
+        using RoomEntryWatcher entry = new(h.Router, h.Classifier, h.Log);
+        EnterUnderNotLastAndFollowLeader(h, "Also here: tunnel horror, giant skeleton.");
+        FeedPlayerLine(h, "Cidir walks into the room from the northwest.");
+
+        h.Feed("Cidir moves to attack giant skeleton.");
+        h.FireSettle();
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_PartyDamageLineWithNoAnnounce_ReleasesAtOnce()
+    {
+        // The party is fighting; we never read its announce.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+        h.Feed("Also here: tunnel horror, giant skeleton.");
+        Assert.Equal(0, Punches(h));
+
+        h.Feed("Thresh stabs giant skeleton for 100 damage!");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_StrangersDamageLine_DoesNotRelease()
+    {
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        h.Players.RecordObservation("Bob", "Warrior", null, null, null, null, null, DateTime.UtcNow);
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+        h.Feed("Also here: tunnel horror, Bob.");
+
+        h.Feed("Bob stabs tunnel horror for 100 damage!");
+        Assert.Equal(0, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_FightAlreadyUnderWayHere_NextPickDoesNotHold()
+    {
+        // The party is already fighting this room: the next pick (here after our target
+        // died) goes out at once rather than waiting a round for an announce that
+        // won't come.
+        using Harness h = new();
+        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
+        h.Settings.NormalAttackCommand = "pu";
+        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
+        h.AddMonster(635, "tunnel horror");
+        h.AddMonster(636, "giant skeleton");
+        h.Feed("Also here: tunnel horror, giant skeleton.");
+        h.Feed("Thresh moves to attack giant skeleton.");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        h.Feed("You gain 100 experience.");                     // our target dies
+        Assert.Null(h.Combat.CurrentTarget);
+        h.Feed("Also here: giant skeleton.");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    [Fact]
+    public void FollowLeader_LeadersDamageLineWithNoAnnounce_TakesTheirTarget()
+    {
+        using Harness h = new();
+        EnterUnderNotLastAndFollowLeader(h, timing: AttackTiming.Default);
+        Assert.Equal(0, Punches(h));
+
+        h.Feed("Cidir smashes giant skeleton for 80 damage!");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void NotLastAndFollowLeader_SpellBuild_MemberFirstThenLeader_SwitchesAtOnce()
+    {
+        // A re-announce before the round fires costs nothing and the last one counts
+        // (GAME_MECHANICS "Attack announce lines and round commits"), so a caster moves
+        // onto the leader's target at once, as a fighter does.
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        EnterUnderNotLastAndFollowLeader(h);
+
+        h.Feed("Thresh moves to attack giant skeleton.");
+        Assert.Equal("nuke tunnel horror", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        h.Feed("Cidir moves to attack giant skeleton.");
+        Assert.Equal("nuke giant skeleton", h.LastSent);
+    }
 
     [Fact]
     public void NotLastAndFollowLeader_NoAnnounces_AttacksOnceAfterTheRound()

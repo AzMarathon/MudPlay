@@ -1013,6 +1013,8 @@ public static class BugReportBuilder
         // announce — the key tells for an "attack-last / not-last not respected" report.
         Kv(sb, "Attack Order", combat.AttackTiming);
         Kv(sb, "Attack-order hold", combat.AwaitingAttackOrderHold ?? "(committed / none)");
+        // Why a hold would or wouldn't have waited here, and when it would have engaged.
+        Kv(sb, "Attack-order hold, this room", svc.Combat.AttackOrderRoomState);
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());

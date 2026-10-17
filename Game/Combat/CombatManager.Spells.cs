@@ -536,9 +536,10 @@ public sealed partial class CombatManager
                 // burst guard: the debuff half of debuff-then-attack is cast on the same
                 // attack-slot clock moments before this dispatch, so a fresh engage /
                 // arrival and an interrupt-resume pass it true to still land THIS round's
-                // attack behind it. The plain per-round re-decide paths (@kill retarget,
-                // target-priority follow) leave it false so the guard still absorbs a burst
-                // of dispatches in the same frame. The server then auto-repeats the spell
+                // attack behind it, and so does a target-priority follow, which moves off a
+                // cast just sent at our own pick. The plain per-round re-decide paths
+                // (@kill retarget) leave it false so the guard still absorbs a burst of
+                // dispatches in the same frame. The server then auto-repeats the spell
                 // each round; the heartbeat re-announces only if the chooser's decision
                 // later changes. Set the bridge even when the cast is blocked so we stay in
                 // spell mode and retry next tick rather than swinging.

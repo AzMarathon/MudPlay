@@ -4996,6 +4996,20 @@ public sealed class AppServices
             timer.Start();
         });
 
+        // The not-last / follow holds' in-round deadline: the projected round when one
+        // is placed, and a UI-thread one-shot.
+        Combat.SetHoldDeadline(
+            () => Tick.LastCombatTickWasPlaced ? Tick.TimeToNextCombatTick : null,
+            (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer
+                {
+                    Interval = delay > TimeSpan.Zero ? delay : TimeSpan.FromMilliseconds(1),
+                };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            });
+
         // Attack-order re-fire quiet window: a UI-thread one-shot so attack-last /
         // attack-after re-fire once the party's staggered announces have gone quiet.
         Combat.SetRefireSettleScheduler((delay, callback) =>

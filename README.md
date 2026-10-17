@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.183.36**
 > - Combat: Attack Order "Attack Not Last" attacks again when the party walks into each room behind you
-> - Combat: "Attack Not Last" with a follow Target Priority waits once, then attacks, even if no one opens
+> - Combat: "Attack Not Last" and follow Target Priority never cost a round; unanswered, they attack before the round fires
+> - Combat: a party member seen fighting releases those holds, and the followed player's hits set the target
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
