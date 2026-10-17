@@ -111,6 +111,7 @@ public sealed class AutoDepositManager : IDisposable
     private readonly Func<bool> _isFollower;
     // The light buy at a shop the reroute stops at.
     private readonly LightShopBuy _lightBuyer;
+    private readonly WirePromptScanner? _promptScanner;
     // A loop's rooms by its waypoints (unbound: none known).
     private readonly Func<Loop, IReadOnlyList<RoomKey>> _loopRoomsOf;
     // Bounds the wait for the fresh `i` on bank arrival (see DepositSyncTimeout).
@@ -173,7 +174,10 @@ public sealed class AutoDepositManager : IDisposable
         TimeSpan? buyTimeout = null,
         Func<bool>? isFollower = null,
         Func<RoomKey, Loop, RoomKey?>? nearestLoopRoom = null,
-        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null)
+        Func<Loop, IReadOnlyList<RoomKey>>? loopRooms = null,
+        // The game's prompts: the first after a reconnect sets off a walk back the
+        // drop held. Unwired, a held walk back waits for Cancel.
+        WirePromptScanner? promptScanner = null)
     {
         ArgumentNullException.ThrowIfNull(cash);
         ArgumentNullException.ThrowIfNull(readCash);
@@ -215,6 +219,8 @@ public sealed class AutoDepositManager : IDisposable
 
         _cash.AutoDepositRequested += OnAutoDepositRequested;
         _walker.Event += OnWalkEvent;
+        _promptScanner = promptScanner;
+        if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObserved;
         // The pass-through stash is NOT subscribed to RoomTracker.StateChanged
         // here: it must run BEFORE the loop's next-move step so the `hide` reaches
         // the wire ahead of the move (otherwise the coins get hidden in the next
@@ -568,15 +574,40 @@ public sealed class AutoDepositManager : IDisposable
     }
 
     // The connection dropped while a light was being bought: the buy's window would
-    // close in the next session and read as a shop that didn't sell. The buy is let
-    // go unrecorded and the walk back starts, as a reroute's walk does across a drop
-    // (nothing stops it; it carries on in the next session and resumes the engine on
-    // arrival).
+    // close in the next session and read as a shop that didn't sell, so the buy is
+    // let go unrecorded. The walk back waits for the first in-game prompt after the
+    // reconnect (NoteInGamePrompt): started now, its first step would go out on the
+    // dead link and leave the tracker a move that never happened, and it would plan
+    // from the shop however the relog placed the character. The engine then resumes
+    // on arrival, as after any reroute.
     public void NoteDisconnected()
     {
         if (_phase != DepositPhase.BuyingLight) return;
-        _log?.Info(LogCategory, "connection dropped during the light buy — walking back without it");
+        _log?.Info(LogCategory, "connection dropped during the light buy — the walk back waits for the reconnect");
+        _lightBuyer.Cancel();
+        _lightBuy = null;
+        _phase = DepositPhase.AwaitingReconnect;
+        ReroutingChanged?.Invoke();
+    }
+
+    // A game prompt (WirePromptScanner.PromptObserved): the first one after a
+    // reconnect sets the walk back off, from wherever the tracker now has us.
+    private void OnPromptObserved(PromptObservation _)
+    {
+        if (_phase != DepositPhase.AwaitingReconnect) return;
+        _log?.Info(LogCategory, "back in the game — walking back from where the reconnect left us");
         WalkBackToOrigin();
+    }
+
+    // A profile or game-data change before the reconnect: the walk back it owed
+    // belongs to what was loaded before.
+    public void DropReconnectResume(string why)
+    {
+        if (_phase != DepositPhase.AwaitingReconnect) return;
+        _log?.Info(LogCategory, $"walk back after the reconnect dropped ({why})");
+        bool lightTrip = _lightTrip;
+        GoIdle();
+        if (!lightTrip) _cash.NotifyAutoDepositAborted();
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -994,6 +1025,7 @@ public sealed class AutoDepositManager : IDisposable
         _disposed = true;
         _cash.AutoDepositRequested -= OnAutoDepositRequested;
         _walker.Event -= OnWalkEvent;
+        if (_promptScanner is not null) _promptScanner.PromptObserved -= OnPromptObserved;
         // OnRoomEntered is driven by AppServices (not a direct subscription).
         _lightBuyer.Dispose();
         _depositSyncTimer.Dispose();
@@ -1008,6 +1040,9 @@ public sealed class AutoDepositManager : IDisposable
         AwaitingInventoryForDeposit,
         WalkingToLightShop,
         BuyingLight,
+        // The connection dropped during the light buy; the walk back goes on the
+        // first in-game prompt after the reconnect.
+        AwaitingReconnect,
         WalkingBackToOrigin,
     }
 }

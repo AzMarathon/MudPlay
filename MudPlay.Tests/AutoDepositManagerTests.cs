@@ -110,6 +110,12 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required Game.Light.AutoLightProvisioner Provisioner { get; init; }
         public required Game.Light.AutoLightShopRouter LightShop { get; init; }
         public required AutoDepositManager AutoDeposit { get; init; }
+        // The game's prompts, as the wire scanner reads them, and the walker's sends.
+        public required WirePromptScanner Prompts { get; init; }
+        public required List<string> Moves { get; init; }
+
+        // The game's statline prompt arrives.
+        public void Prompt() => Prompts.Append(Encoding.Latin1.GetBytes("[HP=100/MA=50]:"));
 
         // The shared mutable source of truth: the manager closures read these
         // two members directly, so a test body just assigns them and fires
@@ -243,11 +249,13 @@ public sealed class AutoDepositManagerTests : IDisposable
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
-        walker.SetWireSender(_ => { });
+        List<string> moves = new();
+        walker.SetWireSender(b => moves.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
         loop.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
+        WirePromptScanner prompts = new();
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -309,7 +317,8 @@ public sealed class AutoDepositManagerTests : IDisposable
                 IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
-            });
+            },
+            promptScanner: prompts);
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -329,6 +338,8 @@ public sealed class AutoDepositManagerTests : IDisposable
             Provisioner = provisioner,
             LightShop = lightShop,
             AutoDeposit = autoDeposit,
+            Prompts = prompts,
+            Moves = moves,
         };
         // Split the manager's single wire by command so `dep` assertions stay
         // isolated from `buy`s the light detour issues on the same wire.
@@ -1033,14 +1044,10 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
     }
 
-    // The connection drops while the bank run buys its light: the buy is let go,
-    // the shop isn't held back for a window that never got its answer, and the walk
-    // back starts, as a reroute's walk carries on across a drop; the loop resumes on
-    // arrival.
-    [Fact]
-    public void ConnectionDropsDuringTheLightBuy_WalksBack_ResumesTheLoop_ShopNotHeldBack()
+    // The bank run's light buy, under way in the shop at 1/4 (the walk back to 1/1
+    // runs dark through 1/2).
+    private static void BankRunBuyingItsLight(Harness h)
     {
-        using Harness h = NewHarness(DarkGraphJson);
         StartLoop(h);
         ArmBankGate(h);
         EnableLightDetour(h);
@@ -1052,18 +1059,75 @@ public sealed class AutoDepositManagerTests : IDisposable
         Arrive(h, new RoomKey(1, 1));
         Arrive(h, new RoomKey(1, 4));
         Assert.Single(h.BuyLines());
+    }
+
+    // The connection drops while the bank run buys its light: the buy is let go, the
+    // shop isn't held back for a window that never got its answer, and nothing
+    // walks on the dead link. The reconnect's room display comes in with no move
+    // owed (no phantom move for the tracker to land), and the first prompt after it
+    // sets the walk back off; the loop resumes on arrival.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_TheWalkBackWaitsForThePrompt()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        int sent = h.Moves.Count;
 
         h.AutoDeposit.NoteDisconnected();
+        Assert.Equal(sent, h.Moves.Count);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.True(h.AutoDeposit.IsRerouting);
+
+        Arrive(h, new RoomKey(1, 4));                     // the reconnect shows the shop
+        Assert.Equal(new RoomKey(1, 4), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        Assert.Equal(sent, h.Moves.Count);
+
+        h.Prompt();
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Assert.True(h.Moves.Count > sent);
         Arrive(h, new RoomKey(1, 1));
         Assert.Equal(LoopState.Running, h.Loop.State);
         Assert.False(h.AutoDeposit.IsRerouting);
         Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
     }
 
+    // The relog lands somewhere else (the dark 1/2): the walk back is planned from
+    // there, not from the shop.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_WalksBackFromThere()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));          // where the reconnect placed us
+        h.Prompt();
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Assert.Equal("s", h.Moves.Last());
+        Arrive(h, new RoomKey(1, 1));
+        Assert.Equal(LoopState.Running, h.Loop.State);
+    }
+
+    // A profile or game-data change before the reconnect drops the walk back owed.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_AProfileChangeDropsTheWalkBack()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        int sent = h.Moves.Count;
+
+        h.AutoDeposit.DropReconnectResume("profile loaded");
+        Assert.False(h.AutoDeposit.IsRerouting);
+        h.Prompt();
+        Assert.Equal(sent, h.Moves.Count);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+    }
+
     // The same for a loop's light trip: the loop isn't left stopped.
     [Fact]
-    public void ConnectionDropsDuringALightTripsBuy_TheLoopResumes()
+    public void ConnectionDropsDuringALightTripsBuy_TheLoopResumesAfterThePrompt()
     {
         using Harness h = NewHarness(DarkGraphJson);
         StartLoop(h);
@@ -1074,6 +1138,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Single(h.BuyLines());
 
         h.AutoDeposit.NoteDisconnected();
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        h.Prompt();
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
         Arrive(h, new RoomKey(1, 1));
         Assert.Equal(LoopState.Running, h.Loop.State);
