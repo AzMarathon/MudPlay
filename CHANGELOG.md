@@ -1,6 +1,6 @@
 # Version history
 
-## 3.184.14
+## 3.184.16
 
 - Commands the client sends are no longer kept in memory for the whole session
 - A prompt cut off by a dropped connection is no longer completed by the next connection's first text
@@ -9,6 +9,12 @@
 - Clear all also shows while building an Auto-Lair setup, and clears its lair markers
 - View → Reset layout, which had no panels to reset, is gone from the menu
 - Settings search no longer offers "Bless 1" to "Bless 15"; a search for bless finds the Spells tab note that points to the Buff Watchdog
+
+## 3.184.9
+
+- Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do
+- Auto-Light: a trip's light stop checks the whole trip, buys at the closest shop it can reach before the dark, checks the purse first, and skips a shop that didn't sell for a while
+- Auto-Light: a bank or stash run whose way back runs dark keeps the light's price, buys at the shop nearest it, then sets off back
 
 ## 3.184.7
 

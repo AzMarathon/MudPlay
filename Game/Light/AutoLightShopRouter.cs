@@ -31,7 +31,8 @@ namespace MudPlay.Game.Light;
 //
 // Scope: detours apply only to a plain walk-to. While a loop or auto-lair run is
 // driving movement (engineWalkActive) this router stands down; a reorder there goes
-// to the loop restock trip (AutoDepositManager.StartLightRestock) instead.
+// to the loop restock trip (AutoDepositManager.StartLightRestock) instead. It stands
+// down for an errand's walks too; the errand makes its own stop (ErrandLightStop).
 //
 // Resolution & failure: the first freshly-bought copy landing in inventory
 // (OnInventoryChanged) resumes the original walk — the dark route need is met by
@@ -294,10 +295,9 @@ public sealed class AutoLightShopRouter : IDisposable
 
     // Pick the shop room minimising dist(cur,shop)+dist(shop,dest) among the
     // rooms that stock the light and are reachable both ways. Ties break on the
-    // nearer shop, then room-key order — deterministic for testability. Public so
-    // the auto-deposit reroute can reuse the same fewest-added-steps choice for its
-    // own single-controller light-shop leg (bank -> shop -> origin) rather than
-    // duplicating the selection; a pure query with no side effects.
+    // nearer shop, then room-key order — deterministic for testability. A pure
+    // query with no side effects; the walk-to detour's choice and the loop light
+    // trip's (an errand's stop picks with TrySelectNearestShop).
     public bool TrySelectShop(RoomKey cur, RoomKey dest, int itemId, out RoomKey best)
     {
         best = default;
@@ -319,6 +319,29 @@ public sealed class AutoLightShopRouter : IDisposable
             }
         }
         return bestTotal != int.MaxValue;
+    }
+
+    // The shop selling the light nearest `from`, among those usable allows: the
+    // nearest one litWay says the walk there needs no light for, else the nearest
+    // of all. Ties break on room-key order. A pure query.
+    public bool TrySelectNearestShop(RoomKey from, int itemId, Func<RoomKey, bool> litWay, Func<RoomKey, bool> usable,
+        out RoomKey shop)
+    {
+        ArgumentNullException.ThrowIfNull(litWay);
+        ArgumentNullException.ThrowIfNull(usable);
+        List<(RoomKey Shop, int Steps)> reachable = new();
+        foreach (RoomKey s in _shopRoomsSellingItem(itemId))
+            if (usable(s) && _distanceBetween(from, s) is { } steps) reachable.Add((s, steps));
+        IOrderedEnumerable<(RoomKey Shop, int Steps)> nearest = reachable
+            .OrderBy(r => r.Steps).ThenBy(r => r.Shop.Map).ThenBy(r => r.Shop.Room);
+        foreach ((RoomKey s, int _) in nearest)
+        {
+            if (!litWay(s)) continue;
+            shop = s;
+            return true;
+        }
+        shop = reachable.Count == 0 ? default : nearest.First().Shop;
+        return reachable.Count > 0;
     }
 
     // A shop selling the light that a trip from `from` to `to` can stop at for at

@@ -14,10 +14,12 @@ namespace MudPlay.Game.Light;
 //    it scans the path for its darkest room and asks the pure AutoLightPlanner what
 //    is needed. A Buy verdict (the route crosses a room nothing carried, worn or
 //    cast covers) becomes a shop detour handed to AutoLightShopRouter, which runs
-//    after any path-item detour and before the walk goes on. While a loop or
-//    Auto-Lair runs, a circuit or leg with such a room is a light trip off the
-//    engine instead (CheckEngineRoute, through SetLoopRestock), at the start and
-//    whenever the shortfall appears. A readied light dwindling under Reorder-at is
+//    after any path-item detour and before the walk goes on. An errand that has
+//    the walker (a training, funding, spell-shop, stash or sell walk) makes the
+//    same stop itself through ErrandLightStop, at the shop TrySelectErrandShop
+//    picks. While a loop or Auto-Lair runs, a circuit or leg with such a room is a
+//    light trip off the engine instead (CheckEngineRoute, through SetLoopRestock),
+//    at the start and whenever the shortfall appears. A readied light dwindling under Reorder-at is
 //    a Reorder: on a walk the same router; on a loop the same trip. A bank run or a
 //    training trip that passes near a shop selling the light stocks up to Carry
 //    hours on the way (PlanStockUp), and a light lying on the floor is picked up by
@@ -112,9 +114,22 @@ public sealed class AutoLightProvisioner
     // copy (when it was short of it), the back-off passes, or the user starts a run;
     // a circuit that no longer needs a light clears it.
     private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTried;
+    // The record as it stood before the latest try, for a try a dropped connection
+    // cut off (NoteEngineTripCutOff).
+    private (string Route, int Lights, long Wealth, DateTimeOffset At, int Failures)? _engineBuyTriedBefore;
 
-    // What one copy of a light costs at the cheapest shop selling it (null: not known).
-    private Func<int, long?> _lightPrice = static _ => null;
+    // What one copy of a light costs at the cheapest shop selling it, and at a given
+    // shop (null: not known).
+    private readonly Func<int, long?> _lightPrice;
+    private readonly Func<int, RoomKey, long?> _shopPrice;
+
+    // Errand light stops that came to nothing (the buy didn't land: out of stock or
+    // no coin; or the shop couldn't be reached), by shop and light: the wealth
+    // carried, when, and how many in a row. Shared by every errand's stop and every
+    // run, so a shop that let one errand down isn't walked to by the next: it is
+    // passed over until the back-off passes (EngineTripBackoff) or the purse can
+    // now pay for a copy when it couldn't. A buy that lands clears it.
+    private readonly Dictionary<(RoomKey Shop, int Item), (long Wealth, DateTimeOffset At, int Failures)> _errandShopFailed = new();
 
     // The light we last asked to ready, and the snapshot it was decided against.
     // Guards a re-send of `use` before the readied light shows up in a later `i`
@@ -182,7 +197,9 @@ public sealed class AutoLightProvisioner
         Func<string, string?>? castLineFor = null,
         Func<bool>? sightTakenAway = null,
         LogService? log = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<int, long?>? lightPrice = null,
+        Func<int, RoomKey, long?>? shopPrice = null)
     {
         ArgumentNullException.ThrowIfNull(isEnabled);
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -214,8 +231,12 @@ public sealed class AutoLightProvisioner
         // latched as not enough. Lighting and casting go on as usual.
         _sightTakenAway = sightTakenAway ?? (static () => false);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
+        _lightPrice = lightPrice ?? (static _ => null);
+        _shopPrice = shopPrice ?? (static (_, _) => null);
         _log = log;
     }
+
+    public bool Enabled => _isEnabled();
 
     // Bind the wire-sender — the gate-wrapped engine pipeline from
     // MainWindowViewModel.
@@ -228,11 +249,9 @@ public sealed class AutoLightProvisioner
     // (AutoDepositManager.StartLightRestock), what says one is running, and the
     // running loop's circuit (LoopRunner.ResolveLoopRoomKeys).
     public void SetLoopRestock(Func<bool> engineRunning, Func<AutoLightBuyRequest, LightRestockOutcome> restock,
-        Func<IReadOnlyList<RoomKey>>? engineRooms = null, Action<Action>? defer = null,
-        Func<int, long?>? lightPrice = null)
+        Func<IReadOnlyList<RoomKey>>? engineRooms = null, Action<Action>? defer = null)
     {
         if (defer is not null) _defer = defer;
-        if (lightPrice is not null) _lightPrice = lightPrice;
         ArgumentNullException.ThrowIfNull(engineRunning);
         ArgumentNullException.ThrowIfNull(restock);
         _engineRunning = engineRunning;
@@ -291,14 +310,16 @@ public sealed class AutoLightProvisioner
     public void Forget(string why)
     {
         bool had = _pendingReadyName is not null || _autoReadiedName is not null
-                   || _spellShort is not null || _madeItem is not null || _engineBuyTried is not null;
+                   || _spellShort is not null || _madeItem is not null || _engineBuyTried is not null
+                   || _errandShopFailed.Count > 0;
         _pendingReadyName = null;
         _autoReadiedName = null;
         _readiedLightBurnedOut = false;
         _madeItem = null;
         _spellShort = null;
         _reorderRequestedFor = null;
-        _engineBuyTried = null;
+        _engineBuyTried = _engineBuyTriedBefore = null;
+        _errandShopFailed.Clear();
         if (had) _log?.Info(LogCategory, $"{why} — light latches cleared");
     }
 
@@ -321,6 +342,7 @@ public sealed class AutoLightProvisioner
             + $"awaiting made item {(_madeItem is { } a ? $"{a.Name} ({(a.ReadSent ? "inventory read sent" : "awaiting the cast line")})" : "none")}; "
             + $"engine light trip tried {(_engineBuyTried is { } t ? $"for {t.Route} at {t.At.ToLocalTime():HH:mm:ss}, {t.Failures} in a row" : "no")}; "
             + $"reorder latched {(_reorderRequestedFor is { } ro ? ro.Name : "no")}; "
+            + $"errand shops held back {(_errandShopFailed.Count == 0 ? "none" : string.Join(", ", _errandShopFailed.Select(f => $"{f.Key.Shop} for #{f.Key.Item} ({f.Value.Failures} in a row, {f.Value.At.ToLocalTime():HH:mm:ss})")))}; "
             + $"last planned buy {_lastPlannedBuy ?? "none"}";
     }
 
@@ -358,9 +380,10 @@ public sealed class AutoLightProvisioner
         }
     }
 
-    // Advisor for an orchestrated errand (the auto-deposit reroute owns the walk):
-    // given a route the character is about to traverse, decide whether it must buy a
-    // light to cover it and, if so, what to buy. Sends nothing. Null when no buy is
+    // Advisor for an orchestrated errand that owns its walk (the auto-deposit
+    // reroute's way back, an errand's light stop in ErrandLightStop): given a route
+    // the character is about to traverse, decide whether it must buy a light to
+    // cover it and, if so, what to buy. Sends nothing. Null when no buy is
     // warranted or the AutoLight master toggle is off.
     public AutoLightBuyRequest? PlanRouteBuy(IReadOnlyList<RoomKey> route)
     {
@@ -412,6 +435,80 @@ public sealed class AutoLightProvisioner
         _log?.Info(LogCategory,
             $"stock-up planned: {more} more {stock.Name} (carrying ~{have.TotalHours:0.#} h of light, target {s.CarryHours} h)");
         return buy;
+    }
+
+    // The shop an errand buys a light at, walking from `from` (user, 2026-10-17:
+    // the closest store, and lights before the dark where it can be done): the
+    // nearest shop selling it that the walk there needs no light for, else the
+    // nearest of all. A shop held back by an earlier errand stop that came to
+    // nothing is passed over. route is the walk the walker would plan.
+    public bool TrySelectErrandShop(AutoLightShopRouter shops, Func<RoomKey, RoomKey, IReadOnlyList<RoomKey>?> route,
+        RoomKey from, AutoLightBuyRequest buy, out RoomKey shop)
+    {
+        ArgumentNullException.ThrowIfNull(shops);
+        ArgumentNullException.ThrowIfNull(route);
+        InventorySnapshot snap = _snapshot();
+        return shops.TrySelectNearestShop(from, buy.ItemId,
+            litWay: s => route(from, s) is { } way && PlanFor(way, snap, out _).Action != AutoLightAction.Buy,
+            usable: s => !ErrandShopHeldBack(s, buy),
+            out shop);
+    }
+
+    // The buy at shop cut down to what the purse pays for at that shop's price,
+    // leaving keepCopper in it, and what it costs: null when it can't pay for one
+    // copy. A light with no known price there is left as asked, costing nothing
+    // known.
+    public AutoLightBuyRequest? AffordableBuy(AutoLightBuyRequest buy, RoomKey shop, long keepCopper, out long cost)
+    {
+        cost = 0;
+        InventorySnapshot snap = _snapshot();
+        int carried = FindByName(buy.LightName, _catalogue()) is { } light ? CarriedCopies(snap.CarriedItems, light) : 0;
+        if (_shopPrice(buy.ItemId, shop) is not { } price || price <= 0) return buy;
+        long spare = snap.Currency.TotalCopperValue - Math.Max(0, keepCopper);
+        long copies = spare / price;
+        if (copies < 1)
+        {
+            _log?.Info(LogCategory, $"no buy of {buy.LightName} at {shop}: {Math.Max(0, spare):N0} copper to spend, one costs {price:N0}");
+            return null;
+        }
+        long wanted = Math.Max(1, buy.Count - carried);
+        long buying = Math.Min(wanted, copies);
+        cost = buying * price;
+        return buying >= wanted ? buy : buy with { Count = (int)(carried + buying) };
+    }
+
+    // How an errand's stop at a shop went: a buy that landed clears the shop; one
+    // that didn't, or a shop the map gives no way to, holds it back for a while.
+    // Only those: a walk that failed for a toll or a fare, or a connection that
+    // dropped, says nothing about the shop.
+    public void NoteErrandShop(RoomKey shop, AutoLightBuyRequest buy, bool bought)
+    {
+        (RoomKey, int) key = (shop, buy.ItemId);
+        if (bought)
+        {
+            _errandShopFailed.Remove(key);
+            return;
+        }
+        int failures = _errandShopFailed.TryGetValue(key, out var was) ? was.Failures + 1 : 1;
+        _errandShopFailed[key] = (_snapshot().Currency.TotalCopperValue, _now(), failures);
+        _log?.Info(LogCategory, $"{shop} didn't sell {buy.LightName} — passed over for errands for {EngineTripBackoff(failures).TotalMinutes:0} min");
+    }
+
+    private bool ErrandShopHeldBack(RoomKey shop, AutoLightBuyRequest buy)
+    {
+        if (!_errandShopFailed.TryGetValue((shop, buy.ItemId), out var failed)) return false;
+        long wealth = _snapshot().Currency.TotalCopperValue;
+        bool canNowPay = _shopPrice(buy.ItemId, shop) is { } price && failed.Wealth < price && wealth >= price;
+        return !canNowPay && _now() - failed.At < EngineTripBackoff(failed.Failures);
+    }
+
+    // An errand the user started has better information than the back-off: every
+    // shop is tried again, as a loop the user starts is.
+    public void ClearErrandShopHolds(string why)
+    {
+        if (_errandShopFailed.Count == 0) return;
+        _errandShopFailed.Clear();
+        _log?.Info(LogCategory, $"{why} — errand light shops held back are tried again");
     }
 
     // Asked by the auto-get path for each light on a room's floor: how many copies
@@ -470,12 +567,24 @@ public sealed class AutoLightProvisioner
         return wait < EngineTripRetryCap ? wait : EngineTripRetryCap;
     }
 
+    // A light trip off the engine (or its reorder) was cut off by a dropped
+    // connection: that says nothing about the trip, so it isn't held as tried and
+    // the restarted run may make it again at once.
+    public void NoteEngineTripCutOff()
+    {
+        if (_engineBuyTried is null && _reorderRequestedFor is null) return;
+        // Only this try is undone: earlier misses in a row keep their weight.
+        _engineBuyTried = _engineBuyTriedBefore;
+        _reorderRequestedFor = null;
+        _log?.Info(LogCategory, "light trip cut off by a dropped connection — not counted as tried");
+    }
+
     // A loop or Auto-Lair run started: check its circuit for dark rooms. A run the
     // user started (not a trip's own resume) gets a fresh try at a light trip that
     // couldn't buy before.
     public void OnEngineStarted(bool userStarted)
     {
-        if (userStarted) _engineBuyTried = null;
+        if (userStarted) _engineBuyTried = _engineBuyTriedBefore = null;
         RequestEngineCheck(null, "the run started");
     }
 
@@ -503,7 +612,7 @@ public sealed class AutoLightProvisioner
         if (plan.Action != AutoLightAction.Buy)
         {
             // Lit now (a buy landed, a light was found): the back-off starts over.
-            if (plan.Action is AutoLightAction.None or AutoLightAction.Ready) _engineBuyTried = null;
+            if (plan.Action is AutoLightAction.None or AutoLightAction.Ready) _engineBuyTried = _engineBuyTriedBefore = null;
             return;
         }
         if (ResolveBuy(plan.LightName!, plan.BuyCount, catalogue) is not { } req) return;
@@ -532,6 +641,7 @@ public sealed class AutoLightProvisioner
             _log?.Debug(LogCategory, $"light trip for {route} waits — another trip has the walker ({plan.Reason})");
             return;
         }
+        _engineBuyTriedBefore = _engineBuyTried;
         _engineBuyTried = (route, lights, wealth, now, failures + 1);
         if (outcome == LightRestockOutcome.Started)
         {

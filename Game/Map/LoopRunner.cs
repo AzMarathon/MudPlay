@@ -3122,6 +3122,16 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _reconnectResumeHeldBySwitch;
     public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
 
+    // A loop an errand stopped (a bank run's light buy) when the connection dropped:
+    // restart it on the first prompt after the reconnect, as one running at the drop
+    // is, with the same guards.
+    public void ResumeOnReconnect(Loop loop, string why)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        _pendingReconnectResume = loop;
+        _log?.Info("LoopRunner", $"reconnect: loop '{loop.Name}' will restart on the first in-game prompt ({why})");
+    }
+
     // Reset States, and a death found out at the login: don't restart the loop on
     // the next prompt after a reconnect.
     public void ClearPendingReconnectResume()
