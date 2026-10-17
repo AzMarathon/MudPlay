@@ -61,6 +61,8 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // One-line "sweep finished" banner set from the SweepCompleted report; cleared
     // when the next sweep starts.
     [ObservableProperty] private string? _completionSummary;
+    // The sweep the banner reports ended before it was done.
+    private bool _lastSweepStopped;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SearchesEditable))]
     [NotifyPropertyChangedFor(nameof(CanEditSelection))]
@@ -286,7 +288,8 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
         GhSweepManager.SweepPhase.Reconning => "Scanning",
         GhSweepManager.SweepPhase.Sorting or GhSweepManager.SweepPhase.FinalRecon
             => _sweep.HasPendingPickupAt(key) ? "Cleaning" : "Complete",
-        _ => CompletionSummary is null ? string.Empty : "Complete", // Idle: blank until a run finishes
+        // Idle: blank until a run ends.
+        _ => CompletionSummary is null ? string.Empty : _lastSweepStopped ? "Stopped" : "Complete",
     };
 
     [RelayCommand]
@@ -335,9 +338,11 @@ public sealed partial class GhManagementSectionViewModel : WorkshopSectionViewMo
     // so setting the observables directly is safe.
     private void OnSweepCompleted(GhSweepReport report)
     {
+        _lastSweepStopped = !report.Finished;
+        string ended = report.Finished ? "complete" : $"stopped ({report.StoppedBecause})";
         CompletionSummary = _sweep.Mode == GhSweepManager.SweepMode.InventoryOnly
-            ? $"Inventory scan complete — {_sweep.CircuitRoomCount} room(s) logged, nothing moved."
-            : $"Sweep complete — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
+            ? $"Inventory scan {ended} — {_sweep.CircuitRoomCount} room(s) logged, nothing moved."
+            : $"Sweep {ended} — {report.Moved.Count} move(s), {report.LeftInPlace.Count} left in place, "
               + $"{report.Stranded.Count} still carried.";
         RefreshRoomStatuses();
     }

@@ -261,4 +261,61 @@ public sealed class BuffSlotRowViewModelTests
         var row = Row(new BuffSlot { Spell = spell });
         Assert.Equal(expected, row.IsItemCast);
     }
+
+    // A member who negated the buff shows red on their box, and unticking then ticking
+    // it is the way back (user, 2026-10-17).
+    [Fact]
+    public void NegatedMember_ShowsMarked_UntickThenTickLiftsTheMark()
+    {
+        var dto = new BuffSlot { Spell = "bless" };
+        dto.Targets.Add("aragorn");
+        dto.NegatedTargets.Add("aragorn");
+        var row = Row(dto);
+        row.RebuildMemberTargets(Party("aragorn", "gimli"));
+
+        BuffMemberToggle aragorn = Toggle(row, "aragorn");
+        Assert.True(aragorn.IsNegated);
+        Assert.Contains("negated bless", aragorn.ToolTipText);
+        Assert.Contains("Untick and tick", aragorn.ToolTipText);
+        Assert.False(Toggle(row, "gimli").IsNegated);
+        Assert.Equal("gimli", Toggle(row, "gimli").ToolTipText);
+
+        aragorn.IsChecked = false;
+        Assert.False(aragorn.IsNegated);
+        Assert.Empty(dto.NegatedTargets);
+
+        aragorn.IsChecked = true;
+        Assert.Contains("aragorn", dto.Targets);
+        Assert.Empty(dto.NegatedTargets);
+    }
+
+    [Fact]
+    public void NegatedMember_UntickedOutOfAllMembers_LiftsOnlyTheirMark()
+    {
+        var dto = new BuffSlot { Spell = "bless", AllMembers = true };
+        dto.NegatedTargets.AddRange(new[] { "aragorn", "gimli" });
+        var row = Row(dto);
+        row.RebuildMemberTargets(Party("aragorn", "gimli"));
+
+        Toggle(row, "aragorn").IsChecked = false;
+
+        Assert.Equal(new[] { "gimli" }, dto.NegatedTargets);
+        Assert.True(Toggle(row, "gimli").IsNegated);
+    }
+
+    [Fact]
+    public void NegatedMark_AddedByTheEngine_ShowsWithoutARebuild()
+    {
+        var dto = new BuffSlot { Spell = "bless", AllMembers = true };
+        var row = Row(dto);
+        row.RebuildMemberTargets(Party("aragorn"));
+        BuffMemberToggle aragorn = Toggle(row, "aragorn");
+        Assert.False(aragorn.IsNegated);
+
+        dto.NegatedTargets.Add("aragorn");
+        row.RefreshNegatedMarks();
+
+        Assert.Same(aragorn, Toggle(row, "aragorn"));
+        Assert.True(aragorn.IsNegated);
+    }
 }

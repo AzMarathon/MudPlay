@@ -139,6 +139,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // The shared door manager's Enqueue: direction, stat requirement, bashable, key
     // item, sender, reply.
     private readonly Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? _openDoor;
+    // The door manager's stop. The manager goes on at a door until it opens or the
+    // room changes, so a climb that ends with its door still being worked stops it.
+    private readonly Action? _stopDoor;
     private readonly Func<int, bool>? _holdsItem;
     // True when the auto-engine behind a movement gate is switched on (see
     // PyramidRunThrough).
@@ -351,10 +354,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
         Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
         Func<int, bool>? holdsItem = null,
-        Func<string, bool>? gateEngineOn = null)
+        Func<string, bool>? gateEngineOn = null,
+        Action? stopDoor = null)
         : this(tracker, walker, snapshot, quickness, log, useTimer: true, post: null,
                isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember, askPosition,
-               openDoor, holdsItem, gateEngineOn) { }
+               openDoor, holdsItem, gateEngineOn, stopDoor) { }
 
     internal PyramidSolver(
         RoomTracker tracker,
@@ -373,7 +377,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
         Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
         Func<int, bool>? holdsItem = null,
-        Func<string, bool>? gateEngineOn = null)
+        Func<string, bool>? gateEngineOn = null,
+        Action? stopDoor = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(walker);
@@ -394,6 +399,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _isPartyMember = isPartyMember ?? (_ => false);
         _askPosition = askPosition;
         _openDoor = openDoor;
+        _stopDoor = stopDoor;
         _holdsItem = holdsItem;
         _gateEngineOn = gateEngineOn;
 
@@ -1399,8 +1405,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         StopTimer();
         _heldMembers.Clear();
         _detour.Clear();
+        bool doorInHand = _doorOpening;
         _doorOpening = false;
         _doorTicket++;
+        // After the ticket moves on, so the manager's "stopped" answer is dropped.
+        if (doorInHand) _stopDoor?.Invoke();
         _moveInFlight = false;
         _holdReason = null;
         _phase = phase;

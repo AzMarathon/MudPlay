@@ -267,13 +267,22 @@ public sealed class RoomGraphManager
     // A stored name went on a room, a learned one came off, or one the room bore
     // was kept (the map was built, the realm changed, another client wrote, the
     // user pressed Save): a list that kept names out of LearnedNames is out of
-    // date. Not raised for a name the tracker learns and nobody has kept. A list
-    // built before shows that one when it is next built, as it always did, and
-    // none has to be rebuilt in the middle of a walk for it.
+    // date. A name the tracker learns is told too, but not at once: each telling
+    // rebuilds the lists, and a walk through a house learns a name a room. It is
+    // told once no name has been learned for KeptListsQuietBeats heartbeats
+    // (TellKeptListsWhenQuiet), so the house costs one rebuild.
     public event Action? LearnedNamesChanged;
+
+    // Heartbeats with no name learned before the names the tracker learned are
+    // told to the kept lists.
+    public const int KeptListsQuietBeats = 5;
 
     private static readonly IReadOnlyDictionary<RoomKey, string> NoLearnedNames = new Dictionary<RoomKey, string>();
     private volatile IReadOnlyDictionary<RoomKey, string> _learnedNames = NoLearnedNames;
+
+    // Names learned and not yet told to the kept lists, and the heartbeats since
+    // the last of them.
+    private int _learnedUntold, _beatsSinceLearned;
 
     private void LearnedNamesMoved(bool tellKeptLists)
     {
@@ -281,7 +290,25 @@ public sealed class RoomGraphManager
         foreach (RoomKey key in _unnamedInData)
             if (_rooms.TryGetValue(key, out Room? room) && !room.HasUnknownName) names[key] = room.Name;
         _learnedNames = names;
-        if (tellKeptLists) LearnedNamesChanged?.Invoke();
+        if (tellKeptLists)
+        {
+            _learnedUntold = 0;
+            LearnedNamesChanged?.Invoke();
+            return;
+        }
+        _learnedUntold++;
+        _beatsSinceLearned = 0;
+    }
+
+    // The heartbeat: tell the kept lists of the names the tracker learned, once
+    // the walk has gone quiet.
+    public void TellKeptListsWhenQuiet()
+    {
+        if (_learnedUntold == 0 || ++_beatsSinceLearned < KeptListsQuietBeats) return;
+        _log?.Log(LogSeverity.Debug, "RoomGraph",
+            $"{_learnedUntold} room name(s) learned on the walk: the lists that keep room names are rebuilt");
+        _learnedUntold = 0;
+        LearnedNamesChanged?.Invoke();
     }
 
     // The rooms the data gives no name: the only ones a stored name may be put on.
@@ -906,6 +933,7 @@ public sealed class RoomGraphManager
         _learnedThisSession.Clear();
         _learnedOverStored.Clear();
         _learnedNames = NoLearnedNames;
+        _learnedUntold = 0;
         _byName.Clear();
         _byNameAndExits.Clear();
         _leversByRoom.Clear();

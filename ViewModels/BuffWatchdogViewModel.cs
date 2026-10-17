@@ -346,6 +346,13 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
         // conflict. Empty off stock.
         IReadOnlyDictionary<string, string> collisionKept = _castDirector.CurrentCollisionOrder();
         IReadOnlyCollection<string> hidden = _castDirector.HiddenPartyTargets;
+        // Members who negated a buff of ours (BuffSlot.NegatedTargets), keyed (cast code, given).
+        HashSet<(string Code, string Given)> negated = new();
+        if (_readPartyBuffs() is { } plan)
+            foreach (BuffSlot slot in plan.Slots)
+                if (!string.IsNullOrWhiteSpace(slot.Spell))
+                    foreach (string given in slot.NegatedTargets)
+                        negated.Add((slot.Spell.Trim().ToLowerInvariant(), given));
 
         // Generalized RemovesSpell conflict pairing across ALL slot shapes (self-self,
         // whole-party-vs-whole-party, member-vs-whole-party, member-vs-member) — unlike
@@ -408,6 +415,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
             // (a cast came back "You do not see … here!") can't be reached — show that.
             if (row.IsParty && !row.IsWholeParty && row.MemberKey.Length > 0)
             {
+                if (negated.Contains((row.CastCode.ToLowerInvariant(), row.MemberKey)))
+                { row.Update(null, now, negated: true); continue; }
                 if (hidden.Contains(row.MemberKey)) { row.Update(null, now, hidden: true); continue; }
                 ActiveBuffTimer? match = null;
                 foreach (ActiveBuffTimer t in snap)
