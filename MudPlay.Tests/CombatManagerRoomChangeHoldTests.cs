@@ -596,6 +596,40 @@ public sealed class CombatManagerRoomChangeHoldTests
         Assert.Equal(2, h.Punches);
     }
 
+    [Fact]
+    public void SameRoomShownAgain_PassageAnotherMemberFound_FollowTakesTheLeadersTargetAtOnce()
+    {
+        // Only the searcher is told what a search found; the rest of the room sees
+        // that they searched (GAME_MECHANICS "Hidden exits — `sea <dir>` reveal
+        // wording"). The passage then lists as a secret passage.
+        using Harness h = new();
+        FollowFightInTheTunnel(h, "north");
+
+        h.Wire("Thresh is searching for exits.");
+        h.ShowRoom("Volcano Tunnel", "cave bear, giant skeleton, Cidir", "north, secret passage east");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(2, h.Punches);
+    }
+
+    [Fact]
+    public void AFindExcusesOnlyTheNextDisplay()
+    {
+        // A search's find explains the exit it found in the display that follows it;
+        // a later display of the same name with that exit new again is another room.
+        using Harness h = new();
+        FollowFightInTheTunnel(h, "north");
+
+        h.Wire("You found an exit to the south!");
+        h.ShowRoom("Volcano Tunnel", "cave bear, giant skeleton, Cidir", "north");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        h.Wire("*Combat Engaged*", "You gain 100 experience.");
+
+        h.ShowRoom("Volcano Tunnel", "cave bear, tunnel horror, Cidir", "north, south");
+        Assert.Equal(2, h.Punches);                                 // held: nothing explains south now
+        h.FireDeadline();
+        Assert.Equal("pu cave bear", h.LastSent);
+    }
+
     // The same name with exits nothing announced changing is another room.
     [Theory]
     [InlineData("north", "north, south")]                       // one more, nothing opened

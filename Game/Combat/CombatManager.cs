@@ -1115,7 +1115,8 @@ public sealed partial class CombatManager : IDisposable
         _exitFoundSub = router.Subscribe(KnownPatterns.UserSearchSucceeded,
             m => NoteExitChangedHere(m, opened: true));
         _exitOpenedOrClosedSub = router.Subscribe(KnownPatterns.RoomExitOpenedOrClosed,
-            m => NoteExitChangedHere(m, opened: m.Groups.Count > 1 && m.Groups[1] == "opened"));
+            m => NoteExitChangedHere(m, opened: m.Groups.Count > 1
+                && string.Equals(m.Groups[1], "opened", StringComparison.OrdinalIgnoreCase)));
         _concealedPassageSub = router.Subscribe(KnownPatterns.RoomConcealedPassageOpened,
             m => NoteExitChangedHere(m, opened: true));
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
@@ -5115,9 +5116,8 @@ public sealed partial class CombatManager : IDisposable
     private readonly HashSet<Direction> _exitsOpenedSinceShown = new();
     private readonly HashSet<Direction> _exitsClosedSinceShown = new();
 
-    // The room the tracker has us in while it is sure of it, else null. Wired in
-    // AppServices; unwired, a room shown after we left the last one is taken for
-    // another room.
+    // The room the tracker has us in while it is sure of it, else null. Unset, a room
+    // shown after we left the last one is taken for another room.
     private Func<Room?>? _confirmedRoom;
 
     public void SetConfirmedRoomProbe(Func<Room?> confirmedRoom) => _confirmedRoom = confirmedRoom;
@@ -5133,15 +5133,18 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // Whether this display shows the room shown last. The same name, and every
-    // difference in the exits explained: one added was announced opened since, one
-    // gone was announced shut or was a `secret passage`, which hides again with no
-    // line. Any other display is another room. A room of the same name whose exits
-    // differ only in those ways can't be told from it, and is read as the same.
+    // difference in the exits explained: one added was announced opened since or is
+    // listed as a `secret passage` (another member's search tells us only that they
+    // searched), one gone was announced shut or was a `secret passage`, which hides
+    // again with no line. Any other display is another room. A room of the same name
+    // whose exits differ only in those ways can't be told from it, and is read as the
+    // same.
     private bool ShowsTheRoomShownLast(RoomObservation before, RoomObservation shown)
     {
         if (!string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)) return false;
         foreach (Direction d in shown.Exits)
-            if (!before.Exits.Contains(d) && !_exitsOpenedSinceShown.Contains(d)) return false;
+            if (!before.Exits.Contains(d) && !_exitsOpenedSinceShown.Contains(d)
+                && shown.SecretPassageDirections?.Contains(d) != true) return false;
         foreach (Direction d in before.Exits)
             if (!shown.Exits.Contains(d) && !_exitsClosedSinceShown.Contains(d)
                 && before.SecretPassageDirections?.Contains(d) != true) return false;
@@ -5152,7 +5155,9 @@ public sealed partial class CombatManager : IDisposable
     // lit later), the room we stand in is the one the tracker is sure of: this
     // display is it when the name is its name and every exit shown is one of its
     // exits. A tracker unsure of the room (a death, a teleport out of the dark, an
-    // unmapped area) says nothing, and the display is taken for another room.
+    // unmapped area) says nothing, and the display is taken for another room. The
+    // tracker is asked before it takes this display, and before or after SysopGoto
+    // commits a `sys goto` landing off the same RoomParsed, by subscription order.
     private bool ShowsTheRoomWeSteppedInto(RoomObservation shown)
         => _confirmedRoom?.Invoke() is { } room
         && string.Equals(room.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
