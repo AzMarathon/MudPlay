@@ -1,5 +1,11 @@
 # Version history
 
+## 3.184.9
+
+- Auto-Light: funding, stash-transfer, sell-detour and spell-shop walks buy the Preferred light first when they run dark, as training walks do
+- Auto-Light: a trip's light stop checks the whole trip, buys at the closest shop it can reach before the dark, checks the purse first, and skips a shop that didn't sell for a while
+- Auto-Light: a bank or stash run whose way back runs dark keeps the light's price, buys at the shop nearest it, then sets off back
+
 ## 3.184.7
 
 - Combat: after a teleport, a drag with no follow line or a fear run, "Attack Not Last" and follow Target Priority hold the new room's first attack again

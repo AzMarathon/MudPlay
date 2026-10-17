@@ -110,6 +110,13 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required Game.Light.AutoLightProvisioner Provisioner { get; init; }
         public required Game.Light.AutoLightShopRouter LightShop { get; init; }
         public required AutoDepositManager AutoDeposit { get; init; }
+        // The game's prompts, as the wire scanner reads them, and the walker's sends.
+        public required WirePromptScanner Prompts { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
+        public required List<string> Moves { get; init; }
+
+        // The game's statline prompt arrives.
+        public void Prompt() => Prompts.Append(Encoding.Latin1.GetBytes("[HP=100/MA=50]:"));
 
         // The shared mutable source of truth: the manager closures read these
         // two members directly, so a test body just assigns them and fires
@@ -125,6 +132,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         public Models.Profile.AutoLightSettings LightSettings { get; } = new();
         public List<Game.Light.LightItem> Catalogue { get; } = new();
         public List<RoomKey> LightShopRooms { get; } = new();
+        // What one torch costs at any shop (null: not known, so any purse pays).
+        public long? TorchPrice { get; set; }
         public List<byte[]> Bought { get; } = new();
 
         public IEnumerable<string> BuyLines() =>
@@ -241,8 +250,11 @@ public sealed class AutoDepositManagerTests : IDisposable
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
-        walker.SetWireSender(_ => { });
-        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
+        List<string> moves = new();
+        walker.SetWireSender(b => moves.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        WirePromptScanner prompts = new();
+        LoopRunner loop = new(tracker, coord, promptScanner: prompts, graph: graph, bfs: bfs, walker: walker,
+            postToUi: action => action());
         loop.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
@@ -274,7 +286,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             roomLightSpell: () => null,
             castRoomLightSpell: _ => false,
             roomLightSpellUp: _ => false,
-            settings: () => h.LightSettings);
+            settings: () => h.LightSettings,
+            lightPrice: _ => h.TorchPrice,
+            shopPrice: (_, _) => h.TorchPrice);
         Game.Light.AutoLightShopRouter lightShop = new(
             shopRoomsSellingItem: _ => h.LightShopRooms,
             currentRoom: () => tracker.State.CurrentRoom?.Key,
@@ -305,7 +319,8 @@ public sealed class AutoDepositManagerTests : IDisposable
                 IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
-            });
+            },
+            coordinator: coord);
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -325,6 +340,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             Provisioner = provisioner,
             LightShop = lightShop,
             AutoDeposit = autoDeposit,
+            Prompts = prompts,
+            Moves = moves,
+            Coordinator = coord,
         };
         // Split the manager's single wire by command so `dep` assertions stay
         // isolated from `buy`s the light detour issues on the same wire.
@@ -909,6 +927,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         StartLoop(h);                 // loop [1/1, 1/3], resumable engine
         ArmBankGate(h);               // bank at 1/3
         EnableLightDetour(h);
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
@@ -917,7 +936,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
-        Assert.Equal("dep 5000", h.DepositLines().Single());
+        // The torch's price stays in the purse for the buy in town.
+        Assert.Equal("dep 4990", h.DepositLines().Single());
 
         // Return leg (1/3 → 1/2 → 1/1) runs dark and nothing is carried → detour
         // to the light shop at 1/4 instead of straight home.
@@ -935,6 +955,288 @@ public sealed class AutoDepositManagerTests : IDisposable
 
         Arrive(h, new RoomKey(1, 1));
         Assert.Equal(LoopState.Running, h.Loop.State);   // engine resumed
+    }
+
+    // The dark-route fixture with a second light shop in the bank's town, two rooms
+    // east of the bank (1/3 ─E─ 1/5 ─E─ 1/6). The shop by the origin (1/4) adds
+    // fewer steps to the way home, but it lies past the dark room.
+    private const string TownShopGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Origin",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Dark",
+            "Light": -200, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Bank",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Shop",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Street",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/6", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Town Shop",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A bank trip buys its light in town before the walk back sets out (user,
+    // 2026-10-17): the shop nearest the bank, not the one by the origin that adds
+    // fewer steps but is reached only through the dark.
+    [Fact]
+    public void BankReturnLegRunsDark_BuysInTheBanksTownBeforeTheWalkBack()
+    {
+        using Harness h = NewHarness(TownShopGraphJson);
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.LightShopRooms.Add(new RoomKey(1, 6));
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Assert.Equal("dep 4990", h.DepositLines().Single());
+
+        Assert.Equal(new RoomKey(1, 6), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 5));
+        Arrive(h, new RoomKey(1, 6));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
+    // A stash trip whose way back runs dark: the light is planned before the hide and
+    // the hide leaves its price in hand (one gold of the fifty), then the light is
+    // bought in town and the trip walks back.
+    [Fact]
+    public void StashReturnLegRunsDark_HideLeavesTheLightsPrice_ThenBuysInTown()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        // A loop off the stash room, so the trip is a detour, not a pass-through.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 49 gold crown", Assert.Single(h.StashLines()));
+
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
+    // The bank run's light buy, under way in the shop at 1/4 (the walk back to 1/1
+    // runs dark through 1/2).
+    private static void BankRunBuyingItsLight(Harness h)
+    {
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+    }
+
+    // The connection drops while the bank run buys its light: the buy is let go
+    // unrecorded, the reroute ends, nothing walks on the dead link, and the loop is
+    // handed to LoopRunner's restart after a reconnect.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_TheLoopRestartsAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        int sent = h.Moves.Count;
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(sent, h.Moves.Count);
+        Assert.Equal("test", h.Loop.PendingReconnectResumeName);
+        Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
+
+        // The reconnect, in wire order: the prompt is read ahead of its chunk's
+        // room display.
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
+    }
+
+    // The reconnect lands somewhere else (the bank's room): the loop restarts on the
+    // prompt, as any loop cut off by a drop does, and once the room display is read
+    // its walk goes on from the room it shows.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_TheLoopRestartsFromThere()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(LoopState.Approaching, h.Loop.State);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Assert.Equal("s", h.Moves.Last());          // planned from the room the reconnect showed
+    }
+
+    // The user's Stop held the trip (the user gate is up) when the link dropped: that
+    // stays a stop, and the loop isn't restarted on the reconnect.
+    [Fact]
+    public void ConnectionDropsWhileTheUsersStopHoldsTheTrip_TheLoopStaysStopped()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.Walker.Pause();
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+    }
+
+    // The master switch off at the reconnect: LoopRunner holds the restart for it.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_MasterSwitchOff_TheRestartWaits()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        h.Loop.MasterSwitchOff = () => true;
+
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        Assert.True(h.Loop.ReconnectResumeHeldForMasterSwitch);
+    }
+
+    // A party reform still to see the room: the restarted loop is held behind the
+    // reform's gate.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_PartyReformPending_TheRestartIsHeld()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        h.Loop.SetReconnectReformProbe(() => true);
+
+        h.Prompt();
+        Assert.True(h.Loop.ReconnectResumeHeldForReform);
+        Assert.Contains(MovementCoordinator.ReconnectReformGate, h.Coordinator.AssertedGates);
+    }
+
+    // The same for a loop's light trip: the loop isn't left stopped.
+    [Fact]
+    public void ConnectionDropsDuringALightTripsBuy_TheLoopRestartsAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        Assert.Equal(LightRestockOutcome.Started,
+            h.AutoDeposit.StartLightRestock(new AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "light for the run"));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // A light trip the drop cut off isn't held as tried: the loop restarted after
+    // the reconnect makes the trip again at once, not after the back-off.
+    [Fact]
+    public void ALightTripCutOffByADrop_IsMadeAgainAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        // The checks are posted to the UI thread in the client: run once the
+        // dispatch that raised them is over.
+        List<Action> posted = new();
+        void RunPosted()
+        {
+            Action[] due = posted.ToArray();
+            posted.Clear();
+            foreach (Action a in due) a();
+        }
+        h.Provisioner.SetLoopRestock(
+            engineRunning: () => h.Loop.State != LoopState.Idle,
+            restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
+            engineRooms: h.Loop.ResolveLoopRoomKeys,
+            defer: posted.Add);
+        // AppServices tells the provisioner of each loop start.
+        h.Loop.Event += e =>
+        {
+            if (e.Kind == LoopEventKind.Started) h.Provisioner.OnEngineStarted(userStarted: e.UserStarted);
+        };
+        h.Provisioner.OnEngineStarted(userStarted: false);
+        RunPosted();
+        Assert.True(h.AutoDeposit.IsLightTrip);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        RunPosted();
+
+        Assert.True(h.AutoDeposit.IsLightTrip);
+    }
+
+    // The stash cutoff's coin counts toward the light's price: with silver the
+    // cutoff, the fifty gold kept in hand pay for the torch, so every silver is
+    // hidden.
+    [Fact]
+    public void StashHoldBack_CountsTheCoinAboveTheCutoff()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        h.Settings.StashCoinCutoff = StashCoinCutoff.Silver;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 20, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5200);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 20 silver noble", Assert.Single(h.StashLines()));
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
     }
 
     [Fact]

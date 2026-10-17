@@ -118,6 +118,17 @@ public readonly record struct CurrencyHoldings(
         return (coins, given);
     }
 
+    // The copper value of the coins whose unit is at most maxUnit (long.MaxValue:
+    // every coin): the pool PlanOffloadAboveKeep offloads from.
+    public long EligibleCopper(long maxUnit = long.MaxValue)
+    {
+        long eligible = 0;
+        foreach ((long unit, long available) in new[]
+                 { (1L, (long)Copper), (10L, (long)Silver), (100L, (long)Gold), (10_000L, (long)Platinum), (1_000_000L, (long)Runic) })
+            if (unit <= maxUnit) eligible += available * unit;
+        return eligible;
+    }
+
     // Decompose the coin above a raw copper-farthing keep floor into a set of
     // per-denomination offload commands. Hides the LOWEST denominations first
     // (copper → runic), so the coins left on hand are the fewest possible: for a
@@ -153,11 +164,7 @@ public readonly record struct CurrencyHoldings(
             ("runic", 1_000_000L, (long)Runic),
         };
 
-        long eligibleHeld = 0;
-        foreach ((_, long unit, long available) in ladder)
-            if (unit <= maxUnit) eligibleHeld += available * unit;
-
-        long excess = eligibleHeld - Math.Max(0, keepCopper);
+        long excess = EligibleCopper(maxUnit) - Math.Max(0, keepCopper);
         if (excess <= 0)
             return Array.Empty<(string, long)>();
 
