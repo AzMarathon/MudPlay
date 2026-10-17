@@ -477,8 +477,9 @@ public sealed class CombatManagerRoomChangeHoldTests
     [Fact]
     public void FollowHoldNothingPlaced_DeadlineTakesTheLeadersTarget()
     {
-        // A display read to its "Also here:" with no exits line after it places nothing,
-        // so the pick waits for the deadline; it still goes onto the leader's target.
+        // The game always ends a display with its exits line; one lost or garbled leaves
+        // the "Also here:" read with nothing to place it, so the pick waits for the
+        // deadline, and still goes onto the leader's target.
         using Harness h = new();
         FollowFightOnTheCraterFloor(h);
 
