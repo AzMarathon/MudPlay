@@ -51,12 +51,6 @@ public sealed class EngineRecoveryGate
     private IRecoverableEngine? _engine;
     private RoomKey? _anchor;
     private readonly List<Direction> _executedSinceAnchor = new();
-
-    // For each executed step, how many room displays had been parsed when it went
-    // out (_displaysParsed). Two steps with a display between their sends weren't
-    // sent together, so that display was the first one's landing.
-    private readonly List<int> _displaysBeforeStep = new();
-    private int _displaysParsed;
     private readonly FootprintMatcher _tier3;
 
     // Tier-2 FORWARD localiser. The same SLAM accumulator as _tier3, but stepped
@@ -269,7 +263,6 @@ public sealed class EngineRecoveryGate
     public void OnRoomObserved(RoomObservation obs)
     {
         _shownForLanding = obs;
-        _displaysParsed++;
         switch (_tier3Phase)
         {
             case Tier3Phase.AwaitingLanding:
@@ -386,7 +379,6 @@ public sealed class EngineRecoveryGate
             return;
         }
         _executedSinceAnchor.Add(direction);
-        _displaysBeforeStep.Add(_displaysParsed);
     }
 
     // ----- tracker subscription --------------------------------------
@@ -996,7 +988,6 @@ public sealed class EngineRecoveryGate
 
         Direction lastSent = _executedSinceAnchor[^1];
         _executedSinceAnchor.RemoveAt(_executedSinceAnchor.Count - 1);
-        _displaysBeforeStep.RemoveAt(_displaysBeforeStep.Count - 1);
         _lastBacktrackReverse = lastSent.Opposite();
         _tier3Phase = Tier3Phase.AwaitingLanding;
         _tier3ReverseSteps++;
@@ -1064,7 +1055,10 @@ public sealed class EngineRecoveryGate
     // settled in. A landing the footprint can't read (no display and no room, no
     // display outside the dark, or two steps landed on one transition) drops the
     // footprint: folding the next display under the wrong step is how it would
-    // converge on the wrong room.
+    // converge on the wrong room. The engines send a step only once the one before
+    // has landed (and MayProceedWithPlannedStep holds one the room can't make), so
+    // two steps landing together means one never did: a refused step the walker
+    // sent again.
     private void FoldTier2ForwardLanding(RoomTransition t, RoomObservation? shown)
     {
         if (!_tier2ForwardActive) return;
@@ -1074,17 +1068,6 @@ public sealed class EngineRecoveryGate
         if (landed > 1)
         {
             DropTier2Forward($"{landed} steps landed on one transition");
-            return;
-        }
-
-        // More than one step unfolded, yet only one landed: fine for steps sent
-        // together, but a display parsed between this step and the next was this
-        // step's own landing, one the tracker didn't count as a landing (it held it
-        // as a re-look). Which step this display belongs to can't then be told.
-        if (_executedSinceAnchor.Count - _tier2ForwardFed > 1
-            && _displaysBeforeStep[_tier2ForwardFed + 1] != _displaysBeforeStep[_tier2ForwardFed])
-        {
-            DropTier2Forward($"a display came between steps {_tier2ForwardFed + 1} and {_tier2ForwardFed + 2} that wasn't read as a landing");
             return;
         }
 
@@ -1106,14 +1089,6 @@ public sealed class EngineRecoveryGate
 
         if (_tier2Forward.IsConverged)
         {
-            // Re-anchoring with steps still out would forget them (the tracker
-            // re-locates clean), so wait for their landings; the set can't grow.
-            if (_tracker.MovesInFlight > 0)
-            {
-                _log?.Log(LogSeverity.Info, LogSource,
-                    $"Tier2.forward down to {_tier2Forward.Candidates.Single()}; waiting for {_tracker.MovesInFlight} step(s) in flight");
-                return;
-            }
             FinishTier2ForwardConverged(_tier2Forward.Candidates.Single());
             return;
         }
@@ -1129,7 +1104,6 @@ public sealed class EngineRecoveryGate
     private void ClearExecuted()
     {
         _executedSinceAnchor.Clear();
-        _displaysBeforeStep.Clear();
         _lastLanding = null;
     }
 

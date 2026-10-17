@@ -104,12 +104,49 @@ public sealed class RoomTracker
 
     // How long a move is given to be answered, counted from when it went out or
     // the last display was read, whichever is later, before it's presumed to have
-    // no answer coming. A step lands in 0.6–0.7 s on Stock and 1.1–1.2 s on
-    // Paradigm, lag included (GAME_MECHANICS "Timing & rounds"), and on Stock a
-    // command waiting behind others runs one fast tick (1 s) after the one before.
-    // So moves sent together are answered about a second apart, the slowest step
-    // seen takes 1.2 s, and a move with nothing for 1.5 s had its answer due.
-    private static readonly TimeSpan UnansweredMoveAge = TimeSpan.FromSeconds(1.5);
+    // no answer coming. Moves typed together are answered one hop apart, and a hop
+    // depends on the character (GAME_MECHANICS "Per-hop movement speed"): Paradigm's
+    // timer runs from 1.0 s up to ~3.1 s with encumbrance, plus lag, with a tail
+    // past the formula; Stock's runs ~0.6–0.7 s light and ~1.65 s Heavy, more when
+    // dragging or after several moves in a row. So the bound is two expected hops
+    // plus a second (_expectedHop, the travel model's live estimate), and never
+    // under UnansweredMoveFloor, which is above the slowest documented hop. Healing a
+    // move that got no answer then waits for a pause of that length.
+    private static readonly TimeSpan UnansweredMoveFloor = TimeSpan.FromSeconds(3.5);
+
+    private TimeSpan UnansweredMoveAge
+    {
+        get
+        {
+            if (_expectedHop?.Invoke() is not { } hop) return UnansweredMoveFloor;
+            TimeSpan derived = hop + hop + TimeSpan.FromSeconds(1);
+            return derived > UnansweredMoveFloor ? derived : UnansweredMoveFloor;
+        }
+    }
+
+    // The character's expected time per hop (the travel model Auto-Lair plans
+    // with). Unset in tests / before wiring: the floor alone applies.
+    private Func<TimeSpan>? _expectedHop;
+
+    public void SetExpectedHopProbe(Func<TimeSpan> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _expectedHop = probe;
+    }
+
+    // Whether the game echoes a typed-ahead command when it runs it, so an echo
+    // means every command before it has been answered. Recorded for Stock
+    // (GAME_MECHANICS "Command rate limit (typing/sending too fast)"); Paradigm is
+    // not recorded, and there an echo retires nothing. Unset: false.
+    private Func<bool>? _echoMarksExecution;
+
+    public void SetEchoMarksExecutionProbe(Func<bool> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _echoMarksExecution = probe;
+    }
+
+    private bool EchoMarksExecution => _echoMarksExecution?.Invoke() == true;
 
     // The time of the latest send, display, dark line or blind line the tracker was
     // given: what MovesInFlight ages moves against, on the same clock they were sent on.
@@ -2558,11 +2595,14 @@ public sealed class RoomTracker
 
         if (_passiveGrid.IsExhausted)
         {
-            // The walked footprint fits no graph path (a stale map, or an unobserved
-            // forced move such as fear). Drop it and re-seed from the next observation.
+            // The walked footprint fits no graph path (a stale map, an unobserved
+            // forced move such as fear, or a move with no answer that hasn't been
+            // retired yet, so displays were read against the wrong moves). Drop it,
+            // and the moves still waiting with it, and re-seed from the next display.
             _log?.Log(LogSeverity.Info, "RoomTracker",
-                "Passive grid locate exhausted: walked footprint fits no graph path; re-seeding on the next observation.");
-            ClearPassiveGrid();
+                "Passive grid locate exhausted: walked footprint fits no graph path; re-seeding on the next observation"
+                + (_unsureMoves.Count > 0 ? $" and no longer waiting on {_unsureMoves.Count} move(s)." : "."));
+            ResetPassiveLocate();
         }
         return false;
     }
@@ -2649,21 +2689,24 @@ public sealed class RoomTracker
         return oldest;
     }
 
-    // Drop the leading unsure moves that will never get a display. With a statline
-    // that echoes, that is a move echoed before a later one with no display read
-    // in between (NoteUnsureEcho does it as the later echo arrives). A move with no
-    // echo seen (a statline that doesn't echo, or one whose echoes stopped reading)
-    // is one past UnansweredMoveAge with a later move behind it: the display now
-    // being read is that later move's.
+    // Drop the leading unsure moves that will never get a display. Where an echo
+    // marks a command being run (EchoMarksExecution), that is a move echoed before a
+    // later one with no display read in between (NoteUnsureEcho does it as the later
+    // echo arrives). Any other move (no echo seen, or a realm whose echo timing isn't
+    // recorded) is one past UnansweredMoveAge with a later move behind it: the
+    // display now being read is that later move's.
     private void RetireUnansweredMoves(DateTimeOffset when)
     {
-        while (_unsureMoves.Count >= 2 && !_unsureMoves[0].Echoed && !StillAwaited(_unsureMoves[0].Move, when))
+        while (_unsureMoves.Count >= 2
+               && (!_unsureMoves[0].Echoed || !EchoMarksExecution)
+               && !StillAwaited(_unsureMoves[0].Move, when))
             RetireOldestUnsureMove($"nothing for {UnansweredMoveAge.TotalSeconds:0.#} s, and a later move is out");
     }
 
     // The game echoed a command while we're unsure of the room: mark the unsure move
-    // it names, and retire the moves before it that were echoed already. Their
-    // displays would have come before this echo, and none did.
+    // it names, and, where the echo marks the command being run, retire the moves
+    // before it that were echoed already. Their displays would have come before this
+    // echo, and none did.
     private void NoteUnsureEcho(string echoed)
     {
         int at = _unsureMoves.FindIndex(u => !u.Echoed
@@ -2671,6 +2714,7 @@ public sealed class RoomTracker
                 || (u.Move.Command is { } cmd && string.Equals(echoed, cmd, StringComparison.OrdinalIgnoreCase))));
         if (at < 0) return;
         _unsureMoves[at].Echoed = true;
+        if (!EchoMarksExecution) return;
         for (int i = at - 1; i >= 0; i--)
         {
             if (!_unsureMoves[i].Echoed) continue;

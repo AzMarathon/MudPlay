@@ -424,6 +424,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **How Stock's typed-ahead queue drains** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_fast_update_character` @0x4232c6 / @0x423149 / @0x423280, `_execute_pending_command` @0x450f24, `_cleanup_pending_commands`; Realm: Stock, Paradigm not recorded)*:
   - **One waiting command runs per fast tick.** A tick that starts with the delay at 0 runs one waiting command; the tick on which a delay runs out performs the deferred move and then runs one. So ten `get`s sent behind a move take ten ticks to answer, and anything sent meanwhile joins the back of the same queue. A line typed while the delay is 0 and the queue is empty runs at once (`_execute_input` @0x450171–0x4501a6).
   - **The game prints a queued command itself when it runs it**: the command text and a line break (`%s` + CR, @0x450f24), then the command's own output. So a command run from the queue is echoed at the time it runs, not when it was typed.
+  - `[NEEDS CONFIRMATION]` **Paradigm:** is a typed-ahead command (a move sent before the one ahead of it has landed) echoed when it runs, as on Stock, or when it is typed? Not recorded; asked of the user 2026-10-17 (PR #1091 review). **Client use:** until it is settled, `RoomTracker.NoteUnsureEcho` treats an echo as "every command before this one has been answered" only on Stock (`SetEchoMarksExecutionProbe`); on Paradigm an unanswered move is retired by the time bound alone (*Movement & navigation → Passive grid re-localiser (command-free)*).
   - **A queued line is kept to 254 characters** (@0x450fba).
   - **Leaving the game empties the queue, and so does dying.** `_cleanup_pending_commands` has one caller, `_cleanup_when_user_leaves` (@0x420e38), which runs on a death, a suicide, the end of the exit wait, a logoff and a hang-up. No flush was found on `break`, on being attacked or on a refused move (callees not all read).
 - **Stock has no `Too many messages sent…` line** *([OBSERVED] 2026-10-09: the text is not in `wccmmud.dll`, `wccmmpls.dll`, the message table or the textblocks; Realm: Stock)*. The Stock engine's only "slow down" lines are the two in the *Stock realms are stricter* bullet of this topic, both printed by `_add_delayed_command` (@0x45103e, @0x45105b). Its chat traffic has per-recipient caps instead, which print no rate line: see *Talk & chat channels → Telepath throttle and per-telepath acknowledgement* and *Talk & chat channels → Gossip and auction*.
@@ -6896,12 +6897,20 @@ Among protectable hazards, a further split governs whether the navigator may off
     room refuses through `NoteCommandMoveRefused`), and a redisplay with no move waiting is a repeat, not a
     fold (`IsRepeatRedisplayWithoutMove`).
   - A move nothing answers that the tracker reads (a command the game answers with only a prompt, a line no
-    detector knows) is retired (`RetireUnansweredMoves`, `NoteUnsureEcho`): on a statline that echoes, once
-    the next command's echo comes with no display between; on one that doesn't, once it has had nothing for
-    1.5 s with a later move out (`UnansweredMoveAge`). The bound comes from *Timing & rounds → Global combat
-    tick and exp accrual* (a step takes 0.6–0.7 s on Stock, 1.1–1.2 s on Paradigm, lag included) and *Wire,
-    prompt & command output → Command rate limit (typing/sending too fast)* (Stock runs one waiting command per
-    1 s fast tick), so moves sent together are answered about a second apart. PR #1091 review, 2026-10-17.
+    detector knows) is retired (`RetireUnansweredMoves`, `NoteUnsureEcho`).
+    - **On Stock, with an echo:** once the next command's echo comes with no display between. That rests on
+      Stock echoing a typed-ahead command when it runs it (*Wire, prompt & command output → Command rate limit
+      (typing/sending too fast)*). Paradigm's echo timing is not recorded, so there `EchoMarksExecution` is off
+      and the echo retires nothing (`RoomTracker.SetEchoMarksExecutionProbe`, wired to the active realm).
+    - **Otherwise (no echo, or Paradigm):** once it has had nothing for `UnansweredMoveAge` with a later move
+      out, counted from its send or the last display read, whichever is later. The bound is two expected hops
+      plus a second, never under 3.5 s. The expected hop is the Auto-Lair travel model's estimate
+      (`SetExpectedHopProbe`: Paradigm's movement formula or Stock's encumbrance buckets).
+    - The bound comes from *Per-hop movement speed*: Paradigm runs from the 1.0 s cap to ~3.1 s with
+      encumbrance, plus lag, and a 32%-encumbered priest's 1.37 s median has a tail past 1.5 s; Stock is ~0.6–0.7 s
+      light and ~1.65 s Heavy, with more units when dragging or after several moves. Moves typed together are
+      answered one hop apart, so a shorter bound retired a heavy character's typed-ahead move.
+    - PR #1091 review, 2026-10-17.
 - **Client policy** *(Claude's design in PR #1091, 2026-10-17; not a user ruling)*: a footprint that comes
   down to one room while a later move is still in flight waits for that move's display before re-anchoring
   (`SettlePassiveFold`; the gate's forward localiser does the same). The set can only shrink, so waiting

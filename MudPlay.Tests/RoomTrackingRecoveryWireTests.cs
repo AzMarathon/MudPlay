@@ -157,23 +157,28 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // A move the game answers with nothing the tracker can read: a typed command
     // that prints only the prompt, or a line no refusal detector knows. It must be
-    // retired, or every later display is read against the move before its own. With
-    // an echo, the next command's echo retires it (it was echoed and no display came
-    // before the next one); with none, a next move sent more than 3 s later does.
+    // retired, or every later display is read against the move before its own. Where
+    // an echo marks the command being run (Stock), the next command's echo retires it
+    // (it was echoed and no display came before the next one). With no echo, or on a
+    // realm whose echo timing isn't recorded (Paradigm), a next move after a pause
+    // longer than the bound (3.5 s at least) does.
     [Theory]
-    [InlineData("enter portal", null, true)]
-    [InlineData("climb rope", null, true)]
-    [InlineData("enter portal", null, false)]
-    [InlineData("e", "Something unseen stops you.", true)]
-    [InlineData("e", "Something unseen stops you.", false)]
-    public void PassiveLocate_AMoveWithNoAnswerTheTrackerReads_IsRetired(string command, string? answer, bool echo)
+    [InlineData("enter portal", null, true, true)]
+    [InlineData("climb rope", null, true, true)]
+    [InlineData("enter portal", null, false, true)]
+    [InlineData("enter portal", null, true, false)]
+    [InlineData("e", "Something unseen stops you.", true, true)]
+    [InlineData("e", "Something unseen stops you.", false, true)]
+    [InlineData("e", "Something unseen stops you.", true, false)]
+    public void PassiveLocate_AMoveWithNoAnswerTheTrackerReads_IsRetired(string command, string? answer, bool echo, bool stockEcho)
     {
         using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
         rig.Echo = echo;
+        rig.EchoMarksExecution = stockEcho;
         if (answer is not null) rig.NextAnswers.Enqueue(answer);
 
         rig.Do(command);
-        if (!echo) rig.Clock.Advance(TimeSpan.FromSeconds(4));   // the player waits, then walks on
+        if (!echo || !stockEcho) rig.Clock.Advance(TimeSpan.FromSeconds(4));   // the player waits, then walks on
         for (int step = 0; step < 4; step++) rig.Do(Token(step));
 
         AssertLocatedAt(rig, A(4));
@@ -197,10 +202,14 @@ public sealed class RoomTrackingRecoveryWireTests
 
     // a. A typed command the room refuses with a line that also answers ordinary
     // commands ("You do not see that here."), sent just now, is refused as a move.
-    [Fact]
-    public void PassiveLocate_ATypedCommandRefusedByTheRoom_IsNotFolded()
+    // With no echo and no pause, nothing but the refusal can retire it.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PassiveLocate_ATypedCommandRefusedByTheRoom_IsNotFolded(bool echo)
     {
         using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.Echo = echo;
         rig.NextAnswers.Enqueue("You do not see that here.");
 
         rig.Do("enter portal");
@@ -209,8 +218,84 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, A(3));
     }
 
-    // c. Down to one room, waiting on a move that never got an answer: past the 3 s
-    // bound, the next display re-anchors instead of being read as that move's.
+    // A heavy character's hops: two moves typed together, answered 2–3 s apart with no
+    // echo. Neither is taken for a move with no answer, each display folds with its
+    // own move, and the footprint isn't settled before the second move lands.
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(2.5)]
+    [InlineData(3.0)]
+    public void PassiveLocate_SlowHops_TypedAheadMovesFoldInOrder(double hopSeconds)
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.Echo = false;
+        rig.AnswerDelay = TimeSpan.FromSeconds(hopSeconds);
+
+        rig.Type(Token(0));
+        rig.Type(Token(1));
+        rig.Pump();
+
+        AssertLocatedAt(rig, A(2));
+        Assert.DoesNotContain(rig.Log.Snapshot(), e => e.Message.Contains("got no answer"));
+    }
+
+    // The same, down to one room on the first display: the second move, landing one
+    // slow hop later, is waited for rather than dropped, so the room settled on is
+    // the one it reached.
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(2.4)]
+    [InlineData(3.0)]
+    public void PassiveLocate_SlowHops_DownToOneWaitsForTheMoveStillOut(double hopSeconds)
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 0));
+        rig.Echo = false;
+        rig.AnswerDelay = TimeSpan.FromSeconds(hopSeconds);
+
+        rig.Type(Token(0));
+        rig.Type(Token(1));
+        rig.Pump();
+
+        AssertLocatedAt(rig, A(2));
+        Assert.DoesNotContain(rig.Log.Snapshot(), e => e.Message.Contains("re-anchoring without them"));
+    }
+
+    // A character whose hop the travel model puts at 3.1 s (Paradigm, heavily
+    // encumbered): the bound grows with it, so moves answered 5 s apart still fold.
+    [Fact]
+    public void PassiveLocate_TheBoundGrowsWithTheExpectedHop()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.Echo = false;
+        rig.Tracker.SetExpectedHopProbe(() => TimeSpan.FromSeconds(3.1));
+        rig.AnswerDelay = TimeSpan.FromSeconds(5);
+
+        rig.Type(Token(0));
+        rig.Type(Token(1));
+        rig.Pump();
+
+        AssertLocatedAt(rig, A(2));
+    }
+
+    // On a realm where the game might echo a command as it's typed (Paradigm isn't
+    // recorded), echoes of moves typed together arrive before either is answered.
+    // There the echo retires nothing, so the moves still fold in order.
+    [Fact]
+    public void PassiveLocate_EchoesAtTypingOnAnUnrecordedRealm_RetireNothing()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.EchoWhenTyped = true;
+        rig.EchoMarksExecution = false;
+
+        rig.Type(Token(0));
+        rig.Type(Token(1));
+        rig.Pump();
+
+        AssertLocatedAt(rig, A(2));
+    }
+
+    // c. Down to one room, waiting on a move that never got an answer: past the bound
+    // (3.5 s at least), the next display re-anchors instead of being read as that move's.
     [Fact]
     public void PassiveLocate_DownToOne_AMoveWithNoAnswerDoesNotHoldTheReanchorForGood()
     {
@@ -405,6 +490,25 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, B(2));
         Assert.Equal((A(0).Map, A(0).Room), (profile.LastKnownRoom!.Map, profile.LastKnownRoom.Room));
         Assert.Empty(engine.Backtracks);
+    }
+
+    // e. A step the game refuses never landed: the footprint is dropped rather than
+    // folding it (the walker sends it again, and two steps would then count as landed
+    // on the next landing).
+    [Fact]
+    public void Tier2Forward_ARefusedStep_DropsTheFootprintRatherThanFoldingIt()
+    {
+        (TrackerWireRig rig, PlanEngine engine) = StartForward(PairWorld(split: 1));
+        using TrackerWireRig _ = rig;
+        engine.Plan.Enqueue(Walk[0]);
+        rig.NextAnswers.Enqueue("There is no exit in that direction!");
+
+        Assert.True(engine.Step());
+        rig.Pump();
+
+        Assert.Equal(A(0), rig.Position);
+        Assert.Equal("idle", rig.Gate.Tier2ForwardStatus);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Tier2.forward-dropped"));
     }
 
     // e. A teleport breaks the walk the forward footprint folds.
