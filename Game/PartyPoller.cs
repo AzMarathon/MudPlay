@@ -129,7 +129,6 @@ public sealed partial class PartyPoller : IDisposable
 
     private sealed class HealthNagState
     {
-        public string Given { get; set; } = string.Empty;
         public DateTime FirstSentAt { get; set; }
         public DateTime? LastSentAt { get; set; }
         public int Sends { get; set; }
@@ -319,7 +318,6 @@ public sealed partial class PartyPoller : IDisposable
         DateTime now = _now();
         _activeNags[given] = new HealthNagState
         {
-            Given       = given,
             FirstSentAt = now,
             Sends       = 1,
         };

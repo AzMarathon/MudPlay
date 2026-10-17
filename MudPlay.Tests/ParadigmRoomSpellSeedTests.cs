@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
@@ -99,26 +98,35 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         MessageCandidateStore candidates = new();
+        ServerFeed server = new(router);
         using MessageCandidateWatcher watcher = new(router, messages, candidates);
+        watcher.AttachLineExtractor(server.Lines);
         watcher.NotifyInGame();
 
         // The room display the line follows in the report, then the line itself.
-        foreach (string line in new[]
+        Play(server, new[]
         {
             "Smoldering Fields",
             "Also here: brute zombie, brute zombie, brute zombie, brute zombie.",
             "Obvious exits: north, south, east, west",
             "You can barely make out a figure lurching in the haze.",
-        })
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false);
-            Invoke(watcher, "OnLine", emitted);
-            Invoke(watcher, "CommitPending");
-        }
+        });
 
         Assert.Equal(staged, candidates.Candidates.Count(c =>
             c.RawText == "You can barely make out a figure lurching in the haze."));
+    }
+
+    // Each line a minute after the last, then the game going on: every held
+    // candidate is released into the store.
+    private static void Play(ServerFeed server, IEnumerable<string> lines)
+    {
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+        foreach (string line in lines)
+        {
+            server.Line(line, at);
+            at = at.AddMinutes(1);
+        }
+        server.Line("The game goes on.", at);
     }
 
     // A seed record whose text is fixed in place keeps the Id it shipped with: a
@@ -143,10 +151,12 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         MessageCandidateStore candidates = new();
+        ServerFeed server = new(router);
         using MessageCandidateWatcher watcher = new(router, messages, candidates);
+        watcher.AttachLineExtractor(server.Lines);
         watcher.NotifyInGame();
 
-        foreach (string line in new[]
+        Play(server, new[]
         {
             "A dog barks off in the distance.",
             "The awful sound of a drunken chorus echoes through the streets.",
@@ -155,13 +165,7 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
             "An ominous wind blows through the trees.",
             "A flock of birds fly overhead.",
             "The leaves begin to rustle, as if some beast were about to spring forth!",
-        })
-        {
-            var emitted = new LineExtractor.EmittedLine(
-                line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false);
-            Invoke(watcher, "OnLine", emitted);
-            Invoke(watcher, "CommitPending");
-        }
+        });
 
         Assert.Empty(candidates.Candidates);
     }
@@ -203,19 +207,17 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         MessageCandidateStore candidates = new();
+        ServerFeed server = new(router);
         using MessageCandidateWatcher watcher = new(router, messages, candidates);
+        watcher.AttachLineExtractor(server.Lines);
         watcher.NotifyInGame();
 
-        var emitted = new LineExtractor.EmittedLine(
-            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false);
-        Invoke(watcher, "OnLine", emitted);
-        Invoke(watcher, "CommitPending");
+        // The line, then the game going on a minute later, which releases a held
+        // candidate into the store.
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+        server.Line(line, at);
+        server.Line("The game goes on.", at.AddMinutes(1));
 
-        Assert.Empty(candidates.Candidates);
+        Assert.DoesNotContain(candidates.Candidates, c => c.RawText == line);
     }
-
-    private static void Invoke(MessageCandidateWatcher watcher, string method, params object[] args) =>
-        typeof(MessageCandidateWatcher)
-            .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(watcher, args.Length == 0 ? null : args);
 }

@@ -1,5 +1,4 @@
 using System.Text;
-using Avalonia.Threading;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
@@ -27,10 +26,11 @@ public sealed class RecoveryLookSweep : IDisposable
 
     // Per-look deadline: if a peek never renders (a lost packet, a room that
     // won't display), skip that arm rather than hang the whole recovery.
-    private static readonly TimeSpan LookTimeout = TimeSpan.FromSeconds(3);
+    internal static readonly TimeSpan LookTimeout = TimeSpan.FromSeconds(3);
 
     private readonly LogService? _log;
-    private readonly DispatcherTimer? _lookTimeout;
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
+    private IDisposable? _lookTimeout;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -41,22 +41,13 @@ public sealed class RecoveryLookSweep : IDisposable
     private readonly Dictionary<Direction, RoomObservation> _neighbours = new();
     private Action<IReadOnlyDictionary<Direction, RoomObservation>>? _onComplete;
 
-    public RecoveryLookSweep(LogService? log = null) : this(log, useTimer: true) { }
-
-    // Test seam: useTimer false swaps the DispatcherTimer out so tests drive the
-    // per-look timeout via FireLookTimeoutForTests instead of a wall clock.
-    internal RecoveryLookSweep(LogService? log, bool useTimer)
+    // schedule arms the per-look timeout; the default is a one-shot on the UI
+    // thread's dispatcher.
+    public RecoveryLookSweep(LogService? log = null, Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         _log = log;
-        if (useTimer)
-        {
-            _lookTimeout = new DispatcherTimer(DispatcherPriority.Background) { Interval = LookTimeout };
-            _lookTimeout.Tick += (_, _) => OnLookTimeout();
-        }
+        _schedule = schedule ?? DispatcherTicks.Once;
     }
-
-    // True while a sweep is mid-flight (looks queued or awaiting a render).
-    public bool Active => _active;
 
     // Available once the main-window VM supplies the EngineSendGate-wrapped
     // SendUserInput. Without it the driver can't peek, so the gate skips the
@@ -106,7 +97,7 @@ public sealed class RecoveryLookSweep : IDisposable
     {
         if (!_active) return;
         _neighbours[_currentLookDir] = obs;
-        _lookTimeout?.Stop();
+        StopLookTimeout();
         SendNextLook();
     }
 
@@ -119,7 +110,7 @@ public sealed class RecoveryLookSweep : IDisposable
         _onComplete = null;
         _lookQueue.Clear();
         _neighbours.Clear();
-        _lookTimeout?.Stop();
+        StopLookTimeout();
     }
 
     private void SendNextLook()
@@ -132,13 +123,19 @@ public sealed class RecoveryLookSweep : IDisposable
 
         _currentLookDir = _lookQueue.Dequeue();
         _wireSender?.Invoke(Encoding.Latin1.GetBytes("look " + _currentLookDir.ToLongName() + "\r"));
-        _lookTimeout?.Stop();
-        _lookTimeout?.Start();
+        StopLookTimeout();
+        _lookTimeout = _schedule(LookTimeout, OnLookTimeout);
+    }
+
+    private void StopLookTimeout()
+    {
+        _lookTimeout?.Dispose();
+        _lookTimeout = null;
     }
 
     private void OnLookTimeout()
     {
-        _lookTimeout?.Stop();
+        _lookTimeout = null;
         if (!_active) return;
         // This peek never rendered — skip the arm and move on. Recovery is
         // best-effort: a missing neighbour is one fewer constraint, not a
@@ -161,12 +158,10 @@ public sealed class RecoveryLookSweep : IDisposable
         cb?.Invoke(result);
     }
 
-    internal void FireLookTimeoutForTests() => OnLookTimeout();
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _lookTimeout?.Stop();
+        StopLookTimeout();
     }
 }

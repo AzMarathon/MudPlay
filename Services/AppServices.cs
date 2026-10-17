@@ -15400,8 +15400,8 @@ public sealed class AppServices
     private bool _autoSearchFlippedForRouteSearch;
 
     // UI bridge to flip the master Auto-Search toggle (the observable that persists +
-    // updates the toolbar); bound by MainWindowViewModel after construction. Null in
-    // headless/test contexts, where the route-search flip is simply a no-op.
+    // updates the toolbar); bound by MainWindowViewModel after construction. Null until
+    // then, when the route-search flip is simply a no-op.
     public Action<bool>? SetAutoSearchEnabled { get; set; }
 
     // Picking the route picker's "Search en route" card turns Auto-Search on for the

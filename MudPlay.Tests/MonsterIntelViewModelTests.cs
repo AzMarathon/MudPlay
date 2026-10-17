@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
@@ -434,16 +433,11 @@ public sealed class MonsterIntelViewModelTests : IDisposable
             observations: null, playerState: null);
         inventory.Dispose();
 
-        // Mutate the VM's backing list in place (same object RowsView was
-        // constructed over) rather than replacing the field -- RowsView
-        // wraps that exact List<T> by reference, so a field swap wouldn't
-        // reach it, but Refresh() re-enumerates its current contents.
-        FieldInfo allField = typeof(MonsterIntelViewModel).GetField("_all", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var all = (List<MonsterIntelEntry>)allField.GetValue(vm)!;
-        MonsterIntelEntry synthetic = all.First(e => e.Name == "test goblin");
+        // The entry the view lists, given the incoming hit chance under test; the
+        // view re-filters on Refresh.
+        MonsterIntelEntry synthetic = vm.RowsView.SourceCollection.Cast<MonsterIntelEntry>()
+            .First(e => e.Name == "test goblin");
         synthetic.IncomingHitChance = incomingHitPercent;
-        all.Clear();
-        all.Add(synthetic);
         vm.RowsView.Refresh();
         return vm;
     }

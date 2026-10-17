@@ -12,13 +12,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.A (spell extension) — <see cref="CombatManager"/> combat-spell
-/// round economy: the chooser-driven cast path that suppresses weapon
-/// swings, the per-round heartbeat re-cast, and the opt-in guard that keeps
-/// the weapon engine unchanged until <see cref="CombatManager.SetCombatSpellCaster"/>
-/// is wired.
-/// </summary>
+// CombatManager combat-spell
+// round economy: the chooser-driven cast path that suppresses weapon
+// swings, the per-round heartbeat re-cast, and the opt-in guard that keeps
+// the weapon engine unchanged until CombatManager.SetCombatSpellCaster
+// is wired.
 public sealed class CombatManagerSpellsTests
 {
     private sealed class Harness : IDisposable
@@ -227,11 +225,11 @@ public sealed class CombatManagerSpellsTests
             Feed("*Combat Off*");
         }
 
-        /// <summary>One combat round. Mirrors the AppServices tick-subscription
-        /// order: the coordinator clears its cooldown first, then the combat
-        /// heartbeat re-decides. (CastingDirector sits between them in production but
-        /// isn't under test here.) Advances the fake clock a full round first, so
-        /// AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.</summary>
+        // One combat round. Mirrors the AppServices tick-subscription
+        // order: the coordinator clears its cooldown first, then the combat
+        // heartbeat re-decides. (CastingDirector sits between them in production but
+        // isn't under test here.) Advances the fake clock a full round first, so
+        // AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.
         public void Tick()
         {
             _clock += TimeSpan.FromSeconds(5);

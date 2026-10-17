@@ -141,7 +141,7 @@ public sealed class RoomTracker
     }
 
     // The character's expected time per hop (the travel model Auto-Lair plans
-    // with). Unset in tests / before wiring: the floor alone applies.
+    // with). Unset before wiring: the floor alone applies.
     private Func<TimeSpan>? _expectedHop;
 
     public void SetExpectedHopProbe(Func<TimeSpan> probe)
@@ -389,8 +389,8 @@ public sealed class RoomTracker
     }
 
     // Wired by AppServices so the passive grid re-localiser stands down while an
-    // engine drives (EngineRecoveryGate.HasAttachedEngine). Left unset in tests /
-    // headless → the passive path is treated as un-gated (no engine present).
+    // engine drives (EngineRecoveryGate.HasAttachedEngine). Left unset, the passive
+    // path is treated as un-gated (no engine present).
     public void SetEngineAttachedProbe(Func<bool> probe)
     {
         ArgumentNullException.ThrowIfNull(probe);

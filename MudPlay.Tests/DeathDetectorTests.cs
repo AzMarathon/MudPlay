@@ -7,11 +7,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for <see cref="DeathDetector"/> + the tracker's death-side
-/// state (<c>NoteDeath</c>, <see cref="RoomConfidence.PendingRespawn"/>,
-/// DeathRecord persistence to profile).
-/// </summary>
+// Coverage for DeathDetector + the tracker's death-side
+// state (NoteDeath, RoomConfidence.PendingRespawn,
+// DeathRecord persistence to profile).
 public sealed class DeathDetectorTests : IDisposable
 {
     // The game's output, fed the way the client receives it.

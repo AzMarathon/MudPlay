@@ -13,16 +13,14 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="DeathRecoveryManager"/>'s stock corpse-recovery flow: on
-/// re-entering the death room, auto-recover reads the "You notice" survey and, if
-/// our "corpse of &lt;given-name&gt;" is on the floor, sends ONE
-/// <c>recover corpse &lt;name&gt;</c>; the single "You have recovered the corpse
-/// of &lt;name&gt;." line finalises. When the corpse is NOT in the survey the pile
-/// is marked Missing (terminal) so it never spam-retries. (The <c>@comeback</c>
-/// party-pickup flow is a separate concern owned by
-/// <see cref="MudPlay.Game.Remote.PartyComebackManager"/>.)
-/// </summary>
+// Pins DeathRecoveryManager's stock corpse-recovery flow: on
+// re-entering the death room, auto-recover reads the "You notice" survey and, if
+// our "corpse of <given-name>" is on the floor, sends ONE
+// recover corpse <name>; the single "You have recovered the corpse
+// of <name>." line finalises. When the corpse is NOT in the survey the pile
+// is marked Missing (terminal) so it never spam-retries. (The @comeback
+// party-pickup flow is a separate concern owned by
+// MudPlay.Game.Remote.PartyComebackManager.)
 public sealed partial class DeathRecoveryManagerTests
 {
     private sealed class GraphHarness : IDisposable

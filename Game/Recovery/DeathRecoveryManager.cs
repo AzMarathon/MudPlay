@@ -504,7 +504,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     // Bind the backscroll-tail provider — the live terminal transcript's last
     // ~200 lines, oldest → newest. Bound by MainWindowViewModel, where the
-    // Emulator lives. Unbound (headless / test paths), death logs simply aren't
+    // Emulator lives. Unbound, death logs simply aren't
     // captured: the record still exists, just without a "How did I Die?" replay.
     public void AttachTranscriptTail(Func<IReadOnlyList<TranscriptSnapshot.Line>> provider)
     {

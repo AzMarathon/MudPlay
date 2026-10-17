@@ -5,12 +5,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pin the shape of the default pattern registry. Tests deliberately
-/// validate ONE representative case per category — full regex correctness
-/// gets validated in a cross-check pass against captured BBS output, not
-/// here.
-/// </summary>
+// Pin the shape of the default pattern registry. Tests deliberately
+// validate ONE representative case per category — full regex correctness
+// gets validated in a cross-check pass against captured BBS output, not
+// here.
 public sealed class DefaultPatternsTests
 {
     private static LineExtractor.EmittedLine Line(string text) =>

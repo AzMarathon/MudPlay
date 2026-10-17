@@ -8,15 +8,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// The death-stop bridge: on our own death it full-stops every movement engine
-/// (the wired stopper) and CLEARS <see cref="MovementCoordinator.UserGate"/> — a
-/// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
-/// a manual/remote nav action afterward runs freely. It rides
-/// <see cref="RoomTracker.PlayerDeathObserved"/>, which fires for BOTH death
-/// lives readouts, so a death by damage ("You have N lives left.") stops as surely
-/// as a suicide ("You now have N lives remaining.").
-/// </summary>
+// The death-stop bridge: on our own death it full-stops every movement engine
+// (the wired stopper) and CLEARS MovementCoordinator.UserGate — a
+// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
+// a manual/remote nav action afterward runs freely. It rides
+// RoomTracker.PlayerDeathObserved, which fires for BOTH death
+// lives readouts, so a death by damage ("You have N lives left.") stops as surely
+// as a suicide ("You now have N lives remaining.").
 public sealed class PlayerDeathMovementHaltTests
 {
     private sealed class Harness : IDisposable

@@ -1265,19 +1265,6 @@ public sealed class PartyManagerTests
         Assert.Equal(0, mudplay.MpPercent);
     }
 
-    [Fact]
-    public void DefaultPatterns_HaveAllPartyEntries()
-    {
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
-
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyFollowsYou,     out _));
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyYouFollowing,   out _));
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyStopsFollowing, out _));
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyHeader,         out _));
-        Assert.True(router.TryGetPattern(KnownPatterns.PartyMemberDied,     out _));
-    }
-
     // ===== PartyMember.HpRichDisplay / MaRichDisplay =====
     //
     // Skeleton-design verbose form for the stacked HP+MA column:
@@ -1331,12 +1318,14 @@ public sealed class PartyManagerTests
     [Fact]
     public void HpRichDisplay_UpdatesWhenPercentChanges()
     {
-        // Validates the [NotifyPropertyChangedFor(HpRichDisplay)]
-        // wiring on the percent field — par-poll percent ticks must
-        // re-fire the bound TextBlock in the new stacked layout.
+        // A par-poll percent tick must re-fire the bound TextBlock: the percent
+        // field raises HpRichDisplay's change too.
         PartyMember m = new() { BaselineHp = 200, HpPercent = 100 };
         Assert.Equal("H:200/200 100%", m.HpRichDisplay);
+        List<string?> raised = new();
+        m.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
         m.HpPercent = 50;
+        Assert.Contains(nameof(PartyMember.HpRichDisplay), raised);
         Assert.Equal("H:100/200 50%", m.HpRichDisplay);
     }
 

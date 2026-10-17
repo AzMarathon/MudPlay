@@ -7,12 +7,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoLightPlanner"/> — the pure ready/buy/reorder/none decision the
-/// auto-light engine acts on. Exercises the three triggers (dwindling readied
-/// light, dark route with / without a covering light on hand, lit route) and the
-/// preferred-vs-auto light selection.
-/// </summary>
+// AutoLightPlanner — the pure ready/buy/reorder/none decision the
+// auto-light engine acts on. Exercises the three triggers (dwindling readied
+// light, dark route with / without a covering light on hand, lit route) and the
+// preferred-vs-auto light selection.
 public sealed class AutoLightPlannerTests
 {
     // torch: 100 illu, 800 UseCount → 80 readied → 40 min burn.

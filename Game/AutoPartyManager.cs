@@ -98,8 +98,8 @@ public sealed class AutoPartyManager : IDisposable
     public Func<string, bool>? UninvitedForDeath { get; set; }
 
     // Window after an uninvite during which the player won't be auto-invited
-    // again. Default 1 h.
-    public TimeSpan UninviteSuppression { get; set; } = TimeSpan.FromHours(1);
+    // again: an hour.
+    public static readonly TimeSpan UninviteSuppression = TimeSpan.FromHours(1);
 
     // ----- Invite-as-wait-signal (Settings → Party "If leading, wait only") --
     // How long, after auto-inviting a seen player while a loop is running, we
@@ -224,7 +224,7 @@ public sealed class AutoPartyManager : IDisposable
 
     // Whether the room display now arriving is of a room we aren't standing in: a
     // `look <direction>` peek into the next room, or the room an exit's spell only
-    // passes us through (RoomTracker.IsPeekSuppressed). Unset in tests / before
+    // passes us through (RoomTracker.IsPeekSuppressed). Unset before
     // wiring → never.
     private Func<bool>? _isPeekedDisplay;
     public void SetPeekProbe(Func<bool> isPeekedDisplay) => _isPeekedDisplay = isPeekedDisplay;
@@ -621,10 +621,9 @@ public sealed class AutoPartyManager : IDisposable
     // `invite X` we sent. Catches BOTH the TryAutoInvite auto-path AND the
     // manual-typed path (user types `invite Raijin` at the prompt). Starts the
     // @join nag for X if one isn't already running, so the escalation behaviour
-    // is identical regardless of who initiated the invite. Idempotent — if
-    // TryAutoInvite just fired and already started a nag for X, StartNag would
-    // simply replace the entry with a fresh one (same invited-at timestamp since
-    // both paths use _now()).
+    // is identical regardless of who initiated the invite. Idempotent — a nag
+    // TryAutoInvite already started for X is left running as it is, so the echo
+    // never restarts its countdown.
     private void OnYouInvited(MatchResult match)
     {
         if (match.Groups.Count == 0) return;

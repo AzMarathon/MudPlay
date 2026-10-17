@@ -1384,7 +1384,6 @@ public sealed class AutoPartyManagerTests
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         DateTime t0 = Now;
         _partyNow = () => t0;
-        engine.UninviteSuppression = TimeSpan.FromMinutes(60);
 
         Dispatch(router, "Raijin has been removed from your followers.");
         _sent.Clear();
@@ -1403,7 +1402,6 @@ public sealed class AutoPartyManagerTests
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         DateTime t0 = Now;
         _partyNow = () => t0;
-        engine.UninviteSuppression = TimeSpan.FromMinutes(60);
 
         Dispatch(router, "Raijin has been removed from your followers.");
         _sent.Clear();

@@ -1109,9 +1109,6 @@ public sealed partial class PartyManager : IDisposable
         _wireSender(bytes);
     }
 
-    // Test seam — read-only view of the disconnect grace window.
-    internal IReadOnlyDictionary<string, DateTimeOffset> RecentlyDisconnected => _recentlyDisconnected;
-
     // Was sender a party member of ours who departed (got left behind / dropped
     // / disconnected) inside the ComebackWindow — and NOT one we
     // deliberately uninvited? Backs the leader-side authorisation of a stranded
