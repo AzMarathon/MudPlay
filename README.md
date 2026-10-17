@@ -2,9 +2,9 @@
 
 <!-- current-version:start -->
 > **Version 3.183.37**
-> - Your own death is read from `You have been killed!`: the death sound, the death-floor refinement and the round reset now run
+> - Your own death is read from `You have been killed!`: the death sound, the death-floor refinement (now only ever lowered) and the round reset now run
 > - A party member's death is read from `<Name> is dead.`; the `has been slain by` and `has died` lines were never sent by the game
-> - A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited
+> - A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited (never without a seen death line, nor after a re-invite)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

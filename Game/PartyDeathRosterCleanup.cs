@@ -27,7 +27,14 @@ namespace MudPlay.Game;
 //     lead, they're uninvited once the room is clear of combat, so the fight is
 //     finished before party state is touched and the auto-party engine doesn't
 //     hold a loop for a corpse it takes for an invitee.
-// Only the leader can uninvite, so a follower's part ends with the roster.
+// Only a death line seen for that member starts this (user, 2026-10-17): a
+// party-splitting teleport also leaves members [Invited], and that is never a
+// reason to uninvite anyone, so nothing here acts on the [Invited] state alone.
+// Only the leader can uninvite, so a follower's part ends with the roster. A
+// member invited again after the death (by the user or the auto-party engine), or
+// seen following again, is no longer the corpse's slot, and isn't uninvited. The
+// uninvite this sends is its own: UninvitedForDeath tells the auto-party engine,
+// which otherwise reads an uninvite as the user turning that player away.
 //
 // A member who was our leader is left to the game's own "You are no longer
 // following <Name>." line, which ends our follow.
@@ -66,6 +73,14 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     // Overrides the wall clock for record/expiry timing.
     public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
 
+    // given-name → when this uninvited them, for UninvitedForDeath.
+    private readonly Dictionary<string, DateTimeOffset> _ownUninvites =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // How long after its uninvite the game's "removed from your followers" echo
+    // is taken for that uninvite.
+    public static readonly TimeSpan OwnUninviteEchoWindow = TimeSpan.FromSeconds(30);
+
     // The last member death seen and what came of it, for the bug report.
     public string? LastDeathSummary { get; private set; }
 
@@ -95,6 +110,9 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         _log = log;
 
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDied, OnMemberDied));
+        // Ahead of PartyManager, whose [Invited] row for the invite would otherwise
+        // let the pending uninvite go out on that same line.
+        _subs.Add(router.Subscribe(KnownPatterns.PartyYouInvited, OnInvited, tieBreak: 1));
         _manager.ParReplyRead += OnParReplyRead;
         _coordinator.GatesChanged += OnGatesChanged;
         _party.Members.CollectionChanged += OnMembersChanged;
@@ -164,6 +182,28 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         TryCleanup();
     }
 
+    // "You have invited <Name> to follow you." — our invite, typed or the
+    // auto-party engine's, of a member whose uninvite is still waiting on combat.
+    // They are wanted back, so the uninvite would undo it.
+    private void OnInvited(MatchResult result)
+    {
+        if (result.Groups.Count == 0) return;
+        string given = GivenNameOf(result.Groups[0]);
+        if (!_pendingDeaths.Remove(given)) return;
+        Note(NowProvider(), $"{given} was invited again after their death: their [Invited] slot is no longer uninvited.");
+    }
+
+    // Whether the game's "<Name> has been removed from your followers." answers an
+    // uninvite of ours, for a dead member's slot, rather than the user's.
+    public bool UninvitedForDeath(string name)
+    {
+        string given = GivenNameOf(name);
+        if (!_ownUninvites.TryGetValue(given, out DateTimeOffset at)) return false;
+        if (NowProvider() - at <= OwnUninviteEchoWindow) return true;
+        _ownUninvites.Remove(given);
+        return false;
+    }
+
     private void OnGatesChanged() => TryCleanup();
 
     private void OnMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -178,10 +218,15 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     }
 
     // The [Invited] flip lands while the `par` rows are read, ahead of the reply's
-    // end; with the room already clear the uninvite goes out then.
+    // end; with the room already clear the uninvite goes out then. A row that goes
+    // back to following is a member back in the party, not the corpse's slot.
     private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PartyMember.IsInvited)) TryCleanup();
+        if (e.PropertyName != nameof(PartyMember.IsInvited)) return;
+        if (sender is PartyMember { IsInvited: false } row
+            && _pendingDeaths.Remove(GivenNameOf(row.Name)))
+            Note(NowProvider(), $"{GivenNameOf(row.Name)} is following again after their death: not uninvited.");
+        TryCleanup();
     }
 
     // The master switch (true = off): off, nobody is uninvited. The death stays
@@ -191,12 +236,16 @@ public sealed class PartyDeathRosterCleanup : IDisposable
 
     private void TryCleanup()
     {
+        DateTimeOffset now = NowProvider();
+        // A death no `par` reply has answered in the window is given up on.
+        foreach ((string given, DateTimeOffset seen) in _awaitingPar.ToArray())
+            if (now - seen > CleanupWindow) _awaitingPar.Remove(given);
+
         if (_pendingDeaths.Count == 0) return;
         if (MasterSwitchOff?.Invoke() == true) return;
         // Hold until the room is clear of combat.
         if (_coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate)) return;
 
-        DateTimeOffset now = NowProvider();
         foreach (string given in _pendingDeaths.Keys.ToArray())
         {
             if (now - _pendingDeaths[given] > CleanupWindow)
@@ -206,6 +255,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
             }
             if (!_party.SelfIsLeader) continue;
             if (RowOf(given) is not { IsInvited: true }) continue;
+            _ownUninvites[given] = now;
             _manager.Uninvite(given);
             _pendingDeaths.Remove(given);
             Note(now, $"Uninvited {given}: the dead member's [Invited] slot is cleared.");

@@ -9541,6 +9541,8 @@ public sealed class AppServices
         // uninvites them once combat clears.
         PartyDeathCleanup = new Game.PartyDeathRosterCleanup(
             Router, PartyState, Party, MovementCoordinator, PartyPoller, Log);
+        // That uninvite is the client's, not the user turning the player away.
+        AutoParty.UninvitedForDeath = given => PartyDeathCleanup.UninvitedForDeath(given);
 
         // Shared room-search resolver — backs the Nav rail search
         // box AND the @goto handler. Subscribes to ActiveSetChanged

@@ -13,8 +13,9 @@ namespace MudPlay.Game;
 // readout every death that leaves a character prints: a death by damage
 // ("You have been killed! / … saved. / You have N lives left.") and a suicide
 // ("You now have N lives remaining.") alike. A party member's death is a
-// different room line handled elsewhere. The stop is unconditional because any death lands us alone in
-// the graveyard regardless of prior party role: a leader's party disbands on death
+// different room line handled elsewhere. The stop is unconditional because any
+// death lands us alone in the graveyard regardless of prior party role: a
+// leader's party disbands on death
 // and a dead follower is dropped from the group, so after death we are always the
 // one who would drive movement.
 //

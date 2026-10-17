@@ -97,6 +97,11 @@ public sealed class AutoPartyManager : IDisposable
     private readonly Dictionary<string, DateTime> _recentlyUninvited =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Whether an uninvite was the client's own for a dead member's [Invited] slot
+    // (PartyDeathRosterCleanup.UninvitedForDeath), which suppresses nothing. Null
+    // reads every uninvite as the user's.
+    public Func<string, bool>? UninvitedForDeath { get; set; }
+
     // Window after an uninvite during which the player won't be auto-invited
     // again. Default 1 h.
     public TimeSpan UninviteSuppression { get; set; } = TimeSpan.FromHours(1);
@@ -444,6 +449,15 @@ public sealed class AutoPartyManager : IDisposable
         if (string.IsNullOrEmpty(name)) return;
         string given = ExtractGiven(name);
         if (string.IsNullOrEmpty(given)) return;
+        if (UninvitedForDeath?.Invoke(given) == true)
+        {
+            // The client cleared a dead member's [Invited] slot; nobody turned
+            // them away, so seeing them again may invite them as before.
+            CancelNag(given, reason: "dead member's slot uninvited");
+            _log?.Log(LogSeverity.Info, "AutoParty",
+                $"{given}'s uninvite cleared a dead member's slot: auto-invite isn't suppressed.");
+            return;
+        }
         _recentlyUninvited[given] = NowProvider();
         CancelNag(given, reason: "uninvited by leader");
         _log?.Log(LogSeverity.Info, "AutoParty",

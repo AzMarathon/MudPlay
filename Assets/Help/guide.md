@@ -1019,7 +1019,9 @@ With party heal spells configured (Settings → Party), members watch each other
 - **Not on the list any more** (Stock takes a dead member off it): they leave your Party window.
 - **Listed as Invited** (Paradigm keeps a dead member's slot): when you lead, MudPlay uninvites them once the fight in the room is over, whether or not a loop is running, so a loop doesn't wait for them as if they were an invite. As a follower you can't uninvite, and the row stays.
 
-Your leader's death needs no check: the game ends your follow itself. A member who dies in another room prints nothing to you, so no check is made; the regular `par` shows what became of them. Each step is in the program log under **Party**, and the bug report's party section shows the last one.
+**Only a death MudPlay saw does this.** A member shown as Invited with no *is dead.* line for them, as after a teleport that splits the party, is never uninvited or taken off the list for it. And if you, or MudPlay's auto-invite, invite the dead member again before the fight is over, or they follow you again, they are not uninvited. MudPlay's own uninvite of a dead member doesn't count as you turning them away: auto-invite still invites them when it next sees them.
+
+Your leader's death needs no check: the game ends your follow itself. A follower is always in the leader's room, so a member's death is always seen there. Each step is in the program log under **Party**, and the bug report's party section shows the last one.
 
 ## Remote @-commands
 
@@ -5109,12 +5111,12 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 
 **Default:** `-25`
 **What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
-**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
+**Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from the HP you survive and lowers this automatically; it never raises it.
 
 ### Auto-refine the floor from slow deaths
 
 **Default:** On
-**What it does:** Lets MudPlay learn this realm's real death floor from deaths where you bled out slowly (they land right at the floor) and update **Player dies at (HP)** to match. A single big overkill hit blows past the floor and is ignored. Turn it off to keep the value you typed.
+**What it does:** Lets MudPlay learn this realm's real death floor from the negative HP you are seen to survive, and update **Player dies at (HP)** to match. Each such HP proves the floor is below it: one you bled on from, and the last HP shown before a death where you bled out slowly. MudPlay only ever **lowers** the value, to one below the deepest HP survived; a death never raises it, since a floor set too shallow would stop the emergency hang-up short. A death by a single big overkill hit is ignored. Turn it off to keep the value you typed.
 
 ### PvP is enabled on this realm
 

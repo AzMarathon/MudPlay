@@ -183,6 +183,7 @@ public sealed partial class PartyPoller : IDisposable
                 Interval = ParCadence,
             };
             _timer.Tick += (_, _) => OnParTimer();
+            _timerCountdownFrom = NowProvider();
             _timer.Start();
         }
     }
@@ -208,7 +209,11 @@ public sealed partial class PartyPoller : IDisposable
         if (cadence != ParCadence)
         {
             ParCadence = cadence;
-            if (_timer is not null) _timer.Interval = cadence;
+            if (_timer is not null)
+            {
+                _timer.Interval = cadence;
+                _timerCountdownFrom = NowProvider();
+            }
         }
         ParOnTimer              = settings.ParPollOnTimer;
         ParAfterCombatRound     = settings.ParPollAfterCombatRound;
@@ -485,6 +490,8 @@ public sealed partial class PartyPoller : IDisposable
         _timer?.Stop();
         StopHealthNagTimer();
         _activeNags.Clear();
+        // No reply to a `par` sent before the drop is coming.
+        _parUnansweredSince = null;
     }
 
     // First in-game prompt after a (re)connect — we're back in the realm, so the
@@ -504,12 +511,17 @@ public sealed partial class PartyPoller : IDisposable
     private void SyncTimer()
     {
         if (_timer is null) return;
-        if (ParOnTimer && !_suspended) _timer.Start();
+        if (ParOnTimer && !_suspended)
+        {
+            if (!_timer.IsEnabled) _timerCountdownFrom = NowProvider();
+            _timer.Start();
+        }
         else _timer.Stop();
     }
 
     private void OnParTimer()
     {
+        _timerCountdownFrom = NowProvider();
         if (ParOnTimer) SendPar(healthRead: true);
     }
 
@@ -555,10 +567,10 @@ public sealed partial class PartyPoller : IDisposable
     // sent now would, so none is sent for it. The default cadence's length.
     public static readonly TimeSpan ParDueWindow = TimeSpan.FromSeconds(5);
 
-    // When the last `par` of ours went out, and when the one still unanswered did
-    // (null once ParReplyRead has come).
-    private DateTime? _lastParSentAt;
+    // When the `par` still unanswered went out (null once ParReplyRead has come,
+    // and after a disconnect), and when the timer's countdown last started.
     private DateTime? _parUnansweredSince;
+    private DateTime _timerCountdownFrom;
 
     private void OnParReplyRead() => _parUnansweredSince = null;
 
@@ -576,16 +588,17 @@ public sealed partial class PartyPoller : IDisposable
         return RequestPar(why) ? ParRequestOutcome.Sent : ParRequestOutcome.Held;
     }
 
-    // The timer counts from the latest `par` (RestartTimerCountdown, and its own
-    // ticks), so its next one is due a cadence after that, when it runs and its
-    // health-read gate lets it send. With no `par` sent yet its countdown isn't
-    // known, and it isn't counted on.
+    // The timer's next tick is a cadence after its countdown last started: when it
+    // was started, restarted after another `par` (RestartTimerCountdown), given a
+    // new cadence, or ticked. It counts only while it runs and its tick would send:
+    // its box ticked, in the game, its health-read gate open. Taking a countdown
+    // as started later than it did can only send a `par` more, never skip one.
     private bool TimerParDueWithin(DateTime now, TimeSpan window)
     {
-        if (!ParOnTimer || _suspended || InTrainerMenu || !_state.IsInParty) return false;
+        if (_timer is not { IsEnabled: true } || !ParOnTimer || _suspended) return false;
+        if (InTrainerMenu || !_state.IsInParty) return false;
         if (IsParPollEnabled is { } gate && !gate()) return false;
-        if (_lastParSentAt is not { } last) return false;
-        return last + ParCadence - now <= window;
+        return _timerCountdownFrom + ParCadence - now <= window;
     }
 
     // The timer counts from the latest `par`, so a `par` sent for another reason
@@ -596,6 +609,7 @@ public sealed partial class PartyPoller : IDisposable
         if (_timer is not { IsEnabled: true }) return;
         _timer.Stop();
         _timer.Start();
+        _timerCountdownFrom = NowProvider();
     }
 
     private bool SendPar(bool healthRead)
@@ -607,9 +621,7 @@ public sealed partial class PartyPoller : IDisposable
         Func<bool>? gate = healthRead ? IsParPollEnabled : IsAutomationEnabled;
         if (gate is not null && !gate()) return false;
         _wireSender(Encoding.Latin1.GetBytes("par\r"));
-        DateTime now = NowProvider();
-        _lastParSentAt = now;
-        _parUnansweredSince = now;
+        _parUnansweredSince = NowProvider();
         return true;
     }
 }

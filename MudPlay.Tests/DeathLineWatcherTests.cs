@@ -90,12 +90,13 @@ public sealed class DeathLineWatcherTests
         Assert.Equal(1, h.Deaths);
     }
 
-    // The bytes of a miracle-save death through the emulator and the line extractor,
-    // read by both death signals as AppServices wires them: the line extractor feeds
-    // the router (DeathLineWatcher) and DeathDetector (RoomTracker.PlayerDeathObserved).
-    // Each fires once, and the death line comes first, ahead of the lives readout.
+    // A miracle-save death's lines, written by hand in the GAME_MECHANICS order with
+    // the game's colours, through the emulator and the line extractor, read by both
+    // death signals as AppServices wires them: the line extractor feeds the router
+    // (DeathLineWatcher) and DeathDetector (RoomTracker.PlayerDeathObserved). Each
+    // fires once, and the death line comes first, ahead of the lives readout.
     [Fact]
-    public void CapturedDeath_DeathLineFiresOnceAheadOfTheLivesReadout()
+    public void MiracleDeathBytes_DeathLineFiresOnceAheadOfTheLivesReadout()
     {
         const string esc = "\u001b";
         TerminalEmulator emulator = new(80, 25);
@@ -125,10 +126,11 @@ public sealed class DeathLineWatcherTests
     }
 
     // DeathFloorTracer is wired to PlayerDied (AppServices). The death line comes
-    // before the respawn's full-HP prompt, so the HP the character bled to is still
-    // the last one read when the floor is judged.
+    // before the respawn's full-HP prompt, so the last HP the character survived is
+    // still the last one read when the floor is judged, and the floor goes to one
+    // below it. Judged after the respawn prompt, there would be nothing to go by.
     [Fact]
-    public void DeathLine_ReachesTheFloorTracerWithTheHpDiedAt()
+    public void DeathLine_ReachesTheFloorTracerWithTheLastHpSurvived()
     {
         using Harness h = new();
         PlayerState state = new() { MaxHp = 200 };
@@ -137,10 +139,12 @@ public sealed class DeathLineWatcherTests
             () => (new BbsProfile { Name = "TestBBS", Realms = { realm } }, realm), _ => { });
         h.Watcher.PlayerDied += tracer.RecordDeath;
 
-        foreach (int hp in new[] { 40, 0, -4, -8, -12, -16, -20 }) state.Hp = hp;
+        state.Hp = 40;
+        for (int hp = -2; hp >= -30; hp -= 2) state.Hp = hp;   // bleeding 2 a tick
+        Assert.Equal(-29, realm.PlayerDiesAtHp);   // -28 seen survived on the way down
         h.Feed("You have been killed!");
         state.Hp = 200;   // the respawn's prompt
 
-        Assert.Equal(-20, realm.PlayerDiesAtHp);
+        Assert.Equal(-31, realm.PlayerDiesAtHp);
     }
 }
