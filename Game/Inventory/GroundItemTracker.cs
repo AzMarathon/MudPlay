@@ -48,8 +48,7 @@ public sealed class GroundItemTracker : IDisposable
     // What printed the list now being read, settled on the row that opens it: later
     // rows of a wrapped list follow that row, not an echo.
     private FloorSurveySource _openListSource;
-    // The clock a survey's read time is taken on. A test steps its own, so which
-    // read ranks slowest never hangs on how busy the machine is.
+    // The clock a survey's read time is taken on.
     private readonly Func<long> _timestamp;
 
     // isKnownItem resolves a survey entry against the active item table (true

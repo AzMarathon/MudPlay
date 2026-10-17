@@ -321,8 +321,7 @@ public sealed class GhSweepManager : IDisposable
     private GhSurveyTiming? _slowestSurveyHere;
     private TimeSpan? _itemLogWriteHere;
 
-    // The clock floor reads and log writes are timed on. A test steps its own, so
-    // which read ranks slowest never hangs on how busy the machine is.
+    // The clock floor reads and log writes are timed on.
     private readonly Func<long> _timestamp;
 
     // Latches the warning that lists can't be told apart, so a sweep says it once.
