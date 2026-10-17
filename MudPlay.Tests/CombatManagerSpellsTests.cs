@@ -4111,9 +4111,10 @@ public sealed class CombatManagerSpellsTests
     {
         public TimeSpan? ToRound { get; set; } = TimeSpan.FromSeconds(3);
         public TimeSpan? Wait { get; private set; }
+        public int Scheduled { get; private set; }
         private Action? _due;
         public HoldDeadline(Harness h)
-            => h.Combat.SetHoldDeadline(() => ToRound, (wait, due) => { Wait = wait; _due = due; });
+            => h.Combat.SetHoldDeadline(() => ToRound, (wait, due) => { Wait = wait; _due = due; Scheduled++; });
         public void Fire() => _due?.Invoke();
     }
 
@@ -4283,6 +4284,49 @@ public sealed class CombatManagerSpellsTests
         deadline.Fire();
         Assert.Equal("pu giant skeleton", h.LastSent);
         Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_MoveRefusedWhileHeld_DeadlineStillAttacksOnce()
+    {
+        // Our move went out and the game refused it: no new room is shown, and the
+        // hold in the room we're still in must keep a deadline.
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        HoldInRoomA(h);
+
+        h.Combat.NoteMoveSent();
+
+        deadline.Fire();
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        Assert.Equal(1, Punches(h));
+    }
+
+    [Fact]
+    public void AttackNotLast_SameRoomRedisplay_RoundPlaced_KeepsTheDeadline()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h);
+        HoldInRoomA(h);
+        Assert.Equal(1, deadline.Scheduled);
+
+        deadline.ToRound = TimeSpan.FromSeconds(1.5);           // the same round, read later
+        h.Feed("Also here: tunnel horror.");
+        Assert.Equal(1, deadline.Scheduled);                     // not pushed back
+        Assert.Equal(TimeSpan.FromSeconds(2), deadline.Wait);
+    }
+
+    [Fact]
+    public void AttackNotLast_SameRoomRedisplay_NoRoundPlaced_KeepsTheEarlierDueTime()
+    {
+        using Harness h = new();
+        HoldDeadline deadline = new(h) { ToRound = null };
+        HoldInRoomA(h);
+        Assert.Equal(1, deadline.Scheduled);
+
+        h.Feed("Also here: tunnel horror.");
+        h.Feed("Also here: tunnel horror.");
+        Assert.Equal(1, deadline.Scheduled);                     // the 1 s isn't restarted
     }
 
     [Fact]

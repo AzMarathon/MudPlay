@@ -313,6 +313,9 @@ public sealed partial class CombatManager : IDisposable
     private Action<TimeSpan, Action>? _scheduleHoldDeadline;
     private bool _holdDeadlineArmed;
     private DateTimeOffset _holdDeadlineArmedAt = DateTimeOffset.MinValue;
+    // When we last left a room: our move sent, the drag line, or (from the roster read
+    // it confirms) the tracker's room confirm.
+    private DateTimeOffset _lastRoomLeaveAt = DateTimeOffset.MinValue;
     private int _holdDeadlineGeneration;
     private DateTimeOffset? _holdDeadlineDue;
 
@@ -1775,10 +1778,11 @@ public sealed partial class CombatManager : IDisposable
 
     private void ArmHoldDeadline()
     {
-        // A deadline armed before the roster now read is another room's (we were
-        // dragged, or an old room's re-display came after our move): this room's hold
+        // A deadline armed since we last left a room is this room's and stands: a
+        // re-display of the room must not push it back, and with no round placed it is
+        // counted from now. One armed before that is another room's: this room's hold
         // gets its own.
-        if ((_holdDeadlineArmed && _holdDeadlineArmedAt >= _rosterReadAt)
+        if ((_holdDeadlineArmed && _holdDeadlineArmedAt >= _lastRoomLeaveAt)
             || _scheduleHoldDeadline is not { } schedule) return;
         TimeSpan? toRound = _timeToNextRound?.Invoke();
         TimeSpan wait = toRound is { } r ? r - HoldDeadlineMargin : UnplacedHoldWait;
@@ -1813,6 +1817,7 @@ public sealed partial class CombatManager : IDisposable
     // (see _roomStateAt).
     private void LeaveRoomFight()
     {
+        _lastRoomLeaveAt = DateTimeOffset.Now;
         ForgetRoomFight();
         DisarmHoldDeadlineKeepingHeldPick();
     }
@@ -4830,6 +4835,8 @@ public sealed partial class CombatManager : IDisposable
         // The new room's roster may already be read, with its hold armed (see
         // _roomStateAt): only what is older than that read is the room we left's.
         if (_roomStateAt < _rosterReadAt) ForgetRoomFight();
+        // The new room began with that roster read.
+        if (_rosterReadAt > _lastRoomLeaveAt) _lastRoomLeaveAt = _rosterReadAt;
         if (_holdDeadlineArmedAt < _rosterReadAt) DisarmHoldDeadlineKeepingHeldPick();
         if (_userBreakHold is { } held && !(lastMoveSentAt >= _userBreakHoldSince))
         {
