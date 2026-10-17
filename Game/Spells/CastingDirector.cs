@@ -2069,21 +2069,21 @@ public sealed class CastingDirector : IDisposable
         return false;
     }
 
-    // The game's caster line for a cast that reached its target and did nothing, read as
-    // our own only when it names the spell we sent, at the member we sent it at, within
-    // the window the game answers a send in (user, 2026-10-17: "only act on casts we
-    // sent, matched by spell name"). The same line also comes for a room spell the game
-    // charges to us (the Underwater Passage's holding breath), which must not touch a
-    // buff of ours (GAME_MECHANICS "Magic Resist (M.R.) and `TypeOfResists`").
+    // The game's caster line for a cast the target negated, read as our own only when
+    // it names the spell we sent, at the member we sent it at, within the window the
+    // game answers a send in (user, 2026-10-17: "only act on casts we sent, matched by
+    // spell name"). The same line also comes for a room spell the game charges to us
+    // (the Underwater Passage's holding breath), which must not touch a buff of ours.
+    // A resist is not a negate, so a resisted cast is never read here (GAME_MECHANICS
+    // "Magic Resist (M.R.) and `TypeOfResists`").
     private bool IsOwnNegatedCast(string text, string shortCode, string target, DateTime sentAt)
     {
-        if (!NegatedCastLine.TryRead(text, out NegatedCastLine.Cast cast)) return false;
-        if (cast.Caster != NegatedCastLine.Self) return false;
+        if (!NegatedCastLine.TryReadOwnNegate(text, out string negatedAt, out string negatedSpell)) return false;
         if (_now() - sentAt > PendingSelfBuffRejectionWindow) return false;
         if (_spellNameByShort?.Invoke(shortCode) is not { Length: > 0 } spellName
-            || !string.Equals(cast.Spell.Trim(), spellName.Trim(), StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(negatedSpell.Trim(), spellName.Trim(), StringComparison.OrdinalIgnoreCase))
             return false;
-        return string.Equals(GivenName(cast.Target.Trim()), GivenName(target.Trim()), StringComparison.OrdinalIgnoreCase);
+        return string.Equals(GivenName(negatedAt.Trim()), GivenName(target.Trim()), StringComparison.OrdinalIgnoreCase);
     }
 
     // A member negated our buff: it never landed, so no timer stands for it, and the

@@ -5044,10 +5044,10 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyBless_TimedFromSend_StockResistedLine_DropsTheTimerArmedOnSend()
+    public void PartyBless_TimedFromSend_Negated_DropsTheTimerArmedOnSend()
     {
         // A caster line that can't name the target times the buff from its send; the
-        // resisted line (Stock's wording of the same three lines) takes that timer back.
+        // negate line takes that timer back.
         using PartyBlessHarness h = new();
         h.Health.BlessIfAboveMa = 0;
         BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
@@ -5057,10 +5057,50 @@ public sealed class CastingDirectorTests
         h.Director.Evaluate();
         Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin");
 
-        h.Confirm("You attempt to cast bless at Raijin, but the spell is resisted.");
+        h.Confirm("You attempt to cast bless at Raijin, but it's negated!");
 
         Assert.DoesNotContain(h.Director.SnapshotActiveBuffs(), b => b.Target == "raijin");
         Assert.Equal(new[] { "raijin" }, slot.NegatedTargets);
+    }
+
+    [Fact]
+    public void PartyBless_ResistedNotNegated_MarksNothing_KeepsBuffingThem()
+    {
+        // "a spell resist is not a negate. a negate specifically has the word negate/d
+        // in the line." (user, 2026-10-17)
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        BuffSlot slot = h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        int raised = 0;
+        h.Director.BuffNegated += (_, _) => raised++;
+
+        h.Director.Evaluate();
+        h.Confirm("You attempt to cast bless at Raijin, but the spell is resisted.");
+
+        Assert.Empty(slot.NegatedTargets);
+        Assert.Equal(0, raised);
+        h.CastsSent.Clear();
+        NextRound(h);
+        Assert.Equal("bles Raijin", Assert.Single(h.CastsSent));   // still offered
+    }
+
+    [Fact]
+    public void PartyBless_SpellNamedNegateMagic_Resisted_IsNotANegate()
+    {
+        // The word has to be the line's own "it's negated!", not part of a spell's name.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.SpellNames["nega"] = "negate magic";
+        BuffSlot slot = h.AddTargetSlot("nega", "Raijin");
+        h.BuffInfo["nega"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You attempt to cast negate magic at Raijin, but the spell is resisted.");
+
+        Assert.Empty(slot.NegatedTargets);
     }
 
     [Fact]

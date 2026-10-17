@@ -25,8 +25,8 @@ public sealed partial class BuffMemberToggle : ObservableObject
     private readonly string _spellName;
 
     public string ToolTipText => IsNegated
-        ? $"{DisplayName} negated {_spellName} when you cast it on them: something they wear "
-          + "(or their magic resistance) stops it, so it is no longer cast on them. "
+        ? $"{DisplayName} negated {_spellName} when you cast it on them: an item they wear "
+          + "negates it, so it is no longer cast on them. "
           + "Untick and tick this box to try again."
         : DisplayName;
 

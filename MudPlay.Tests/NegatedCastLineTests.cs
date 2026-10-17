@@ -68,4 +68,22 @@ public sealed class NegatedCastLineTests
     [InlineData("You resisted orc shaman's cast of harm.")]
     public void ANegatedCast_IsNotAnUnrecognizedLine(string line)
         => Assert.True(BenignChatterMatcher.IsBenign(line));
+
+    // A resist is not a negate (user, 2026-10-17): only the caster's "it's negated!"
+    // line is read as our cast negated.
+    [Theory]
+    [InlineData("You attempt to cast bless at Aldric, but it's negated!", true)]
+    [InlineData("You attempt to cast bless at Aldric, but the spell is resisted.", false)]
+    [InlineData("You attempt to cast negate magic at Aldric, but the spell is resisted.", false)]
+    [InlineData("You negate Aldric's cast of bless!", false)]
+    [InlineData("Borin negates Aldric's cast of bless!", false)]
+    public void OwnNegate_OnlyTheCasterNegatedLine(string line, bool expected)
+    {
+        Assert.Equal(expected, NegatedCastLine.TryReadOwnNegate(line, out string target, out string spell));
+        if (expected)
+        {
+            Assert.Equal("Aldric", target);
+            Assert.Equal("bless", spell);
+        }
+    }
 }

@@ -3,18 +3,17 @@ using System.Text.RegularExpressions;
 namespace MudPlay.Game.Spells;
 
 // The game's lines for a cast that reached its target and did nothing to it: the
-// target's magic resistance threw it off, or something the target wears negates
-// that spell (GAME_MECHANICS "Magic Resist (M.R.) and `TypeOfResists`"). One cast
-// prints up to three of them, one to each party:
+// target resisted it, or negated it (something they wear, or a monster's negate
+// flags). A resist is not a negate (GAME_MECHANICS "Magic Resist (M.R.) and
+// `TypeOfResists`"). One cast prints up to three of them, one to each party:
 //
 //   to the caster   You attempt to cast holding breath at Aldric, but it's negated!
 //   to the target   You negate Aldric's cast of holding breath!
 //   to the room     Aldric negates Aldric's cast of holding breath!
 //
-// That is Paradigm's wording. Stock's says "resisted" in the same three places
-// ("You attempt to cast %s at %s, but the spell is resisted.", "You resisted %s's
-// cast of %s.", "%s resisted %s's cast of %s.", and without "cast of" when the
-// caster is a player).
+// Those are negates. The resist lines take the same three places ("You attempt to
+// cast %s at %s, but the spell is resisted.", "You resisted %s's cast of %s.",
+// "%s resisted %s's cast of %s.", and without "cast of" when the caster is a player).
 //
 // Each names the spell, so none is a spell's own message, and none means the spell
 // took hold: read here so nothing takes it for an unknown spell line or an effect.
@@ -48,8 +47,22 @@ public static partial class NegatedCastLine
         return true;
     }
 
+    // Our own cast that the target negated: only the caster line that says "negated".
+    // A resist is not a negate (user, 2026-10-17), so Stock's "the spell is resisted."
+    // form, which TryRead also reads, is not one.
+    public static bool TryReadOwnNegate(string? line, out string target, out string spell)
+    {
+        target = spell = string.Empty;
+        if (string.IsNullOrEmpty(line) || !line.Contains("negated", StringComparison.Ordinal)) return false;
+        if (ToCasterRx().Match(line.Trim()) is not { Success: true } own || !own.Groups["negated"].Success)
+            return false;
+        target = own.Groups["target"].Value;
+        spell = own.Groups["spell"].Value;
+        return true;
+    }
+
     [GeneratedRegex(
-        @"^You attempt to cast (?<spell>.+) at (?<target>[\w' -]+), but (?:it's negated!|the spell is resisted\.)$",
+        @"^You attempt to cast (?<spell>.+) at (?<target>[\w' -]+), but (?:(?<negated>it's negated!)|the spell is resisted\.)$",
         RegexOptions.CultureInvariant)]
     private static partial Regex ToCasterRx();
 
