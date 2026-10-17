@@ -31,17 +31,17 @@ public sealed class SpellCasterIndexTests : IDisposable
     // in "+" and one.
     internal const string Spells = """
         [
-          { "Number": 1042, "Name": "glacial mist", "Learnable": 1, "Learned From": "NPC #244",
+          { "Number": 1042, "Name": "glacial mist", "Learnable": 1, "Learned From": "NPC #244", "Targets": 12,
             "Casted By": "Monster #1032, Monster #2661" },
           { "Number": 1336, "Name": "galacial mist", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #1069" },
-          { "Number": 135, "Name": "ice storm", "Learnable": 1, "Learned From": "Item #502",
+          { "Number": 135, "Name": "ice storm", "Learnable": 1, "Learned From": "Item #502", "Targets": 12,
             "Casted By": "Monster #833" },
           { "Number": 1363, "Name": "ice storm", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #108, Monster #297, Monster #311, Monster #2661" },
           { "Number": 5027, "Name": "ice storm", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #176, Monster #1069" },
-          { "Number": 771, "Name": "blizzard", "Learnable": 1, "Learned From": "Item #1243",
+          { "Number": 771, "Name": "blizzard", "Learnable": 1, "Learned From": "Item #1243", "Targets": 12,
             "Casted By": "Monster #2661", "Abil-1": 151, "AbilVal-1": 1015 },
           { "Number": 5019, "Name": "blizzard", "Learnable": 0, "Learned From": "\u0000",
             "Casted By": "Monster #637", "Abil-1": 151, "AbilVal-1": 1015 },
@@ -88,7 +88,13 @@ public sealed class SpellCasterIndexTests : IDisposable
           { "Number": 9105, "Name": "(9199, learnable)", "Learnable": 1, "Learned From": "\u0000",
             "Casted By": "Monster #108" },
           { "Number": 9106, "Name": "(9199, taught by an item)", "Learnable": 0, "Learned From": "Item #119",
-            "Casted By": "Monster #108" }
+            "Casted By": "Monster #108" },
+          { "Number": 9107, "Name": "(9199, learnable, aimed at a foe)", "Learnable": 1, "Learned From": "\u0000",
+            "Targets": 8, "Casted By": "Monster #108" },
+          { "Number": 9108, "Name": "(learnable, aimed at a foe, no monster)", "Learnable": 1,
+            "Learned From": "\u0000", "Targets": 12, "Casted By": "\u0000" },
+          { "Number": 9109, "Name": "(9107 and a textblock)", "Learnable": 1, "Learned From": "\u0000",
+            "Targets": 8, "Casted By": "Monster #108, Textblock #2500(8%)" }
         ]
         """;
 
@@ -169,13 +175,41 @@ public sealed class SpellCasterIndexTests : IDisposable
     public void ASlotThatCanNeverLand_IsNoCaster()
         => Assert.Equal(new[] { "white queen" }, Of(1336).Monsters);
 
+    // Glacial mist is learnable and aimed at foes (Targets 12): its casters are its
+    // monsters and the players who learned it.
     [Fact]
-    public void ASpellAPlayerCanLearn_IsNeverClosed()
+    public void ASpellAPlayerCanLearn_AimedAtFoes_IsCastByMonstersAndPlayers()
     {
         SpellCasterIndex.Casters mist = Of(1042);
 
         Assert.Contains("Lorzina", mist.Monsters);
         Assert.False(mist.OnlyMonstersAndRooms);
+        Assert.True(mist.PlayersAtFoes);
+    }
+
+    [Theory]
+    [InlineData(9107)]   // a monster casts it too
+    [InlineData(9108)]   // nothing else does
+    public void ALearnableSpellAimedAtFoes_IsPlayersAtFoes(int spell)
+    {
+        SpellCasterIndex.Casters casters = Of(spell);
+
+        Assert.True(casters.PlayersAtFoes);
+        Assert.False(casters.OnlyMonstersAndRooms);
+    }
+
+    // A buff a player can learn (9105 has no Targets aimed at foes) can be cast on
+    // the character by anyone, the character included; one a textblock casts as well
+    // has a caster not in view.
+    [Theory]
+    [InlineData(9105)]
+    [InlineData(9109)]
+    public void ALearnableSpell_NotAimedAtFoesOrWithACasterNotInView_IsOpen(int spell)
+    {
+        SpellCasterIndex.Casters casters = Of(spell);
+
+        Assert.False(casters.PlayersAtFoes);
+        Assert.False(casters.OnlyMonstersAndRooms);
     }
 
     // Each row here has a monster for a caster and one thing more, and is kept open
@@ -188,8 +222,8 @@ public sealed class SpellCasterIndexTests : IDisposable
     [InlineData(9102)]   // its list was cut off at the column's 250 characters
     [InlineData(9103)]   // a room is listed whose own spell it is not: an exit's or a command's cast
     [InlineData(9104)]   // another spell casts it otherwise than by ending in it
-    [InlineData(9105)]   // a player can learn it
-    [InlineData(9106)]   // an item teaches it
+    [InlineData(9105)]   // a player can learn it, and it isn't aimed at foes
+    [InlineData(9106)]   // an item teaches it, and it isn't aimed at foes
     [InlineData(9100)]   // it lists a monster the set has no row for
     [InlineData(5522)]   // a death spell: its caster is gone from the roster when it lands
     public void AMonstersSpell_WithOneCasterNotInView_IsNeverClosed(int spell)
@@ -234,7 +268,7 @@ public sealed class SpellCasterIndexTests : IDisposable
     }
 
     // Blizzard ends in freezing (ability 151): freezing is cast by whoever casts a
-    // blizzard, and is open because one of the two blizzards can be learned.
+    // blizzard, players among them, since one of the two blizzards can be learned.
     [Fact]
     public void ASpellReachedThroughAnother_HasThatSpellsCasters()
     {
@@ -242,6 +276,7 @@ public sealed class SpellCasterIndexTests : IDisposable
 
         Assert.Contains("storm giant king", freezing.Monsters);
         Assert.False(freezing.OnlyMonstersAndRooms);
+        Assert.True(freezing.PlayersAtFoes);
     }
 
     // Freezing water, on the Underwater Passage rooms, ends in holding breath, which

@@ -1953,6 +1953,9 @@ public sealed class AppServices
     // it. Rebuilt on a worker each time a set's room graph has loaded.
     public Game.GameData.SpellCasterIndex SpellCasters { get; private set; } = null!;
 
+    // Where the character stands, as SpellCasters is asked of it.
+    public Game.Conditions.CastReach CastReach { get; private set; } = null!;
+
     // Outbound ailment-sync engine — on a local curable ailment it
     // announces on say (.@poisoned etc.) so other MudPlay
     // clients mirror our state, and @waits the leader; on clear it @oks.
@@ -5289,12 +5292,15 @@ public sealed class AppServices
         SpellCasters = new Game.GameData.SpellCasterIndex(GameData, () => RoomGraph.Rooms, Log);
         RoomGraph.GraphReloaded += () => Task.Run(SpellCasters.Warm);
         if (GameData.ActiveSet is not null) Task.Run(SpellCasters.Warm);
-        Conditions.SetCastReach(new Game.Conditions.CastReach(SpellCasters, () =>
+        CastReach = new Game.Conditions.CastReach(SpellCasters, () =>
             Game.Conditions.CastReach.Standing(
                 RoomTracker.State.Confidence, RoomTracker.State.CurrentRoom,
                 inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
                 blinded: Conditions.IsBlinded,
-                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster)));
+                RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster,
+                pvpRealm: ResolveActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
+        Conditions.SetCastReach(CastReach);
+        Conditions.CasterNamed += RoomClassifier.NoteCasterNamed;
         // Watches the same wire for lines neither the message catalogue above nor any
         // registered Router pattern recognizes, staging them as review candidates.
         // AttachLineExtractor lands in MainWindowViewModel alongside the other line

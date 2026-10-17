@@ -1668,6 +1668,9 @@ public static class BugReportBuilder
         // gates poison-sensitive behavior (e.g. the downtime-rest paths skip a
         // poisoned character). Distinct from the party self-row's broadcast flags.
         Kv(sb, "Active conditions (self)", svc.Conditions.ActiveFlags.ToString());
+        // What an applied line several spells share is read by: a record none of
+        // these can have cast is left out (ConditionTracker.KeepWhatCouldBeCastHere).
+        Kv(sb, "Who can cast here", Game.Conditions.CastReach.Describe(svc.CastReach.Now()));
         sb.Append('\n');
         sb.Append("**Stat screen (PlayerStats)**\n\n");
         sb.Append(Json(svc.PlayerStats));

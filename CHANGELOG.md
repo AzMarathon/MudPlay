@@ -1,5 +1,12 @@
 # Version history
 
+## 3.181.5
+
+- A message record switched off in Game Data still keeps its line from latching another spell's shorter text
+- A cast line naming a caster the room didn't list stops conditions being ruled out by who is listed
+- A player's attack spell is ruled out unless a player outside the party is in the room on a PvP realm
+- Help lists every rule for a line several records fit
+
 ## 3.181.2
 
 - Deaths remember the game data they were recorded on, shown in a new Game data column
