@@ -1011,8 +1011,10 @@ public sealed class AutoLightProvisionerTests
         Assert.Equal(new[] { "", "i", "", "" }, h.Sent);
     }
 
-    // Blind or under a darkening spell (globe of darkness and the like), a dark
-    // room says nothing about the spell: it isn't latched. Lighting goes on.
+    // Blind or under a darkening spell (globe of darkness and the like, which print
+    // the can't-see line — user, 2026-10-17), a dark room says nothing about the
+    // spell: it isn't latched. Lighting goes on, and once the debuff ends the latch
+    // works again.
     [Fact]
     public void SightTakenAway_LightsAsUsual_ButNeverLatches()
     {

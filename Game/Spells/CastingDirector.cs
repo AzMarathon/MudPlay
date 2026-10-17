@@ -1124,7 +1124,7 @@ public sealed class CastingDirector : IDisposable
 
     // A party member died — death wipes EVERY buff on them, so drop each timer we hold on
     // that member + any hidden back-off for them. No-op for a name we hold no timer for
-    // (the "<Name> has died." line also fires for mobs / randos).
+    // (the "<Name> is dead." line names any player in the room).
     public void ClearMemberBuffTimers(string givenName)
     {
         if (string.IsNullOrWhiteSpace(givenName)) return;

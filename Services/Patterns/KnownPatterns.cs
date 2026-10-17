@@ -139,10 +139,9 @@ public static class KnownPatterns
     public const string OtherAttacksWithWeapon = "combat.other-attacks-with-weapon";
     public const string OtherSwingsAtTarget    = "combat.other-swings-at-target";
 
-    // Local-player death — "You have been slain by <killer>." per MajorMUD's
-    // canonical wording. DeathLineWatcher subscribes here and emits the
-    // PlayerDied event that DeathRecoveryManager consumes for corpse-recovery.
-    public const string UserSlain            = "combat.user-slain";
+    // Local-player death — "You have been killed!". DeathLineWatcher subscribes
+    // here and raises PlayerDied.
+    public const string UserKilled           = "combat.user-killed";
 
     // "X moves to attack Y." — emitted by the server for every player's combat
     // announce, including ours, which is what the AttackTiming re-fire modes
@@ -442,8 +441,7 @@ public static class KnownPatterns
     public const string PartyLeftBehind     = "party.left-behind";       // "X is no longer following you." — leader's view of a follower who couldn't move with us (held / knocked down)
     public const string PartyYouInvited     = "party.you-invited";       // "You have invited X to follow you." — our own outbound invite confirmation
     public const string PartyHeader         = "party.par-header";        // "The following people are in your travel party:" — anchors the par-block state machine
-    public const string PartyMemberDeath    = "party.member-death";      // "X has been slain by Y" — conservative kill-attribution match
-    public const string PartyMemberDied     = "party.member-died";       // "X has died." / Stock's "X is dead." — the universal third-person death line any observer sees; the consumer scopes it to party members by roster match (see PartyDeathRosterCleanup)
+    public const string PartyMemberDied     = "party.member-died";       // "X is dead." — the room's line for any player's death; consumers scope it to party members by roster match (see PartyDeathRosterCleanup)
     // "X drops to the ground!" — the room/party-side signal a player hit 0 HP
     // (mortally wounded, not yet dead). Seen by everyone present, including the
     // dropper (with their own name). AllyDroppedHandler scopes it to a party /

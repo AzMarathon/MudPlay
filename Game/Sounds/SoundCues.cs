@@ -61,7 +61,7 @@ public static class SoundCues
         new(PartyInvite, ChatParty, "Party invite", "Someone invites you to follow them.", SoundTones.Chime),
         new(PartyMemberDown, ChatParty, "Party member down", "A party member drops to the ground.", SoundTones.Alert),
 
-        new(Death, Danger, "You died", "You are killed.", SoundTones.Low),
+        new(Death, Danger, "You died", "The game says \"You have been killed!\" (not after a suicide).", SoundTones.Low),
         new(MortallyWounded, Danger, "Mortally wounded", "You drop to the ground.", SoundTones.Alarm),
         new(Flee, Danger, "Fleeing", "A flee starts.", SoundTones.Alert),
         new(NavigationStopped, Danger, "Navigation stopped", "A walk or loop fails, or the client loses track of the room.", SoundTones.Alert),

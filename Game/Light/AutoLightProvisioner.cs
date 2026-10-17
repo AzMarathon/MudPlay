@@ -210,8 +210,9 @@ public sealed class AutoLightProvisioner
         // empty, a light-making cast reads the inventory at once.
         _castLineFor = castLineFor ?? (static _ => null);
         // Blind, or under a spell that takes light away (globe of darkness and the
-        // like): a dark room then says nothing about the room-light spell, so it
-        // isn't latched as not enough. Lighting and casting go on as usual.
+        // like, which make the room print its can't-see line — user, 2026-10-17): a
+        // dark room then says nothing about the room-light spell, so it isn't
+        // latched as not enough. Lighting and casting go on as usual.
         _sightTakenAway = sightTakenAway ?? (static () => false);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _log = log;

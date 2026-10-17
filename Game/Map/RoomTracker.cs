@@ -205,15 +205,14 @@ public sealed class RoomTracker
     // the learned name for later sessions (LearnedRoomNameStore).
     public event Action<NameLearnedEvent>? NameLearned;
 
-    // Fired from NoteDeath for BOTH death phrasings ("You now have N lives
-    // remaining." and the miracle-save "You have N lives left."). This is the one
-    // universal local-death signal — DeathLineWatcher's PlayerDied only fires on
-    // the "slain by" line, which a miracle-save death never prints, so movement /
-    // combat quiescence that hangs off "slain by" alone silently misses every
-    // miracle death (the loop kept rerouting out of the graveyard; the combat
-    // engine re-attacked a stale hostile). Consumers that must react to ANY death
-    // subscribe here. Raised synchronously inside NoteDeath, before the respawn
-    // room confirms, so a loop-stop lands ahead of the graveyard's recovery-reroute.
+    // Fired from NoteDeath for BOTH lives readouts ("You now have N lives
+    // remaining." after a suicide and "You have N lives left." after a death by
+    // damage). This is the local-death signal for every death that leaves a
+    // character: DeathLineWatcher's PlayerDied ("You have been killed!") comes
+    // ahead of it for a death by damage, but a suicide never prints that line.
+    // Consumers that must react to ANY death subscribe here. Raised synchronously
+    // inside NoteDeath, before the respawn room confirms, so a loop-stop lands
+    // ahead of the graveyard's recovery-reroute.
     public event Action? PlayerDeathObserved;
 
     // The room the last witnessed death happened in, for PlayerDeathObserved's

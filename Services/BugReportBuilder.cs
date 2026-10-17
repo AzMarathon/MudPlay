@@ -684,6 +684,14 @@ public static class BugReportBuilder
         // What puts `par` on the wire. A "member's HP was stale / the heal came
         // late" report turns on whether anything was polling at all.
         Kv(sb, "par is sent", svc.PartyPoller.ParTriggerSummary);
+        // A member's death asks `par` whether they are still on the list. A "the dead
+        // member stayed in my party window" report turns on what that check did.
+        Kv(sb, "Last party member death", svc.PartyDeathCleanup.LastDeathSummary ?? "(none seen this session)");
+        if (svc.PartyDeathCleanup.AwaitingPar.Count > 0)
+            Kv(sb, "Dead members awaiting a par reply", string.Join(", ", svc.PartyDeathCleanup.AwaitingPar));
+        if (svc.PartyDeathCleanup.AwaitingUninvite.Count > 0)
+            Kv(sb, "Dead members to uninvite once listed [Invited] and combat clears",
+                string.Join(", ", svc.PartyDeathCleanup.AwaitingUninvite));
         // Board-specific disconnect line, if the active BBS defines one — the
         // config a "party sprinted off after a member dropped" report needs to
         // confirm the custom logoff line was actually taught to the client.
@@ -1013,6 +1021,8 @@ public static class BugReportBuilder
         // announce — the key tells for an "attack-last / not-last not respected" report.
         Kv(sb, "Attack Order", combat.AttackTiming);
         Kv(sb, "Attack-order hold", combat.AwaitingAttackOrderHold ?? "(committed / none)");
+        // Why a hold would or wouldn't have waited here, and when it would have engaged.
+        Kv(sb, "Attack-order hold, this room", svc.Combat.AttackOrderRoomState);
         Kv(sb, "Worn weapon", WornSlot(inv, "Weapon Hand") ?? "(none)");
         Kv(sb, "Worn off-hand", WornSlot(inv, "Off-Hand") ?? "(none)");
         Kv(sb, "Using alternate weapon", combat.UsingAlternateWeapon.ToString());
