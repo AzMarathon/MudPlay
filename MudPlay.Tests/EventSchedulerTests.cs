@@ -24,11 +24,11 @@ public sealed class EventSchedulerTests
     private static readonly byte[] PromptBytes = Encoding.Latin1.GetBytes("[HP=100]: ");
 
     private static (EventManager events, EventScheduler scheduler, WirePromptScanner prompt,
-                    List<byte[]> sent) Build()
+                    List<byte[]> sent) Build(Func<DateTime>? now = null)
     {
         EventManager events = new();
         WirePromptScanner prompt = new();
-        EventScheduler scheduler = new(events, prompt);
+        EventScheduler scheduler = new(events, prompt, now: now);
         List<byte[]> sent = new();
         events.SetWireSender(sent.Add);
         return (events, scheduler, prompt, sent);
@@ -429,7 +429,8 @@ public sealed class EventSchedulerTests
     [Fact]
     public void SwitchingOneEvent_LeavesAnotherEventsCountdownRunning()
     {
-        var (events, scheduler, prompt, _) = Build();
+        DateTime now = new(2026, 10, 10, 18, 0, 0);
+        var (events, scheduler, prompt, _) = Build(() => now);
         ScheduledEvent hourly = EveryMinutes("hourly", 60);
         ScheduledEvent switched = EveryMinutes("switched", 10);
         events.Add(hourly);
@@ -441,7 +442,7 @@ public sealed class EventSchedulerTests
         Assert.NotNull(hourlyDue);
         Assert.NotNull(switchedDue);
 
-        Thread.Sleep(30);       // so a countdown started over would read later
+        now += TimeSpan.FromMinutes(3);   // so a countdown started over would read later
         Assert.Equal(EventManager.SwitchResult.SwitchedOff, events.SetEnabled(switched, false, "test"));
 
         Assert.Null(scheduler.GetNextFire(switched));
@@ -452,6 +453,7 @@ public sealed class EventSchedulerTests
         Assert.Equal(hourlyDue, scheduler.GetNextFire(hourly));
         // Its own period starts from the moment it was switched back on.
         Assert.True(scheduler.GetNextFire(switched) > switchedDue);
+        Assert.Equal(now + TimeSpan.FromMinutes(10), scheduler.GetNextFire(switched));
     }
 
     // An edit puts a different event in the place, and that still starts every
@@ -459,7 +461,8 @@ public sealed class EventSchedulerTests
     [Fact]
     public void EditingAnEvent_StillRestartsTheCountdowns()
     {
-        var (events, scheduler, prompt, _) = Build();
+        DateTime now = new(2026, 10, 10, 18, 0, 0);
+        var (events, scheduler, prompt, _) = Build(() => now);
         ScheduledEvent hourly = EveryMinutes("hourly", 60);
         ScheduledEvent edited = EveryMinutes("edited", 10);
         events.Add(hourly);
@@ -468,12 +471,13 @@ public sealed class EventSchedulerTests
         prompt.Append(PromptBytes);
         DateTime? hourlyDue = scheduler.GetNextFire(hourly);
 
-        Thread.Sleep(30);
+        now += TimeSpan.FromMinutes(3);
         ScheduledEvent replacement = EveryMinutes("edited", 20);
         events.Replace(edited, replacement);
 
         Assert.True(scheduler.GetNextFire(hourly) > hourlyDue);
-        Assert.NotNull(scheduler.GetNextFire(replacement));
+        Assert.Equal(now + TimeSpan.FromMinutes(60), scheduler.GetNextFire(hourly));
+        Assert.Equal(now + TimeSpan.FromMinutes(20), scheduler.GetNextFire(replacement));
     }
 
     // ----- Dispose ----------------------------------------------------

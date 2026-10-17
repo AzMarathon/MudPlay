@@ -40,7 +40,6 @@ public sealed partial class DeathRecoveryManagerTests
         using GraphHarness h = DiedAtTheGates();
         h.Tracker.NoteMoveSent(Direction.S);
         h.Tracker.NoteDarkRoomEntered();
-        System.Threading.Thread.Sleep(5);
 
         h.FeedSurvey("a lantern");
         h.Tracker.NoteRoomObserved(Obs3());
@@ -115,7 +114,6 @@ public sealed partial class DeathRecoveryManagerTests
         h.EnterGates();
         h.Tracker.NoteLookSent();
         Assert.True(h.Recovery.RecoverNow(h.Latest));
-        System.Threading.Thread.Sleep(5);
         h.FeedSurvey("a lantern");                    // the peek's floor
         h.Tracker.NoteRoomObserved(Obs3());           // set aside as a peek
         h.Recovery.FeedTestLine("Obvious exits: south");
@@ -353,7 +351,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Stays.Add("iron key");
         h.KeyItems.Add("iron key");
         h.EnterGates();
-        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "iron key", "ration" });
+        h.Snapshot = h.SnapWith(Array.Empty<EquippedItem>(), new[] { "iron key", "ration" });
         h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
         h.Sent.Clear();
         h.Recovery.AutoRecover = true;
@@ -372,7 +370,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Stays.Add("golden idol");
         h.KeyItems.Add("golden idol");
         h.EnterGates();
-        h.Snapshot = SnapWith(new[] { new EquippedItem("golden idol", "Neck") }, new[] { "ration" });
+        h.Snapshot = h.SnapWith(new[] { new EquippedItem("golden idol", "Neck") }, new[] { "ration" });
         h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
         h.Sent.Clear();
         h.Recovery.AutoRecover = true;
@@ -390,7 +388,7 @@ public sealed partial class DeathRecoveryManagerTests
         // (InventoryManager.NoteLitLightBurnedOut), so the record holds what exists.
         using GraphHarness h = new() { Paradigm = false };
         h.EnterGates();
-        h.Snapshot = SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>());
+        h.Snapshot = h.SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>());
         h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
         h.Sent.Clear();
         h.Recovery.AutoRecover = true;

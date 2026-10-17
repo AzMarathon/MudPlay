@@ -16,8 +16,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The CP pass over the `train stats` form, driven end to end with the delays
-// shrunk: what it types comes from the form, the form must show it before SAVE,
+// The CP pass over the `train stats` form, driven end to end on a clock the test
+// moves, with every wait the pass makes run out on the test's own thread: what it
+// types comes from the form, the form must show it before SAVE,
 // and a plan row is reported applied only when the game showed it (report
 // paradigm-20260930-160602). The character is level 31 with 26 CP and trained
 // Strength 133; raising it to 136 costs 25.
@@ -39,6 +40,8 @@ public sealed class AutoTrainApplyTests : IDisposable
     private readonly object _wireLock = new();
     private readonly List<string> _sent = new();
     private readonly List<bool> _explicitResults = new();
+    private readonly ManualClock _clock = new();
+    private readonly ContinuationPump _pump = new();
     private AutoTrainManager? _manager;
     private string _screen = string.Empty;
     private Action<string>? _onTyped;
@@ -79,14 +82,8 @@ public sealed class AutoTrainApplyTests : IDisposable
         _profile.Current!.CharacterPlan = new List<CpPlanEntry> { new(31, rowStrength, 40, 30, 100, 60, 30) };
 
         var manager = new AutoTrainManager(_stats, _parser, gameData, _inventory, _profile, _trainer,
-                                           new ListedEffectCatalog(new MessageStore(), gameData), _router)
-        {
-            KeystrokeDelayMs = 5,
-            MenuRenderDelay = TimeSpan.FromMilliseconds(40),
-            FormSettleTimeout = TimeSpan.FromMilliseconds(200),
-            ExitGrace = TimeSpan.FromMilliseconds(150),
-            StatReadTimeout = TimeSpan.FromMilliseconds(300),
-        };
+                                           new ListedEffectCatalog(new MessageStore(), gameData), _router,
+                                           now: () => _clock.Now, delay: _clock.Delay);
         manager.SetWireSender(OnWire);
         manager.SetScreenReader(() => _screen);
         manager.PlanCommitted += () => _committed++;
@@ -180,20 +177,26 @@ public sealed class AutoTrainApplyTests : IDisposable
             ["AutoTrainer"] = JsonSerializer.SerializeToElement(new AutoTrainerSettings { AutoTrainStats = true }),
         };
 
-    private static async Task WaitUntil(Func<bool> done)
+    // Starts what the pass does under the pump, so it goes on from each of its waits
+    // on this thread.
+    private void Start(Action start) => _pump.Run(start);
+
+    // Lets the pass run to its end: each wait in turn as the clock reaches it, and
+    // what the pass goes on with after it, until nothing is left to come due.
+    private void Settle()
     {
-        DateTime giveUp = DateTime.UtcNow.AddSeconds(10);
-        while (!done())
+        _pump.Drain();
+        for (int waits = 0; _clock.RunNext(); waits++)
         {
-            Assert.True(DateTime.UtcNow < giveUp, "the pass never settled");
-            await Task.Delay(10);
+            Assert.True(waits < 10_000, "the pass never settled");
+            _pump.Drain();
         }
     }
 
     // ----- the form is the source ---------------------------------------------
 
     [Fact]
-    public async Task Paradigm_BuffedStatScreen_PlansFromTheForm_AndTheRowIsApplied()
+    public void Paradigm_BuffedStatScreen_PlansFromTheForm_AndTheRowIsApplied()
     {
         // `stat` reads Strength 153 / Agility 90 under a buff; the form shows 133 / 100.
         AutoTrainManager manager = Build(paradigm: true);
@@ -201,8 +204,9 @@ public sealed class AutoTrainApplyTests : IDisposable
         FormTakes("136");
 
         Assert.True(manager.CanTrainNow);
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal("train stats", Sent()[0]);
         Assert.Equal(new[] { "136" }, Typed());
@@ -211,14 +215,15 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task TheFormDoesNotShowWhatWasTyped_NothingIsSaved_AndTheRowIsKept()
+    public void TheFormDoesNotShowWhatWasTyped_NothingIsSaved_AndTheRowIsKept()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         _screen = FormText(133, 26);   // and it stays that way whatever is typed
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         // `train stats`, Family Name and the six stat boxes: the pass stopped with
@@ -231,15 +236,16 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task OnlyPartOfTheRowIsAffordable_ItIsSpent_AndTheRowIsKept()
+    public void OnlyPartOfTheRowIsAffordable_ItIsSpent_AndTheRowIsKept()
     {
         // The row wants Strength 138; 26 CP reaches 136.
         AutoTrainManager manager = Build(paradigm: true, rowStrength: 138);
         CleanStat();
         FormTakes("136");
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(0, _committed);
@@ -247,15 +253,16 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task TheFormNeverCloses_NothingIsReportedApplied()
+    public void TheFormNeverCloses_NothingIsReportedApplied()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         FormTakes("136");
         _formCloses = false;
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(0, _committed);
         Assert.Contains("didn't close", manager.LastApplyNote);
@@ -265,14 +272,15 @@ public sealed class AutoTrainApplyTests : IDisposable
     // ----- Apply this level ---------------------------------------------------
 
     [Fact]
-    public async Task ApplyThisLevel_TypesTheRow_AndReportsItApplied()
+    public void ApplyThisLevel_TypesTheRow_AndReportsItApplied()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         FormTakes("136");
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(new[] { true }, _explicitResults);
@@ -280,7 +288,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task ATrainerScreenAlreadyOpen_IsNeverSentTrainStats()
+    public void ATrainerScreenAlreadyOpen_IsNeverSentTrainStats()
     {
         // The first pass stops before SAVE and leaves the form up. A second click
         // would type `train stats` into a box and run every keystroke a box on,
@@ -289,13 +297,14 @@ public sealed class AutoTrainApplyTests : IDisposable
         CleanStat();
         _screen = FormText(133, 26);   // takes nothing typed into it
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
         Assert.True(_trainer.IsInputMenuActive);
         int sent = Sent().Length;
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        manager.TrainNow();
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Start(manager.TrainNow);
 
         Assert.False(manager.IsBusy);
         Assert.Equal(sent, Sent().Length);
@@ -304,7 +313,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task ApplyThisLevel_WithAStatNothingExplains_NeverTypesPastThePlan()
+    public void ApplyThisLevel_WithAStatNothingExplains_NeverTypesPastThePlan()
     {
         // Trained Strength 133, plan row 136, and something unexplained adds 5:
         // `stat` reads 138 in red. The row is still 136, and so is what is typed.
@@ -312,22 +321,24 @@ public sealed class AutoTrainApplyTests : IDisposable
         FeedStat(" 138", Red, " 100", Cyan, "You feel odd! (30s)");
         FormTakes("136");
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(new[] { true }, _explicitResults);
     }
 
     [Fact]
-    public async Task ApplyThisLevel_ARowTheFormCannotAfford_SpendsNothing()
+    public void ApplyThisLevel_ARowTheFormCannotAfford_SpendsNothing()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         FormTakes("138");
 
-        manager.ApplyTargets(new[] { 138, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 138, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Empty(Typed());
         Assert.Equal(new[] { false }, _explicitResults);
@@ -337,15 +348,16 @@ public sealed class AutoTrainApplyTests : IDisposable
     // ----- no form to read: the `stat` screen stands in -----------------------
 
     [Fact]
-    public async Task UnreadableForm_ATrustedStat_TypesFromIt_AndTheCpOnAFreshStatDecides()
+    public void UnreadableForm_ATrustedStat_TypesFromIt_AndTheCpOnAFreshStatDecides()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         _screen = "Obvious exits: north\n";
         _onTyped = text => { if (text == "stat") CleanStat(cp: 1); };
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal("stat", Sent()[^1]);
@@ -353,43 +365,46 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task UnreadableForm_TheCpDidNotMove_TheRowIsKept()
+    public void UnreadableForm_TheCpDidNotMove_TheRowIsKept()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         _screen = "Obvious exits: north\n";
         _onTyped = text => { if (text == "stat") CleanStat(cp: 26); };
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(0, _committed);
         Assert.Equal("no CP was spent", manager.LastApplyNote);
     }
 
     [Fact]
-    public async Task UnreadableForm_NoStatScreenComesBack_TheRowIsKept()
+    public void UnreadableForm_NoStatScreenComesBack_TheRowIsKept()
     {
         AutoTrainManager manager = Build(paradigm: true);
         CleanStat();
         _screen = "Obvious exits: north\n";
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(0, _committed);
         Assert.Contains("no `stat` screen came back", manager.LastApplyNote);
     }
 
     [Fact]
-    public async Task UnreadableForm_AndAStatScreenThatCannotBeTrusted_TypesNothing()
+    public void UnreadableForm_AndAStatScreenThatCannotBeTrusted_TypesNothing()
     {
         AutoTrainManager manager = Build(paradigm: true);
         BuffedStat();
         _screen = "Obvious exits: north\n";
 
-        manager.TrainNow();
-        await WaitUntil(() => !manager.IsBusy);
+        Start(manager.TrainNow);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Empty(Typed());
         Assert.Equal(0, _committed);
@@ -398,10 +413,10 @@ public sealed class AutoTrainApplyTests : IDisposable
 
     // ----- the user's own `train stats` ---------------------------------------
 
-    private void UserTypesTrainStats() => OnWire(Encoding.Latin1.GetBytes("train stats\r"));
+    private void UserTypesTrainStats() => Start(() => OnWire(Encoding.Latin1.GetBytes("train stats\r")));
 
     [Fact]
-    public async Task UsersOwnForm_WithARaiseToMake_IsTypedAndApplied()
+    public void UsersOwnForm_WithARaiseToMake_IsTypedAndApplied()
     {
         AutoTrainManager manager = Build(paradigm: true);
         AutoTrainStatsOn();
@@ -409,14 +424,15 @@ public sealed class AutoTrainApplyTests : IDisposable
         FormTakes("136");
 
         UserTypesTrainStats();
-        await WaitUntil(() => !manager.IsBusy);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(1, _committed);
     }
 
     [Fact]
-    public async Task UsersOwnForm_WithNothingThePlanCanRaise_IsLeftOpen()
+    public void UsersOwnForm_WithNothingThePlanCanRaise_IsLeftOpen()
     {
         // The buffed `stat` can't say what is left, so the pass has to look at the
         // form; it shows no CP to spend. Nothing may be typed into the user's form.
@@ -426,8 +442,8 @@ public sealed class AutoTrainApplyTests : IDisposable
         _screen = FormText(133, 0);
 
         UserTypesTrainStats();
-        await WaitUntil(() => !manager.IsBusy);
-        await Task.Delay(100);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Equal(0, _committed);
@@ -435,7 +451,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task UsersOwnForm_ShowingTheRowAlreadyTrained_ClearsItWithoutTyping()
+    public void UsersOwnForm_ShowingTheRowAlreadyTrained_ClearsItWithoutTyping()
     {
         AutoTrainManager manager = Build(paradigm: true);
         AutoTrainStatsOn();
@@ -443,9 +459,8 @@ public sealed class AutoTrainApplyTests : IDisposable
         _screen = FormText(136, 1);
 
         UserTypesTrainStats();
-        // This ending goes idle just before it reports the row, and here that happens on
-        // another thread, so idle alone can be seen a moment too early.
-        await WaitUntil(() => !manager.IsBusy && _committed > 0);
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Equal(1, _committed);
@@ -470,7 +485,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task Stock_ApplyThisLevel_ReadsStatAgain_AndGoesAheadOnceItIsClean()
+    public void Stock_ApplyThisLevel_ReadsStatAgain_AndGoesAheadOnceItIsClean()
     {
         // The hold rests on a `stat` from before the buff ended.
         AutoTrainManager manager = Build(paradigm: false);
@@ -478,8 +493,9 @@ public sealed class AutoTrainApplyTests : IDisposable
         FormTakes("136");
         _onTyped += text => { if (text == "stat") CleanStat(); };
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "stat", "train stats" }, Sent().Take(2));
         Assert.Equal(new[] { "136" }, Typed());
@@ -487,14 +503,15 @@ public sealed class AutoTrainApplyTests : IDisposable
     }
 
     [Fact]
-    public async Task Stock_ApplyThisLevel_StillAltered_IsNotStarted()
+    public void Stock_ApplyThisLevel_StillAltered_IsNotStarted()
     {
         AutoTrainManager manager = Build(paradigm: false);
         FeedStat("*153", Red, " 100", Cyan);
         _onTyped = text => { if (text == "stat") FeedStat("*153", Red, " 100", Cyan); };
 
-        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
-        await WaitUntil(() => !manager.IsBusy);
+        Start(() => manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 }));
+        Settle();
+        Assert.False(manager.IsBusy);
 
         Assert.Equal(new[] { "stat" }, Sent());
         Assert.Equal(new[] { false }, _explicitResults);
@@ -506,10 +523,9 @@ public sealed class AutoTrainApplyTests : IDisposable
     public void TheGamesRefusal_EndsThePassWithItsReason_WhateverTheMarksSaid()
     {
         AutoTrainManager manager = Build(paradigm: false);
-        manager.MenuRenderDelay = TimeSpan.FromSeconds(5);   // the refusal arrives first
         CleanStat();
 
-        manager.TrainNow();
+        Start(manager.TrainNow);
         Assert.True(manager.IsBusy);
         Dispatch("Your stats are unnaturally altered!  You may not train stats now.");
 
@@ -517,5 +533,11 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Contains("refused", manager.LastApplyNote);
         Assert.Equal(0, _committed);
+
+        // The render wait and the screen's timeout running out afterwards start nothing.
+        Settle();
+        Assert.False(manager.IsBusy);
+        Assert.Equal(new[] { "train stats" }, Sent());
+        Assert.Contains("refused", manager.LastApplyNote);
     }
 }

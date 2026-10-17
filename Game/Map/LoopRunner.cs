@@ -250,6 +250,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // A room command's own delay runs in real time from the command (Stopwatch
     // timestamp it ends at); 0 for the reply wait, which pauses with the loop.
     private long _delayDeadline;
+    // The clocks the loop's times are read on: lap times on the wall clock, a room
+    // command's delay on the Stopwatch.
+    private readonly Func<DateTimeOffset> _now;
+    private readonly Func<long> _timestamp;
     // A DispatcherTimer can't be set past ~24 days, and a delay may be far longer:
     // a long one is waited out in slices, each re-reading the deadline.
     private static readonly TimeSpan MaxDelaySlice = TimeSpan.FromHours(1);
@@ -259,7 +263,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private TimeSpan DeadlineRemaining()
     {
-        TimeSpan left = TimeSpan.FromSeconds((double)(_delayDeadline - Stopwatch.GetTimestamp()) / Stopwatch.Frequency);
+        TimeSpan left = TimeSpan.FromSeconds((double)(_delayDeadline - _timestamp()) / Stopwatch.Frequency);
         return left < TimeSpan.Zero ? TimeSpan.Zero : left;
     }
 
@@ -433,7 +437,7 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             if (State == LoopState.Idle) return TimeSpan.Zero;
             if (_lapStartedAt == default) return TimeSpan.Zero;
-            return DateTimeOffset.UtcNow - _lapStartedAt;
+            return _now() - _lapStartedAt;
         }
     }
 
@@ -893,7 +897,8 @@ public sealed class LoopRunner : IRecoverableEngine
         WirePromptScanner? promptScanner = null, LogService? log = null,
         RoomGraphManager? graph = null, EngineRecoveryGate? recovery = null,
         BfsMapper? bfs = null, AutoWalkManager? walker = null,
-        IRoomFilter? filter = null, Action<Action>? postToUi = null)
+        IRoomFilter? filter = null, Action<Action>? postToUi = null,
+        Func<DateTimeOffset>? now = null, Func<long>? timestamp = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(coordinator);
@@ -908,6 +913,8 @@ public sealed class LoopRunner : IRecoverableEngine
         _runFilter = filter;
         _filter = filter;
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
+        _timestamp = timestamp ?? Stopwatch.GetTimestamp;
 
         _tracker.StateChanged += OnTrackerStateChanged;
         // A death found out at the login (the hang-up penalty killed the character
@@ -1282,7 +1289,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
         _loop = loop;
         LastRunLoopName = loop.Name;   // retained past Stop/Reset for @path recovery
-        LastRunLoopAt = DateTimeOffset.UtcNow;
+        LastRunLoopAt = _now();
         // Retain a COPY so "@loop last" / the Loop-mode chip can re-run or re-open
         // this exact loop even if it was an ad-hoc, never-saved run. The two settings
         // are the ones this character runs the loop with (Loop.OwnSettings), not the
@@ -1685,7 +1692,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (!_firstWaypointReached)
         {
             _firstWaypointReached = true;
-            _lapStartedAt = DateTimeOffset.UtcNow;
+            _lapStartedAt = _now();
             if (_suppressFirstWaypointEvent)
                 _suppressFirstWaypointEvent = false;   // consume the detour-resume suppression
             else
@@ -1885,7 +1892,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // Record the just-completed lap's duration into the rolling
         // history (capped at MaxLapHistory) so AverageLapTime stays
         // bounded in memory across long-running sessions.
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _now();
         bool partLap = _partialLap;
         _partialLap = false;
         if (!partLap)
@@ -2803,7 +2810,7 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         _delayRemaining = duration;
         _delayDeadline = runsInRealTime
-            ? Stopwatch.GetTimestamp() + (long)(duration.TotalSeconds * Stopwatch.Frequency)
+            ? _timestamp() + (long)(duration.TotalSeconds * Stopwatch.Frequency)
             : 0;
         StartOrResumeDelayTimer();
     }
@@ -2820,7 +2827,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _delayTimer.Tick -= OnDelayTick;
         _delayTimer.Tick += OnDelayTick;
         _delayTimer.Interval = _delayRemaining < MaxDelaySlice ? _delayRemaining : MaxDelaySlice;
-        _delayStartTimestamp = Stopwatch.GetTimestamp();
+        _delayStartTimestamp = _timestamp();
         _delayTimer.Start();
     }
 
@@ -2835,7 +2842,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _delayRemaining = TimeSpan.FromTicks(1);
             return;
         }
-        TimeSpan elapsed = Stopwatch.GetElapsedTime(_delayStartTimestamp);
+        TimeSpan elapsed = Stopwatch.GetElapsedTime(_delayStartTimestamp, _timestamp());
         _delayRemaining -= elapsed;
         if (_delayRemaining < TimeSpan.Zero) _delayRemaining = TimeSpan.Zero;
     }
@@ -3329,7 +3336,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // echoing, rather than act on it.
     private bool RecoveryWouldDeclineAsEcho() =>
         !_resumingAfterFlee && _recoverAttempts > 0
-        && DateTimeOffset.UtcNow - _lastRecoveryAttemptAt < _recoveryAttemptSpacing;
+        && _now() - _lastRecoveryAttemptAt < _recoveryAttemptSpacing;
 
     private void EnterRecovery(string reason)
     {
@@ -3358,7 +3365,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // it's the same one echoing. Drop it rather than spend budget on it — the
         // next block or mismatch re-enters, by which time a resync may have landed
         // or the character may actually have moved.
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = _now();
         if (RecoveryWouldDeclineAsEcho())
         {
             _log?.Debug("LoopRunner",

@@ -121,7 +121,7 @@ public sealed class LoopRunnerTests : IDisposable
     // a same-burst gate assert between a resume and its deferred send.
     private Harness NewHarness(string json = GraphJson, bool deferResume = false,
         bool wireRecovery = false, bool withWalker = false, LogService? log = null,
-        string? tbinfoJson = null)
+        string? tbinfoJson = null, ManualClock? clock = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -162,7 +162,8 @@ public sealed class LoopRunnerTests : IDisposable
         // depends on.
         AutoWalkManager? walker = withWalker ? new AutoWalkManager(graph, bfs, tracker, coord) : null;
         LoopRunner runner = new(tracker, coord, log: log, graph: graph, recovery: gate, bfs: bfs,
-            walker: walker, filter: filter, postToUi: deferResume ? posted.Add : a => a());
+            walker: walker, filter: filter, postToUi: deferResume ? posted.Add : a => a(),
+            now: clock is null ? null : () => clock.Now, timestamp: clock is null ? null : clock.Timestamp);
         Harness h = new()
         {
             Tracker = tracker, Coordinator = coord, Runner = runner, Posted = posted,
@@ -602,7 +603,8 @@ public sealed class LoopRunnerTests : IDisposable
     [Fact]
     public void CommandDelay_RunsOnThroughAFight()
     {
-        Harness h = NewHarness();
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(new Loop("arena", new[]
         {
@@ -612,7 +614,11 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Single(h.Sent);
 
         h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
-        Thread.Sleep(80);
+        clock.Advance(TimeSpan.FromMilliseconds(29));
+        Assert.Equal(TimeSpan.FromMilliseconds(1), h.Runner.CommandDelayRemaining);
+        clock.Advance(TimeSpan.FromMilliseconds(51));
+        Assert.Equal(TimeSpan.Zero, h.Runner.CommandDelayRemaining);
+        Assert.Single(h.Sent);                     // the fight still holds the step
         h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
         h.Drain();
 
@@ -2955,15 +2961,18 @@ public sealed class LoopRunnerTests : IDisposable
     [Fact]
     public void CurrentLapTime_KeepsCounting_WhileAFightPausesTheLoop()
     {
-        Harness h = NewHarness();
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
-        System.Threading.Thread.Sleep(20);
+        clock.Advance(TimeSpan.FromMilliseconds(20));
 
         h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
 
         Assert.Equal(LoopState.Paused, h.Runner.State);
         Assert.True(h.Runner.CurrentLapTime >= TimeSpan.FromMilliseconds(20));
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(TimeSpan.FromMilliseconds(5020), h.Runner.CurrentLapTime);
 
         h.Runner.Stop("done");
         Assert.Equal(TimeSpan.Zero, h.Runner.CurrentLapTime);

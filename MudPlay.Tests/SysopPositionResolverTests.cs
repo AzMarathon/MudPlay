@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -50,6 +51,9 @@ public sealed class SysopPositionResolverTests : IDisposable
         public bool Suppressed { get; set; }
 
         private TaskCompletionSource _currentDelay = new();
+        // What the resolver hands on to finish a probe, where the app hands it to the
+        // UI thread.
+        private readonly BlockingCollection<Action> _posted = new();
 
         public Harness(string root)
         {
@@ -80,30 +84,28 @@ public sealed class SysopPositionResolverTests : IDisposable
                 Probe, graph, Tracker,
                 suppressed: () => Suppressed,
                 log: null,
-                post: null,
+                post: _posted.Add,
                 useTimer: false);
             Resolver.PositionResolved += Resolved.Add;
             Resolver.LocateFailed += () => Failures++;
         }
 
-        // The probe completes off a continuation, so every test that drives a
-        // reply has to let it run before asserting. Poll for the outcome rather
-        // than yielding a fixed number of times — a fixed count is a guess that
-        // gets flaky the moment the rest of the suite loads the scheduler.
-        public async Task ReplyWithRoom(int map, int room)
+        public void ReplyWithRoom(int map, int room)
         {
             int before = Resolved.Count + Failures;
             Parser.FeedTestLine($"Room {room}  Map: {map}");
             Parser.FeedTestLine("Monsters: None");
             Parser.FeedTestLine("[HP=100]:", isPromptLine: true);
-            await SettleUntil(() => Resolved.Count + Failures > before);
+            FinishTheProbe();
+            Assert.Equal(before + 1, Resolved.Count + Failures);
         }
 
-        public async Task FireProbeTimeout()
+        public void FireProbeTimeout()
         {
             int before = Resolved.Count + Failures;
             _currentDelay.TrySetResult();
-            await SettleUntil(() => Resolved.Count + Failures > before);
+            FinishTheProbe();
+            Assert.Equal(before + 1, Resolved.Count + Failures);
         }
 
         // Drives the tracker to Lost: from Unknown, an observation no graph room
@@ -111,31 +113,31 @@ public sealed class SysopPositionResolverTests : IDisposable
         public void DriveTrackerLost()
             => Tracker.NoteRoomObserved(new RoomObservation("Nowhere", new HashSet<Direction> { Direction.W }));
 
-        private static async Task SettleUntil(Func<bool> done)
+        // A reply goes on from the probe on a pool thread, which posts the finish to
+        // the resolver's thread. That post is waited for, not polled for, and run here,
+        // as the UI thread would run it: the limit only bounds a probe that never
+        // answers, however busy the pool is.
+        private void FinishTheProbe()
         {
-            // Wait for the probe's completion continuation to run. A short burst of
-            // yields catches the common case cheaply; then fall back to real short
-            // delays. A pure Task.Yield spin re-queues onto the SAME thread-pool work
-            // queue the continuation needs, so under a saturated pool (the full suite
-            // under release-build load) it competes with the continuation and can give
-            // up before it runs — flaking ConsecutiveRecoveryLocatesAreNotThrottledOut
-            // and friends. Task.Delay parks on the timer queue instead, freeing a pool
-            // thread for the continuation. ~1s of real budget only ever elapses on a
-            // genuine failure; the happy path returns immediately.
-            for (int i = 0; i < 100 && !done(); i++) await Task.Yield();
-            for (int i = 0; i < 500 && !done(); i++) await Task.Delay(2);
+            Assert.True(_posted.TryTake(out Action? finish, TimeSpan.FromSeconds(30)), "the probe never finished");
+            finish();
+            Assert.Empty(_posted);
         }
 
-        public void Dispose() => Probe.Dispose();
+        public void Dispose()
+        {
+            Probe.Dispose();
+            _posted.Dispose();
+        }
     }
 
     [Fact]
-    public async Task LocatesTheTrackerAtTheReportedRoom()
+    public void LocatesTheTrackerAtTheReportedRoom()
     {
         using Harness h = new(_root);
 
         Assert.True(h.Resolver.TryRequestLocate("test"));
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
 
         Assert.Equal(new[] { "sys st\r\n" }, h.Sent);
         Assert.Equal(new RoomKey(1, 7), h.Tracker.State.CurrentRoom?.Key);
@@ -145,14 +147,14 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task TrackerGoingLostAsksWithoutBeingTold()
+    public void TrackerGoingLostAsksWithoutBeingTold()
     {
         using Harness h = new(_root);
 
         h.DriveTrackerLost();
         Assert.Equal(RoomConfidence.Lost, h.Tracker.State.Confidence);
 
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
 
         Assert.Single(h.Sent);
         Assert.Equal(new RoomKey(1, 7), h.Tracker.State.CurrentRoom?.Key);
@@ -160,12 +162,12 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task ProbeTimeoutFailsTheLocateAndLeavesTheTrackerAlone()
+    public void ProbeTimeoutFailsTheLocateAndLeavesTheTrackerAlone()
     {
         using Harness h = new(_root);
 
         Assert.True(h.Resolver.TryRequestLocate("test"));
-        await h.FireProbeTimeout();
+        h.FireProbeTimeout();
 
         Assert.Equal(1, h.Failures);
         Assert.Empty(h.Resolved);
@@ -173,14 +175,14 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task RoomOutsideTheActiveGraphFailsRatherThanLocating()
+    public void RoomOutsideTheActiveGraphFailsRatherThanLocating()
     {
         // The game is right and our map is wrong (wrong game-data set). A
         // confident wrong answer is worse than no answer.
         using Harness h = new(_root);
 
         Assert.True(h.Resolver.TryRequestLocate("test"));
-        await h.ReplyWithRoom(9, 999);
+        h.ReplyWithRoom(9, 999);
 
         Assert.Equal(1, h.Failures);
         Assert.Empty(h.Resolved);
@@ -207,7 +209,7 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task LocateQueuesBehindUnconfirmedMovement()
+    public void LocateQueuesBehindUnconfirmedMovement()
     {
         using Harness h = new(_root);
         h.Tracker.SetLocated(new RoomKey(1, 7));
@@ -226,7 +228,7 @@ public sealed class SysopPositionResolverTests : IDisposable
         Assert.Single(h.Sent);
         Assert.False(h.Resolver.LocateDeferred);
 
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
         Assert.Equal(new RoomKey(1, 7), Assert.Single(h.Resolved));
     }
 
@@ -246,13 +248,13 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task RepeatedRequestsAreThrottledIntoOneCommand()
+    public void RepeatedRequestsAreThrottledIntoOneCommand()
     {
         // An oscillating tracker must not become a command loop.
         using Harness h = new(_root);
 
         Assert.True(h.Resolver.TryRequestLocate("first"));
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
 
         Assert.False(h.Resolver.TryRequestLocate("second"));
         Assert.Single(h.Sent);
@@ -270,7 +272,7 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task RecoveryCallerAsksImmediatelyEvenMidMove()
+    public void RecoveryCallerAsksImmediatelyEvenMidMove()
     {
         // The gate only asks because a move is stuck unconfirmed. Queuing behind
         // that move waits out the exact condition the locate is meant to break,
@@ -285,7 +287,7 @@ public sealed class SysopPositionResolverTests : IDisposable
 
         Assert.False(h.Resolver.LocateDeferred);
         Assert.Single(h.Sent);
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
         Assert.Equal(new RoomKey(1, 7), Assert.Single(h.Resolved));
     }
 
@@ -304,7 +306,7 @@ public sealed class SysopPositionResolverTests : IDisposable
     }
 
     [Fact]
-    public async Task ConsecutiveRecoveryLocatesAreNotThrottledOut()
+    public void ConsecutiveRecoveryLocatesAreNotThrottledOut()
     {
         // The stall watchdog escalates every 10s, so a second stall always lands
         // inside the 15s self-triggered throttle. Denying it drops the sweep into
@@ -313,11 +315,11 @@ public sealed class SysopPositionResolverTests : IDisposable
         using Harness h = new(_root);
 
         Assert.True(h.Resolver.TryRequestLocate("stall 1", forRecovery: true));
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
         Assert.Single(h.Resolved);
 
         Assert.True(h.Resolver.TryRequestLocate("stall 2", forRecovery: true));
-        await h.ReplyWithRoom(1, 7);
+        h.ReplyWithRoom(1, 7);
 
         Assert.Equal(2, h.Resolved.Count);
         Assert.Equal(2, h.Sent.Count);

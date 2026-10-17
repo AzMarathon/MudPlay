@@ -56,6 +56,8 @@ public sealed class AutoTrainManager : IDisposable
     private readonly ListedEffectCatalog _listedEffects;
     private readonly IDisposable _refusalSub;
     private readonly LogService? _log;
+    private readonly Func<DateTimeOffset> _now;
+    private readonly Func<TimeSpan, Task> _delay;
     private readonly WireSender _wire = new();
     private Func<string>? _readScreen;
 
@@ -82,20 +84,20 @@ public sealed class AutoTrainManager : IDisposable
     private TaskCompletionSource<bool>? _formClosed;
 
     // Delay between keystrokes so the server's form redraw keeps pace.
-    public int KeystrokeDelayMs { get; set; } = 200;
+    private const int KeystrokeDelayMs = 200;
     // Grace after `train stats` for the stat box to render before we check the
     // command-driven input-menu signal and begin the replay (the realm-
     // independent fallback for menus whose marker row never scrolls).
-    public TimeSpan MenuRenderDelay { get; set; } = TimeSpan.FromMilliseconds(1200);
+    private static readonly TimeSpan MenuRenderDelay = TimeSpan.FromMilliseconds(1200);
     // How long to wait for the trainer screen after sending `train stats`.
-    public TimeSpan MenuEntryTimeout { get; } = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan MenuEntryTimeout = TimeSpan.FromSeconds(6);
     // How long the form gets to show the last typed value before SAVE.
-    public TimeSpan FormSettleTimeout { get; set; } = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan FormSettleTimeout = TimeSpan.FromSeconds(3);
     // How long the form gets to close after SAVE before the keyboard is released
     // without it.
-    public TimeSpan ExitGrace { get; set; } = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(4);
     // How long a `stat` the pass asked for gets to arrive.
-    public TimeSpan StatReadTimeout { get; set; } = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan StatReadTimeout = TimeSpan.FromSeconds(8);
 
     // Raised when CanTrainNow / IsBusy may have changed.
     public event Action? StateChanged;
@@ -124,7 +126,8 @@ public sealed class AutoTrainManager : IDisposable
 
     public AutoTrainManager(PlayerStats stats, StatParser statParser, GameDataCache gameData,
                             InventoryManager inventory, ProfileService profile, TrainerMenuTracker trainer,
-                            ListedEffectCatalog listedEffects, MessageRouter router, LogService? log = null)
+                            ListedEffectCatalog listedEffects, MessageRouter router, LogService? log = null,
+                            Func<DateTimeOffset>? now = null, Func<TimeSpan, Task>? delay = null)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(statParser);
@@ -142,6 +145,9 @@ public sealed class AutoTrainManager : IDisposable
         _trainer = trainer;
         _listedEffects = listedEffects;
         _log = log;
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
+        _delay = delay ?? Task.Delay;
+
         _stats.PropertyChanged += OnStatsChanged;
         _trainer.MenuEntered += OnMenuEntered;
         _trainer.InputMenuEntered += OnManualTrainStatsEntered;
@@ -304,7 +310,7 @@ public sealed class AutoTrainManager : IDisposable
 
     private async Task AwaitMenuTimeoutAsync(int session)
     {
-        await Task.Delay(MenuEntryTimeout);
+        await _delay(MenuEntryTimeout);
         if (_sessionId == session && _phase == Phase.AwaitingMenu)
             Abort("the trainer screen never opened", "Trainer screen never opened (not at a trainer?) — aborted.");
     }
@@ -317,7 +323,7 @@ public sealed class AutoTrainManager : IDisposable
     // replay) from "command bounced" (the InputMenuExited handler already aborted).
     private async Task AwaitRenderThenReplayAsync(int session)
     {
-        await Task.Delay(MenuRenderDelay);
+        await _delay(MenuRenderDelay);
         if (_sessionId != session || _phase != Phase.AwaitingMenu) return;
         if (!_trainer.IsInputMenuActive) return;   // prompt returned / not armed — let the abort paths handle it
         _log?.Info("AutoTrain", "Trainer screen up (input-menu signal) — replaying plan.");
@@ -530,7 +536,7 @@ public sealed class AutoTrainManager : IDisposable
                 if (FormLost(session)) return;
                 if (i == afterStats && !(await FormShowsTargetAsync(session)).Ok) return;
                 _wire.Send(_sequence[i]);
-                await Task.Delay(KeystrokeDelayMs);
+                await _delay(TimeSpan.FromMilliseconds(KeystrokeDelayMs));
             }
             if (FormLost(session)) return;
 
@@ -541,7 +547,7 @@ public sealed class AutoTrainManager : IDisposable
             if (!ok) return;
 
             _wire.Send(_sequence[^1]);
-            await Task.Delay(KeystrokeDelayMs);
+            await _delay(TimeSpan.FromMilliseconds(KeystrokeDelayMs));
             // Nudge the room back onto the screen. Stock redisplays it on leaving the
             // train screen; other realms (MMUD Reborn) don't, and with no room display
             // there's nothing for the tracker to land on — the client sat idle after a
@@ -588,13 +594,13 @@ public sealed class AutoTrainManager : IDisposable
     // then whatever it shows (null when it can't be read) is the answer.
     private async Task<TrainStatsScreen?> ReadSettledFormAsync(int session)
     {
-        DateTime giveUp = DateTime.UtcNow + FormSettleTimeout;
+        DateTimeOffset giveUp = _now() + FormSettleTimeout;
         while (true)
         {
             TrainStatsScreen? form = TrainStatsScreen.TryRead(_readScreen?.Invoke());
             if (form is not null && form.Stats.SequenceEqual(_target)) return form;
-            if (DateTime.UtcNow >= giveUp || _sessionId != session || _phase != Phase.Replaying) return form;
-            await Task.Delay(50);
+            if (_now() >= giveUp || _sessionId != session || _phase != Phase.Replaying) return form;
+            await _delay(TimeSpan.FromMilliseconds(50));
         }
     }
 
@@ -630,7 +636,7 @@ public sealed class AutoTrainManager : IDisposable
     private async Task<bool> FormClosedAsync()
     {
         if (_formClosed is not { } closed) return false;
-        return await Task.WhenAny(closed.Task, Task.Delay(ExitGrace)) == closed.Task;
+        return await Task.WhenAny(closed.Task, _delay(ExitGrace)) == closed.Task;
     }
 
     // The pass can't go on typing: a newer session replaced it, or the form closed
@@ -674,7 +680,7 @@ public sealed class AutoTrainManager : IDisposable
         try
         {
             _wire.Send("stat");
-            return await Task.WhenAny(parsed.Task, Task.Delay(StatReadTimeout)) == parsed.Task;
+            return await Task.WhenAny(parsed.Task, _delay(StatReadTimeout)) == parsed.Task;
         }
         finally
         {
