@@ -99,7 +99,8 @@ public sealed class QuestTickMigrationTests : IDisposable
             "[] (1/102) `kneel`",
         }, QuestTextFormatter.StepLines(cache, quest, placement));
         // The old draft was the three typed lines: its checkboxes 0, 1, 2 are 0, 2, 3 now.
-        Assert.Equal(new[] { 0, 2, 3 }, QuestTextFormatter.CheckboxesSinceKillSteps(cache, quest));
+        var moves = QuestTextFormatter.CheckboxMoves(cache, 400, sinceKillSteps: true);
+        Assert.Equal(new[] { 0, 2, 3 }, Enumerable.Range(0, 3).Select(i => moves[(0, i)].Index));
     }
 
     [Fact]

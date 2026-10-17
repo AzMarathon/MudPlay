@@ -7,10 +7,12 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Moves a character's saved quest-step ticks onto the steps they were made on, once each
-// time the drafted checklists gained lines: first their kill lines, then their gather
-// lines (fetching an item a later step needs). A tick is kept as the number of its
-// checkbox, and a line drafted ahead of a ticked step pushes that step down; left alone,
-// every later tick would sit too early and the last would fall off.
+// time the drafted checklists changed shape: first their kill lines, then their gather
+// lines (fetching an item a later step needs) and each tier ending with its reward
+// hand-in, which moves that line onto the tier before. A tick is kept as the number of
+// its checkbox on its tier's card, and a line drafted ahead of a ticked step pushes that
+// step down; left alone, every later tick would sit too early and the last would fall
+// off, and a moved hand-in's tick would land on another step.
 //
 // The profile's schema upgrade marks a profile whose ticks predate the kill lines
 // (CharacterProfile.QuestTicksPredateKillSteps); CharacterProfile.QuestDraftRevision
@@ -18,7 +20,8 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // this has run, so it runs once per character per change and a second call does nothing.
 internal static class QuestTickMigration
 {
-    // The drafted checklists' current shape: 1 = with gather lines.
+    // The drafted checklists' current shape: 1 = with gather lines, tiers ending on
+    // their reward hand-in.
     public const int CurrentDraftRevision = 1;
 
     // resolve gives a quest's definition by flag and step; itemSources / itemDrops are
@@ -46,30 +49,57 @@ internal static class QuestTickMigration
         if (itemDrops is not null && !string.Equals(itemDrops.ActiveSet, gameData.ActiveSet, System.StringComparison.Ordinal))
             return false;
 
-        foreach (QuestProgress progress in profile.QuestLog ?? Enumerable.Empty<QuestProgress>())
+        List<QuestProgress> log = profile.QuestLog ?? new List<QuestProgress>();
+        // A checklist the user wrote counts its own lines, which did not change.
+        bool Drafted(int flag, int step) => string.IsNullOrWhiteSpace(resolve(flag, step).Steps);
+
+        foreach (int flag in log.Where(p => p.CheckedSteps is { Count: > 0 }).Select(p => p.Flag).Distinct().ToList())
         {
-            if (progress.CheckedSteps is not { Count: > 0 } ticks) continue;
-            CrawledQuest? quest = crawled.FirstOrDefault(q => q.Flag == progress.Flag && q.Step == progress.Step);
-            if (quest is null) continue;
-            // A checklist the user wrote counts its own lines, which did not change.
-            if (!string.IsNullOrWhiteSpace(resolve(progress.Flag, progress.Step).Steps)) continue;
+            List<CrawledQuest> tiers = crawled.Where(q => q.Flag == flag).ToList();
+            if (tiers.Count == 0) continue;
 
             // Ticks from before the kill lines map straight onto today's draft.
-            IReadOnlyList<int> now = beforeKillSteps
-                ? QuestTextFormatter.CheckboxesSinceKillSteps(gameData, quest, itemSources, itemDrops)
-                : QuestTextFormatter.CheckboxesSinceGatherSteps(gameData, quest, itemSources, itemDrops);
-            List<int> placed = new();
-            foreach (int tick in ticks)
+            IReadOnlyDictionary<(int Step, int Index), (int Step, int Index)> moves =
+                QuestTextFormatter.CheckboxMoves(gameData, flag, beforeKillSteps, itemSources, itemDrops);
+            var placed = new Dictionary<int, List<int>>();
+            var touched = new HashSet<int>();
+            foreach (QuestProgress progress in log.Where(p => p.Flag == flag && p.CheckedSteps is { Count: > 0 }).ToList())
             {
-                // A number past the end of the old draft was not made against it; it is
-                // kept as it is rather than guessed at.
-                int target = tick >= 0 && tick < now.Count ? now[tick] : tick;
-                if (target >= 0 && !placed.Contains(target)) placed.Add(target);
+                if (!tiers.Exists(t => t.Step == progress.Step) || !Drafted(flag, progress.Step)) continue;
+                touched.Add(progress.Step);
+                int oldCount = moves.Keys.Count(k => k.Step == progress.Step);
+                foreach (int tick in progress.CheckedSteps!)
+                {
+                    (int Step, int Index) target;
+                    if (moves.TryGetValue((progress.Step, tick), out target)) { }
+                    // A number past the end of the old draft was not made against it; it is
+                    // kept as it is rather than guessed at.
+                    else if (tick >= oldCount) target = (progress.Step, tick);
+                    else continue;
+                    if (!Drafted(flag, target.Step)) continue;
+                    List<int> list = placed.TryGetValue(target.Step, out List<int>? l) ? l : placed[target.Step] = new List<int>();
+                    if (!list.Contains(target.Index)) list.Add(target.Index);
+                    touched.Add(target.Step);
+                }
             }
-            if (placed.SequenceEqual(ticks)) continue;
-            progress.CheckedSteps = placed.Count == 0 ? null : placed;
-            moved++;
+
+            foreach (int step in touched)
+            {
+                QuestProgress? progress = log.FirstOrDefault(p => p.Flag == flag && p.Step == step);
+                List<int>? ticks = placed.TryGetValue(step, out List<int>? l) ? l : null;
+                if (progress is null)
+                {
+                    if (ticks is null) continue;
+                    log.Add(progress = new QuestProgress(flag, step));
+                }
+                List<int> before = progress.CheckedSteps ?? new List<int>();
+                List<int> after = ticks ?? new List<int>();
+                if (before.SequenceEqual(after)) continue;
+                progress.CheckedSteps = after.Count == 0 ? null : after;
+                moved++;
+            }
         }
+        if (log.Count > 0) profile.QuestLog = log;
 
         profile.QuestTicksPredateKillSteps = false;
         profile.QuestDraftRevision = CurrentDraftRevision;

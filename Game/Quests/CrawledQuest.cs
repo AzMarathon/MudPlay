@@ -53,9 +53,11 @@ namespace MudPlay.Game.Quests;
 //   BandOrdinal — 1-based position of this band among the flag's bands in ascending
 //     level order (band 1 is the lowest tier). 0 for a single-part quest. Drives
 //     the "Good 1"-style default band name.
-//   StepRangeStart — lowest give-step Order that belongs to this band's followable
-//     checklist (inclusive). 0 for a single-part quest (no band filtering). Band 1
-//     starts at 1 so it absorbs any pre-first-milestone give-steps.
+//   StepRangeStart — lowest give-step Order that belongs to this band (inclusive): its
+//     gate, which the complete value and the flag sync read. 0 for a single-part quest
+//     (no band filtering). Band 1 starts at 1 so it absorbs any pre-first-milestone
+//     give-steps. The drafted checklist draws the tier one step later, closing each
+//     tier on its reward hand-in (QuestTextFormatter.DraftRange).
 //   StepRangeEnd — highest give-step Order that belongs to this band (inclusive). 0
 //     for a single-part quest (no filtering). The last band carries int.MaxValue so
 //     it absorbs every overflow give-step past the final milestone — nothing is

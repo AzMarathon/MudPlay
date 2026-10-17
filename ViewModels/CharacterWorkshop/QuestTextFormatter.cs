@@ -239,9 +239,8 @@ internal static partial class QuestTextFormatter
     // give-step in order — each a checkbox line "[] {step}" (the seed guides carry no
     // flag/order prefix, so the draft matches them) so the Quest Status tab renders it
     // as a tickable item and the editor pre-fills it verbatim. For a multi-part band
-    // only the give-steps inside the band's StepRangeStart..StepRangeEnd span are
-    // emitted; a single-part quest (range 0/0) emits every step. Empty when the flag
-    // drafts no steps.
+    // only the give-steps of the band's tier are emitted (DraftRange); a single-part
+    // quest (range 0/0) emits every step. Empty when the flag drafts no steps.
     //
     // itemSources / itemDrops let the draft add a line for fetching an item a step needs
     // that no earlier step hands over (QuestItemGathering); without them those items are
@@ -273,7 +272,7 @@ internal static partial class QuestTextFormatter
         ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
     {
         var lines = new List<(int Order, string Line)>();
-        foreach ((int order, string? body, _, _) in DraftSteps(gameData, q, monsterRooms, itemSources, itemDrops))
+        foreach ((_, int order, string? body, _, _) in DraftSteps(gameData, q, monsterRooms, itemSources, itemDrops))
         {
             // A pure flag-advance (no room, command, kill or item) carries nothing the
             // player can act on, so it's dropped from the draft rather than listed as an
@@ -284,24 +283,49 @@ internal static partial class QuestTextFormatter
         return lines;
     }
 
-    // Every step the draft considers for a quest, in checklist order: its body (null
-    // when it has nothing followable), whether the draft had a line for it before kill
-    // steps were read off the death-spell chain, and whether it is a gather line (the
-    // draft had none of those before them either).
-    private static IEnumerable<(int Order, string? Body, bool HadLineBefore, bool Gathers)> DraftSteps(
-        GameDataCache gameData, CrawledQuest q, IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms,
+    // The give-steps a tier's draft lists, inclusive; null for a single-part quest. A
+    // give-step ladder's tier gate (StepRangeStart of the next tier) is the reward
+    // hand-in of the tier before it — the Good ladder's `ask annora return` at 6 — so the
+    // draft ends each tier with it, as the hand-written guides do (user, 2026-10-17), and
+    // the next tier opens after it. StepRangeStart / StepRangeEnd themselves are left
+    // alone: the tier's complete value and the flag sync read them. A value ladder keeps
+    // its own span.
+    private static (int Start, int End)? DraftRange(CrawledQuest q)
+    {
+        if (q.StepRangeEnd <= 0) return null;
+        if (q.ProgressByValue || q.BandOrdinal <= 0) return (q.StepRangeStart, q.StepRangeEnd);
+        int start = q.BandOrdinal == 1 ? q.StepRangeStart : q.StepRangeStart + 1;
+        int end = q.StepRangeEnd == int.MaxValue ? int.MaxValue : q.StepRangeEnd + 1;
+        return (start, end);
+    }
+
+    // Every step the draft considers for a quest's flag, in checklist order: its place in
+    // the flag's whole draft, its body (null when it has nothing followable), whether
+    // the draft had a line for it before kill steps were read off the death-spell chain,
+    // and whether it is a gather line (the draft had none of those before them either).
+    // range filters to one tier's span; null takes every step.
+    private static IEnumerable<(int Position, int Order, string? Body, bool HadLineBefore, bool Gathers)> DraftSteps(
+        GameDataCache gameData, int flag, bool byAbilityValue, (int Start, int End)? range,
+        IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms,
         ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
     {
-        IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue);
-        foreach (QuestStep s in QuestItemGathering.Draft(gameData, steps, q.ProgressByValue, itemSources, itemDrops))
+        IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, flag, byAbilityValue);
+        IReadOnlyList<QuestStep> drafted = QuestItemGathering.Draft(gameData, steps, byAbilityValue, itemSources, itemDrops);
+        for (int position = 0; position < drafted.Count; position++)
         {
-            if (q.StepRangeEnd > 0 && (s.Order < q.StepRangeStart || s.Order > q.StepRangeEnd)) continue;
-            IEnumerable<QuestStep>? sameStep = q.ProgressByValue || s.Gathers
+            QuestStep s = drafted[position];
+            if (range is { } r && (s.Order < r.Start || s.Order > r.End)) continue;
+            IEnumerable<QuestStep>? sameStep = byAbilityValue || s.Gathers
                 ? null : steps.Where(o => !o.Gathers && o.Order == s.Order);
-            yield return (s.Order, StepOrNull(gameData, s, monsterRooms, sameStep),
+            yield return (position, s.Order, StepOrNull(gameData, s, monsterRooms, sameStep),
                 !s.Gathers && HadLineBeforeKillSteps(s), s.Gathers);
         }
     }
+
+    private static IEnumerable<(int Position, int Order, string? Body, bool HadLineBefore, bool Gathers)> DraftSteps(
+        GameDataCache gameData, CrawledQuest q, IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms,
+        ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops)
+        => DraftSteps(gameData, q.Flag, q.ProgressByValue, DraftRange(q), monsterRooms, itemSources, itemDrops);
 
     // Whether the draft listed this step when a kill was only told from a "Monster #N"
     // location: anything with a command, a room or monster to link, or an item changing
@@ -312,33 +336,41 @@ internal static partial class QuestTextFormatter
         || RoomLinks(s.Location).Length > 0
         || s.GrantedItems.Count > 0 || s.TurnInItems.Count > 0 || s.RequiredItems.Count > 0;
 
-    // For step ticks saved before then: where each checkbox of that draft sits in
-    // today's — the entry at an old checkbox number is its number now, or -1 when the
-    // step no longer has a line. A quest whose draft didn't change maps each number to
-    // itself. The gather lines count in today's numbering whatever indexes were at
+    // For step ticks saved against an older draft of one quest flag: where each of that
+    // draft's checkboxes, (tier, number), sits in today's, keyed by the old (tier,
+    // number). A step whose line is gone is absent. The older drafts are the one from
+    // before the kill lines (sinceKillSteps) and the one before the gather lines, both of
+    // which ran every tier over StepRangeStart..StepRangeEnd; today's adds lines and ends
+    // each tier with its reward hand-in, which moves that line onto the tier before
+    // (DraftRange). The gather lines count in today's numbering whatever indexes were at
     // hand, so the caller passes the ones the Quest tab drafts with.
-    public static IReadOnlyList<int> CheckboxesSinceKillSteps(GameDataCache gameData, CrawledQuest q,
+    public static IReadOnlyDictionary<(int Step, int Index), (int Step, int Index)> CheckboxMoves(
+        GameDataCache gameData, int flag, bool sinceKillSteps,
         ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
-        => CheckboxMap(gameData, q, itemSources, itemDrops, e => e.HadLineBefore);
-
-    // The same for ticks saved after kill steps but before the gather lines: every line
-    // of that draft is in today's, which only adds gather lines between them.
-    public static IReadOnlyList<int> CheckboxesSinceGatherSteps(GameDataCache gameData, CrawledQuest q,
-        ItemSourceIndex? itemSources = null, MonsterDropIndex? itemDrops = null)
-        => CheckboxMap(gameData, q, itemSources, itemDrops, e => !e.Gathers && e.Body is not null);
-
-    private static List<int> CheckboxMap(GameDataCache gameData, CrawledQuest q,
-        ItemSourceIndex? itemSources, MonsterDropIndex? itemDrops,
-        Func<(int Order, string? Body, bool HadLineBefore, bool Gathers), bool> wasLine)
     {
-        var map = new List<int>();
-        int now = 0;
-        foreach ((int Order, string? Body, bool HadLineBefore, bool Gathers) e in DraftSteps(gameData, q, null, itemSources, itemDrops))
+        List<CrawledQuest> tiers = QuestCrawler.Crawl(gameData, null).Where(c => c.Flag == flag).ToList();
+        var now = new Dictionary<int, (int Step, int Index)>();
+        foreach (CrawledQuest tier in tiers)
         {
-            if (wasLine(e)) map.Add(e.Body is null ? -1 : now);
-            if (e.Body is not null) now++;
+            int index = 0;
+            foreach (var e in DraftSteps(gameData, tier, null, itemSources, itemDrops))
+                if (e.Body is not null) now[e.Position] = (tier.Step, index++);
         }
-        return map;
+
+        var moves = new Dictionary<(int Step, int Index), (int Step, int Index)>();
+        foreach (CrawledQuest tier in tiers)
+        {
+            (int Start, int End)? oldRange = tier.StepRangeEnd > 0 ? (tier.StepRangeStart, tier.StepRangeEnd) : null;
+            int index = 0;
+            foreach (var e in DraftSteps(gameData, tier.Flag, tier.ProgressByValue, oldRange, null, itemSources, itemDrops))
+            {
+                bool wasLine = sinceKillSteps ? e.HadLineBefore : !e.Gathers && e.Body is not null;
+                if (!wasLine) continue;
+                if (now.TryGetValue(e.Position, out (int Step, int Index) target)) moves[(tier.Step, index)] = target;
+                index++;
+            }
+        }
+        return moves;
     }
 
     // Parse user-or-crawler step markdown into render rows. Each non-blank line is one

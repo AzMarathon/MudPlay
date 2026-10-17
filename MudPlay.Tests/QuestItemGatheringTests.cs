@@ -46,7 +46,9 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 931, "Name": "iron crown" },
           { "Number": 685, "Name": "gleaming dagger" },
           { "Number": 686, "Name": "Spirit Dagger of Goijar" },
-          { "Number": 687, "Name": "golden chest" }
+          { "Number": 687, "Name": "golden chest" },
+          { "Number": 688, "Name": "severed head of Goru-Nezar" },
+          { "Number": 689, "Name": "golden chest" }
         ]
         """;
 
@@ -60,7 +62,10 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 63, "Name": "Commander Markus", "DeathSpell": 0, "DropItem-0": 622, "DropItem%-0": 100 },
           { "Number": 64, "Name": "kobold king", "DeathSpell": 574, "DropItem-0": 931, "DropItem%-0": 100 },
           { "Number": 65, "Name": "orc captain", "DeathSpell": 0, "DropItem-0": 700, "DropItem%-0": 30 },
-          { "Number": 66, "Name": "spectral knight", "DeathSpell": 580 }
+          { "Number": 66, "Name": "spectral knight", "DeathSpell": 580 },
+          { "Number": 70, "Name": "chancellor annora", "DeathSpell": 0 },
+          { "Number": 71, "Name": "king kulgar", "DeathSpell": 0 },
+          { "Number": 72, "Name": "Goru-Nezar", "DeathSpell": 0, "DropItem-0": 688, "DropItem%-0": 100 }
         ]
         """;
 
@@ -102,9 +107,23 @@ public sealed class QuestItemGatheringTests : IDisposable
           { "Number": 5000, "Action": "100:giveitem 703\n", "Called From": "Textblock(rndm) #4999" },
           { "Number": 5010, "Action": "forge ore:takeitem 703:giveability 301 1\n", "Called From": "Room 14/7225" },
 
-          { "Number": 1500, "Action": "business:minlevel 10:failability 140:giveability 140 1\nreturn:checkability 140 3:takeitem 686:giveitem 687:giveability 140 4\n", "Called From": "Room 6/1387" },
-          { "Number": 1505, "Action": "forge:minlevel 20:takeitem 684:giveitem 685:giveability 140 2\n", "Called From": "Room 6/1357" },
-          { "Number": 1510, "Action": "checkability 140 2:takeitem 685:giveitem 686:giveability 140 3\n", "Called From": "Spell #580" }
+          { "Number": 1500, "Action": "business:minlevel 10:failability 140:giveability 140 1\nreport:minlevel 20:takeitem 685:giveitem 687:giveability 140 3\n", "Called From": "Room 6/1387" },
+          { "Number": 1505, "Action": "forge:checkability 140 1:takeitem 684:giveitem 685:giveability 140 2\n", "Called From": "Room 6/1357" },
+          { "Number": 1510, "Action": "checkability 140 3:giveitem 686:giveability 140 4\n", "Called From": "Spell #580" },
+          { "Number": 1520, "Action": "success:checkability 140 4:takeitem 686:giveability 140 5\n", "Called From": "Room 1/1333" },
+
+          { "Number": 1600, "Action": "missions:1601\nhead:1602\nsuccess:1603\n", "Called From": "Monster #70" },
+          { "Number": 1601, "Action": "", "Called From": "Textblock #1600" },
+          { "Number": 1602, "Action": "", "Called From": "Textblock #1600" },
+          { "Number": 1603, "Action": "", "Called From": "Textblock #1600" },
+          { "Number": 1611, "Action": "minlevel 20:failability 141:giveability 141 1\n", "Called From": "Textblock #1601" },
+          { "Number": 1612, "Action": "minlevel 30:takeitem 688:giveability 141 2\n", "Called From": "Textblock #1602" },
+          { "Number": 1613, "Action": "minlevel 40:giveability 141 5\n", "Called From": "Textblock #1603" },
+          { "Number": 1700, "Action": "business:1701\nreturn:1702\n", "Called From": "Monster #71" },
+          { "Number": 1701, "Action": "", "Called From": "Textblock #1700" },
+          { "Number": 1702, "Action": "", "Called From": "Textblock #1700" },
+          { "Number": 1711, "Action": "checkability 141 2:giveability 141 3\n", "Called From": "Textblock #1701" },
+          { "Number": 1712, "Action": "checkability 141 3:giveitem 689:giveability 141 4\n", "Called From": "Textblock #1702" }
         ]
         """;
 
@@ -141,6 +160,9 @@ public sealed class QuestItemGatheringTests : IDisposable
         [64] = new[] { new RoomKey(6, 834) },
         [65] = new[] { new RoomKey(7, 1363) },
         [66] = new[] { new RoomKey(6, 994) },
+        [70] = new[] { new RoomKey(1, 1333) },
+        [71] = new[] { new RoomKey(6, 1387) },
+        [72] = new[] { new RoomKey(3, 668) },
     };
 
     private static CrawledQuest Quest(GameDataCache cache, int flag) =>
@@ -279,25 +301,85 @@ public sealed class QuestItemGatheringTests : IDisposable
     }
 
     [Fact]
-    public void LaterTier_DraftsInTheSeedGuidesShape()
+    public void Tiers_DraftInTheSeedGuidesShape_EachEndingOnItsRewardHandIn()
     {
         GameDataCache cache = NewCache();
         (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
-        // Modelled on the seed's Good 3: what a step needs comes first, "(… required)";
-        // each kill names its drop; the tier opens with the tier it follows.
+        // Modelled on the seed's Good 2 / Good 3: what a step needs comes first, "(…
+        // required)"; each kill names its drop; the level-gated reward hand-in (`report`,
+        // the next tier's gate) closes the tier it rewards, and the next tier opens after
+        // it with the tier it follows (user, 2026-10-17).
         List<CrawledQuest> tiers = QuestCrawler.Crawl(cache, null).Where(q => q.Flag == 140).ToList();
         Assert.Equal(2, tiers.Count);
 
         Assert.Null(QuestTextFormatter.PriorTierLine(cache, tiers[0], q => $"Tier {q.BandOrdinal}"));
-        Assert.Equal("-Complete Tier 1 first-", QuestTextFormatter.PriorTierLine(cache, tiers[1], q => $"Tier {q.BandOrdinal}"));
-        Assert.Equal(new[] { "[] (6/1387) `business`" },
-            QuestTextFormatter.StepLines(cache, tiers[0], Placement, givers, drops));
         Assert.Equal(new[]
         {
+            "[] (6/1387) `business`",
             "[] (6/76) kill metallic monstrosity (gleaming shard)",
             "[] (6/1357) (gleaming shard required) `forge` (get gleaming dagger)",
-            "[] (6/994) (gleaming dagger required) kill spectral knight (Spirit Dagger of Goijar)",
-            "[] (6/1387) (Spirit Dagger of Goijar required) `return` (get golden chest)",
+            "[] (6/1387) (gleaming dagger required) `report` (get golden chest)",
+        }, QuestTextFormatter.StepLines(cache, tiers[0], Placement, givers, drops));
+
+        Assert.Equal("-Complete Tier 1 first-", QuestTextFormatter.PriorTierLine(cache, tiers[1], q => $"Tier {q.BandOrdinal}"));
+        Assert.Equal(new[]
+        {
+            "[] (6/994) kill spectral knight (Spirit Dagger of Goijar)",
+            "[] (1/1333) (Spirit Dagger of Goijar required) `success`",
+        }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
+
+        // Only where the draft draws the tier line moved: the tier's complete value is
+        // still read off its own give-step span.
+        Assert.Equal(2, tiers[0].CompleteValue);
+    }
+
+    [Fact]
+    public void TicksOnAMovedHandIn_FollowItOntoTheTierBefore()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+        // Ticked against the old drafts: tier 1 was `business`, `forge`; tier 2 opened
+        // with the `report` hand-in, then the knight, then `success`.
+        CharacterProfile profile = new()
+        {
+            QuestLog = new List<QuestProgress>
+            {
+                new(140, 10) { CheckedSteps = new List<int> { 1 } },
+                new(140, 20) { CheckedSteps = new List<int> { 0, 1 } },
+            },
+        };
+
+        Assert.True(QuestTickMigration.Apply(profile, cache, (f, s) => new QuestDefinition(f, s), out int moved, givers, drops));
+
+        Assert.Equal(2, moved);
+        Assert.Equal(new[] { 2, 3 }, profile.QuestLog.Single(p => p.Step == 10).CheckedSteps);
+        Assert.Equal(new[] { 0 }, profile.QuestLog.Single(p => p.Step == 20).CheckedSteps);
+    }
+
+    [Fact]
+    public void GoodLadderShape_Good2EndsOnTheHeadHandIn_Good3OnAnnorasSuccess()
+    {
+        GameDataCache cache = NewCache();
+        (ItemSourceIndex givers, MonsterDropIndex drops) = Indexes(cache);
+        // The user's own tier boundary (2026-10-17): Goru-Nezar's head and its hand-in to
+        // Annora close Good 2; Good 3 runs from King Kulgar's business to the success
+        // hand-in back at Annora. Flag 141 carries those lines with Paradigm's names.
+        List<CrawledQuest> tiers = QuestCrawler.Crawl(cache, null).Where(q => q.Flag == 141).ToList();
+        string Title(CrawledQuest q) => $"Good {q.BandOrdinal + 1}";
+
+        Assert.Equal(new[]
+        {
+            "[] (1/1333) `ask chancellor annora missions`",
+            "[] (3/668) kill Goru-Nezar (severed head of Goru-Nezar)",
+            "[] (1/1333) (severed head of Goru-Nezar required) `ask chancellor annora head`",
+        }, QuestTextFormatter.StepLines(cache, tiers[0], Placement, givers, drops));
+
+        Assert.Equal("-Complete Good 2 first-", QuestTextFormatter.PriorTierLine(cache, tiers[1], Title));
+        Assert.Equal(new[]
+        {
+            "[] (6/1387) `ask king kulgar business`",
+            "[] (6/1387) `ask king kulgar return` (get golden chest)",
+            "[] (1/1333) `ask chancellor annora success`",
         }, QuestTextFormatter.StepLines(cache, tiers[1], Placement, givers, drops));
     }
 }
