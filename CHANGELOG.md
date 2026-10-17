@@ -1,5 +1,9 @@
 # Version history
 
+## 3.183.23
+
+- Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
 ## 3.183.22
 
 - Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
