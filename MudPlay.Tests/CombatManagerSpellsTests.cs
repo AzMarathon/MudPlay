@@ -423,8 +423,8 @@ public sealed class CombatManagerSpellsTests
 
     // Report paradigm-20260923-103938: a room-attack spell (hsto) is a persistent room
     // channel — once cast while engaged it hits every monster each round, survivors and
-    // roamers alike, and must NOT be recast (the engine has no dedup, so a redundant send
-    // breaks+restarts it: *Combat Off* + *Combat Engaged*). After the primary target dies
+    // roamers alike, so it isn't recast (a re-send costs nothing but adds nothing).
+    // After the primary target dies
     // and the room re-displays with survivors still ≥ MinEnemies, the round must re-anchor
     // WITHOUT re-issuing the room spell.
     [Fact]

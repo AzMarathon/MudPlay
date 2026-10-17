@@ -2291,8 +2291,9 @@ public sealed partial class CombatManager : IDisposable
         // (hsto) is on record for this engagement (_roomChannelSpell) but the round's
         // target was just cleared by a kill (_currentTarget null — the guard above
         // couldn't catch it), the AoE is STILL hitting every survivor and roamer each
-        // round; re-issuing it would break+restart the channel (no engine-side dedup —
-        // report paradigm-20260923-103938). If the chooser, peeked against the fresh
+        // round, so there is nothing to re-issue (a re-send would cost nothing but add
+        // nothing — GAME_MECHANICS "Room-attack spells: cast bare, persistent
+        // channel"). If the chooser, peeked against the fresh
         // roster, would STILL pick that same room spell, re-anchor the round to a
         // surviving mob so the per-round heartbeat keeps driving the channel (tally, no
         // send) and return without dispatching. If it now picks something else — the
@@ -2317,8 +2318,7 @@ public sealed partial class CombatManager : IDisposable
                 _castingSpellTarget = anchor.RawName;
                 _log?.Combat(LogCategory,
                     $"room-attack channel '{channelSpell}' still live — re-anchoring to "
-                    + $"{anchor.RawName} without recast (the AoE already covers the room; "
-                    + "recasting would break/restart it)");
+                    + $"{anchor.RawName} without recast (the AoE already covers the room)");
                 return;
             }
             _roomChannelSpell = null;   // conditions lapsed — channel over, let the chain switch off it
