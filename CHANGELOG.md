@@ -1,5 +1,13 @@
 # Version history
 
+## 3.183.13
+
+- A line whose condition was left out by who can cast it here is logged at Info, naming both sides
+- Bug report shows the who-casts index's load, why the room list isn't whole, and the last narrowed line
+- A failed who-casts index build is logged as a warning and shown in the bug report
+- Bug report shows the broadcast channel's answer and refusal counts this minute, without names
+- A negated cast's log line counts the records sharing the spell's name instead of listing them
+
 ## 3.183.9
 
 - Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing

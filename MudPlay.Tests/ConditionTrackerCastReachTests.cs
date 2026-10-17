@@ -729,4 +729,95 @@ public sealed class ConditionTrackerCastReachTests : IDisposable
             cannotSee: false, rosterIsWhole: true, Known));
         Assert.Null(CastReach.MonstersSeen(Roster("snow leopard"), cannotSee: false, rosterIsWhole: true, Known));
     }
+
+    // ----- what the log and the bug report say of it -------------------
+
+    // A record left out is a condition the client does not hold, so it is said at
+    // Info, with Debug off: one line for the line read, naming both sides.
+    [Fact]
+    public void ANarrowedLine_IsLoggedOnceAtInfo_AndKeptForTheBugReport()
+    {
+        _log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = false };
+        AddTheFreezingFamily();
+        Monsters("ice sorceress");
+
+        Feed("You are freezing");
+
+        LogEntry said = Assert.Single(_log.Snapshot(), e => e.Message.Contains("shared by several spells", StringComparison.Ordinal));
+        Assert.Equal(LogSeverity.Info, said.Severity);
+        Assert.Contains("applied line 'You are freezing'", said.Message, StringComparison.Ordinal);
+        Assert.Contains("cast here: 'ice storm' (ice sorceress here)", said.Message, StringComparison.Ordinal);
+        Assert.Contains("'glacial mist' (Confused)", said.Message, StringComparison.Ordinal);
+        Assert.Contains("'galacial mist' (Confused)", said.Message, StringComparison.Ordinal);
+
+        ConditionTracker.Narrowing narrowed = Assert.IsType<ConditionTracker.Narrowing>(_tracker.LastNarrowed);
+        Assert.Equal("You are freezing", narrowed.Line);
+        Assert.Equal("'ice storm' (ice sorceress here)", narrowed.Kept);
+        Assert.Contains("'galacial mist' (Confused)", narrowed.LeftOut, StringComparison.Ordinal);
+    }
+
+    // A room spell repeats the same line every tick: the first narrowing is said at
+    // Info, the same one again within a minute only at Debug, and once the minute is
+    // out it is Info again.
+    [Fact]
+    public void TheSameNarrowingRepeated_IsInfoOnce_ThenDebugWithinTheWindow()
+    {
+        _log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        AddTheFreezingFamily();
+        Monsters("ice sorceress");
+        DateTimeOffset start = DateTimeOffset.UtcNow;
+
+        FeedAt("You are freezing", start);
+        FeedAt("You are freezing", start.AddSeconds(10));
+        FeedAt("You are freezing", start.AddSeconds(80));
+
+        List<LogSeverity> said = _log.Snapshot()
+            .Where(e => e.Message.Contains("shared by several spells", StringComparison.Ordinal))
+            .Select(e => e.Severity).ToList();
+        Assert.Equal(new[] { LogSeverity.Info, LogSeverity.Debug, LogSeverity.Info }, said);
+        Assert.Equal(start.AddSeconds(80), _tracker.LastNarrowed!.At);
+    }
+
+    [Fact]
+    public void ALineNothingIsLeftOutOf_LogsNoNarrowing()
+    {
+        AddTheFreezingFamily();
+        Monsters();
+
+        Feed("You are freezing");
+
+        Assert.DoesNotContain(_log.Snapshot(), e => e.Message.Contains("shared by several spells", StringComparison.Ordinal));
+        Assert.Null(_tracker.LastNarrowed);
+    }
+
+    [Fact]
+    public void WhyRosterNotWhole_SaysWhatKeepsTheRosterFromCounting()
+    {
+        RoomEntitiesObservation seen = Roster("ice sorceress");
+        Assert.Null(CastReach.WhyRosterNotWhole(seen, false, false, false, true, null, Known));
+        Assert.Equal("the room is dark", CastReach.WhyRosterNotWhole(seen, true, false, false, true, null, Known));
+        Assert.Equal("the room was entered blind", CastReach.WhyRosterNotWhole(seen, false, true, false, true, null, Known));
+        Assert.Equal("the character is blind", CastReach.WhyRosterNotWhole(seen, false, false, true, true, null, Known));
+        Assert.Equal("no room list has been read", CastReach.WhyRosterNotWhole(null, false, false, false, true, null, Known));
+        Assert.Equal("a summon: 'x'", CastReach.WhyRosterNotWhole(seen, false, false, false, false, "a summon: 'x'", Known));
+        Assert.Equal("it lists 'snow leopard', a monster the game data has none of",
+            CastReach.WhyRosterNotWhole(Roster("snow leopard"), false, false, false, true, null, Known));
+        Assert.Equal("it lists 'a shape', who can't be placed",
+            CastReach.WhyRosterNotWhole(
+                new RoomEntitiesObservation("Also here: …",
+                    new[] { new RoomEntity("a shape", "a shape", EntityKind.Unknown, null) }, DateTimeOffset.UtcNow),
+                false, false, false, true, null, Known));
+    }
+
+    // After a link drop the classifier has no roster and says why; that reason, not
+    // the bare "no room list", is what the report shows.
+    [Fact]
+    public void WhyRosterNotWhole_WithNoRoster_GivesTheClassifiersReason()
+    {
+        Assert.Equal("the game was left; no room has been read since",
+            CastReach.WhyRosterNotWhole(
+                null, false, false, false, false, "the game was left; no room has been read since", Known));
+        Assert.Equal("no room list has been read",
+            CastReach.WhyRosterNotWhole(null, false, false, false, false, null, Known));
+    }
 }

@@ -116,11 +116,20 @@ public sealed class RoomEntityClassifier : IDisposable
     // gate asks who is here to fight, and a roster that is short does it no harm.
     public bool RosterIsWhole { get; private set; }
 
+    // Why RosterIsWhole is false, for the bug report; null while it is true.
+    public string? RosterNotWholeBecause { get; private set; } = "no room has been read yet";
+
+    private void SetRosterWhole(bool whole, string? because = null)
+    {
+        RosterIsWhole = whole;
+        RosterNotWholeBecause = whole ? null : because;
+    }
+
     // Someone may be in the room whom the roster does not name.
     public void NoteUnlistedArrival(string why)
     {
         if (!RosterIsWhole) return;
-        RosterIsWhole = false;
+        SetRosterWhole(false, why);
         _log?.Debug(LogCategory, $"roster no longer known to be whole — {why}");
     }
 
@@ -267,7 +276,7 @@ public sealed class RoomEntityClassifier : IDisposable
         RoomEntitiesObservation obs = new(rawFirst, entities, DateTimeOffset.Now);
         Current = obs;
         _lastAlsoHereAt = obs.At;
-        RosterIsWhole = true;
+        SetRosterWhole(true);
         EntitiesObserved?.Invoke(obs);
     }
 
@@ -297,7 +306,7 @@ public sealed class RoomEntityClassifier : IDisposable
         RoomEntitiesObservation obs = new(rawLine, entities, DateTimeOffset.Now);
         Current = obs;
         _lastAlsoHereAt = obs.At;
-        RosterIsWhole = true;
+        SetRosterWhole(true);
         EntitiesObserved?.Invoke(obs);
     }
 
@@ -821,7 +830,7 @@ public sealed class RoomEntityClassifier : IDisposable
             At: DateTimeOffset.Now,
             Source: RoomObservationSource.RoomChange);
         Current = obs;
-        RosterIsWhole = false;
+        SetRosterWhole(false, "a room too dark to list who is in it was entered");
         _log?.Debug(LogCategory, keep is { } kept
             ? $"dark advance — roster reset, kept active target {kept.ResolvedName}"
             : "dark advance — roster reset to empty");
@@ -848,7 +857,7 @@ public sealed class RoomEntityClassifier : IDisposable
             At: DateTimeOffset.Now,
             Source: RoomObservationSource.RoomChange);
         Current = wiped;
-        RosterIsWhole = shownEmpty;
+        SetRosterWhole(shownEmpty, "the room changed and its list was dropped");
         EntitiesObserved?.Invoke(wiped);
     }
 
@@ -870,7 +879,7 @@ public sealed class RoomEntityClassifier : IDisposable
         _alsoHereRawFirst = null;
         _lastAlsoHereAt = null;
         Current = null;
-        RosterIsWhole = false;
+        SetRosterWhole(false, "the game was left; no room has been read since");
     }
 
     // Look again at the names the roster couldn't place. A player we had no record

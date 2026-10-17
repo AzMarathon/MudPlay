@@ -106,6 +106,8 @@ public sealed class SpellCasterIndex
     // One build at a time, so the build of the later load is the one left standing.
     private readonly object _buildGate = new();
     private volatile Snapshot? _snapshot;
+    // Why the last build threw, for the bug report; null once one succeeds.
+    private volatile string? _failure;
 
     // rooms: the active set's rooms, as the room graph holds them. textblocks: the
     // active set's TBInfo entries; without them no textblock is known to cast.
@@ -137,6 +139,7 @@ public sealed class SpellCasterIndex
     // tables and the textblocks, and walks the room graph.
     public void Warm()
     {
+        GameDataCache.Load? building = null;
         try
         {
             lock (_buildGate)
@@ -144,6 +147,7 @@ public sealed class SpellCasterIndex
                 // Read before the build: a switch that overtakes it leaves a result
                 // no lookup will take for the new set's.
                 GameDataCache.Load load = _cache.ActiveLoad;
+                building = load;
                 // The cache's load moves before the textblock store reloads. A build
                 // begun in between would read the last set's textblocks; it is left
                 // unbuilt, and the graph load that follows the store's warms again.
@@ -156,6 +160,7 @@ public sealed class SpellCasterIndex
                 Tally tally = new();
                 Snapshot built = Build(load, tally);
                 _snapshot = built;
+                _failure = null;
                 if (load.Set is not null)
                     _log?.Info("SpellCasterIndex",
                         $"Spell casters in '{load.Set}': {built.BySpell.Count} spells, "
@@ -170,12 +175,39 @@ public sealed class SpellCasterIndex
                         + $"Built in {clock.ElapsedMilliseconds} ms.");
             }
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (building is { } overtaken && overtaken != _cache.ActiveLoad)
         {
-            // The set switched again and the room graph was cleared under the walk;
-            // that load warms its own.
-            _log?.Debug("SpellCasterIndex", $"build overtaken by a set switch ({ex.Message})");
+            // The set switched again and its data was torn down under the walk, which
+            // can throw any type; that load warms its own.
+            _log?.Debug("SpellCasterIndex", $"build overtaken by a set switch ({ex.GetType().Name}: {ex.Message})");
         }
+        catch (Exception ex)
+        {
+            // Runs on a worker nobody awaits: a fault left to it surfaces only later,
+            // through the crash reporter's hook. The load stays unbuilt, so nothing
+            // is ruled out, which is safe; the log and the bug report say so.
+            _failure = $"{ex.GetType().Name}: {ex.Message}";
+            _log?.Warn("SpellCasterIndex",
+                $"Spell casters for '{building?.Set}' not built ({_failure}); no shared applied line is read by who casts it here.");
+        }
+    }
+
+    // For the bug report: whether the index stands for the load the cache is serving.
+    public string Describe()
+    {
+        GameDataCache.Load serving = _cache.ActiveLoad;
+        if (serving.Set is null) return "no game data set active";
+        string failed = _failure is { } why ? $"; the last build failed ({why})" : string.Empty;
+        Snapshot? published = _snapshot;
+        if (published is not { } built || built.Load != serving)
+        {
+            string last = published is { Load.Set: { } lastSet }
+                ? $"; last built for '{lastSet}' (load {published.Load.Generation})" : string.Empty;
+            return $"not built for '{serving.Set}' (load {serving.Generation}){last}{failed}: nothing is ruled out";
+        }
+        return $"built for '{serving.Set}' (load {serving.Generation}): {built.BySpell.Count} spells, "
+            + $"{built.BySpell.Values.Count(static c => c.OnlyMonstersAndRooms)} cast only by monsters or rooms, "
+            + $"{built.BySpell.Values.Count(static c => c.PlayersAtFoes)} by those or a player at a foe{failed}";
     }
 
     private Snapshot Build(GameDataCache.Load load, Tally tally)

@@ -1342,8 +1342,18 @@ public sealed class RemoteCommandManager : IDisposable
         return true;
     }
 
-    // For tests: how many speakers the two broadcast bounds are holding a time for.
-    internal int BroadcastSpeakersRememberedForTests => _broadcastAnswers.Remembered + _broadcastRefusals.Remembered;
+    // For the bug report: the turns spent this minute of the two broadcast bounds,
+    // each out of BroadcastAnswerBudget.AnswersPerWindow, and how many speakers they
+    // hold a time for (a speaker past the minute is dropped at the next look). Counts
+    // only: the speakers are other players.
+    public readonly record struct BroadcastAnswerCounts(int Permitted, int Refused, int Remembered);
+
+    public BroadcastAnswerCounts BroadcastAnswers()
+    {
+        DateTimeOffset now = Now();
+        return new(_broadcastAnswers.SpentAt(now), _broadcastRefusals.SpentAt(now),
+            _broadcastAnswers.Remembered + _broadcastRefusals.Remembered);
+    }
 
     // True when speaker is the local character (a public-channel self-echo). The gang
     // echo carries a single-word given name, while our own name may be "Given Family", so
