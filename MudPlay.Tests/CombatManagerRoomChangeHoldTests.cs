@@ -83,10 +83,25 @@ public sealed class CombatManagerRoomChangeHoldTests
         // one-shot waits until the test fires it.
         public TimeSpan? ToRound { get; set; } = TimeSpan.FromSeconds(3);
         private Action? _deadline;
+        public int DeadlinesScheduled { get; private set; }
         public void FireDeadline() => _deadline?.Invoke();
 
-        public Harness(string rooms = Rooms)
+        // With deferPost, what the combat engine posts waits in Posted until the test
+        // runs it (DrainPosted), as the UI dispatcher runs it after the current flush.
+        public List<Action> Posted { get; } = new();
+        private readonly bool _deferPost;
+        public void DrainPosted()
         {
+            List<Action> due = new(Posted);
+            Posted.Clear();
+            foreach (Action a in due) a();
+        }
+
+        public DarkRoomCombatWatcher DarkRoom { get; }
+
+        public Harness(string rooms = Rooms, bool deferPost = false)
+        {
+            _deferPost = deferPost;
             _root = Path.Combine(Path.GetTempPath(), "mudplay-roomchange-hold-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
             File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
@@ -121,12 +136,15 @@ public sealed class CombatManagerRoomChangeHoldTests
                 readSettings: () => Settings,
                 isEnabled: () => true,
                 readOwnGivenName: () => "MudPlay",
-                post: a => a(),
+                post: a => { if (_deferPost) Posted.Add(a); else a(); },
                 log: Log);
+            DarkRoom = new DarkRoomCombatWatcher(Router, Tracker, Classifier,
+                currentTarget: () => Combat.CurrentTarget, log: Log);
+            Router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.RoomSpellKill += MonsterDeaths.NoteRoomSpellKill;
             Combat.SetFearGate(() => Feared);
-            Combat.SetHoldDeadline(() => ToRound, (_, due) => _deadline = due);
+            Combat.SetHoldDeadline(() => ToRound, (_, due) => { _deadline = due; DeadlinesScheduled++; });
             // As AppServices and the main window wire them.
             Tracker.StateChanged += t =>
             {
@@ -182,6 +200,7 @@ public sealed class CombatManagerRoomChangeHoldTests
         public void Dispose()
         {
             Entry.Dispose();
+            DarkRoom.Dispose();
             Combat.Dispose();
             MonsterDeaths.Dispose();
             Classifier.Dispose();
@@ -458,8 +477,8 @@ public sealed class CombatManagerRoomChangeHoldTests
     [Fact]
     public void FollowHoldNothingPlaced_DeadlineTakesTheLeadersTarget()
     {
-        // A re-display with no exits line (a blind character's) places nothing, so the
-        // pick waits for the deadline; it still goes onto the leader's target.
+        // A display read to its "Also here:" with no exits line after it places nothing,
+        // so the pick waits for the deadline; it still goes onto the leader's target.
         using Harness h = new();
         FollowFightOnTheCraterFloor(h);
 
@@ -499,21 +518,94 @@ public sealed class CombatManagerRoomChangeHoldTests
     }
 
     [Fact]
-    public void FightSeenInTheNewRoomBeforeItsExitsLine_IsThatRoomsFight()
+    public void FightSeenAfterAnUnplacedRead_IsThisRoomsFight()
     {
-        // After a teleport the follow hold waits on the new room. A party member's hit
-        // there, read before the exits line, is this room's fight: a monster walking in
-        // is picked at once, not held.
+        // A read nothing placed holds the follow pick. A party member's hit seen after
+        // it is this room's fight, so a monster walking in is picked at once, onto the
+        // leader's last target.
         using Harness h = new();
-        FightInTheTunnel(h);
-        h.Settings.AttackTiming = AttackTiming.Default;
-        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+        FollowFightOnTheCraterFloor(h);
 
-        h.Wire("\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton, cave bear, Cidir.");
+        h.Wire("\u001b[1;36mCrater Floor\u001b[0m", "Also here: cave bear, giant skeleton, Cidir.");
         Assert.Equal(1, h.Punches);                                 // the follow hold
         h.Wire("Thresh stabs cave bear for 50 damage!");
         Assert.Equal(1, h.Punches);
         h.Wire("A tunnel horror stomps in from the east.");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+    }
+
+    // FollowLeader in the Volcano Tunnel: the leader opens on the tunnel horror, we
+    // follow, the leader is seen hitting the giant skeleton, and the horror dies.
+    private static void FollowFightInTheTunnel(Harness h, string exits)
+    {
+        h.Settings.AttackTiming = AttackTiming.Default;
+        h.Settings.TargetPriority = TargetPriority.FollowLeader;
+        h.ShowRoom("Lava Chamber", null, "south");
+        h.SendMove(Direction.S);
+        h.ShowRoom("Volcano Tunnel", "tunnel horror, cave bear, giant skeleton, Cidir", exits);
+        h.Wire("Cidir moves to attack tunnel horror.");
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Wire("*Combat Engaged*", "Cidir smashes giant skeleton for 80 damage!", "You gain 100 experience.");
+        Assert.Equal(1, h.Punches);
+    }
+
+    // The exits a room lists change in place (GAME_MECHANICS "Hidden exits — `sea
+    // <dir>` reveal wording", "Door and gate barriers in the room display"): the room
+    // shown again with more or fewer of them is still this room.
+    [Theory]
+    [InlineData("north", "north, secret passage east", null)]                      // a search found it
+    [InlineData("north, secret passage east", "north", null)]                      // it hid again
+    [InlineData("north", "north, south", "The exit to the south just opened!")]   // a timed exit
+    public void SameRoomShownAgain_ExitsChangedInPlace_FollowTakesTheLeadersTargetAtOnce(
+        string before, string after, string? line)
+    {
+        using Harness h = new();
+        FollowFightInTheTunnel(h, before);
+
+        if (line is not null) h.Wire(line);
+        h.ShowRoom("Volcano Tunnel", "cave bear, giant skeleton, Cidir", after);
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(2, h.Punches);
+    }
+
+    [Fact]
+    public void DarkRoomLitAfterTheFight_IsThisRoomsFight()
+    {
+        // We step into a room too dark to show, fight there, and it's lit: the display
+        // that finally shows is the room we stepped into, not the room shown before it.
+        using Harness h = new();
+        h.ShowRoom("Volcano Tunnel", null, "north");
+        h.SendMove(Direction.N);
+        h.Wire("The room is very dark - you can't see anything.");
+        h.Wire("Thresh moves to attack tunnel horror.");           // reveals it in the dark
+        h.FireDeadline();                                           // the hold its reveal latched
+        Assert.Equal("pu tunnel horror", h.LastSent);
+        h.Wire("*Combat Engaged*", "You gain 100 experience.", "*Combat Off*");
+
+        h.ShowRoom("Lava Chamber", "giant skeleton", "south");
+        Assert.Equal("pu giant skeleton", h.LastSent);
+        Assert.Equal(2, h.Punches);
+    }
+
+    [Fact]
+    public void ReleaseForARoomShownAgain_DoesNotEndTheNextRoomsHold()
+    {
+        // The room is shown again and its release is posted; in the same flush we're
+        // teleported, and the next room's roster latches a hold of its own. The posted
+        // release is for the room before: it leaves that hold and its deadline alone.
+        using Harness h = new(deferPost: true);
+        FightInTheTunnel(h);
+        h.Wire("\u001b[1;36mVolcano Tunnel\u001b[0m", "Also here: cave bear.", "Obvious exits: north.");
+        h.Wire("\u001b[1;36mObsidian Hall\u001b[0m", "Also here: giant skeleton.");
+        int scheduled = h.DeadlinesScheduled;
+
+        h.DrainPosted();
+        Assert.Equal(1, h.Punches);
+        Assert.Equal(scheduled, h.DeadlinesScheduled);              // not ended and re-armed
+        h.Wire("Obvious exits: east.");
+        h.DrainPosted();
+        Assert.Equal(1, h.Punches);
+        h.FireDeadline();
         Assert.Equal("pu giant skeleton", h.LastSent);
     }
 }

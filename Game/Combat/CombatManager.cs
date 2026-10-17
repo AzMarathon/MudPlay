@@ -1834,6 +1834,7 @@ public sealed partial class CombatManager : IDisposable
     private void LeaveRoomFight()
     {
         _lastRoomLeaveAt = DateTimeOffset.Now;
+        _lastShownRoom = null;
         ForgetRoomFight();
         DisarmHoldDeadlineKeepingHeldPick();
     }
@@ -5091,13 +5092,19 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // The last room display we were shown, not counting a `look <direction>` peek.
+    // Null once we've left the room it showed (LeaveRoomFight): the display of a room
+    // we stepped into, read later (a dark room lit, a move's display hidden as a
+    // peek), is that room's, and the move already dropped the fight before it.
     private RoomObservation? _lastShownRoom;
 
-    // A display that shows the room we were last shown (the same name, and the same
-    // exits listed) is taken for that room; any other display is another room. Two
-    // rooms alike in both can't be told apart, and are read as one. This places the
-    // fight on record (see _rosterRoomPlaced) without the tracker, which can't place
-    // a room in a grid of like rooms or in an unmapped area.
+    // A display with the room's name, whose exits either take in all of those shown
+    // last or are all among them, is taken for the room shown last: the exits listed
+    // change in place (a search reveals a secret passage, a found exit hides again, a
+    // timed exit or a lever opens one), and the tracker's own match lets them differ
+    // the same way. Any other display is another room. Rooms alike that way can't be
+    // told apart, and are read as one. This places the fight on record (see
+    // _rosterRoomPlaced) without the tracker, which can't place a room in a grid of
+    // like rooms or in an unmapped area.
     private void PlaceRoomFight(RoomObservation shown)
     {
         RoomObservation? last = _lastShownRoom;
@@ -5106,18 +5113,16 @@ public sealed partial class CombatManager : IDisposable
         bool rosterReadHere = !_rosterRoomPlaced;
         _rosterRoomPlaced = true;
         if (!_fightUnderwayHere) return;
-        if (last is { } before
-            && string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
-            && before.Exits.SetEquals(shown.Exits))
+        if (last is not { } before
+            || (string.Equals(before.Name, shown.Name, StringComparison.OrdinalIgnoreCase)
+                && (before.Exits.IsSubsetOf(shown.Exits) || shown.Exits.IsSubsetOf(before.Exits))))
         {
             if (rosterReadHere) ReleaseHoldForFightHere();
             return;
         }
-        // Another room. A roster read in this display may already have seen the new
-        // room's fight (a party damage line), which stays; with no roster read in it,
-        // the room listed nobody, and the fight is all the room before's (a death or a
-        // teleport into an empty room, and a monster that walks in later opens it).
-        if (rosterReadHere && _roomStateAt >= _rosterReadAt) return;
+        // Another room: the fight is the room before's, whether or not this display
+        // lists anyone (a monster walking into a room shown empty after a death or a
+        // teleport opens it).
         _log?.Combat(LogCategory,
             $"'{shown.Name}' shown with no move of ours, unlike the room before — the fight seen there isn't this room's");
         ForgetRoomFight();
@@ -5126,13 +5131,16 @@ public sealed partial class CombatManager : IDisposable
     // The room was shown again: a hold latched on its roster only because the fight
     // on record wasn't yet placed here is let go, and the pick goes out as mid-fight
     // picks do. Posted, as NoteRoomLeft's re-look is, so the tracker and the roster
-    // finish with this display before the pick reads them.
+    // finish with this display before the pick reads them. A roster read since (the
+    // next room's, in the same flush) has a hold of its own, which this doesn't end.
     private void ReleaseHoldForFightHere()
     {
         if (!_awaitingNotLast && !_awaitingFollowAnnounce) return;
+        DateTimeOffset releasedFor = _rosterReadAt;
         _post(() =>
         {
-            if (_disposed || !_fightUnderwayHere || (!_awaitingNotLast && !_awaitingFollowAnnounce)) return;
+            if (_disposed || _rosterReadAt != releasedFor || !_fightUnderwayHere
+                || (!_awaitingNotLast && !_awaitingFollowAnnounce)) return;
             if (!Fighting() || _currentTarget is not null || _classifier.Current is not { } obs) return;
             _log?.Combat(LogCategory,
                 "the room was shown again with no move of ours — the fight seen here is this room's; "
