@@ -434,6 +434,41 @@ public sealed class PartyDeathRosterCleanupTests
         Assert.Contains("invite Raijin\r", h.Wire);
     }
 
+    // One echo answers the client's uninvite; the user's own uninvite of the same
+    // player moments later is the user's, and still blocks auto-invite.
+    [Fact]
+    public void UsersUninvite_RightAfterTheClients_StillSuppresses()
+    {
+        using Harness h = Leading();
+        h.Players.RecordObservation("Raijin", null, null, null, null, null, null, h.Clock);
+        h.Players.EditCustomization("Raijin", new PlayerCustomization(InviteToPartyIfSeen: true, JoinPartyIfInvited: false));
+        h.Line("Raijin is dead.");
+        h.ParReply(null, Harness.Invited("Raijin"), Harness.Row("Bob"), Harness.Row("Cid"));
+        h.Line("Raijin has been removed from your followers.");   // the client's
+
+        h.Clock += TimeSpan.FromSeconds(10);
+        h.Line("Raijin has been removed from your followers.");   // the user's
+        h.Clock += TimeSpan.FromMinutes(5);
+        h.Line("Also here: Raijin.");
+
+        Assert.DoesNotContain("invite Raijin\r", h.Wire);
+    }
+
+    // Following again while the `par` is still held back: back in the party, so
+    // a later [Invited] slot (a teleport split) isn't uninvited for the death.
+    [Fact]
+    public void FollowingAgainWhileTheParIsHeld_IsNotUninvited()
+    {
+        using Harness h = Leading();
+        h.Poller.MasterSwitchOff = () => true;
+        h.Line("Raijin is dead.");
+        h.Line("Raijin started to follow you.");
+        Assert.Empty(h.Cleanup.AwaitingUninvite);
+
+        h.ParReply(null, Harness.Invited("Raijin"), Harness.Row("Bob"), Harness.Row("Cid"));
+        Assert.Empty(h.Uninvites);
+    }
+
     // The user's own uninvite still suppresses, as before.
     [Theory]
     [InlineData(true)]

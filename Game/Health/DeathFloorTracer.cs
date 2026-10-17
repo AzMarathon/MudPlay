@@ -7,10 +7,11 @@ namespace MudPlay.Game.Health;
 // Traces a realm's negative-HP death floor and refines RealmProfile.PlayerDiesAtHp
 // toward it from HP readings the character survived. The seed (-25) is only a
 // guess; both paths only ever lower it, to one below a survived reading:
-//   1. The last HP read before a clean *slow* death (RecordDeath). The HP the
-//      death came at is never printed: the prompt before the death line is the
-//      last HP the character lived through, so it proves only that the floor is
-//      below it.
+//   1. The last HP read before a clean *slow* death (RecordDeath). It is taken
+//      as an HP the character lived through, so it proves only that the floor is
+//      below it. Whether a bleed-out's last prompt can show the floor itself is
+//      not confirmed (GAME_MECHANICS "Death threshold & consequences"); if it
+//      can, the floor this gives is one HP too deep, the safe side.
 //   2. A *live* reading deep in the bleeding-out band that a later in-band
 //      prompt proves was survived — a hard hit we lived through is a valid lower
 //      bound even though it never qualifies as a slow death (NoteHp).

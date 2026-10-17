@@ -113,6 +113,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         // Ahead of PartyManager, whose [Invited] row for the invite would otherwise
         // let the pending uninvite go out on that same line.
         _subs.Add(router.Subscribe(KnownPatterns.PartyYouInvited, OnInvited, tieBreak: 1));
+        _subs.Add(router.Subscribe(KnownPatterns.PartyFollowsYou, OnFollowsYou));
         _manager.ParReplyRead += OnParReplyRead;
         _coordinator.GatesChanged += OnGatesChanged;
         _party.Members.CollectionChanged += OnMembersChanged;
@@ -193,15 +194,25 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         Note(NowProvider(), $"{given} was invited again after their death: their [Invited] slot is no longer uninvited.");
     }
 
+    // "<Name> started to follow you." — a dead member back in the party, also while
+    // the `par` that would show their slot is still held back.
+    private void OnFollowsYou(MatchResult result)
+    {
+        if (result.Groups.Count == 0) return;
+        string given = GivenNameOf(result.Groups[0]);
+        if (!_pendingDeaths.Remove(given)) return;
+        Note(NowProvider(), $"{given} is following again after their death: not uninvited.");
+    }
+
     // Whether the game's "<Name> has been removed from your followers." answers an
     // uninvite of ours, for a dead member's slot, rather than the user's.
     public bool UninvitedForDeath(string name)
     {
         string given = GivenNameOf(name);
         if (!_ownUninvites.TryGetValue(given, out DateTimeOffset at)) return false;
-        if (NowProvider() - at <= OwnUninviteEchoWindow) return true;
+        // One echo per uninvite: a later one for the same name is the user's.
         _ownUninvites.Remove(given);
-        return false;
+        return NowProvider() - at <= OwnUninviteEchoWindow;
     }
 
     private void OnGatesChanged() => TryCleanup();

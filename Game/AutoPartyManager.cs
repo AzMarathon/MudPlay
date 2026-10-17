@@ -147,6 +147,20 @@ public sealed class AutoPartyManager : IDisposable
     private readonly HashSet<string> _reformPendingInvite =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // The members a party-splitting teleport split off (NotePartySplitTeleport),
+    // while their reform is in hand. Their `@join` nag is limited to
+    // SplitReformJoinNags, and their wait doesn't run out before those nags have
+    // gone unanswered (user, 2026-10-17: "it should invite, wait for the @join nag
+    // to kick in. After the 3 nags, if they don't join, then follow the behavior
+    // we have in the client"). A split leaves them [Invited], which is no reason
+    // to give up on them sooner.
+    private readonly HashSet<string> _splitReform =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // How many `@join` nags a member a teleport split off is sent before the wait
+    // for them may run out.
+    public const int SplitReformJoinNags = 3;
+
     // A party-splitting-teleport reform stays "settling" for a short grace beyond
     // the last member's rejoin. The final follow-confirmation clears the reform
     // sets one beat BEFORE TrapDelegationManager sees the join (PartyManager
@@ -254,6 +268,8 @@ public sealed class AutoPartyManager : IDisposable
         public DateTime InvitedAt { get; set; }
         public DateTime? LastJoinAt { get; set; }
         public int JoinSends { get; set; }
+        // No more than this many sends, when set (a teleport-split member's).
+        public int? MaxSends { get; set; }
         // True once the target telepathed back {Ok} — stop firing @join but
         // keep waiting for them to actually follow.
         public bool Acknowledged { get; set; }
@@ -360,11 +376,13 @@ public sealed class AutoPartyManager : IDisposable
                 Watch(m);
                 string given = ExtractGiven(m.Name);
                 if (string.IsNullOrEmpty(given)) continue;
-                CancelNag(given, reason: "joined the party");
                 // A row added already non-invited is a real join (par
-                // discovered them); the invited-placeholder add keeps
-                // waiting until its IsInvited flips false (OnMemberPropertyChanged).
-                if (!m.IsInvited) EndInviteWait(given, reason: "joined the party");
+                // discovered them); the invited-placeholder add (the game's
+                // echo of our invite) keeps the nag and the wait going until
+                // its IsInvited flips false (OnMemberPropertyChanged).
+                if (m.IsInvited) continue;
+                CancelNag(given, reason: "joined the party");
+                EndInviteWait(given, reason: "joined the party");
             }
         }
         if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
@@ -863,7 +881,7 @@ public sealed class AutoPartyManager : IDisposable
     // ----- @join nag escalation ----------------------------------------
 
     // Begin (or replace) the @join nag flow for given.
-    private void StartNag(string given, DateTime invitedAt)
+    private void StartNag(string given, DateTime invitedAt, int? maxSends = null)
     {
         // Master opt-out — the invite still went out, we just don't chase it.
         if (!JoinNagEnabled) return;
@@ -872,6 +890,7 @@ public sealed class AutoPartyManager : IDisposable
             Given     = given,
             InvitedAt = invitedAt,
             JoinSends = 0,
+            MaxSends  = maxSends,
         };
         EnsureNagTimerRunning();
     }
@@ -944,6 +963,7 @@ public sealed class AutoPartyManager : IDisposable
             // join-confirmation path (CollectionChanged) or the
             // total-cap above will close the nag out.
             if (s.Acknowledged) continue;
+            if (s.MaxSends is int max && s.JoinSends >= max) continue;
 
             if (s.LastJoinAt is null)
             {
@@ -1033,6 +1053,8 @@ public sealed class AutoPartyManager : IDisposable
     public string ReformSummary => _reformGiven.Count == 0 ? "(none)"
         : $"holding for {string.Join(", ", _reformGiven)}; awaiting arrival: "
           + (_reformPendingInvite.Count == 0 ? "nobody" : string.Join(", ", _reformPendingInvite))
+          + (_splitReform.Count == 0 ? ""
+              : $"; split off, waited for through {SplitReformJoinNags} @join nags: {string.Join(", ", _splitReform)}")
           + (_reformOrigin is { } o ? $"; from {o.Map}/{o.Room}, crossed={ReformCrossed}" : "");
 
     public bool IsReformSettling
@@ -1063,6 +1085,7 @@ public sealed class AutoPartyManager : IDisposable
             // ("You don't see X here!") and is lost. The invite goes out from
             // OnTeleportArrival / OnRoomAlsoHere once X is actually present.
             _reformPendingInvite.Add(given);
+            _splitReform.Add(given);
             BeginReformWait(given, now);
             anyDeferred = true;
             _log?.Log(LogSeverity.Info, "AutoParty",
@@ -1100,6 +1123,7 @@ public sealed class AutoPartyManager : IDisposable
             string given = ExtractGiven(name);
             if (string.IsNullOrEmpty(given)) continue;
             _reformPendingInvite.Add(given);
+            _splitReform.Add(given);
             BeginReformWait(given, now);
             anyDeferred = true;
             _log?.Log(LogSeverity.Info, "AutoParty",
@@ -1183,14 +1207,15 @@ public sealed class AutoPartyManager : IDisposable
         // Override the re-invite cooldown — the split is a deliberate reform
         // trigger, not the rapid room re-render the cooldown guards against — but
         // not an invite that's already just gone out.
+        int? maxNags = _splitReform.Contains(given) ? SplitReformJoinNags : null;
         if (InvitedJustNow(given, now))
         {
-            if (!_activeNags.ContainsKey(given)) StartNag(given, now);
+            if (!_activeNags.ContainsKey(given)) StartNag(given, now, maxNags);
             return;
         }
         _recentlyInvited[given] = now;
         _wire.Send($"invite {given}");
-        StartNag(given, now);
+        StartNag(given, now, maxNags);
         _log?.Log(LogSeverity.Info, "AutoParty",
             $"Re-inviting {given} — now observed in the room (party reform).");
     }
@@ -1253,6 +1278,7 @@ public sealed class AutoPartyManager : IDisposable
         // race-probe look. See IsReformSettling.
         if (_reformGiven.Remove(given)) _reformSettleUntil = NowProvider() + ReformSettleGrace;
         _reformPendingInvite.Remove(given);
+        _splitReform.Remove(given);
         _log?.Log(LogSeverity.Info, "AutoParty",
             $"Released loop hold for {given} — {reason}.");
         RefreshInviteGate();
@@ -1274,6 +1300,7 @@ public sealed class AutoPartyManager : IDisposable
         }
         _reformGiven.Clear();
         _reformPendingInvite.Clear();
+        _splitReform.Clear();
         StopReformRedisplay();
         _log?.Log(LogSeverity.Info, "AutoParty", $"Aborted party-reform holds — {reason}.");
         RefreshInviteGate();
@@ -1298,6 +1325,16 @@ public sealed class AutoPartyManager : IDisposable
         {
             if (!_inviteWaits.TryGetValue(given, out DateTime invitedAt)) continue;
             if (now - invitedAt < InviteWaitWindow) continue;
+            // A teleport-split member invited on landing: not before the last of
+            // their nags has gone a nag's interval unanswered. A member never seen
+            // to land (no invite, so no nag) and a nag the user turned off, or that
+            // ran out its own total time, end as before.
+            if (_splitReform.Contains(given)
+                && _activeNags.TryGetValue(given, out NagState? nag) && nag.MaxSends is int max)
+            {
+                if (nag.JoinSends < max || nag.LastJoinAt is not { } last || now - last < JoinNagFrequency) continue;
+                CancelNag(given, reason: $"{max} @join nags after the party-splitting teleport went unanswered");
+            }
             if (LeftBehindOnOurList?.Invoke(given) == true)
             {
                 _log?.Log(LogSeverity.Info, "AutoParty",
@@ -1337,6 +1374,7 @@ public sealed class AutoPartyManager : IDisposable
         _inviteWaits.Clear();
         _reformGiven.Clear();
         _reformPendingInvite.Clear();
+        _splitReform.Clear();
         StopReformRedisplay();
         _log?.Log(LogSeverity.Info, "AutoParty", $"Released all loop holds — {reason}.");
         RefreshInviteGate();
