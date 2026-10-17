@@ -94,6 +94,10 @@ public static class BugReportBuilder
             }
             secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
         }
+        // Other players' corpse passwords typed this session: held in memory only, so
+        // they can be found wherever the terminal or a log caught them.
+        foreach (string password in svc.CorpseHandoff.SessionPasswords)
+            secrets.Add(new(BugReportScrub.CorpsePasswordLabel, password));
         // Only the name the game itself shows is exempt: a profile can be called
         // anything, the login name included.
         return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
@@ -160,6 +164,7 @@ public static class BugReportBuilder
                     scrubber, Censor))),
             new(BugReportAutomationSections.PermissionsHeading, SafeSection(() => BugReportAutomationSections.RemotePermissions(svc))),
             new(BugReportAutomationSections.DeathsHeading, SafeSection(() => BugReportAutomationSections.DeathHistory(svc.DeathRecovery.Records))),
+            new(BugReportAutomationSections.CorpseHandoffsHeading, SafeSection(() => BugReportAutomationSections.CorpseHandoffs(svc.CorpseHandoff.Records))),
             new("Keybindings (changed from the default)", SafeSection(() => BuildKeybindings(svc))),
             new("Monster overrides", SafeSection(() => BuildMonsterOverrides(svc))),
             new("Monster observations (this character, newest first)", SafeSection(() => BuildMonsterObservations(svc))),
@@ -210,7 +215,7 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
         Kv(sb, "Account details", scrubber.MaskedValues > 0
-            ? $"the account details saved in MudPlay ({scrubber.MaskedValues} value(s): login name, login password, suicide password) "
+            ? $"the account details saved in MudPlay and the corpse recovery passwords typed this session ({scrubber.MaskedValues} value(s): login name, login password, suicide password, corpse passwords) "
               + $"are written as `{BugReportScrub.Mask}` wherever they appear in this report"
             : "none are saved in MudPlay for this character, so none could be masked: a login typed by hand is not known to the client");
         if (scrubber.UnreadableValues > 0)
@@ -349,7 +354,11 @@ public static class BugReportBuilder
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
+        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
+            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
+            ? "available"
+            : "none (no BBS, or the realm's name can't be a folder)");
         Kv(sb, "Game data: long text damaged by an old import",
             svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
         Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());

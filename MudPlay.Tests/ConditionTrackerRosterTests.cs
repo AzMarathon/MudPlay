@@ -323,7 +323,6 @@ public sealed class ConditionTrackerRosterTests
     // line is seen. What holds, stops attacks or blinds is latched all the same.
     [Theory]
     [InlineData("paradigm", "ancestral guardian", "You are deathly afraid!", MessageFlags.MovementPrevented)]
-    [InlineData("paradigm", "mammoth stone scorpion", "You are paralyzed!", MessageFlags.MovementPrevented | MessageFlags.AttackPrevented)]
     [InlineData("stock", "monkey spirit", "You have gone mad!", MessageFlags.AttackPrevented)]
     [InlineData("stock", "crowned spider", "You are caught in a cocoon!", MessageFlags.Blinded)]
     public void WithOnlyTheMilderSpellsCasterListed_AHoldAnAttackStopABlindness_StillLatches(
@@ -336,6 +335,60 @@ public sealed class ConditionTrackerRosterTests
         Assert.True(h.Classifier.RosterIsWhole);
         Assert.Equal(mustLatch, h.Told.ActiveFlags & mustLatch);
         h.AssertToldLatchesWhatNotToldDoes();
+    }
+
+    // Paradigm's two paralyzed spells, #327 (the crawlers', the wraith spider's and
+    // Nahr's) and #5110 (the scorpion's), carry the same Confusion at +100, which is
+    // how the engine paralyzes. Both records are holds and attack-stops, so whichever
+    // caster is here, the paralysis holds and nothing reads it as a confusion.
+    [Theory]
+    [InlineData("carrion crawler")]
+    [InlineData("mammoth stone scorpion")]
+    public void AParalysis_HoldsAndStopsAttacks_WhicheverCasterIsListed(string listed)
+    {
+        using Harness h = new("paradigm");
+
+        h.Feed($"Also here: {listed}.", "Your muscles begin to seize up!", "You are paralyzed!");
+
+        Assert.True(h.Classifier.RosterIsWhole);
+        Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, h.Told.ActiveFlags);
+        h.AssertToldLatchesWhatNotToldDoes();
+    }
+
+    // Every record that applies `You are paralyzed` is a hold and an attack-stop: the
+    // paralyzed spells and yellow fungus (#249), all of them Confusion (71) in the data
+    // (the user's ruling of 2026-10-17). A set's own message file stores the user's
+    // overrides by Id, so the Ids stay.
+    [Theory]
+    [InlineData("paradigm", "paralyzed", 327, "65c6d25ebdba89ec")]
+    [InlineData("paradigm", "paralyzed", 5110, "f3246e40343077c8")]
+    [InlineData("paradigm", "yellow fungus", 249, "ffef3d936076c9b0")]
+    [InlineData("stock", "paralyzed", 327, "65c6d25ebdba89ec")]
+    [InlineData("stock", "yellow fungus", 249, "96a7f595b8a7e815")]
+    public void TheSeed_FlagsEveryParalysisAsAHoldAndAnAttackStop_AndKeepsItsId(
+        string realm, string name, int spell, string id)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-para-seed-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, $"Messages.{realm}.seed.json"))!;
+
+            MessageRecord r = seed.Single(x =>
+                x.Name == name && x.Links is { } links && links.Contains(new GameDataLink("Spells", spell)));
+            Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, r.Flags);
+            Assert.Equal(0x30, r.RawFlagsHex);
+            Assert.Equal(id, r.Id);
+            Assert.DoesNotContain(seed, x =>
+                x.AppliedMessage == "You are paralyzed"
+                && x.Flags != (MessageFlags.MovementPrevented | MessageFlags.AttackPrevented));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException) { /* best-effort temp cleanup */ }
+        }
     }
 
     // ----- what it does rule out, and when it stops ------------------

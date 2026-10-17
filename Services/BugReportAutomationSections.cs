@@ -12,6 +12,7 @@ public static class BugReportAutomationSections
     public const string AutomationHeading = "Triggers, aliases and macros";
     public const string PermissionsHeading = "Remote-command permissions";
     public const string DeathsHeading = "Death history (oldest first)";
+    public const string CorpseHandoffsHeading = "Corpses to hand back (newest first)";
 
     // How many deaths are listed: the history is kept for the character's life.
     private const int DeathsShown = 25;
@@ -50,6 +51,7 @@ public static class BugReportAutomationSections
         Line("Telepaths", () => svc.Telepaths.Queued + svc.Telepaths.InFlight == 0 && !svc.Telepaths.Held ? null
             : $"{svc.Telepaths.Queued} queued, {svc.Telepaths.InFlight} awaiting the game's acknowledgement"
               + (svc.Telepaths.Held ? "; held until an @suicide has had its password prompt answered" : string.Empty));
+        Line("Corpse handoff", () => svc.CorpseHandoff.DescribePending());
         Line("Relog", () => svc.RelogSignal.DescribePending());
         Line("Cleanup log-off", () => svc.CleanupLogout.DescribePending());
         Line("Game entry", () => svc.MainMenuEntry.DescribePending());
@@ -154,6 +156,21 @@ public static class BugReportAutomationSections
               .Append(d.UnrecoveredItems is { Count: > 0 } missing ? $"; still missing {missing.Count} item(s)" : string.Empty)
               .Append(d.GameData is { } set ? $"; recorded on game data '{set}'" : "; game data not recorded (taken as the active one's)")
               .Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // Other players' corpses recovered and not yet handed back: names and items,
+    // never the password (the record has none).
+    public static string CorpseHandoffs(IReadOnlyList<Models.Profile.CorpseHandoffRecord> records)
+    {
+        ArgumentNullException.ThrowIfNull(records);
+        if (records.Count == 0) return "_(none)_";
+        StringBuilder sb = new();
+        foreach (Models.Profile.CorpseHandoffRecord r in records)
+        {
+            sb.Append("- ").Append(r.RecoveredText).Append(" in ").Append(r.RoomText).Append(" — ").Append(r.Summary)
+              .Append(r.Note is { Length: > 0 } note ? $" ({note})" : string.Empty).Append('\n');
         }
         return sb.ToString();
     }

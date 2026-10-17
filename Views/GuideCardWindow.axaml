@@ -1,12 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:vm="using:MudPlay.ViewModels.Guides"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="220"
-        x:Class="MudPlay.Views.FirstRunTutorialWindow"
-        x:DataType="vm:FirstRunTutorialViewModel"
-        Title="First-time setup"
+        x:Class="MudPlay.Views.GuideCardWindow"
+        x:DataType="vm:GuideViewModel"
+        Title="Visual Guide"
         Width="300" SizeToContent="Height"
         CanResize="False" ShowInTaskbar="False"
         WindowDecorations="None"
@@ -45,7 +45,7 @@
             BorderBrush="{StaticResource ChromeBorderBrush}"
             BorderThickness="1" Padding="16,14">
         <StackPanel Spacing="10">
-            <TextBlock Text="First-time setup"
+            <TextBlock Text="{Binding GuideTitle}" TextWrapping="Wrap"
                        FontSize="11" FontWeight="SemiBold"
                        Foreground="{StaticResource AccentYellowBrush}"/>
             <TextBlock Text="{Binding CurrentTitle}"
@@ -53,10 +53,10 @@
                        Foreground="{StaticResource ChromeFgBrush}"/>
 
             <!-- Step checklist: each line ticks (☑) once done; the next line to
-                 click is highlighted. -->
-            <ItemsControl ItemsSource="{Binding CurrentSubs}">
+                 click is highlighted; explanation lines carry a bullet. -->
+            <ItemsControl ItemsSource="{Binding CurrentLines}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:SubStepView">
+                    <DataTemplate x:DataType="vm:GuideLineView">
                         <Grid ColumnDefinitions="Auto,*" Margin="0,3,0,0">
                             <TextBlock Grid.Column="0" Text="{Binding Marker}"
                                        Classes="subMark" FontSize="13"
@@ -86,12 +86,12 @@
                 <Button Grid.Column="3" Content="{Binding NextButtonText}"
                         Command="{Binding NextCommand}"/>
             </Grid>
-            <Button Content="Skip — don't show this again"
+            <Button Content="{Binding CloseButtonText}"
                     HorizontalAlignment="Left" Padding="0" Margin="0,2,0,0"
                     Background="Transparent" BorderThickness="0"
                     FontSize="11"
                     Foreground="{StaticResource ChromeFgMutedBrush}"
-                    Command="{Binding SkipCommand}"/>
+                    Command="{Binding CloseCommand}"/>
         </StackPanel>
     </Border>
 </Window>

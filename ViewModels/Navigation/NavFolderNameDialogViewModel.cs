@@ -13,10 +13,17 @@ public sealed partial class NavFolderNameDialogViewModel : ObservableObject, IDi
 {
     public event Action<string?>? CloseRequested;
 
-    public NavFolderNameDialogViewModel(string title, string prompt, string initial = "")
+    // Loop and lair folders are folders on disk, so what NavFolderManager would
+    // refuse is said as the user types; GOTO folders live in the profile and pass
+    // none.
+    private readonly Func<string, string?>? _whyNot;
+
+    public NavFolderNameDialogViewModel(string title, string prompt, string initial = "",
+        Func<string, string?>? whyNot = null)
     {
         Title = title;
         Prompt = prompt;
+        _whyNot = whyNot;
         _name = initial ?? string.Empty;
     }
 
@@ -27,10 +34,20 @@ public sealed partial class NavFolderNameDialogViewModel : ObservableObject, IDi
     public string Prompt { get; }
 
     // The folder path being entered. /-separated; empty is rejected by the caller.
-    [ObservableProperty] private string _name;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ErrorMessage))]
+    [NotifyPropertyChangedFor(nameof(HasError))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private string _name;
 
-    [RelayCommand]
+    public string ErrorMessage => _whyNot?.Invoke(Name?.Trim() ?? string.Empty) ?? string.Empty;
+
+    public bool HasError => ErrorMessage.Length > 0;
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save() => CloseRequested?.Invoke(Name?.Trim() ?? string.Empty);
+
+    private bool CanSave() => !HasError;
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);

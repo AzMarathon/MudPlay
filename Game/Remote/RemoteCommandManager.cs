@@ -1039,11 +1039,13 @@ public sealed class RemoteCommandManager : IDisposable
     }
 
     // The test of the rule above, for whatever words this client is asked to put
-    // on the wire for another player: `@do`'s, and a relay-back's payload.
+    // on the wire for another player: `@do`'s, and a relay-back's payload. Each word
+    // is read as it goes out as well, after WireText: a letter outside ASCII leaves
+    // as `?`, so `suicideé` would reach the game as `suicide?`.
     private static bool SendsSuicide(IEnumerable<string> words)
     {
         foreach (string word in words)
-            if (HasLetterRun(word, "suicide"))
+            if (HasLetterRun(word, "suicide") || HasLetterRun(WireText.Ascii(word), "suicide"))
                 return true;
         return false;
     }

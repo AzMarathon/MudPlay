@@ -8,6 +8,7 @@ using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Batch;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
@@ -286,6 +287,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // slice, so it takes its own write path.
         _db.SetAccountName(record.GivenName, result.Updated.AccountName);
         _db.SetRelationship(record.GivenName, result.Updated.Relationship, result.Updated.PvpResponse);
+        GuideActions.Report(GuideActions.PlayerPermissionsSaved);
         Reload();
     }
 
