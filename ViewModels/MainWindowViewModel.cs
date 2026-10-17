@@ -1088,6 +1088,19 @@ public partial class MainWindowViewModel : ObservableObject
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
                 $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
                 + "some features will be missing data]", TerminalStatusKind.Error));
+        // A profile whose set's name can't be a folder runs with no game data; say so
+        // where the user looks, not only in the program log. The start-up profile was
+        // refused before this subscription existed, so its notice is read here once.
+        AppServices.Current.GameDataSetRefused += notice =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                WriteTerminalStatus($"[GAME DATA: {notice}]", TerminalStatusKind.Error));
+        if (AppServices.Current.RefusedGameDataSetNotice is { } refusedAtStart)
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                // As with the start-up profile notice: the splash would hide it.
+                if (ShowSplash) ShowSplash = false;
+                WriteTerminalStatus($"[GAME DATA: {refusedAtStart}]", TerminalStatusKind.Error);
+            });
         // A statline mismatch the reconciler couldn't fix leaves HP unreadable, so
         // every HP-gated engine stalls with no visible cause — warn on the terminal
         // once and keep a status-bar warning up until a prompt matches. POST it:

@@ -398,10 +398,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         string? name = await PromptFolderNameAsync(
             "Rename folder", "New name for this folder.", node.Name);
         if (string.IsNullOrEmpty(name)) return;
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _favorites.RenameFolder(node.Path, target);
+        _favorites.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     [RelayCommand]
@@ -870,28 +867,25 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     [RelayCommand]
     private async Task NewFolderAsync(NavFolderNodeViewModel? parent)
     {
-        if (_folders is null) return;
+        if (_folders is not { } folders) return;
         string? name = await PromptFolderNameAsync(
-            "New folder", "Name the new folder (use / to nest).");
+            "New folder", "Name the new folder (use / to nest).",
+            whyNot: n => folders.WhyNotFolder(NavFolders.Combine(parent?.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
         string full = parent is null ? name : NavFolders.Combine(parent.Path, name);
-        _folders.CreateFolder(full);
+        folders.CreateFolder(full);
     }
 
     // Rename a folder (and everything beneath it). No-op if the target name already exists.
     [RelayCommand]
     private async Task RenameFolderAsync(NavFolderNodeViewModel? node)
     {
-        if (_folders is null || node is null) return;
+        if (_folders is not { } folders || node is null) return;
         string? name = await PromptFolderNameAsync(
-            "Rename folder", "New name for this folder.", node.Name);
+            "Rename folder", "New name for this folder.", node.Name,
+            n => folders.WhyNotFolder(NavFolders.RenameTarget(node.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
-        // Rename swaps only the last segment unless the user typed a
-        // path; rebase onto the same parent so a bare name moves in place.
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _folders.RenameFolder(node.Path, target);
+        folders.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     // Delete a folder. Its loops / lairs / sub-folders are re-parented one
@@ -926,7 +920,8 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move loop", "Destination folder (blank = root).", row.Source.Folder);
+            "Move loop", "Destination folder (blank = root).", row.Source.Folder,
+            _folders is { } folders ? folders.WhyNotFolder : null);
         if (folder is null) return;
         MoveLoopToFolder(row, folder);
     }
@@ -937,14 +932,16 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move setup", "Destination folder (blank = root).", row.Source.Folder);
+            "Move setup", "Destination folder (blank = root).", row.Source.Folder,
+            _folders is { } folders ? folders.WhyNotFolder : null);
         if (folder is null) return;
         MoveLairToFolder(row, folder);
     }
 
-    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "")
+    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "",
+        Func<string, string?>? whyNot = null)
     {
-        NavFolderNameDialogViewModel vm = new(title, prompt, initial);
+        NavFolderNameDialogViewModel vm = new(title, prompt, initial, whyNot);
         return await _dialogs.OpenWindowAsync<NavFolderNameDialogViewModel, string?>(vm);
     }
 

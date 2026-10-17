@@ -2559,7 +2559,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private async Task NewLoopFolderAsync(NavFolderNodeViewModel? parent)
     {
         string? name = await PromptFolderNameAsync(
-            "New folder", "Name the new folder (use / to nest).");
+            "New folder", "Name the new folder (use / to nest).",
+            whyNot: n => _services.NavFolders.WhyNotFolder(NavFolders.Combine(parent?.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
         string full = parent is null ? name : NavFolders.Combine(parent.Path, name);
         _services.NavFolders.CreateFolder(full);
@@ -2571,12 +2572,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (node is null) return;
         string? name = await PromptFolderNameAsync(
-            "Rename folder", "New name for this folder.", node.Name);
+            "Rename folder", "New name for this folder.", node.Name,
+            n => _services.NavFolders.WhyNotFolder(NavFolders.RenameTarget(node.Path, n)));
         if (string.IsNullOrEmpty(name)) return;
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _services.NavFolders.RenameFolder(node.Path, target);
+        _services.NavFolders.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     // Delete a Loops/Lairs folder — its loops / lairs / sub-folders
@@ -2611,10 +2610,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         string? name = await PromptFolderNameAsync(
             "Rename folder", "New name for this folder.", node.Name);
         if (string.IsNullOrEmpty(name)) return;
-        string target = name.Contains(NavFolders.Separator)
-            ? name
-            : NavFolders.Combine(NavFolders.Parent(node.Path), name);
-        _services.Favorites.RenameFolder(node.Path, target);
+        _services.Favorites.RenameFolder(node.Path, NavFolders.RenameTarget(node.Path, name));
     }
 
     // Delete a GOTO folder — its favourites / sub-folders re-parent one
@@ -2658,7 +2654,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move loop", "Destination folder (blank = root).", row.Source.Folder);
+            "Move loop", "Destination folder (blank = root).", row.Source.Folder,
+            _services.NavFolders.WhyNotFolder);
         if (folder is null) return;
         MoveLoopToFolder(row, folder);
     }
@@ -2670,7 +2667,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (row is null) return;
         string? folder = await PromptFolderNameAsync(
-            "Move setup", "Destination folder (blank = root).", row.Source.Folder);
+            "Move setup", "Destination folder (blank = root).", row.Source.Folder,
+            _services.NavFolders.WhyNotFolder);
         if (folder is null) return;
         MoveSetupToFolder(row, folder);
     }
@@ -2693,9 +2691,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // menu item (nowhere to move to otherwise).
     public bool HasGotoFolders => _services.Favorites.AllFolders.Count > 0;
 
-    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "")
+    private async Task<string?> PromptFolderNameAsync(string title, string prompt, string initial = "",
+        Func<string, string?>? whyNot = null)
     {
-        NavFolderNameDialogViewModel vm = new(title, prompt, initial);
+        NavFolderNameDialogViewModel vm = new(title, prompt, initial, whyNot);
         return await _services.Dialogs.OpenWindowAsync<NavFolderNameDialogViewModel, string?>(vm);
     }
 

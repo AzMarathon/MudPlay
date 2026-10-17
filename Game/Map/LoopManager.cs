@@ -454,23 +454,30 @@ public sealed class LoopManager
     }
 
     // Persist loop under GameDataSetLoopsFolder. No-op when no set is active.
+    // False when nothing was saved: no set, or a folder that can't be one
+    // (NavFolders.WhyNotFolder), refused with the reason in the log.
     //
     // The write is split. The loop itself (rooms, commands, delays, the per-room
     // marks, notes) goes to the file, which every character on the game data reads.
     // Its OnlyAttackInLairRooms and LairEntryDebuff are what the loaded character
     // wants for it and are kept for that character alone.
-    public void Save(Loop loop)
+    public bool Save(Loop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
         if (string.IsNullOrWhiteSpace(loop.Name))
             throw new ArgumentException("Loop name is required.", nameof(loop));
-        if (_setName is null) return;
+        if (_setName is null) return false;
 
+        string root = AppPaths.GameDataSetLoopsFolder(_setName);
+        if (NavFolders.WhyNotFolder(root, loop.Folder) is { } whyNot)
+        {
+            _log?.Warn("Loops", $"loop '{loop.Name}' not saved: {whyNot}");
+            return false;
+        }
         // Saving normalises to the current schema version so a v2
         // loop edited in the new editor lands on disk as v3 cleanly.
         loop.SchemaVersion = Loop3Schema;
         loop.Folder = NavFolders.Normalize(loop.Folder);
-        string root = AppPaths.GameDataSetLoopsFolder(_setName);
         // A loop name is unique set-wide, so a folder change is a move:
         // any stale file for this name (in any folder) is removed after
         // the write so we don't leave a duplicate behind.
@@ -489,6 +496,7 @@ public sealed class LoopManager
         _loops[loop.Name] = loop;
         KeepSettingsOf(loop);
         LoopsChanged?.Invoke();
+        return true;
     }
 
     // Save a loop to an explicit path chosen via a Save-As dialog (rename + pick a
@@ -547,9 +555,12 @@ public sealed class LoopManager
         string target = NavFolders.Normalize(folder);
         if (string.Equals(NavFolders.Normalize(loop.Folder), target, StringComparison.OrdinalIgnoreCase))
             return false;
+        // The catalogue's own object: a refused move leaves it where it was.
+        string previous = loop.Folder;
         loop.Folder = target;
-        Save(loop);
-        return true;
+        if (Save(loop)) return true;
+        loop.Folder = previous;
+        return false;
     }
 
     // Delete the loop named name. No-op when not in the catalogue or no set

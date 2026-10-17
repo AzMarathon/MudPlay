@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.29**
-> - A buff a party member negates is no longer cast on them; their Buff Watchdog box shows red until re-ticked
-> - Only a negate line about a cast you sent counts, matched by spell name and member; a resisted cast is not a negate
-> - A resisted attack spell counts toward its cast cap and as a miss, like a negated one
-> - A buff a party member negated or resisted is no longer counted as a miss of yours
+> **Version 3.181.32**
+> - A realm whose name can't be a folder gets no realm-tier game-data overrides instead of sharing the holding folder
+> - A profile whose game data set's name can't be used says so on the terminal, not only in the log
+> - A loop or Auto-Lair folder name that can't be a folder is refused as you type, and the holding folder stays out of the tree
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
