@@ -960,16 +960,13 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
     // ----- the realm renamed ------------------------------------------------
 
     // A realm renamed is told to the store (Profile.RealmRenamed) once its folder
-    // has moved, and before the realm in play reads as the new one: Settings saves
-    // the BBS after it moves the folder. The pin that follows finds the store
-    // there already, and nothing comes off the map, an unsaved name included.
+    // has moved. The pin that follows finds the store there already, and nothing
+    // comes off the map, an unsaved name included.
     private string RenameRealmA(Client client)
     {
         string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
         if (Directory.Exists(_realmA)) Directory.Move(_realmA, renamed);
         client.Store.OnFolderRenamed(_realmA, renamed);
-        // Settings' order: the BBS, and with it the realm in play, is saved after.
-        client.Store.OnRealmChanged();
         client.Realm = renamed;
         client.Store.OnRealmChanged();
         return renamed;
@@ -1104,6 +1101,42 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
         Assert.True(client.Unnamed(Cellar));
     }
 
+    // A realm renamed, and later a new realm given its old name and played: the
+    // old name is that realm's now, and a name seen on it is saved there.
+    [Fact]
+    public void ARealmGivenARenamedRealmsOldName_LaterSavesItsOwnNames()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+        RenameRealmA(client);
+
+        client.Realm = _realmA;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmA, client.Store.RealmFolder);
+        client.See(House, HouseName);
+        Assert.Equal(LearnedRoomNameStore.KeepResult.Stored, client.KeepHow(House, HouseName));
+        Assert.Contains("15/861", File.ReadAllText(NamesFile(_realmA)));
+    }
+
+    // In one Settings OK: the realm renamed, a new realm given its old name, and
+    // the character moved to that one. The pin takes up the new realm, not the
+    // renamed one.
+    [Fact]
+    public void ARealmGivenARenamedRealmsOldName_InTheSameOk_IsTakenUp()
+    {
+        Client client = Start(_realmA);
+        client.See(Cellar, CellarName);
+        string renamed = Path.Combine(Path.GetDirectoryName(_realmA)!, "one renamed");
+        client.Store.OnFolderRenamed(_realmA, renamed);
+
+        client.Realm = _realmA;
+        client.Store.OnRealmChanged();
+
+        Assert.Equal(_realmA, client.Store.RealmFolder);
+        Assert.True(client.Unnamed(Cellar));
+    }
+
     // Another realm renamed: nothing of this one's moves.
     [Fact]
     public void AnotherRealmRenamed_LeavesThisOneAlone()
@@ -1170,21 +1203,24 @@ public sealed class LearnedRoomNameStoreTests : IDisposable
     // ----- what a write that never finished left -------------------------------
 
     [Fact]
-    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndALiveOnesIsLeft()
+    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndOneUnderAWritersHoldIsLeft()
     {
         Directory.CreateDirectory(_realmA);
         string dead = $"{NamesFile(_realmA)}.{int.MaxValue}.tmp";
-        string old = $"{NamesFile(_realmA)}.{Environment.ProcessId + 1}.tmp";
-        string live = $"{NamesFile(_realmA)}.{Environment.ProcessId}.tmp";
+        string mine = $"{NamesFile(_realmA)}.{Environment.ProcessId}.tmp";
         string others = $"{NamesFile(_realmA)}.{int.MaxValue}.{Guid.NewGuid():N}.tmp";
-        foreach (string temp in new[] { dead, old, live, others }) File.WriteAllText(temp, "{");
-        File.SetLastWriteTimeUtc(old, DateTime.UtcNow - SharedFileWrite.StaleAfter - TimeSpan.FromMinutes(1));
+        foreach (string temp in new[] { dead, mine, others }) File.WriteAllText(temp, "{");
 
+        // A client is writing the file: its temporary file may be the one being
+        // written, so none is touched.
+        using (SharedFileWrite.Hold(NamesFile(_realmA), out _)) Start(_realmA);
+        Assert.True(File.Exists(dead));
+        Assert.Equal(0, Said("left by a write that never finished"));
+
+        // No write in progress: whatever process made them, they are dead.
         Start(_realmA);
-
         Assert.False(File.Exists(dead));
-        Assert.False(File.Exists(old));
-        Assert.True(File.Exists(live));
+        Assert.False(File.Exists(mine));
         Assert.True(File.Exists(others));
         Assert.Equal(2, Said("left by a write that never finished"));
     }

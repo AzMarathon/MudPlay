@@ -509,20 +509,47 @@ public sealed class LearnedArrivalRoomStoreTests : IDisposable
     }
 
     // A write that never finished left its temporary file: removed when the set
-    // is taken up, unless a live client may be writing it now.
+    // is taken up, unless a client is writing the file at that moment.
     [Fact]
-    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndALiveOnesIsLeft()
+    public void ADeadWritesTemporaryFile_IsRemovedAtLoad_AndOneUnderAWritersHoldIsLeft()
     {
         string path = FileFor("paradigm");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        string dead = $"{path}.{int.MaxValue}.tmp", live = $"{path}.{Environment.ProcessId}.tmp";
+        string dead = $"{path}.{int.MaxValue}.tmp";
         File.WriteAllText(dead, "{");
-        File.WriteAllText(live, "{");
+
+        using (SharedFileWrite.Hold(path, out _)) Client();
+        Assert.True(File.Exists(dead));
 
         Client();
-
         Assert.False(File.Exists(dead));
-        Assert.True(File.Exists(live));
         Assert.Contains(_log, e => e.Severity == LogSeverity.Info && e.Message.Contains("left by a write that never finished"));
+    }
+
+    // A hold that timed out is not waited on again until one is had: whatever
+    // keeps it may not be another client, and each wait is on the UI thread.
+    [Fact]
+    public void AHoldThatTimedOut_IsTriedOnceAfter_UntilItIsHadAgain()
+    {
+        string path = FileFor("paradigm");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (SharedFileWrite.Hold(path, out _))
+        {
+            System.Diagnostics.Stopwatch first = System.Diagnostics.Stopwatch.StartNew();
+            Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(first.ElapsedMilliseconds >= 200);
+
+            System.Diagnostics.Stopwatch again = System.Diagnostics.Stopwatch.StartNew();
+            for (int beat = 0; beat < 5; beat++) Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(again.ElapsedMilliseconds < 200);
+        }
+        using (SharedFileWrite.Hold(path, out _)) { }
+        // Had again: the next one that has to wait, waits.
+        using (SharedFileWrite.Hold(path, out _))
+        {
+            System.Diagnostics.Stopwatch waited = System.Diagnostics.Stopwatch.StartNew();
+            Assert.ThrowsAny<IOException>(() => SharedFileWrite.Hold(path, out _));
+            Assert.True(waited.ElapsedMilliseconds >= 200);
+        }
     }
 }

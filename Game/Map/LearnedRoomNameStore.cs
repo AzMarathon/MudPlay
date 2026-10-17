@@ -100,13 +100,10 @@ public sealed class LearnedRoomNameStore
     // A write re-read the file and may have taken in another client's names,
     // which are not on the map until the next Apply.
     private bool _applyOwed;
-    // Each realm folder this store was carried away from by a rename, and where
-    // to: a name seen before the rename and saved after it was seen here.
+    // Each folder the realm held was carried away from by a rename, and where to,
+    // until another realm is taken up: a name seen before the rename and saved
+    // after it was seen on this realm.
     private readonly Dictionary<string, string> _renamedTo = new(StringComparer.Ordinal);
-    // The folders the realm held was renamed from, until the realm in play reads
-    // as the new one: until then, the realm in play reading as one of them is the
-    // rename not yet saved with its BBS, not a change of realm.
-    private readonly HashSet<string> _oldNamesUntilPinned = new(StringComparer.Ordinal);
 
     //   activeRealmFolder — the realm being played (AppServices.ActiveRealmFolder),
     //                       asked each time rather than handed over, so a room map
@@ -173,22 +170,15 @@ public sealed class LearnedRoomNameStore
     // the next look finds no file where the folder was, and takes the names off
     // the map as another realm's.
     //
-    // Only the folder is followed here; the realm in play is not asked for. A
-    // rename is told before the new name is saved with the BBS (Settings saves
-    // the BBS after it moves the folders), so until the re-pin that follows, the
-    // realm in play can read as another. Read under its old name meanwhile, it is
-    // not taken for a change of realm.
+    // Only the folder is followed here; the realm in play is not asked for. The
+    // loaded character is re-pointed at the new name only after the rename is
+    // told, and the re-pin that follows is what takes up the realm in play.
     public void OnFolderRenamed(string from, string to)
     {
         ArgumentNullException.ThrowIfNull(from);
         ArgumentNullException.ThrowIfNull(to);
         if (_realmFolder is not { } held || Moved(held, from, to) is not { } moved) return;
         _realmFolder = moved;
-        // A BBS and its realm renamed in one OK: the realm's old name under the
-        // BBS's new one is an old name too.
-        foreach (string old in _oldNamesUntilPinned.ToList())
-            if (Moved(old, from, to) is { } alsoOld) _oldNamesUntilPinned.Add(alsoOld);
-        _oldNamesUntilPinned.Add(held);
         foreach (string earlier in _renamedTo.Keys.ToList())
             if (string.Equals(_renamedTo[earlier], held, StringComparison.Ordinal)) _renamedTo[earlier] = moved;
         _renamedTo[held] = moved;
@@ -252,7 +242,11 @@ public sealed class LearnedRoomNameStore
         // The text is not echoed where it is refused: it may be what is wrong with it.
         if (!Usable(name, out string clean)) return KeepResult.NotARoomName;
         if (_realmFolder is null || _graph.ActiveSet is not { Length: > 0 } set) return KeepResult.NoRealmOrSet;
-        if (seenOnRealm is not null && _renamedTo.TryGetValue(seenOnRealm, out string? since)) seenOnRealm = since;
+        // Only for a folder the realm left: one that is the realm in play again (a
+        // new realm given the old name) is that realm's.
+        if (seenOnRealm is not null && !string.Equals(seenOnRealm, _realmFolder, StringComparison.Ordinal)
+            && _renamedTo.TryGetValue(seenOnRealm, out string? since))
+            seenOnRealm = since;
         if (!string.Equals(seenOnRealm, _realmFolder, StringComparison.Ordinal)) return KeepResult.OtherRealm;
         if (!string.Equals(seenOnSet, set, StringComparison.OrdinalIgnoreCase)) return KeepResult.OtherSet;
         if (_graph.GetRoom(room) is not { } onMap || !string.Equals(onMap.Name, name, StringComparison.Ordinal))
@@ -300,12 +294,7 @@ public sealed class LearnedRoomNameStore
     {
         string? folder = _activeRealmFolder();
         if (string.IsNullOrWhiteSpace(folder)) folder = null;
-        if (string.Equals(folder, _realmFolder, StringComparison.Ordinal))
-        {
-            _oldNamesUntilPinned.Clear();
-            return false;
-        }
-        if (folder is not null && _oldNamesUntilPinned.Contains(folder)) return false;
+        if (string.Equals(folder, _realmFolder, StringComparison.Ordinal)) return false;
 
         // A folder told of by no rename is another realm: the store doesn't guess
         // at a rename from what the folders hold.
@@ -315,7 +304,7 @@ public sealed class LearnedRoomNameStore
         // (removed, or renamed with no word of it): writing would make the folder
         // again under the old name.
         if (_unwritten.Count > 0 && _realmFolder is not null && Directory.Exists(_realmFolder)) TryWrite();
-        _oldNamesUntilPinned.Clear();
+        _renamedTo.Clear();
         _realmFolder = folder;
         _bySet.Clear();
         _unwritten.Clear();
