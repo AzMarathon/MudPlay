@@ -125,7 +125,17 @@ public static class BugReportAutomationSections
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
         if (without.Count > 0)
             sb.Append("\nParty members with no permission at all: ").Append(string.Join(", ", without)).Append('\n');
+        sb.Append('\n').Append(BroadcastAnswers(svc.RemoteCommands.BroadcastAnswers())).Append('\n');
         return sb.ToString();
+    }
+
+    // Why a command said on the broadcast channel was passed over: the minute's turns
+    // were spent. Names are left out; they are other players'.
+    internal static string BroadcastAnswers(Game.Remote.RemoteCommandManager.BroadcastAnswerCounts counts)
+    {
+        int cap = Game.Remote.BroadcastAnswerBudget.AnswersPerWindow;
+        return $"Broadcast channel, the last minute: {counts.Permitted} of {cap} answers to permitted speakers, "
+            + $"{counts.Refused} of {cap} refusals; {counts.Remembered} speaker(s) remembered (names not shown).";
     }
 
     public static string DeathHistory(IReadOnlyList<Models.Profile.DeathRecord> records)

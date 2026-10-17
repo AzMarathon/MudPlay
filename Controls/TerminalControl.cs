@@ -235,7 +235,7 @@ public sealed class TerminalControl : Control
         Focusable = true;
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
-        UpdateRenderMode();
+        ApplyCellRenderMode(this, FontFamily);
         _text.Reset(_typeface, RenderFontSize, _cellW);
     }
 
@@ -247,18 +247,22 @@ public sealed class TerminalControl : Control
     // through a draw-transform instead (the PushTransform branch in Render).
     private const string BitmapFontFamilyName = "Mx437 IBM VGA 8x16";
 
-    private bool IsBitmapFont => FontFamily.Name.Equals(BitmapFontFamilyName, StringComparison.OrdinalIgnoreCase);
+    private bool IsBitmapFont => IsBitmapFontFamily(FontFamily);
+
+    private static bool IsBitmapFontFamily(FontFamily family) =>
+        family.Name.Equals(BitmapFontFamilyName, StringComparison.OrdinalIgnoreCase);
 
     // Bitmap-style fonts need aliased rendering to avoid colour smearing across
     // cell boundaries — subpixel AA fringes the block-drawing chars MajorMUD
     // uses for borders/statline. Vector fonts want the normal antialiased path
     // (Unspecified), the same as any other on-screen text, or their curves look
-    // jagged. Re-evaluated whenever the font family changes.
-    private void UpdateRenderMode()
+    // jagged. Shared with the history view so scrollback looks like the live
+    // screen; each caller re-applies it whenever its font family changes.
+    internal static void ApplyCellRenderMode(Visual target, FontFamily family)
     {
-        bool bitmap = IsBitmapFont;
-        TextOptions.SetTextRenderingMode(this, bitmap ? TextRenderingMode.Alias : TextRenderingMode.Unspecified);
-        RenderOptions.SetEdgeMode(this, bitmap ? EdgeMode.Aliased : EdgeMode.Unspecified);
+        bool bitmap = IsBitmapFontFamily(family);
+        TextOptions.SetTextRenderingMode(target, bitmap ? TextRenderingMode.Alias : TextRenderingMode.Unspecified);
+        RenderOptions.SetEdgeMode(target, bitmap ? EdgeMode.Aliased : EdgeMode.Unspecified);
     }
 
     static TerminalControl()
@@ -516,7 +520,7 @@ public sealed class TerminalControl : Control
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
-        UpdateRenderMode();
+        ApplyCellRenderMode(this, FontFamily);
         (_cellW, _cellH) = MeasureCell(RenderFontSize);
         // The glyph lookups are for the old face and size. (Zoom doesn't reach here —
         // it scales the native render and leaves RenderFontSize untouched.)

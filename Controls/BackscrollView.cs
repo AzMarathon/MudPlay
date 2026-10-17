@@ -20,7 +20,8 @@ namespace MudPlay.Controls;
 // currently in view (O(viewport)) and owns its own (row, col) selection model,
 // so selecting and copying stay flat no matter how deep the scrollback runs.
 //
-// Rendering mirrors TerminalControl: the same CP437 cell grid, the same per-run
+// Rendering mirrors TerminalControl: the same CP437 cell grid and per-font
+// antialiasing choice (TerminalControl.ApplyCellRenderMode), the same per-run
 // background fill and one glyph run per colour run (CellRunText), the same
 // AnsiPalette colour resolution — so history looks identical to the live
 // screen. Scrolling is
@@ -115,11 +116,6 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     {
         Focusable = true;
         ClipToBounds = true;
-        // Aliased text/edges keep the CP437 bitmap face from fringing colour at
-        // glyph boundaries. Applied for every font here; TerminalControl
-        // antialiases vector fonts instead.
-        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Alias);
-        RenderOptions.SetEdgeMode(this, EdgeMode.Aliased);
         _typeface = new Typeface(FontFamily);
         RecalculateMetrics();
     }
@@ -178,6 +174,7 @@ public sealed class BackscrollView : Control, ILogicalScrollable
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
+        TerminalControl.ApplyCellRenderMode(this, FontFamily);
         // Snap the cell box to whole pixels so adjacent cell fills meet exactly
         // and glyph advances stay grid-aligned (matches TerminalControl).
         FormattedText probe = new("M", CultureInfo.InvariantCulture, FlowDirection.LeftToRight,

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.12**
+> **Version 3.183.28**
 > - Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
 > - Stale on-screen text and tooltips corrected to match what the client does
 > - Message editor's Use tier box removed (message edits always stay with the game-data set)

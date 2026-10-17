@@ -2264,7 +2264,7 @@
                                                     <Button Grid.Column="2"
                                                             Content="Go" FontSize="10"
                                                             Padding="8,2"
-                                                            Classes="Accent"
+                                                            Classes="accent"
                                                             ToolTip.Tip="Go: start this Auto-Lair setup. Right-click for Run (Auto-Combat off) or Sprint."
                                                             Command="{Binding $parent[ListBox].((vm:NavigationViewModel)DataContext).RunSetupCommand}"
                                                             CommandParameter="{Binding}"/>

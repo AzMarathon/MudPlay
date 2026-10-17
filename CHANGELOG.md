@@ -1,12 +1,44 @@
 # Version history
 
-## 3.183.12
+## 3.183.28
 
 - Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
 - Stale on-screen text and tooltips corrected to match what the client does
 - Message editor's Use tier box removed (message edits always stay with the game-data set)
 - Auto-Lair's idle penalty setting removed (it had no effect)
 - Monster records show HP regen every 30 seconds, not 90
+
+## 3.183.23
+
+- Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
+## 3.183.22
+
+- Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
+- Navigation: Save, Accept and Go buttons that were meant to stand out now show in the accent colour
+- Field labels in Settings General and Events and on the Roomba tab now use the dimmed label style
+
+## 3.183.19
+
+- Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed
+- Sync Timers: a pick you apply no longer reads "changed since you asked"
+- Sync Timers: what you held when you asked is taken as you press Enter, not when the game echoes it
+- Sync Timers: a request typed into the open window before Request Timers is now collected there
+- Sync Timers: an expired timer of yours counts as none, so a reply for it merges in
+- Help: a request typed at a non-game prompt opens no window where the board shows nothing back
+
+## 3.183.13
+
+- A line whose condition was left out by who can cast it here is logged at Info, naming both sides
+- Bug report shows the who-casts index's load, why the room list isn't whole, and the last narrowed line
+- A failed who-casts index build is logged as a warning and shown in the bug report
+- Bug report shows the broadcast channel's answer and refusal counts this minute, without names
+- A negated cast's log line counts the records sharing the spell's name instead of listing them
+
+## 3.183.9
+
+- Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+- Yellow fungus's paralysis now holds and stops attacks instead of confusing, on both realms
 
 ## 3.183.7
 
