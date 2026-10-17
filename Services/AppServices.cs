@@ -6511,6 +6511,8 @@ public sealed class AppServices
         // Realm picks the recovery mechanic: Paradigm packs the pile into a corpse
         // (`recover corpse`), Stock scatters it loose on the floor (per-item `get`).
         DeathRecovery.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        DeathRecovery.SetGameDataInstalledProbe(set =>
+            GameData.AvailableSets.Contains(set, StringComparer.OrdinalIgnoreCase));
         // Match our own corpse by the LIVE in-game name, not a copied profile's stale
         // Current.Name (report stock-20260828-104653).
         DeathRecovery.AttachLiveSelfName(() => Party.LocalCharacterName);
@@ -6624,7 +6626,8 @@ public sealed class AppServices
         // @timer — read-only report of the boss respawn timers being tracked. Reads
         // the boss catalog + persisted kill-times; no wire output beyond its reply.
         BossTimerQuery = new Game.Remote.BossTimerQueryHandler(RemoteCommands, Bosses, BossTimers, GameData, Log);
-        DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records);
+        DeathQuery = new Game.Remote.DeathQueryHandler(RemoteCommands, () => DeathRecovery.Records,
+            r => DeathRecovery.OtherGameDataRefusal(r) is not null);
         // Paced-send scheduler: a UI-thread one-shot (same shape as the combat
         // switch-dispatch delay) so an @roomba sync / @loop send trickles its lines
         // out ~800ms apart instead of flooding the channel.
@@ -10660,7 +10663,8 @@ public sealed class AppServices
             entryRoomSays: (hungUpIn, enteredIn) => Game.Recovery.HangupDeathArrivalRooms.Read(
                 hungUpIn, enteredIn, HangupArrivalListTrust, RoomGraph.CouldBeTakenFor, InParadigmAlbion,
                 LearnedArrivalLands.For),
-            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}");
+            roomLabel: room => RoomGraph.GetRoom(room)?.Name is { Length: > 0 } name ? $"{name} ({room})" : $"room {room}",
+            roomsGameData: () => RoomTracker.RoomsGameData);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a

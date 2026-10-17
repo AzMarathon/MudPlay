@@ -34,6 +34,11 @@ public sealed class HeldAtDisconnect
     // The room the character stood in, or null when the map wasn't sure of it.
     public RoomRef? Room { get; set; }
 
+    // The game-data set Room's number is of, so a death worked out from this list is
+    // stamped with it and not with whatever set is active by the next entry. null on
+    // a list from before it was kept.
+    public string? GameData { get; set; }
+
     // How many drops of the link the list covers: 1, or more when a check was cut
     // short by the link dropping again and what it hadn't found was kept on the
     // list. Each one may have cost the realm's item count, so the cap on what a

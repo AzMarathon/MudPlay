@@ -726,6 +726,41 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return _walker is not null && _walker.WalkTo(room, preferTeleportFree: false);
     }
 
+    // Why this death's pile can't be gone for right now, or null: it was recorded on
+    // another game-data set than the one whose rooms the map holds, and the same
+    // room number there is another room. Nothing walks to it, arms a grab in it or
+    // sweeps from it until that set is back. A record from before the set was kept
+    // has no stamp and is taken as the active set's, as it always was. So is one
+    // whose set is no longer installed (deleted, or renamed in Manage Sets), which
+    // could never be switched back to (user, 2026-10-17). The record itself is left
+    // as it is.
+    public string? OtherGameDataRefusal(DeathRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.GameData is not { } set) return null;
+        string? refusal = new OpenedOnGameData(set).Refusal("death", _roomTracker.RoomsGameData, "recover it");
+        return refusal is not null && GameDataInstalled(set) ? refusal : null;
+    }
+
+    // Whether the named game-data set is still installed. Unbound (tests), every set is.
+    public bool GameDataInstalled(string set) => _gameDataInstalled?.Invoke(set) ?? true;
+
+    private Func<string, bool>? _gameDataInstalled;
+
+    // Bind the probe that says whether a game-data set is still installed, for a
+    // death stamped with one that has since gone. Wired by AppServices.
+    public void SetGameDataInstalledProbe(Func<string, bool> installed)
+    {
+        ArgumentNullException.ThrowIfNull(installed);
+        _gameDataInstalled = installed;
+    }
+
+    private bool OnActiveGameData(DeathRecord record) => OtherGameDataRefusal(record) is null;
+
+    private void NoteOtherGameData(DeathRecord record, string what) =>
+        _log?.Info(LogCategory, $"{what} for death #{record.RecordNumber} at {record.RoomKeyText}: "
+            + new OpenedOnGameData(record.GameData).LogReason(_roomTracker.RoomsGameData));
+
     // Demand signal to recover a deathpile. If we're already standing in the
     // death room, grab every recorded pile item in place (and re-equip the worn
     // ones when Auto-Equip is on); otherwise start walking there and grab on
@@ -735,6 +770,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(record);
         if (record.Room is not { } target) return false;
+        if (OtherGameDataRefusal(record) is not null)
+        {
+            NoteOtherGameData(record, "Recover Now refused");
+            return false;
+        }
         if (SweepRunning)
         {
             _log?.Info(LogCategory, "recover-now: a spill sweep is already under way — left to finish");
@@ -854,8 +894,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // one is the user asking for the room to be looked at again: its arrival is
         // judged like any other, off the room's own display.
         if (rec is null && _pendingRecoverNow is { Status: DeathRecoveryStatus.Missing, Room: { } asked } again
-            && asked.Map == room.Key.Map && asked.Room == room.Key.Room)
+            && asked.Map == room.Key.Map && asked.Room == room.Key.Room && OnActiveGameData(again))
             rec = again;
+        if (rec is null && !sameRoom && FindRecoverableAt(room.Key, otherGameData: true) is { } elsewhere)
+            NoteOtherGameData(elsewhere, "recovery not started here");
         if (rec is not null && !ReferenceEquals(_activeRecovery, rec))
         {
             bool force = ReferenceEquals(_pendingRecoverNow, rec);
@@ -973,7 +1015,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
             // Nothing item-worthy left (empty or only coins) → nothing to grab in passing.
-            if (FullyRecovered(r) || r.Room is not { } rr) continue;
+            if (FullyRecovered(r) || r.Room is not { } rr || !OnActiveGameData(r)) continue;
             bool borders = room.Exits.Values.Any(e => e.Target.Map == rr.Map && e.Target.Room == rr.Room);
             if (borders && (best is null || r.RecordNumber > best.RecordNumber)) best = r;
         }
@@ -993,8 +1035,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             && rec.Room is { } r && dest.Map == r.Map && dest.Room == r.Room;
     }
 
-    // Newest un-recovered record whose death room matches key.
-    private DeathRecord? FindRecoverableAt(RoomKey key)
+    // Newest un-recovered record whose death room matches key, of those recorded on
+    // the active game data (or, with otherGameData, of those recorded on another).
+    private DeathRecord? FindRecoverableAt(RoomKey key, bool otherGameData = false)
     {
         if (_profile.Current?.DeathHistory is not { } list) return null;
         DeathRecord? best = null;
@@ -1005,6 +1048,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             // The user re-tries a Missing pile explicitly via Recover Now.
             if (r.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
             if (r.Room is not { } room || room.Map != key.Map || room.Room != key.Room) continue;
+            if (OnActiveGameData(r) == otherGameData) continue;
             if (best is null || r.RecordNumber > best.RecordNumber) best = r;
         }
         return best;
@@ -2927,6 +2971,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         {
             RecordNumber = p.DeathHistory.Count + 1,
             RoomName = here?.Name,
+            GameData = _roomTracker.RoomsGameData,
             Status = DeathRecoveryStatus.Active,
         };
         if (_inventorySnapshot is { } provider)

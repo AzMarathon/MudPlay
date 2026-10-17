@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.181.12**
+> **Version 3.181.13**
 > - Loading another character drops a loop held for a reconnect or loaded to start, with a notice
 > - Stopping a pyramid climb or asylum maze solve stops the door it was bashing
 > - A destination queued in the Navigation window is dropped when the game data changes

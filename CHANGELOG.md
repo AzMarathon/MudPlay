@@ -1,6 +1,6 @@
 # Version history
 
-## 3.181.12
+## 3.181.13
 
 - Loading another character drops a loop held for a reconnect or loaded to start, with a notice
 - Stopping a pyramid climb or asylum maze solve stops the door it was bashing
@@ -13,6 +13,13 @@
 - Help: switching game data forgets party hand-overs too
 - A second Stop or Reset States ends a party training trip waiting on the leader's own train
 - One failing held start no longer keeps a game data change from stopping the rest
+
+## 3.181.2
+
+- Deaths remember the game data they were recorded on, shown in a new Game data column
+- Recover Now, Auto-Recover and the map's skull skip a pile recorded on another game data; older deaths, and those of a game data no longer installed, count as the active one's
+- A hang-up death keeps the game data the link dropped on
+- @death names the game data of a death recorded on another one
 
 ## 3.181.1
 

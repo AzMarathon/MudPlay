@@ -2389,7 +2389,7 @@ Reports your deaths that are not fully recovered, so a party member can help you
 
 | Reply | When |
 |---|---|
-| `death #<n> <date and time>: <status> at <room name> (<map>/<room>), <n> lives left` | One line per death. `<status>` is `active`, `partial` or `missing`. The time is your computer's local time. |
+| `death #<n> <date and time>: <status> at <room name> (<map>/<room>), <n> lives left` | One line per death. `<status>` is `active`, `partial` or `missing`. The time is your computer's local time. A death recorded on another game data than the one active adds `, recorded on game data '<name>'` after the room, since that number is another room on this one. |
 | `<n> more unrecovered deaths` | `@death all`, after the fifth line. |
 | `no unrecovered deaths` | Every death on record is recovered, or there are none. |
 | the Failure message | **Refusal:** the sender doesn't hold Query deaths. |
@@ -3432,6 +3432,8 @@ A helper for cashing in boss chests: the **Record Keeping → Chest Offload** su
 ### Death Recovery
 
 Your death history. **How did I Die?** replays the backscroll from the moment of death, in the colours you saw it in and in your terminal font (select and copy with the mouse or Ctrl+C). Deaths recorded before colours were kept show in plain text. The saved log file keeps the colours as ANSI codes, so it also reads in colour in `less -R`. **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
+
+**Each death remembers the game data it was recorded on** (the **Game data** column). Room numbers belong to their game data, so while another one is active a pile is not recovered: **Recover Now** is greyed out and the detail panel names both, **Auto-Recover Deathpiles** leaves the room alone, and the map draws no skull for it. Double-clicking the row still centres the map, on the active game data's room of that number. Switch back and it is recovered as usual. Deaths recorded before the game data was kept show **—** and are recovered on whatever is active, as before. So is a death whose game data is no longer installed (deleted, or renamed in **Manage Sets**), since there is nothing to switch back to; the detail panel says so. A death worked out after a hang-up keeps the game data you were on when the link dropped.
 
 Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and overflows into other rooms when that floor is full), it `get`s each item back.
 
