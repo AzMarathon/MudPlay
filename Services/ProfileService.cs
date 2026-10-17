@@ -91,9 +91,6 @@ public sealed class ProfileService
 
     public ProfileService() : this(AppPaths.DefaultProfileFile, AppPaths.DefaultProfileResetMarker) { }
 
-    // A template of a test's own: the Global one is what every profile created in
-    // the process starts from, so a template one test wrote would be handed to the
-    // characters other tests create alongside it.
     internal ProfileService(string defaultProfileFile, string defaultProfileResetMarker)
     {
         _defaultProfileFile = defaultProfileFile;
