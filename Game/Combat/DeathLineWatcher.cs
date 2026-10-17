@@ -3,48 +3,47 @@ using MudPlay.Services.Patterns;
 
 namespace MudPlay.Game.Combat;
 
-// Observes the canonical local-player death line ("You have been slain by
-// <killer>.") and emits PlayerDied. Pure observation; the recovery flow
-// (corpse-walk, item re-pickup, gear re-equip) lives in DeathRecoveryManager.
+// Raises PlayerDied on the local player's death line, "You have been killed!"
+// (KnownPatterns.UserKilled). The game prints it for every death by damage, the
+// last life's included, and names no killer (GAME_MECHANICS "Death lines & the
+// miracle-save").
 //
-// Kept apart from DeathRecoveryManager because the death line matters to more than
-// the recovery flow.
-//
-// The pattern carries the killer's name in KnownPatterns.UserSlain's first
-// capture; consumers read it off PlayerDiedEvent.Killer.
+// Its own event beside RoomTracker.PlayerDeathObserved, which DeathDetector raises
+// at the lives readout that follows: this line comes first, while the HP the
+// character died at is still the last one read (DeathFloorTracer), and it is the
+// only sign of a death on the last life, which prints no lives readout. A suicide
+// prints neither this line nor a death by damage's readout. Each consumer takes
+// one of the two events, never both, so no death is acted on twice.
 public sealed class DeathLineWatcher : IDisposable
 {
     // LogService category for the death notification row.
     public const string LogCategory = "Death";
 
     private readonly LogService? _log;
-    private readonly IDisposable _slainSub;
+    private readonly IDisposable _killedSub;
     private bool _disposed;
 
-    // Fired once per observed local-death line. Consumers run on the
-    // MessageRouter's marshalled thread.
-    public event Action<PlayerDiedEvent>? PlayerDied;
+    // Fired once per death line. Consumers run on the MessageRouter's marshalled
+    // thread.
+    public event Action? PlayerDied;
 
     public DeathLineWatcher(MessageRouter router, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         _log = log;
-        _slainSub = router.Subscribe(KnownPatterns.UserSlain, OnSlain);
+        _killedSub = router.Subscribe(KnownPatterns.UserKilled, OnKilled);
     }
 
-    private void OnSlain(MatchResult match)
+    private void OnKilled(MatchResult _)
     {
-        string killer = match.Groups.Count > 0 ? match.Groups[0].Trim() : string.Empty;
-        PlayerDiedEvent evt = new(killer, DateTimeOffset.Now);
-        _log?.Warn(LogCategory,
-            killer.Length > 0 ? $"slain by {killer}" : "slain (killer unknown)");
-        PlayerDied?.Invoke(evt);
+        _log?.Warn(LogCategory, "You have been killed!");
+        PlayerDied?.Invoke();
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _slainSub.Dispose();
+        _killedSub.Dispose();
     }
 }

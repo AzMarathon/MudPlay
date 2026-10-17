@@ -13,11 +13,10 @@ namespace MudPlay.Game.Health;
 //      proves the floor sits below it — a hard hit we lived through is a valid
 //      lower bound even though it never qualifies as a slow death (NoteHp).
 //
-// Why the HP trajectory and not the death line: MajorMUD prints exactly one
-// death message ("You have been slain by <killer>.") whether you were overkilled
-// by a single blow or bled out one tick at a time — a bleed-out still names the
-// last attacker, so the line can't tell the two apart. Only the HP trajectory
-// into death can. [CONFIRMED]
+// Why the HP trajectory and not the death line: MajorMUD prints the same death
+// line ("You have been killed!") whether you were overkilled by a single blow or
+// bled out one tick at a time, so the line can't tell the two apart. Only the HP
+// trajectory into death can. [CONFIRMED]
 //
 // Why only slow deaths measure the floor: the floor is a fixed per-realm
 // constant, but a bleed-out crosses it one small tick at a time and lands right
@@ -141,9 +140,10 @@ public sealed class DeathFloorTracer : IDisposable
             $"refined {old} → {bound} (realm '{realm.Name}' on BBS '{active.Bbs.Name}').");
     }
 
-    // The local player just died (wired to DeathLineWatcher.PlayerDied). Classify
-    // the death off the trajectory captured so far and, when it's a clean slow
-    // death, refine the active BBS's death floor to the measured HP.
+    // The local player just died (wired to DeathLineWatcher.PlayerDied, whose line
+    // comes before the respawn's full-HP prompt). Classify the death off the
+    // trajectory captured so far and, when it's a clean slow death, refine the
+    // active BBS's death floor to the measured HP.
     public void RecordDeath()
     {
         // Snapshot + reset first: whatever happens, the next life starts with a

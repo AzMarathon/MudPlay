@@ -6,63 +6,72 @@ using MudPlay.Services.Patterns;
 
 namespace MudPlay.Game;
 
-// Leader-side roster hygiene for a party member who dies mid-farm. When we're
-// leading an automated route (loop / walk-to / Auto-Lair) and a member is
-// killed, MajorMUD doesn't drop them cleanly — the dead character lingers in
-// our `par` as an [Invited] (pending) slot, indistinguishable from a genuine
-// recruit we're still waiting on. Left alone, the auto-party engine treats that
-// corpse as an invitee and holds the loop (PartyInviteGate) until its whole
-// wait-window elapses. Because we KNOW this "invitee" is actually a member who
-// just died, we can uninvite them promptly instead of stalling the route.
+// Squares the party roster with the game after a member dies in our room (user,
+// 2026-10-17: "if a party member dies, we should check par, if they're no longer on
+// the list, or it says invited, then remove them from the party").
 //
-// Why the death line alone isn't enough. "<Name> has died." is the universal
-// third-person death line every observer sees — it fires for randoms and (with
-// variant wording) mobs too, not just our party. So every action here is doubly
-// bounded: we only ever act on a name that was an ACTIVE member of OUR party at
-// the moment it died (the active→invited transition the user described), and we
-// only actually send `uninvite` once that same name is showing as an [Invited]
-// par slot. A still-pending recruit was invited from the start (never active),
-// so it's never recorded; a same-named mob is never in our roster; neither can
-// trigger a real uninvite.
+// The death line. "<Name> is dead." is what everyone else in the room sees when a
+// player dies (GAME_MECHANICS "Death lines & the miracle-save"). It names any
+// player, party or not, so nothing here acts on a name that wasn't an ACTIVE member
+// of ours when it died: a stranger isn't on the roster, a still-pending recruit
+// was invited from the start, and the victim never sees its own line.
 //
-// Timing. We defer the uninvite until the room is clear of combat (the Combat
-// gate releases) so we finish the current fight before touching party state,
-// then let the loop continue on its own. par polls throughout the fight, so the
-// dead member has usually flipped to [Invited] by the time combat clears; a
-// per-row IsInvited watch backs up the rare case where that flip lands after.
+// The check. One `par` is asked for (PartyPoller.RequestParUnlessPending: none when
+// a `par` already sent is unanswered or the timer's next is due within its window),
+// and the first `par` reply read afterwards answers it:
+//   - the member isn't listed (Stock takes a dead member off every list): the
+//     roster has already dropped them, as PartyManager does for any member a `par`
+//     leaves out;
+//   - the member is listed [Invited] (Paradigm keeps the dead member's slot,
+//     GAME_MECHANICS "Member death shows as an invited slot in `par`"): when we
+//     lead, they're uninvited once the room is clear of combat, so the fight is
+//     finished before party state is touched and the auto-party engine doesn't
+//     hold a loop for a corpse it takes for an invitee.
+// Only the leader can uninvite, so a follower's part ends with the roster.
 //
-// Scope. Gated on "a movement engine is actually running" — during hands-on
-// play the user manages party state themselves, so we don't auto-uninvite. Only
-// the leader can uninvite anyway, so a follower observing the death is a no-op.
+// A member who was our leader is left to the game's own "You are no longer
+// following <Name>." line, which ends our follow.
 //
 // Read-only on party state: it reads PartyState and calls the public
 // PartyManager.Uninvite (which routes the removal through the server echo), so
 // PartyManager stays the sole writer of every roster field.
 public sealed class PartyDeathRosterCleanup : IDisposable
 {
-    // Surfaced in the log timeline when the cleanup fires an uninvite.
+    // Surfaced in the log timeline for each decision.
     public const string LogCategory = "Party";
 
     private readonly PartyState _party;
     private readonly PartyManager _manager;
     private readonly MovementCoordinator _coordinator;
-    private readonly Func<bool> _isMovementActive;
+    private readonly PartyPoller _poller;
     private readonly LogService? _log;
     private readonly List<IDisposable> _subs = new();
 
-    // given-name → time we observed the death. Bounded by CleanupWindow so a
-    // recorded death that never materialises as an [Invited] slot (member was
-    // instead fully removed, or the death-line wording is off) is dropped rather
-    // than lingering forever.
+    // given-name → when the death was seen, for the deaths a `par` reply hasn't
+    // answered yet.
+    private readonly Dictionary<string, DateTimeOffset> _awaitingPar =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // given-name → when the death was seen, for the dead members we lead that are
+    // to be uninvited once they show [Invited] and the room is clear. Bounded by
+    // CleanupWindow so a death that never surfaces as an [Invited] slot is dropped
+    // rather than lingering forever.
     private readonly Dictionary<string, DateTimeOffset> _pendingDeaths =
         new(StringComparer.OrdinalIgnoreCase);
 
-    // Give up on a recorded death if it hasn't surfaced as an [Invited] slot
-    // within this window. Generous — a par poll is ~5 s and combat can run long.
+    // Give up on a recorded death if no `par` has settled it within this window.
+    // Generous — a par poll is ~5 s and combat can run long.
     public TimeSpan CleanupWindow { get; set; } = TimeSpan.FromMinutes(2);
 
-    // Test seam — overrides the wall clock for record/expiry timing.
+    // Overrides the wall clock for record/expiry timing.
     public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
+
+    // The last member death seen and what came of it, for the bug report.
+    public string? LastDeathSummary { get; private set; }
+
+    // The dead members waiting on a `par` reply or on their uninvite.
+    public IReadOnlyCollection<string> AwaitingPar => _awaitingPar.Keys;
+    public IReadOnlyCollection<string> AwaitingUninvite => _pendingDeaths.Keys;
 
     private bool _disposed;
 
@@ -71,21 +80,22 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         PartyState party,
         PartyManager manager,
         MovementCoordinator coordinator,
-        Func<bool> isMovementActive,
+        PartyPoller poller,
         LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(manager);
         ArgumentNullException.ThrowIfNull(coordinator);
-        ArgumentNullException.ThrowIfNull(isMovementActive);
+        ArgumentNullException.ThrowIfNull(poller);
         _party = party;
         _manager = manager;
         _coordinator = coordinator;
-        _isMovementActive = isMovementActive;
+        _poller = poller;
         _log = log;
 
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDied, OnMemberDied));
+        _manager.ParReplyRead += OnParReplyRead;
         _coordinator.GatesChanged += OnGatesChanged;
         _party.Members.CollectionChanged += OnMembersChanged;
         foreach (PartyMember m in _party.Members)
@@ -95,24 +105,62 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     private void OnMemberDied(MatchResult result)
     {
         if (result.Groups.Count == 0) return;
-        string name = result.Groups[0];
-        if (string.IsNullOrEmpty(name)) return;
+        string given = GivenNameOf(result.Groups[0]);
+        if (given.Length == 0) return;
+        if (ActiveMember(given) is not { } member) return;
 
-        // Only the leader can uninvite, and only during an automated route —
-        // hands-on play leaves party state to the user.
-        if (!_party.SelfIsLeader) return;
-        if (!_isMovementActive()) return;
+        DateTimeOffset now = NowProvider();
+        if (!_party.SelfIsLeader && (member.IsLeader || IsOurLeader(given)))
+        {
+            Note(now, $"{given} (our leader) is dead: the game ends our follow, so no `par` is asked for.");
+            return;
+        }
 
-        string given = GivenNameOf(name);
-        // Record only the active→invited transition: the name must be an ACTIVE
-        // member of ours right now (not self, not an already-pending invite). A
-        // rando/mob "has died." isn't in our roster; a still-pending recruit is
-        // IsInvited already — both are correctly ignored here.
-        if (!IsActiveMember(given)) return;
+        _awaitingPar[given] = now;
+        if (_party.SelfIsLeader) _pendingDeaths[given] = now;
+        string asked = _poller.RequestParUnlessPending($"{given} is dead") switch
+        {
+            ParRequestOutcome.Sent => "`par` sent",
+            ParRequestOutcome.OnItsWay => "a `par` already sent and not yet answered",
+            ParRequestOutcome.DueSoon =>
+                $"the timer's next `par`, due within {PartyPoller.ParDueWindow.TotalSeconds:0} s",
+            _ => "no `par` could be sent now (master switch, out of the game or in a menu); the next one read",
+        };
+        Note(now, $"{given} is dead: {asked} will show whether they are still on the party list.");
+        TryCleanup();
+    }
 
-        _pendingDeaths[given] = NowProvider();
-        _log?.Info(LogCategory,
-            $"{given} died mid-route — will uninvite the corpse's pending slot once the room clears.");
+    // The first `par` reply read after a death settles it: PartyManager has already
+    // squared the roster with the reply when this is raised.
+    private void OnParReplyRead()
+    {
+        if (_awaitingPar.Count == 0) return;
+        DateTimeOffset now = NowProvider();
+        foreach ((string given, DateTimeOffset seen) in _awaitingPar.ToArray())
+        {
+            _awaitingPar.Remove(given);
+            if (now - seen > CleanupWindow) continue;
+            PartyMember? row = RowOf(given);
+            if (row is null)
+            {
+                _pendingDeaths.Remove(given);
+                Note(now, $"`par` no longer lists {given}, dead: dropped from the party roster.");
+            }
+            else if (row.IsInvited)
+            {
+                // With the room already clear the uninvite went out as the row was
+                // read, and said so.
+                if (_pendingDeaths.ContainsKey(given))
+                    Note(now, $"`par` lists {given}, dead, as [Invited]: uninvited once the room is clear of combat.");
+                else if (!_party.SelfIsLeader)
+                    Note(now, $"`par` lists {given}, dead, as [Invited]: only the leader can uninvite, so the row stays.");
+            }
+            else
+            {
+                _pendingDeaths.Remove(given);
+                Note(now, $"`par` still lists {given} in the party after their death: the roster is left as it is.");
+            }
+        }
         TryCleanup();
     }
 
@@ -129,8 +177,8 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         TryCleanup();
     }
 
-    // A dead member usually flips active→[Invited] during the fight; this backs
-    // up the case where par delivers that flip after combat has already cleared.
+    // The [Invited] flip lands while the `par` rows are read, ahead of the reply's
+    // end; with the room already clear the uninvite goes out then.
     private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(PartyMember.IsInvited)) TryCleanup();
@@ -145,7 +193,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     {
         if (_pendingDeaths.Count == 0) return;
         if (MasterSwitchOff?.Invoke() == true) return;
-        // Hold until the room is clear of combat, then let the route continue.
+        // Hold until the room is clear of combat.
         if (_coordinator.AssertedGates.Contains(MovementCoordinator.CombatGate)) return;
 
         DateTimeOffset now = NowProvider();
@@ -156,31 +204,40 @@ public sealed class PartyDeathRosterCleanup : IDisposable
                 _pendingDeaths.Remove(given);
                 continue;
             }
-            if (!ShowsInvited(given)) continue;
+            if (!_party.SelfIsLeader) continue;
+            if (RowOf(given) is not { IsInvited: true }) continue;
             _manager.Uninvite(given);
             _pendingDeaths.Remove(given);
-            _log?.Info(LogCategory,
-                $"Uninvited {given} — dead member's pending par slot cleared; route continues.");
+            Note(now, $"Uninvited {given}: the dead member's [Invited] slot is cleared.");
         }
     }
 
-    private bool IsActiveMember(string given)
+    private void Note(DateTimeOffset at, string message)
+    {
+        LastDeathSummary = $"{at:HH:mm:ss} {message}";
+        _log?.Info(LogCategory, message);
+    }
+
+    private PartyMember? ActiveMember(string given)
     {
         foreach (PartyMember m in _party.Members)
             if (!m.IsSelf && !m.IsInvited
                 && GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
+                return m;
+        return null;
     }
 
-    private bool ShowsInvited(string given)
+    private PartyMember? RowOf(string given)
     {
         foreach (PartyMember m in _party.Members)
-            if (m.IsInvited
-                && GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
+            if (!m.IsSelf && GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase))
+                return m;
+        return null;
     }
+
+    private bool IsOurLeader(string given)
+        => _party.LeaderName is { Length: > 0 } leader
+           && GivenNameOf(leader).Equals(given, StringComparison.OrdinalIgnoreCase);
 
     // First whitespace-delimited token. "Raijin WuzHere" → "Raijin". MajorMUD
     // addresses players by given name only and chat/par disagree on the form,
@@ -188,8 +245,9 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     private static string GivenNameOf(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;
-        int space = name.IndexOf(' ');
-        return space >= 0 ? name[..space] : name;
+        string trimmed = name.Trim();
+        int space = trimmed.IndexOf(' ');
+        return space >= 0 ? trimmed[..space] : trimmed;
     }
 
     public void Dispose()
@@ -198,6 +256,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         _disposed = true;
         foreach (IDisposable sub in _subs) sub.Dispose();
         _subs.Clear();
+        _manager.ParReplyRead -= OnParReplyRead;
         _coordinator.GatesChanged -= OnGatesChanged;
         _party.Members.CollectionChanged -= OnMembersChanged;
         foreach (PartyMember m in _party.Members)

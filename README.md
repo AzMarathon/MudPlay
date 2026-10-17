@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.34**
-> - Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after a kill in a guard fight and the retry waits for it (in a dark room it retries at once)
-> - Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+> **Version 3.183.37**
+> - Your own death is read from `You have been killed!`: the death sound, the death-floor refinement and the round reset now run
+> - A party member's death is read from `<Name> is dead.`; the `has been slain by` and `has died` lines were never sent by the game
+> - A party member's death sends one `par`: dropped from the roster when no longer listed, uninvited by the leader when listed Invited
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

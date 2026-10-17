@@ -362,7 +362,6 @@ public sealed partial class ComebackRequester : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.PartyYouNoLongerFollowing, OnNoLongerFollowing));
         _subs.Add(router.Subscribe(KnownPatterns.PartyFollowMove, OnFollowLine));
         _subs.Add(router.Subscribe(KnownPatterns.PartyYouFollowing, _ => OnFollowingAgain()));
-        _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDeath, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDied, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.PartyMemberDropped, OnPlayerDown));
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));

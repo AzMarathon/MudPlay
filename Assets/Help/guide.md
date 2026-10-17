@@ -1014,6 +1014,13 @@ With party heal spells configured (Settings → Party), members watch each other
 
 **A partymate who drops to the ground** is aided at once, and movement holds so the party doesn't walk off (or drag them into a lair) while they're down. Aid only stops the bleeding: they climb back 1 HP every 30 s and can't act until their HP is positive. So the hold lasts as long as that climb can take — worked out from their HP if their client answers, otherwise from the realm's death floor (Settings → BBS + Display) as the worst case. Your downed-ally heal speeds it up. Once they should be up, MudPlay checks their health; when they answer standing, a leader re-invites them, and the hold releases once they're back to the party-heal bar.
 
+**A partymate who dies** in your room (*Raijin is dead.*) is checked against the party list. MudPlay sends one `par` and reads the reply; it sends none when a `par` it sent is still unanswered, or when the `par` timer (Settings → Party → *Send `par`*) sends its next within 5 seconds, since that reply answers just as soon. Like the poll, it waits for you to be in the game and out of the trainer menu, and nothing goes out with the **Auto-All** master switch off; the next `par` read then answers it, your own included.
+
+- **Not on the list any more** (Stock takes a dead member off it): they leave your Party window.
+- **Listed as Invited** (Paradigm keeps a dead member's slot): when you lead, MudPlay uninvites them once the fight in the room is over, whether or not a loop is running, so a loop doesn't wait for them as if they were an invite. As a follower you can't uninvite, and the row stays.
+
+Your leader's death needs no check: the game ends your follow itself. A member who dies in another room prints nothing to you, so no check is made; the regular `par` shows what became of them. Each step is in the program log under **Party**, and the bug report's party section shows the last one.
+
 ## Remote @-commands
 
 A remote command is a line of chat that starts with `@`. Another player sends it to your character; MudPlay reads it, checks that this player may ask for it, does it, and answers on the channel it came in on. It is how a leader steers followers, how a party asks its healer for a heal, and how two MudPlay clients hand each other loops, boss timers and Roomba logs.
@@ -6958,7 +6965,7 @@ The two timer cues are checked every 30 seconds while you're in the game, and ea
 
 **Danger**
 
-- **You died**.
+- **You died** — the game says *You have been killed!*: any death by damage, your last life's included. A `suicide` makes no sound.
 - **Mortally wounded** — you drop to the ground.
 - **Fleeing** — a flee starts: low HP or mana, a hit-and-run or failed-backstab retreat, a PvP flee back along your route, or a monster set to **Flee** seen in the room.
 - **Navigation stopped** — a walk or loop fails, or the client loses track of the room.

@@ -21,7 +21,9 @@ namespace MudPlay.Game;
 //      DispatcherTimer ticking at ParCadence (5 s default), a combat round we
 //      fought in closing (or, ticked in, one we only witnessed), and a round
 //      whose totals carry unknown damage. Apart from those, RequestPar sends one
-//      for a caller that needs to know who is still in the party.
+//      for a caller that needs to know who is still in the party, and
+//      RequestParUnlessPending one only when no `par` already on its way or due
+//      soon will tell it.
 //
 // Reply-format match: the on-join reply comes back as a telepath carrying the
 // member's PartyEssentialHandlers.OnHealth answer, "{HP=690/720,MA=200/300, Resting}".
@@ -116,7 +118,8 @@ public sealed partial class PartyPoller : IDisposable
     // Mirrors PartySettings.SendHealthToMembers.
     public bool HealthNagEnabled { get; set; } = true;
 
-    // Test seam — overrides DateTime.UtcNow for the nag tick clock.
+    // The clock for the nag ticks and for when a `par` went out. Overridable so a
+    // test can run it.
     public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
 
     // Per-given-name nag state. Created on the initial @health send; cleared on
@@ -171,6 +174,7 @@ public sealed partial class PartyPoller : IDisposable
 
         _state.Members.CollectionChanged += OnMembersChanged;
         _chat.EntryClassified += OnChatEntry;
+        _manager.ParReplyRead += OnParReplyRead;
 
         if (useTimer)
         {
@@ -248,6 +252,7 @@ public sealed partial class PartyPoller : IDisposable
         _disposed = true;
         _state.Members.CollectionChanged -= OnMembersChanged;
         _chat.EntryClassified -= OnChatEntry;
+        _manager.ParReplyRead -= OnParReplyRead;
         _timer?.Stop();
         StopHealthNagTimer();
     }
@@ -542,6 +547,47 @@ public sealed partial class PartyPoller : IDisposable
         return true;
     }
 
+    // A `par` sent and not answered yet counts as on its way for this long; one whose
+    // reply never came stops holding a request back after it.
+    public static readonly TimeSpan ParReplyWait = TimeSpan.FromSeconds(5);
+
+    // A timer `par` due within this long answers a request about as soon as one
+    // sent now would, so none is sent for it. The default cadence's length.
+    public static readonly TimeSpan ParDueWindow = TimeSpan.FromSeconds(5);
+
+    // When the last `par` of ours went out, and when the one still unanswered did
+    // (null once ParReplyRead has come).
+    private DateTime? _lastParSentAt;
+    private DateTime? _parUnansweredSince;
+
+    private void OnParReplyRead() => _parUnansweredSince = null;
+
+    // One `par` to learn who is still in the party, unless a `par` already answers
+    // that about as soon: one sent whose reply hasn't been read, or the timer's
+    // next one due within ParDueWindow. Whatever `par` reply is read next was made
+    // after the line that asked, since the game sends its output in order. Held
+    // by what holds RequestPar, and by the master switch.
+    public ParRequestOutcome RequestParUnlessPending(string why)
+    {
+        DateTime now = NowProvider();
+        if (_parUnansweredSince is { } sent && now - sent < ParReplyWait) return ParRequestOutcome.OnItsWay;
+        if (TimerParDueWithin(now, ParDueWindow)) return ParRequestOutcome.DueSoon;
+        if (MasterSwitchOff?.Invoke() == true) return ParRequestOutcome.Held;
+        return RequestPar(why) ? ParRequestOutcome.Sent : ParRequestOutcome.Held;
+    }
+
+    // The timer counts from the latest `par` (RestartTimerCountdown, and its own
+    // ticks), so its next one is due a cadence after that, when it runs and its
+    // health-read gate lets it send. With no `par` sent yet its countdown isn't
+    // known, and it isn't counted on.
+    private bool TimerParDueWithin(DateTime now, TimeSpan window)
+    {
+        if (!ParOnTimer || _suspended || InTrainerMenu || !_state.IsInParty) return false;
+        if (IsParPollEnabled is { } gate && !gate()) return false;
+        if (_lastParSentAt is not { } last) return false;
+        return last + ParCadence - now <= window;
+    }
+
     // The timer counts from the latest `par`, so a `par` sent for another reason
     // isn't followed by the timer's own back to back; with rounds coming faster
     // than the cadence it stays quiet.
@@ -561,6 +607,9 @@ public sealed partial class PartyPoller : IDisposable
         Func<bool>? gate = healthRead ? IsParPollEnabled : IsAutomationEnabled;
         if (gate is not null && !gate()) return false;
         _wireSender(Encoding.Latin1.GetBytes("par\r"));
+        DateTime now = NowProvider();
+        _lastParSentAt = now;
+        _parUnansweredSince = now;
         return true;
     }
 }
