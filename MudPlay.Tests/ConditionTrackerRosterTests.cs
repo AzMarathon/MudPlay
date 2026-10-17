@@ -338,6 +338,51 @@ public sealed class ConditionTrackerRosterTests
         h.AssertToldLatchesWhatNotToldDoes();
     }
 
+    // Paradigm's two paralyzed spells, #327 (the crawlers', the wraith spider's and
+    // Nahr's) and #5110 (the scorpion's), carry the same Confusion at +100, which is
+    // how the engine paralyzes. Both records are holds and attack-stops, so whichever
+    // caster is here, the paralysis holds and nothing reads it as a confusion.
+    [Theory]
+    [InlineData("carrion crawler")]
+    [InlineData("mammoth stone scorpion")]
+    public void AParalysis_HoldsAndStopsAttacks_WhicheverCasterIsListed(string listed)
+    {
+        using Harness h = new("paradigm");
+
+        h.Feed($"Also here: {listed}.", "Your muscles begin to seize up!", "You are paralyzed!");
+
+        Assert.True(h.Classifier.RosterIsWhole);
+        Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, h.Told.ActiveFlags);
+        h.AssertToldLatchesWhatNotToldDoes();
+    }
+
+    [Fact]
+    public void TheParadigmSeed_FlagsBothParalyzedRecordsAlike_AndKeepsTheirIds()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-para-seed-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            List<MessageRecord> seed = JsonStore.Load<List<MessageRecord>>(
+                Path.Combine(dir, "Messages.paradigm.seed.json"))!;
+            MessageRecord Linked(int spell) => seed.Single(r =>
+                r.Name == "paralyzed" && r.Links is { } links && links.Contains(new GameDataLink("Spells", spell)));
+
+            MessageRecord crawlers = Linked(327), scorpions = Linked(5110);
+            Assert.Equal(MessageFlags.MovementPrevented | MessageFlags.AttackPrevented, crawlers.Flags);
+            Assert.Equal(crawlers.Flags, scorpions.Flags);
+            Assert.Equal(crawlers.RawFlagsHex, scorpions.RawFlagsHex);
+            // A set's own message file stores the user's overrides by Id.
+            Assert.Equal("65c6d25ebdba89ec", crawlers.Id);
+            Assert.Equal("f3246e40343077c8", scorpions.Id);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException) { /* best-effort temp cleanup */ }
+        }
+    }
+
     // ----- what it does rule out, and when it stops ------------------
 
     // Three plagues print the same lines: plague (#1024) is a disease, dark plague

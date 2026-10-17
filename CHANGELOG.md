@@ -1,5 +1,9 @@
 # Version history
 
+## 3.181.33
+
+- Paradigm's scorpion paralysis (#5110) now holds and stops attacks, like the other paralysis, instead of confusing
+
 ## 3.181.32
 
 - Shared condition lines read who can cast a spell from the item, textblock and room tables, not just the spell's cut-off caster list
