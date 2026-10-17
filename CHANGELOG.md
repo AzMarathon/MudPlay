@@ -1,8 +1,9 @@
 # Version history
 
-## 3.183.2
+## 3.183.3
 
 - `@do` and `@party` relays send plain text: a character outside ASCII goes out as `?` or its plain spelling, as in every reply
+- `@divert` forwards telepaths as plain text too
 - The `@do` and relay-back `suicide` refusal reads the word as sent: a non-ASCII letter beside it no longer hides it
 
 ## 3.183.0

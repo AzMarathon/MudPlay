@@ -92,6 +92,19 @@ public sealed class DivertHandlerTests
     }
 
     [Fact]
+    public void Divert_ForwardsTextOutsideAscii_AsPlainText()
+    {
+        var (router, _, players, forwardWire, _) = Setup();
+        SeedPlayer(players, "Bob", PlayerRemoteControls.DivertConversations);
+
+        Telepath(router, "Bob", "@divert Raijin");
+        Telepath(router, "Carl", "café ≥ 5");
+
+        Assert.Equal("/Raijin Carl telepathed: caf? >= 5\r",
+            Encoding.Latin1.GetString(Assert.Single(forwardWire)));
+    }
+
+    [Fact]
     public void Divert_SkipsTargetsOwnTelepath()
     {
         // Diverting to Raijin; Raijin's own telepath isn't echoed back.

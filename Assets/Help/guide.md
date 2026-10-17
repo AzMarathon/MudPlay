@@ -2711,7 +2711,7 @@ Zeroes your session statistics: the same wipe as **Reset session** in the Sessio
 
 #### @divert
 
-Forwards your incoming telepaths to another player, so someone else can read your mail while you are away.
+Forwards your incoming telepaths to another player, so someone else can read your mail while you are away. Each one arrives as `<sender> telepathed: <message>`; a character outside plain ASCII goes out as `?` or its plain spelling.
 
 **Forms:**
 
