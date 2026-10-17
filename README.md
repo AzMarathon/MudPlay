@@ -1,13 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.6**
-> - Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
-> - Unsure of your room, a text-exit move (`go path`) still narrows down where you are
-> - Unsure of your room, a refused, blocked, rate-limited or unanswered move is no longer counted when the room shows again
-> - Unsure of your room, moves typed together are each matched to their own room display
-> - Unsure of your room, a move into a dark room (or made blind) still counts, and so does a Lost room display that fits no room exactly
-> - A walk's forward re-locate reads every step's landing in order; a room it, the walk-back or an unsure re-match settles on is never saved as your known room, and a relog lands back on it
+> **Version 3.184.13**
+> - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
+> - Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
+> - Unsure of your room, a move into a room that reads like the one held no longer re-confirms the held room
+> - A save right after logging back on, before the room shows, keeps the moves to replay
+> - A character with no saved room starts with no room, not the last character's
+> - Lost, or the map rebuilt, also drops a worked-out room saved for the next relog
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

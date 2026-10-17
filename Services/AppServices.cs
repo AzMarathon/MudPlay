@@ -5081,6 +5081,7 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
+        Health.FleeMoveSent = Recovery.NoteEngineStepSent;
         // MovementControl is built further down; the lambda reads it when a Flee
         // monster is seen.
         Health.IsNavigationPausedByUser = () => MovementControl.IsUserPaused;

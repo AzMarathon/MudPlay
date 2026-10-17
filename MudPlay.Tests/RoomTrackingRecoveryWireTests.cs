@@ -546,23 +546,37 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Empty(engine.Backtracks);
     }
 
-    // e. A step the game refuses never landed: the footprint is dropped rather than
-    // folding it (the walker sends it again, and two steps would then count as landed
-    // on the next landing).
-    [Fact]
-    public void Tier2Forward_ARefusedStep_DropsTheFootprintRatherThanFoldingIt()
+    // A step the game refuses or drops never happened: it leaves the walk-back
+    // history, so tier 3 can't reverse it, and the forward footprint neither folds it
+    // nor is dropped over it. The engine sends the step again, as the walker does,
+    // and that landing folds as the step.
+    [Theory]
+    [InlineData("There is no exit in that direction!")]
+    [InlineData("You are typing too quickly - command ignored")]
+    public void Tier2Forward_ARefusedStep_LeavesTheHistory_AndTheStepSentAgainFolds(string refusal)
     {
         (TrackerWireRig rig, PlanEngine engine) = StartForward(PairWorld(split: 1));
         using TrackerWireRig _ = rig;
         engine.Plan.Enqueue(Walk[0]);
-        rig.NextAnswers.Enqueue("There is no exit in that direction!");
+        rig.NextAnswers.Enqueue(refusal);
 
         Assert.True(engine.Step());
         rig.Pump();
 
         Assert.Equal(A(0), rig.Position);
-        Assert.Equal("idle", rig.Gate.Tier2ForwardStatus);
-        Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Tier2.forward-dropped"));
+        Assert.Empty(rig.Gate.ExecutedSinceAnchor);
+        Assert.StartsWith("active — 2 candidates, depth 0", rig.Gate.Tier2ForwardStatus);
+
+        engine.Plan.Enqueue(Walk[0]);   // sent again
+        engine.Plan.Enqueue(Walk[1]);
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(new[] { Walk[0] }, rig.Gate.ExecutedSinceAnchor);
+        Assert.True(engine.Step());
+        rig.Pump();
+
+        Assert.Equal(TierLevel.Tier1, rig.Gate.CurrentTier);
+        AssertLocatedAt(rig, A(2));
     }
 
     // e. A teleport breaks the walk the forward footprint folds.
@@ -901,8 +915,8 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(Gate, Saved(profile));
     }
 
-    // A character loaded with no saved room keeps the tracker where it was, but
-    // neither the last character's trail nor its guess goes along to be saved.
+    // Neither the last character's trail nor its guess goes along with a swap to a
+    // character with no saved room, to be saved as its own.
     [Fact]
     public void AProfileSwap_ToOneWithNoSavedRoom_TakesNoTrailOrGuessAlong()
     {
@@ -1021,5 +1035,258 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.False(rig.Tracker.PositionIsGuess);
         Assert.Equal(Gate, Saved(profile));
         Assert.Null(profile.RecentStepsFrom);
+    }
+
+    // ----- a flee's steps in the walk-back -------------------------------
+
+    // Two copies of a bending corridor of "Hall" rooms, one off a Gate and one off a
+    // Postern: every Hall reads like its twin, so a walk-back tells them apart only
+    // once it is back at the Gate.
+    private static RoomKey BendA(int i) => new(1, 10 + i);
+    private static RoomKey BendB(int i) => new(1, 20 + i);
+    private static readonly RoomKey Postern = new(1, 2);
+
+    private static string BendWorld()
+    {
+        List<string> rooms = new()
+        {
+            TrackerWireRig.Room(Gate.Map, Gate.Room, "Gate", ("E", Ref(BendA(1)))),
+            TrackerWireRig.Room(Postern.Map, Postern.Room, "Postern", ("E", Ref(BendB(1)))),
+        };
+        foreach ((Func<int, RoomKey> at, RoomKey end) in new (Func<int, RoomKey>, RoomKey)[] { (BendA, Gate), (BendB, Postern) })
+        {
+            RoomKey one = at(1), two = at(2), three = at(3), four = at(4);
+            rooms.Add(TrackerWireRig.Room(one.Map, one.Room, "Hall", ("W", Ref(end)), ("E", Ref(two))));
+            rooms.Add(TrackerWireRig.Room(two.Map, two.Room, "Hall", ("W", Ref(one)), ("N", Ref(three))));
+            rooms.Add(TrackerWireRig.Room(three.Map, three.Room, "Hall", ("S", Ref(two)), ("E", Ref(four))));
+            rooms.Add(TrackerWireRig.Room(four.Map, four.Room, "Hall", ("W", Ref(three))));
+        }
+        return TrackerWireRig.Rooms(rooms);
+    }
+
+    // A flee is a real move: its step goes in the walk-back history, wired as the
+    // client wires it (HealthManager.FleeMoveSent). The engine walks E, E, N, a low-HP
+    // run goes back S, the walk carries on N into a room showing an exit the map
+    // lacks, and the engine's watchdog gives up. The walk-back undoes the run's step
+    // too, so it retraces the way taken and settles at the Gate; reversing only the
+    // engine's steps would send it south out of a room with no south exit.
+    [Fact]
+    public void AFleeStep_IsInTheWalkBackHistory_SoTheWalkBackRetracesIt()
+    {
+        using TrackerWireRig rig = new(BendWorld()) { Position = Gate };
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        Game.PlayerState state = new();
+        using Game.Health.HealthManager health = new(state, new MovementCoordinator(rig.Log),
+            readSettings: () => new HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: () => string.Empty,
+            getActiveMovementEngine: () => engine,
+            getLastSentDirection: () => rig.Gate.ExecutedSinceAnchor.Count > 0 ? rig.Gate.ExecutedSinceAnchor[^1] : null,
+            readCombatSettings: () => new CombatSettings { RunDirection = RunDirection.Backward, RunDistance = 1 },
+            readGeneralSettings: null,
+            hasEngageableHostiles: () => true,
+            log: rig.Log,
+            hasHostileInRoom: () => true,
+            post: action => action());
+        health.FleeMoveSent = rig.Gate.NoteEngineStepSent;
+        foreach (Direction dir in new[] { Direction.E, Direction.E, Direction.N })
+        {
+            engine.Plan.Enqueue(dir);
+            Assert.True(engine.Step());
+            rig.Pump();
+        }
+        Assert.Equal(BendA(3), rig.Position);
+
+        state.MaxHp = 200;
+        state.InCombat = true;
+        state.HasPromptData = true;
+        state.Hp = 30;
+        rig.Pump();
+        Assert.Equal(BendA(2), rig.Position);
+        Assert.Equal(new[] { Direction.E, Direction.E, Direction.N, Direction.S }, rig.Gate.ExecutedSinceAnchor);
+
+        engine.Plan.Enqueue(Direction.N);
+        rig.ExtraShownExits[BendA(3)] = new[] { Direction.D };
+        Assert.True(engine.Step());
+        rig.Pump();
+        rig.ExtraShownExits.Clear();
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        RoomKey? recovered = null;
+        rig.Gate.Recovered += key => recovered = key;
+
+        rig.Gate.NoteEngineStalled("the step's watchdog gave up");
+        rig.Pump();
+
+        Assert.Equal(Gate, recovered);
+        Assert.Equal(Gate, rig.Position);
+        Assert.Empty(rig.Failures);
+        Assert.Equal(new[] { Direction.S, Direction.S, Direction.N, Direction.S, Direction.W, Direction.W }, engine.Backtracks);
+    }
+
+    // ----- where tier 3 starts -------------------------------------------
+
+    // The map holds A(0), really in its twin B(0), and follows the walk as A's. B's
+    // room 2 shows an exit A's lacks (shared with a decoy), so the map, unsure, goes
+    // on holding A(1), the room the step left; the character stands in B(2). Seeded
+    // from what that landing showed, the walk-back's first reverse step tells B(2)
+    // from the decoy. Seeded from the room held, it is a step out of line, and the
+    // footprint runs out at once.
+    [Fact]
+    public void Tier3_AnUnsureMap_StartsTheWalkBackFromTheFailedStepsLanding()
+    {
+        using TrackerWireRig rig = new(PairWorld(split: 6, decoyAt: 2)) { Position = B(0) };
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(A(0).Map, A(0).Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        engine.Plan.Enqueue(Walk[0]);
+        engine.Plan.Enqueue(Walk[1]);
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(B(2), rig.Position);
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        Assert.Equal(A(1), rig.Believed);
+        RoomKey? recovered = null;
+        rig.Gate.Recovered += key => recovered = key;
+
+        rig.Gate.NoteEngineStalled("the step's watchdog gave up");
+        rig.Pump();
+
+        Assert.Empty(rig.Failures);
+        Assert.Equal(B(1), recovered);
+        AssertLocatedAt(rig, B(1));
+    }
+
+    // ----- a stale re-confirm in rooms that read alike --------------------
+
+    // The map, unsure, holds A(10) of corridors where every room reads alike. The
+    // character walks on east: the display fits the room held as well as any, but it
+    // shows where the move went. Re-confirming the room held would put the map back
+    // a room behind; it stays unsure until a display only one room fits.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AMovesDisplay_ThatFitsTheSuspectRoomAndItsLookAlikes_DoesNotReconfirmIt(bool echo)
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(10), Echo = echo };
+        CharacterProfile profile = new() { LastKnownRoom = new RoomRef(CorridorA(10).Map, CorridorA(10).Room) };
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        // An exit the map doesn't have shows: no room fits, and the map goes unsure of
+        // the room it holds.
+        rig.ExtraShownExits[rig.Position] = new[] { Direction.N };
+        rig.Do("l");
+        rig.ExtraShownExits.Clear();
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+
+        rig.Do("e");
+
+        Assert.Equal(CorridorA(11), rig.Position);
+        Assert.NotEqual(RoomConfidence.Confirmed, rig.Tracker.State.Confidence);
+
+        for (int step = 0; step < 12; step++) rig.Do("w");
+        AssertLocatedAt(rig, Gate);
+    }
+
+    // ----- saves around a relog and a profile swap -----------------------
+
+    // A relog lands on the trail's start and replays the trail against the first
+    // display. A save before that display (the profile saves all through play)
+    // keeps the trail rather than saving the start as the room the character is in.
+    [Fact]
+    public void ASaveRightAfterARelog_KeepsTheTrailForTheFirstDisplay()
+    {
+        using TrackerWireRig rig = new(TwinCorridors(byPosition: true)) { Position = CorridorA(8) };
+        CharacterProfile profile = new()
+        {
+            LastKnownRoom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room),
+            RecentSteps = new() { new DirectionDto(Direction.E), new DirectionDto(Direction.E), new DirectionDto(Direction.E) },
+        };
+        rig.Tracker.Hydrate(profile);
+
+        Save(rig);
+        Assert.Equal(3, profile.RecentSteps?.Count);
+        Assert.Equal(CorridorA(5), Saved(profile));
+        rig.ShowRoom();
+
+        AssertLocatedAt(rig, CorridorA(8));
+    }
+
+    // A character loaded with no saved room doesn't take on the room the tracker
+    // held for the last one: its first save, before any room is shown, writes no
+    // room as its own.
+    [Fact]
+    public void AProfileSwap_ToOneWithNoSavedRoom_DoesNotSaveTheLastCharactersRoom()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = Gate };
+        CharacterProfile first = new();
+        rig.Tracker.Hydrate(first);
+        rig.ShowRoom();
+        AssertLocatedAt(rig, Gate);
+        Assert.Equal(Gate, Saved(first));
+
+        Save(rig);
+        rig.Tracker.OnProfileClosed();
+        CharacterProfile next = new();
+        rig.Tracker.Hydrate(next);
+        Save(rig);
+
+        Assert.Null(next.LastKnownRoom);
+        Assert.Null(rig.Believed);
+        Assert.Equal(RoomConfidence.Unknown, rig.Tracker.State.Confidence);
+    }
+
+    // A character that never had a room saved as known (only rooms it worked out)
+    // still has the guess its last save kept: a relog lands there, as a guess.
+    [Fact]
+    public void ARelog_WithAGuessSavedAndNoKnownRoom_LandsOnTheGuess()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(5) };
+        CharacterProfile profile = new() { RecentStepsFrom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room) };
+
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+
+        AssertLocatedAt(rig, CorridorA(5));
+        Assert.True(rig.Tracker.PositionIsGuess);
+        Assert.Null(profile.LastKnownRoom);
+    }
+
+    // A guess saved as where a relog lands (a trail of none) ends with the guess:
+    // holding no room (Lost, the room graph built again) takes it off the profile,
+    // so a relog lands on the known room rather than on the old guess.
+    [Theory]
+    [InlineData("lost")]
+    [InlineData("reload")]
+    public void AGuessEndingWithNoRoomHeld_TakesItsSavedStartWithIt(string how)
+    {
+        using TrackerWireRig rig = GuessInCorridor(out CharacterProfile profile);
+        Assert.NotNull(profile.RecentStepsFrom);
+        if (how == "lost")
+        {
+            // Displays no room fits, with nothing moved: the map strikes out to Lost.
+            foreach (Direction shown in new[] { Direction.N, Direction.S, Direction.U })
+            {
+                rig.ExtraShownExits[rig.Position] = new[] { shown };
+                rig.Do("l");
+            }
+            Assert.Equal(RoomConfidence.Lost, rig.Tracker.State.Confidence);
+        }
+        else
+        {
+            rig.Graph.OnActiveSetChanged("alpha");
+            Assert.Equal(RoomConfidence.Unknown, rig.Tracker.State.Confidence);
+        }
+
+        Assert.Null(profile.RecentStepsFrom);
+        rig.Tracker.OnProfileClosed();
+        rig.Tracker.Hydrate(profile);
+        Assert.Equal(Gate, rig.Believed);
+        Assert.False(rig.Tracker.PositionIsGuess);
     }
 }

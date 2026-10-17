@@ -1,5 +1,14 @@
 # Version history
 
+## 3.184.13
+
+- Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
+- Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
+- Unsure of your room, a move into a room that reads like the one held no longer re-confirms the held room
+- A save right after logging back on, before the room shows, keeps the moves to replay
+- A character with no saved room starts with no room, not the last character's
+- Lost, or the map rebuilt, also drops a worked-out room saved for the next relog
+
 ## 3.184.6
 
 - Lost-recovery walk-back stops after 64 reverse moves and gives up as an exhausted one does
