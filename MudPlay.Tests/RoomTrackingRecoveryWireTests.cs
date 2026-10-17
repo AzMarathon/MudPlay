@@ -155,6 +155,79 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, A(1));
     }
 
+    // A move the game answers with nothing the tracker can read: a typed command
+    // that prints only the prompt, or a line no refusal detector knows. It must be
+    // retired, or every later display is read against the move before its own. With
+    // an echo, the next command's echo retires it (it was echoed and no display came
+    // before the next one); with none, a next move sent more than 3 s later does.
+    [Theory]
+    [InlineData("enter portal", null, true)]
+    [InlineData("climb rope", null, true)]
+    [InlineData("enter portal", null, false)]
+    [InlineData("e", "Something unseen stops you.", true)]
+    [InlineData("e", "Something unseen stops you.", false)]
+    public void PassiveLocate_AMoveWithNoAnswerTheTrackerReads_IsRetired(string command, string? answer, bool echo)
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.Echo = echo;
+        if (answer is not null) rig.NextAnswers.Enqueue(answer);
+
+        rig.Do(command);
+        if (!echo) rig.Clock.Advance(TimeSpan.FromSeconds(4));   // the player waits, then walks on
+        for (int step = 0; step < 4; step++) rig.Do(Token(step));
+
+        AssertLocatedAt(rig, A(4));
+    }
+
+    // More unanswered moves than the queue holds (typed quickly, no echo, so none is
+    // retired): the passive locate starts over rather than reading every later
+    // display against an older move.
+    [Fact]
+    public void PassiveLocate_MoreUnansweredMovesThanTheQueueHolds_StartsOver()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.Echo = false;
+
+        for (int i = 0; i < 16; i++) rig.Do("enter portal");
+        Assert.Equal("idle", rig.Tracker.PassiveGridStatus);
+
+        for (int step = 0; step < 3; step++) rig.Do(Token(step));
+        AssertLocatedAt(rig, A(3));
+    }
+
+    // a. A typed command the room refuses with a line that also answers ordinary
+    // commands ("You do not see that here."), sent just now, is refused as a move.
+    [Fact]
+    public void PassiveLocate_ATypedCommandRefusedByTheRoom_IsNotFolded()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 1));
+        rig.NextAnswers.Enqueue("You do not see that here.");
+
+        rig.Do("enter portal");
+        for (int step = 0; step < 3; step++) rig.Do(Token(step));
+
+        AssertLocatedAt(rig, A(3));
+    }
+
+    // c. Down to one room, waiting on a move that never got an answer: past the 3 s
+    // bound, the next display re-anchors instead of being read as that move's.
+    [Fact]
+    public void PassiveLocate_DownToOne_AMoveWithNoAnswerDoesNotHoldTheReanchorForGood()
+    {
+        using TrackerWireRig rig = StartInPair(PairWorld(split: 0));
+        rig.Echo = false;
+
+        rig.Type(Token(0));
+        rig.Type("enter portal");   // answered with only a prompt
+        rig.Pump();
+        Assert.NotEqual(RoomConfidence.Confirmed, rig.Tracker.State.Confidence);
+
+        rig.Clock.Advance(TimeSpan.FromSeconds(4));
+        rig.Do("l");
+
+        AssertLocatedAt(rig, A(1));
+    }
+
     // c. Two moves sent before either is answered: each display folds with its own
     // move, oldest first.
     [Fact]
@@ -244,12 +317,16 @@ public sealed class RoomTrackingRecoveryWireTests
         public Direction? PeekNextPlannedDirection() => Plan.Count > 0 ? Plan.Peek() : null;
         public IReadOnlyList<Direction> PeekPlannedDirections(int count) => Plan.Take(count).ToList();
 
-        public void Step()
+        // As LoopRunner does before every planned step: the gate may hold it, or take
+        // over (tier 3). Returns whether the step went out.
+        public bool Step()
         {
+            if (!_rig.Gate.MayProceedWithPlannedStep()) return false;
             Direction dir = Plan.Dequeue();
             _rig.Tracker.NoteMoveSent(dir);
             _rig.Gate.NoteEngineStepSent(dir);
             _rig.Send(Encoding.Latin1.GetBytes(dir.ToToken() + "\r"));
+            return true;
         }
 
         public void SendBacktrackMove(Direction direction)
@@ -277,18 +354,20 @@ public sealed class RoomTrackingRecoveryWireTests
         return (rig, engine);
     }
 
-    // e. Two steps out at once: the first lands with the second still queued
-    // (Pending), the second lands Confirmed. Each folds in its turn.
+    // e. Each step, sent once the one before has landed (the gate holds a step the
+    // room it would leave from has no exit for), folds with its own landing.
     [Fact]
-    public void Tier2Forward_TwoStepsOut_EachLandingFoldsItsOwnStep()
+    public void Tier2Forward_StepsInTurn_EachLandingFoldsItsOwnStep()
     {
         (TrackerWireRig rig, PlanEngine engine) = StartForward(PairWorld(split: 1));
         using TrackerWireRig _ = rig;
         engine.Plan.Enqueue(Walk[0]);
         engine.Plan.Enqueue(Walk[1]);
 
-        engine.Step();
-        engine.Step();
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.StartsWith("active — 2 candidates, depth 1", rig.Gate.Tier2ForwardStatus);
+        Assert.True(engine.Step());
         rig.Pump();
 
         Assert.Equal(TierLevel.Tier1, rig.Gate.CurrentTier);
@@ -316,9 +395,9 @@ public sealed class RoomTrackingRecoveryWireTests
         engine.Plan.Enqueue(Walk[0]);
         engine.Plan.Enqueue(Walk[1]);
 
-        engine.Step();
+        Assert.True(engine.Step());
         rig.Pump();
-        engine.Step();
+        Assert.True(engine.Step());
         rig.Pump();
 
         Assert.Equal(TierLevel.Tier1, rig.Gate.CurrentTier);

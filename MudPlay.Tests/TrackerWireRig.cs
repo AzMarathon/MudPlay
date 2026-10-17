@@ -79,7 +79,13 @@ internal sealed class TrackerWireRig : IDisposable
         Graph = new RoomGraphManager(cache, Log);
         Graph.OnActiveSetChanged("alpha");
 
-        _emulator = new TerminalEmulator(80, 25, () => Clock.Now);
+        // Each read moves the clock one tick, as the wall clock does between two rows:
+        // a row stamped like the prompt row before it reads as that prompt's echo.
+        _emulator = new TerminalEmulator(80, 25, () =>
+        {
+            Clock.Advance(TimeSpan.FromTicks(1));
+            return Clock.Now;
+        });
         _lines = new LineExtractor(_emulator, Clock.Timestamp);
         DefaultPatterns.Seed(_router);
         _lines.LineEmitted += _router.Dispatch;
@@ -152,8 +158,9 @@ internal sealed class TrackerWireRig : IDisposable
         Feed($"\r\n -- Following your Party leader {dir.ToLongName()} --\r\n" + RoomText(Position) + Prompt);
     }
 
-    // The room we stand in, shown with nothing typed (logging in, a respawn).
-    public void ShowRoom() => Feed(RoomText(Position) + Prompt);
+    // The room we stand in, shown with nothing typed (logging in, a respawn). It
+    // starts on a line of its own: on the prompt row it would read as an echo.
+    public void ShowRoom() => Feed("\r\n" + RoomText(Position) + Prompt);
 
     private void Answer(string command)
     {

@@ -6892,11 +6892,21 @@ Among protectable hazards, a further split governs whether the navigator may off
     — no name, no exits, traversal inferred from no bonk* and *Moving while blind*. A Lost display no room
     matches exactly still folds, by the subset match.
   - A refusal while unsure un-counts the newest unsure move (`NoteMoveBlocked`, and `NoteCommandDropped`
-    within its 3 s window; the exit-gate and hold refusals through `MoveAwaitingAnswer`), and a redisplay with
-    no move waiting is a repeat, not a fold (`IsRepeatRedisplayWithoutMove`).
-- **Client policy** (2026-10-17): a footprint that comes down to one room while a later move is still in
-  flight waits for that move's display before re-anchoring (`SettlePassiveFold`; the gate's forward
-  localiser does the same). The set can only shrink, so waiting never loses the room.
+    within its 3 s window; the exit-gate and hold refusals through `MoveAwaitingAnswer`; a typed command the
+    room refuses through `NoteCommandMoveRefused`), and a redisplay with no move waiting is a repeat, not a
+    fold (`IsRepeatRedisplayWithoutMove`).
+  - A move nothing answers that the tracker reads (a command the game answers with only a prompt, a line no
+    detector knows) is retired (`RetireUnansweredMoves`, `NoteUnsureEcho`): on a statline that echoes, once
+    the next command's echo comes with no display between; on one that doesn't, once it has had nothing for
+    1.5 s with a later move out (`UnansweredMoveAge`). The bound comes from *Timing & rounds → Global combat
+    tick and exp accrual* (a step takes 0.6–0.7 s on Stock, 1.1–1.2 s on Paradigm, lag included) and *Wire,
+    prompt & command output → Command rate limit (typing/sending too fast)* (Stock runs one waiting command per
+    1 s fast tick), so moves sent together are answered about a second apart. PR #1091 review, 2026-10-17.
+- **Client policy** *(Claude's design in PR #1091, 2026-10-17; not a user ruling)*: a footprint that comes
+  down to one room while a later move is still in flight waits for that move's display before re-anchoring
+  (`SettlePassiveFold`; the gate's forward localiser does the same). The set can only shrink, so waiting
+  never loses the room. A move past `UnansweredMoveAge` isn't waited for (`SettleStalePassiveWait`;
+  `RoomTracker.MovesInFlight` doesn't count it for the gate).
 
 ### Great Pyramid puzzle climb
 *Status: CONFIRMED 2026-07-29 (user + capture `follower log of going up the pyramid.log` + hand-drawn map + game-data trace); undead-priest holds CONFIRMED 2026-07-30 (user + game-data trace) · Realm: Paradigm (1.9.1); stock noted where it differs*

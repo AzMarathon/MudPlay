@@ -88,7 +88,40 @@ public sealed class RoomTracker
     // _pending when a sure tracker turns unsure (CarryPendingIntoUnsure). Each
     // unsure display, dark line or blind line answers the oldest; a refusal
     // un-counts the newest; a settled position empties it. Bounded like _pending.
-    private readonly List<PendingMove> _unsureMoves = new();
+    // A move can also get no answer at all the tracker knows: a typed command the
+    // game answers with nothing but a prompt, or with a line no detector catalogues.
+    // Such a move is retired (RetireUnansweredMoves) or else every later display
+    // would be read one move behind.
+    private readonly List<UnsureMove> _unsureMoves = new();
+
+    private sealed class UnsureMove
+    {
+        public required PendingMove Move { get; init; }
+        // The game echoed it on the prompt row: it was read, so its display (if it
+        // has one) comes before the next command's echo.
+        public bool Echoed { get; set; }
+    }
+
+    // How long a move is given to be answered, counted from when it went out or
+    // the last display was read, whichever is later, before it's presumed to have
+    // no answer coming. A step lands in 0.6–0.7 s on Stock and 1.1–1.2 s on
+    // Paradigm, lag included (GAME_MECHANICS "Timing & rounds"), and on Stock a
+    // command waiting behind others runs one fast tick (1 s) after the one before.
+    // So moves sent together are answered about a second apart, the slowest step
+    // seen takes 1.2 s, and a move with nothing for 1.5 s had its answer due.
+    private static readonly TimeSpan UnansweredMoveAge = TimeSpan.FromSeconds(1.5);
+
+    // The time of the latest send, display, dark line or blind line the tracker was
+    // given: what MovesInFlight ages moves against, on the same clock they were sent on.
+    private DateTimeOffset _latestEventAt;
+
+    private void NoteEventTime(DateTimeOffset when)
+    {
+        if (when > _latestEventAt) _latestEventAt = when;
+    }
+
+    private bool StillAwaited(PendingMove move, DateTimeOffset now) =>
+        now - (move.SentAt > _lastObservationAt ? move.SentAt : _lastObservationAt) <= UnansweredMoveAge;
     // Reports whether a navigation engine is currently attached to the recovery gate.
     // Null in tests / before wiring → treated as "not attached", so the passive path
     // runs. Wired by AppServices to EngineRecoveryGate.HasAttachedEngine.
@@ -509,6 +542,8 @@ public sealed class RoomTracker
         }
         LastMoveWasManual = !isEngineAnnouncement && !isFollowDrag;
         SettleUnshownCastDrag(when);
+        NoteEventTime(when);
+        SettleStalePassiveWait(when);
         PendingMove move = isFollowDrag
             ? PendingMove.FromFollowDrag(direction, when)
             : PendingMove.FromDirection(direction, when);
@@ -644,6 +679,8 @@ public sealed class RoomTracker
         }
         LastMoveWasManual = !isEngineAnnouncement;
         SettleUnshownCastDrag(when);
+        NoteEventTime(when);
+        SettleStalePassiveWait(when);
         PendingMove move = new(cardinal, command, when);
         EnqueuePending(move);
         AppendStep(new DirectionDto(cardinal, command));
@@ -718,6 +755,8 @@ public sealed class RoomTracker
         // Unsure of the room, the dark line still answers the oldest move in flight:
         // no bonk came, so it was taken. The passive footprint dead-reckons it here,
         // rather than folding it later under a lit display that isn't its own.
+        NoteEventTime(when);
+        SettleStalePassiveWait(when);
         if (!IsSure)
         {
             FoldUnshownMove(when, "dark line");
@@ -809,6 +848,8 @@ public sealed class RoomTracker
 
         // As in the dark: unsure of the room, the line answers the oldest move in
         // flight, and the passive footprint dead-reckons it.
+        NoteEventTime(when);
+        SettleStalePassiveWait(when);
         if (!IsSure)
         {
             FoldUnshownMove(when, "blind-move line");
@@ -1276,6 +1317,9 @@ public sealed class RoomTracker
         State.OpenDoorDirections = observation.OpenDoorDirections;
         State.ClosedDoorDirections = observation.ClosedDoorDirections;
 
+        NoteEventTime(when);
+        SettleStalePassiveWait(when);
+
         // From here on a room the tracker settles on is the one this display shows:
         // a booked landing it corrects, as much as the reconcile that follows.
         _reconcilingDisplay = true;
@@ -1296,7 +1340,7 @@ public sealed class RoomTracker
             switch (State.Confidence)
             {
                 case RoomConfidence.Unknown:
-                    LandFromCandidateSearch(observation, TakeAnsweredMove(), when);
+                    LandFromCandidateSearch(observation, TakeAnsweredMove(when), when);
                     break;
 
                 case RoomConfidence.Confirmed:
@@ -1309,7 +1353,7 @@ public sealed class RoomTracker
                     break;
 
                 case RoomConfidence.Suspect:
-                    ReconcileFromSuspect(observation, TakeAnsweredMove(), when);
+                    ReconcileFromSuspect(observation, TakeAnsweredMove(when), when);
                     break;
 
                 case RoomConfidence.Lost:
@@ -1318,7 +1362,7 @@ public sealed class RoomTracker
                     // land via candidate search. PendingRespawn arrives via
                     // the same code path because the recovery semantics are
                     // identical: the next obs is wherever we are now.
-                    LandFromCandidateSearch(observation, TakeAnsweredMove(), when);
+                    LandFromCandidateSearch(observation, TakeAnsweredMove(when), when);
                     break;
             }
         }
@@ -1568,7 +1612,7 @@ public sealed class RoomTracker
         // is waiting on: counted but never made, it must not be folded.
         if (!IsSure)
         {
-            if (_unsureMoves.Count == 0 || when - _unsureMoves[^1].SentAt > DroppedCommandWindow) return;
+            if (_unsureMoves.Count == 0 || when - _unsureMoves[^1].Move.SentAt > DroppedCommandWindow) return;
             DropMostRecentPending();
             DropNewestUnsureMove("dropped by the typing-rate limiter");
             return;
@@ -1608,6 +1652,16 @@ public sealed class RoomTracker
     public bool NoteCommandMoveRefused(DateTimeOffset? whenUtc = null)
     {
         DateTimeOffset when = whenUtc ?? _now();
+        // Unsure of the room, the same holds for the newest unsure move: a typed
+        // command refused never moved us, and must not be folded.
+        if (!IsSure && MoveAwaitingAnswer)
+        {
+            PendingMove newest = _unsureMoves[^1].Move;
+            if (newest.Command is null || when - newest.SentAt > DroppedCommandWindow) return false;
+            CommandMoveRefused?.Invoke();
+            NoteMoveBlocked(when);
+            return true;
+        }
         if (State.Confidence != RoomConfidence.Pending) return false;
         if (MostRecentPending() is not { Command: not null } last) return false;
         if (when - last.SentAt > DroppedCommandWindow) return false;
@@ -1650,6 +1704,7 @@ public sealed class RoomTracker
         // occasionally see, and hold every un-echoed move as a re-look forever.
         if (provesStatlineReadable)
             _everReceivedEcho = true;
+        if (!IsSure) NoteUnsureEcho(command);
         // Record only an echo that names the move currently in flight. A non-move
         // command echoed mid-move (stat, inventory), or the echo of an already-
         // confirmed move, must not overwrite the head move's echo and leave its
@@ -2456,7 +2511,7 @@ public sealed class RoomTracker
     // footprint dead-reckons it, keeping every candidate the move can be made from.
     private void FoldUnshownMove(DateTimeOffset when, string what)
     {
-        if (TakeAnsweredMove() is not { } move)
+        if (TakeAnsweredMove(when) is not { } move)
         {
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"{char.ToUpperInvariant(what[0])}{what[1..]} seen while {State.Confidence} with no move in flight — holding position.");
@@ -2477,16 +2532,19 @@ public sealed class RoomTracker
     // After a passive fold: re-anchor on a single survivor, drop an exhausted
     // footprint. A survivor found while later moves are still in flight waits for
     // them: re-anchoring now would forget those moves, and their displays would then
-    // be read from the wrong room. The set can't grow, so waiting loses nothing.
+    // be read from the wrong room. The set can't grow, so waiting loses nothing. Only
+    // a move inside UnansweredMoveAge is waited for: an older one is presumed to have
+    // no answer coming, and must not hold the re-anchor off for good.
     private bool SettlePassiveFold(DateTimeOffset when)
     {
         if (_passiveGrid.IsConverged && _graph.GetRoom(_passiveGrid.Candidates.Single()) is { } room)
         {
-            if (_unsureMoves.Count > 0)
+            int live = _unsureMoves.Count(u => StillAwaited(u.Move, when));
+            if (live > 0)
             {
                 _log?.Log(LogSeverity.Info, "RoomTracker",
                     $"Passive grid locate down to {room.Name} {room.Key} after {_passiveGrid.Depth} moves; "
-                    + $"waiting for {_unsureMoves.Count} move(s) still in flight before re-anchoring.");
+                    + $"waiting for {live} move(s) still in flight before re-anchoring.");
                 return false;
             }
             _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -2509,6 +2567,21 @@ public sealed class RoomTracker
         return false;
     }
 
+    // A footprint down to one room, waiting on moves that have since passed
+    // UnansweredMoveAge: re-anchor there now, before the next send or line is read,
+    // so that one is read from the room. Run ahead of every send, display, dark line
+    // and blind line while unsure.
+    private void SettleStalePassiveWait(DateTimeOffset when)
+    {
+        if (IsSure || !_passiveGridActive || !_passiveGrid.IsConverged || _unsureMoves.Count == 0) return;
+        if (_unsureMoves.Any(u => StillAwaited(u.Move, when))) return;
+        if (_isEngineAttached?.Invoke() == true) return;
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Passive grid locate was waiting on {_unsureMoves.Count} move(s) with no answer in {UnansweredMoveAge.TotalSeconds:0.#} s; re-anchoring without them.");
+        _unsureMoves.Clear();
+        SettlePassiveFold(when);
+    }
+
     // How a move hops one candidate: a cardinal through that direction's exit, a
     // text exit through whichever exit of the candidate answers to its command.
     private Func<RoomKey, HopOutcome> PassiveHop(PendingMove move)
@@ -2526,8 +2599,27 @@ public sealed class RoomTracker
     // Moves still waiting on a display: the pending queue while the tracker is sure
     // of the room, the unsure-move queue otherwise (the pending queue isn't answered
     // then). The recovery gate reads it to tell which of its executed steps have
-    // landed.
-    public int MovesInFlight => IsSure ? _pending.Count : _unsureMoves.Count;
+    // landed. A move past UnansweredMoveAge isn't counted: one stale entry would
+    // otherwise hold every later step back from folding.
+    public int MovesInFlight
+    {
+        get
+        {
+            DateTimeOffset now = _latestEventAt;
+            int count = 0;
+            if (IsSure)
+            {
+                foreach (PendingMove move in _pending)
+                    if (StillAwaited(move, now)) count++;
+            }
+            else
+            {
+                foreach (UnsureMove unsure in _unsureMoves)
+                    if (StillAwaited(unsure.Move, now)) count++;
+            }
+            return count;
+        }
+    }
 
     // A move is out with no answer yet, so a refusal line now refuses it: Pending
     // while sure, a queued unsure move otherwise.
@@ -2537,24 +2629,70 @@ public sealed class RoomTracker
     private void NoteUnsureMove(PendingMove move)
     {
         if (IsSure) return;
-        _unsureMoves.Add(move);
-        if (_unsureMoves.Count > PendingQueueCap) _unsureMoves.RemoveAt(0);
+        _unsureMoves.Add(new UnsureMove { Move = move });
+        if (_unsureMoves.Count <= PendingQueueCap) return;
+        // Dropping only the oldest would leave every later display read against the
+        // move before its own. Start over: the next display seeds a fresh footprint.
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"{_unsureMoves.Count} moves sent while unsure with no answer; dropping them and the passive footprint.");
+        ResetPassiveLocate();
     }
 
     // The oldest unsure move, which the display (or dark / blind line) now being read
     // is the outcome of; null when none is in flight.
-    private PendingMove? TakeAnsweredMove()
+    private PendingMove? TakeAnsweredMove(DateTimeOffset when)
     {
+        RetireUnansweredMoves(when);
         if (_unsureMoves.Count == 0) return null;
-        PendingMove oldest = _unsureMoves[0];
+        PendingMove oldest = _unsureMoves[0].Move;
         _unsureMoves.RemoveAt(0);
         return oldest;
+    }
+
+    // Drop the leading unsure moves that will never get a display. With a statline
+    // that echoes, that is a move echoed before a later one with no display read
+    // in between (NoteUnsureEcho does it as the later echo arrives). A move with no
+    // echo seen (a statline that doesn't echo, or one whose echoes stopped reading)
+    // is one past UnansweredMoveAge with a later move behind it: the display now
+    // being read is that later move's.
+    private void RetireUnansweredMoves(DateTimeOffset when)
+    {
+        while (_unsureMoves.Count >= 2 && !_unsureMoves[0].Echoed && !StillAwaited(_unsureMoves[0].Move, when))
+            RetireOldestUnsureMove($"nothing for {UnansweredMoveAge.TotalSeconds:0.#} s, and a later move is out");
+    }
+
+    // The game echoed a command while we're unsure of the room: mark the unsure move
+    // it names, and retire the moves before it that were echoed already. Their
+    // displays would have come before this echo, and none did.
+    private void NoteUnsureEcho(string echoed)
+    {
+        int at = _unsureMoves.FindIndex(u => !u.Echoed
+            && (EchoMatchesHead(echoed, u.Move)
+                || (u.Move.Command is { } cmd && string.Equals(echoed, cmd, StringComparison.OrdinalIgnoreCase))));
+        if (at < 0) return;
+        _unsureMoves[at].Echoed = true;
+        for (int i = at - 1; i >= 0; i--)
+        {
+            if (!_unsureMoves[i].Echoed) continue;
+            PendingMove dead = _unsureMoves[i].Move;
+            _unsureMoves.RemoveAt(i);
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Move {DescribeMove(dead)} was echoed and the next command's echo came with no display between; not counted as a move.");
+        }
+    }
+
+    private void RetireOldestUnsureMove(string why)
+    {
+        PendingMove dead = _unsureMoves[0].Move;
+        _unsureMoves.RemoveAt(0);
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Move {DescribeMove(dead)} got no answer ({why}); not counted as a move.");
     }
 
     private void DropNewestUnsureMove(string why)
     {
         if (_unsureMoves.Count == 0) return;
-        PendingMove newest = _unsureMoves[^1];
+        PendingMove newest = _unsureMoves[^1].Move;
         _unsureMoves.RemoveAt(_unsureMoves.Count - 1);
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"Move {DescribeMove(newest)} {why} while {State.Confidence}; not counted as a move.");
@@ -2564,17 +2702,22 @@ public sealed class RoomTracker
     // moves. Only a move sent since the last display was read can be in flight: an
     // older one had a display to answer it, even one the tracker held as a re-look of
     // the room being left (in a corridor of rooms that read alike, the pending queue
-    // grows that way). When a display brought the change, it answers the oldest.
+    // grows that way). Of those, a leading one past UnansweredMoveAge with a later
+    // one behind it got no answer (a typed command the game answered with only a
+    // prompt). When a display brought the change, it answers the oldest left.
     private void CarryPendingIntoUnsure()
     {
         ResetPassiveLocate();
-        bool skipOldest = _reconcilingDisplay;
-        foreach (PendingMove move in _pending)
+        List<PendingMove> inFlight = _pending.Where(m => m.SentAt > _lastObservationAt).ToList();
+        while (inFlight.Count >= 2 && !StillAwaited(inFlight[0], _latestEventAt))
         {
-            if (move.SentAt <= _lastObservationAt) continue;
-            if (skipOldest) { skipOldest = false; continue; }
-            _unsureMoves.Add(move);
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Move {DescribeMove(inFlight[0])} got no answer before the next went out; not carried as in flight.");
+            inFlight.RemoveAt(0);
         }
+        if (_reconcilingDisplay && inFlight.Count > 0) inFlight.RemoveAt(0);
+        foreach (PendingMove move in inFlight)
+            _unsureMoves.Add(new UnsureMove { Move = move });
     }
 
     private void ClearPassiveGrid()
