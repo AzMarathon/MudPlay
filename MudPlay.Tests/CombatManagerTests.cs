@@ -65,10 +65,23 @@ public sealed class CombatManagerTests
             while (_uiJobs.Count > 0) _uiJobs.Dequeue()();
         }
 
-        public Harness()
+        // The death watcher, wired as AppServices wires it: built ahead of the combat
+        // manager, so a kill's *Combat Off* reaches NoteUnattributedDeath before the
+        // combat manager's own handler for the line. Only with wireDeathWatcher.
+        public MonsterDeathWatcher? Deaths { get; }
+
+        public Harness(bool wireDeathWatcher = false)
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
+            if (wireDeathWatcher)
+            {
+                Deaths = new MonsterDeathWatcher(Router, Log);
+                Deaths.MonsterDied += evt =>
+                {
+                    if (evt.RoomSpellRoster is null) Combat!.NoteUnattributedDeath();
+                };
+            }
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: n => Overlays.TryGetValue(n, out MonsterOverlay? o)
                                      ? o : new MonsterOverlay(),
@@ -158,6 +171,7 @@ public sealed class CombatManagerTests
         public void Dispose()
         {
             Combat.Dispose();
+            Deaths?.Dispose();
             Classifier.Dispose();
         }
     }
@@ -626,6 +640,62 @@ public sealed class CombatManagerTests
         h.Feed("You don't see brigand chief here!");
 
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+    }
+
+    // The guarded priority dies as every kill reaches the client: exp + *Combat Off*,
+    // which a guard's death prints alike. The kill's re-pick swings at the surviving
+    // guard, so that Off's guard retry is paced out and the block outlived the chief.
+    // The next Off of the fight (a cast's, a stun's) then sent the retry at the dead
+    // chief and took the live fight's target over for a round. The kill now asks for
+    // the room, and its re-display, no longer listing the chief, ends the chase.
+    [Fact]
+    public void GuardBlock_PriorityKilled_ReDisplayWithoutIt_ClearsBlock_NoRetryAtTheCorpse()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+
+        h.Feed("Also here: brigand chief, large brigand.");
+        Assert.Equal("brigand chief", h.Combat.CurrentTarget);
+        h.Feed("large brigand moves to protect brigand chief");
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
+
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        Assert.Equal("large brigand", h.Combat.CurrentTarget);   // the survivor was re-picked
+        Assert.Equal(1, h.CrRefreshSends);                       // and the room asked for
+
+        h.Feed("Also here: large brigand.");
+        Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
+
+        BackdateLastAttack(h.Combat);
+        int sentBefore = h.Sent.Count;
+        h.Feed("*Combat Off*");
+
+        Assert.DoesNotContain(h.Sent.Skip(sentBefore),
+            b => Encoding.Latin1.GetString(b).TrimEnd('\r') == "a brigand chief");
+        Assert.Equal("large brigand", h.Combat.CurrentTarget);
+    }
+
+    // The other side: a guard's kill looks the same, and the re-display it asks for
+    // still lists the chief, so the chase goes on.
+    [Fact]
+    public void GuardBlock_GuardKilled_ReDisplayStillListsPriority_KeepsBlock()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "brigand chief", killable: true);
+        h.AddMonster(2, "brigand", killable: true, allowNoPrefix: true, "large", "small");
+
+        h.Feed("Also here: brigand chief, large brigand, small brigand.");
+        h.Feed("large brigand moves to protect brigand chief");
+
+        BackdateLastAttack(h.Combat);
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Feed("Also here: brigand chief, small brigand.");
+
+        Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
     }
 
     // A monster a party member killed (no exp for us, so no death seen) stays on the

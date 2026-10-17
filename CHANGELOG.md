@@ -1,5 +1,10 @@
 # Version history
 
+## 3.183.24
+
+- Combat: a guarded monster's death no longer leaves a guard retry aimed at its corpse; the room is re-read after each kill in a guard fight
+- Combat: a monster that walks in just as a kill pays you exp is no longer attacked off the stale room list; the room is re-read first
+
 ## 3.183.22
 
 - Character Info: a carried container's chest icon is drawn as a link, not a plain grey button

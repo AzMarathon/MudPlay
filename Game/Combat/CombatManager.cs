@@ -1712,26 +1712,53 @@ public sealed partial class CombatManager : IDisposable
         // confirmed, pruned roster drive a clean engage instead of racing it.
         if (_lastDeathAt > _arrivalSettleArmedAt)
         {
+            NoteArrivalSettleDecision("a kill landed during the window — deferred to the room re-display");
             _log?.Combat(LogCategory,
                 "arrival-settle: a kill landed during the window — deferring engage to the "
                 + "roster resync so the round's action can't corpse-cast a just-killed mob");
             TrySendRoomRefresh("kill during arrival-settle");
             return;
         }
+        // The same kill with no target of ours to drop: nothing stamps a death for it,
+        // but its exp line still came. A kill's exp line is always for a monster of our
+        // fight or our room (GAME_MECHANICS "Kill detection and monster-kill message
+        // order"), so the roster may still hold the corpse. An exp line that wasn't a
+        // kill's costs only the re-display's round trip.
+        if (_lastExpGainAt > _arrivalSettleArmedAt)
+        {
+            NoteArrivalSettleDecision("an exp line came during the window — deferred to the room re-display");
+            _log?.Combat(LogCategory,
+                "arrival-settle: an exp line came during the window with no target of ours to pin it on — "
+                + "deferring engage to the room re-display so the round's action can't corpse-cast a just-killed mob");
+            TrySendRoomRefresh("exp gain during arrival-settle");
+            return;
+        }
         if (MoveInFlight())
         {
             HoldForOurMove();
+            NoteArrivalSettleDecision("our move was in flight — left to the new room's display");
             _log?.Combat(LogCategory,
                 "arrival-settle: our move is in flight — that arrival is in the room we're leaving; "
                 + "the new room's display decides");
             return;
         }
+        NoteArrivalSettleDecision("window elapsed with no room re-display — engaged the accumulated room");
         _log?.Combat(LogCategory,
             "arrival-settle: window elapsed with no room re-display — engaging the accumulated room");
         _arrivalSettleBypass = true;
         try { OnEntitiesObserved(cur); }
         finally { _arrivalSettleBypass = false; }
     }
+
+    // What the arrival settle last did when its window elapsed, for the bug report:
+    // its log lines are combat diagnostics, off unless the user turned them on.
+    private (DateTimeOffset At, string Text)? _lastArrivalSettleDecision;
+
+    public string? LastArrivalSettleDecision => _lastArrivalSettleDecision is { } d
+        ? $"{d.At:HH:mm:ss.fff} {d.Text}"
+        : null;
+
+    private void NoteArrivalSettleDecision(string text) => _lastArrivalSettleDecision = (DateTimeOffset.Now, text);
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
@@ -1750,6 +1777,7 @@ public sealed partial class CombatManager : IDisposable
             _rosterReadAt = obs.At;
             _expGainsSinceRosterRead = 0;
             _heldRoomLookPending = false;
+            if (_guardBlockedTarget is { } guarded) JudgeGuardBlockByRoster(obs, guarded);
         }
         // Only a room read anew says we've landed: the old roster is dispatched again
         // by several paths while the move is still in flight.
@@ -3980,6 +4008,14 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // A kill in a guard fight: ask for the room, whose re-display says whether the
+        // guarded priority still stands (JudgeGuardBlockByRoster). The removal below
+        // can't: it drops our target's slot, which through the redirect is usually the
+        // priority's, whichever of them died.
+        if (_guardBlockedTarget is { } guarded && TrySendRoomRefresh("kill in a guard fight"))
+            _log?.Combat(LogCategory,
+                $"kill while '{guarded}' is guard-blocked — re-displaying the room to see whether it still stands");
+
         // Normally the corpse's identity is the still-set _currentTarget. But a prompt
         // exp-inferred kill (OnUserGainExperience) fires BEFORE this Off and already
         // nulled _currentTarget — fall back to the target it stashed so the roster
@@ -5632,6 +5668,37 @@ public sealed partial class CombatManager : IDisposable
         SendAttack(_readSettings().NormalAttackCommand, priority, refire: true,
                    refireReason: "guard retry");
     }
+
+    // A kill in a guard fight doesn't say whether a guard or the guarded priority
+    // fell: both pay exp and print *Combat Off* alike. The room read from the game
+    // does. While it lists the priority the chase goes on; once it doesn't, the
+    // priority is dead or gone, and a block left standing sends the next guard retry
+    // at it, taking the target from whatever fight is left. Matched on either name
+    // so only a roster plainly without the priority ends the chase.
+    private void JudgeGuardBlockByRoster(RoomEntitiesObservation obs, string priority)
+    {
+        foreach (RoomEntity e in obs.Entities)
+        {
+            if (e.Kind != EntityKind.Monster) continue;
+            if (string.Equals(e.RawName, priority, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(e.ResolvedName, priority, StringComparison.OrdinalIgnoreCase))
+            {
+                _lastGuardRosterCheck = (DateTimeOffset.Now, $"'{priority}' still listed — block kept");
+                return;
+            }
+        }
+        _guardBlockedTarget = null;
+        _lastGuardRosterCheck = (DateTimeOffset.Now, $"'{priority}' no longer listed — block dropped");
+        _log?.Combat(LogCategory,
+            $"room re-display no longer lists guarded priority '{priority}' — clearing guard block");
+    }
+
+    // What the last room read made of a guard block, for the bug report.
+    private (DateTimeOffset At, string Text)? _lastGuardRosterCheck;
+
+    public string? LastGuardRosterCheck => _lastGuardRosterCheck is { } c
+        ? $"{c.At:HH:mm:ss.fff} {c.Text}"
+        : null;
 
     // Public current-room engageability probe for consumers (AutoSearch) that must
     // gate on THIS room's live roster, not the sticky cross-room combat gate
