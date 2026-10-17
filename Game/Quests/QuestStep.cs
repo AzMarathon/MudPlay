@@ -19,10 +19,23 @@ namespace MudPlay.Game.Quests;
 //   RequiredItems — checkitem ids the player must be carrying.
 //   TurnInItems — takeitem ids the step takes from the player.
 //   GrantedItems — giveitem ids the step hands the player.
+//   Gathers — true for a step that only fetches an item a later step of the quest
+//     asks for, advancing no flag: a line gated on the flag that hands the item over
+//     (the Conquest hands a monster's death gives while the quest is open), or, when
+//     nothing in the quest's own lines yields it, where the set gives or drops it
+//     (QuestItemGathering). Its Order is that of the step that needs the item, and it
+//     sorts just ahead of it.
+//   Droppers — the monsters a gather step's item drops from (a kill for the item);
+//     null otherwise.
+//   Note — a gather step's source as the data names it ("from silverwood chest",
+//     "turn in orc-head"); null otherwise.
 public sealed record QuestStep(
     int Order,
     string? Command,
     string? Location,
     IReadOnlyList<int> RequiredItems,
     IReadOnlyList<int> TurnInItems,
-    IReadOnlyList<int> GrantedItems);
+    IReadOnlyList<int> GrantedItems,
+    bool Gathers = false,
+    IReadOnlyList<int>? Droppers = null,
+    string? Note = null);

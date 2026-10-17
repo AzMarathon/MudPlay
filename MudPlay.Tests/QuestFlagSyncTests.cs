@@ -74,25 +74,26 @@ public sealed class QuestFlagSyncTests
     [Fact]
     public void ResolveNewlyComplete_MarksEveryReachedAlignmentTier()
     {
-        // Evil tiers complete at 2 / 3 / 11; a live flag value of 11 has passed all three.
-        var targets = new[] { T(128, 10, 2), T(128, 20, 3), T(128, 30, 11), T(128, 40, 13) };
-        var observed = new Dictionary<int, int> { [128] = 11 };
+        // Evil tiers complete after their hand-ins, at 3 / 4 / 12; a live flag value of 12
+        // has passed all three.
+        var targets = new[] { T(128, 10, 3), T(128, 20, 4), T(128, 30, 12), T(128, 40, 14) };
+        var observed = new Dictionary<int, int> { [128] = 12 };
         var marked = QuestFlagCompletion.ResolveNewlyComplete(
                 targets, observed, new HashSet<QuestFlagCompletion.QuestKey>())
             .Select(k => k.Step).OrderBy(s => s).ToArray();
 
-        Assert.Equal(new[] { 10, 20, 30 }, marked);   // 40 (needs 13) stays incomplete
+        Assert.Equal(new[] { 10, 20, 30 }, marked);   // 40 (needs 14) stays incomplete
     }
 
     [Fact]
     public void ResolveNewlyComplete_EvilFlag17_CompletesTiersOneThroughFour()
     {
-        // The five Evil tiers complete at their LAST flag value — 2 / 3 / 11 / 13 / 31. A live
-        // 128(17) sits partway through tier 5 (14–31), so tiers 1–4 read complete and tier 5
-        // does not. Bands keyed by their crawl step (band ordinal here for clarity).
+        // The five Evil tiers complete after their hand-ins — 3 / 4 / 12 / 14 / 31. A live
+        // 128(17) sits partway through tier 5, so tiers 1–4 read complete and tier 5 does
+        // not. Bands keyed by their crawl step (band ordinal here for clarity).
         var targets = new[]
         {
-            T(128, 1, 2), T(128, 2, 3), T(128, 3, 11), T(128, 4, 13), T(128, 5, 31),
+            T(128, 1, 3), T(128, 2, 4), T(128, 3, 12), T(128, 4, 14), T(128, 5, 31),
         };
         var observed = new Dictionary<int, int> { [128] = 17 };
         var marked = QuestFlagCompletion.ResolveNewlyComplete(

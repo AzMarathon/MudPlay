@@ -1,14 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.180.46**
-> - Monster Intel's Hits You % counts your dodge, shown to the tenth below 10%
-> - Your Matchup's Melee line uses your class's to-hit floor (1% for Silk on Paradigm) and matches the list
-> - Applied debuffs move the list's Hits You % and rounds to kill, not just Your Matchup
-> - Your Matchup lists each of a monster's physical attacks under the Melee line
-> - Your hit % on a monster counts its dodge too, in Monster Intel, the Workshop Calculators and the Item Finder; the Calculators' monster attack rows use your class floor
-> - Bug reports carry the AC, dodge and class floor the hit chances are worked from
-> - Loop simulator rolls swings both ways at the same chances, so dodge counts there too (area rankings saved before are dropped)
+> **Version 3.181.0**
+> - Quest steps: a command in backticks, single quotes or two-word-plus double quotes is clickable; the shipped guides all use backticks
+> - Drafted quest checklists read like the shipped guides: what a step needs comes first, "(gleaming shard required)", each tier ends with its own reward hand-in, and the next opens with "-Complete <tier> first-"
+> - Drafts add a line to fetch each item a step needs: the quest's own give, a sure drop, the NPC or room that gives it, other drops or a chest, and a fetch for what that NPC wants in turn; a drop off a monster the quest already kills is noted on that kill
+> - A give drawn from a room's roll table names the command that draws it (`mine vein`), never the roll number, and drafts mark it "(on a roll)" after any surer source
+> - A quest tier reads complete after its reward hand-in (Evil 3/4/12/14, Good 6/8/17/19, Neutral 7/8/11/13), the line its draft ends on
+> - A quest keeps the class lock of the lines that start it, though its hand-in names no class (Conquest 1 and 2, Tarl, Luca Prodigio)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

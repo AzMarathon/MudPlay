@@ -427,6 +427,13 @@ public sealed class CharacterProfile
     // this.
     public bool QuestTicksPredateKillSteps { get; set; }
 
+    // The shape of the drafted checklists the step ticks in QuestLog were made against
+    // (QuestTickMigration.CurrentDraftRevision). A profile from before it was recorded
+    // reads 0; QuestTickMigration moves its ticks onto the same steps of today's draft
+    // the first time a game-data set is there to draft from, and sets this. A new
+    // profile, holding no ticks yet, goes through the same pass as a no-op.
+    public int QuestDraftRevision { get; set; }
+
     // Local date the login-time quest-flag sync last ran for this character. The
     // sync (the `abil` burst on Paradigm / `sys ... abil` on Stock) runs at most
     // ONCE PER DAY — a relog later the same day skips it — so it's stamped here

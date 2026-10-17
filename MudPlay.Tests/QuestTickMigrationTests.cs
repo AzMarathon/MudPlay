@@ -99,7 +99,8 @@ public sealed class QuestTickMigrationTests : IDisposable
             "[] (1/102) `kneel`",
         }, QuestTextFormatter.StepLines(cache, quest, placement));
         // The old draft was the three typed lines: its checkboxes 0, 1, 2 are 0, 2, 3 now.
-        Assert.Equal(new[] { 0, 2, 3 }, QuestTextFormatter.CheckboxesSinceKillSteps(cache, quest));
+        var moves = QuestTextFormatter.CheckboxMoves(cache, 400, sinceKillSteps: true);
+        Assert.Equal(new[] { 0, 2, 3 }, Enumerable.Range(0, 3).Select(i => moves[(0, i)].Index));
     }
 
     [Fact]
@@ -109,7 +110,7 @@ public sealed class QuestTickMigrationTests : IDisposable
         // Ticked before the change: "bow", "take crown" and "kneel" — every line there was.
         CharacterProfile profile = ProfileWith(new QuestProgress(400, 0) { CheckedSteps = new List<int> { 0, 1, 2 } });
 
-        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted, out _));
 
         // The same three steps; the new kill line (checkbox 1) is left unticked.
         Assert.Equal(new[] { 0, 2, 3 }, profile.QuestLog![0].CheckedSteps);
@@ -123,7 +124,7 @@ public sealed class QuestTickMigrationTests : IDisposable
         List<int> ticks = new() { 1 };
         CharacterProfile profile = ProfileWith(new QuestProgress(401, 0) { CheckedSteps = ticks });
 
-        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted, out _));
 
         Assert.Same(ticks, profile.QuestLog![0].CheckedSteps);
         Assert.Equal(new[] { 1 }, ticks);
@@ -137,7 +138,7 @@ public sealed class QuestTickMigrationTests : IDisposable
         CharacterProfile profile = ProfileWith(new QuestProgress(400, 0) { CheckedSteps = ticks });
 
         Assert.True(QuestTickMigration.Apply(profile, cache,
-            (flag, step) => new QuestDefinition(flag, step, steps: "[] my own step\n[] another\n[] a third")));
+            (flag, step) => new QuestDefinition(flag, step, steps: "[] my own step\n[] another\n[] a third"), out _));
 
         Assert.Same(ticks, profile.QuestLog![0].CheckedSteps);
         Assert.Equal(new[] { 0, 1, 2 }, ticks);
@@ -149,11 +150,11 @@ public sealed class QuestTickMigrationTests : IDisposable
         GameDataCache cache = NewCache();
         CharacterProfile profile = ProfileWith(new QuestProgress(400, 0) { CheckedSteps = new List<int> { 1 } });
 
-        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.True(QuestTickMigration.Apply(profile, cache, Drafted, out _));
         Assert.Equal(new[] { 2 }, profile.QuestLog![0].CheckedSteps);
 
         // The mark is gone, so a second pass leaves the already-moved tick where it is.
-        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted, out _));
         Assert.Equal(new[] { 2 }, profile.QuestLog[0].CheckedSteps);
     }
 
@@ -163,10 +164,11 @@ public sealed class QuestTickMigrationTests : IDisposable
         GameDataCache cache = NewCache();
         CharacterProfile profile = new()
         {
+            QuestDraftRevision = QuestTickMigration.CurrentDraftRevision,
             QuestLog = new List<QuestProgress> { new(400, 0) { CheckedSteps = new List<int> { 1 } } },
         };
 
-        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted, out _));
         Assert.Equal(new[] { 1 }, profile.QuestLog[0].CheckedSteps);
     }
 
@@ -176,7 +178,7 @@ public sealed class QuestTickMigrationTests : IDisposable
         GameDataCache cache = NewCache(withData: false);
         CharacterProfile profile = ProfileWith(new QuestProgress(400, 0) { CheckedSteps = new List<int> { 1 } });
 
-        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted));
+        Assert.False(QuestTickMigration.Apply(profile, cache, Drafted, out _));
 
         Assert.True(profile.QuestTicksPredateKillSteps);
         Assert.Equal(new[] { 1 }, profile.QuestLog![0].CheckedSteps);

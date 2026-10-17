@@ -396,6 +396,45 @@ public sealed class QuestCrawlerTests : IDisposable
     }
 
     [Fact]
+    public void Crawl_UnguardedTurnInThatNeedsTheFlagHeld_KeepsTheEntryClassLock()
+    {
+        // Paradigm's Conquest1 (208): only classes 1–4 can be handed the flag, and the
+        // turn-in that moves it to 2 has no class guard but runs only for a character
+        // already holding it (`testability 208 1:checkability 208 1`). It must not open
+        // the quest to every class — a Mystic was told it was available (report
+        // paradigm-20261011-230844).
+        IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "class 1:minlevel 45:failability 208:giveability 208 1:text 5210",
+                "class 4:minlevel 45:failability 208:giveability 208 1:text 5210",
+                "checkability 208 1:testability 208 1:checkitem 3643 9271:takeitem 3643:"
+                + "giveability 208 2:addability 96 10:addability 4 1:text 5217"), classId: 15);
+
+        CrawledQuest q = Assert.Single(crawled);
+        Assert.Equal(new[] { 1, 4 }, q.ClassIds);
+        Assert.Equal(0, q.RequiredLevel);
+        Assert.True(QuestEligibilityResolver.IsIneligible(q, 15, null, null, false, false, false));
+        Assert.Equal(45, QuestCrawler.Crawl(CacheWithTbInfo(
+            "class 1:minlevel 45:failability 208:giveability 208 1",
+            "checkability 208 1:testability 208 1:takeitem 3643:giveability 208 2:addability 4 1"), classId: 1)
+            .Single().RequiredLevel);
+    }
+
+    [Fact]
+    public void Crawl_CheckAfterTheLineSetsTheFlag_IsNotAHeldGate()
+    {
+        // The She-Dragon ruby shape: the line sets the flag and only then checks it, so
+        // it is an entry anyone can run, and leaves the quest open.
+        IReadOnlyList<CrawledQuest> crawled = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "class 1:minlevel 35:giveability 131 1",
+                "touch ruby:minlevel 35 541:failability 131:giveability 131 3:checkability 131 3:testability 131 3:addability 58 1"),
+            classId: null);
+
+        Assert.Null(Assert.Single(crawled).ClassIds);
+    }
+
+    [Fact]
     public void Crawl_EveryGiveabilityChainRaceGuarded_RestrictsToUnionOfRaces()
     {
         // A race-locked quest: every granting chain carries a `race N` guard → restricted
@@ -903,19 +942,22 @@ public sealed class QuestCrawlerTests : IDisposable
     }
 
     [Fact]
-    public void Crawl_TierLadder_EachBandCompletesAtItsOwnGiveValue()
+    public void Crawl_TierLadder_EachBandCompletesAfterItsRewardHandIn()
     {
-        // A minlevel staircase whose gives land at 2 / 3 / 11 (the Evil-alignment shape):
-        // each crawler band completes at the highest give value inside its range, NOT the
-        // gap up to the next tier — so the bands read 2, 3, 11, not 2, 10, 11.
+        // A minlevel staircase in the Evil-alignment shape: each tier's reward hand-in is the
+        // next tier's level-gated give (3 at level 20, 11 at level 30), and a tier is complete
+        // after that hand-in (user, 2026-10-17) — 3 and 11, not the 2 and 4 given before it.
+        // The last tier completes at the highest give it reaches.
         IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
             CacheWithTbInfo(
                 "giveability 128 2:minlevel 10",
                 "giveability 128 3:minlevel 20",
-                "giveability 128 11:minlevel 30"), classId: null);
+                "giveability 128 4",
+                "giveability 128 11:minlevel 30",
+                "giveability 128 12"), classId: null);
 
         int[] completes = quests.OrderBy(q => q.BandOrdinal).Select(q => q.CompleteValue ?? -1).ToArray();
-        Assert.Equal(new[] { 2, 3, 11 }, completes);
+        Assert.Equal(new[] { 3, 11, 12 }, completes);
     }
 
     [Fact]

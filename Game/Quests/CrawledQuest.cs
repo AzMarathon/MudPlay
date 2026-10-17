@@ -53,9 +53,11 @@ namespace MudPlay.Game.Quests;
 //   BandOrdinal — 1-based position of this band among the flag's bands in ascending
 //     level order (band 1 is the lowest tier). 0 for a single-part quest. Drives
 //     the "Good 1"-style default band name.
-//   StepRangeStart — lowest give-step Order that belongs to this band's followable
-//     checklist (inclusive). 0 for a single-part quest (no band filtering). Band 1
-//     starts at 1 so it absorbs any pre-first-milestone give-steps.
+//   StepRangeStart — lowest give-step Order that belongs to this band (inclusive): its
+//     gate, which the complete value and the flag sync read. 0 for a single-part quest
+//     (no band filtering). Band 1 starts at 1 so it absorbs any pre-first-milestone
+//     give-steps. The drafted checklist draws the tier one step later, closing each
+//     tier on its reward hand-in (QuestTextFormatter.DraftRange).
 //   StepRangeEnd — highest give-step Order that belongs to this band (inclusive). 0
 //     for a single-part quest (no filtering). The last band carries int.MaxValue so
 //     it absorbs every overflow give-step past the final milestone — nothing is
@@ -104,9 +106,10 @@ public sealed record CrawledQuest(
     // The quest-flag value at which this quest (or band) reads as complete in-game — what
     // an `abil <flag>` / `sys god … abil` query must show for the flag before the client
     // auto-marks it done. It is the terminal reachable flag value: the highest absolute
-    // `giveability <flag> V` for a single-part quest or a ladder's last band, and the
-    // band's own upper value (StepRangeEnd / value boundary) for an earlier band — so the
-    // five alignment tiers cap at their own values (Evil 2/3/11/13/31). null when it can't
+    // `giveability <flag> V` for a single-part quest or a ladder's last band; for an
+    // earlier band of a give-step ladder the value its reward hand-in (the next band's
+    // gate) sets, since a tier is complete after its hand-in — Evil 3/4/12/14, then 31 on
+    // Stock — and a value ladder's own boundary value. null when it can't
     // be told from "not started": the flag tops out at value 0 (Perfect Stealth 186(0)),
     // or nothing sets it absolutely. A null CompleteValue is never auto-marked; the Quest
     // editor's per-quest override is where the user supplies one (or corrects a miss).

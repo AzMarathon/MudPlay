@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using MudPlay.Game.Map;
 using MudPlay.Game.Quests;
 using MudPlay.Services;
@@ -150,6 +151,70 @@ public sealed class QuestTextFormatterTests
         var seg = Assert.Single(QuestTextFormatter.SplitStepLinks("nothing here ''"));
         Assert.Null(seg.Command);
         Assert.Equal("nothing here ''", seg.Text);
+    }
+
+    // ----- the other ways guides mark a command ------------------------------
+    //
+    // Report paradigm-20261011-230844: the drafted steps write `ask renfry hands` in
+    // backticks and pasted write-ups use "…" / “…”, and none of those were links.
+
+    [Fact]
+    public void SplitStepLinks_BacktickCommand_IsALink_ApostrophesAndAll()
+    {
+        var segs = QuestTextFormatter.SplitStepLinks("(14/247) `ask renfry hands` (turn in X)").ToList();
+        Assert.Equal(new RoomKey(14, 247), segs[0].Room);
+        Assert.Equal(("`ask renfry hands`", (RoomKey?)null, (string?)"ask renfry hands"), segs[2]);
+        Assert.Equal(" (turn in X)", segs[3].Text);
+
+        Assert.Equal("ask spirit of draka's ghost",
+            QuestTextFormatter.SplitStepLinks("`ask spirit of draka's ghost`").Single().Command);
+    }
+
+    [Theory]
+    [InlineData("Talk with him and say “ask Demon Imp return”, and he will", "ask Demon Imp return")]
+    [InlineData("you can \"ask Demon Imp back\" and you will be teleported", "ask Demon Imp back")]
+    [InlineData("Travel W and “say nightfall” to see a flash of light.", "say nightfall")]
+    public void SplitStepLinks_DoubleQuotedCommand_IsALink(string line, string command)
+    {
+        Assert.Equal(command, Assert.Single(QuestTextFormatter.SplitStepLinks(line), s => s.Command is not null).Command);
+    }
+
+    [Theory]
+    [InlineData("Equip and \"use\" the Multicoloured Staff.")]
+    [InlineData("This part is to finish \"Rune-ing\" your character")]
+    [InlineData("He says \"This is not what I want.\" and walks off")]
+    public void SplitStepLinks_DoubleQuotedWordOrSentence_StaysProse(string line)
+    {
+        Assert.Null(Assert.Single(QuestTextFormatter.SplitStepLinks(line)).Command);
+    }
+
+    [Fact]
+    public void SeedGuides_MarkEveryAskWithBackticks()
+    {
+        // The shipped guides use the one mark: no ask is left in single or double quotes.
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-questseed-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            using JsonDocument seed = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "QuestDefs.seed.json")));
+            int commands = 0;
+            foreach (JsonElement quest in seed.RootElement.EnumerateArray())
+            {
+                string steps = quest.GetProperty("Steps").GetString() ?? string.Empty;
+                foreach (string line in steps.Split('\n'))
+                    foreach (var seg in QuestTextFormatter.SplitStepLinks(line))
+                        if (seg.Command is not null)
+                        {
+                            Assert.StartsWith("`", seg.Text, StringComparison.Ordinal);
+                            commands++;
+                        }
+            }
+            Assert.True(commands > 100);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
+        }
     }
 
     // ----- Step: seed-style auto-draft rendering -----------------------------
@@ -312,23 +377,30 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
-    public void Step_RequiredItemAlsoTurnedIn_ListedOnceAsTurnIn()
+    public void Step_RequiredItemAlsoTurnedIn_ListedOnce()
     {
         // A step that checks the same item it takes (checkitem + takeitem of one id)
-        // names it once in the turn-in note, not again as "required".
-        Assert.Equal("(2/340) `ask valduin crystal` (turn in #100)",
+        // names it once.
+        Assert.Equal("(2/340) (#100 required) `ask valduin crystal`",
             QuestTextFormatter.Step(NoSet,
                 MakeStep(2, "ask valduin crystal", "Room 2/340",
                     required: new[] { 100 }, turnIn: new[] { 100 })));
     }
 
     [Fact]
-    public void Step_DistinctRequiredAndTurnIn_BothListed()
+    public void Step_TakenAndCheckedItems_AreBothRequired()
     {
-        Assert.Equal("(2/340) `ask x` (turn in #100) (#200 required)",
+        Assert.Equal("(2/340) (#100, #200 required) `ask x`",
             QuestTextFormatter.Step(NoSet,
                 MakeStep(2, "ask x", "Room 2/340",
                     required: new[] { 200 }, turnIn: new[] { 100 })));
+    }
+
+    [Fact]
+    public void Step_HandInWithNothingElseToDo_ReadsTurnIn()
+    {
+        Assert.Equal("(6/3109) turn in #100, #200",
+            QuestTextFormatter.Step(NoSet, MakeStep(10, null, "Room 6/3109", turnIn: new[] { 100, 200 })));
     }
 
     [Fact]
@@ -339,16 +411,12 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
-    public void Step_RequiredItem_TrailsAsRequiredNote()
+    public void Step_NeededItem_GoesAheadOfTheCommand_AsTheGuidesWriteIt()
     {
-        Assert.Equal("(6/1357) `ask martok forge` (#100 required)",
+        // The seed guide's "[](6/1357) (Gleaming Shard required) `ask martok forge`".
+        Assert.Equal("(6/1357) (#100 required) `ask martok forge`",
             QuestTextFormatter.Step(NoSet, MakeStep(4, "ask martok forge", "Room 6/1357", required: new[] { 100 })));
-    }
-
-    [Fact]
-    public void Step_TurnInItem_TrailsAsTurnInNote()
-    {
-        Assert.Equal("(1/1333) `ask annora head` (turn in #100)",
+        Assert.Equal("(1/1333) (#100 required) `ask annora head`",
             QuestTextFormatter.Step(NoSet, MakeStep(5, "ask annora head", "Room 1/1333", turnIn: new[] { 100 })));
     }
 

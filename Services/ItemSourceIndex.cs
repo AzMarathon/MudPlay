@@ -47,10 +47,19 @@ public enum ItemGiverKind { Monster, Room }
 // item, takes one twice, carries any other condition, or shares its keyword with
 // another line. Stock tries a keyword's lines in order and moves on from one that
 // fails a check; what Paradigm does isn't recorded, so several lines are left alone.
+//
+// TakenItemId is the first item the award line takes, whatever else it asks (the item
+// its "turn in" Requirement names), so a quest draft can say what to fetch first; zero
+// when the line takes nothing. Rolled is true when the give is one outcome of a roll —
+// a line of a `random` table, or a line that draws one — so typing the keyword may well
+// hand nothing over. NeededItems are the items the give checks the character holds
+// (`checkitem`) besides the one it takes, on the award line or, for a table's line, on
+// the line that draws the table (`pry coffin:checkitem 570:…:random 9379`); null when
+// none.
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
     string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null,
-    int TradeItemId = 0);
+    int TradeItemId = 0, int TakenItemId = 0, bool Rolled = false, IReadOnlyList<int>? NeededItems = null);
 
 // One monster a room command summons on demand, which drops an item at a
 // guaranteed rate. This is the deterministic corner of monster drops, and the
@@ -324,9 +333,10 @@ public sealed class ItemSourceIndex
                 // the same line ("give blade:takeitem 20:giveitem 22"); a
                 // multi-block give leads with the directive ("giveitem 807:...")
                 // and takes its keyword from the parent menu (root.Keyword). The
-                // leading token is a keyword only when it isn't itself a directive.
+                // leading token is a keyword only when it isn't itself a directive
+                // or a roll-table band (see IsTypedTrigger).
                 string[] toks = line.Split(':');
-                string lineKeyword = toks.Length > 0 && !LooksLikeDirective(toks[0].Trim())
+                string lineKeyword = toks.Length > 0 && IsTypedTrigger(toks[0].Trim())
                     ? toks[0].Trim()
                     : string.Empty;
 
@@ -363,7 +373,10 @@ public sealed class ItemSourceIndex
                 // turn-in / purchase / quest-reward gate and no `random` roll on
                 // the award line — so the acquisition router can rely on the
                 // command producing the item every time.
-                bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom;
+                // A line of a roll table is one draw's outcome, never a sure give.
+                bool rollBand = toks.Length > 0
+                    && int.TryParse(toks[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+                bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom && !rollBand;
 
                 // One item taken, once, nothing else asked of the character, and no
                 // other line under the same keyword. A line that takes several, or
@@ -384,9 +397,15 @@ public sealed class ItemSourceIndex
                         // line; only fall back to the parent-menu keyword when this
                         // line leads with a directive.
                         string keyword = lineKeyword.Length > 0 ? lineKeyword : root.Keyword;
+                        bool drawn = lineKeyword.Length == 0 && root.Drawn;
+                        List<int> needs = (checkedItems ?? new List<int>()).Where(id => id > 0 && id != takeId)
+                            .Concat(drawn ? root.DrawNeeds ?? Array.Empty<int>() : Array.Empty<int>())
+                            .Distinct().ToList();
                         AddGiver(giversByItem, itemId,
                             new ItemGiver(root.Kind, root.Number, root.Map, root.Room, name, requirement,
-                                keyword, deterministic, refusals, tradeItemId));
+                                keyword, deterministic, refusals, tradeItemId, takeId,
+                                Rolled: rollBand || hasRandom || drawn,
+                                NeededItems: needs.Count > 0 ? needs : null));
                     }
                 }
             }
@@ -575,12 +594,10 @@ public sealed class ItemSourceIndex
                 switch (r.Kind)
                 {
                     case CfKind.Monster:
-                        AddRoot(roots, new GiverRoot(ItemGiverKind.Monster, r.Number, 0, 0,
-                            ExtractKeyword(block.Action, child)));
+                        AddRoot(roots, Root(ItemGiverKind.Monster, r.Number, 0, 0, ExtractKeyword(block.Action, child)));
                         break;
                     case CfKind.Room:
-                        AddRoot(roots, new GiverRoot(ItemGiverKind.Room, 0, r.Map, r.Room,
-                            ExtractKeyword(block.Action, child)));
+                        AddRoot(roots, Root(ItemGiverKind.Room, 0, r.Map, r.Room, ExtractKeyword(block.Action, child)));
                         break;
                     case CfKind.Textblock:
                         if (r.Number > 0 && seenTb.Add(r.Number)
@@ -594,14 +611,20 @@ public sealed class ItemSourceIndex
         }
     }
 
+    private static GiverRoot Root(ItemGiverKind kind, int number, int map, int room,
+        (string Keyword, bool Drawn, IReadOnlyList<int>? Needs) trigger) =>
+        new(kind, number, map, room, trigger.Keyword, trigger.Drawn, trigger.Needs);
+
     // The menu key on a textblock whose target block is `child`. A menu block's
     // Action is newline-separated "keyword:blockNumber" lines (the greeting
     // routes each keyword to a sub-block); return the keyword whose target is the
     // block we descended into. Empty when `child` is unset or reached via a
-    // LinkTo continuation rather than a keyed menu entry.
-    private static string ExtractKeyword(string? action, int child)
+    // LinkTo continuation rather than a keyed menu entry. Drawn and Needs say the
+    // keyword is a command whose line draws `child` as a roll table, and which items
+    // that line checks for.
+    private static (string Keyword, bool Drawn, IReadOnlyList<int>? Needs) ExtractKeyword(string? action, int child)
     {
-        if (child <= 0 || string.IsNullOrEmpty(action)) return string.Empty;
+        if (child <= 0 || string.IsNullOrEmpty(action)) return (string.Empty, false, null);
         foreach (string rawLine in action.Split('\n'))
         {
             int colon = rawLine.IndexOf(':');
@@ -610,9 +633,22 @@ public sealed class ItemSourceIndex
             string kw = rawLine[..colon].Trim();
             // A "checkitem 20:815"-style directive line points at a child block
             // too but isn't a menu key — skip it so only real keywords surface.
-            if (kw.Length > 0 && !LooksLikeDirective(kw)) return kw;
+            if (kw.Length > 0 && !LooksLikeDirective(kw)) return (kw, false, null);
         }
-        return string.Empty;
+        // A roll table is drawn by a command's own line (`mine vein:nomonsters:random
+        // 5000`), not by a menu entry: that line's trigger is what reaches the draw.
+        foreach (string rawLine in action.Split('\n'))
+        {
+            string[] toks = rawLine.Split(':');
+            string head = toks[0].Trim();
+            if (!IsTypedTrigger(head)) continue;
+            if (!toks.Skip(1).Any(t => TryArg(t.Trim(), "random", out int table) && table == child)) continue;
+            List<int> needs = new();
+            foreach (string t in toks.Skip(1))
+                if (TryArg(t.Trim(), "checkitem", out int item) && item > 0 && !needs.Contains(item)) needs.Add(item);
+            return (head, true, needs.Count > 0 ? needs : null);
+        }
+        return (string.Empty, false, null);
     }
 
     private static void AddGiver(Dictionary<int, List<ItemGiver>> giversByItem, int itemId, ItemGiver giver)
@@ -636,7 +672,7 @@ public sealed class ItemSourceIndex
                     || string.Equals(e.Keyword, giver.Keyword, StringComparison.OrdinalIgnoreCase)))
             {
                 if (e.Requirement.Length == 0 && giver.Requirement.Length > 0)
-                    e = e with { Requirement = giver.Requirement };
+                    e = e with { Requirement = giver.Requirement, TakenItemId = giver.TakenItemId };
                 if (e.Keyword.Length == 0 && giver.Keyword.Length > 0)
                     e = e with { Keyword = giver.Keyword };
                 if (!e.Deterministic && giver.Deterministic)
@@ -646,6 +682,11 @@ public sealed class ItemSourceIndex
                 // game runs, so it voids the trade whichever order they arrive in.
                 if (e.TradeItemId != giver.TradeItemId)
                     e = e with { TradeItemId = 0 };
+                // A sure line under the row makes the row sure.
+                if (e.Rolled && !giver.Rolled)
+                    e = e with { Rolled = false };
+                if (e.NeededItems is null && giver.NeededItems is not null)
+                    e = e with { NeededItems = giver.NeededItems };
                 if (giver.RefusalMessages is { Count: > 0 } more)
                     e = e with { RefusalMessages = (e.RefusalMessages ?? Array.Empty<int>()).Union(more).ToList() };
                 list[i] = e;
@@ -665,7 +706,8 @@ public sealed class ItemSourceIndex
     private enum CfKind { Monster, Room, Textblock, Spell }
     private readonly record struct CalledFromRef(CfKind Kind, int Number, int Map, int Room);
     private readonly record struct GiverRoot(
-        ItemGiverKind Kind, int Number, int Map, int Room, string Keyword);
+        ItemGiverKind Kind, int Number, int Map, int Room, string Keyword,
+        bool Drawn = false, IReadOnlyList<int>? DrawNeeds = null);
 
     // A Called-From string is a comma-separated list of provenance tokens:
     // "Monster #246", "Room 7/1008", "Textblock #349", "Textblock(rndm) #868",
@@ -774,6 +816,13 @@ public sealed class ItemSourceIndex
         return TBInfoActionResolver.IsDirectiveHead(head);
     }
 
+    // A line's leading token is something a player types only when it is neither a
+    // directive nor a bare number: a `random` table's lines lead with the roll band the
+    // draw compares against (`100:giveitem 1830`), which is never typed.
+    private static bool IsTypedTrigger(string tok) =>
+        tok.Length > 0 && !LooksLikeDirective(tok)
+        && !int.TryParse(tok, NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+
     // How many of a block's lines one trigger runs: the lines led by that keyword,
     // or for the empty keyword the directive-led lines the block's menu key reaches.
     private static int LinesSharingTrigger(string[] lines, string keyword)
@@ -784,7 +833,7 @@ public sealed class ItemSourceIndex
             string line = raw.Trim();
             if (line.Length == 0) continue;
             string head = line.Split(':', 2)[0].Trim();
-            string trigger = LooksLikeDirective(head) ? string.Empty : head;
+            string trigger = IsTypedTrigger(head) ? head : string.Empty;
             if (string.Equals(trigger, keyword, StringComparison.OrdinalIgnoreCase)) count++;
         }
         return count;

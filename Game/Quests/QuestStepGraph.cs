@@ -17,7 +17,9 @@ namespace MudPlay.Game.Quests;
 // becomes one QuestStep, ordered by the chain's give-step — the quest's own progress
 // counter. The crawl surfaces the player command, the location, and the items the
 // step checks / takes / gives; identical steps (the same chain echoed from multiple
-// rooms) collapse to one entry.
+// rooms) collapse to one entry. A chain that checks the flag and hands an item over
+// without changing the flag is a gather step (QuestStep.Gathers), drafted ahead of
+// the step that takes the item.
 public static class QuestStepGraph
 {
     // Build the ordered step draft for flag in the active set. Empty when no set is
@@ -48,6 +50,7 @@ public static class QuestStepGraph
         if (tbinfo is null) return Array.Empty<QuestStep>();
 
         var steps = new List<QuestStep>();
+        var gathers = new List<QuestStep>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         // A chain is a step only through a directive whose first number is the flag,
@@ -73,14 +76,36 @@ public static class QuestStepGraph
             {
                 if (!raw.Contains(flagDigits, StringComparison.Ordinal)) continue;
                 QuestStep? step = byAbilityValue ? BuildValueStep(raw, flag, location) : BuildStep(raw, flag, location);
-                if (step is null) continue;
+                if (step is null)
+                {
+                    // The value axis already takes every line that gates on the flag.
+                    if (!byAbilityValue && BuildGatherStep(raw, flag, location) is { } gather)
+                        gathers.Add(ResolveAsk(gather, cache, tbinfo));
+                    continue;
+                }
                 step = ResolveAsk(step, cache, tbinfo);
                 if (seen.Add(CanonicalKey(step))) steps.Add(step);
             }
         }
 
+        // A gather line joins the draft only when a step of the quest asks for what it
+        // hands over, and it goes just ahead of the first such step past its gate: the
+        // Conquest hands come off the four chieftains while the flag is at 1, and the
+        // turn-in that moves it to 2 takes them.
+        foreach (QuestStep gather in gathers)
+        {
+            QuestStep? consumer = steps
+                .Where(s => s.Order > gather.Order && gather.GrantedItems.Any(i => s.TurnInItems.Contains(i) || s.RequiredItems.Contains(i)))
+                .OrderBy(s => s.Order)
+                .FirstOrDefault();
+            if (consumer is null) continue;
+            QuestStep placed = gather with { Order = consumer.Order };
+            if (seen.Add(CanonicalKey(placed))) steps.Add(placed);
+        }
+
         return steps
             .OrderBy(s => s.Order)
+            .ThenBy(s => s.Gathers ? 0 : 1)
             .ThenBy(s => s.Location, StringComparer.OrdinalIgnoreCase)
             .ThenBy(s => s.Command, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -172,12 +197,72 @@ public static class QuestStepGraph
         return new QuestStep(value <= 0 ? 1 : value, ReadCommand(segments), location, requiredItems, turnInItems, grantedItems);
     }
 
+    // A line that hands over an item for the quest, leaving the flag alone: it checks
+    // the flag and gives an item, no step of it gives, adds to or clears the flag, and it
+    // checks no other flag.
+    // The check is checkability / testability while the quest is under way, or
+    // failability before it starts (`failability 130:failitem 3867:giveitem 3867`, the
+    // chalice Blood Champ's hand-in takes). Its Order is, for now, the value the check
+    // asks for (the checkability floor, else the testability ceiling, else 0 for not
+    // holding the flag), which the caller places the line after. Null for any other line.
+    private static QuestStep? BuildGatherStep(string raw, int flag, string? location)
+    {
+        string[] segments = raw.Split(':');
+        if (segments.Length == 0) return null;
+
+        int? floor = null, ceiling = null;
+        bool without = false;
+        var requiredItems = new List<int>();
+        var turnInItems = new List<int>();
+        var grantedItems = new List<int>();
+        foreach (string segment in segments)
+        {
+            string[] p = segment.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length == 0) continue;
+            bool onFlag = p.Length >= 2 && int.TryParse(p[1], out int af) && af == flag;
+            int value = p.Length >= 3 && int.TryParse(p[2], out int v) ? v : 0;
+            switch (p[0].ToLowerInvariant())
+            {
+                case "giveability" or "addability" or "removeability" when onFlag:
+                    return null;
+                case "checkability" when onFlag && p.Length >= 3:
+                    floor = floor is int f ? Math.Max(f, value) : value;
+                    break;
+                case "testability" when onFlag && p.Length >= 3:
+                    ceiling = ceiling is int c ? Math.Min(c, value) : value;
+                    break;
+                case "failability" when onFlag:
+                    without = true;
+                    break;
+                // A line that also asks for another flag's progress belongs to that
+                // quest; its give is gated on it, not on this one.
+                case "checkability" or "testability":
+                    return null;
+                case "checkitem" when p.Length >= 2 && int.TryParse(p[1], out int ci):
+                    if (!requiredItems.Contains(ci)) requiredItems.Add(ci);
+                    break;
+                case "takeitem" when p.Length >= 2 && int.TryParse(p[1], out int ti):
+                    if (!turnInItems.Contains(ti)) turnInItems.Add(ti);
+                    break;
+                case "giveitem" when p.Length >= 2 && int.TryParse(p[1], out int gi):
+                    if (!grantedItems.Contains(gi)) grantedItems.Add(gi);
+                    break;
+            }
+        }
+
+        if (grantedItems.Count == 0 || (floor ?? ceiling ?? (without ? 0 : null)) is not int gate) return null;
+        return new QuestStep(gate, ReadCommand(segments), location, requiredItems, turnInItems, grantedItems, Gathers: true);
+    }
+
     // The first segment is a player command only when it doesn't lead with a known
-    // guard/effect directive — otherwise the chain is reached by dialogue branch.
+    // guard/effect directive — otherwise the chain is reached by dialogue branch. A
+    // leading number is a line of a `random` roll table (the roll runs the first line
+    // whose number is above it), so it isn't typed either.
     internal static string? ReadCommand(string[] segments)
     {
         string first = segments[0].Trim();
         if (first.Length == 0) return null;
+        if (int.TryParse(first, out _)) return null;
         string kw = first.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant() ?? "";
         return DirectiveKeywords.Contains(kw) ? null : first;
     }
@@ -321,7 +406,7 @@ public static class QuestStepGraph
     private static string CanonicalKey(QuestStep s)
     {
         var sb = new StringBuilder();
-        sb.Append(s.Order).Append('|').Append(s.Command).Append('|').Append(s.Location).Append('|');
+        sb.Append(s.Order).Append('|').Append(s.Gathers).Append('|').Append(s.Command).Append('|').Append(s.Location).Append('|');
         sb.AppendJoin(',', s.RequiredItems).Append('|');
         sb.AppendJoin(',', s.TurnInItems).Append('|');
         sb.AppendJoin(',', s.GrantedItems);
