@@ -3,8 +3,8 @@ using System.Linq;
 
 namespace MudPlay.Services;
 
-// Game-data set lifecycle operations exposed by the Game Data → "Manage Sets…"
-// dialog: copy or move the data the user made for one set into another (the parts
+// Game-data set lifecycle operations exposed by the Game Data → "Manage Game
+// Data…" dialog: copy or move the data the user made for one set into another (the parts
 // they tick: GameDataSetPart), and delete a set outright. "Loops" means the whole
 // shared AppPaths.GameDataSetLoopsFolder tree — loop circuits, Auto-Lair setups,
 // and the nav-folder subdirectories all live in it — so it goes as one library,

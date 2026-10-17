@@ -3,11 +3,6 @@ namespace MudPlay.Models.Profile;
 // Per-character "Cash" settings — drives Game.Cash.CashManager's per-currency
 // pickup / discard behaviour and auto-deposit trigger. Stored as the "Cash"
 // entry in CharacterProfile.Settings.
-//
-// v1 ships per-currency Policy + a single AutoDepositIfWealthExceeds threshold.
-// Encumbrance gates, cascade drop-smaller-for-larger, and the walker-driven
-// auto-deposit reroute land as follow-up work on this engine — the foundation
-// here lets the user smoke-test the per-currency pickup path end-to-end.
 public sealed class CashSettings
 {
     // Per-currency pickup behavior.
@@ -17,11 +12,9 @@ public sealed class CashSettings
     public CashPolicy PlatinumPolicy { get; set; } = CashPolicy.Collect;
     public CashPolicy RunicPolicy { get; set; } = CashPolicy.Collect;
 
-    // Auto-deposit trigger — fire when total held wealth (in the realm's
-    // canonical unit, typically gold-equivalent) exceeds this value. 0 disables
-    // the trigger. v1 fires the CashManager.AutoDepositRequested event;
-    // subscribers wire the walker reroute themselves until the full
-    // snapshot-pause-walk-deposit-resume flow ships.
+    // Auto-deposit trigger — fire when total held wealth (copper value) exceeds
+    // this value. 0 disables the trigger. CashManager raises AutoDepositRequested;
+    // AutoDepositManager runs the bank / stash trip.
     public long AutoDepositIfWealthExceeds { get; set; }
 
     // Auto-deposit trigger — fire when the total number of physical coins held
@@ -32,9 +25,8 @@ public sealed class CashSettings
     // back below their thresholds.
     public long AutoDepositIfCoinsExceed { get; set; }
 
-    // Bank room key — used by the (follow-up) auto-deposit walker reroute to
-    // know where to walk. Sourced from the Shops table where ShopType == 7
-    // (bank). v1 just stores it; the reroute itself is unwired.
+    // The bank or stash room an auto-deposit trip walks to. A bank is a Shops
+    // row with ShopType == 7; a key naming neither is ignored.
     public string BankRoomKey { get; set; } = string.Empty;
 
     // ----- Minimum cash to keep on hand (BANKING) --------------------

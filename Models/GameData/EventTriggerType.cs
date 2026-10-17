@@ -1,11 +1,11 @@
 namespace MudPlay.Models.GameData;
 
 // When a ScheduledEvent fires.
-//   Logon — fires on every successful game entry (every
-//     LoginAutomator.LoggedIntoGame). Includes first-connect and every
-//     subsequent reconnect.
-//   Logoff — fires once during a clean shutdown, before the wire closes.
-//     Dropped connections skip Logoff events.
+//   Logon — fires on every game entry: the first prompt after a connect.
+//     Includes first-connect and every subsequent reconnect.
+//   Logoff — fires once per session when the BBS warns of its nightly
+//     cleanup shutdown, while the connection is still up. The user's own
+//     disconnect and a dropped connection don't fire it.
 //   Relog — fires alongside Logon, but ONLY when the game entry is a
 //     reconnect (a prior in-session disconnect happened). Never fires on
 //     the first game entry of a program run.

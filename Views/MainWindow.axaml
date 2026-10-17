@@ -62,12 +62,11 @@
                           IsChecked="{Binding AutoLoadLastProfile, Mode=TwoWay}"
                           ToolTip.Tip="When checked, MudPlay reopens the profile you loaded last time on launch instead of a blank draft (falls back to blank if that profile was deleted). Applies app-wide."/>
                 <Separator IsVisible="{Binding HasRecents}"/>
-                <!-- Recent profiles. Header shows "<profile> - <BBS>"
-                     when the profile has a pinned BBS, else just the
-                     profile name. CommandParameter binds to the RAW
-                     profile name (ProfileNameN) so OpenRecentProfile
-                     gets the on-disk identifier regardless of how the
-                     menu label renders. -->
+                <!-- Recent profiles. Header shows "<profile> - <BBS>:<realm>"
+                     (or just the name when no BBS is pinned);
+                     CommandParameter is the slot's ProfileRef
+                     (ProfileNameN) so the command gets the (BBS,
+                     character) key regardless of how the label renders. -->
                 <MenuItem Header="{Binding Recent0, StringFormat='_1)  {0}'}"
                           IsVisible="{Binding Recent0, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
                           Command="{Binding OpenRecentProfileCommand}"
@@ -318,7 +317,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="Pick what this button does (and do it now)"
+                                            ToolTip.Tip="Pick what this button does (click the button to run it)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -377,7 +376,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="Pick what this button does (and do it now)"
+                                        ToolTip.Tip="Pick what this button does (click the button to run it)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -435,7 +434,7 @@
                                 </Button>
                                 <Button Classes="ToolbarBtn ToolbarArrowV"
                                         IsVisible="{Binding HasSubActions}"
-                                        ToolTip.Tip="Pick what this button does (and do it now)"
+                                        ToolTip.Tip="Pick what this button does (click the button to run it)"
                                         Click="OnToolbarSubActionsClick">
                                     <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                           StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"
@@ -504,7 +503,7 @@
                                     </Button>
                                     <Button Classes="ToolbarBtn ToolbarArrow"
                                             IsVisible="{Binding HasSubActions}"
-                                            ToolTip.Tip="Pick what this button does (and do it now)"
+                                            ToolTip.Tip="Pick what this button does (click the button to run it)"
                                             Click="OnToolbarSubActionsClick">
                                         <Path Data="M1 3 L4 6 L7 3" Stroke="{Binding $parent[Button].Foreground}"
                                               StrokeThickness="1.5" StrokeLineCap="Round" StrokeJoin="Round"

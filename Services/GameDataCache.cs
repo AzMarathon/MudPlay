@@ -11,7 +11,7 @@ namespace MudPlay.Services;
 // they have folded a table into typed model collections of their own.
 //
 // Storage layout is the one written by MdbImporter:
-// Data/game data/{set-name}/{table-name}.json. Each subdirectory of
+// game data/{set-name}/{table-name}.json. Each subdirectory of
 // AppPaths.GameDataRoot is a switchable set; the set picker on the Game Data menu
 // reads AvailableSets.
 //
@@ -37,10 +37,10 @@ namespace MudPlay.Services;
 // thread.
 //
 // Wiring: AppServices constructs the cache and subscribes it to
-// ProfileService.ProfileLoaded + ProfileService.BbsPinApplied so the pinned BBS's
-// BbsProfile.ActiveGameDataSet drives the switch automatically (falling back to
-// GlobalSettings.DefaultGameDataSet when no BBS is pinned). Manual switches via
-// the File → Game Data → Active set menu write back to the resolved BBS profile.
+// ProfileService.ProfileLoaded + ProfileService.BbsPinApplied so the active
+// realm's ActiveGameDataSet drives the switch automatically (falling back to
+// GlobalSettings.DefaultGameDataSet when no realm is pinned). A pick from the
+// Game Data menu's set list writes back to the active realm.
 //
 // Two small types other classes name live in files of their own: Load
 // (GameDataCache.Load.cs) and TableFileStamp (GameDataCache.TableFileStamp.cs).
@@ -710,8 +710,7 @@ public sealed partial class GameDataCache
 
     // Lookup the Name field of the row in tableName whose Number field equals
     // number. Returns null when the table isn't in the active set, the row isn't
-    // found, or either field is missing on the matched row. Used by edit dialogs
-    // to render GameDataLink back-references as human-readable labels.
+    // found, or either field is missing on the matched row.
     public string? FindNameByNumber(string tableName, int number)
     {
         GameRow? row = FindRowByNumber(tableName, number);
@@ -740,8 +739,7 @@ public sealed partial class GameDataCache
     // Return the row in tableName whose Name field equals name (case-insensitive),
     // or null when the table isn't in the active set or no row matches. Ties go to
     // the first row in the file. The returned row stays valid for as long as the
-    // caller holds it. Used by the trap-delegation capability lookup to resolve a
-    // party member's class / race row before scanning its abilities.
+    // caller holds it.
     public GameRow? FindRowByName(string tableName, string name)
     {
         ArgumentNullException.ThrowIfNull(name);

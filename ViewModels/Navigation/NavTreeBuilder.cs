@@ -16,9 +16,8 @@ public static class NavTreeBuilder
     // both alphabetical (case-insensitive, via SortKeyOf). folderOf returns
     // a row's stored folder (empty = root). allFolders seeds folders that
     // have no rows yet (empty folders the user created) so they still
-    // render. defaultExpanded seeds each folder's starting expand state — the
-    // rail's Loops+Lairs tree passes false (start collapsed); the Manage dialog
-    // and GOTO tree keep the default true.
+    // render. defaultExpanded seeds each folder's starting expand state (every
+    // current surface passes false).
     public static List<object> Build<TRow>(
         IEnumerable<TRow> rows,
         Func<TRow, string?> folderOf,
@@ -68,21 +67,8 @@ public static class NavTreeBuilder
     }
 
     // Replace target's contents with a freshly built tree, preserving folder
-    // expand/collapse state across the rebuild (keyed by folder path) so a
-    // refresh doesn't snap every folder back to its default. For surfaces that
-    // never filter (the Manage dialog); a fresh scratch override set harvested
-    // from the current tree each call reproduces the original behaviour.
-    public static void Sync<TRow>(
-        ObservableCollection<object> target,
-        IEnumerable<TRow> rows,
-        Func<TRow, string?> folderOf,
-        IEnumerable<string> allFolders,
-        bool defaultExpanded = true)
-        => Sync(target, rows, folderOf, allFolders, defaultExpanded,
-                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                harvest: true, forceExpandAll: false);
-
-    // Filter-aware sync with a caller-OWNED persistent expand-override set
+    // expand/collapse state across the rebuild (keyed by folder path).
+    // Filter-aware, with a caller-OWNED persistent expand-override set
     // (folders the user toggled away from the default). When harvest is true the
     // current tree's toggles are folded into expandOverrides first — the caller
     // skips this when the current tree is a filtered / force-expanded view, which

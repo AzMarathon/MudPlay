@@ -7,11 +7,8 @@ namespace MudPlay.Game.Combat;
 // <killer>.") and emits PlayerDied. Pure observation; the recovery flow
 // (corpse-walk, item re-pickup, gear re-equip) lives in DeathRecoveryManager.
 //
-// Separated from DeathRecoveryManager because the death event has multiple
-// consumers besides recovery: HealthManager clears any held HealthRecovery /
-// ManaRecovery gate on death; CombatManager stops swinging; CashManager cancels
-// any in-flight pickup batch; the Workshop DEATH section records the death +
-// location for the history list. One watcher feeds them all.
+// Kept apart from DeathRecoveryManager because the death line matters to more than
+// the recovery flow.
 //
 // The pattern carries the killer's name in KnownPatterns.UserSlain's first
 // capture; consumers read it off PlayerDiedEvent.Killer.

@@ -18,8 +18,7 @@ namespace MudPlay.Game.Spells;
 // Uses the same ability codes + 10x-DR scaling as the buff/equipment resolvers
 // (CharacterCalculator.MapAbilityToStat, BuffDefenseCalculator) so a debuff reads
 // consistently everywhere. Slowness (abil 68) is a flag, not a magnitude — the
-// sim raises the monster's attack energy x1.5 (MMUD-Explorer's AdjustSpeedForSlowness),
-// thinning its swings/round by ~a third.
+// sim raises the monster's attack energy x1.5, thinning its swings/round by ~a third.
 public static class MonsterDebuffCalculator
 {
     public const int AcCode = 2, AcBlurCode = 10, DrCode = 7, DodgeCode = 34,
@@ -30,8 +29,8 @@ public static class MonsterDebuffCalculator
 
     // A debuff worth listing in the picker is one that moves a number in the
     // matchup sim — it carries at least one AC / DR / Dodge / Accuracy / Slowness
-    // ability. (Crowd-control debuffs like blind/hold have no stat delta, so they
-    // are excluded — see the "stat-affecting debuffs only" scope decision.)
+    // ability. (Crowd-control debuffs like blind/hold have no stat delta for the
+    // sim to apply, so they are excluded.)
     public static bool AffectsMonsterStats(KnownSpell spell)
     {
         foreach (SpellAbility a in spell.Formula.Abilities)

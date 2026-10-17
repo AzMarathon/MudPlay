@@ -25,10 +25,10 @@ public sealed class TerminalEmulator
     // Fires every time the cursor leaves a finished row — the canonical "this
     // line just finished" signal. LineFeed is the usual way; a row painted by
     // cursor positioning finishes when the cursor is moved off it instead (see
-    // CompleteRowBeforeLeaving). Used by LineExtractor so chat / automation see
-    // every completed line, regardless of whether the row eventually scrolls
-    // off-screen. ScrollbackBuffer.RowAdded remains the "row left the visible
-    // screen" signal (only ScrollUp fires it).
+    // CompleteRowBeforeLeaving), so chat and automation see every completed line,
+    // regardless of whether the row eventually scrolls off-screen.
+    // ScrollbackBuffer.RowAdded remains the "row left the visible screen" signal:
+    // a scroll, a clear or a shrink pushes the row into the ring.
     public event Action<ScrollbackBuffer.Row>? LineCompleted;
 
     // The cursor row has taken a glyph since it was last completed.
@@ -101,7 +101,7 @@ public sealed class TerminalEmulator
         ScreenUpdated?.Invoke();
     }
 
-    // The four states the parser can be in. Most bytes are processed in
+    // The five states the parser can be in. Most bytes are processed in
     // Ground; Esc/Csi handle escape sequences; OscString swallows OSC
     // strings (we don't act on any of them); Charset eats the SCS designator
     // byte after ESC ( / ) / * / +.
@@ -205,9 +205,9 @@ public sealed class TerminalEmulator
         // LF is the canonical "this row is done" signal. Fire LineCompleted
         // before the cursor moves so subscribers see the row that just
         // finished — independent of whether it's about to scroll off or
-        // stay on the visible screen. Scrollback capture is handled by
-        // ScrollUp (when scrolling) or by the Backscroll view's live-tail
-        // path (when not).
+        // stay on the visible screen. A row that scrolls off is captured by
+        // ScrollUp; one still on screen reaches the Backscroll window in the
+        // snapshot it takes when it opens.
         ReadOnlySpan<Cell> cells = Screen.Row(Screen.CursorY);
         LineCompleted?.Invoke(new ScrollbackBuffer.Row(DateTimeOffset.Now, cells.ToArray(), softWrap));
         _rowWritten = false;

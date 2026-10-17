@@ -31,9 +31,9 @@ namespace MudPlay.Game.Health;
 //     floor switches from the trigger to the configured rest-target (a much
 //     higher bar) — hysteresis so an active rest holds out to a full recovery
 //     instead of standing back up the instant the pool ticks one point above
-//     the trigger. Both pools reaching target clears both gates, sends
-//     `stand`, and emits any post-rest command(s). Walker resumes when the
-//     last gate clears.
+//     the trigger. Both pools reaching target clears both gates and emits any
+//     post-rest command(s); the next move stands the character up. Walker
+//     resumes when the last gate clears.
 //
 // In-combat semantics: the HP/MA gates can assert mid-fight (so the walker
 // doesn't try to leave the room when a fight is going badly), but `rest` is NEVER
@@ -61,11 +61,12 @@ namespace MudPlay.Game.Health;
 // pools climb back above their run-triggers. Multi-step flee advances one queued
 // direction per NoteRoomChanged.
 //
-// Hang-if-below: PlayerState.Hp at or below HealthSettings.HangIfBelowHp fires a
-// single-shot hard disconnect via the configured exit command. Setting the
-// threshold to 0 disables the check. The trigger stays live all the way through
-// the bleeding-out window: a MajorMUD character at 0 HP or below hasn't died yet
-// (death happens at the per-realm negative floor, BbsProfile.PlayerDiesAtHp) and
+// Hang-if-below: PlayerState.Hp at or below HealthSettings.HangIfBelowHp, with
+// a hostile in the room, fires a single-shot hard disconnect via the configured
+// exit command. 0 is a live trigger, not an off switch (DisableHangups is). The
+// trigger stays live all the way through the bleeding-out window: a MajorMUD
+// character at 0 HP or below hasn't died yet (death happens at the per-realm
+// negative floor, RealmProfile.PlayerDiesAtHp) and
 // can still hang up, so the disconnect keeps firing down to — but not past — that
 // floor, giving a dropped-but-not-yet-dead character a last chance to escape.
 public sealed class HealthManager : IDisposable
@@ -302,9 +303,9 @@ public sealed class HealthManager : IDisposable
         : this(state, coordinator, readSettings, isEnabled, readHangupCommand: null, log) { }
 
     // Constructor with a readHangupCommand selector so the hangup-on-emergency
-    // path uses the user's configured exit command (typically =x or ;o, set in
-    // Settings → Other → Game Exit). Without it, the hangup path no-ops with a
-    // log warning. AppServices wires () => GameCommands.ExitCommand.
+    // path uses the user's configured exit command (the realm's Game exit
+    // command on Settings → BBS + Display). Without it, the hangup path no-ops
+    // with a log warning. AppServices wires () => GameCommands.ExitCommand.
     public HealthManager(
         PlayerState state,
         MovementCoordinator coordinator,
@@ -350,7 +351,7 @@ public sealed class HealthManager : IDisposable
     //     fight, so with no hostile present there's nothing to flee and dropping
     //     the carrier would only strand a safe-but-wounded character in a
     //     reconnect loop. Wired to CombatStateTracker.HasHostileMonster.
-    //   readDeathFloor — the realm's negative-HP death floor (BbsProfile.
+    //   readDeathFloor — the realm's negative-HP death floor (RealmProfile.
     //     PlayerDiesAtHp, e.g. -25). The emergency-hangup path fires anywhere in
     //     the bleeding-out window (hang-trigger down to this floor) but bails once
     //     HP has fallen past it — a character at or below the floor is already
@@ -530,10 +531,6 @@ public sealed class HealthManager : IDisposable
         _isSelfPoisoned = isSelfPoisoned;
     }
 
-    // Wire the loop's per-waypoint "do not rest here" check: returns true when a
-    // loop is running and the room we're standing in is a waypoint flagged
-    // DoNotRest, so the rest hold is suppressed and the loop advances out of it.
-    // Left unwired, resting is unaffected.
     // A loop room flagged "rest up here" (HP and/or mana): rest to that pool's rest-max
     // there, even above the rest-if-below trigger, unless it's already at rest-max.
     public void SetRestHereSelector(Func<(bool Hp, bool Mana)> restHere) => _restHere = restHere;
@@ -585,9 +582,10 @@ public sealed class HealthManager : IDisposable
     public bool HpRestDeferredByRoomSpell { get; private set; }
 
     // Wire the Auto-Rest switch. The engine switch (isEnabled) turns the whole
-    // manager off; this one turns off only the resting — the recovery holds and the
-    // rest / meditate sends — and leaves the flee and the emergency hangup running,
-    // so a character healing by spell alone still runs and hangs up when it must.
+    // manager off; this one turns off the resting — the recovery holds and the
+    // rest / meditate sends — and the low-HP emergency hangup with it
+    // (LowHpHangupHeld), but leaves the flee running, so a character healing by
+    // spell alone still runs when it must.
     public void SetRestEnabledGate(Func<bool> isRestEnabled)
     {
         ArgumentNullException.ThrowIfNull(isRestEnabled);
@@ -622,6 +620,10 @@ public sealed class HealthManager : IDisposable
         return true;
     }
 
+    // Wire the loop's per-waypoint "do not rest here" check: returns true when a
+    // loop is running and the room we're standing in is a waypoint flagged
+    // DoNotRest, so the rest hold is suppressed and the loop advances out of it.
+    // Left unwired, resting is unaffected.
     public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
     {
         ArgumentNullException.ThrowIfNull(shouldSkipRestHere);
@@ -750,7 +752,8 @@ public sealed class HealthManager : IDisposable
     // has the ability, and we're solo and currently stealthed. This is the "can
     // rest safely with a monster in the room" condition — it relaxes the rest-out
     // hostiles guard.
-    // Rest and meditate end a sneak (GAME_MECHANICS "What ends a sneak"), so while
+    // Rest and meditate end a sneak (GAME_MECHANICS "Sneaking — commands, equip
+    // order, and the sneak state machine" → "What ends a sneak"), so while
     // SneakGuard keeps one they wait — unless the race or class has ShadowRest, whose
     // rest keeps the stealth.
     public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;
@@ -837,7 +840,7 @@ public sealed class HealthManager : IDisposable
     public bool RecoveredWithin(TimeSpan window) => _now() - _recoveredAt <= window;
     private DateTimeOffset _recoveredAt = DateTimeOffset.MinValue;
 
-    // True between the rest emit and the corresponding stand emit.
+    // True from the rest emit until the recovery completes or the rest is broken.
     public bool RestInFlight => _restInFlight;
 
     // The rest and flee latches that are set right now, for a bug report: what a
@@ -1715,8 +1718,8 @@ public sealed class HealthManager : IDisposable
             // Pick rest vs meditate based on user settings + which
             // pool is the proximate trigger.
             //
-            // - UseMeditateAbility is the master toggle (defaults true;
-            //   non-Kai classes should turn it off).
+            // - UseMeditateAbility is the master toggle (default off; turn it
+            //   on for a class that meditates).
             // - MeditateBeforeResting flips the order when BOTH pools
             //   are gated: meditate fills MA first, then rest fills
             //   HP. Without this, rest is sent regardless.
@@ -2092,7 +2095,7 @@ public sealed class HealthManager : IDisposable
         if (string.IsNullOrWhiteSpace(hangCmd))
         {
             _log?.Warn(LogCategory,
-                $"HANGUP ({reason}) but no hangup command configured — set Settings → Other → Game Exit.");
+                $"HANGUP ({reason}) but no hangup command configured — set the realm's Game exit command on Settings → BBS + Display.");
             return EscapeOutcome.NotSent;
         }
 
@@ -2774,11 +2777,6 @@ public sealed class HealthManager : IDisposable
         return maPct < hpPct ? "meditate" : "rest";
     }
 
-    // Called by an external observer (RoomTracker via AppServices) when the
-    // player's location changes. Server-side resting state is auto-cleared on
-    // move, so our _restInFlight latch must drop too — otherwise the next
-    // recovery cycle would skip the rest emit because we'd still think we were
-    // sitting.
     // The idle-stall watchdog force-cleared combat optimistically (it sent a resync
     // CR and is waiting on the re-display to self-heal). Hold the rest-out branch
     // until that re-display re-confirms the room, so we don't rest in the flicker
@@ -2919,8 +2917,12 @@ public sealed class HealthManager : IDisposable
         _post(Evaluate);
     }
 
-    // Overload that captures the new room key so the flee path can (a) step its
-    // multi-move queue on every arrival and (b) call
+    // Called by an external observer (RoomTracker via AppServices) when the
+    // player's location changes. Server-side resting state is auto-cleared on
+    // move, so our _restInFlight latch must drop too — otherwise the next
+    // recovery cycle would skip the rest emit because we'd still think we were
+    // sitting. The overload captures the new room key so the flee path can (a)
+    // step its multi-move queue on every arrival and (b) call
     // IRecoverableEngine.ResumeAfterRecovery with the correct anchor once HP
     // recovers.
     public void NoteRoomChanged(Map.RoomKey? newRoom)

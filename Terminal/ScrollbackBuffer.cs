@@ -42,13 +42,9 @@ public sealed class ScrollbackBuffer
     // Number of rows currently held (grows up to Capacity, then plateaus).
     public int Count => _count;
 
-    // Fired after each Append. Used by the Backscroll window's tail follower.
+    // Fired after each Append, so a transcript capture can write each row as it
+    // leaves the screen.
     public event Action<Row>? RowAdded;
-
-    // Fired after SetCapacity changes Capacity. Backscroll consumers re-bind
-    // their views since cached indices may now reference different rows (or
-    // rows that no longer exist after a shrink).
-    public event Action? CapacityChanged;
 
     public ScrollbackBuffer(int capacity = DefaultCapacity)
     {
@@ -115,7 +111,7 @@ public sealed class ScrollbackBuffer
     // Resize the ring to newCapacity in place. Shrinking discards the oldest
     // rows first (the newest newCapacity rows survive). Growing leaves the
     // existing rows intact and reserves empty space for future appends. No-op
-    // if the capacity is unchanged. Fires CapacityChanged on success.
+    // if the capacity is unchanged.
     public void SetCapacity(int newCapacity)
     {
         if (newCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(newCapacity));
@@ -139,7 +135,5 @@ public sealed class ScrollbackBuffer
         Capacity = newCapacity;
         _count = keep;
         _head = keep % newCapacity;
-
-        CapacityChanged?.Invoke();
     }
 }

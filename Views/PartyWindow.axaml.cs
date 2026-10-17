@@ -4,10 +4,10 @@ using Avalonia.Markup.Xaml;
 
 namespace MudPlay.Views;
 
-// Modeless Party window. Bound to ViewModels.PartyViewModel;
-// code-behind only attaches the persisted window-layout and wires the
-// global-hotkeys handler so chord forwards (Ctrl+G etc.) still work
-// when the Party window has focus.
+// Modeless Party window. Bound to ViewModels.PartyViewModel; code-behind
+// attaches the persisted window-layout and the global-hotkeys handler (so
+// the window hotkeys still work while it has focus) and disposes the VM on
+// close.
 public partial class PartyWindow : Window
 {
     public PartyWindow()

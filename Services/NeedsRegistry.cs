@@ -9,18 +9,15 @@ namespace MudPlay.Services;
 public enum NeedKind
 {
     // The character needs an illumination source (torch / lantern / +illu
-    // gear / light spell) to see a dark room. Posted by auto-light, fulfilled
-    // opportunistically by auto-get.
+    // gear / light spell) to see a dark room. Posted by auto-light.
     LightSource,
 
     // The character needs a specific item to traverse a planned route — an
     // (Item: N) / (Ticket: N) exit gate the walker will hit but we don't
     // carry the required item. The Need.Descriptor is the item id (decimal).
     // Posted by Game.Map.PathItemDemandTracker at walk-start; resolved when
-    // the item enters inventory. Its consumers include the Settings → Other
-    // "search rooms if item needed" affordance (arms auto-search while any
-    // such need is outstanding) and active fulfillers (shop routing,
-    // monster-drop reroute, party obtain) that claim the same needs.
+    // the item enters inventory. Active fulfillers (shop routing, monster-drop
+    // reroute, give / summon routing, party obtain) react to the post.
     PathItem,
 }
 
@@ -50,32 +47,23 @@ public readonly record struct Need(
 
 // The fulfillment half of the auto-engine coordination model (the gating half
 // is Game.Map.MovementCoordinator). No engine references another by type: a
-// requester Posts a Need, and a fulfilling engine claims it (TryClaim),
-// satisfies it, then resolves it (Resolve). The requester never knows who
-// fulfils. Auto-light posts a LightSource need; auto-get fulfils by grabbing
-// a torch/lantern en route.
+// requester Posts a Need, fulfilling engines react to NeedPosted, and the
+// requester Resolves it once satisfied. The requester never knows who fulfils.
 //
-// Thread affinity: posts come from MessageRouter handlers and claims come
-// from engine ticks — both on the UI thread. The internal list is
+// Thread affinity: posts come from MessageRouter handlers and resolves from
+// engine ticks — both on the UI thread. The internal list is
 // nonetheless guarded by a lock (cheap insurance, matching LogService /
 // Game.Map.MovementCoordinator). The NeedPosted event fires on the posting
 // thread after the lock is released.
 public sealed class NeedsRegistry
 {
-    private sealed class Slot
-    {
-        public required Need Need { get; init; }
-        public string? Claimant { get; set; }
-    }
-
     private readonly object _gate = new();
-    private readonly List<Slot> _slots = new();
+    private readonly List<Need> _needs = new();
     private readonly LogService? _log;
 
     // Fires after a genuinely new need is posted (not on a deduped re-post).
-    // Lets a fulfilling engine wake and attempt a TryClaim immediately instead
-    // of polling. Fired on the posting thread after the internal lock is
-    // released.
+    // Lets a fulfilling engine act on it at once instead of polling. Fired on
+    // the posting thread after the internal lock is released.
     public event Action<Need>? NeedPosted;
 
     public NeedsRegistry(LogService? log = null)
@@ -98,17 +86,17 @@ public sealed class NeedsRegistry
         bool isNew;
         lock (_gate)
         {
-            Slot? existing = Find(kind, descriptor);
-            if (existing is not null)
+            int existing = IndexOf(kind, descriptor);
+            if (existing >= 0)
             {
                 isNew = false;
-                need = existing.Need;
+                need = _needs[existing];
             }
             else
             {
                 isNew = true;
                 need = new Need(kind, descriptor, requester, DateTimeOffset.Now, Math.Max(1, quantity));
-                _slots.Add(new Slot { Need = need });
+                _needs.Add(need);
             }
         }
 
@@ -123,8 +111,8 @@ public sealed class NeedsRegistry
     // Re-announce the still-outstanding needs of kind to the subscribers, as if
     // they had just been posted.
     //
-    // Post fires NeedPosted only for a NEW need, which makes a fulfiller's single
-    // chance to claim its one and only chance. That loses a need whenever a
+    // Post fires NeedPosted only for a NEW need, which makes a fulfiller's first
+    // offer its one and only chance. That loses a need whenever a
     // fulfiller had to stand down the first time it was offered: a route needing
     // two items posts both back-to-back, the first router takes item one and every
     // other router defers so they don't fight over the walk — and when that detour
@@ -134,40 +122,18 @@ public sealed class NeedsRegistry
     //
     // Called at walk-start, once the previous detour has necessarily finished (its
     // resume is what started this walk), so the deferring router is now free.
-    // Re-offering an already-claimed need is harmless: every fulfiller no-ops when
-    // its own detour is already running.
+    // Re-offering a need already being fetched is harmless: every fulfiller no-ops
+    // when its own detour is already running.
     public void Reoffer(NeedKind kind)
     {
         Need[] outstanding;
         lock (_gate)
-            outstanding = _slots.Where(s => s.Need.Kind == kind).Select(s => s.Need).ToArray();
+            outstanding = _needs.Where(n => n.Kind == kind).ToArray();
         if (outstanding.Length == 0) return;
 
         _log?.Info("Needs", $"re-offering {outstanding.Length} outstanding {kind} need(s)");
         foreach (Need n in outstanding)
             NeedPosted?.Invoke(n);
-    }
-
-    // Try to claim the oldest unclaimed need of kind for claimant. A claimed
-    // need stays in the registry (still outstanding) but won't be handed to a
-    // second claimant — only Resolve or Release changes that. Returns false
-    // with need defaulted when nothing is claimable.
-    public bool TryClaim(NeedKind kind, string claimant, out Need need)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(claimant);
-        lock (_gate)
-        {
-            Slot? slot = _slots.FirstOrDefault(s => s.Need.Kind == kind && s.Claimant is null);
-            if (slot is null)
-            {
-                need = default;
-                return false;
-            }
-            slot.Claimant = claimant;
-            need = slot.Need;
-        }
-        _log?.Info("Needs", $"claimed — kind={need.Kind} descriptor={need.Descriptor} by={claimant}");
-        return true;
     }
 
     // Remove a need from the registry — the fulfiller got the thing. Identity
@@ -178,41 +144,21 @@ public sealed class NeedsRegistry
         bool removed;
         lock (_gate)
         {
-            Slot? slot = Find(need.Kind, need.Descriptor);
-            removed = slot is not null && _slots.Remove(slot);
+            int at = IndexOf(need.Kind, need.Descriptor);
+            removed = at >= 0;
+            if (removed) _needs.RemoveAt(at);
         }
         if (removed) _log?.Info("Needs", $"resolved — kind={need.Kind} descriptor={need.Descriptor}");
         return removed;
     }
 
-    // Drop a claim without resolving — the fulfiller gave up (e.g. the only
-    // source is a monster drop we couldn't grab this trip). The need returns
-    // to the unclaimed pool so another fulfiller (or the same one on a later
-    // tick) can retry. Returns true if a matching claimed need was released.
-    public bool Release(Need need)
-    {
-        bool released = false;
-        lock (_gate)
-        {
-            Slot? slot = Find(need.Kind, need.Descriptor);
-            if (slot is { Claimant: not null })
-            {
-                slot.Claimant = null;
-                released = true;
-            }
-        }
-        if (released) _log?.Info("Needs", $"released — kind={need.Kind} descriptor={need.Descriptor}");
-        return released;
-    }
-
-    // Snapshot of every outstanding need of kind (claimed or not), oldest
-    // first. Lets a requester check whether its need is still pending without
-    // re-posting.
+    // Snapshot of every outstanding need of kind, oldest first. Lets a requester
+    // check whether its need is still pending without re-posting.
     public IReadOnlyList<Need> Outstanding(NeedKind kind)
     {
         lock (_gate)
         {
-            return _slots.Where(s => s.Need.Kind == kind).Select(s => s.Need).ToArray();
+            return _needs.Where(n => n.Kind == kind).ToArray();
         }
     }
 
@@ -220,22 +166,22 @@ public sealed class NeedsRegistry
     // pending acquisitions don't leak into the next.
     public void Clear()
     {
-        lock (_gate) { _slots.Clear(); }
+        lock (_gate) { _needs.Clear(); }
     }
 
-    // Drop every outstanding need of one kind, claimed or not, and say how many
+    // Drop every outstanding need of one kind and say how many
     // went. For the needs that name a game-data record (a route item's number)
     // when the game data becomes another set, under which the number is another
     // item; a need that names none (a light source) is still a need.
     public int Clear(NeedKind kind)
     {
         int dropped;
-        lock (_gate) { dropped = _slots.RemoveAll(s => s.Need.Kind == kind); }
+        lock (_gate) { dropped = _needs.RemoveAll(n => n.Kind == kind); }
         return dropped;
     }
 
-    private Slot? Find(NeedKind kind, string descriptor)
-        => _slots.FirstOrDefault(
-            s => s.Need.Kind == kind &&
-                 string.Equals(s.Need.Descriptor, descriptor, StringComparison.Ordinal));
+    private int IndexOf(NeedKind kind, string descriptor)
+        => _needs.FindIndex(
+            n => n.Kind == kind &&
+                 string.Equals(n.Descriptor, descriptor, StringComparison.Ordinal));
 }

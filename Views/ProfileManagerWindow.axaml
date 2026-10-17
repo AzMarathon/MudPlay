@@ -79,7 +79,7 @@
                     <Button Content="BBS settings…" HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             Command="{Binding EditBbsCommand}" IsEnabled="{Binding HasBbsSelection}"
-                            ToolTip.Tip="Open Settings → BBS for this BBS: host, port, retry, terminal size, logon steps."/>
+                            ToolTip.Tip="Open Settings → BBS + Display for this BBS: host, port, retry, terminal size, logon steps."/>
                 </StackPanel>
                 <ListBox ItemsSource="{Binding Bbses}"
                          SelectedItem="{Binding SelectedBbs, Mode=TwoWay}"
@@ -117,7 +117,7 @@
                     <Button Content="Realm settings…" HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             Command="{Binding EditRealmCommand}" IsEnabled="{Binding HasRealmSelection}"
-                            ToolTip.Tip="Open Settings → BBS on this realm: game-menu commands, death floor, boss cleanup time, runic currency name."/>
+                            ToolTip.Tip="Open Settings → BBS + Display on this realm: game-menu commands, death floor, boss cleanup time, runic currency name."/>
                 </StackPanel>
                 <ListBox ItemsSource="{Binding Realms}"
                          SelectedItem="{Binding SelectedRealm, Mode=TwoWay}"

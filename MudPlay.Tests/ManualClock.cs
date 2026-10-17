@@ -11,21 +11,19 @@ internal sealed class ManualClock
     private readonly List<(DateTimeOffset Due, long Order, TaskCompletionSource Done)> _waits = new();
     private long _order;
 
-    public ManualClock() : this(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero)) { }
-
-    public ManualClock(DateTimeOffset start)
+    public ManualClock()
     {
-        _origin = start;
-        Now = start;
+        _origin = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero);
+        Now = _origin;
     }
 
     public DateTimeOffset Now { get; private set; }
 
-    // The same instant as a Stopwatch timestamp.
-    public long Timestamp() => (Now - _origin).Ticks * Stopwatch.Frequency / TimeSpan.TicksPerSecond;
-
-    // How many delays are still to come due.
-    public int Waiting => _waits.Count;
+    // The same instant as a Stopwatch timestamp, counted from a second in: a
+    // timestamp of 0 reads as "none" to some callers. Worked in 128 bits, as ticks
+    // times the Stopwatch frequency outgrows a long within minutes.
+    public long Timestamp() =>
+        Stopwatch.Frequency + (long)((Int128)(Now - _origin).Ticks * Stopwatch.Frequency / TimeSpan.TicksPerSecond);
 
     // As Task.Delay: a delay of nothing has nothing to wait for.
     public Task Delay(TimeSpan after)

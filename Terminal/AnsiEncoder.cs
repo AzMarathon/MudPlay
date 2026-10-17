@@ -5,8 +5,8 @@ namespace MudPlay.Terminal;
 // Re-emits a Cell[] row as plain text plus inline ANSI SGR escapes, so a
 // captured log file rendered through less -R, a modern terminal, or any
 // ANSI-aware viewer shows the same colours the user saw live. Mirrors the
-// run-batching Controls.CellRowDisplay does for on-screen rendering — same
-// logical groupings, different output medium.
+// same-attribute run batching TerminalControl does on screen — same logical
+// groupings, different output medium.
 public static class AnsiEncoder
 {
     // Encode cells as ANSI text. Always ends with ESC [ 0 m so the output

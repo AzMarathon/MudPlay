@@ -2,7 +2,7 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Game.Health;
 
-// Words a realm's hang-up penalty (RealmProfile, Settings → BBS) for the two
+// Words a realm's hang-up penalty (RealmProfile, Settings → BBS + Display) for the two
 // places that show it: the program log when a hang-up goes out, and the bug
 // report. The penalty is the board's own (GAME_MECHANICS
 // "Hang-up / lost carrier"); the client reports it, and after one looks for the

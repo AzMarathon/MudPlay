@@ -19,8 +19,9 @@ namespace MudPlay.ViewModels.GameData.Tables;
 //
 // Double-click opens the interactive room-detail popup for the room this shop sits in (read
 // from the row's Assigned To field, formatted as "Room {map}/{room}") — the same popup the
-// Rooms tab opens, showing the shop's stock, exits, and neighbours. A shop that spans several
-// rooms opens on the first and lists the rest as clickable siblings in the popup's title.
+// Navigation ROOM INFO panel's shop link opens, showing the shop's stock, exits, and
+// neighbours. A shop that spans several rooms opens on the first and lists the rest as
+// clickable siblings in the popup's title.
 // There's no per-shop edit dialog — the MDB is the source of truth for shops.
 public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditableTableSectionViewModel
 {
@@ -87,8 +88,8 @@ public sealed class ShopsSectionViewModel : JsonTableSectionViewModel, IEditable
     // \x00 (unassigned, e.g. an Inn) or doesn't start with "Room ".
     //
     // Some shops (Bank of Godfrey, multi-branch chains) carry a comma-separated list of rooms —
-    // "Room 1/297, Room 6/1334". We take the first token; the dialog only jumps to one room
-    // anyway, and the rest are accessible via the Rooms tab's search.
+    // "Room 1/297, Room 6/1334". We take the first token; the popup lists the shop's other
+    // rooms as clickable siblings.
     private (int Map, int Room) ReadAssignedRoom(int shopNumber)
     {
         GameTable? doc = _cache.GetTable("Shops");

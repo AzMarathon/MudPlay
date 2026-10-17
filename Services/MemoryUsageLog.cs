@@ -17,7 +17,7 @@ namespace MudPlay.Services;
 //
 // Deliberately kept OUT of the program log: a sample a minute all night would
 // bury the operator-facing entries, and these numbers are only interesting when
-// chasing memory. It lands in its own Data/Logs/{ts}-memory.log instead, so the
+// chasing memory. It lands in its own Logs/{ts}-memory.log instead, so the
 // program log stays clean while the memory history is a file away.
 //
 // Gated by LogDiagnosticState.AutoCollectLogs: the timer always ticks, but each

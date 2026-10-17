@@ -56,7 +56,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
     {
         // Existing message (player casts it) → User Definitions (tab 0).
         var vm = new MessageEditDialogViewModel(
-            Blank("fireball"), SettingsTier.Defaults, Array.Empty<MessageRecord>(),
+            Blank("fireball"), Array.Empty<MessageRecord>(),
             isNew: false, cache: null, gameDataInfo: SomeInfo);
         Assert.Equal(0, vm.InitialTabIndex);
     }
@@ -66,7 +66,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
     {
         // No message (room/item/monster cast) but Game Data exists → tab 1.
         var vm = new MessageEditDialogViewModel(
-            Blank("freezing water"), SettingsTier.Defaults, Array.Empty<MessageRecord>(),
+            Blank("freezing water"), Array.Empty<MessageRecord>(),
             isNew: true, cache: null, gameDataInfo: SomeInfo);
         Assert.Equal(1, vm.InitialTabIndex);
     }
@@ -77,7 +77,7 @@ public sealed class SpellsGameDataTabTests : IDisposable
         // Plain Messages-tab edit (no Game Data tab) always stays on tab 0,
         // even for a new record.
         var vm = new MessageEditDialogViewModel(
-            Blank("greeting"), SettingsTier.Defaults, Array.Empty<MessageRecord>(),
+            Blank("greeting"), Array.Empty<MessageRecord>(),
             isNew: true, cache: null, gameDataInfo: NoInfo);
         Assert.Equal(0, vm.InitialTabIndex);
     }

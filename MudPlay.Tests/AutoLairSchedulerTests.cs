@@ -3,13 +3,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 7.19 — AutoLairScheduler.PickNext is the deterministic target
-/// picker. Pure function over <see cref="LairCandidate"/>s + a travel
-/// model — no graph dependency, no clock, no global state. The tests
-/// pin down the scoring contract: default heuristic balances wasted-
-/// respawn vs idle-wait under idlePenalty; throughput ignores idle.
-/// </summary>
+// AutoLairScheduler.PickNext is the deterministic target picker. Pure
+// function over LairCandidates + a travel model — no graph dependency, no
+// clock, no global state. The tests pin down the scoring contract: the
+// default heuristic goes to the closest lair that's up by arrival, else the
+// soonest fight; throughput ignores idle.
 public sealed class AutoLairSchedulerTests
 {
     private static readonly DateTimeOffset _t0 =
@@ -71,10 +69,10 @@ public sealed class AutoLairSchedulerTests
     public void PickNext_DefaultHeuristic_PrefersReadySoonerOverIdleWait()
     {
         // Lair A: ready 100s from now, 2 hops (entryArrival = 3s). Slack
-        // = 3 - 100 = -97s idle. Score = 97.
+        // = 3 - 100 = -97s idle.
         // Lair B: ready in 5s, 10 hops (entryArrival = 11s). Slack =
-        // 11 - 5 = 6s wasted. Score = 6.
-        // Idle-penalised default → B wins.
+        // 11 - 5 = 6s wasted, so it is up by arrival.
+        // Only B is up by arrival → B wins.
         LairCandidate[] cands =
         {
             Reachable(1, 100, readyAt: _t0.AddSeconds(100), hops:  2),
@@ -88,12 +86,11 @@ public sealed class AutoLairSchedulerTests
     }
 
     [Fact]
-    public void PickNext_DefaultHeuristic_PrefersReadyLair_EvenAtZeroPenalty()
+    public void PickNext_DefaultHeuristic_PrefersReadyLairOverIdling()
     {
-        // "Prefer a ready lair" is a hard rule for Default, independent of idlePenalty:
-        // an already-ready lair (200) always beats idling for a sooner-popping one
-        // (100), even at penalty 0 (where the old Default reduced to throughput and
-        // would have idled). Fixes the reported 112s wait-room idle.
+        // "Prefer a ready lair" is a hard rule for Default: an already-ready lair
+        // (200) always beats idling for a sooner-popping one (100). Fixes the
+        // reported 112s wait-room idle.
         LairCandidate[] cands =
         {
             Reachable(1, 100, readyAt: _t0.AddSeconds(100), hops:  2),  // idle=97s
@@ -101,7 +98,7 @@ public sealed class AutoLairSchedulerTests
         };
 
         LairDecision? best = AutoLairScheduler.PickNext(
-            cands, _flat, AutoLairHeuristic.Default, idlePenalty: 0.0, now: _t0);
+            cands, _flat, AutoLairHeuristic.Default, now: _t0);
 
         Assert.NotNull(best);
         Assert.Equal(new RoomKey(1, 200), best!.Lair);
@@ -266,23 +263,5 @@ public sealed class AutoLairSchedulerTests
         Assert.Equal(_t0.AddSeconds(5), best.EntryArrival);
         // slack = _t0+5 - (_t0+60) = -55s idle.
         Assert.Equal(TimeSpan.FromSeconds(-55), best.SlackAtEntry);
-    }
-
-    [Fact]
-    public void PickNext_IdlePenaltyAboveOne_PunishesIdleMore()
-    {
-        // idle=10s vs wasted=5s at idlePenalty=2 → score(idle)=20, score(wasted)=5.
-        // Wasted candidate wins.
-        LairCandidate[] cands =
-        {
-            Reachable(1, 100, readyAt: _t0.AddSeconds(20), hops: 4),  // idle=15s under penalty 2 = score 30
-            Reachable(1, 200, readyAt: _t0.AddSeconds(2),  hops: 4),  // wasted=3s = score 3
-        };
-
-        LairDecision? best = AutoLairScheduler.PickNext(
-            cands, _flat, AutoLairHeuristic.Default, idlePenalty: 2.0, now: _t0);
-
-        Assert.NotNull(best);
-        Assert.Equal(new RoomKey(1, 200), best!.Lair);
     }
 }

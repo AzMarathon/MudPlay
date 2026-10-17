@@ -86,7 +86,6 @@ public sealed class SpellRecordDialogService
 
         MessageEditDialogViewModel vm = new(
             record,
-            currentTier:     SettingsTier.Defaults,
             existingRecords: _messages.Messages,
             isNew:           isNew,
             cache:           _cache,

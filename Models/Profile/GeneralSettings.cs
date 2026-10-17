@@ -38,8 +38,8 @@ public sealed class GeneralSettings
     // Char-tier; surfaced in Settings → General.
     public bool LoadLastRanLoop { get; set; } = true;
 
-    // Before persisting changes, copy the existing profile JSON to
-    // {name}.json.bak. Off by default; users who want a safety net for
+    // Before persisting changes, copy the existing profile.json to
+    // profile.json.bak. Off by default; users who want a safety net for
     // hand-edits or settings churn can flip it on.
     public bool BackupOnSave { get; set; }
 

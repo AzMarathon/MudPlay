@@ -203,17 +203,12 @@ public sealed class BossTimerSyncCollectorTests
     }
 
     [Fact]
-    public void IgnoresChunksBeforeBeginAndAfterStop()
+    public void IgnoresChunksBeforeBegin()
     {
         BossTimerSyncCollector c = NewCollector(out var got);
         var recs = new[] { new BossTimerSyncRecord(1, "a", T("2026-08-22T01:00:00Z")) };
 
-        FeedResponse(c, "Bob", recs, 100);   // no Begin yet
-        Assert.Empty(got);
-
-        c.Begin(RemoteChannel.Gangpath);
-        c.Stop();
-        FeedResponse(c, "Bob", recs, 100);   // after Stop
+        FeedResponse(c, "Bob", recs, 100);
         Assert.Empty(got);
     }
 

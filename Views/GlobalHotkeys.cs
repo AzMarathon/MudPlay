@@ -8,12 +8,11 @@ using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
 
-// Adds the app-wide window-toggle hotkeys (now sourced from
-// KeybindingStore) to a child window so re-pressing the hotkey closes
-// the open window — the toggle convention. Avalonia's window-level
-// KeyBindings only fire when that window has focus, so without this
-// every panel had its own focus surface and the hotkey toggle was
-// unreachable.
+// Adds the app-wide window hotkeys (sourced from KeybindingStore) to a
+// child window, so the open / raise / close toggle works while that
+// window has focus. Avalonia's window-level KeyBindings only fire when
+// that window has focus, so without this every panel had its own focus
+// surface and its hotkey was unreachable from it.
 //
 // On KeybindingStore.BindingChanged the bindings for every attached
 // window get rebuilt — keeping the runtime in sync with whatever the

@@ -228,8 +228,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // in BeginCircle, cleared on Reset.
     private bool _suppressFirstWaypointEvent;
 
-    // Wall-clock anchor for the current lap. Set on LoopReachedFirstWaypoint and
-    // refreshed on every wrap so CurrentLapTime reads correctly.
+    // Wall-clock anchor for the current lap. Set when BeginCircle first reaches the
+    // first waypoint and refreshed on every wrap so CurrentLapTime reads correctly.
     private DateTimeOffset _lapStartedAt;
 
     private readonly List<TimeSpan> _lapDurations = new();
@@ -344,9 +344,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // be re-RUN, not just named. This is what lets "@loop last" and the Loop-mode
     // chip re-run / re-open the last loop even when it was an ad-hoc one that was
     // never saved (LastRunLoopName alone can't be resolved back to a Loop for an
-    // unsaved run). Captured BEFORE the in-place waypoint rotation below, so it keeps
-    // the canonical (waypoint-0-first) order. A distinct copy from the running _loop,
-    // so the rotation a run performs never mutates the retained snapshot.
+    // unsaved run). A distinct copy from the running _loop, so later edits to the
+    // running loop never reach the retained snapshot.
     public Loop? LastRunLoop { get; private set; }
 
     // The game-data set LastRunLoop was run on: its rooms are that set's. It is kept
@@ -418,18 +417,13 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _returningFromDetour;
     public bool ReturningFromDetour => _returningFromDetour && State is LoopState.Approaching or LoopState.Paused;
 
-    // Room the running cycle begins + ends at (the rotation entry). Stable from the
-    // moment the rotation is computed (during Start for v2 loops with UserWaypoints)
-    // until the runner resets. Null for legacy v1 loops where the cycle has no
-    // canonical start anchor.
+    // Room the running cycle begins + ends at (the entry the run picked). Stable from
+    // the moment Start picks it until the runner resets. Null for legacy v1 loops,
+    // which load with no waypoints and so have no canonical start anchor.
     public RoomKey? CircleStartRoom => _circleStartRoom;
 
     // Total steps in the rotated circle. 0 when no loop is active.
     public int StepCount => _expandedSteps.Count;
-
-    // Read-only view of the runtime-expanded step sequence. Used by the CURRENT NAV
-    // pane to render per-step rows. Empty between runs.
-    public IReadOnlyList<LoopStep> ExpandedSteps => _expandedSteps;
 
     // Time elapsed in the current lap. Zero when no loop is running or the first
     // waypoint hasn't been reached. Computed on each read so VM bindings can poll via
@@ -1296,11 +1290,10 @@ public sealed class LoopRunner : IRecoverableEngine
         _loop = loop;
         LastRunLoopName = loop.Name;   // retained past Stop/Reset for @path recovery
         LastRunLoopAt = _now();
-        // Retain a canonical-order COPY (waypoints not yet rotated here) so "@loop
-        // last" / the Loop-mode chip can re-run or re-open this exact loop even if it
-        // was an ad-hoc, never-saved run. A copy, not the same object, so RotateLoopTo
-        // below can't reorder the snapshot. The two settings are the ones this
-        // character runs the loop with (Loop.OwnSettings), not the loop file's.
+        // Retain a COPY so "@loop last" / the Loop-mode chip can re-run or re-open
+        // this exact loop even if it was an ad-hoc, never-saved run. The two settings
+        // are the ones this character runs the loop with (Loop.OwnSettings), not the
+        // loop file's.
         LastRunLoop = new Loop(loop.Name, new List<LoopWaypoint>(loop.Waypoints))
         {
             Notes = loop.Notes,
@@ -1362,8 +1355,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // Started is raised AFTER each branch commits its state +
         // rotation + expansion + (where applicable) State transition.
         // Subscribers like NavigationViewModel.RefreshLoopOverlays read
-        // runner.State / CircleStartRoom / ExpandedSteps in their
-        // handler; if we raised before the commit they'd see the prior
+        // runner.State / CurrentLoop / ResolveLoopRoomKeys() (built from
+        // the start room and the expanded steps) in their handler; if we
+        // raised before the commit they'd see the prior
         // (Idle) shape and the approach-phase preview overlay would
         // render empty.
 
@@ -2368,8 +2362,9 @@ public sealed class LoopRunner : IRecoverableEngine
                     return;
                 }
                 // Cross through the ordinary step path, not straight away: a bash or
-                // open ends a sneak (GAME_MECHANICS "What ends a sneak") and a monster
-                // may have walked in meanwhile, so the ready check (re-sneak) and a
+                // open ends a sneak (GAME_MECHANICS "Sneaking — commands, equip order,
+                // and the sneak state machine", its What ends a sneak list) and a
+                // monster may have walked in meanwhile, so the ready check (re-sneak) and a
                 // combat pause get their say first (report paradigm-20260928-125823).
                 // The door is marked open so the re-driven step crosses it rather than
                 // opening it again; if it can't be marked (a move still pending), cross
@@ -3354,8 +3349,8 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         // A block landing while the character is Confused is the movement-fumble
-        // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
-        // violently!") — the just-sent move was consumed by the fumble, not a
+        // mechanic (GAME_MECHANICS "Confusion fumbles — actions fail and must be
+        // re-sent") — the just-sent move was consumed by the fumble, not a
         // genuine mapping/graph problem, and the resync below confirms the
         // tracker's belief is correct every time. Confusion can fumble several
         // moves back-to-back well inside MaxRecoverAttempts' window; charging

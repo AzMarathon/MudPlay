@@ -2,11 +2,9 @@ namespace MudPlay.Services.Patterns;
 
 // Stable identifiers for the default MessageRouter pattern seed. Subsystems
 // subscribe by name — router.Subscribe(KnownPatterns.UserHits, handler) —
-// instead of re-typing regex strings everywhere. Users can also reference these
-// IDs from the Trigger UI when they want to react to a built-in pattern.
+// instead of re-typing regex strings everywhere.
 //
-// Naming convention: category.action in lower-kebab, matching the rest of the
-// codebase (MenuCommandIds).
+// Naming convention: category.action in lower-kebab.
 public static class KnownPatterns
 {
     // ----- Stealth -------------------------------------------------------
@@ -147,9 +145,9 @@ public static class KnownPatterns
     public const string UserSlain            = "combat.user-slain";
 
     // "X moves to attack Y." — emitted by the server for every player's combat
-    // announce, including ours. Used by CombatManager to implement the
-    // AttackTiming re-fire mechanism (AttackLastParty / AttackLastRoom /
-    // AttackAfter). The pattern tolerates the bracketed-prompt prefix
+    // announce, including ours, which is what the AttackTiming re-fire modes
+    // (AttackLastParty / AttackLastRoom / AttackAfter) key on. The pattern
+    // tolerates the bracketed-prompt prefix
     // ("[HP=100/MA=50]:X moves to attack Y.") plus a bare colon prefix; the
     // announcer name + target are positional captures.
     public const string PartyAttackAnnounce  = "combat.party-attack-announce";

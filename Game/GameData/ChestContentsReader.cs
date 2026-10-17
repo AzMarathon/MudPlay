@@ -19,7 +19,7 @@ public readonly record struct ChestDrop(int ItemId, string ItemName, double Prob
 public sealed record ChestContents(int MinItems, int MaxItems, IReadOnlyList<ChestDrop> Drops);
 
 // Resolves a container item's loot table from the active game-data set. The
-// chain is Items(ItemType 8) → Abil 43 (CastSpell) → Spells → Abil 148 (castsp)
+// chain is Items(ItemType 8) → Abil 43 (CastsSp) → Spells → Abil 148 (TextBlock)
 // → TBInfo, whose Action is the open script: `message` (flavour), `giveitem`
 // (guaranteed), and `random T` tokens — one independent draw each. A `random`
 // target table's lines are cumulative-threshold brackets; the selected bracket

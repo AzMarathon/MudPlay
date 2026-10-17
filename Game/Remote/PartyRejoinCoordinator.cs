@@ -87,7 +87,7 @@ public sealed class PartyRejoinCoordinator : IDisposable
     // no party to return to. Surfaced in the bug report's Party section.
     public string? RememberedLeader => _rememberedLeader;
 
-    // "If leading, accept @comeback for up to" (Settings → Party): a drop longer than
+    // "If leading, accept @comeback for (min)" (Settings → Party): a drop longer than
     // this and the party has moved on, so re-entry sends no @comeback.
     public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
 
@@ -148,12 +148,12 @@ public sealed class PartyRejoinCoordinator : IDisposable
         CancelRoomWait();
     }
 
-    // Open the one-shot rejoin latch. Called on every connect; the @comeback
-    // only actually fires on the next in-game prompt if a leader is remembered.
     // The connection dropped while we were in-game. Only the first drop of an outage
     // counts; failed redials don't restamp it.
     public void NoteDisconnected() => _droppedAt ??= NowProvider();
 
+    // Open the one-shot rejoin latch. Called on every connect; the @comeback
+    // only actually fires on the next in-game prompt if a leader is remembered.
     public void Arm()
     {
         _armed = true;

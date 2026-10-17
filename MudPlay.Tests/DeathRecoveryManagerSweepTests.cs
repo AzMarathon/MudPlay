@@ -143,7 +143,7 @@ public sealed partial class DeathRecoveryManagerTests
 
         public void Die(EquippedItem[] worn, string[] carried)
         {
-            H.Snapshot = SnapWith(worn, carried);
+            H.Snapshot = H.SnapWith(worn, carried);
             H.Tracker.NoteDeath(2, "You have 2 lives left.");
         }
 

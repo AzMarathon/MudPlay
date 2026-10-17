@@ -31,7 +31,7 @@ public sealed class AutoLightSettings
 
     // "Only use my room-light spell (no items)" mode. When true the engine never
     // buys or readies light items — it relies purely on worn +illu gear plus the
-    // configured room-light spell (SpellsSettings.RoomLightSpell), casting the
+    // room-light spell (the self buff slot flagged OnlyWhenDark), casting the
     // spell to cover a dark room and accepting the darkness penalty if gear +
     // spell still fall short. Overrides PreferredLightName (which is ignored).
     public bool UseRoomLightSpellOnly { get; set; }

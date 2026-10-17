@@ -9,11 +9,12 @@ namespace MudPlay.Game.Inventory;
 // line, resolves each entry against game data, and sends get <item name> for
 // any item flagged ItemOverlay.AutoCollect.
 //
-// There is no bulk "get all" verb in MajorMUD — each item is collected
-// individually by name. Every entry the survey line names is run through the
-// injected resolver, which maps the loose room wording back to an item Number
-// and reads its per-character AutoCollect override. Non-items (cash entries,
-// scenery) and items not flagged for collection are skipped.
+// There is no "get all" verb — each item is collected by name (Paradigm takes
+// a counted `get N <item>` for a pile; Stock one `get` per copy). Every entry
+// the survey line names is run through the injected resolver, which maps the
+// loose room wording back to an item Number and reads its per-character
+// AutoCollect override. Non-items (cash entries, scenery) and items not
+// flagged for collection are skipped.
 //
 // Collect-after-combat: when CashSettings.CollectAfterCombatFinished is set
 // (the shared Cash + Items timing toggle) and the room still holds engageable
@@ -31,9 +32,6 @@ namespace MudPlay.Game.Inventory;
 //
 // Master switch: AutoActionDefaults.AutoGetItems (shared with the Settings →
 // General toggle and the toolbar Toggle command).
-//
-// Not yet handled: needs-fulfillment (grabbing a torch to satisfy a LightSource
-// need), encumbrance gating, batching, and party provisioning.
 public sealed class AutoGetItemsManager : IDisposable
 {
     // LogService category — [AutoGet] rows per collected / deferred item.
@@ -458,11 +456,11 @@ public sealed class AutoGetItemsManager : IDisposable
             if (!item.AutoCollect) continue;     // user didn't flag it
 
             // A stacked ground pile is surveyed with a leading count ("5 piece of
-            // amber"): there is no bulk-get verb, so each get grabs a single unit
-            // and the pile needs one get per counted unit — otherwise only one is
-            // taken and the rest linger until the next room re-display. Each unit
-            // re-checks the MaxToGet cap and the encumbrance projection on its own,
-            // so a cap or weight ceiling stops the pile partway rather than after
+            // amber"): every counted unit is weighed on its own, then sent as one
+            // `get N <item>` on Paradigm or one get per unit on Stock — otherwise only
+            // one is taken and the rest linger until the next room re-display. Each
+            // unit re-checks the MaxToGet cap and the encumbrance projection on its
+            // own, so a cap or weight ceiling stops the pile partway rather than after
             // the whole stack.
             int units = ParseLeadingCount(entry);
             // Command-side dedup (immediate path only — the deferred build is

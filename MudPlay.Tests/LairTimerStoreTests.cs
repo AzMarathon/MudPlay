@@ -421,14 +421,4 @@ public sealed class LairTimerStoreTests : IDisposable
             killUtc.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture),
             LairTimerStore.LogTime(killUtc));
     }
-
-    [Fact]
-    public void ResetArrivals_NoCrash_OnEmptyStore()
-    {
-        var (cache, graph, tracker) = BuildFixture();
-        using LairTimerStore store = new(cache, graph, tracker);
-
-        store.ResetArrivals();
-        Assert.Null(store.LastEntered(new RoomKey(5, 100)));
-    }
 }

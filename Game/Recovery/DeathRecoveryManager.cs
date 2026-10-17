@@ -18,7 +18,8 @@ namespace MudPlay.Game.Recovery;
 // Surfaces the loaded profile's Records (the deathpile grid), the persisted
 // AutoRecover / AutoEquip toggles, and the recovery actions. The recovery state
 // machine drives each record's Active → Partial → Recovered transition off
-// observed room re-entry and "You pick up …" confirmations. Current lives are
+// observed room re-entry and the recovery lines ("You took <item>." on Stock,
+// "You have recovered the corpse of <name>." on Paradigm). Current lives are
 // surfaced separately on the Character Info tab (from PlayerStats.Lives), not
 // here.
 //
@@ -27,8 +28,7 @@ namespace MudPlay.Game.Recovery;
 // nothing to do with death recovery.
 public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 {
-    // LogService category — appears as [DeathRecovery] rows per observation +
-    // comeback request.
+    // LogService category — the [DeathRecovery] rows.
     public const string LogCategory = "DeathRecovery";
 
     private readonly DeathLineWatcher _deathWatcher;
@@ -423,10 +423,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _wireSender = sender;
     }
 
-    // Bind the per-session LineExtractor so the manager can watch for
-    // "You pick up ..." confirmations that drive the Partial → Recovered
-    // transition (and the per-item re-equip). Bound by MainWindowViewModel on
-    // connect.
+    // Bind the per-session LineExtractor so the manager reads the recovery lines
+    // ("You took …", "You have recovered the corpse of …") that drive the
+    // Partial → Recovered transition (and the per-item re-equip). Bound by
+    // MainWindowViewModel on connect.
     public void AttachLineExtractor(LineExtractor lines)
     {
         ArgumentNullException.ThrowIfNull(lines);
@@ -496,13 +496,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _isParadigm = isParadigm;
     }
 
-    // Bind the LIVE self-name (from PartyManager.LocalCharacterName, tracked off the
-    // `stat`/`par` screens) so corpse matching identifies "self" by the authoritative
-    // in-game name, not a possibly-stale CharacterProfile.Name. Approach A already
-    // heals Current.Name from `stat`, so this is belt-and-suspenders for the narrow
-    // pre-stat window (dying before the first stat parse); we still prefer the live
-    // name and fall back to Current.Name only when it's blank. Optional — unbound
-    // (tests) it just reads Current.Name as before.
+    // Bind the LIVE self-name (PartyManager.LocalCharacterName, tracked off the
+    // `stat`/`par` screens) so corpse matching identifies "self" by the in-game name
+    // rather than CharacterProfile.Name, which a copied profile can leave stale. The
+    // live name wins; Current.Name is the fallback only when it is blank. Optional —
+    // unbound (tests) it reads Current.Name.
     public void AttachLiveSelfName(Func<string?> provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -639,9 +637,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool AutoGrabAllowed => AutoRecover && _isAutoEnabled?.Invoke() != false;
 
     // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
-    // re-entering the death room. Persisted per-character. The grab itself is
-    // inert until inventory tracking records lost items; the preference is stored
-    // now.
+    // re-entering the death room. Persisted per-character.
     public bool AutoRecover
     {
         get => _profile.Current?.DeathAutoRecover ?? false;
@@ -655,8 +651,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     }
 
     // Re-equip items that were worn at death after recovering them. Persisted
-    // per-character; inert until inventory tracking records what was equipped at
-    // death.
+    // per-character.
     public bool AutoEquip
     {
         get => _profile.Current?.DeathAutoEquip ?? false;
@@ -1060,7 +1055,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     // Start (or restart) recovering a deathpile. Mark the record Partial and,
     // when autoGrab, ARM the grab for the next floor survey read in the room (see
-    // _grabOnSurvey, OnSurveyUpdated, TryCorpseRecover). A known-empty pile (nothing
+    // _grabOnSurvey, OnSurveyUpdated, RecoverCorpse). A known-empty pile (nothing
     // was lost) jumps straight to Recovered.
     private void BeginRecovery(DeathRecord record, bool autoGrab, bool deliberate, bool arrivedByWalk)
     {

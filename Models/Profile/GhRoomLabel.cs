@@ -15,9 +15,10 @@ public sealed class GhRoomLabel
 
     public List<GhCategoryRule> Rules { get; set; } = new();
 
-    // At most one labeled room in the set may be the catch-all — the room
-    // anything matching no explicit rule anywhere gets swept to, instead of
-    // being left in place. Enforced single-owner by GhRoomLabelStore.
+    // A catch-all room takes anything matching no explicit rule anywhere,
+    // instead of it being left in place. Several rooms may be catch-alls: they
+    // form an overflow chain, the next taking over when one is full
+    // (GhDestinationResolver).
     public bool IsCatchAll { get; set; }
 
     public GhRoomLabel() { }

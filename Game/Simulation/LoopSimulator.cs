@@ -26,8 +26,9 @@ namespace MudPlay.Game.Simulation;
 // A character that opens with a backstab walks sneaked. By the user's call
 // (2026-09-30, report paradigm-20260930-114254) a sneak always holds on a move and
 // is re-taken the moment the room it leaves is clear; see-hidden breaks it, and so
-// does anything on GAME_MECHANICS "What ends a sneak" the simulation does (an
-// attack, a cast, a rest). Arriving sneaked at a fight, the first round is the
+// does anything on GAME_MECHANICS "Sneaking — commands, equip order, and the sneak
+// state machine" → "What ends a sneak" the simulation does (an attack, a cast, a
+// rest). Arriving sneaked at a fight, the first round is the
 // surprise stab (GAME_MECHANICS "Backstab"); every round after it is the usual
 // attack choice.
 public static class LoopSimulator
@@ -559,7 +560,8 @@ public static class LoopSimulator
         }
 
         // The weapon round: swings carry their fractional remainder into the next
-        // round (energy rolls over — GAME_MECHANICS "Player physical swings per round").
+        // round (energy rolls over — GAME_MECHANICS "Player physical swings per round:
+        // cap and energy formula").
         // A debuff's AC / Dodge / DR strip lands here (MonsterDebuffCalculator).
         private void Swing(Mob target)
         {
@@ -1020,7 +1022,8 @@ public static class LoopSimulator
         }
 
         // A broken sneak is re-taken before the step only where nothing is alive in the
-        // room (GAME_MECHANICS "NPCs and sneaking").
+        // room (GAME_MECHANICS "Sneaking — commands, equip order, and the sneak state
+        // machine" → "NPCs and sneaking").
         private void StartWalk(Walk kind, double seconds)
         {
             _walk = kind;

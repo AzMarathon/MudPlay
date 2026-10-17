@@ -337,7 +337,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         Spellcasting = _stats.Spellcasting;
     }
 
-    // ----- Box B + C ------------------------------------------------------
+    // ----- Box C ----------------------------------------------------------
 
     private void RefreshDerived()
     {
@@ -353,8 +353,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         if (classRow is GameRow c) CharacterCalculator.ApplyAbilityBonuses(combined, c, _stats.Class);
 
         // Completed quests grant permanent stat rewards the same accuracy/damage
-        // formulas account for — fold them into the combined aggregate (never Box B,
-        // which is equipment-only) and surface them in their own readout.
+        // formulas account for — fold them into the combined aggregate and surface
+        // them in their own readout.
         CharacterCalculator.ApplyQuestBonuses(combined, _questBonuses.Bonuses, "Quests");
         RebuildQuestBonusRows();
 

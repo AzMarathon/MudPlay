@@ -106,8 +106,9 @@ public static class RemoteCommandCatalog
             ["@invite"]       = PlayerRemoteControls.RequestInvite,
             ["@join"]         = PlayerRemoteControls.RequestInvite,
             // Bulk inventory verbs — operate on *all* applicable items
-            // (@get-all: everything on the ground we can pick up; @drop-all:
-            // everything in the pack we can drop; @deposit-all: bank it all).
+            // (@get-all: everything on the ground we can pick up; @drop-all / @hide-all:
+            // everything in the pack we can drop or hide; @deposit-all: level the coin on
+            // hand to the keep-on-hand floor, banking the excess or withdrawing the shortfall).
             // Distinct from @equip <set>, which is a per-slot loadout swap.
             ["@get-all"]      = PlayerRemoteControls.ExecuteCommands,
             ["@get-stash"]    = PlayerRemoteControls.ExecuteCommands,
@@ -201,7 +202,6 @@ public static class RemoteCommandCatalog
             // remembered-leader bridge @comeback uses (a dropped member is no
             // longer an IsActivePartyMember). See RemoteCommandManager.ForgetEligibility.
             ["@forget"]       = PlayerRemoteControls.None,
-            // (@kill moved to ExecuteCommands — see Basic Commands above.)
             // @heal sits at ExecuteCommands rather than None: it's an
             // action request ("cast heal on me"), not a coordination
             // signal. A sender may legitimately need it even when the

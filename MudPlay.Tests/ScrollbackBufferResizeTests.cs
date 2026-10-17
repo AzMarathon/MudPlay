@@ -107,26 +107,10 @@ public sealed class ScrollbackBufferResizeTests
         ScrollbackBuffer buf = new(capacity: 4);
         buf.Append(Row('A'));
 
-        int events = 0;
-        buf.CapacityChanged += () => events++;
-
         buf.SetCapacity(4);
 
         Assert.Equal(4, buf.Capacity);
         Assert.Equal(1, buf.Count);
-        Assert.Equal(0, events);
-    }
-
-    [Fact]
-    public void SetCapacity_FiresCapacityChanged()
-    {
-        ScrollbackBuffer buf = new(capacity: 4);
-
-        int events = 0;
-        buf.CapacityChanged += () => events++;
-
-        buf.SetCapacity(8);
-        Assert.Equal(1, events);
     }
 
     [Fact]

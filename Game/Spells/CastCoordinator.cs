@@ -28,8 +28,8 @@ namespace MudPlay.Game.Spells;
 //     evaluates multiple candidates in the same frame.
 //
 // This is a foundation layer — it does NOT decide what to cast; CastingDirector
-// picks the spell and target and calls TryCast. External engines that cast spells
-// outside the director (CombatManager's pre-attack chain, for example) must call
+// picks the spell and target and calls TryCast. A between-round command sent
+// outside TryCast (an item-cast buff's use, a user-typed cast) must call
 // NotifyExternalCastSent so the cooldown is honoured.
 public sealed class CastCoordinator : IDisposable
 {
@@ -191,12 +191,11 @@ public sealed class CastCoordinator : IDisposable
     // retry a fizzle. Per-round heartbeat re-casts leave it false.
     // bypassRecastInterval additionally skips the 500ms MinRecastInterval burst guard.
     // That guard exists to absorb CastingDirector's OWN back-to-back survival re-casts;
-    // a combat-attack resume fired the instant a survival buff/heal's *Combat Off*
-    // lands is a legitimate back-to-back (buff, then immediately attack) that the 500ms
-    // window would otherwise defer to the next tick — a wasted round the mob swings
-    // through (the "broke combat to cast armr, didn't re-attack until after they swung"
-    // report). The combat dispatch is already paced once-per-round by ResumePacing /
-    // the round cooldown, so it can't burst; CastingDirector's casts leave this false.
+    // the combat engine sends legitimate back-to-back attack-slot casts (a pre-attack
+    // debuff then the attack, a primary then its alternate after a "no effect") that
+    // the 500ms window would otherwise defer to the next tick. The combat dispatch is
+    // already paced once-per-round by ResumePacing / the round cooldown, so it can't
+    // burst; CastingDirector's casts leave this false.
     public bool TryCast(string spellName, string? target = null,
                         bool bypassRoundCooldown = false, bool bypassRecastInterval = false)
     {

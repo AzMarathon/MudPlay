@@ -297,7 +297,7 @@
                            Text="✓ matches · ≈ room differs from the recording · ↺ found again · ✎ set by you · + added by you · ✗ untranslated (left out unless you set a room) · greyed: left out · ⚠ no route onward · ⓘ what isn't carried over"/>
                 <Button Grid.Column="3" Content="Reject" Command="{Binding RejectCommand}" MinWidth="90" IsCancel="True"/>
                 <Button Grid.Column="4" Content="Accept" Command="{Binding AcceptCommand}" MinWidth="90"
-                        Classes="Accent" IsEnabled="{Binding CanAccept}"/>
+                        Classes="accent" IsEnabled="{Binding CanAccept}"/>
             </Grid>
         </Grid>
     </Border>

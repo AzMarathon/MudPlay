@@ -10,10 +10,11 @@ namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for the Game Data Browser → Players tab. Surfaces the
 // engine-observed fields (Given / Family name + Last Seen timestamp displayed read-only)
-// plus the user-editable behavior toggles and the 15 Allowed Remote Control
+// plus the user-editable behavior toggles and the 16 Allowed Remote Control
 // checkboxes (the MegaMUD-documented categories plus MudPlay's own app-specific
-// extensions — boss timers, deaths, item location). Save produces a fresh
-// PlayerRecord the caller writes back through PlayerDatabase.EditRecord.
+// extensions — boss timers, deaths, item location, quests). Save produces a fresh
+// PlayerRecord the caller splits back into PlayerDatabase's customization,
+// account-name and relationship writes.
 public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialogViewModel<PlayerEditResult>
 {
     public event Action<PlayerEditResult?>? CloseRequested;
@@ -41,7 +42,7 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     [ObservableProperty] private int _relationshipIndex;
     [ObservableProperty] private int _pvpResponseIndex;
 
-    // ----- 15 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
+    // ----- 16 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryVersion;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryExperience;
@@ -302,15 +303,14 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
             PvpResponse         = PvpResponseIndex >= 1 && PvpResponseIndex <= PvpLabels.Actions.Count
                 ? PvpLabels.Actions[PvpResponseIndex - 1] : null,
         };
-        CloseRequested?.Invoke(new PlayerEditResult(_original.DisplayName, updated, _resetDupeRequested));
+        CloseRequested?.Invoke(new PlayerEditResult(updated, _resetDupeRequested));
     }
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
 }
 
-// Result returned from PlayerEditDialogViewModel on Save. Carries the original display name
-// (so PlayerDatabase.EditRecord can locate the right record even if the user renamed) plus
-// the updated record. ResetDupe is true only when the user pressed Reset @dupe; the
-// updated record's own @dupe lock is never trusted (see PlayerCustomization.KeepDupeLockFrom).
-public sealed record PlayerEditResult(string OriginalDisplayName, PlayerRecord Updated, bool ResetDupe);
+// Result returned from PlayerEditDialogViewModel on Save: the updated record. ResetDupe
+// is true only when the user pressed Reset @dupe; the updated record's own @dupe lock is
+// never trusted (see PlayerCustomization.KeepDupeLockFrom).
+public sealed record PlayerEditResult(PlayerRecord Updated, bool ResetDupe);

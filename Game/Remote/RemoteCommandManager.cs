@@ -45,10 +45,11 @@ namespace MudPlay.Game.Remote;
 //      blocked unconditionally — no per-player flag can override — and so is
 //      `@party set suicide`.
 //   2. Party whitelist. Handlers registered with PlayerRemoteControls.None as
-//      the required category are gated on whether the sender is an active party
-//      member (per PartyState.Members). Used for the base @party <sub> commands
-//      that every party member should be able to issue regardless of trust
-//      level.
+//      the required category (@wait / @ok / @waiting / @comeback / @forget /
+//      @share / @ptrain) are gated on whether the sender is an active party
+//      member (per PartyState.Members), with eligibility bridges for a member
+//      already dropped server-side (ComebackEligibility, ForgetEligibility,
+//      PartyTrainEligibility).
 //   3. Per-player flag check. The merged PlayerRecord.RemoteControls (BBS-tier
 //      observation + Char-tier customisation) must include the handler's
 //      required PlayerRemoteControls flag. Default for never-seen / un-customised
@@ -119,8 +120,9 @@ public sealed class RemoteCommandManager : IDisposable
     public Func<string?>? SelfNameProvider { get; set; }
 
     // True while we're sneaking or hidden. A reply to a command said aloud would be a
-    // directed say, and saying anything ends a sneak (GAME_MECHANICS "What ends a
-    // sneak"), so it goes back by telepath instead (user, 2026-09-28).
+    // directed say, and saying anything ends a sneak (GAME_MECHANICS "Sneaking —
+    // commands, equip order, and the sneak state machine", its What ends a sneak
+    // list), so it goes back by telepath instead (user, 2026-09-28).
     public Func<bool>? StealthedProvider { get; set; }
 
     // The master switch. Asked with a description of the command; true means the
@@ -148,11 +150,11 @@ public sealed class RemoteCommandManager : IDisposable
     // TalkSettings.DisallowAllRemoteCommands.
     public bool MasterDisable { get; set; }
 
-    // Disallows the @party <command> directive path only. When true, an active
-    // party member's @party <command> relay is denied unless the sender carries an
-    // explicit per-player grant. Does NOT affect the
-    // rest of the party-whitelist (@wait / @ok / @comeback / @share) — those stay
-    // allowed for active members regardless. Pushed from
+    // Disallows the @party <command> directive path. When true, no member's
+    // @party <command> is relayed, whatever they are granted, and a member without a
+    // QueryHealthStatus grant also loses the free answer to a bare @party. Does NOT
+    // affect the rest of the party-whitelist (@wait / @ok / @comeback / @share …) —
+    // those stay allowed for active members regardless. Pushed from
     // TalkSettings.DisallowPartyCommands.
     public bool DisallowPartyDirectives { get; set; }
 
@@ -241,8 +243,8 @@ public sealed class RemoteCommandManager : IDisposable
     // Register a handler for one @-command. requiredCategory declares which
     // PlayerRemoteControls flag the sender must hold; pass
     // PlayerRemoteControls.None to mark the handler as "party-whitelist only"
-    // (allowed for any active party member regardless of per-player flags — used
-    // by @party <sub>). command is verbatim including the leading @, matched
+    // (allowed for any active party member regardless of per-player flags — the
+    // @wait / @ok / @comeback family). command is verbatim including the leading @, matched
     // case-insensitively; handler is invoked with a RemoteCommandContext when the
     // command authorises.
     public void RegisterHandler(string command, PlayerRemoteControls requiredCategory, Action<RemoteCommandContext> handler)
@@ -1141,8 +1143,8 @@ public sealed class RemoteCommandManager : IDisposable
     private bool IsAuthorised(string sender, PlayerRemoteControls requiredCategory, string command)
     {
         // Special case: requiredCategory == None means "party whitelist —
-        // allowed for any active party member". Used by @wait / @ok /
-        // @comeback / @share. These are NOT affected by Disallow @party
+        // allowed for any active party member": @wait, @ok, @waiting,
+        // @comeback, @forget, @share, @ptrain. These are NOT affected by Disallow @party
         // commands — that toggle narrows only the @party directive path
         // (handled by the @party fallback branch below), per user spec.
         if (requiredCategory == PlayerRemoteControls.None)

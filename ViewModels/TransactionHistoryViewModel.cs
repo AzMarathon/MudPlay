@@ -42,16 +42,13 @@ public sealed partial class TransactionHistoryViewModel : ObservableObject, IDis
         if (!_disposed) Rebuild();
     });
 
-    // The only user-driven clear of the ledger. Resetting the tracker raises
-    // Changed, which rebuilds Rows empty via OnChanged. Also truncates the
-    // persisted transactions.log so the on-disk copy matches — this is the
-    // explicit user wipe, distinct from the session-boundary Reset the tracker
-    // takes on connect / character switch (which must leave the log intact).
     // The user-driven clear — entries checked "keep" are left behind, so this is
     // "clear everything except what I marked". With nothing kept it's a full wipe
     // (tracker reset + truncated log); with some kept it retains those in memory
     // (Hydrate) and rewrites the on-disk log to match. No-op when there's nothing
-    // to drop (everything's kept, or the ledger is already empty).
+    // to drop (everything's kept, or the ledger is already empty). Distinct from the
+    // session-boundary Reset the tracker takes on connect / character switch, which
+    // must leave the log intact.
     [RelayCommand]
     private void Clear()
     {

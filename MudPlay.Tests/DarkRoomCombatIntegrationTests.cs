@@ -275,10 +275,13 @@ public sealed class DarkRoomCombatIntegrationTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);   // first-revealed engaged
         int beforeDeath = h.Sent.Count;
 
-        // The rat dies — mirror the AppServices MonsterDeath wiring: clear the
-        // target, then drop the entity so the surviving set re-fires EntitiesObserved.
-        h.Combat.NoteMonsterDied("giant rat");
-        h.Classifier.RemoveDeadEntity("giant rat");
+        // The rat dies: the death drops it from the roster, and the surviving set
+        // re-fires EntitiesObserved.
+        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
+        // the death event AppServices routes to NoteUnattributedDeath.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
 
         Assert.True(h.Sent.Count > beforeDeath, "expected a fresh swing at a survivor");
         Assert.Equal("a orc", h.LastSent);                   // Reverse → last-witnessed survivor
@@ -342,9 +345,12 @@ public sealed class DarkRoomCombatIntegrationTests
         Assert.Equal(1, h.AttackSends);
         Assert.Equal("cave lizard", h.Combat.CurrentTarget);
 
-        // First lizard dies — mirror the AppServices MonsterDeath wiring.
-        h.Combat.NoteMonsterDied("cave lizard");
-        h.Classifier.RemoveDeadEntity("cave lizard");
+        // First lizard dies.
+        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
+        // the death event AppServices routes to NoteUnattributedDeath.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
         Assert.Null(h.Combat.CurrentTarget);          // roster empty, target cleared
 
         // The surviving lizard swings again — re-revealed, re-engaged.
@@ -374,8 +380,11 @@ public sealed class DarkRoomCombatIntegrationTests
         Assert.Equal(1, h.AttackSends);                                // survivor not thrashed to
 
         // The first lizard dies; the re-pick engages the still-present second mob.
-        h.Combat.NoteMonsterDied("cave lizard");
-        h.Classifier.RemoveDeadEntity("cave lizard");
+        // A kill as the client sees one: the exp line, the kill's *Combat Off*, and
+        // the death event AppServices routes to NoteUnattributedDeath.
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
 
         Assert.Equal("small cave lizard", h.Combat.CurrentTarget);
         Assert.Equal(2, h.AttackSends);

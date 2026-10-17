@@ -40,9 +40,9 @@
         </Style>
 
         <!-- Fixed-height rows so each list shows exactly 8 at a time
-             (28px × 8 = 224 → the Border height below). Predictable
-             height keeps the rail buttons from overlapping the way the
-             old proportional (2*/3*) sizing did when the window shrank. -->
+             (28px rows plus the list's padding → the 234 Border height
+             below). Predictable height keeps the rail buttons from
+             overlapping when the window shrinks. -->
         <Style Selector="ListBox.RowList">
             <Setter Property="Padding" Value="2"/>
         </Style>

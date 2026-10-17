@@ -36,8 +36,9 @@ public static class CombatCalculator
     // ParaMUD dodge hard ceiling.
     public const int PARAMUD_DODGE_CAP = 98;
     // Maximum swings landable in a single round — realm-dependent: hard-capped
-    // at 5 on Stock, 6 on Paradigm (GAME_MECHANICS.md "Combat order… swings per
-    // round"). A fixed 5 under-counted every Paradigm swing/DPS/rounds figure.
+    // at 5 on Stock, 6 on Paradigm (GAME_MECHANICS "Player physical swings per
+    // round: cap and energy formula"). A fixed 5 under-counted every Paradigm
+    // swing/DPS/rounds figure.
     public static int MaxSwingsForRealm(RealmType realm) => realm == RealmType.ParaMud ? 6 : 5;
 
     // ----- Hit chance ------------------------------------------------------
@@ -116,8 +117,8 @@ public static class CombatCalculator
             // Protection-from-Good (ability 25); Paradigm dropped it and uses VileWard
             // (ability 1113) instead — its server ignores ProtGood, and its gear carries
             // none, so ProtGood must never count on Paradigm even if a stray value leaks
-            // in. VileWard is already Paradigm-only below. See GAME_MECHANICS "ProtGood
-            // vs VileWard".
+            // in. VileWard is already Paradigm-only below. See GAME_MECHANICS "Armour
+            // Class contributions — shadow, Prot-Evil, Prot-Good, VileWard".
             int realmProtGood = realmType == RealmType.ParaMud ? 0 : protGood;
             int secondaryDef = protEvil + realmProtGood + (hasShadow ? 10 : 0);
             if (realmType == RealmType.ParaMud && vileWard > 0 && evilLevel > EvilLevel.Saint)
@@ -195,8 +196,8 @@ public static class CombatCalculator
     // ----- Dodge -----------------------------------------------------------
 
     // Raw dodge value from stats (NOT a percentage — feed it to
-    // CalcDodgeVSAccuracy). Includes a low-encumbrance bonus when under 33%
-    // encumbered.
+    // CalcDodgeVSAccuracy). Includes the light-load bonus (HasLightLoadBonus):
+    // under 33% encumbered on Stock, up to 33% on Paradigm.
     public static int CalcDodge(int level, int agility, int charm, int plusDodge,
                                 double currentEncum = 0, double maxEncum = -1,
                                 RealmType realmType = RealmType.Stock)
@@ -700,15 +701,13 @@ public static class CombatCalculator
     {
         int speed = hasSlowness ? (attackSpeed * 3) / 2 : attackSpeed;
 
-        // Combat term is level × the class CombatLVL. MMUD-Explorer feeds this
-        // formula GetClassCombat (= CombatLVL − 2, modMMudDatabase.bas) into a
-        // (nCombat + 2) form — net level × CombatLVL. We pass the raw CombatLVL and
-        // drop the +2, which is identical. Passing the raw CombatLVL into a
-        // (combatLevel + 2) form was the bug: an extra level×2 in the divisor
-        // undercut energy ~26% and inflated every swing/DPS/rounds figure (report:
-        // L28 Paladin, throwing hammers speed 1100, 57% encum — read 9 swings
-        // uncapped / bash 4.5 where the game shows 7.143 / 3.572). Accuracy keeps
-        // the raw CombatLVL (CalcAccuracy), which the game does too.
+        // Combat term is level × the class CombatLVL. Written with Combat = CombatLVL − 2
+        // in a (Combat + 2) term it comes to the same thing; we pass the raw CombatLVL and
+        // drop the +2. Passing the raw CombatLVL into a (combatLevel + 2) form was the bug:
+        // an extra level×2 in the divisor undercut energy ~26% and inflated every
+        // swing/DPS/rounds figure (report: L28 Paladin, throwing hammers speed 1100, 57%
+        // encum — read 9 swings uncapped / bash 4.5 where the game shows 7.143 / 3.572).
+        // Accuracy keeps the raw CombatLVL (CalcAccuracy), which the game does too.
         int divisor = ((level * combatLevel) + 45) * (agility + 150) / 6;
         if (divisor < 1) divisor = 1;
         int energy = (speed * 1000) / divisor;

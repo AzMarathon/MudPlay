@@ -33,12 +33,12 @@ public sealed class PathItemSummonRouterTests
     // must not construct an attributed death — asserting on one would pin a
     // guarantee production cannot deliver.
     private static MonsterDeathEvent Died()
-        => new(Array.Empty<MonsterDeathIdentity>(), 1000, DateTimeOffset.Now, true);
+        => new(1000, DateTimeOffset.Now);
 
     // The other shape: a kill of our own room spell, raised on its exp line. It names
     // nobody either, only the kinds of monster the room listed.
     private static MonsterDeathEvent DiedUnderRoomSpell(DateTimeOffset at)
-        => new(Array.Empty<MonsterDeathIdentity>(), 1000, at, true,
+        => new(1000, at,
             RoomSpellRoster: new[] { new MonsterDeathIdentity(7, "obsidian statue") });
 
     private sealed class Harness

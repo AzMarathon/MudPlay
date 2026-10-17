@@ -138,9 +138,10 @@
                                     Padding="8,2"
                                     Command="{Binding NewLairCommand}"
                                     ToolTip.Tip="Create a new Auto-Lair setup from scratch."/>
-                            <!-- Import .mp: file picker → MegaMUD .mp loop
-                                 file → anchor resolver → LoopEditor with
-                                 the imported loop pre-filled. -->
+                            <!-- Import .mp: file picker → the import review
+                                 window (the decoded file beside our
+                                 translation), where the loop is fixed up and
+                                 accepted or rejected. -->
                             <Button Grid.Column="5"
                                     Content="Import .mp"
                                     FontSize="10"
@@ -155,7 +156,7 @@
                         <!-- Right margin reserves a gutter for the overlay
                              vertical scrollbar (Fluent floats it over the
                              viewport's right edge) so it can't sit on top of
-                             the per-loop / per-lair Run + action buttons in the
+                             the per-loop / per-lair Go + action buttons in the
                              tree rows below. -->
                         <StackPanel Margin="0,0,14,0">
                             <!-- Status line: the last .mp import's outcome,
@@ -419,10 +420,11 @@
                                                         <Run Text="{Binding Notes}"/>
                                                     </TextBlock>
                                                 </StackPanel>
-                                                <!-- Run / Load / Edit / ✕ delete — same row shape
-                                                     as the loop rows. Run loads this setup's
-                                                     markers into the scheduler and starts it;
-                                                     Load stages the markers without starting. -->
+                                                <!-- Go / Load / Edit / ✕ delete — same row shape
+                                                     as the loop rows. Go loads this setup's
+                                                     markers into the scheduler and starts it
+                                                     (▾ for Run / Sprint); Load stages the
+                                                     markers without starting. -->
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
                                                     <Button Content="Go" FontSize="10"
                                                             Padding="8,2"
@@ -676,7 +678,7 @@
                                                                     CommandParameter="{Binding}"/>
                                                             <Button Content="▾" FontSize="10" Padding="4,2"
                                                             Foreground="{StaticResource AccentGreenBrush}"
-                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive begins.">
+                                                            ToolTip.Tip="Run: Go with Auto-Combat off. Sprint: Go in Sprint Mode. Either ends when you arrive.">
                                                         <Button.Flyout>
                                                             <MenuFlyout>
                                                                 <MenuItem Header="Run — Go with Auto-Combat off"
@@ -728,8 +730,9 @@
                 </TabItem>
             </TabControl>
 
-            <!-- Footer — walk-to search box + Run on the left, Close on
-                 the right. Type / pick a room, hit Run: the dialog closes
+            <!-- Footer — walk-to search box + Go (▾ Run / Sprint) on the
+                 left, Close on the right. Type / pick a room, hit Go: the
+                 dialog closes
                  and the walker heads there. The dropdown floats above the
                  box (its own Grid.Row="1" overlay anchored bottom) so it
                  doesn't shove the footer around. -->

@@ -28,8 +28,8 @@ public static class HelpContentRenderer
 
     // Field-label accent — the guide's recurring "**Default:** …", "**What it
     // does:** …", "**Important notes:** …" convention. Coloring just the label
-    // (not the value text after it) gives every one of those ~150 entries a
-    // scannable field name without touching the markdown itself.
+    // (not the value text after it) gives every such entry a scannable field
+    // name without touching the markdown itself.
     private static readonly IBrush LabelBrush = new SolidColorBrush(Color.Parse("#4E9BDE"));
 
     // ⚠️-prefixed paragraphs (the guide's "not currently functional" callouts)

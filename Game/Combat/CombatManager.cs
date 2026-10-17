@@ -10,8 +10,8 @@ namespace MudPlay.Game.Combat;
 
 // Auto-attack engine. Subscribes to RoomEntityClassifier.EntitiesObserved and
 // (for re-fire pacing) to KnownPatterns.PartyAttackAnnounce. Picks a target per
-// MonsterOverlay.Priority + CombatSettings.TargetOrder, filters out anything not
-// flagged MonsterRelationship.Enemy, and sends the configured attack command.
+// MonsterOverlay.Priority + CombatSettings.TargetOrder, filters out anything
+// MonsterEngagement doesn't call engageable, and sends the configured attack command.
 // Server auto-repeats swings each 5-second round; CombatManager re-picks when
 // the room re-displays without the current target, and resumes (re-engages)
 // when the server reports *Combat Off* mid-fight — e.g. a manual buff / heal
@@ -22,7 +22,8 @@ namespace MudPlay.Game.Combat;
 //   2. Each monster's MonsterOverlay is resolved via MonsterOverlaySeedStore
 //      (Defaults tier) merged with SettingsResolver.ResolveGameData (Global /
 //      BBS / Char overrides).
-//   3. Engageable = MonsterRelationship.Enemy (Relationship-based only).
+//   3. Engageable per MonsterEngagement: Enemy, a KillOnSight Neutral, or an
+//      instance the user hand-engaged.
 //   4. Engageable list is sorted by MonsterAttackPriority (First=0 highest,
 //      Last=4 lowest), tiebreak by appearance order in the Also-Here line.
 //   5. CombatSettings.TargetOrder picks Normal = first sorted (highest prio) or
@@ -696,8 +697,8 @@ public sealed partial class CombatManager : IDisposable
     // Timestamp of the last attack we actually sent to the wire (set by
     // NoteAttackSent on every SendAttack). Distinct from _lastInterruptResumeAt,
     // which only tracks resumes: an attack fired by the death→re-observe path
-    // (NoteMonsterDied clears the dead target, the room re-picks the survivor and
-    // swings) is a SendAttack, not a resume, so it never touched the resume
+    // (NoteUnattributedDeath drops the dead target, the room re-picks the survivor
+    // and swings) is a SendAttack, not a resume, so it never touched the resume
     // stamp. The interrupt-resume must see it to avoid doubling on top of it.
     private DateTimeOffset _lastAttackSentAt = DateTimeOffset.MinValue;
 
@@ -754,23 +755,19 @@ public sealed partial class CombatManager : IDisposable
 
     // Set when a between-round cast (survival heal / buff) spent its round while we
     // were mid attack-spell combat and our attack spell hasn't been re-announced
-    // since. It does NOT gate between-round casting: a 0-energy between-round cast
-    // and the combat attack are INDEPENDENT slots that both land the same round
-    // (the attack auto-repeats server-side and re-fires on the cast's *Combat Off* —
-    // GAME_MECHANICS.md, "independent slots"), so a heal never actually costs the
-    // round's attack and CastingDirector must not decline one on this. Retained as
-    // diagnostic / cascade state only: it's surfaced in the bug-report snapshot and
-    // read by the stale-state cleanup guards (a between-round cast leaves
-    // _castingSpellTarget live; if the fight ends before the *Combat Off* resume
-    // lands, that target must be cleared). Weapon-mode combat never sets this — only
-    // an attack SPELL does. Set in NoteBetweenRoundCast (only while _castingSpellTarget
-    // is live), cleared when a real attack goes back out (NoteAttackSent) or the room
-    // clears (OnRoomCleared).
+    // since. It does NOT gate between-round casting: a 0-energy between-round cast and
+    // the combat attack are INDEPENDENT slots that both land the same round (the
+    // attack auto-repeats server-side and re-fires on the cast's *Combat Off* —
+    // GAME_MECHANICS "Between-round cast slot vs the combat attack"), so a heal never
+    // actually costs the round's attack and CastingDirector must not decline one on
+    // this. Retained as diagnostic / cascade state only: it's surfaced in the
+    // bug-report snapshot and read by the stale-state cleanup guards (a between-round
+    // cast leaves _castingSpellTarget live; if the fight ends before the *Combat Off*
+    // resume lands, that target must be cleared). Weapon-mode combat never sets this —
+    // only an attack SPELL does. Set in NoteBetweenRoundCast (only while
+    // _castingSpellTarget is live), cleared when a real attack goes back out
+    // (NoteAttackSent) or the room clears (OnRoomCleared).
     private bool _spellAttackOwed;
-
-    // Diagnostic view of _spellAttackOwed (surfaced in the combat snapshot / bug
-    // report). No longer consulted for between-round cast scheduling — see the field.
-    public bool IsSpellAttackOwed => _spellAttackOwed;
 
     // The server is repeating a spell we announced: every round's landing line is
     // ours though we send nothing more.
@@ -788,8 +785,9 @@ public sealed partial class CombatManager : IDisposable
     // MinValue on any target/round reset so a stale stamp can't bar a legit resume.
     private DateTimeOffset _suppressResumeForBetweenRoundStamp = DateTimeOffset.MinValue;
 
-    // When a monster death was last detected this burst (stamped by
-    // NoteMonsterDied / NoteUnattributedDeath). The between-round-cast resume
+    // When a monster death was last detected this burst (stamped by every kill
+    // path: NoteUnattributedDeath, DropTargetForInferredKill and
+    // ForceAoeMultiKillReparse). The between-round-cast resume
     // must not fire when a kill just happened: a mob's dying *Combat Off* and a
     // between-round heal in the same round both land inside CastInterruptResumeWindow,
     // so the resume would misread the KILL's Off as its cast's interrupt and re-
@@ -799,15 +797,6 @@ public sealed partial class CombatManager : IDisposable
     // death→re-display→re-observe path, which re-picks any survivor from the
     // resynced roster (or clears the gate on an empty room).
     private DateTimeOffset _lastDeathAt = DateTimeOffset.MinValue;
-
-    // When a monster death was last detected via a MATCHED DEATH LINE — stamped
-    // only by NoteMonsterDied, NOT by the exp+Off fallback below. A matched death
-    // already handled the kill and re-picked the next survivor, so the same
-    // burst's *Combat Off* must not ALSO trip the exp-inference: doing so drops
-    // the freshly-picked survivor and re-attacks it, double-firing "aa <next>"
-    // right after the first kill (report paradigm-20260812-215511). Distinct from
-    // _lastDeathAt, which the exp-inference itself stamps and so can't self-gate on.
-    private DateTimeOffset _lastMatchedDeathAt = DateTimeOffset.MinValue;
 
     // How long after a detected death a *Combat Off* is treated as the kill's Off
     // rather than a cast interrupt. A death line and its *Combat Off* arrive in the
@@ -828,17 +817,15 @@ public sealed partial class CombatManager : IDisposable
     private bool _attackSentSinceDeath;
 
     // Prompt kill signal. A kill emits "You gain N experience." immediately before
-    // its *Combat Off* (wire order: death line → exp → Off). Each realm gives its
-    // monsters CUSTOM death messages that overlap across species and aren't in our
-    // game data, so we can't match a death line to the flavored target we were
-    // fighting — the specific-death matcher misses and only the lagging exp+Off
-    // fallback correlation (a separate watcher) eventually drops it, a beat AFTER
-    // this handler's resume already re-attacked the corpse ("You don't see X
-    // here!", then a full round idle). Stamping the exp here lets OnCombatStatus
-    // treat an Off that a fresh exp explains — and that NO between-round survival
-    // cast explains — as our kill's Off, dropping the dead target before the resume
-    // fires. Consumed on use so a stale exp from an earlier identical-exp kill can't
-    // mark a later non-kill Off (a thrown weapon emits one per strike).
+    // its *Combat Off* (wire order: death line → exp → Off). Death lines are per-monster
+    // flavour the client doesn't read, so without this only MonsterDeathWatcher's exp+Off
+    // correlation drops the target, a beat AFTER this handler's resume already
+    // re-attacked the corpse ("You don't see X here!", then a full round idle).
+    // Stamping the exp here lets OnCombatStatus treat an Off that a fresh exp
+    // explains — and that NO between-round survival cast explains — as our kill's
+    // Off, dropping the dead target before the resume fires. Consumed on use so a
+    // stale exp from an earlier identical-exp kill can't mark a later non-kill Off
+    // (a thrown weapon emits one per strike).
     private DateTimeOffset _lastExpGainAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan ExpKillWindow = TimeSpan.FromSeconds(3);
 
@@ -974,11 +961,11 @@ public sealed partial class CombatManager : IDisposable
     // arrive as one burst (one server flush → one synchronous line batch). Firing
     // a re-fire per announce would send several redundant attack commands that
     // round; we only need ONE, landing after the last announce so our swing sits
-    // last in initiative. HandleAttackOrderRefire records the pending
-    // target/announcer and posts a single flush to the next dispatcher turn — it
-    // runs after the whole burst has been processed, collapsing N announces into
-    // one send. The flush is near-immediate (next turn), so it still lands well
-    // inside the ~5s round; we never hold the attack toward the round tick.
+    // last in initiative. ScheduleAttackOrderRefire records the pending
+    // target/announcer and flushes once the announces go quiet (RefireSettle), or on
+    // the next dispatcher turn when no settle scheduler is wired, collapsing N
+    // announces into one send. Either way it still lands well inside the ~5s round;
+    // we never hold the attack toward the round tick.
     private bool _refireFlushScheduled;
     private string? _refireTarget;
     private string? _refireAnnouncer;
@@ -1310,7 +1297,7 @@ public sealed partial class CombatManager : IDisposable
         // The attack-spell cascade's own latched state — surfaced separately from
         // CurrentTarget/AnnouncedSpell because these two can legitimately go stale
         // relative to it (report paradigm-20260824-012300: a spellTarget on a
-        // monster long gone, with IsSpellAttackOwed stuck true, silently blocked
+        // monster long gone, with SpellAttackOwed stuck true, silently blocked
         // every automatic heal/cure/bless). A report showing a CastingSpellTarget
         // that doesn't match CurrentTarget, or SpellAttackOwed=true with no live
         // fight, is this bug re-occurring.
@@ -1526,83 +1513,6 @@ public sealed partial class CombatManager : IDisposable
     {
         if (!Fighting()) return;
         if (_classifier.Current is { } live) OnEntitiesObserved(live);
-    }
-
-    // Called by the MonsterDeath subscriber when a death-line match resolves to a
-    // monster whose name might be ours. deadMonsterName is the base / display
-    // name of the dead monster, lifted from the matched death-line's
-    // MonsterDeathIdentity.Name. Clears _currentTarget when the dead monster
-    // shares a name with our current target (either the raw / unflavored case
-    // where two same-name mobs occupy the room, or the flavored case where the
-    // resolved species matches). Without this, the next OnEntitiesObserved sees
-    // another live entity with the same RawName still in the engageable list and
-    // short-circuits ("server still swinging") — so we'd never re-issue `attack`
-    // against the surviving instance, and CombatManager goes silent while the
-    // other rats keep biting.
-    public void NoteMonsterDied(string deadMonsterName)
-    {
-        if (string.IsNullOrEmpty(deadMonsterName)) return;
-
-        // A kill just landed — mark it so the between-round-cast resume treats the
-        // imminent *Combat Off* as the kill's Off, not its own cast's interrupt
-        // (see _lastDeathAt). Stamped regardless of whether this death matches our
-        // target: any death in the room means a re-observe is coming that owns the
-        // re-engage.
-        _lastDeathAt = DateTimeOffset.Now;
-        _lastMatchedDeathAt = DateTimeOffset.Now;   // death LINE matched — gates the exp-inference off
-        _attackSentSinceDeath = false;
-
-        // The guarded priority itself fell — the redirect chase is over. Drop the
-        // memory so no stray guard-retry fires "aa <priority>" at the corpse. Runs
-        // before the _currentTarget guard below because a roster-desync room-clear
-        // may have already nulled _currentTarget while the guard block is still set.
-        if (_guardBlockedTarget is { } blocked &&
-            string.Equals(blocked, deadMonsterName, StringComparison.OrdinalIgnoreCase))
-        {
-            _log?.Combat(LogCategory, $"guard priority '{blocked}' died — clearing guard block");
-            _guardBlockedTarget = null;
-        }
-
-        if (_currentTarget is not { } current) return;
-
-        // Direct RawName match — the unflavored case. Two "giant rat"
-        // entries: `_currentTarget == "giant rat"` and the dead-line
-        // gave us "giant rat". Whichever instance the server was
-        // swinging at is the dead one; the other doesn't auto-engage.
-        if (string.Equals(current, deadMonsterName, StringComparison.OrdinalIgnoreCase))
-        {
-            _log?.Combat(LogCategory,
-                $"target died — clearing _currentTarget='{current}' (raw-name match)");
-            _currentTarget = null;
-            _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
-            _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
-            ClearBackstabResolution();
-            return;
-        }
-
-        // Resolved-name match — the flavored case. _currentTarget is
-        // "angry kobold thief" (RawName); the dead-line resolves to
-        // "kobold thief" (ResolvedName). The classifier's current
-        // observation is the source of truth for the raw → resolved
-        // mapping. Look up the entity matching our RawName and
-        // compare its ResolvedName.
-        if (_classifier.Current is { } obs)
-        {
-            for (int i = 0; i < obs.Entities.Count; i++)
-            {
-                RoomEntity e = obs.Entities[i];
-                if (e.Kind != EntityKind.Monster) continue;
-                if (!string.Equals(e.RawName, current, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(e.ResolvedName, deadMonsterName, StringComparison.OrdinalIgnoreCase)) continue;
-                _log?.Combat(LogCategory,
-                    $"target died — clearing _currentTarget='{current}' (resolved-name match)");
-                _currentTarget = null;
-                _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
-                _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
-                ClearBackstabResolution();
-                return;
-            }
-        }
     }
 
     // Force our combat target to the named monster and engage it this round,
@@ -1833,12 +1743,8 @@ public sealed partial class CombatManager : IDisposable
         {
             _currentTarget = null;
             // AutoCombat going off mid-fight must drop the attack-spell cascade
-            // too, not just the target — CastingDirector's IsSpellAttackOwed gate
-            // (armed by NoteBetweenRoundCast while _castingSpellTarget is live)
-            // otherwise survives the toggle and silently blocks every automatic
-            // heal/cure/bless until something else happens to clear it (report
-            // paradigm-20260824-012300: a stale spellTarget on a monster long
-            // gone suppressed grhe for the rest of the session).
+            // too, not just the target, so no stale spell target or latch outlives the
+            // toggle (report paradigm-20260824-012300).
             ClearAttackSpellCascadeState();
             return;
         }
@@ -1872,11 +1778,7 @@ public sealed partial class CombatManager : IDisposable
                 MonsterOverlay overlay = ResolveOverlay(n);
                 if (!MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                     continue;
-                // Engageability is Relationship-based ONLY. Earlier we
-                // also required MonsterMessageRecord.DeathLine non-empty
-                // as a "killable" proxy, but 152 of 1100 monsters in the
-                // stock data set ship with empty DeathLine (incomplete
-                // data, not actually unkillable — acid slime, etc.). The
+                // Engageability is MonsterEngagement's call alone. The
                 // overlay seed marks the real friendlies explicitly; if
                 // a monster is Enemy / unmarked, it's a target.
 
@@ -2402,15 +2304,10 @@ public sealed partial class CombatManager : IDisposable
         // or weapon swing). Spell categories only participate when the caster
         // is wired — otherwise the order is just Backstab vs Physical.
         // bypassRecastInterval: a monster arriving is independent of whatever
-        // we were just doing — a due self-buff/reroll cast (CastingDirector's
-        // Buffing category) sets _lastCastSentAt moments before this fresh
-        // engage runs, and without the bypass CastCoordinator's recast interval
-        // defers the attack SPELL to the next tick, handing the newcomer a free
-        // round (report paradigm-20260916-033047: prfl's reroll cast landed the
-        // same instant a giant squid arrived, the attack was blocked/deferred,
-        // and the squid got a full round of unanswered hits before the retry
-        // fired). The buff and the attack are independent slots server-side —
-        // mirrors the identical fix for the debuff-then-attack case above.
+        // we were just doing, so the newcomer's attack goes out this tick rather
+        // than waiting out the burst guard (report paradigm-20260916-033047). A
+        // CastingDirector buff can't hold it up any more: buffs are paced on
+        // CastCoordinator's separate between-round clock.
         DispatchRoundAction(settings, picked, engageable.Count, obs, bypassRecastInterval: true);
     }
 
@@ -2502,7 +2399,7 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // Reset the attack-spell cascade's per-target/per-room economy — the
-    // announced spell, the round-owed diagnostic latch (IsSpellAttackOwed), the
+    // announced spell, the round-owed diagnostic latch (_spellAttackOwed), the
     // alternation/tally clocks, the observed-immunity set, and the chooser's own
     // cast-cap counters. Shared by OnRoomCleared (a genuine end-of-fight), the
     // AutoCombat-disabled early return (toggling combat off must not leave the
@@ -2555,7 +2452,7 @@ public sealed partial class CombatManager : IDisposable
     // waiting on a *Combat Off* that was lost along with the connection — the
     // resume path only fires within CastInterruptResumeWindow of the interrupted
     // cast, so an Off that never arrives means the round-owed latch
-    // (IsSpellAttackOwed) never clears and the character never resumes
+    // (_spellAttackOwed) never clears and the character never resumes
     // attacking, even though the monster (still fighting server-side through the
     // link-death) keeps attacking back (report paradigm-20260827-203548; same
     // failure shape as paradigm-20260824-012300's stale-spellTarget lockup,
@@ -3307,10 +3204,11 @@ public sealed partial class CombatManager : IDisposable
 
         // The game prints lines in the order it handled the commands, and answers each
         // attack with its own *Combat Engaged* (GAME_MECHANICS "Non-swing actions break
-        // combat"). An announce read before our last attack was answered was handled
-        // ahead of it, so ours already lands after it: a re-fire there was the extra
-        // attack every fight sent (report paradigm-20261013-153710). The window lets a
-        // refused attack, which never gets its Engaged, stop blocking re-fires.
+        // combat (casting, equipping)"). An announce read before our last attack was
+        // answered was handled ahead of it, so ours already lands after it: a re-fire
+        // there was the extra attack every fight sent (report
+        // paradigm-20261013-153710). The window lets a refused attack, which never gets
+        // its Engaged, stop blocking re-fires.
         if (!_engagedSinceLastAttack && DateTimeOffset.Now - _lastAttackSentAt < RefireAnswerWindow)
         {
             _log?.Combat(LogCategory,
@@ -3335,7 +3233,7 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // Trailing-edge flush of a coalesced AttackTiming re-fire (see the _refire*
-    // fields). Runs one dispatcher turn after the round's announce burst, so a
+    // fields). Runs once the round's announce burst has gone quiet, so a
     // single attack goes out against our target once — after the last party
     // announce. Skips when combat was turned off, we were disposed, nothing is
     // pending, or the target died / changed during the burst (no longer our
@@ -3364,7 +3262,7 @@ public sealed partial class CombatManager : IDisposable
         // members have already swung, so staying last in line and opening with bs
         // are not in tension. Arm the resolution watch + consume the opener exactly
         // as DispatchRoundAction does. (The awaiting-resolution window — bs already
-        // in flight — is held upstream in HandleAttackOrderRefire so no second
+        // in flight — is held upstream in ScheduleAttackOrderRefire so no second
         // command doubles on top of the surprise.)
         if (_classifier.Current is { } liveObs && BackstabPending(settings, liveObs))
         {
@@ -3403,9 +3301,7 @@ public sealed partial class CombatManager : IDisposable
     // Build an EngageableCandidate for the monster matching name (RawName or
     // ResolvedName, case-insensitive) in obs, resolving its overlay priority.
     // Returns null when no numbered monster entity matches — the caller falls
-    // back to a literal attack command. Used by Target Priority to route a
-    // followed target through the full per-round dispatch (weapon swap / spell
-    // pick).
+    // back to a literal attack command.
     private EngageableCandidate? TryBuildCandidate(RoomEntitiesObservation obs, string name)
     {
         for (int i = 0; i < obs.Entities.Count; i++)
@@ -3797,10 +3693,10 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // "You don't see <X> here!" — server can't find the target we just attacked.
-    // Different from MonsterDeathWatcher's path: catches cases where the death
-    // line was missed, the mob fled, or a partymate killed it between our send
-    // and the server's resolve. Drop the current target and refresh the room so
-    // the next observation picks a fresh target.
+    // Different from MonsterDeathWatcher's path: catches cases where the kill
+    // went unseen, the mob fled, or a partymate killed it between our send and
+    // the server's resolve. Drop the current target and refresh the room so the
+    // next observation picks a fresh target.
     private void OnTargetNotHere(MatchResult m)
     {
         if (m.Groups.Count > 0 && !_classifier.RefusalNamesMonster(m.Groups[0], _currentTarget)) return;
@@ -3916,27 +3812,19 @@ public sealed partial class CombatManager : IDisposable
         TrySendRoomRefresh("command-no-effect");
     }
 
-    // A kill happened but the death-line didn't hand us a roster slot to drop.
-    // Two callers: (1) a specific death-line matched but the classifier couldn't
-    // attribute it to any monster in the current room view (shared /
-    // suffix-flavored wordings: the death line resolved to "spectre" while the
-    // roster holds "shadow spectre", so RemoveDeadEntity found nothing to drop);
-    // (2) a fallback death (exp + *Combat Off*) where the death line was missing
-    // entirely — the norm for datasets missing per-monster DeathLine patterns.
+    // A kill happened, and deaths carry no monster identity (the exp + *Combat Off*
+    // signal names no one), so there's no roster slot handed to us to drop.
     //
-    // Either way we WERE swinging at something and a kill just landed, so
-    // _currentTarget is our best identity for the corpse: a fallback death's
-    // *Combat Off* means OUR fight ended, and a flavored specific death is the
-    // same mob under a base-name wording. Attribute the death to _currentTarget
-    // exactly like a matched death does — drop it from the live roster so the
-    // synthetic EntitiesObserved re-picks the next survivor immediately, or
-    // clears the room and releases the Combat gate when it was the last mob.
-    // Without this the dead mob lingers, the next tick re-swings at the corpse
-    // ("Your command had no effect."), and recovery waits out the idle-stall
-    // watchdog — the reported "tries to re-attack the monster that clearly died"
-    // and "sits idle after a kill until the timeout" stalls. Only when the target
-    // name doesn't match any roster slot do we fall back to the debounced CR
-    // re-display, letting the server hand back the true roster.
+    // We WERE swinging at something and a kill just landed, so _currentTarget is
+    // our best identity for the corpse: the *Combat Off* means OUR fight ended.
+    // Drop it from the live roster so the synthetic EntitiesObserved re-picks the
+    // next survivor immediately, or clears the room and releases the Combat gate
+    // when it was the last mob. Without this the dead mob lingers, the next tick
+    // re-swings at the corpse ("Your command had no effect."), and recovery waits
+    // out the idle-stall watchdog — the reported "tries to re-attack the monster
+    // that clearly died" and "sits idle after a kill until the timeout" stalls.
+    // Only when the target name doesn't match any roster slot do we fall back to
+    // the debounced CR re-display, letting the server hand back the true roster.
     public void NoteUnattributedDeath()
     {
         // A kill of ours with the attack held. When its exp line came before any
@@ -4001,8 +3889,8 @@ public sealed partial class CombatManager : IDisposable
         _lastDeathAt = DateTimeOffset.Now;
         _attackSentSinceDeath = false;
 
-        // Clear the target BEFORE the removal re-fires EntitiesObserved (mirrors
-        // the specific-death ordering) so the re-pick sees a clean slate.
+        // Clear the target BEFORE the removal re-fires EntitiesObserved so the
+        // re-pick sees a clean slate.
         _currentTarget = null;
         _castingSpellTarget = null;   // end spell mode on the kill too — no corpse re-cast
         ClearBackstabResolution();
@@ -4233,9 +4121,7 @@ public sealed partial class CombatManager : IDisposable
     // (self-heal / cure / buff / debuff) just went to the server. Arms
     // OnCombatStatus to attribute the imminent *Combat Off* to that cast and
     // resume the weapon attack promptly (see _betweenRoundCastAt). Also arms
-    // _spellAttackOwed while an attack spell was actively cycling — this cast just
-    // spent the round that owed us an attack, so CastingDirector must sit out the
-    // next one (see _spellAttackOwed).
+    // _spellAttackOwed (diagnostic only) while an attack spell was actively cycling.
     // Engine-armed between-round cast (CastingDirector survival heals/buffs, and
     // our own internal casts). Never rate-limited — the engine casts at most once
     // per round, so each is a legitimate resume.
@@ -4983,12 +4869,11 @@ public sealed partial class CombatManager : IDisposable
         // to a retry: the reported "won't re-engage after buffing/healing, sits there
         // until manual input" stall.
         // The interrupted attack spell held the round the between-round cast
-        // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
-        // so it has already CloseCurrent'd that round (RoundCount++) — tally it
-        // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
-        // The heartbeat can't (it bails while _combatOff), so without this the
-        // resume re-announces the just-capped spell uncapped (LBOL 2x, report
-        // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
+        // just closed — tally it toward MaxCasts NOW, before the re-decide inside
+        // DispatchRoundAction. The heartbeat can't (it bails while _combatOff), so
+        // without this the resume re-announces the just-capped spell uncapped (LBOL
+        // 2x, report paradigm-20260820-063541). Gated on ReadRoundCount having moved
+        // since the last tally (a cast of ours confirmed), so a heal that interrupted
         // BEFORE the spell's first fire (no round opened) doesn't over-count;
         // death-window gated so the kill-left-a-survivor path (a legitimately
         // fresh cast on the survivor) is untouched.
@@ -5012,12 +4897,11 @@ public sealed partial class CombatManager : IDisposable
         _lastSpellResumeForBetweenRoundCastAt = _betweenRoundCastAt;
         _log?.Combat(LogCategory,
             $"between-round-cast resume → re-announcing attack spell on {target}");
-        // bypassRecastInterval: this re-attack lands within 500ms of the
-        // survival buff/heal that dropped *Combat Off*; without the bypass the
-        // burst guard defers it to the next tick and the mob swings free (the
-        // "broke combat to cast armr, didn't re-attack until after they swung"
-        // report). This resume is now guarded to fire once per interrupt (see
-        // above), so the bypass can't compound into a burst.
+        // bypassRecastInterval: the re-announce goes out this tick rather than
+        // waiting out the burst guard. (The buff/heal that dropped *Combat Off* is
+        // paced on the between-round clock and can't trip the guard itself.) This
+        // resume is guarded to fire once per interrupt (see above), so the bypass
+        // can't compound into a burst.
         DispatchRoundAction(_readSettings(), cand, CountEngageable(live), live,
             bypassRecastInterval: true);
     }
@@ -5059,9 +4943,7 @@ public sealed partial class CombatManager : IDisposable
     // round's alternate attack corpse-cast at the just-killed mob — lbol kills the
     // rotworm, then `mmis rotworm` goes out at the corpse → "You don't see rotworm
     // here!" (report paradigm-20260814-230258). This is generic: the exp line is
-    // identical for every monster, so no per-monster death message is needed. Skip
-    // when a specific death line already dropped this kill (avoid a double-drop of a
-    // freshly re-picked target).
+    // identical for every monster, so no per-monster death message is needed.
     private void OnUserGainExperience(MatchResult match)
     {
         _lastExpGainAt = DateTimeOffset.Now;
@@ -5072,9 +4954,7 @@ public sealed partial class CombatManager : IDisposable
             _userBreakHoldKillRaced = true;
         _lastExpWasRoomSpellKill = false;
         NoteRoomSpellKill(match);
-        if (_currentTarget is not null
-            && _attackSentSinceDeath
-            && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
+        if (_currentTarget is not null && _attackSentSinceDeath)
         {
             DropTargetForInferredKill(
                 "kill inferred from exp gain (prompt, pre-*Combat Off*) — dropping target so the round's alternate can't corpse-cast");
@@ -5343,25 +5223,20 @@ public sealed partial class CombatManager : IDisposable
                     "*Combat Off* carries the pre-attack debuff's stamp — between-round-cast "
                     + "resume suppressed (the combat attack already fired this round)");
 
-            // Prompt kill drop. A fresh exp gain explains this Off (wire: death →
-            // exp → Off) while NO between-round survival cast does — so it's our
-            // kill's Off, not a mid-fight heal's. The custom per-monster death
-            // message didn't match, so without this the resume paths below re-attack
-            // the corpse ("You don't see X here!") and stall a round waiting out the
-            // recovery — the reported "won't re-engage after a kill until the next
-            // NPC attacks." Arm the existing death-suppression guards (stamp
-            // _lastDeathAt) and drop spell mode so the heartbeat can't re-cast at the
-            // corpse; the death→re-observe re-picks the survivor. The no-between-
-            // round-cast gate keeps a heal's Off — or a party share-exp landing
-            // beside one — from being misread as a kill (that path resumes below).
+            // Prompt kill drop. A fresh exp gain explains this Off (wire: death → exp →
+            // Off) while NO between-round survival cast does — so it's our kill's Off,
+            // not a mid-fight heal's. Nothing else names the kill, so without this the
+            // resume paths below re-attack the corpse ("You don't see X here!") and
+            // stall a round waiting out the recovery — the reported "won't re-engage
+            // after a kill until the next NPC attacks." Arm the existing
+            // death-suppression guards (stamp _lastDeathAt) and drop spell mode so the
+            // heartbeat can't re-cast at the corpse; the death→re-observe re-picks the
+            // survivor. The no-between-round-cast gate keeps a heal's Off — or a party
+            // share-exp landing beside one — from being misread as a kill (that path
+            // resumes below).
             bool expExplainsOff = _currentTarget is not null
                 && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
-                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow
-                // ...and NO matched death line just handled this kill. If one did,
-                // it already dropped the corpse and re-picked the next survivor —
-                // this *Combat Off* is that kill's Off, so inferring a second kill
-                // here would drop the fresh target and re-attack it (double-fire).
-                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow;
+                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow;
             // Nor is it a kill's when it answers a command (CommandOffProbe): the exp
             // is then an earlier kill's, a room spell's that left this target standing,
             // and the Off is the one our attack on that survivor prints ahead of its
@@ -5578,14 +5453,14 @@ public sealed partial class CombatManager : IDisposable
         }
     }
 
-    // Guard/redirect recognition — "<guard> moves to protect <priority>". While a
-    // guarded monster (brigand chief) is shielded, our swing lands on the guard,
-    // not the chief. We don't move _currentTarget onto the guard (the server is
-    // already swinging the guard for us, and leaving _currentTarget on the chief
-    // keeps its death line attributable); we just remember the priority so each
-    // guard's death re-attacks it (TryGuardRetry). Only acts when the protected
-    // monster is the one we're already trying to kill — a protect line shielding
-    // some other room monster isn't ours to chase.
+    // Guard/redirect recognition — "<guard> moves to protect <priority>". While
+    // a guarded monster (brigand chief) is shielded, our swing lands on the
+    // guard, not the chief. We don't move _currentTarget onto the guard (the
+    // server is already swinging the guard for us, and leaving _currentTarget on
+    // the chief keeps the kill credited to the fight we chose); we just remember
+    // the priority so each guard's death re-attacks it (TryGuardRetry). Only
+    // acts when the protected monster is the one we're already trying to kill —
+    // a protect line shielding some other room monster isn't ours to chase.
     private void OnMonsterProtect(MatchResult match)
     {
         if (!Fighting()) return;
@@ -5876,9 +5751,8 @@ public sealed partial class CombatManager : IDisposable
         // a later cast-interrupt Off should resume, not stand down (see
         // _attackSentSinceDeath).
         _attackSentSinceDeath = true;
-        // The owed attack just went out — CastingDirector is clear to fire another
-        // survival cast next round (see _spellAttackOwed). No-op for a weapon swing,
-        // which never set this in the first place.
+        // The owed attack just went out — clear the diagnostic latch (see
+        // _spellAttackOwed). No-op for a weapon swing, which never set it.
         _spellAttackOwed = false;
         _engagedSinceLastAttack = false;
         if (_engageConfirmed) return;

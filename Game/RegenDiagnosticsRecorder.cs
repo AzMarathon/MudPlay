@@ -8,16 +8,13 @@ namespace MudPlay.Game;
 // is gated at LogService.Debug, so it stays silent unless the Log pane's
 // Debug-diagnostics toggle is on.
 //
-// Motivation: some realms (Paradigm is the known case) vary the per-tick
-// amount within a cycle instead of the interval — e.g. splitting a natural /
-// rest tick into thirds where the first ticks pay a fraction and a later one
-// pays the balance. A single editable interval can't capture that shape.
-// Standing still (natural) or resting / meditating with this on produces a
-// raw tick-by-tick trace the amount pattern can be reverse-engineered from
-// before it's modelled.
+// Motivation: a realm can vary the per-tick amount within a cycle rather than the
+// interval — Paradigm pays idle HP in thirds, the last of each three carrying the
+// regen percent's extra (CharacterCalculator.ParadigmHpRegenThird). Standing still,
+// resting or meditating with this on gives the raw tick-by-tick trace such a
+// pattern is read off.
 //
-// This is the first producer on the otherwise-empty Debug channel. It reads
-// live values off PlayerState at event time — the tracker fires after the
+// It reads live values off PlayerState at event time — the tracker fires after the
 // state property has already advanced, so the reported total is post-tick.
 public sealed class RegenDiagnosticsRecorder : IDisposable
 {

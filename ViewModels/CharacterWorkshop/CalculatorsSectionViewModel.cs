@@ -39,6 +39,9 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 //   Backstab — the realm-aware backstab damage range for the backstab-set weapon
 //     (or a picked one), reading level / strength / stealth / class-stealth and
 //     the +BS ability bonuses from the live character.
+//   Mana Regen — the natural mana tick and roll-spell range for a caster
+//     archetype, with the stat / level / +ManaRgn% breakpoints charted.
+//   Monster Aggro — who a monster goes for, on the loaded realm's model.
 // The underlying "actual" offense/defense snapshot tracks the live stats,
 // inventory, and completed-quest bonuses so the Reset buttons and the Backstab
 // read-out always reflect the current character. The editable inputs, though,
@@ -311,7 +314,7 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     // character is a caster (mage / druid).
     private int _manaGearRegenPct, _liveMageryType, _liveMageryLevel;
     // Lazily scanned once per set for the roll-spell picker; the sublist matching
-    // the currently-selected magery drives ManaRollSpellNames.
+    // the currently-selected magery drives ManaRollSpellOptions.
     private readonly KnownSpellCatalog _spellCatalog;
     private IReadOnlyList<KnownSpell> _rollSpells = Array.Empty<KnownSpell>();
     // Suspends RecomputeManaRegen while a multi-input seed / rebuild is in flight,

@@ -1,10 +1,12 @@
 namespace MudPlay.Models.GameData;
 
 // User-defined outgoing typed-shortcut → command expansion. The
-// outgoing-text mirror of Trigger: when the user hits Enter on the
-// terminal canvas or the Conversation window's input field, the first
-// whitespace-delimited word is checked against the alias table; matches
-// are expanded and sent to the game in place of the typed text.
+// outgoing-text mirror of Trigger: on a line the client's own windows send
+// (the Conversation window's input field, quest-step commands and the like)
+// or the local API sends, the first whitespace-delimited word is checked
+// against the alias table; matches are expanded and sent to the game in place
+// of the typed text. A line typed in the terminal goes out as typed
+// (TerminalControl.SubmitTypedLine) and never expands (AliasEngine).
 //
 // Name: the literal first token of the user's input, matched
 // case-insensitively. Rejected at edit time when it would collide with a

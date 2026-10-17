@@ -583,7 +583,7 @@ public sealed partial class DeathRecoveryManagerTests
     private static void DieWithALightAndKeys(GraphHarness h)
     {
         h.EnterGates();
-        h.Snapshot = SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>())
+        h.Snapshot = h.SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>())
             with
             {
                 ReadiedLight = new ReadiedLight("torch", 12),
@@ -632,7 +632,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Stays.Add("iron key");
         h.Stays.Add("signet ring");
         h.EnterGates();
-        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "signet ring", "ration" })
+        h.Snapshot = h.SnapWith(Array.Empty<EquippedItem>(), new[] { "signet ring", "ration" })
             with { Keys = new[] { "iron key" } };
         h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
         h.Sent.Clear();

@@ -197,7 +197,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // Remove the selected row — but only the top or bottom one, so the plan stays
     // a contiguous level run (removing a middle level would orphan the rows
-    // above/below it). A middle selection sets RemoveError.
+    // above/below it). A middle selection explains why in ActionMessage instead.
     [RelayCommand(CanExecute = nameof(HasRows))]
     private void RemoveRow()
     {

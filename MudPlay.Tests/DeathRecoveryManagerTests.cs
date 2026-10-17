@@ -38,12 +38,13 @@ public sealed partial class DeathRecoveryManagerTests
         public DeathRecoveryManager Recovery { get; }
         public List<string> Sent { get; } = new();
         public InventorySnapshot Snapshot { get; set; } = InventorySnapshot.Empty;
-        // The clock the room tracker and recovery stamp what they see on: the real one,
-        // except that each reading is always later than the one before. Two things a
-        // test does one after the other are told apart by their order alone, however
+        // The clock the room tracker and recovery stamp what they see on, and the
+        // harness's own lines and inventory snapshots with them: the real one, except
+        // that each reading is always later than the one before. Two things a test
+        // does one after the other are told apart by their order alone, however
         // coarse the system clock is, with no pause between them.
         private DateTimeOffset _clock;
-        private DateTimeOffset Now()
+        public DateTimeOffset Now()
         {
             DateTimeOffset now = DateTimeOffset.UtcNow;
             return _clock = now > _clock ? now : _clock.AddTicks(1);
@@ -186,7 +187,10 @@ public sealed partial class DeathRecoveryManagerTests
         public void FeedSurvey(string list) =>
             _router.Dispatch(new LineExtractor.EmittedLine(
                 $"You notice {list} here.", Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
+                Now(), IsPromptLine: false));
+
+        public InventorySnapshot SnapWith(EquippedItem[] worn, string[] carried)
+            => new(CurrencyHoldings.Empty, EncumbranceReading.Empty, worn, carried, Now());
 
         public DeathRecord Latest => Profile.Current!.DeathHistory![^1];
 
@@ -214,13 +218,10 @@ public sealed partial class DeathRecoveryManagerTests
         }
     }
 
-    private static InventorySnapshot SnapWith(EquippedItem[] worn, string[] carried)
-        => new(CurrencyHoldings.Empty, EncumbranceReading.Empty, worn, carried, DateTimeOffset.UtcNow);
-
     private static void Die(GraphHarness h, EquippedItem[] worn, string[] carried)
     {
         h.EnterGates();
-        h.Snapshot = SnapWith(worn, carried);
+        h.Snapshot = h.SnapWith(worn, carried);
         h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");   // tracker → PendingRespawn
         h.Sent.Clear();
     }
@@ -418,7 +419,7 @@ public sealed partial class DeathRecoveryManagerTests
         h.Sent.Clear();
 
         // The user put the armour back on themselves while Auto-All was off.
-        h.Snapshot = SnapWith(new[] { new EquippedItem("plate mail", "Torso") }, new[] { "platinum mace" });
+        h.Snapshot = h.SnapWith(new[] { new EquippedItem("plate mail", "Torso") }, new[] { "platinum mace" });
         autoOn = true;
         h.Recovery.OnAutoAllRestored();
 
@@ -894,7 +895,7 @@ public sealed partial class DeathRecoveryManagerTests
         // the record, and names an item that is gone for good.
         using GraphHarness h = new() { Paradigm = false };
         h.EnterGates();
-        h.Snapshot = SnapWith(
+        h.Snapshot = h.SnapWith(
             new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
             Array.Empty<string>());
         h.Recovery.FeedTestLine("You have been killed!");
@@ -917,7 +918,7 @@ public sealed partial class DeathRecoveryManagerTests
     {
         using GraphHarness h = new();   // Paradigm
         h.EnterGates();
-        h.Snapshot = SnapWith(new[] { new EquippedItem("steel helm", "Head") }, Array.Empty<string>());
+        h.Snapshot = h.SnapWith(new[] { new EquippedItem("steel helm", "Head") }, Array.Empty<string>());
         h.Recovery.FeedTestLine("Your steel helm has returned to its rightful place.");
         h.Tracker.NoteDeath(2, "You have 2 lives left.");
 
@@ -958,7 +959,7 @@ public sealed partial class DeathRecoveryManagerTests
         // pile with a torch still on a floor somewhere.
         using GraphHarness h = new() { Paradigm = false };
         h.EnterGates();
-        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "3 torch" });
+        h.Snapshot = h.SnapWith(Array.Empty<EquippedItem>(), new[] { "3 torch" });
         h.Recovery.FeedTestLine("Your torch has returned to its rightful place.");
         h.Tracker.NoteDeath(2, "You have 2 lives left.");
         h.Recovery.AutoRecover = true;

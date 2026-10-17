@@ -59,8 +59,8 @@ public partial class CharacterWorkshopWindow : Window
 
     private void OnSectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        // SelectionChanged bubbles: an inner ComboBox / ListBox (e.g. the Monster
-        // Matchup pickers) would otherwise re-fit — and so resize — the whole window
+        // SelectionChanged bubbles: an inner ComboBox / ListBox (e.g. the Hit
+        // Calculator's attack-type and weapon pickers) would otherwise re-fit — and so resize — the whole window
         // on every pick (report paradigm-20260813-125617). Only the section
         // TabControl's own selection change should trigger a re-fit.
         if (!ReferenceEquals(e.Source, sender)) return;

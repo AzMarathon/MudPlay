@@ -3,8 +3,7 @@ namespace MudPlay.Game.Combat;
 // Payload of RoomEntryWatcher.ArrivalObserved. The classifier appends a
 // RoomEntity to its observation list and re-fires
 // RoomEntityClassifier.EntitiesObserved; this is the smaller-grained event that
-// names the arrival itself, for subsystems that care about the spawn-as-event
-// (e.g. SessionStats or a per-mob spawn-counter).
+// names the arrival itself, for subsystems that care about the arrival as an event.
 //
 // Name is the name post-article-strip — e.g. "fierce lashworm" from the wire's
 // "A fierce lashworm crawls into the room from nowhere." (the leading "A "/"An

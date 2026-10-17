@@ -5,10 +5,10 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Settings;
 
-// Base for one section in the SettingsWindowViewModel's sidebar. Every settings
-// tab — including app-wide ones like Display and Toolbar — lives on the loaded
-// character profile, so sections don't take a runtime scope; each one knows
-// where its data lives.
+// Base for one section in the SettingsWindowViewModel's sidebar. Each section
+// knows where its own data lives — mostly the loaded character profile, but some
+// fields are BBS-record or install-global (Global tier) — so sections take no
+// runtime scope and the window has no tier picker.
 //
 // Game-data record overrides use the four-tier (Defaults / Global / BBS / Char)
 // hierarchy via SettingsResolver, over in the Game Data Browser. Settings-tab

@@ -63,7 +63,6 @@ public sealed class AutoTrainManager : IDisposable
 
     private Phase _phase = Phase.Idle;
     private int _sessionId;
-    private int _lastLevel;
     private IReadOnlyList<string> _sequence = Array.Empty<string>();
 
     // The pass in flight (STR/INT/WIL/AGL/HEA/CHM): the plan row it is working
@@ -85,20 +84,20 @@ public sealed class AutoTrainManager : IDisposable
     private TaskCompletionSource<bool>? _formClosed;
 
     // Delay between keystrokes so the server's form redraw keeps pace.
-    public int KeystrokeDelayMs { get; set; } = 200;
+    private const int KeystrokeDelayMs = 200;
     // Grace after `train stats` for the stat box to render before we check the
     // command-driven input-menu signal and begin the replay (the realm-
     // independent fallback for menus whose marker row never scrolls).
-    public TimeSpan MenuRenderDelay { get; set; } = TimeSpan.FromMilliseconds(1200);
+    private static readonly TimeSpan MenuRenderDelay = TimeSpan.FromMilliseconds(1200);
     // How long to wait for the trainer screen after sending `train stats`.
-    public TimeSpan MenuEntryTimeout { get; } = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan MenuEntryTimeout = TimeSpan.FromSeconds(6);
     // How long the form gets to show the last typed value before SAVE.
-    public TimeSpan FormSettleTimeout { get; set; } = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan FormSettleTimeout = TimeSpan.FromSeconds(3);
     // How long the form gets to close after SAVE before the keyboard is released
     // without it.
-    public TimeSpan ExitGrace { get; set; } = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan ExitGrace = TimeSpan.FromSeconds(4);
     // How long a `stat` the pass asked for gets to arrive.
-    public TimeSpan StatReadTimeout { get; set; } = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan StatReadTimeout = TimeSpan.FromSeconds(8);
 
     // Raised when CanTrainNow / IsBusy may have changed.
     public event Action? StateChanged;
@@ -148,7 +147,6 @@ public sealed class AutoTrainManager : IDisposable
         _log = log;
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _delay = delay ?? Task.Delay;
-        _lastLevel = stats.Level;
 
         _stats.PropertyChanged += OnStatsChanged;
         _trainer.MenuEntered += OnMenuEntered;
@@ -713,9 +711,7 @@ public sealed class AutoTrainManager : IDisposable
 
     private void OnStatsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Track level for the (future) loop/auto-lair auto-fire; refresh
-        // CanTrainNow for the CP Allocation tab's manual Train Now.
-        if (_stats.Level != _lastLevel) _lastLevel = _stats.Level;
+        // Refresh CanTrainNow for the CP Allocation tab's Train Now.
         StateChanged?.Invoke();
     }
 

@@ -67,8 +67,6 @@ public sealed class MonsterDeathWatcherTests
 
         Assert.Single(h.Events);
         MonsterDeathEvent evt = h.Events[0];
-        Assert.True(evt.IsFallback);
-        Assert.Empty(evt.Candidates);
         Assert.Equal(9, evt.ExperienceGained);
     }
 

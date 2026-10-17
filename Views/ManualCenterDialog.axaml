@@ -21,7 +21,7 @@
 
             <!-- Single search box — mirrors the Navigation rail's
                  search input. Enter commits the highlighted (or top)
-                 row; up/down arrows move through the dropdown. -->
+                 row. -->
             <TextBox Grid.Row="1" Classes="clearable"
                      Name="QueryBox"
                      Text="{Binding Query, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -31,7 +31,7 @@
 
             <!-- Live results dropdown — visible only while there are
                  matches. Same row template as the Navigation
-                 dropdown / LoopEditor add-room row. -->
+                 dropdown / Loop Editor dialog's add-room row. -->
             <Border Grid.Row="2"
                     IsVisible="{Binding HasSearchResults}"
                     Background="{StaticResource ChromeBgElevBrush}"

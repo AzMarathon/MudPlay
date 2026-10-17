@@ -490,6 +490,9 @@ public sealed class MovePlayerHandler : IDisposable
         return true;
     }
 
+    // An @stop just took hold (not a repeat of one already holding).
+    public Action? Stopped { get; set; }
+
     // @stop mirrors the toolbar Pause button exactly (routes through the same
     // MovementController). The user-pause STACKS on top of any engine wait, so a
     // route paused mid-combat (CombatGate held) stays paused after the fight
@@ -502,9 +505,6 @@ public sealed class MovePlayerHandler : IDisposable
     // idle @stop arms the gate directly to still register an explicit hold for
     // whatever starts next. Idempotent: a second @stop while already user-paused
     // just re-confirms.
-    // An @stop just took hold (not a repeat of one already holding).
-    public Action? Stopped { get; set; }
-
     private void OnStop(RemoteCommandContext ctx)
     {
         if (_controller.IsUserPaused)

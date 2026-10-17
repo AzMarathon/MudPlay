@@ -442,9 +442,10 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
         Assert.Single(h.AllSent, s => s == "blast");
 
-        // The primary dies; the room re-displays with two survivors (still ≥ MinEnemies).
-        // The channel is still hitting them — the re-pick must re-anchor, not re-cast.
-        h.Combat.NoteMonsterDied("giant rat");
+        // The primary dies under the room spell (its exp line, no *Combat Off*); the room
+        // re-displays with two survivors (still ≥ MinEnemies). The channel is still
+        // hitting them — the re-pick must re-anchor, not re-cast.
+        h.Feed("You gain 10 experience.");
         h.Feed("Also here: dark stalker, muckworm.");
         Assert.Single(h.AllSent, s => s == "blast");   // still exactly one blast — no recast
 
@@ -501,7 +502,7 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat, dark stalker, muckworm.");
         Assert.Single(h.AllSent, s => s == "blast");
 
-        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("You gain 10 experience.");
         h.Feed("Your spell has no effect in this room!");
         h.Feed("Also here: dark stalker, muckworm.");
 
@@ -523,7 +524,7 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
 
         // Down to one survivor (< MinEnemies) → channel over → single-target attack.
-        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("You gain 10 experience.");
         h.Feed("Also here: dark stalker.");
         Assert.Equal("nuke dark stalker", h.LastSent);
     }
@@ -650,33 +651,6 @@ public sealed class CombatManagerSpellsTests
 
         h.FireSettle();                            // window elapsed, no re-display
         Assert.Equal("nuke giant rat", h.LastSent);
-    }
-
-    // Corpse-cast on the arrival-settle path (report paradigm-20260916-141344: nebo at a
-    // dead muckworm). A straggler kill's death line lands INSIDE the settle window — its
-    // roster resync (a forced re-display) is still in flight when the window elapses, so
-    // the accumulated roster can still name the just-killed mob (or a fresh same-named
-    // arrival not yet confirmed in-room). Engaging then re-picks that name and casts at a
-    // target the server rejects a beat later. The settle-elapsed path must defer to the
-    // resync — force the re-display, cast nothing — instead of racing it.
-    [Fact]
-    public void ArrivalSettle_KillLandsInsideWindow_DefersToResync_NoCorpseCast()
-    {
-        using Harness h = new();
-        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
-        h.AddMonster(1, "muckworm");
-
-        h.Arrive("muckworm");                       // arms the settle hold (no target yet)
-        Assert.Equal(string.Empty, h.LastSent);
-
-        h.Combat.NoteMonsterDied("muckworm");       // a kill's death line lands inside the window
-        int sentBeforeSettle = h.Sent.Count;
-
-        h.FireSettle();                             // window elapsed — a kill happened mid-window
-
-        Assert.DoesNotContain("nebo muckworm", h.AllSent);   // never corpse-cast
-        Assert.Equal(sentBeforeSettle + 1, h.Sent.Count);    // exactly the CR resync went out
-        Assert.Equal(string.Empty, h.LastSent);              // = the bare CR (trimmed to empty)
     }
 
     // Report paradigm-20260927-095328: the loop sent `u`, and before the new room
@@ -1772,7 +1746,7 @@ public sealed class CombatManagerSpellsTests
     // mob swinging free before the resume landed (a live capture caught it
     // exactly: armr fires, *Combat Off*, one full round of silence — the mob's
     // free swing — then harm finally resumes). CastingDirector's attack-owed gate
-    // (CombatManager.IsSpellAttackOwed) is what actually prevents the collision
+    // (CombatManager._spellAttackOwed) is what actually prevents the collision
     // this used to guard against — it stops a SECOND heal/buff from contesting
     // the round, so by the time this resume runs nothing else wants the slot.
     //
@@ -3138,7 +3112,6 @@ public sealed class CombatManagerSpellsTests
         Assert.All(h.DeathEvents, d =>
         {
             Assert.Equal(16250, d.ExperienceGained);
-            Assert.Empty(d.Candidates);
             Assert.Equal("brute zombie", Assert.Single(d.RoomSpellRoster!).Name);
         });
         Assert.DoesNotContain(MovementCoordinator.CombatGate, coordinator.AssertedGates);
@@ -4399,7 +4372,7 @@ public sealed class CombatManagerSpellsTests
     // (spellTarget=small blue dragon hatchling)" with the dragon long gone).
     // The stale _castingSpellTarget leaves the attack resume waiting on a *Combat
     // Off* that never comes, stranding the attack. Disabling AutoCombat must drop
-    // the whole cascade, not just CurrentTarget. (IsSpellAttackOwed is asserted
+    // the whole cascade, not just CurrentTarget. (SpellAttackOwed is asserted
     // here as part of the cascade state; it's diagnostic now, not a cast gate.)
     [Fact]
     public void AutoCombatDisabled_ClearsStaleAttackSpellCascade()
@@ -4411,13 +4384,13 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: small blue dragon hatchling.");
         Assert.Equal("agon small blue dragon hatchling", h.LastSent);
         h.Combat.NoteBetweenRoundCast();   // a survival cast armed the round-owed latch
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Equal("small blue dragon hatchling", h.Combat.Snapshot().CastingSpellTarget);
 
         h.AutoCombatEnabled = false;
         h.Feed("Also here: small blue dragon hatchling.");   // next observation, combat off
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4436,11 +4409,11 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: small blue dragon hatchling.");
         h.Combat.NoteBetweenRoundCast();
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
 
         h.Combat.OnPlayerDeath();
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4463,11 +4436,11 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: small blue dragon hatchling.");
         h.Combat.NoteBetweenRoundCast();   // self-buff mid-fight; *Combat Off* never lands — connection drops
-        Assert.True(h.Combat.IsSpellAttackOwed);
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed);
 
         h.Combat.OnDisconnected();
 
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
         Assert.Null(h.Combat.Snapshot().CastingSpellTarget);
         Assert.Null(h.Combat.Snapshot().CurrentTarget);
     }
@@ -4508,7 +4481,7 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Equal("turn shade", h.LastSent);
         Assert.False(h.Combat.CombatOff);
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
     }
 
     // Follow-up report paradigm-20260824-235607 reproduced the same visible stall
@@ -4530,7 +4503,7 @@ public sealed class CombatManagerSpellsTests
         h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
         // Production subscription order: CastCoordinator clears the spent round,
         // then CombatManager retries the attack. CastingDirector sits between them
-        // and observes IsSpellAttackOwed=true, asserted below.
+        // and observes SpellAttackOwed=true, asserted below.
         tick.CombatTickElapsed += () => h.Cast.OnCombatTick();
         tick.CombatTickElapsed += h.Combat.OnCombatTick;
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
@@ -4545,7 +4518,7 @@ public sealed class CombatManagerSpellsTests
 
         Assert.Empty(h.Sent);                    // attack genuinely blocked, nothing sent
         Assert.False(h.Combat.CombatOff);
-        Assert.True(h.Combat.IsSpellAttackOwed); // no second buff may steal the retry
+        Assert.True(h.Combat.Snapshot().SpellAttackOwed); // no second buff may steal the retry
         Assert.NotNull(tick.LastCombatTick);      // production timer fallback can now fire
 
         // The seeded timer reaches the projected next round without any recognized
@@ -4554,6 +4527,6 @@ public sealed class CombatManagerSpellsTests
         tick.PollTimersForTests();
 
         Assert.Equal("turn shade", h.LastSent);
-        Assert.False(h.Combat.IsSpellAttackOwed);
+        Assert.False(h.Combat.Snapshot().SpellAttackOwed);
     }
 }

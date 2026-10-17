@@ -7,8 +7,7 @@ namespace MudPlay.Models.Profile;
 // CharacterProfile.Settings.
 //
 // Char-tier (not Global) — different characters land on different toolbar
-// layouts. null Layout means "use defaults": the 13 standard buttons in their
-// original group order.
+// layouts. null Layout means "use defaults": Services.ToolbarDefaults.
 public sealed class ToolbarSettings
 {
     // Ordered toolbar items. null or empty falls back to

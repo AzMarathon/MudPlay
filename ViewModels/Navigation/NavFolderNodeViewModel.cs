@@ -10,7 +10,7 @@ namespace MudPlay.ViewModels.Navigation;
 //
 // The leaf rows keep their existing types (LoopRowViewModel, ManagerLoopRow,
 // FavoriteRowViewModel, …) so the surrounding XAML row templates are reused
-// verbatim — the TreeView picks the right template by runtime type. Building
+// verbatim — the flat row list (NavFlatRow) picks the right template by runtime type. Building
 // the tree from a flat row list is NavTreeBuilder's job.
 public sealed partial class NavFolderNodeViewModel : ObservableObject
 {
@@ -30,9 +30,7 @@ public sealed partial class NavFolderNodeViewModel : ObservableObject
     // Child folders (as NavFolderNodeViewModel) then leaf rows, both pre-sorted by the builder.
     public ObservableCollection<object> Children { get; } = new();
 
-    // Tree expand/collapse state. The builder seeds the starting value per
-    // surface (the rail's Loops+Lairs tree starts collapsed; the Manage dialog
-    // and GOTO tree start expanded); NavTreeBuilder preserves a user's per-folder
-    // override across rebuilds.
+    // Tree expand/collapse state. Every surface starts its folders collapsed;
+    // NavTreeBuilder preserves a user's per-folder override across rebuilds.
     [ObservableProperty] private bool _isExpanded;
 }

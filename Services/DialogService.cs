@@ -34,7 +34,7 @@ public sealed class DialogService
     }
 
     // Register that TViewModel dialogs are hosted by a TWindow. Called once per
-    // dialog (typically from AppServices.Initialize or a small bootstrap method).
+    // dialog at startup (App.axaml.cs).
     public void RegisterWindow<TViewModel, TWindow>()
         where TWindow : Window, new()
     {

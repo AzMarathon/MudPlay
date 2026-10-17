@@ -16,12 +16,13 @@ namespace MudPlay.Game.Inventory;
 // the player (or a macro) surfaced. This is a design choice (reactive-on-list,
 // not proactive-on-shop-entry), not a game constraint.
 //
-// One command per unit: MajorMUD has no bulk-buy verb, so `buy <item>` transacts
-// exactly one copy. The engine sends a single `buy <name>`, then waits for the
-// result before the next unit — KnownPatterns.UserBuys ("You just bought X …")
-// advances the count; KnownPatterns.UserBuyFailed ("You cannot afford X.")
-// abandons that ware (purse spent) and moves to the next flagged item, and so
-// does KnownPatterns.UserBuyRefused (out of stock, not a ware here, can't be
+// One command per unit on Stock: its `buy <item>` transacts exactly one copy.
+// Paradigm buys the whole remaining quantity in one `buy N <item>`. Either way
+// the engine sends one command, then waits for the result before the next —
+// KnownPatterns.UserBuys ("You just bought X …") advances the count;
+// KnownPatterns.UserBuyFailed ("You cannot afford X.") abandons that ware (purse
+// spent) and moves to the next flagged item, and so does
+// KnownPatterns.UserBuyRefused (out of stock, not a ware here, can't be
 // carried). The charm-scaled buy price isn't cheaply predictable, so
 // affordability is read off the live result rather than computed up front
 // (matching the confirmed mechanic). Each fresh `list` resets the pump, so a
@@ -35,8 +36,9 @@ namespace MudPlay.Game.Inventory;
 // LIGHT items are excluded upstream (Auto-light owns them) and a LoyalItem is
 // never a buy target — both decided by the injected resolver.
 //
-// Master switch: AutoActionDefaults.AutoBuy. UI-thread only (MessageRouter +
-// LineExtractor both marshal upstream), so the pump state needs no lock.
+// Master switch: Auto Get Items (AutoActionDefaults.AutoGetItems). UI-thread only
+// (MessageRouter + LineExtractor both marshal upstream), so the pump state needs no
+// lock.
 public sealed class AutoBuyManager : IDisposable
 {
     // LogService category — [AutoBuy] rows per queued / bought item.

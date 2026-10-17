@@ -1,5 +1,30 @@
 # Version history
 
+## 3.183.32
+
+- A renamed room not yet shown, redisplaying mid-step, no longer loses the map's place or (with a move echo) names the room ahead
+- With no move echo, two look-alike house rooms no longer lend the room ahead the name of the one beyond
+- A gang-house room renamed to a name the game data has elsewhere is re-learned
+- A look into a named room next door no longer names the house room ahead
+
+## 3.183.28
+
+- Game Data → Open Browser… shows its real shortcut (F3 by default) instead of Ctrl+G
+- Stale on-screen text and tooltips corrected to match what the client does
+- Message editor's Use tier box removed (message edits always stay with the game-data set)
+- Auto-Lair's idle penalty setting removed (it had no effect)
+- Monster records show HP regen every 30 seconds, not 90
+
+## 3.183.23
+
+- Backscroll and How did I Die? draw a vector terminal font smooth (antialiased), like the live terminal
+
+## 3.183.22
+
+- Character Info: a carried container's chest icon is drawn as a link, not a plain grey button
+- Navigation: Save, Accept and Go buttons that were meant to stand out now show in the accent colour
+- Field labels in Settings General and Events and on the Roomba tab now use the dimmed label style
+
 ## 3.183.19
 
 - Sync Timers: the first telepathed player's answer waits while your next telepath request is still unconfirmed

@@ -62,6 +62,30 @@ public sealed class SharedRealmFilesTests : IDisposable
         Assert.False(second.TakeInOutsideChanges());
     }
 
+    [Fact]
+    public void Players_LegacyDuplicatesInTheFile_CollapseOnLoad_KeepingNewest()
+    {
+        // A players file written under the old layout has a row per (given, family)
+        // pair, so "Debbie Par" and "Debbie Schwartz" are the same player twice. Loading
+        // it keeps the newer LastSeen as canonical but preserves the older FirstSeen.
+        DateTime older = new(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+        DateTime newer = new(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        JsonStore.Save(AppPaths.RealmPlayersFile(_realm), new List<PlayerObservation>
+        {
+            new("Debbie", "Schwartz", "Mage", "Elf", "Good", null, null, null,
+                FirstSeenUtc: older, LastSeenUtc: older),
+            new("Debbie", "Par", null, null, null, null, null, null,
+                FirstSeenUtc: newer, LastSeenUtc: newer),
+        });
+
+        PlayerDatabase db = NewPlayers();
+
+        PlayerRecord r = Assert.Single(db.Players);
+        Assert.Equal("Par", r.FamilyName);     // newer wins for the volatile column
+        Assert.Equal(older, r.FirstSeenUtc);   // older preserves "known since"
+        Assert.Equal(newer, r.LastSeenUtc);
+    }
+
     private GhItemLocationStore NewSightings()
     {
         GhItemLocationStore store = new(new ItemNameStore(new GameDataCache()));

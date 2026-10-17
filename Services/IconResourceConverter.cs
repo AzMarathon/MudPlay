@@ -7,9 +7,9 @@ namespace MudPlay.Services;
 
 // XAML value converter — looks up a string resource key (e.g. "IconPlug") in the
 // application's resource dictionary and returns the matching StreamGeometry. Used
-// by the dynamic toolbar and the Settings → Toolbar list editor so the icon data
-// lives in a single place (Themes/Icons.axaml) while every row resolves its
-// glyph by catalogue key.
+// by the dynamic toolbar and the Settings → Toolbar + Shortcuts list editor so
+// the icon data lives in a single place (Themes/Icons.axaml) while every row
+// resolves its glyph by catalogue key.
 public sealed class IconResourceConverter : IValueConverter
 {
     public static IconResourceConverter Instance { get; } = new();

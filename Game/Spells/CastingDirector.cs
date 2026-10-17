@@ -33,7 +33,7 @@ namespace MudPlay.Game.Spells;
 //     spells are CureHoldsSpell etc. Internal order inside the Curing slot:
 //     movement-prevented → poison → disease → blindness. A cure ticked "Cure after
 //     combat" waits until the fight is over (CureWaitsForFightEnd).
-//   - Buffing — recast player buffs (Bless1–10 slots).
+//   - Buffing — recast the unified buff list (CharacterProfile.PartyBuffs).
 //   - Debuffing — an in-between action sourced from the combat engine. The DECISION
 //     (config + once-per-room / once-per-target gating) is owned by CombatManager /
 //     CombatSpellChooser; this director only casts the debuff through the shared
@@ -279,9 +279,9 @@ public sealed class CastingDirector : IDisposable
     private bool _settleHoldLogged;
 
     // A mana-regen roll-spell reroll the reroller staged (last roll below its
-    // threshold). It's offered by PickSelfBuff at PriorityBuffing and cast through
-    // the normal between-round pass — so it competes with a due heal/cure and
-    // spends the one-per-round slot, instead of firing on the raw wire — then
+    // threshold). It's offered by PickManaRegenReroll at PriorityBuffing and cast
+    // through the normal between-round pass — so it competes with a due heal/cure
+    // and spends the one-per-round slot, instead of firing on the raw wire — then
     // cleared once it goes out. Null when no reroll is pending.
     private string? _pendingManaRegenReroll;
 
@@ -335,7 +335,7 @@ public sealed class CastingDirector : IDisposable
     // Given names (lower-cased) of party members a single-target buff couldn't reach
     // because they're HIDING — the server answered "You do not see <name> here!" to
     // our cast. We back off casting on them (no spam) until we MOVE (NoteRoomChanged
-    // clears all) or they reappear in "Also here:" (cleared in PickPartyBuff). The
+    // clears all) or they reappear in "Also here:" (cleared in DueUnifiedBuffs). The
     // Buff Watchdog reads this to show "hidden — couldn't target".
     private readonly HashSet<string> _hiddenTargets = new(StringComparer.OrdinalIgnoreCase);
 
@@ -352,7 +352,7 @@ public sealed class CastingDirector : IDisposable
         _log?.Combat(LogCategory, "moved rooms — cleared hidden party-buff back-offs, will retry.");
     }
     // Self-buff cast code → the party-wide party buff that removes (supersedes) it while
-    // in a party. PickSelfBuff skips a covered slot; the Buff Watchdog labels it.
+    // in a party. DueUnifiedBuffs skips a covered slot; the Buff Watchdog labels it.
     private Func<IReadOnlyDictionary<string, string>>? _selfBuffCoverage;
     // Configured buffs another configured buff PERMANENTLY removes (Paradigm continuous
     // removal, one-directional): loser cast code → winning buff name. Never maintained (the
@@ -446,9 +446,8 @@ public sealed class CastingDirector : IDisposable
         }
     }
 
-    // Old 3-arg + 4-arg ctors kept as a convenience overload so the
-    // existing AppServices wiring + tests don't churn while
-    // party-cast wiring lands.
+    // Party-less overload, for a director with no PartyState (tests that don't
+    // exercise party casting).
     public CastingDirector(
         PlayerState state,
         CastCoordinator cast,
@@ -982,7 +981,7 @@ public sealed class CastingDirector : IDisposable
     }
 
     // Wire the self-buff coverage source: self-buff cast code → the party-wide party buff
-    // that removes (supersedes) it while in a party. PickSelfBuff skips a covered slot so
+    // that removes (supersedes) it while in a party. DueUnifiedBuffs skips a covered slot so
     // we let the party buff cover us instead of self-casting the removed spell.
     public void SetSelfBuffCoverage(Func<IReadOnlyDictionary<string, string>> coverage)
     {
@@ -1492,7 +1491,7 @@ public sealed class CastingDirector : IDisposable
 
     // The mana-regen roll-spell reroller staged a reroll (its last roll came in
     // below the configured threshold). Instead of firing it on the raw wire, stash
-    // it and run the between-round pass now: PickSelfBuff offers it at
+    // it and run the between-round pass now: PickManaRegenReroll offers it at
     // PriorityBuffing (bypassing the slot's recast timer — the point is to recast
     // immediately), so a due heal/cure still wins and, in combat, it spends the
     // one-cast-per-round slot like every other between-round cast. Cleared in
@@ -1801,7 +1800,7 @@ public sealed class CastingDirector : IDisposable
         // matches several records (bless, chant, glass orb, dark blessing on Paradigm),
         // so this handler fires once PER matched record. Only the buff we actually cast
         // is really ours. While a fresh pending self-buff exists (armed on send, same
-        // staleness window OnSelfBuffRejected uses), attribute the WHOLE burst to it:
+        // staleness window OnCastFailed uses), attribute the WHOLE burst to it:
         // refresh the pending buff and IGNORE every sibling record — otherwise casting
         // bless also refreshes chant / glass orb off the shared line. With nothing fresh
         // pending, trust the record map (e.g. the reactive HP-regen HoT has no pending).
@@ -2186,20 +2185,19 @@ public sealed class CastingDirector : IDisposable
         // stranding the slot for a full round even after the condition clears (an
         // emergency heal lost its retry window and the character died mid-stunlock).
         // Hold here instead, same as CombatManager.AttacksBlocked, so the slot is
-        // still free the instant ConditionEnded's re-evaluate fires. Corrects the
-        // GAME_MECHANICS.md note that only attacks were governed by AttackPrevented —
-        // a between-round self-heal is refused by it too.
+        // still free the instant ConditionEnded's re-evaluate fires (GAME_MECHANICS
+        // "Attack-prevented states (stun, petrify, bind)": the block is not attack-only).
         if (AttacksPrevented()) return null;
         if (_cast.IsCastBlocked) return null;
         // No attack-owed alternation gate here. A 0-energy between-round survival
         // cast and the combat attack are INDEPENDENT slots that both land in the
         // same round — the attack auto-repeats server-side and re-fires on the
         // cast's *Combat Off*, so casting a heal never actually costs the round's
-        // attack (GAME_MECHANICS.md, "independent slots"). Gating this slot on the
-        // attack was wrong: it made a due top-priority survival cast (even an
-        // emergency heal) sit out a whole round while its own slot sat free, for a
-        // contention that doesn't exist. The one real per-round limit is the shared
-        // between-round slot itself — enforced below.
+        // attack (GAME_MECHANICS "Between-round cast slot vs the combat attack").
+        // Gating this slot on the attack was wrong: it made a due top-priority
+        // survival cast (even an emergency heal) sit out a whole round while its
+        // own slot sat free, for a contention that doesn't exist. The one real
+        // per-round limit is the shared between-round slot itself — enforced below.
 
         // One between-round spell (heal / cure / buff / debuff / item) per combat
         // round: the game allows a single 0-energy cast per round, so a second draws
@@ -2535,7 +2533,7 @@ public sealed class CastingDirector : IDisposable
     // its recast window — in type-priority order (the Spells-tab priorities), formatted
     // `code(typePrio)`; buffs additionally carry their slot number as `code(typePrio-
     // slot)`. Read-only: the heal/party/cure pickers don't mutate state, and buffs are
-    // enumerated directly (so PickSelfBuff's mana-regen-reroll consumption is untouched).
+    // enumerated directly (so PickManaRegenReroll's reroll consumption is untouched).
     // Debuffs are omitted — they're the combat engine's decision and re-peeking it here
     // is not guaranteed side-effect-free. Only logged when the queue is non-empty AND
     // differs from the last one logged: it's evaluated every tick, and an unchanged
@@ -2764,10 +2762,8 @@ public sealed class CastingDirector : IDisposable
          && SelfCureDue(spells.CureBlindnessSpell, spells.CureBlindnessAfterCombat))
             return spells.CureBlindnessSpell;
 
-        // No CureConfusion picker on SpellsSettings yet (legacy: rare
-        // and short-lived in stock MajorMUD). When added, slot it
-        // last in the priority order. Same shape for any future
-        // realm-specific status.
+        // Confusion has no cure slot on SpellsSettings: it is rare and short-lived
+        // in stock MajorMUD.
         return null;
     }
 
@@ -3012,10 +3008,9 @@ public sealed class CastingDirector : IDisposable
 
     // ----- Buffing ----------------------------------------------------
 
-    // Pick the next buff to (re)cast. Self buffs (Bless1–10 + regen + when-full
-    // slots) take precedence over party buffs; within each scope the slot order is
-    // the priority order. Returns the first slot whose buff is due to recast — never
-    // confirmed-active, or within the RecastMarginSec expiry window.
+    // Pick the next buff to (re)cast: the first due one from the staged mana-regen
+    // reroll, then the unified buff list in priority order (DueBuffs). Due means never
+    // confirmed-active, or within the slot's RecastMarginSec expiry window.
     //
     // "Active" is duration-based: a buff's timer starts only when we observe OUR
     // successful cast (self via the ConditionTracker AppliedMessage, party via the

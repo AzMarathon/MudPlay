@@ -275,11 +275,10 @@ public static class RouteChoicePrompt
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
-                // Every gate here is already flagged AutoObtainForPath, but the
-                // DEMAND gate is a separate switch: with Settings → Other → "search
-                // rooms if item needed" off it stays shut, so this path's own
-                // "arming acquisition" promise armed nothing. Forcing the ids opens
-                // it for this walk, which is what the flags asked for.
+                // Every gate here is already flagged AutoObtainForPath, but need-posting
+                // keys on a per-walk forced obtain, so the flags alone arm nothing.
+                // Forcing the ids opens it for this walk, which is what the flags
+                // asked for.
                 // Items only: no card was shown, so no trade rides on this walk.
                 JourneyFetch? soleFetch = plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems
@@ -939,10 +938,9 @@ public static class RouteChoicePrompt
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");
                 // The route's ITEM gates need the same force as its hazard counters,
-                // for the same reason: the pick is the consent. Only the hazard
-                // counters were being forced, so an item-gated pick armed nothing
-                // unless the global search-if-needed preference happened to be on —
-                // and the walk then crossed a gate it had made no arrangements for.
+                // for the same reason: the pick is the consent, and without a forced
+                // obtain nothing would be armed for them — the walk would cross a gate
+                // it had made no arrangements for.
                 //
                 // Both go in one order, which the walk carries on its journey. A
                 // trade hands an item of the user's over: picking this card agrees to

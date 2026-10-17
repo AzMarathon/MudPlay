@@ -61,8 +61,8 @@ public sealed class RoomEntryWatcher : IDisposable
 
     // Fires after each arrival is parsed + classified + appended to the
     // classifier. Independent of RoomEntityClassifier.EntitiesObserved —
-    // consumers that only care about per-arrival deltas (e.g. spawn counters)
-    // subscribe here instead of folding observation diffs.
+    // consumers that only care about per-arrival deltas subscribe here instead of
+    // folding observation diffs.
     public event Action<RoomEntryArrivalEvent>? ArrivalObserved;
 
     public RoomEntryWatcher(

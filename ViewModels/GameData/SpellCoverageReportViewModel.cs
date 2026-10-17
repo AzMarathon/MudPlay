@@ -109,8 +109,8 @@ public sealed partial class SpellCoverageReportViewModel : ObservableObject
 
     // Double-click drilldown — opens the Message edit dialog with a fresh record whose
     // Name is the spell's Name and whose Links point at (Spells, spell.Number). The user
-    // fills in the 5 perspective line slots (caster / target / witness / applied /
-    // stat-line), flags, and Action; on save the audit fires and the spell drops off the
+    // fills in the perspective lines (caster / target / witness / applied and its
+    // wear-off line) and flags; on save the audit fires and the spell drops off the
     // unanchored list on the next refresh.
     [RelayCommand]
     private async Task CreateMessageForSpellAsync(UnanchoredSpell? spell)
@@ -141,7 +141,6 @@ public sealed partial class SpellCoverageReportViewModel : ObservableObject
 
         MessageEditDialogViewModel vm = new(
             blank,
-            currentTier:     SettingsTier.Defaults,
             existingRecords: store.Messages,
             isNew:           true,
             cache:           cache);
