@@ -1001,4 +1001,25 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, CorridorA(5));
         Assert.False(rig.Tracker.PositionIsGuess);
     }
+
+    // A strict anchor ends a guess on disk too: after an `rm` answer puts the map
+    // sure of another room, the save holds no start worked out, and the relog
+    // lands on the known room.
+    [Fact]
+    public void AStrictLocateAfterASavedGuess_LeavesNoWorkedOutStartSaved()
+    {
+        using TrackerWireRig rig = GuessInCorridor(out CharacterProfile profile);
+        rig.Do("e");
+        Save(rig);
+        Assert.NotNull(profile.RecentStepsFrom);
+
+        rig.Position = Gate;
+        rig.Tracker.SetLocated(Gate);
+        Relog(rig, profile);
+
+        AssertLocatedAt(rig, Gate);
+        Assert.False(rig.Tracker.PositionIsGuess);
+        Assert.Equal(Gate, Saved(profile));
+        Assert.Null(profile.RecentStepsFrom);
+    }
 }

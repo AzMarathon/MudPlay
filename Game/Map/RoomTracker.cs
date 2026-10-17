@@ -2351,14 +2351,13 @@ public sealed class RoomTracker
             bool unique = fitting.Count == 1 && fitting[0] == current.Key;
             State.SuspectStrikes = 0;
             ClearPendingAndSteps();
+            // The flag is set before the confirm is raised, so its listeners read it.
+            PositionIsGuess = !unique;
+            if (unique) PersistConfirmedAnchor(current, when);
             SetConfidence(RoomConfidence.Confirmed, when,
                 unique ? "suspect resolved (current room re-confirmed, 1-of-1)" : "suspect resolved (current room re-confirmed)");
-            if (unique)
-            {
-                PersistConfirmedAnchor(current, when);
-                PositionIsGuess = false;
-            }
-            else MarkGuess();
+            // Saved once Confirmed: a guess with no steps saves the room held as the start.
+            if (!unique) PersistSteps();
             return;
         }
 
