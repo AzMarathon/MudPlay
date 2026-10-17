@@ -4,32 +4,26 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pure state-machine coverage for the tier-2 footprint accumulator.
-/// Uses inline delegates instead of a live <c>RoomGraphManager</c> so
-/// each test pins down a single behaviour — narrowing, trap drop, no-exit
-/// drop, a set that never grows, mismatch-to-zero.
-/// </summary>
+// Pure state-machine coverage for the tier-2 footprint accumulator.
+// Uses inline delegates instead of a live RoomGraphManager so
+// each test pins down a single behaviour — narrowing, trap drop, no-exit
+// drop, a set that never grows, mismatch-to-zero.
 public sealed class FootprintMatcherTests
 {
     // ----- helpers ---------------------------------------------------
 
     private static RoomKey K(int map, int room) => new(map, room);
 
-    /// <summary>
-    /// Builds a step-probe delegate from a flat dictionary mapping
-    /// (from, dir) → <see cref="HopOutcome"/>. Anything not in the map
-    /// is treated as <see cref="HopOutcome.NoExit"/>.
-    /// </summary>
+    // Builds a step-probe delegate from a flat dictionary mapping
+    // (from, dir) → HopOutcome. Anything not in the map
+    // is treated as HopOutcome.NoExit.
     private static Func<RoomKey, Direction, HopOutcome> ProbeFrom(
         Dictionary<(RoomKey, Direction), HopOutcome> table)
         => (from, dir) => table.TryGetValue((from, dir), out HopOutcome o) ? o : HopOutcome.NoExit();
 
-    /// <summary>
-    /// Observation predicate that matches when the target's key is one
-    /// of <paramref name="acceptedKeys"/>. Models the "this candidate's
-    /// target room name+exits look like the observation" branch.
-    /// </summary>
+    // Observation predicate that matches when the target's key is one
+    // of acceptedKeys. Models the "this candidate's
+    // target room name+exits look like the observation" branch.
     private static Func<RoomKey, RoomObservation, bool> AcceptOnly(params RoomKey[] acceptedKeys)
         => (target, _) => Array.IndexOf(acceptedKeys, target) >= 0;
 
@@ -274,11 +268,9 @@ public sealed class FootprintMatcherTests
 
     // ----- FilterByNeighbours (look-sweep spatial narrowing) ----------
 
-    /// <summary>
-    /// Two identical-name twins that Step alone can't separate ARE separated
-    /// by a look-sweep: the peeked neighbour in a direction matches only one
-    /// twin's graph-neighbour, dropping the other.
-    /// </summary>
+    // Two identical-name twins that Step alone can't separate ARE separated
+    // by a look-sweep: the peeked neighbour in a direction matches only one
+    // twin's graph-neighbour, dropping the other.
     [Fact]
     public void FilterByNeighbours_breaks_twins_by_peeked_neighbour()
     {
@@ -306,10 +298,8 @@ public sealed class FootprintMatcherTests
         Assert.Equal(0, m.Depth);                 // a look is not a move
     }
 
-    /// <summary>
-    /// A candidate that has no exit in a direction we successfully peeked is
-    /// inconsistent (the real room does have that exit) and is dropped.
-    /// </summary>
+    // A candidate that has no exit in a direction we successfully peeked is
+    // inconsistent (the real room does have that exit) and is dropped.
     [Fact]
     public void FilterByNeighbours_drops_candidate_missing_the_peeked_exit()
     {
@@ -335,11 +325,9 @@ public sealed class FootprintMatcherTests
         Assert.Single(m.Candidates, a);
     }
 
-    /// <summary>
-    /// A trapped arm is unverifiable, so it contributes no constraint — a
-    /// candidate is NOT dropped merely because the peeked direction is a trap
-    /// on it, even when its target wouldn't match.
-    /// </summary>
+    // A trapped arm is unverifiable, so it contributes no constraint — a
+    // candidate is NOT dropped merely because the peeked direction is a trap
+    // on it, even when its target wouldn't match.
     [Fact]
     public void FilterByNeighbours_trapped_arm_is_no_constraint()
     {
@@ -367,10 +355,8 @@ public sealed class FootprintMatcherTests
         Assert.Contains(b, m.Candidates);
     }
 
-    /// <summary>
-    /// An empty peek map (nothing resolved — e.g. every look timed out) is a
-    /// no-op: the candidate set is untouched.
-    /// </summary>
+    // An empty peek map (nothing resolved — e.g. every look timed out) is a
+    // no-op: the candidate set is untouched.
     [Fact]
     public void FilterByNeighbours_empty_peek_is_noop()
     {
@@ -386,11 +372,9 @@ public sealed class FootprintMatcherTests
 
     // ----- StepBlind (dark dead-reckon) -------------------------------
 
-    /// <summary>
-    /// In the dark there's no room to match, so StepBlind hops every
-    /// candidate and keeps its target unconditionally — even when the
-    /// observation predicate would reject all of them.
-    /// </summary>
+    // In the dark there's no room to match, so StepBlind hops every
+    // candidate and keeps its target unconditionally — even when the
+    // observation predicate would reject all of them.
     [Fact]
     public void StepBlind_hops_without_observation_filter()
     {
@@ -417,10 +401,8 @@ public sealed class FootprintMatcherTests
         Assert.False(m.IsExhausted);
     }
 
-    /// <summary>
-    /// StepBlind still drops a candidate the move is structurally impossible
-    /// from (no exit / trap-gated).
-    /// </summary>
+    // StepBlind still drops a candidate the move is structurally impossible
+    // from (no exit / trap-gated).
     [Fact]
     public void StepBlind_drops_no_exit_and_trapped()
     {
@@ -443,10 +425,8 @@ public sealed class FootprintMatcherTests
         Assert.True(m.IsExhausted);
     }
 
-    /// <summary>
-    /// Two candidates that dead-reckon to the same room collapse to one —
-    /// blind movement alone can converge when paths merge.
-    /// </summary>
+    // Two candidates that dead-reckon to the same room collapse to one —
+    // blind movement alone can converge when paths merge.
     [Fact]
     public void StepBlind_converges_when_paths_merge()
     {

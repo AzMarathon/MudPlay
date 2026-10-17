@@ -49,7 +49,7 @@ public sealed class LightShopBuyTests
         h.Buyer.OnInventoryChanged();
         Assert.Equal(new[] { true }, h.Done);
         Assert.True(h.WindowCancelled);
-        Assert.False(h.Buyer.IsBuying);
+        Assert.Null(h.Buyer.Buying);
     }
 
     [Fact]

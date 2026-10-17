@@ -476,7 +476,9 @@ public sealed class RoomTrackingRecoveryWireTests
         }
 
         public void PauseForRecovery(string reason) { }
-        public void ResumeAfterRecovery(RoomKey recoveredAnchor) { }
+        // What the gate resumed the engine at, as the engine sees it.
+        public Action<RoomKey>? Resumed { get; set; }
+        public void ResumeAfterRecovery(RoomKey recoveredAnchor) => Resumed?.Invoke(recoveredAnchor);
         public void AbortFromRecoveryFailure(string detail) => Aborts.Add(detail);
     }
 
@@ -698,7 +700,7 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
         RoomKey? recovered = null;
         bool savedStayed = false;
-        rig.Gate.Recovered += key =>
+        engine.Resumed = key =>
         {
             recovered = key;
             savedStayed = Saved(profile) == Gate && rig.Tracker.State.Confidence == RoomConfidence.Confirmed;

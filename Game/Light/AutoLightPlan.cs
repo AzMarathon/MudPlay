@@ -6,8 +6,9 @@ public enum AutoLightAction
     // Route is lit and any readied light is healthy — do nothing.
     None,
 
-    // Ready a light already in the pack — the engine sends use <LightName>.
-    // No shop trip needed.
+    // A light already in the pack covers the route — no shop trip. Nothing is
+    // readied off the route plan: a light is used one room ahead of the dark or on
+    // the can't-see line.
     Ready,
 
     // Buy BuyCount of LightName (a shop detour), then ready one.

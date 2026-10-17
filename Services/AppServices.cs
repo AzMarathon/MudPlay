@@ -274,9 +274,6 @@ public sealed class AppServices
     // applied at startup, saved on Changed (see the Apply/Persist helpers below).
     public LogDiagnosticState LogDiagnostics { get; } = new();
 
-    // Docking / floating panel framework (single-UserControl reparented).
-    public FloatingPanelHost Panels { get; }
-
     // Per-character top-level window position + size memory. Each
     // window calls WindowLayoutStore.AttachWindow once
     // during construction with a stable id; the store handles
@@ -3028,7 +3025,6 @@ public sealed class AppServices
         Settings.GlobalSettingsChanged += _ => ApplyTerminalColorsFromGlobalSettings();
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
-        Panels = new FloatingPanelHost();
         // Loopback control API. Constructed always, listening only while the
         // Global setting says so — and it follows that setting live, so toggling
         // it opens / closes the socket without a restart. The emulator is fetched
@@ -3659,8 +3655,7 @@ public sealed class AppServices
             bashRestRecovered:             () => BashRestGate(recovered: true),
             log: Log,
             // UI-thread one-shot so the door FSM's response watchdog fires on the
-            // same thread its router-driven handlers run on; keeps Game/Map UI-free
-            // (tests drive result lines synchronously and leave this null).
+            // same thread its router-driven handlers run on; keeps Game/Map UI-free.
             scheduleDelay: (delay, callback) =>
             {
                 var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -3719,10 +3714,6 @@ public sealed class AppServices
         CleanupLogout.SetMasterSwitchCheck(MasterSwitchOff("Cleanup log-off"));
         PromptScanner.RealmLeftPromptObserved += () => CleanupLogout.NoteRealmLeftPrompt();
 
-        // Bridge: load persisted panel layouts on profile load; snapshot back
-        // into the profile DTO just before serialization on save.
-        Profile.ProfileLoaded += p => Panels.ApplyLayouts(p.PanelLayouts);
-
         // PartyManager needs the local character's name so its par-row
         // parser can tag the right row IsSelf=true (par's "Given Family"
         // name is compared against this). The profile name is a label the
@@ -3764,8 +3755,6 @@ public sealed class AppServices
                 Profile.Save();
             }
         };
-        Profile.ProfileClosed += () => Panels.ApplyLayouts(layouts: null);
-        Profile.ProfileSaving += p => p.PanelLayouts = Panels.SnapshotLayouts();
 
         // Bridge: keep the live DisplayConfig in sync with the active BBS.
         // Font size + scrollback are BBS-tier (different BBSes warrant
@@ -4293,7 +4282,7 @@ public sealed class AppServices
         // gate to open (polling the room's open-gate exit, since there's no gate-open
         // line), then move. isGateOpen reads the live open-door directions the room
         // display parses "open gate <dir>" into; scheduleDelay is the same UI-thread
-        // one-shot the door FSM uses (null in tests — they drive lines synchronously).
+        // one-shot the door FSM uses.
         Winch = new Game.Map.WinchManager(
             Router,
             isGateOpen: dir => RoomTracker.State.OpenDoorDirections?.Contains(dir) == true,
@@ -5817,7 +5806,7 @@ public sealed class AppServices
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
-        // RoundDamageTracker's timer-driven RoundCount. That tracker's 5s window is
+        // RoundDamageTracker's timer-driven round counter. That tracker's 5s window is
         // sized for DPS/session stats, not per-cast precision, and can bundle more
         // than one real cast into a single round for a fast caster, under-counting
         // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
@@ -8020,7 +8009,7 @@ public sealed class AppServices
         // arrival shore — on a wall-clock deadline it sizes from the passage's
         // transit-spell rounds. Wire a UI-thread one-shot so OnBoatDeadline runs on
         // the same thread the walker's tracker events do; the injected shape keeps
-        // the Game/Map layer UI-free (tests drive a fake clock instead).
+        // the Game/Map layer UI-free.
         Func<TimeSpan, Action, IDisposable> uiOneShot = (delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -15407,8 +15396,8 @@ public sealed class AppServices
     private bool _autoSearchFlippedForRouteSearch;
 
     // UI bridge to flip the master Auto-Search toggle (the observable that persists +
-    // updates the toolbar); bound by MainWindowViewModel after construction. Null in
-    // headless/test contexts, where the route-search flip is simply a no-op.
+    // updates the toolbar); bound by MainWindowViewModel after construction. Null until
+    // then, when the route-search flip is simply a no-op.
     public Action<bool>? SetAutoSearchEnabled { get; set; }
 
     // Picking the route picker's "Search en route" card turns Auto-Search on for the
@@ -15756,9 +15745,9 @@ public sealed class AppServices
         int obtainable = 0;
         foreach (RouteRequirement req in requirements)
         {
-            // Already satisfied (carried) or an optional shortcut → nothing to source;
-            // don't let it veto the auto-obtain, and never source it.
-            if (req.Carried || req.Optional) continue;
+            // Already carried → nothing to source; don't let it veto the auto-obtain,
+            // and never source it.
+            if (req.Carried) continue;
             if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 or RouteRequirementKind.DoorKey))
                 return false;

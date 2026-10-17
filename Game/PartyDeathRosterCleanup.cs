@@ -70,8 +70,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     // Generous — a par poll is ~5 s and combat can run long.
     public TimeSpan CleanupWindow { get; set; } = TimeSpan.FromMinutes(2);
 
-    // Overrides the wall clock for record/expiry timing.
-    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.Now;
+    private readonly Func<DateTimeOffset> _now;
 
     // given-name → when this uninvited them, for UninvitedForDeath.
     private readonly Dictionary<string, DateTimeOffset> _ownUninvites =
@@ -96,8 +95,10 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         PartyManager manager,
         MovementCoordinator coordinator,
         PartyPoller poller,
-        LogService? log = null)
+        LogService? log = null,
+        Func<DateTimeOffset>? now = null)
     {
+        _now = now ?? (() => DateTimeOffset.Now);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(manager);
@@ -128,7 +129,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (given.Length == 0) return;
         if (ActiveMember(given) is not { } member) return;
 
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         if (!_party.SelfIsLeader && (member.IsLeader || IsOurLeader(given)))
         {
             Note(now, $"{given} (our leader) is dead: the game ends our follow, so no `par` is asked for.");
@@ -154,7 +155,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
     private void OnParReplyRead()
     {
         if (_awaitingPar.Count == 0) return;
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         foreach ((string given, DateTimeOffset seen) in _awaitingPar.ToArray())
         {
             _awaitingPar.Remove(given);
@@ -191,7 +192,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (result.Groups.Count == 0) return;
         string given = GivenNameOf(result.Groups[0]);
         if (!_pendingDeaths.Remove(given)) return;
-        Note(NowProvider(), $"{given} was invited again after their death: their [Invited] slot is no longer uninvited.");
+        Note(_now(), $"{given} was invited again after their death: their [Invited] slot is no longer uninvited.");
     }
 
     // "<Name> started to follow you." — a dead member back in the party, also while
@@ -201,7 +202,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (result.Groups.Count == 0) return;
         string given = GivenNameOf(result.Groups[0]);
         if (!_pendingDeaths.Remove(given)) return;
-        Note(NowProvider(), $"{given} is following again after their death: not uninvited.");
+        Note(_now(), $"{given} is following again after their death: not uninvited.");
     }
 
     // Whether the game's "<Name> has been removed from your followers." answers an
@@ -212,7 +213,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (!_ownUninvites.TryGetValue(given, out DateTimeOffset at)) return false;
         // One echo per uninvite: a later one for the same name is the user's.
         _ownUninvites.Remove(given);
-        return NowProvider() - at <= OwnUninviteEchoWindow;
+        return _now() - at <= OwnUninviteEchoWindow;
     }
 
     private void OnGatesChanged() => TryCleanup();
@@ -236,7 +237,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
         if (e.PropertyName != nameof(PartyMember.IsInvited)) return;
         if (sender is PartyMember { IsInvited: false } row
             && _pendingDeaths.Remove(GivenNameOf(row.Name)))
-            Note(NowProvider(), $"{GivenNameOf(row.Name)} is following again after their death: not uninvited.");
+            Note(_now(), $"{GivenNameOf(row.Name)} is following again after their death: not uninvited.");
         TryCleanup();
     }
 
@@ -247,7 +248,7 @@ public sealed class PartyDeathRosterCleanup : IDisposable
 
     private void TryCleanup()
     {
-        DateTimeOffset now = NowProvider();
+        DateTimeOffset now = _now();
         // A death no `par` reply has answered in the window is given up on.
         foreach ((string given, DateTimeOffset seen) in _awaitingPar.ToArray())
             if (now - seen > CleanupWindow) _awaitingPar.Remove(given);

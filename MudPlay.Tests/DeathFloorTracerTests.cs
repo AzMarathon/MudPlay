@@ -6,12 +6,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="DeathFloorTracer"/> slow-vs-overkill classification and the
-/// death-floor refine writeback. A slow death (gradual bleed to the floor)
-/// refines <see cref="RealmProfile.PlayerDiesAtHp"/>; an overkill (killed from
-/// positive HP, or a big single drop past the floor) is discarded.
-/// </summary>
+// DeathFloorTracer slow-vs-overkill classification and the
+// death-floor refine writeback. A slow death (gradual bleed to the floor)
+// refines RealmProfile.PlayerDiesAtHp; an overkill (killed from
+// positive HP, or a big single drop past the floor) is discarded.
 public sealed class DeathFloorTracerTests
 {
     private sealed class Harness : IDisposable
