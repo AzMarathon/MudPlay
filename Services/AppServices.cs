@@ -4747,11 +4747,10 @@ public sealed class AppServices
         };
         // Boss-timer auto-start. MUST be the FIRST MonsterDied subscriber: it reads
         // the engaged target name (CombatManager.CurrentTarget) live, and a later
-        // subscriber (the roster-resync below) clears it via NoteMonsterDied /
-        // NoteUnattributedDeath. The in-game signal is "engaged a named monster, it
-        // died (awarded exp)"; the room comes from the live tracker (the event
-        // carries neither). Fallback deaths (no candidate identity) are attributed
-        // through the engaged name, so they're covered too.
+        // subscriber (the roster-resync below) clears it via NoteUnattributedDeath.
+        // The in-game signal is "engaged a named monster, it died (awarded exp)"; the
+        // room comes from the live tracker (the event carries neither), and the death
+        // is attributed through the engaged name.
         // DeathAttributionTarget covers an exp-inferred kill, which nulls CurrentTarget
         // before this fires, so "we attacked the boss, then gained exp" still attributes.
         // A room spell's kill names nobody: the engaged target is only the monster the

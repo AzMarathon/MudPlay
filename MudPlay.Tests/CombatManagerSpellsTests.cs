@@ -442,9 +442,10 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
         Assert.Single(h.AllSent, s => s == "blast");
 
-        // The primary dies; the room re-displays with two survivors (still ≥ MinEnemies).
-        // The channel is still hitting them — the re-pick must re-anchor, not re-cast.
-        h.Combat.NoteMonsterDied("giant rat");
+        // The primary dies under the room spell (its exp line, no *Combat Off*); the room
+        // re-displays with two survivors (still ≥ MinEnemies). The channel is still
+        // hitting them — the re-pick must re-anchor, not re-cast.
+        h.Feed("You gain 10 experience.");
         h.Feed("Also here: dark stalker, muckworm.");
         Assert.Single(h.AllSent, s => s == "blast");   // still exactly one blast — no recast
 
@@ -501,7 +502,7 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Also here: giant rat, dark stalker, muckworm.");
         Assert.Single(h.AllSent, s => s == "blast");
 
-        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("You gain 10 experience.");
         h.Feed("Your spell has no effect in this room!");
         h.Feed("Also here: dark stalker, muckworm.");
 
@@ -523,7 +524,7 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
 
         // Down to one survivor (< MinEnemies) → channel over → single-target attack.
-        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("You gain 10 experience.");
         h.Feed("Also here: dark stalker.");
         Assert.Equal("nuke dark stalker", h.LastSent);
     }
@@ -650,33 +651,6 @@ public sealed class CombatManagerSpellsTests
 
         h.FireSettle();                            // window elapsed, no re-display
         Assert.Equal("nuke giant rat", h.LastSent);
-    }
-
-    // Corpse-cast on the arrival-settle path (report paradigm-20260916-141344: nebo at a
-    // dead muckworm). A straggler kill's death line lands INSIDE the settle window — its
-    // roster resync (a forced re-display) is still in flight when the window elapses, so
-    // the accumulated roster can still name the just-killed mob (or a fresh same-named
-    // arrival not yet confirmed in-room). Engaging then re-picks that name and casts at a
-    // target the server rejects a beat later. The settle-elapsed path must defer to the
-    // resync — force the re-display, cast nothing — instead of racing it.
-    [Fact]
-    public void ArrivalSettle_KillLandsInsideWindow_DefersToResync_NoCorpseCast()
-    {
-        using Harness h = new();
-        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo", MinEnemies = 1 };
-        h.AddMonster(1, "muckworm");
-
-        h.Arrive("muckworm");                       // arms the settle hold (no target yet)
-        Assert.Equal(string.Empty, h.LastSent);
-
-        h.Combat.NoteMonsterDied("muckworm");       // a kill's death line lands inside the window
-        int sentBeforeSettle = h.Sent.Count;
-
-        h.FireSettle();                             // window elapsed — a kill happened mid-window
-
-        Assert.DoesNotContain("nebo muckworm", h.AllSent);   // never corpse-cast
-        Assert.Equal(sentBeforeSettle + 1, h.Sent.Count);    // exactly the CR resync went out
-        Assert.Equal(string.Empty, h.LastSent);              // = the bare CR (trimmed to empty)
     }
 
     // Report paradigm-20260927-095328: the loop sent `u`, and before the new room

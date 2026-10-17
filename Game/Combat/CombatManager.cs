@@ -798,15 +798,6 @@ public sealed partial class CombatManager : IDisposable
     // resynced roster (or clears the gate on an empty room).
     private DateTimeOffset _lastDeathAt = DateTimeOffset.MinValue;
 
-    // When a monster death was last detected via a MATCHED DEATH LINE — stamped
-    // only by NoteMonsterDied, NOT by the exp+Off fallback below. A matched death
-    // already handled the kill and re-picked the next survivor, so the same
-    // burst's *Combat Off* must not ALSO trip the exp-inference: doing so drops
-    // the freshly-picked survivor and re-attacks it, double-firing "aa <next>"
-    // right after the first kill (report paradigm-20260812-215511). Distinct from
-    // _lastDeathAt, which the exp-inference itself stamps and so can't self-gate on.
-    private DateTimeOffset _lastMatchedDeathAt = DateTimeOffset.MinValue;
-
     // How long after a detected death a *Combat Off* is treated as the kill's Off
     // rather than a cast interrupt. A death line and its *Combat Off* arrive in the
     // same server burst (milliseconds apart), so this only needs to bridge that gap
@@ -1522,80 +1513,6 @@ public sealed partial class CombatManager : IDisposable
     {
         if (!Fighting()) return;
         if (_classifier.Current is { } live) OnEntitiesObserved(live);
-    }
-
-    // Clears _currentTarget when a monster named deadMonsterName has died and it
-    // shares a name with our current target (either the raw / unflavored case
-    // where two same-name mobs occupy the room, or the flavored case where the
-    // resolved species matches). Without this, the next OnEntitiesObserved sees
-    // another live entity with the same RawName still in the engageable list and
-    // short-circuits ("server still swinging") — so we'd never re-issue `attack`
-    // against the surviving instance, and CombatManager goes silent while the
-    // other rats keep biting.
-    public void NoteMonsterDied(string deadMonsterName)
-    {
-        if (string.IsNullOrEmpty(deadMonsterName)) return;
-
-        // A kill just landed — mark it so the between-round-cast resume treats the
-        // imminent *Combat Off* as the kill's Off, not its own cast's interrupt
-        // (see _lastDeathAt). Stamped regardless of whether this death matches our
-        // target: any death in the room means a re-observe is coming that owns the
-        // re-engage.
-        _lastDeathAt = DateTimeOffset.Now;
-        _lastMatchedDeathAt = DateTimeOffset.Now;   // death LINE matched — gates the exp-inference off
-        _attackSentSinceDeath = false;
-
-        // The guarded priority itself fell — the redirect chase is over. Drop the
-        // memory so no stray guard-retry fires "aa <priority>" at the corpse. Runs
-        // before the _currentTarget guard below because a roster-desync room-clear
-        // may have already nulled _currentTarget while the guard block is still set.
-        if (_guardBlockedTarget is { } blocked &&
-            string.Equals(blocked, deadMonsterName, StringComparison.OrdinalIgnoreCase))
-        {
-            _log?.Combat(LogCategory, $"guard priority '{blocked}' died — clearing guard block");
-            _guardBlockedTarget = null;
-        }
-
-        if (_currentTarget is not { } current) return;
-
-        // Direct RawName match — the unflavored case. Two "giant rat"
-        // entries: `_currentTarget == "giant rat"` and the dead-line
-        // gave us "giant rat". Whichever instance the server was
-        // swinging at is the dead one; the other doesn't auto-engage.
-        if (string.Equals(current, deadMonsterName, StringComparison.OrdinalIgnoreCase))
-        {
-            _log?.Combat(LogCategory,
-                $"target died — clearing _currentTarget='{current}' (raw-name match)");
-            _currentTarget = null;
-            _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
-            _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
-            ClearBackstabResolution();
-            return;
-        }
-
-        // Resolved-name match — the flavored case. _currentTarget is
-        // "angry kobold thief" (RawName); the dead-line resolves to
-        // "kobold thief" (ResolvedName). The classifier's current
-        // observation is the source of truth for the raw → resolved
-        // mapping. Look up the entity matching our RawName and
-        // compare its ResolvedName.
-        if (_classifier.Current is { } obs)
-        {
-            for (int i = 0; i < obs.Entities.Count; i++)
-            {
-                RoomEntity e = obs.Entities[i];
-                if (e.Kind != EntityKind.Monster) continue;
-                if (!string.Equals(e.RawName, current, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!string.Equals(e.ResolvedName, deadMonsterName, StringComparison.OrdinalIgnoreCase)) continue;
-                _log?.Combat(LogCategory,
-                    $"target died — clearing _currentTarget='{current}' (resolved-name match)");
-                _currentTarget = null;
-                _castingSpellTarget = null;   // end spell mode on the kill, mirroring the weapon path — no corpse re-cast
-                _spellChooser.ResetForNewTarget();   // a kill resets the cascade so the next mob (even same-named) reconsiders the normal spell
-                ClearBackstabResolution();
-                return;
-            }
-        }
     }
 
     // Force our combat target to the named monster and engage it this round,
@@ -5037,9 +4954,7 @@ public sealed partial class CombatManager : IDisposable
             _userBreakHoldKillRaced = true;
         _lastExpWasRoomSpellKill = false;
         NoteRoomSpellKill(match);
-        if (_currentTarget is not null
-            && _attackSentSinceDeath
-            && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
+        if (_currentTarget is not null && _attackSentSinceDeath)
         {
             DropTargetForInferredKill(
                 "kill inferred from exp gain (prompt, pre-*Combat Off*) — dropping target so the round's alternate can't corpse-cast");
@@ -5321,8 +5236,7 @@ public sealed partial class CombatManager : IDisposable
             // resumes below).
             bool expExplainsOff = _currentTarget is not null
                 && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
-                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow
-                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow;
+                && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow;
             // Nor is it a kill's when it answers a command (CommandOffProbe): the exp
             // is then an earlier kill's, a room spell's that left this target standing,
             // and the Off is the one our attack on that survivor prints ahead of its

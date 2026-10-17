@@ -676,18 +676,6 @@ public sealed class PlayerDatabase
         return removed;
     }
 
-    // Replace the realm observation layer wholesale.
-    public void ReplaceObservations(IEnumerable<PlayerObservation> rows)
-    {
-        _observations.Clear();
-        foreach (PlayerObservation o in rows)
-        {
-            if (string.IsNullOrEmpty(o.GivenName)) continue;
-            MergeOnLoad(o);
-        }
-        Rebuild();
-    }
-
     // ----- Swap + persistence -------------------------------------------
 
     private void OnSwap()

@@ -49,10 +49,6 @@ public sealed class CombatLineClassifier : IDisposable
     private bool _lastSeenRecorded;
     private (string Text, string Tag)? _pendingLedger;
 
-    // The most recent line's classification (None for non-combat / out-of-window
-    // lines).
-    public CombatLineKind LastKind { get; private set; }
-
     public CombatLineClassifier(MessageRouter router)
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
@@ -67,7 +63,6 @@ public sealed class CombatLineClassifier : IDisposable
         if (line.Text.StartsWith("*Combat Engaged*", StringComparison.Ordinal))
         {
             _inCombatWindow = true;
-            LastKind = CombatLineKind.None;
             Record(line.Text, CombatLineKind.None);
             Seen(line.Text, recorded: true);
             return;
@@ -77,13 +72,11 @@ public sealed class CombatLineClassifier : IDisposable
             Record(line.Text, CombatLineKind.None);   // record before closing the window
             Seen(line.Text, recorded: true);
             _inCombatWindow = false;
-            LastKind = CombatLineKind.None;
             return;
         }
 
         (TerminalColor fg, bool bold) = DominantForeground(line);
         CombatLineKind kind = Classify(line.Text, fg, bold, _inCombatWindow);
-        LastKind = kind;
         string? ledger = TakePendingLedger(line.Text);
         bool recorded = _inCombatWindow || ledger is not null;
         if (recorded) Record(line.Text, kind, ledger);

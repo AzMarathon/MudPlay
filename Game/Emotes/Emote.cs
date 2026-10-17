@@ -8,5 +8,5 @@ public enum EmoteKind { Unicode, Image }
 // One emote: a shortcode mapped to either a Unicode emoji string (Kind=Unicode) or an
 // image resource path (Kind=Image). Shortcode is the bare name without the surrounding
 // colons for a word emote (":lol:" → "lol"), or the literal emoticon (":)" ) for the
-// emoticon set. DisplayName is a friendly label; nothing shows it yet.
-public sealed record Emote(string Shortcode, EmoteKind Kind, string Payload, string DisplayName);
+// emoticon set.
+public sealed record Emote(string Shortcode, EmoteKind Kind, string Payload);

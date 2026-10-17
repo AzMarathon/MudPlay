@@ -835,8 +835,8 @@ public sealed class LoopRunnerTests : IDisposable
     public void ReconcileExpandedSteps_DelayChange_UpdatesStepInPlace_KeepsIndex()
     {
         // A live delay edit on the running-loop rail keeps the command count, so it's
-        // applied in place — the frozen CommandLoopStep is swapped for one carrying the
-        // new delay, without a re-expand and without moving the runner's position.
+        // applied in place — without a re-expand and without moving the runner's
+        // position — and the command waits the new delay the next time it runs.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Loop loop = new("cmd", new[]
@@ -845,18 +845,24 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 2)),
         });
         h.Runner.Start(loop);
-
-        CommandLoopStep before = h.Runner.ExpandedSteps.OfType<CommandLoopStep>().Single();
-        Assert.Equal(500, before.DelayMs);
+        Assert.Contains(h.Sent, b => Encoding.Latin1.GetString(b) == "dep 100\r");
+        Assert.True(h.Runner.CommandDelayRemaining <= TimeSpan.FromMilliseconds(500));
         int indexBefore = h.Runner.CurrentIndex;
 
         loop.Waypoints.First(w => w.Command == "dep 100").DelayMs = 1200;
         h.Runner.ReconcileExpandedSteps();
-
-        CommandLoopStep after = h.Runner.ExpandedSteps.OfType<CommandLoopStep>().Single();
-        Assert.Equal(1200, after.DelayMs);
-        Assert.Equal("dep 100", after.Command);
         Assert.Equal(indexBefore, h.Runner.CurrentIndex);
+
+        // Finish this delay and close a lap (B, then back to A): the command runs again
+        // with the new delay.
+        h.Runner.FireDelayForTests();
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+
+        Assert.Equal(2, h.Sent.Count(b => Encoding.Latin1.GetString(b) == "dep 100\r"));
+        Assert.True(h.Runner.CommandDelayRemaining > TimeSpan.FromMilliseconds(1000));
     }
 
     [Fact]
@@ -864,7 +870,7 @@ public sealed class LoopRunnerTests : IDisposable
     {
         // Adding a command changes the expanded step count, so reconcile can't swap in
         // place mid-flight — it defers a re-expand to the next lap wrap. The new command
-        // step is absent until the lap closes, then present.
+        // isn't sent on this lap's visit to B, and is on the next lap's.
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         Loop loop = new("addcmd", new[]
@@ -873,20 +879,21 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 2)),
         });
         h.Runner.Start(loop);
-        Assert.Empty(h.Runner.ExpandedSteps.OfType<CommandLoopStep>());
 
         loop.Waypoints[1].Command = "smile";
         h.Runner.ReconcileExpandedSteps();
-        Assert.Empty(h.Runner.ExpandedSteps.OfType<CommandLoopStep>());   // deferred, not yet applied
 
-        // Close a lap (observe B then A back to the entry) — the wrap re-expands.
+        // This lap: B then back to A — deferred, so B sends no command yet.
         h.Tracker.NoteRoomObserved(new RoomObservation("B",
             new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.DoesNotContain(h.Sent, b => Encoding.Latin1.GetString(b) == "smile\r");
         h.Tracker.NoteRoomObserved(new RoomObservation("A",
             new HashSet<Direction> { Direction.N }));
 
-        Assert.Contains(h.Runner.ExpandedSteps.OfType<CommandLoopStep>(),
-            s => s.Command == "smile");
+        // The wrap re-expanded the loop: the next visit to B sends it.
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Contains(h.Sent, b => Encoding.Latin1.GetString(b) == "smile\r");
     }
 
     [Fact]

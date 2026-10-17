@@ -421,9 +421,6 @@ public sealed class LoopRunner : IRecoverableEngine
     // Total steps in the rotated circle. 0 when no loop is active.
     public int StepCount => _expandedSteps.Count;
 
-    // Read-only view of the runtime-expanded step sequence. Empty between runs.
-    public IReadOnlyList<LoopStep> ExpandedSteps => _expandedSteps;
-
     // Time elapsed in the current lap. Zero when no loop is running or the first
     // waypoint hasn't been reached. Computed on each read so VM bindings can poll via
     // a periodic tick. A fight, a rest or a recovery pauses the loop mid-lap without
