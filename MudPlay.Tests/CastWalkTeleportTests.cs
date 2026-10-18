@@ -501,6 +501,39 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Null(h.Tracker.LastCastLanding);
     }
 
+    // An engine's step the game never took is out of the recovery gate's walk-back
+    // history too, so a later walk-back doesn't reverse it.
+    [Fact]
+    public void Gate_StepNeverAnswered_LeavesTheWalkBackHistory()
+    {
+        Harness h = NewHarness();
+        EngineRecoveryGate gate = new(h.Graph, h.Tracker);
+        gate.Attach(new IdleEngine());
+        h.Tracker.SetLocated(Antechamber);
+        h.Tracker.NoteMoveSent(Direction.E);
+        gate.NoteEngineStepSent(Direction.E);
+        Assert.Equal(new[] { Direction.E }, gate.ExecutedSinceAnchor);
+
+        h.RunTimers();
+        h.Tracker.NoteRoomObserved(RoomBeforeThePassage());
+
+        Assert.Equal(Antechamber, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Empty(gate.ExecutedSinceAnchor);
+    }
+
+    // An engine that only needs to be attached: nothing here moves it.
+    private sealed class IdleEngine : IRecoverableEngine
+    {
+        public string Name => "Idle";
+        public RoomKey? JourneyOrigin => null;
+        public Direction? PeekNextPlannedDirection() => null;
+        public IReadOnlyList<Direction> PeekPlannedDirections(int count) => Array.Empty<Direction>();
+        public void SendBacktrackMove(Direction direction) { }
+        public void PauseForRecovery(string reason) { }
+        public void ResumeAfterRecovery(RoomKey recoveredAnchor) { }
+        public void AbortFromRecoveryFailure(string detail) { }
+    }
+
     // A step of our own can simply be late: the game queues a command behind an
     // action delay. Its two displays then come after we asked, ahead of the answer.
     // The first is the room passed through like any other (hidden from the

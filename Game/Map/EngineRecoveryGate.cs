@@ -106,7 +106,26 @@ public sealed class EngineRecoveryGate
     // sender binds (per-session, on the UI thread). Null before
     // connect → recovery falls back to the temporal-only footprint.
     private RecoveryLookSweep? _sweep;
-    private readonly Func<TimeSpan, Action, IDisposable>? _lookTimeoutSchedule;
+    private readonly Func<TimeSpan, Action, IDisposable>? _timeoutSchedule;
+
+    // A reverse move chosen while the tracker has yet to read the room display that
+    // led to it (OnRoomObserved runs ahead of the tracker's reconcile). It goes out
+    // once that display is read (RoomTracker.RoomDisplayRead): sent first, it would be
+    // counted in the trail the tracker replays against that display, which then reads
+    // a room one step ahead of where the character stands.
+    private bool _trackerReadingDisplay;
+    private Direction? _reverseAwaitingRead;
+
+    // The reverse move in flight (when the tracker counted it sent), and the wait for
+    // its landing: a move the game never answers in that time ends the walk-back
+    // rather than holding the engine paused for good.
+    private DateTimeOffset? _reverseSentAt;
+    private bool _reverseResent;
+    private IDisposable? _reverseLandingTimer;
+
+    // Well past the slowest documented hop (GAME_MECHANICS "Per-hop movement speed":
+    // ~3.1 s on Paradigm, heavily loaded) with lag on top.
+    public static readonly TimeSpan ReverseLandingTimeout = TimeSpan.FromSeconds(10);
 
     // Combat-clear gate: true while a hostile the combat engine will
     // auto-engage is in the room. Null → no combat gating (no combat
@@ -215,6 +234,10 @@ public sealed class EngineRecoveryGate
     public string Tier3Status => Tier3Active
         ? $"{_tier3Phase} — {_tier3.Candidates.Count} candidates, depth {_tier3.Depth}, "
           + $"{_tier3ReverseSteps}/{Tier3DepthCeiling} reverse moves sent"
+          + (_reverseAwaitingRead is { } held ? $"; reverse {held} held until the map reads the landing"
+              : _reverseSentAt is not null ? $"; reverse {_lastBacktrackReverse} awaiting its landing (up to {ReverseLandingTimeout.TotalSeconds:0} s)"
+              : string.Empty)
+          + (_reverseResent ? "; sent again after a rate-limit drop" : string.Empty)
         : "idle";
 
     // Fires whenever CurrentTier changes. Payload carries previous/new + a reason.
@@ -223,12 +246,13 @@ public sealed class EngineRecoveryGate
     // Fires when tier-3 recovery fails terminally. Caller surfaces the modeless info dialog.
     public event Action<RecoveryFailedEvent>? RecoveryFailed;
 
-    // lookTimeoutSchedule arms the look-sweep's per-look timeout (RecoveryLookSweep);
-    // the default is a one-shot on the UI thread's dispatcher.
+    // timeoutSchedule arms the look-sweep's per-look timeout (RecoveryLookSweep) and
+    // the wait for a reverse move's landing; the default is a one-shot on the UI
+    // thread's dispatcher.
     public EngineRecoveryGate(RoomGraphManager graph, RoomTracker tracker, LogService? log = null,
-        Func<TimeSpan, Action, IDisposable>? lookTimeoutSchedule = null)
+        Func<TimeSpan, Action, IDisposable>? timeoutSchedule = null)
     {
-        _lookTimeoutSchedule = lookTimeoutSchedule;
+        _timeoutSchedule = timeoutSchedule;
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(tracker);
         _graph = graph;
@@ -236,6 +260,7 @@ public sealed class EngineRecoveryGate
         _log = log;
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.MoveUncounted += OnMoveUncounted;
+        _tracker.RoomDisplayRead += OnTrackerReadDisplay;
 
         _tier3 = new FootprintMatcher(
             probeHop: ProbeHop,
@@ -259,7 +284,7 @@ public sealed class EngineRecoveryGate
     public void SetWireSender(Action<byte[]> sender)
     {
         ArgumentNullException.ThrowIfNull(sender);
-        _sweep ??= new RecoveryLookSweep(_log, _lookTimeoutSchedule);
+        _sweep ??= new RecoveryLookSweep(_log, _timeoutSchedule);
         _sweep.SetWireSender(sender);
     }
 
@@ -270,6 +295,7 @@ public sealed class EngineRecoveryGate
     public void OnRoomObserved(RoomObservation obs)
     {
         _shownForLanding = obs;
+        _trackerReadingDisplay = true;
         switch (_tier3Phase)
         {
             case Tier3Phase.AwaitingLanding:
@@ -391,9 +417,24 @@ public sealed class EngineRecoveryGate
     // reverse it, and the forward footprint must not fold it. Only an engine step is
     // in the history, so a typed move, a drag or one of the walk-back's own reverse
     // moves matches nothing here. The engine re-sends a refused step as a new one.
-    private void OnMoveUncounted(PendingMove move)
+    private void OnTrackerReadDisplay()
+    {
+        _trackerReadingDisplay = false;
+        if (_reverseAwaitingRead is not { } held) return;
+        _reverseAwaitingRead = null;
+        if (_engine is null || _tier3Phase != Tier3Phase.AwaitingLanding) return;
+        SendReverse(held);
+    }
+
+    private void OnMoveUncounted(MoveUncountedEvent uncounted)
     {
         if (_engine is null) return;
+        PendingMove move = uncounted.Move;
+        if (_tier3Phase == Tier3Phase.AwaitingLanding && _reverseSentAt == move.SentAt)
+        {
+            OnReverseMoveUncounted(uncounted.RateLimited);
+            return;
+        }
         int at = _executedSinceAnchor.FindLastIndex(s => s.SentAt == move.SentAt);
         if (at < 0) return;
         _executedSinceAnchor.RemoveAt(at);
@@ -935,6 +976,7 @@ public sealed class EngineRecoveryGate
     private void HandleLitLanding(RoomObservation obs)
     {
         if (_engine is null) return;
+        EndReverseWait();
 
         _tier3.Step(_lastBacktrackReverse, obs);
         if (_tier3.IsConverged) { FinishTier3Success(_tier3.Candidates.Single()); return; }
@@ -949,6 +991,7 @@ public sealed class EngineRecoveryGate
     private void HandleDarkLanding()
     {
         if (_engine is null) return;
+        EndReverseWait();
 
         // No combat gating wired → step immediately; otherwise hold
         // until a combat tick with the room clear, then dead-reckon.
@@ -1058,11 +1101,62 @@ public sealed class EngineRecoveryGate
 
         _log?.Log(LogSeverity.Info, LogSource,
             $"Tier3.backtrack: reverse({lastSent})={_lastBacktrackReverse} (reverse move {_tier3ReverseSteps}/{Tier3DepthCeiling}, history remaining={_executedSinceAnchor.Count})");
-        _engine.SendBacktrackMove(_lastBacktrackReverse);
+        _reverseResent = false;
+        if (_trackerReadingDisplay) _reverseAwaitingRead = _lastBacktrackReverse;
+        else SendReverse(_lastBacktrackReverse);
+    }
+
+    private void SendReverse(Direction reverse)
+    {
+        if (_engine is null) return;
+        _reverseLandingTimer?.Dispose();
+        _reverseSentAt = null;
+        _engine.SendBacktrackMove(reverse);
+        if (_tier3Phase != Tier3Phase.AwaitingLanding) return;   // a send that ended the walk-back
+        // Every engine tells the tracker of the move as it sends it.
+        _reverseSentAt = _tracker.LastMoveSentAt;
+        DateTimeOffset? sent = _reverseSentAt;
+        _reverseLandingTimer = (_timeoutSchedule ?? DispatcherTicks.Once)(ReverseLandingTimeout, () =>
+        {
+            if (_tier3Phase != Tier3Phase.AwaitingLanding || _reverseSentAt != sent) return;
+            _log?.Log(LogSeverity.Warn, LogSource,
+                $"Tier3.no-answer: reverse move {_lastBacktrackReverse} got no landing in {ReverseLandingTimeout.TotalSeconds:0} s; ending the walk-back.");
+            EndReverseWait();
+            FailTier3($"reverse move {_lastBacktrackReverse} got no answer in {ReverseLandingTimeout.TotalSeconds:0} s");
+        });
+    }
+
+    // The reverse move in flight never happened. One the typing-rate limiter dropped
+    // never ran, so it goes out once more. One the game refused can't be made from
+    // here: the way back isn't the way the history says (a one-way exit, or we aren't
+    // where the footprint holds), so the walk-back ends the way an exhausted one does.
+    private void OnReverseMoveUncounted(bool rateLimited)
+    {
+        EndReverseWait();
+        if (rateLimited && !_reverseResent)
+        {
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"Tier3.reverse-dropped: reverse move {_lastBacktrackReverse} dropped by the typing-rate limiter; sending it again.");
+            _reverseResent = true;
+            SendReverse(_lastBacktrackReverse);
+            return;
+        }
+        _log?.Log(LogSeverity.Warn, LogSource,
+            $"Tier3.reverse-refused: reverse move {_lastBacktrackReverse} {(rateLimited ? "dropped twice" : "refused")} by the game; ending the walk-back.");
+        FailTier3($"reverse move {_lastBacktrackReverse} {(rateLimited ? "dropped twice by the typing-rate limiter" : "refused by the game")}; the way back can't be retraced");
+    }
+
+    private void EndReverseWait()
+    {
+        _reverseLandingTimer?.Dispose();
+        _reverseLandingTimer = null;
+        _reverseSentAt = null;
     }
 
     private void ResetTier3Orchestration()
     {
+        EndReverseWait();
+        _reverseAwaitingRead = null;
         _tier3Phase = Tier3Phase.Idle;
         _combatClearResume = null;
         _tier3ReverseSteps = 0;

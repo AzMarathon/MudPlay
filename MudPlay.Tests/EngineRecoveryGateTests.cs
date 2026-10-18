@@ -578,7 +578,7 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_InPlaceLookSweep_BreaksTwin_WithoutBacktrack()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
+        var gate = new EngineRecoveryGate(graph, tracker, timeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
         List<string> wire = SweepWire(gate);
 
@@ -660,7 +660,7 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_DarkRoom_SkipsLookSweep_ReverseWalksInstead()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr-dark", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
+        var gate = new EngineRecoveryGate(graph, tracker, timeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
         List<string> wire = SweepWire(gate);
 
@@ -689,7 +689,7 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_CombatGate_HoldsLookSweep_UntilClear()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr-combat", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
+        var gate = new EngineRecoveryGate(graph, tracker, timeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
         List<string> wire = SweepWire(gate);
 

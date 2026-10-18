@@ -359,11 +359,18 @@ public sealed class RoomTracker
     // the like) — raised after the tracker has un-counted it.
     public event Action? MoveBlocked;
 
-    // A move that was sent is un-counted as never made: the game refused it, or its
-    // typing-rate limiter dropped it. Carries the move taken off, and is raised before
-    // the tracker settles back on the room it never left, so the recovery gate drops
-    // the step from its walk-back history before an engine re-sends it.
-    public event Action<PendingMove>? MoveUncounted;
+    // A move that was sent is un-counted as never made: the game refused it, its
+    // typing-rate limiter dropped it, a cast-on-walk step was never taken, or the
+    // connection dropped before it landed. Carries the move taken off, and is raised
+    // before the tracker settles back on the room it never left, so the recovery gate
+    // drops the step from its walk-back history before an engine re-sends it.
+    public event Action<MoveUncountedEvent>? MoveUncounted;
+
+    // A room display has been read: raised at the end of NoteRoomObserved, however it
+    // came out (a peek dropped included). RoomDisplayParser hands each display to its
+    // RoomParsed listeners first, so a listener that sends a move off a display waits
+    // for this, or the tracker reads that display with the new move already counted.
+    public event Action? RoomDisplayRead;
 
     // A sent or dragged move landed in the room it predicted, shown by that room's
     // own display. Proof the character can move, which a consumer holding a stale
@@ -869,6 +876,17 @@ public sealed class RoomTracker
                 "Entered a dark room — no name/exits shown; position inferred from moves, combat from attack lines.");
         IsInDarkRoom = true;
 
+        // The first line after a drop that had a move in flight. A dark line can't
+        // say which room it is, so nothing proves the move sent before the drop
+        // landed: it counts as not taken, as a display of the room it left would
+        // count it (ReconcileAfterReconnect).
+        if (_connectionLostMidMove)
+        {
+            _connectionLostMidMove = false;
+            ForgetMovesLostToTheDrop(when);
+            return;
+        }
+
         if (TakeCastLandingLine(when, "is too dark to show")) return;
 
         // Unsure of the room, the dark line still answers the oldest move in flight:
@@ -1339,6 +1357,26 @@ public sealed class RoomTracker
         if (!_pending.IsEmpty) _connectionLostMidMove = true;
     }
 
+    // A dark-room line was the first thing shown after a drop that had a move in
+    // flight. Sure of the room before, the tracker goes back to the room the move
+    // left, the move un-counted; unsure, the moves are only forgotten.
+    private void ForgetMovesLostToTheDrop(DateTimeOffset when)
+    {
+        bool wasPending = State.Confidence == RoomConfidence.Pending;
+        PendingMove? newest = null;
+        while (_pending.TryDequeue(out PendingMove drained)) newest = drained;
+        EndCastCrossing();
+        _unsureMoves.Clear();
+        _cardinalEchoClaim = null;
+        if (newest is not { } lost) return;
+        DropMostRecentStep();
+        MoveUncounted?.Invoke(new MoveUncountedEvent(lost, RateLimited: false));
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Reconnected into a dark room: move {DescribeMove(lost)} sent before the drop counts as not taken.");
+        if (wasPending)
+            SetConfidence(RoomConfidence.Confirmed, when, "reconnected into a dark room; the move sent before the drop not taken");
+    }
+
     // The first room display after a drop that had a move in flight. The move either
     // landed before the link died or it didn't: whichever of the two rooms the
     // display matches is where we are. When it matches both (an identically-named
@@ -1351,7 +1389,8 @@ public sealed class RoomTracker
         if (_pending.Count == 1 && _pending.TryPeek(out PendingMove head) && source is not null
             && TryResolvePendingExit(source, head, out RoomExit exit))
             target = PredictedLanding(exit);
-        while (_pending.TryDequeue(out _)) { /* drain */ }
+        PendingMove? newest = null;
+        while (_pending.TryDequeue(out PendingMove drained)) newest = drained;
         EndCastCrossing();
         _unsureMoves.Clear();
         _cardinalEchoClaim = null;
@@ -1361,6 +1400,7 @@ public sealed class RoomTracker
         if (atSource && !atTarget)
         {
             DropMostRecentStep();   // the step it logged was never taken
+            if (newest is { } lost) MoveUncounted?.Invoke(new MoveUncountedEvent(lost, RateLimited: false));
             SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop never landed");
             return;
         }
@@ -1383,7 +1423,18 @@ public sealed class RoomTracker
     // this against the expected outcome of any pending move.
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? _now();
+        try
+        {
+            ReadRoomDisplay(observation, whenUtc ?? _now());
+        }
+        finally
+        {
+            RoomDisplayRead?.Invoke();
+        }
+    }
+
+    private void ReadRoomDisplay(RoomObservation observation, DateTimeOffset when)
+    {
 
         if (_suppressObservationUntil is { } until)
         {
@@ -1683,7 +1734,7 @@ public sealed class RoomTracker
         // server refused, so it never happened.
         PendingMove? refused = DropMostRecentPending();
         PendingMove? refusedUnsure = DropNewestUnsureMove("refused");
-        if ((refused ?? refusedUnsure) is { } uncounted) MoveUncounted?.Invoke(uncounted);
+        if ((refused ?? refusedUnsure) is { } uncounted) MoveUncounted?.Invoke(new MoveUncountedEvent(uncounted, RateLimited: false));
 
         if (State.Confidence == RoomConfidence.Pending)
         {
@@ -1734,13 +1785,13 @@ public sealed class RoomTracker
             if (_unsureMoves.Count == 0 || when - _unsureMoves[^1].Move.SentAt > DroppedCommandWindow) return;
             PendingMove? droppedPending = DropMostRecentPending();
             PendingMove? droppedUnsure = DropNewestUnsureMove("dropped by the typing-rate limiter");
-            if ((droppedPending ?? droppedUnsure) is { } uncounted) MoveUncounted?.Invoke(uncounted);
+            if ((droppedPending ?? droppedUnsure) is { } uncounted) MoveUncounted?.Invoke(new MoveUncountedEvent(uncounted, RateLimited: true));
             return;
         }
         if (State.Confidence != RoomConfidence.Pending || _pending.IsEmpty) return;
         if (LastMoveSentAt is not { } sent || when - sent > DroppedCommandWindow) return;
 
-        if (DropMostRecentPending() is { } dropped) MoveUncounted?.Invoke(dropped);
+        if (DropMostRecentPending() is { } dropped) MoveUncounted?.Invoke(new MoveUncountedEvent(dropped, RateLimited: true));
         RoomConfidence target = _pending.IsEmpty ? RoomConfidence.Confirmed : RoomConfidence.Pending;
         SetConfidence(target, when, "command dropped (typing too quickly)");
         _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -2136,7 +2187,8 @@ public sealed class RoomTracker
                     // game never echoed the step: it was never taken. Off the queue
                     // with it, or the tracker waits on it for good.
                     EndCastCrossing();
-                    DropMostRecentPending();
+                    if (DropMostRecentPending() is { } neverTaken)
+                        MoveUncounted?.Invoke(new MoveUncountedEvent(neverTaken, RateLimited: false));
                     _log?.Log(LogSeverity.Info, "RoomTracker",
                         $"Move {moveLabel} through a teleporting exit was never answered, and the room asked for is still '{source.Name}' — un-counting the move.");
                     SetConfidence(RoomConfidence.Confirmed, when, $"move {moveLabel} never taken (the room asked for is the one it was leaving)");
@@ -3630,6 +3682,11 @@ public readonly record struct RoomTransition(
     Room? NewRoom,
     DateTimeOffset At,
     bool Displayed = false);
+
+// Payload of RoomTracker.MoveUncounted: the move taken off, and whether the game's
+// typing-rate limiter dropped it (the command never ran, so sending it again can
+// work) rather than the game refusing it.
+public readonly record struct MoveUncountedEvent(PendingMove Move, bool RateLimited);
 
 // Payload of RoomTracker.NameLearned. Carries the room the tracker just adopted
 // by ExitMask + the verbatim observed name it learned. The main window's

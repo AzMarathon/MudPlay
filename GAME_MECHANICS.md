@@ -4904,7 +4904,10 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
       `EngineRecoveryGate.OnMoveUncounted`, matched by send time). This rests on *Refused ("bonked") moves*
       (a refusal means the move never happened) and on *Movement on the wire — command echo, failure lines,
       and what actually moves you* (a rate-limit drop did not execute). The engine re-sends the step as a new
-      one, so the forward localiser folds that landing as the step instead of dropping its footprint.
+      one, so the forward localiser folds that landing as the step instead of dropping its footprint. A
+      cast-on-walk step the game never took (`ReconcileFromPending`, the room asked for is the one it was
+      leaving) and a step the first display after a reconnect shows never landed (`ReconcileAfterReconnect`)
+      leave it the same way.
     - A flee's steps go into it (`HealthManager.FleeMoveSent` → `NoteEngineStepSent`): a flee is a commanded,
       echoed move (same topic), sent through the engine's `SendBacktrackMove`.
     - The tier-3 walk-back starts where the character stands. With the tracker unsure, it still holds the room
@@ -4912,6 +4915,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
       (`NewestLanding`), as the tier-2 seed does. A landing no room fits exactly (the map lacks an exit it
       shows) is reached by moving the held room's candidates across that step (`FootprintMatcher.StepBlind`);
       only when the step leaves none does it seed from the held room, as before.
+    - **Each reverse move goes out only once the tracker has read the previous one's landing**
+      (`RoomTracker.RoomDisplayRead`; `RoomDisplayParser` hands a display to the gate before the tracker).
+      Sent first, it was counted in the trail `TryReplayRecover` projects against that display, and in rooms
+      that read alike the tracker confirmed a room one step ahead (PR #1096 probe: Paradigm walk-backs that
+      confirmed a wrong room at some point, 1 → 3, back to main's 1 or below with the order fixed).
+    - **A reverse move that never happens doesn't hold the walk-back.** Refused (the *Refused ("bonked")
+      moves* signals), it ends the walk-back the way an exhausted one does (`FailTier3`: the terminal `rm`,
+      `sys st`, then Lost), since the way back isn't the way the history says. Dropped by the typing-rate
+      limiter, it goes out once more. With no answer at all in `EngineRecoveryGate.ReverseLandingTimeout`
+      (10 s, past the slowest hop in *Per-hop movement speed*), the walk-back ends the same way. Client policy
+      (the follow-up PR, 2026-10-17).
   - **Client policy** *(user, 2026-10-17)*: a room the tier-3 walk-back settles on is a guess too.
     `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`. The walker and the loop runner
     resume from the key either way, and the bug report's *Recovery anchor* is the gate's own walk-back anchor.
@@ -4934,6 +4948,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
       fits it (`ReconcileFromSuspect`): in rooms that read alike it fits the held room as well as the one the
       move went to. Before the follow-up PR (2026-10-17) such a display re-confirmed the held room, a room
       behind the character, and that made most of the wrong-room ends in PR #1091's map probe.
+      - **Client policy** *(the client's own design in PR #1096, 2026-10-17; not a user ruling)*: a wrong room
+        is worse than an unresolved one. In the probe's walks with a command the game answers with only a
+        prompt, or a move answered by an uncatalogued line, up to 30 fewer walks of 400 end in the right room
+        than on main, and end unresolved instead; across all 56 passive cells, walks that end in a wrong room
+        fall from 214 to 39 and walks that confirm a wrong room at some step from 1,235 to 389.
     - **A character loaded with no saved room, or one not in the active game data, holds no room**
       (`Hydrate` → `ForgetPosition`), so its first save can't write the last character's room as its own.
       (Before 2026-10-17 the tracker kept the room it held for the character before.)
@@ -4975,6 +4994,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - The tracker keeps position by projecting the sent direction onto the current room's graph edge (`RoomTracker.NoteDarkRoomEntered`): when the pending move resolves to a known neighbour it advances there; when the edge is unmapped it holds the last position (stays Pending) rather than guessing.
+- **Client policy** *(user, 2026-10-17)*: a dark line that is the first thing shown after a dropped connection that had a move in flight doesn't advance the tracker. A dark line can't say which room it is, so the move sent before the drop counts as not taken, as a display of the room it left would count it (`ForgetMovesLostToTheDrop`, beside `ReconcileAfterReconnect`); it leaves the walk-back history too (*Nav-recovery authoritative locate (`rm` / `sys st`)*).
 
 ### Moving while blind
 *Status: CONFIRMED (capture 2026-07-11)*
