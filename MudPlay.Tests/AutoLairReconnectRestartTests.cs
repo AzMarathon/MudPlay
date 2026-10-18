@@ -201,8 +201,8 @@ public sealed class AutoLairReconnectRestartTests
 
     // A lair entered before the drop keeps its timer through the restart, a nightly
     // cleanup between the two included: the lair clock runs on wall time, and the run
-    // is the same one. Paradigm's cleanup doesn't refill the lairs (user, 2026-10-17);
-    // on Stock nothing seen in the game module says it does.
+    // is the same one. On neither realm does the cleanup refill the lairs (user,
+    // 2026-10-17).
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
