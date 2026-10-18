@@ -386,7 +386,8 @@ public sealed class AutoLairManager : IDisposable
     public bool RunStartedByUser { get; private set; }
 
     // keepLairTimers: the restart after a reconnect is the same run, and the lair
-    // timers it kept are wall-clock, so they still hold; every other start treats
+    // timers it kept are wall-clock, so they still hold, through the board's nightly
+    // cleanup too (GAME_MECHANICS "Lair respawn timers"); every other start treats
     // each marked lair as ready.
     private bool StartRun(string? label, bool keepLairTimers)
     {
@@ -469,11 +470,6 @@ public sealed class AutoLairManager : IDisposable
     private readonly ReconnectRestart<LairRun> _restart;
     private readonly WirePromptScanner? _promptScanner;
 
-    // The game restarted while the link was down (a nightly cleanup): every lair was
-    // filled and its last-kill stamp cleared (GAME_MECHANICS "Lair respawn timers"),
-    // so the run's timers no longer hold.
-    private bool _gameRestartedSinceDrop;
-
     private static void PostToUiThread(Action action) => Dispatcher.UIThread.Post(action);
 
     private static string Describe(LairRun run) =>
@@ -512,25 +508,14 @@ public sealed class AutoLairManager : IDisposable
     // Stop does, and restarted from the room the reconnect shows (ReconnectRestart).
     // A pause the user had on it is kept as the loop's is, on the user gate, so a
     // Resume pressed during the outage counts.
-    //
-    // gameRestarting: the drop is the board's nightly cleanup (its warning was seen).
-    public void NotifyDisconnected(bool gameRestarting = false)
+    public void NotifyDisconnected()
     {
-        _gameRestartedSinceDrop = gameRestarting;
         bool paused = IsPaused;
         _restart.NoteDisconnected(IsActive ? new LairRun(LastRunLairName, RunStartedByUser) : null, () =>
         {
             Stop("disconnected — will resume on reconnect", willResume: true);
             if (paused) _coordinator?.AssertGate(MovementCoordinator.UserGate);
         });
-    }
-
-    // The board was found in its cleanup on the way back in: the game restarts.
-    public void NoteGameRestarted()
-    {
-        if (_restart.Pending is null || _gameRestartedSinceDrop) return;
-        _gameRestartedSinceDrop = true;
-        _log?.Info("AutoLair", "reconnect: the game restarted while the link was down; the restarted run's lair timers start afresh");
     }
 
     // A run an errand stopped (a bank run's light buy) when the connection dropped.
@@ -553,9 +538,7 @@ public sealed class AutoLairManager : IDisposable
     private bool RestartAfterReconnect(LairRun run)
     {
         bool paused = _coordinator?.IsGateAsserted(MovementCoordinator.UserGate) == true;
-        bool keepTimers = !_gameRestartedSinceDrop;
-        _gameRestartedSinceDrop = false;
-        if (!StartRun(run.Label, keepLairTimers: keepTimers))
+        if (!StartRun(run.Label, keepLairTimers: true))
         {
             _log?.Warn("AutoLair", $"reconnect: {Describe(run)} could not be restarted");
             return false;

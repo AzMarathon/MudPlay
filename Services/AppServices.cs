@@ -9456,9 +9456,6 @@ public sealed class AppServices
         // the terminal re-enters it.
         LoopRunner.SetReconnectNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
         AutoLair.SetReconnectNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
-        // The board found in its nightly cleanup on the way back in: the game restarts,
-        // and the lairs with it.
-        Cleanup.CleanupModeDetected += () => AutoLair.NoteGameRestarted();
         Walker.Event += e =>
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;

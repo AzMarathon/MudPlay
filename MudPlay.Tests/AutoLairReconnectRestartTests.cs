@@ -3,7 +3,6 @@ using System.Linq;
 using MudPlay.Game;
 using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
-using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -57,8 +56,6 @@ public sealed class AutoLairReconnectRestartTests
         public AutoLairManager Lair { get; }
         public LoopRunner Runner { get; }
         public MovementController Controller { get; }
-        // The board's nightly-cleanup watcher, read at the drop as MainWindowViewModel reads it.
-        public CleanupWarningWatcher Cleanup { get; } = new();
         // The terminal notices the restarts give.
         public List<string> Notices { get; } = new();
         private readonly List<IDisposable> _dispose = new();
@@ -84,7 +81,6 @@ public sealed class AutoLairReconnectRestartTests
                 : Rig.Walker.State != WalkState.Idle ? ("a walk", Rig.Walker.StartedForUser) : null);
             Lair.SetReconnectNotice(Notices.Add);
             Runner.SetReconnectNotice(Notices.Add);
-            Cleanup.CleanupModeDetected += Lair.NoteGameRestarted;
             ParadigmPositionResolver resolver = new(Rig.Router, Rig.Tracker, Rig.Gate, Rig.Cache, Rig.Log, schedule: Ticks.Arm);
             resolver.SetWireSender(Rig.Send);
             Rig.Gate.TryResyncOnce = resolver.RequestResyncOnce;
@@ -117,7 +113,7 @@ public sealed class AutoLairReconnectRestartTests
         {
             Reform?.NoteDisconnected();
             Runner.NotifyDisconnected();
-            Lair.NotifyDisconnected(gameRestarting: Cleanup.Latest is not null);
+            Lair.NotifyDisconnected();
             Rig.Tracker.NoteConnectionLost();
             Rig.DropLink();
         }
@@ -125,7 +121,6 @@ public sealed class AutoLairReconnectRestartTests
         // Back in the game: the realm shows the room `at` and its prompt, in one chunk.
         public void Reconnect(RoomKey at)
         {
-            Cleanup.Reset();
             Reform?.Arm();
             Rig.Position = at;
             Rig.ShowRoom();
@@ -204,12 +199,16 @@ public sealed class AutoLairReconnectRestartTests
         Assert.Equal(Yard, w.Rig.Believed);
     }
 
-    // A lair entered before the drop keeps its timer through the restart: the lair
-    // clock runs on wall time, and the run is the same one.
-    [Fact]
-    public void LairTimersOfTheRun_SurviveTheRestart()
+    // A lair entered before the drop keeps its timer through the restart, a nightly
+    // cleanup between the two included: the lair clock runs on wall time, and the run
+    // is the same one. Paradigm's cleanup doesn't refill the lairs (user, 2026-10-17);
+    // on Stock nothing seen in the game module says it does.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LairTimersOfTheRun_SurviveTheRestart_ThroughANightlyCleanup(bool paradigm)
     {
-        using World w = new(Yard);
+        using World w = new(Yard, paradigm);
         w.Start();
         Assert.Equal(Den, w.Lair.CurrentTarget);
         w.Ticks.RunAll();                                         // the entry is due: step in
@@ -217,6 +216,7 @@ public sealed class AutoLairReconnectRestartTests
         Assert.Equal(Den, w.Rig.Believed);
         DateTimeOffset? denReady = w.Timers.NextReadyAt(Den, RespawnSeconds);
         Assert.NotNull(denReady);
+        w.Rig.Show("The system is shutting down in 2 minutes for maintenance.");
 
         w.Drop();
         w.Reconnect(Yard);
@@ -373,43 +373,6 @@ public sealed class AutoLairReconnectRestartTests
         Assert.True(w.Lair.IsActive);
         Assert.False(w.Lair.IsPaused);
         Assert.Equal(new[] { "n" }, w.SentSince(mark));
-    }
-
-    // After the board's nightly cleanup the game restarted and filled every lair:
-    // the restarted run's timers start afresh, so Den is due again at once.
-    [Fact]
-    public void AfterTheNightlyCleanup_TheLairTimersStartAfresh()
-    {
-        using World w = new(Yard);
-        w.Start();
-        w.Ticks.RunAll();                                         // the entry is due: step in
-        w.Rig.Pump(limit: 1);
-        Assert.NotNull(w.Timers.NextReadyAt(Den, RespawnSeconds));
-        w.Cleanup.Append(System.Text.Encoding.Latin1.GetBytes("The system is shutting down in 2 minutes for maintenance."));
-
-        w.Drop();
-        w.Reconnect(Yard);
-
-        Assert.True(w.Lair.IsActive);
-        Assert.Null(w.Timers.NextReadyAt(Den, RespawnSeconds));
-        Assert.Equal(Den, w.Lair.CurrentTarget);
-    }
-
-    // The same when the board is found in its cleanup on the way back in.
-    [Fact]
-    public void FoundInTheCleanupOnTheWayBackIn_TheLairTimersStartAfresh()
-    {
-        using World w = new(Yard);
-        w.Start();
-        w.Ticks.RunAll();
-        w.Rig.Pump(limit: 1);
-        w.Drop();
-        w.Cleanup.Append(System.Text.Encoding.Latin1.GetBytes("Sorry, this system is not available at the moment, please try again later."));
-
-        w.Reconnect(Yard);
-
-        Assert.Null(w.Timers.NextReadyAt(Den, RespawnSeconds));
-        Assert.Equal(Den, w.Lair.CurrentTarget);
     }
 
     // ----- a run started while the restart is still owed -----------------------------
