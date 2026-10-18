@@ -3597,6 +3597,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // redisplays. Resumes itself on the first in-game prompt after
                 // reconnect (see LoopRunner.NotifyDisconnected).
                 AppServices.Current.LoopRunner.NotifyDisconnected();
+                // An Auto-Lair run the same way: stopped now, restarted from the room
+                // the reconnect shows (AutoLairManager.NotifyDisconnected).
+                AppServices.Current.AutoLair.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
                 // A Stock spill sweep would time out stop after stop against the dead

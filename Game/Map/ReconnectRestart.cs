@@ -111,8 +111,15 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // the start go (the Default task at a login, as it always waited).
     public bool WaitForAnyRoom { get; set; }
 
-    // A terminal notice, for a start made from a room the map isn't sure of or one
-    // not made at all.
+    // A walk the client started by itself that is going, as a notice names it, or
+    // null: the start waits for it to end. Unset: none looked at.
+    public Func<string?>? WaitFor { get; set; }
+
+    // The walk the start is waiting behind, or null.
+    public string? WaitingFor { get; private set; }
+
+    // A terminal notice, for a start made from a room the map isn't sure of, one not
+    // made at all, one another run took the place of, and one waiting behind a walk.
     public Action<string>? Notice { get; set; }
 
     // The first game prompt came with the switch off: the start is owed, and
@@ -175,6 +182,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         Pending = null;
         HeldForMasterSwitch = false;
         AwaitsAnyRoom = false;
+        WaitingFor = null;
         ForgetRoomWait();
     }
 
@@ -183,8 +191,19 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // waiting for the first prompt is left as it always was.
     public void DropHeld(string why)
     {
-        if (!HeldForMasterSwitch && !AwaitsRoom && !AwaitsAnyRoom) return;
+        if (!HeldForMasterSwitch && !AwaitsRoom && !AwaitsAnyRoom && WaitingFor is null) return;
         _log?.Info(_owner, $"{_occasion}: {(Pending is { } p ? _describe(p) : "(nothing)")} will not be started ({why})");
+        Clear();
+    }
+
+    // Another run started while the start is owed: a loop or an Auto-Lair run,
+    // whoever started it, or a walk the user started (MovementController says which).
+    // That run is the one going now; started after it, this one would take its place.
+    public void SupersededBy(string by)
+    {
+        if (Pending is not { } run) return;
+        _log?.Info(_owner, $"{_occasion}: {_describe(run)} will not be started: {by} was started");
+        Notice?.Invoke($"[{Capitalised(_describe(run))} not restarted after the {_occasion}: {by} was started]");
         Clear();
     }
 
@@ -230,6 +249,19 @@ public sealed class ReconnectRestart<TRun> where TRun : class
             Clear();
             return;
         }
+        // A walk the client started by itself (an errand, a flee) goes on; the start
+        // waits for it, and the next prompt asks again.
+        if (WaitFor?.Invoke() is { } walk)
+        {
+            if (WaitingFor != walk)
+            {
+                _log?.Info(_owner, $"{_occasion}: {_describe(run)} waits for {walk} to end");
+                Notice?.Invoke($"[{Capitalised(_describe(run))} restarts after {walk} ends]");
+            }
+            WaitingFor = walk;
+            return;
+        }
+        WaitingFor = null;
         if (MasterSwitchOff?.Invoke() == true)
         {
             if (!KeepForMasterSwitch)

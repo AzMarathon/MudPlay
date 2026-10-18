@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Avalonia.Threading;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
@@ -214,7 +215,10 @@ public sealed class AutoLairManager : IDisposable
         LairTimerStore timers,
         LogService? log = null,
         MovementCoordinator? coordinator = null,
-        Func<TimeSpan, Action, IDisposable>? schedule = null)
+        Func<TimeSpan, Action, IDisposable>? schedule = null,
+        WirePromptScanner? promptScanner = null,
+        Action<Action>? postToUi = null,
+        EngineRecoveryGate? recovery = null)
     {
         ArgumentNullException.ThrowIfNull(walker);
         _schedule = schedule ?? DispatcherTicks.Once;
@@ -233,6 +237,13 @@ public sealed class AutoLairManager : IDisposable
         _walker.Event += OnWalkerEvent;
         _tracker.StateChanged += OnTrackerTransition;
         if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
+        _restart = new ReconnectRestart<LairRun>("AutoLair", "reconnect", tracker, coordinator, recovery, log,
+            postToUi ?? PostToUiThread, _schedule,
+            describe: Describe,
+            runningNow: () => IsActive ? "Auto-Lair" : null,
+            start: RestartAfterReconnect);
+        _promptScanner = promptScanner;
+        if (_promptScanner is not null) _promptScanner.PromptObserved += OnPromptObserved;
     }
 
     public void Dispose()
@@ -244,6 +255,8 @@ public sealed class AutoLairManager : IDisposable
         _walker.Event -= OnWalkerEvent;
         _tracker.StateChanged -= OnTrackerTransition;
         if (_coordinator is not null) _coordinator.GatesChanged -= OnGatesChanged;
+        if (_promptScanner is not null) _promptScanner.PromptObserved -= OnPromptObserved;
+        _restart.Detach();
     }
 
     // ----- marker CRUD ---------------------------------------------
@@ -359,7 +372,13 @@ public sealed class AutoLairManager : IDisposable
     // descriptor for a coord-list run). A label-less call — a resume of the same
     // run from Trainer / comeback paths — keeps the prior name but re-stamps the
     // time so the last-run ordering stays fresh.
-    public bool Start(string? label = null)
+    public bool Start(string? label = null) => StartRun(label, keepLairTimers: false);
+
+    // keepLairTimers: the restart after a reconnect is the same run, and the lair
+    // timers it kept are wall-clock, so they still hold, through the board's nightly
+    // cleanup too (GAME_MECHANICS "Lair respawn timers"); every other start treats
+    // each marked lair as ready.
+    private bool StartRun(string? label, bool keepLairTimers)
     {
         if (IsActive) return true;
         StoppedForResume = false;
@@ -383,7 +402,7 @@ public sealed class AutoLairManager : IDisposable
         // respawn timers should only tick from the moment the
         // scheduler ENTERS each lair as part of this run, not from
         // some wall-clock anchor the player set incidentally.
-        _timers.ResetArrivalsFor(_markers.Keys);
+        if (!keepLairTimers) _timers.ResetArrivalsFor(_markers.Keys);
         _abandonedDoors.Clear();
         _abandonedDoorsVersion++;
         _lairsLeftOut.Clear();
@@ -427,6 +446,98 @@ public sealed class AutoLairManager : IDisposable
         _log?.Info("AutoLair", $"stop: {reason}");
 
         if (_walker.State != WalkState.Idle) _walker.Stop("auto-lair stop");
+        _restart.EndReformHold("the Auto-Lair run was stopped");
+    }
+
+    // ----- restart after a reconnect -----------------------------------
+
+    // The run a dropped link cut off: its setup name. The marks and their overrides
+    // stay with the manager through the stop, and the restart runs the ones held then.
+    private sealed record LairRun(string? Label);
+
+    private readonly ReconnectRestart<LairRun> _restart;
+    private readonly WirePromptScanner? _promptScanner;
+
+    private static void PostToUiThread(Action action) => Dispatcher.UIThread.Post(action);
+
+    private static string Describe(LairRun run) =>
+        run.Label is { Length: > 0 } label ? $"Auto-Lair '{label}'" : "Auto-Lair";
+
+    // True while the master switch (Auto-All) is off: the restart waits for it.
+    public Func<bool>? MasterSwitchOff
+    {
+        get => _restart.MasterSwitchOff;
+        set => _restart.MasterSwitchOff = value;
+    }
+
+    // PartyReformCoordinator.PendingReform: a leader's restarted run waits for the
+    // reform to see the room.
+    public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom) => _restart.SetReformProbe(reformAwaitsRoom);
+
+    // Another run started while the restart is owed (MovementController).
+    public void SupersedeReconnectResume(string by) => _restart.SupersededBy(by);
+
+    // A walk the client started by itself, going while the restart is owed: the
+    // restart waits for it (MovementController).
+    public void SetAutomaticWalkProbe(Func<string?> automaticWalk) => _restart.WaitFor = automaticWalk;
+
+    public string? ReconnectResumeWaitsFor => _restart.WaitingFor;
+
+    // The terminal notice for a restart made from a room the map isn't sure of, or
+    // not made at all.
+    public void SetReconnectNotice(Action<string> notice) => _restart.Notice = notice;
+
+    // For the bug report and the held-start notices.
+    public string? PendingReconnectResume => _restart.Pending is { } run ? Describe(run) : null;
+    public bool ReconnectResumeHeldForMasterSwitch => _restart.HeldForMasterSwitch;
+    public bool ReconnectResumeAwaitsRoom => _restart.AwaitsRoom;
+    public bool ReconnectResumeLocating => _restart.Locating;
+    public bool ReconnectResumeHeldForReform => _restart.HeldForReform;
+
+    // The link dropped. A run going then has no way to know: its walk would step
+    // onto the dead link and its timers would go on deciding (an engagement called
+    // over, a lair called empty) through the outage, and the reconnect's first room
+    // display would be read against a leg planned before it. Stopped cleanly, as a
+    // Stop does, and restarted from the room the reconnect shows (ReconnectRestart).
+    // A pause the user had on it is kept as the loop's is, on the user gate, so a
+    // Resume pressed during the outage counts.
+    public void NotifyDisconnected()
+    {
+        bool paused = IsPaused;
+        _restart.NoteDisconnected(IsActive ? new LairRun(LastRunLairName) : null, () =>
+        {
+            Stop("disconnected — will resume on reconnect", willResume: true);
+            if (paused) _coordinator?.AssertGate(MovementCoordinator.UserGate);
+        });
+    }
+
+    // A run an errand stopped (a bank run's light buy) when the connection dropped.
+    public void ResumeOnReconnect(string why) => _restart.SetAside(new LairRun(LastRunLairName), why);
+
+    // Reset States, a profile swap or a change of game data.
+    public void ClearPendingReconnectResume() => _restart.Clear();
+
+    // A Stop, or another character loaded, while the restart waits in the game.
+    public void DropHeldReconnectResume(string why) => _restart.DropHeld(why);
+
+    public void ResumeAfterMasterSwitch() => _restart.ResumeAfterMasterSwitch();
+
+    private void OnPromptObserved(PromptObservation _) => _restart.OnPrompt();
+
+    // The same run again: ActiveChanged(true) goes out as for any start, so what a
+    // start sets up (the base-modes settle, the equipment set for the run) is set up
+    // again, as for a loop's restart. Paused if the user gate is up now: the user
+    // had it paused at the drop and didn't Resume since.
+    private bool RestartAfterReconnect(LairRun run)
+    {
+        bool paused = _coordinator?.IsGateAsserted(MovementCoordinator.UserGate) == true;
+        if (!StartRun(run.Label, keepLairTimers: true))
+        {
+            _log?.Warn("AutoLair", $"reconnect: {Describe(run)} could not be restarted");
+            return false;
+        }
+        if (paused) Pause();
+        return true;
     }
 
     // Suspend scheduling without tearing down state. All timers stop;

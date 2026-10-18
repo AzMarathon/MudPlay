@@ -575,13 +575,12 @@ public sealed class AutoDepositManager : IDisposable
     // The connection dropped while a light was being bought. The buy's window would
     // close in the next session and read as a shop that didn't sell, so it is let go
     // unrecorded, and the reroute ends here: a walk back now would step on the dead
-    // link from the shop. A loop it came off is handed to LoopRunner's own restart
-    // after a reconnect (LoopRunner.ResumeOnReconnect), as a loop running at the drop
-    // is, with the guards that has (the master switch, a party reform): it restarts on
-    // the reconnect's first prompt, its first step planned from the room that prompt's
-    // display shows, and its own planning takes up any light still wanted. Not when the user's Stop
-    // held the trip (the user gate is up): that stays a stop. An Auto-Lair run has no
-    // such restart and stays stopped.
+    // link from the shop. A loop or an Auto-Lair run it came off is handed to that
+    // engine's own restart after a reconnect (ResumeOnReconnect), as a run going at
+    // the drop is, with the guards that has (the master switch, a party reform): it
+    // restarts on the reconnect's first prompt, planned from the room that prompt's
+    // display shows, and its own planning takes up any light still wanted. Not when
+    // the user's Stop held the trip (the user gate is up): that stays a stop.
     public void NoteDisconnected()
     {
         if (_phase != DepositPhase.BuyingLight) return;
@@ -596,7 +595,7 @@ public sealed class AutoDepositManager : IDisposable
         else if (resume.Kind == DetourResumeKind.Loop && resume.Loop is { } loop)
             _loopRunner.ResumeOnReconnect(loop, "a light buy the connection cut off");
         else if (resume.Kind == DetourResumeKind.Lair)
-            _log?.Info(LogCategory, "Auto-Lair stays stopped after the drop — start it again once back");
+            _autoLair.ResumeOnReconnect("a light buy the connection cut off");
     }
 
     private void OnWalkEvent(WalkEvent e)

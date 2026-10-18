@@ -3132,6 +3132,15 @@ public sealed class LoopRunner : IRecoverableEngine
     // A loop an errand stopped (a bank run's light buy) when the connection dropped.
     public void ResumeOnReconnect(Loop loop, string why) => _restart.SetAside(loop, why);
 
+    // Another run started while the restart is owed (MovementController).
+    public void SupersedeReconnectResume(string by) => _restart.SupersededBy(by);
+
+    // A walk the client started by itself, going while the restart is owed: the
+    // restart waits for it (MovementController).
+    public void SetAutomaticWalkProbe(Func<string?> automaticWalk) => _restart.WaitFor = automaticWalk;
+
+    public string? ReconnectResumeWaitsFor => _restart.WaitingFor;
+
     public void ClearPendingReconnectResume() => _restart.Clear();
 
     public void DropHeldReconnectResume(string why) => _restart.DropHeld(why);

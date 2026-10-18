@@ -2073,17 +2073,14 @@ public static class BugReportBuilder
         // game once the room is known, held until the party reform has seen the room
         // when one is pending: a "walked off without the party after a relog" or
         // "stepped out of the wrong room" report needs which it was.
-        Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
-            ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
-                ? $"'{pendingLoop}' — when the master switch is back on"
-                : svc.LoopRunner.ReconnectResumeLocating
-                    ? $"'{pendingLoop}' — asked the game where we are (rm / sys st), restarts on its answer"
-                : svc.LoopRunner.ReconnectResumeAwaitsRoom
-                    ? $"'{pendingLoop}' — once the room is known (next prompt or a confirmed room)"
-                    : $"'{pendingLoop}' — on the next in-game prompt, once its room display is read"
-            : svc.LoopRunner.ReconnectResumeHeldForReform
-                ? "restarted — held until the party reform has seen the room"
-                : "(none pending)");
+        Kv(sb, "Loop restart after reconnect", DescribeReconnectRestart(
+            svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop ? $"'{pendingLoop}'" : null,
+            svc.LoopRunner.ReconnectResumeHeldForMasterSwitch, svc.LoopRunner.ReconnectResumeLocating,
+            svc.LoopRunner.ReconnectResumeAwaitsRoom, svc.LoopRunner.ReconnectResumeWaitsFor, svc.LoopRunner.ReconnectResumeHeldForReform));
+        Kv(sb, "Auto-Lair restart after reconnect", DescribeReconnectRestart(
+            svc.AutoLair.PendingReconnectResume,
+            svc.AutoLair.ReconnectResumeHeldForMasterSwitch, svc.AutoLair.ReconnectResumeLocating,
+            svc.AutoLair.ReconnectResumeAwaitsRoom, svc.AutoLair.ReconnectResumeWaitsFor, svc.AutoLair.ReconnectResumeHeldForReform));
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
@@ -3361,4 +3358,15 @@ public static class BugReportBuilder
         try { return read(); }
         catch { return fallback; }
     }
+
+    // A run waiting to restart after a reconnect (pending: how it is named, or null),
+    // and what it waits on.
+    private static string DescribeReconnectRestart(string? pending, bool heldForSwitch, bool locating, bool awaitsRoom,
+        string? waitsFor, bool heldForReform) => pending is not null
+        ? waitsFor is not null ? $"{pending} — waiting for {waitsFor} (a walk the client started) to end"
+            : heldForSwitch ? $"{pending} — when the master switch is back on"
+            : locating ? $"{pending} — asked the game where we are (rm / sys st), restarts on its answer"
+            : awaitsRoom ? $"{pending} — once the room is known (next prompt or a confirmed room)"
+            : $"{pending} — on the next in-game prompt, once its room display is read"
+        : heldForReform ? "restarted — held until the party reform has seen the room" : "(none pending)";
 }

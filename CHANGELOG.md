@@ -1,5 +1,11 @@
 # Version history
 
+## 3.184.21
+
+- Auto-Lair cut off by a dropped connection restarts once you're back, from the room the reconnect shows, as a loop does
+- A light buy cut off by a drop hands Auto-Lair to that restart instead of leaving it stopped
+- A loop or Auto-Lair run started meanwhile, or a walk you start, takes the place of a restart still owed; a walk the client starts makes it wait
+
 ## 3.184.19
 
 - A loop restarted after a reconnect, and the Default task at a login, plan from the room the game shows, not the room before
