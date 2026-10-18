@@ -20,6 +20,9 @@ public sealed class ItemOverrideSaveTests : IDisposable
     private readonly string _set = "item-save-" + Path.GetRandomFileName();
     private readonly string _bbs = "item-save-" + Path.GetRandomFileName();
     private readonly SettingsResolver _resolver;
+    private readonly GameDataCache _cache;
+    private readonly BbsProfileStore _boards;
+    private readonly ProfileService _profile;
 
     public ItemOverrideSaveTests()
     {
@@ -27,15 +30,15 @@ public sealed class ItemOverrideSaveTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, _set));
         File.WriteAllText(Path.Combine(_root, _set, "Items.json"),
             """[{ "Number": 101, "Name": "large shield", "Encum": 10, "ItemType": 2 }]""");
-        GameDataCache cache = new(_root);
-        cache.SwitchSet(_set);
+        _cache = new GameDataCache(_root);
+        _cache.SwitchSet(_set);
 
-        BbsProfileStore boards = new();
-        boards.Save(new BbsProfile { Name = _bbs, Host = "h", Realms = { new RealmProfile { Name = "home" } } });
-        ProfileService profile = TestProfiles.Service();
-        profile.CreateProfile(_bbs, "Tester");
-        profile.Load(_bbs, "Tester");
-        _resolver = new SettingsResolver(new SettingsService(), boards, profile, () => cache.ActiveSet);
+        _boards = new BbsProfileStore();
+        _boards.Save(new BbsProfile { Name = _bbs, Host = "h", Realms = { new RealmProfile { Name = "home" } } });
+        _profile = TestProfiles.Service();
+        _profile.CreateProfile(_bbs, "Tester");
+        _profile.Load(_bbs, "Tester");
+        _resolver = new SettingsResolver(new SettingsService(), _boards, _profile, () => _cache.ActiveSet);
     }
 
     public void Dispose()
@@ -228,6 +231,50 @@ public sealed class ItemOverrideSaveTests : IDisposable
 
         Assert.Empty(HeldAt(SettingsTier.Bbs));
         Assert.Equal(SettingsTier.Defaults, Tier);
+    }
+
+    // Auto-sell off in the batch editor turns the sell detour off with it, over a
+    // Global detour as well.
+    [Fact]
+    public async Task TheBatchEditorsAutoSellOff_TurnsAGlobalSellDetourOff()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Global, "Items", Id, new Dictionary<string, object>
+        {
+            ["AutoSell"] = true, ["SellDetour"] = true, ["SellDetourAbove"] = "5",
+        });
+        ItemBatchChanges sellOff = new() { AutoSell = BatchToggle.Off };
+
+        await GameDataOverrideApplier.ApplyItemAsync(_resolver, new ConfirmService(new DialogService()), Id,
+            SettingsTier.Character, sellOff.ApplyTo(Resolved(seed)), seed, sellOff.ChosenFields);
+
+        ItemOverlay now = Resolved(seed);
+        Assert.False(now.AutoSell ?? false);
+        Assert.False(now.SellDetour ?? false);
+        Assert.Null(now.SellDetourAbove);
+    }
+
+    // Another client changed the character's override file after this one read
+    // it: a save builds on the file as it stands, and keeps the other's change.
+    [Fact]
+    public void ASave_BuildsOnTheFileAsItStands_NotAStaleCopy()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
+        Assert.True(Resolved(seed).AutoStash);   // this client holds the file cached
+
+        SettingsResolver other = new(new SettingsService(), _boards, _profile, () => _cache.ActiveSet);
+        other.WriteGameDataAt(SettingsTier.Character, "Items", Id,
+            new Dictionary<string, object> { ["AutoStash"] = true, ["LoyalItem"] = true });
+        string file = AppPaths.OverrideFile(SettingsTier.Character, "Tester", "Items", _set, _bbs);
+        File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(1));
+
+        GameDataOverrideApplier.ApplyItemAt(_resolver, Id, SettingsTier.Character,
+            new ItemOverlay { AutoCollect = true }, seed, new[] { "AutoCollect" });
+
+        SettingsResolver fresh = new(new SettingsService(), _boards, _profile, () => _cache.ActiveSet);
+        Assert.Equal(new[] { "AutoCollect", "AutoStash", "LoyalItem" },
+            fresh.ReadGameDataAt(SettingsTier.Character, "Items", Id)!.Select(p => p.Key).Order());
     }
 
     // The batch editor saves only the fields it was told to set.

@@ -3969,7 +3969,7 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 A box you didn't change isn't copied into your tier, so it goes on following the tier it comes from. Only the tier you picked is written. The batch editor (for the fields it is told to set) and `@auto-get <item>` save the same way.
 
-An item saved by an earlier version holds every box at the tier it was saved at. A box you don't change there goes on hiding what the tiers under it say; pick **Installed defaults** in Use to clear the item and start again.
+An item saved by an earlier version holds every box at the tier it was saved at. A box you don't change there goes on hiding what the tiers under it say. Picking **Installed defaults** in Use clears it, but that resets the item everywhere: it removes your Global, realm and character edits for that item (the window asks first), not just the tier you were on.
 
 **Opening.** With **Auto-open** ticked on a container (and Auto-Get Items running), a copy that comes into your pack — picked up, bought or handed to you — is opened for you. MudPlay sends `open <container>`, reads your inventory a moment later, and puts what the container gave on the **Chest Offload** list (Workshop → Record Keeping), where you can sell or drop it; it is said to the room only if that tab's **Say loot to the room** box is ticked.
 
