@@ -352,7 +352,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         ManualTimers hold = new();
         DefaultTaskRunner runner = new(
             w.Prompt, w.Tracker, profile, loops, new LairManager(), w.Runner, w.Lairs, partyState, party, w.Log,
-            schedule: hold.Arm);
+            schedule: hold.Arm, postToUi: a => a());
         _dispose.Add(runner);
         if (registered) w.Controller.AddHeldStart(() => runner.HeldStart, reason => runner.DropHold(reason));
 

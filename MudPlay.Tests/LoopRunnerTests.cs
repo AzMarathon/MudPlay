@@ -86,11 +86,11 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     // A room command's delay runs out: the newest timer that is neither the stall
-    // watchdog nor the reconnect hold.
+    // watchdog nor a reconnect restart's time limit.
     private static void RunCommandDelay(Harness h)
     {
         TimeSpan[] delays = h.Ticks.PendingDelays
-            .Where(d => d != LoopRunner.StallWatchdogInterval && d != LoopRunner.ReconnectReformHoldMax).ToArray();
+            .Where(d => d != LoopRunner.StallWatchdogInterval && d != ReconnectRestartLimits.ReformHoldMax && d != ReconnectRestartLimits.RoomWaitMax).ToArray();
         if (delays.Length > 0) h.Ticks.RunDue(delays[^1]);
     }
 
@@ -1428,7 +1428,7 @@ public sealed class LoopRunnerTests : IDisposable
     {
         Harness h = HeldAfterReconnect(() => true);
 
-        h.Ticks.RunDue(LoopRunner.ReconnectReformHoldMax);
+        h.Ticks.RunDue(ReconnectRestartLimits.ReformHoldMax);
 
         Assert.Equal(LoopState.Running, h.Runner.State);
         Assert.False(h.Runner.ReconnectResumeHeldForReform);
@@ -1449,7 +1449,7 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.False(h.Runner.ReconnectResumeHeldForReform);
         Assert.False(h.Coordinator.IsPaused);
 
-        h.Ticks.RunDue(LoopRunner.ReconnectReformHoldMax);
+        h.Ticks.RunDue(ReconnectRestartLimits.ReformHoldMax);
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
         Assert.Equal(LoopState.Idle, h.Runner.State);
@@ -1470,7 +1470,7 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.False(h.Runner.ReconnectResumeHeldForReform);
         Assert.False(h.Coordinator.IsPaused);
         Assert.Equal("ab", h.Runner.PendingReconnectResumeName);
-        h.Ticks.RunDue(LoopRunner.ReconnectReformHoldMax);            // the old hold's timer does nothing
+        h.Ticks.RunDue(ReconnectRestartLimits.ReformHoldMax);            // the old hold's timer does nothing
         Assert.Equal(LoopState.Idle, h.Runner.State);
 
         reformPending = false;                                   // the next reconnect, no party this time

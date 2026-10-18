@@ -9452,6 +9452,13 @@ public sealed class AppServices
             NoticeUnpaid($"[Navigation: no walk to {where} - {reason}]");
         });
         LoopRunner.SetUnpaidCrossingHandler(reason => NoticeUnpaid($"[Navigation: {reason}]"));
+        // Posted: the restart can be decided inside the line pump, where writing to
+        // the terminal re-enters it.
+        LoopRunner.SetReconnectNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
+        AutoLair.SetReconnectNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
+        // The board found in its nightly cleanup on the way back in: the game restarts,
+        // and the lairs with it.
+        Cleanup.CleanupModeDetected += () => AutoLair.NoteGameRestarted();
         Walker.Event += e =>
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
@@ -10526,10 +10533,11 @@ public sealed class AppServices
         AutoLair.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
         // A restart still owed after a reconnect gives way to a run the user started
         // meanwhile on another engine.
-        LoopRunner.SetOtherRunProbe(() => AutoLair.IsActive ? "Auto-Lair"
-            : Walker.State != Game.Map.WalkState.Idle ? "a walk" : null);
-        AutoLair.SetOtherRunProbe(() => LoopRunner.State != Game.Map.LoopState.Idle ? $"loop '{LoopRunner.CurrentLoop?.Name ?? "?"}'"
-            : Walker.State != Game.Map.WalkState.Idle ? "a walk" : null);
+        LoopRunner.SetOtherRunProbe(() => AutoLair.IsActive ? ("Auto-Lair", AutoLair.RunStartedByUser)
+            : Walker.State != Game.Map.WalkState.Idle ? ("a walk", Walker.StartedForUser) : null);
+        AutoLair.SetOtherRunProbe(() => LoopRunner.State != Game.Map.LoopState.Idle
+                ? ($"loop '{LoopRunner.CurrentLoop?.Name ?? "?"}'", LoopRunner.RunStartedByUser)
+            : Walker.State != Game.Map.WalkState.Idle ? ("a walk", Walker.StartedForUser) : null);
 
         // Reconnect-recovery cross-wiring — done here (after PartyRejoin exists)
         // because these hooks bridge the leader-side comeback manager and the
@@ -10631,10 +10639,11 @@ public sealed class AppServices
         // holding for the party-reform window on a party-session reconnect.
         DefaultTaskRunner = new Game.DefaultTaskRunner(
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
-            LoopRunner, AutoLair, PartyState, Party, Log)
+            LoopRunner, AutoLair, PartyState, Party, Log, recovery: Recovery)
         {
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
+        DefaultTaskRunner.SetStartNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
         // A change of game data calls off a task still waiting out the party-rebuild
         // window: the loop or Auto-Lair it would start was picked from the old
         // data's catalogue.

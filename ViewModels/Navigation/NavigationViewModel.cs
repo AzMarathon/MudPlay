@@ -1632,7 +1632,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     // Before the setup replaces the live markers.
                     if (_services.RefuseStartForMasterSwitch("Auto-Lair")) return;
                     _services.MovementControl.StartUserRun(
-                        () => { LoadSetupInternal(target); _services.AutoLair.Start(); });
+                        () => { LoadSetupInternal(target); _services.AutoLair.Start(userStarted: true); });
                 })));
         }
 
@@ -1982,7 +1982,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             LoadSetupInternal(row.Source);
             ApplyStartMode(mode);
-            _services.AutoLair.Start();
+            _services.AutoLair.Start(userStarted: true);
         });
     }
 
@@ -5094,7 +5094,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.MovementControl.StartUserRun(() =>
             {
                 ApplyStartMode(mode);
-                _services.AutoLair.Start();
+                _services.AutoLair.Start(userStarted: true);
             });
             return;
         }

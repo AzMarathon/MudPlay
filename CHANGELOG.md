@@ -1,15 +1,15 @@
 # Version history
 
-## 3.184.19
+## 3.184.21
 
 - Auto-Lair cut off by a dropped connection restarts once you're back, from the room the reconnect shows, as a loop does
 - A light buy cut off by a drop hands Auto-Lair to that restart instead of leaving it stopped
-- A restart still owed after a reconnect gives way to a loop, Auto-Lair run or walk you started meanwhile
+- A restart still owed after a reconnect gives way to a loop, Auto-Lair run or walk you start meanwhile, and waits for one started by itself
 
-## 3.184.18
+## 3.184.19
 
-- A loop restarted after a reconnect plans its first step from the room the reconnect shows, not the room before the drop
-- Unsure of that room, the restart asks the game where you are (rm / sys st) and starts from the answer; with no answer it isn't restarted
+- A loop restarted after a reconnect, and the Default task at a login, plan from the room the game shows, not the room before
+- Unsure of that room, they ask the game (rm / sys st), and with no answer start from the room the map believes, with a notice
 - Stop calls off a restart still waiting on the room
 
 ## 3.184.17

@@ -908,7 +908,8 @@ public sealed class LoopRunner : IRecoverableEngine
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
 
         _tracker.StateChanged += OnTrackerStateChanged;
-        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), tracker, coordinator, recovery, log, _postToUi, _schedule,
+        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), "reconnect", tracker, coordinator, recovery, log,
+            _postToUi, _schedule,
             describe: l => $"loop '{l.Name}'",
             runningNow: () => State != LoopState.Idle ? $"loop '{_loop?.Name ?? "?"}'" : null,
             start: l => Start(l));
@@ -1072,6 +1073,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // uses only the teleports allowed to those (AutoWalkManager.SetAutomaticWalkTeleports).
     public bool Start(Loop loop, bool userStarted = false)
     {
+        RunStartedByUser = userStarted;
         _userApproach = userStarted;
         _startingForUser = userStarted;
         try { return StartInternal(loop, isRecovery: false, gateFallback: true); }
@@ -3124,18 +3126,26 @@ public sealed class LoopRunner : IRecoverableEngine
     public bool ReconnectResumeAwaitsRoom => _restart.AwaitsRoom;
     public bool ReconnectResumeLocating => _restart.Locating;
 
+    // The terminal notice for a restart made from a room the map isn't sure of, or
+    // not made at all.
+    public void SetReconnectNotice(Action<string> notice) => _restart.Notice = notice;
+
     // A loop an errand stopped (a bank run's light buy) when the connection dropped.
     public void ResumeOnReconnect(Loop loop, string why) => _restart.SetAside(loop, why);
+
+    // The run going was started by the user (Start's userStarted), not by an event,
+    // a remote command, a sweep or a resume; kept until the next Start.
+    public bool RunStartedByUser { get; private set; }
+
+    // An Auto-Lair run or a walk that is going while the restart is owed: one the
+    // user started wins over it; one started on its own makes it wait.
+    public void SetOtherRunProbe(Func<(string What, bool ByUser)?> otherRun) => _restart.OtherRun = otherRun;
 
     public void ClearPendingReconnectResume() => _restart.Clear();
 
     public void DropHeldReconnectResume(string why) => _restart.DropHeld(why);
 
     public void ResumeAfterMasterSwitch() => _restart.ResumeAfterMasterSwitch();
-
-    // A walk or an Auto-Lair run the user started while the restart was owed: the
-    // restart gives way to it, as to a loop of the runner's own.
-    public void SetOtherRunProbe(Func<string?> otherRun) => _restart.OtherRun = otherRun;
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
@@ -3161,7 +3171,6 @@ public sealed class LoopRunner : IRecoverableEngine
     // the restarted loop is being held until the party reform has seen the room.
     public string? PendingReconnectResumeName => _restart.Pending?.Name;
     public bool ReconnectResumeHeldForReform => _restart.HeldForReform;
-    internal static readonly TimeSpan ReconnectReformHoldMax = ReconnectRestart<Loop>.ReformHoldMax;
 
     private void OnPromptObserved(PromptObservation _)
     {

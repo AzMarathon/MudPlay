@@ -3599,7 +3599,8 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // An Auto-Lair run the same way: stopped now, restarted from the room
                 // the reconnect shows (AutoLairManager.NotifyDisconnected).
-                AppServices.Current.AutoLair.NotifyDisconnected();
+                AppServices.Current.AutoLair.NotifyDisconnected(
+                    gameRestarting: AppServices.Current.Cleanup.Latest is not null);
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
                 // A Stock spill sweep would time out stop after stop against the dead
@@ -5641,7 +5642,7 @@ public partial class MainWindowViewModel : ObservableObject
             s.AutoLair.Clear();
             foreach (Models.Profile.LairMarker m in setup.Markers)
                 s.AutoLair.Mark(new Game.Map.RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-            s.AutoLair.Start();
+            s.AutoLair.Start(userStarted: true);
         });
     }
 

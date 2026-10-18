@@ -831,7 +831,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         if (AppServices.Current.RefuseStartForMasterSwitch("Auto-Lair")) return;
         LoadLairMarkers(row.Source);
         ApplyStartMode(mode);
-        _autoLair.Start();
+        _autoLair.Start(userStarted: true);
     }
 
     // Stage a saved setup's markers without starting the scheduler — lets the

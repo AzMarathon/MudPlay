@@ -42,24 +42,28 @@ public sealed class LoopReconnectRestartRoomTests
     {
         public TrackerWireRig Rig { get; }
         public LoopRunner Runner { get; }
-        // The `rm` resolver's reply timeout.
+        // The runner's and the `rm` resolver's timers.
         public ManualTimers Ticks { get; } = new();
+        // The terminal notices the restart gives.
+        public List<string> Notices { get; } = new();
         private readonly List<IDisposable> _dispose = new();
 
         // Logged in, standing in `at`. paradigm: a Paradigm realm, whose `rm` the
         // recovery gate's one-shot locate asks, wired as AppServices wires it.
-        public World(RoomKey at, bool paradigm = false)
+        // located: the login's display placed us (false: a room the map can't tell).
+        public World(RoomKey at, bool paradigm = false, bool located = true)
         {
             Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:", paradigm: paradigm) { Position = at };
             Runner = new LoopRunner(Rig.Tracker, Rig.Coordinator, Rig.Prompts, Rig.Log, Rig.Graph, Rig.Gate,
-                new BfsMapper(Rig.Graph), Rig.Walker, postToUi: Rig.Post);
+                new BfsMapper(Rig.Graph), Rig.Walker, postToUi: Rig.Post, schedule: Ticks.Arm);
             Runner.SetWireSender(Rig.Send);
+            Runner.SetReconnectNotice(Notices.Add);
             ParadigmPositionResolver resolver = new(Rig.Router, Rig.Tracker, Rig.Gate, Rig.Cache, Rig.Log, schedule: Ticks.Arm);
             resolver.SetWireSender(Rig.Send);
             Rig.Gate.TryResyncOnce = resolver.RequestResyncOnce;
             _dispose.Add(resolver);
             Rig.ShowRoom();
-            Assert.Equal(at, Rig.Believed);
+            if (located) Assert.Equal(at, Rig.Believed);
         }
 
         // A leader's party, its reform after a reconnect and the hold a dropped
@@ -173,9 +177,11 @@ public sealed class LoopReconnectRestartRoomTests
         Assert.Null(w.Runner.PendingReconnectResumeName);
     }
 
-    // The game never answers the locate: the restart is ended, not left waiting.
+    // The game never answers the locate. The restart isn't left waiting, nor ended:
+    // the loop starts from the room the map believes, as it did before the wait, and
+    // its recovery puts it right. The terminal says so.
     [Fact]
-    public void ReconnectWhereTheTrackerIsUnsure_TheLocateFails_TheRestartIsEnded()
+    public void ReconnectWhereTheTrackerIsUnsure_TheLocateFails_StartsFromTheBelievedRoom()
     {
         using World w = new(Gate, paradigm: true);
         Assert.True(w.Runner.Start(GateYard()));
@@ -185,24 +191,20 @@ public sealed class LoopReconnectRestartRoomTests
         Assert.True(w.Runner.ReconnectResumeLocating);
 
         w.Rig.Pump(limit: 1);                                 // `rm` answered with nothing it reads
-        w.Ticks.Advance(TimeSpan.FromSeconds(5));             // the resolver's reply timeout
+        w.Ticks.Advance(TimeSpan.FromSeconds(4));             // the resolver's reply timeout
 
         Assert.Null(w.Runner.PendingReconnectResumeName);
         Assert.False(w.Runner.ReconnectResumeLocating);
-        Assert.Equal(new[] { "rm" }, w.SentSince(mark));
-        Assert.Contains(w.Rig.Log.Snapshot(), e => e.Source == "LoopRunner"
-            && e.Message.Contains("is not restarted: the room after the reconnect couldn't be told"));
-
-        w.Rig.Show("Somebody waves.");
-        w.Rig.Type("w");
-        w.Rig.Pump(limit: 1);
-        Assert.Equal(Gate, w.Rig.Believed);
-        Assert.Equal(LoopState.Idle, w.Runner.State);
+        Assert.NotEqual(LoopState.Idle, w.Runner.State);
+        Assert.Equal(new[] { "rm", "n" }, w.SentSince(mark));  // from Gate, the room believed
+        Assert.Contains(w.Notices, n => n.StartsWith("[Loop 'gy' started from 1/1 after the reconnect, though the map isn't sure", StringComparison.Ordinal)
+            && n.Contains("the game didn't say where we are"));
     }
 
-    // A realm with nothing to ask (no `rm`, no sysop): the restart ends at once.
+    // A realm with nothing to ask (no `rm`, no sysop): the loop starts from the
+    // room the map believes at once.
     [Fact]
-    public void ReconnectWhereTheTrackerIsUnsure_WithNothingToAsk_TheRestartIsEnded()
+    public void ReconnectWhereTheTrackerIsUnsure_WithNothingToAsk_StartsFromTheBelievedRoom()
     {
         using World w = new(Gate);
         Assert.True(w.Runner.Start(GateYard()));
@@ -211,9 +213,98 @@ public sealed class LoopReconnectRestartRoomTests
 
         w.Reconnect(Corridor);
 
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+        Assert.NotEqual(LoopState.Idle, w.Runner.State);
+        Assert.Null(w.Runner.PendingReconnectResumeName);
+        Assert.Contains(w.Notices, n => n.Contains("nothing to ask the game where we are with"));
+    }
+
+    // The link drops on a step between two rooms that look the same, and the
+    // reconnect shows the one it left: the map can't say which, and on Stock with
+    // nothing to ask the loop goes on from the room it left, the recovery gate on
+    // hand, as before the restart waited for the room.
+    [Fact]
+    public void DropBetweenTwoLookalikeRooms_OnStock_TheLoopGoesOnFromTheRoomItLeft()
+    {
+        using World w = new(Gate);
+        w.Rig.Do("e");
+        w.Rig.Tracker.SetLocated(Corridor);                     // the user puts the map right
+        Assert.True(w.Runner.Start(new Loop("cc", new[] { Corridor, new RoomKey(1, 5) })));
+        Assert.Equal("e", w.Rig.Sent.Last());
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Corridor);
+
+        Assert.Equal(RoomConfidence.Suspect, w.Rig.Tracker.State.Confidence);
+        Assert.Equal(new[] { "e" }, w.SentSince(mark));
+        Assert.NotEqual(LoopState.Idle, w.Runner.State);
+        Assert.Single(w.Notices);
+    }
+
+    // No room believed at all (the map never placed us): nothing to start from. The
+    // restart is ended, and the terminal says so.
+    [Fact]
+    public void ReconnectWithNoRoomBelievedAtAll_TheRestartIsEnded()
+    {
+        using World w = new(Corridor, located: false);
+        Assert.Null(w.Rig.Tracker.State.CurrentRoom);
+        w.Runner.ResumeOnReconnect(GateYard(), "a light buy the connection cut off");
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Corridor);
+
         Assert.Empty(w.SentSince(mark));
         Assert.Equal(LoopState.Idle, w.Runner.State);
         Assert.Null(w.Runner.PendingReconnectResumeName);
+        Assert.Equal(new[] { "[Loop 'gy' not started after the reconnect: the map has no room to start it from]" }, w.Notices);
+    }
+
+    // No room display and no further prompt (an idle character at full HP): the
+    // wait has a time limit, and the loop starts from the room believed when it runs out.
+    [Fact]
+    public void ReconnectWithNoRoomDisplayAndNoMorePrompts_StartsWhenTheWaitRunsOut()
+    {
+        using World w = new(Gate);
+        Assert.True(w.Runner.Start(GateYard()));
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Rig.Show("Welcome back!");
+        Assert.True(w.Runner.ReconnectResumeAwaitsRoom);
+        Assert.Empty(w.SentSince(mark));
+
+        w.Ticks.Advance(ReconnectRestartLimits.RoomWaitMax);
+
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+        Assert.NotEqual(LoopState.Idle, w.Runner.State);
+        Assert.Contains(w.Notices, n => n.Contains("no room known within 12s"));
+    }
+
+    // The game's no-answer to a locate asked before the link dropped again belongs
+    // to that wait: it neither starts the loop on the dead link nor ends the restart
+    // owed to the next reconnect.
+    [Fact]
+    public void ALocatesNoAnswer_AfterAnotherDrop_LeavesTheNextRestartAlone()
+    {
+        using World w = new(Gate, paradigm: true);
+        Assert.True(w.Runner.Start(GateYard()));
+        w.Drop();
+        w.Reconnect(Corridor);
+        Assert.True(w.Runner.ReconnectResumeLocating);
+        int mark = w.Mark();
+
+        w.Drop();                                             // the `rm` goes unanswered
+        w.Ticks.Advance(TimeSpan.FromSeconds(4));             // its timeout fires offline
+
+        Assert.Empty(w.SentSince(mark));
+        Assert.Equal(LoopState.Idle, w.Runner.State);
+        Assert.Equal("gy", w.Runner.PendingReconnectResumeName);
+        Assert.Empty(w.Notices);
+
+        w.Reconnect(Gate);
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
     }
 
     // A reconnect whose room display hasn't come (the move sent before the drop still
