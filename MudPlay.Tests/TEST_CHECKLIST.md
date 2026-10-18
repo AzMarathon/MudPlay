@@ -996,7 +996,7 @@ How to keep it current:
 
 ### DefaultTaskLoginRoomTests.cs
 - Covers: Game/DefaultTaskRunner's start at a login through Game/Map/ReconnectRestart (with LoopRunner, LoopManager, RoomTracker, WirePromptScanner, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver), on TrackerWireRig, the profile from TestProfiles with the Default task set to a loop.
-- Checks: logged in to another room than the one the map had, the task's loop is planned from the shown room; logged in to a room the map can't tell, with nothing to ask, the task starts from the room believed with a terminal notice; with "Do nothing" nothing is asked of the game and nothing said; with the master switch off no `rm` goes out and nothing starts; with no room known at all the task waits for one with no time limit and no notice, and starts once the map has one.
+- Checks: logged in to another room than the one the map had, the task's loop is planned from the shown room; logged in to a room the map can't tell, with nothing to ask, the task starts from the room believed with a terminal notice; with "Do nothing" nothing is asked of the game and nothing said; with the master switch off no `rm` goes out and nothing starts, and switched back on the next prompts start nothing; with no room known at all the task waits for one with no time limit and no notice, and starts once the map has one.
 - Why: the task started at the first prompt, ahead of the room display that came with it, and planned from the room before (review of #1095, 2026-10-17).
 
 ### DefaultTaskRunnerTests.cs
