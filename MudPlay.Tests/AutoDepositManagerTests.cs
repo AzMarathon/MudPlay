@@ -13,24 +13,22 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.E follow-up — <see cref="AutoDepositManager"/> reroute. A wealth /
-/// coin gate crossing (signalled by <see cref="CashManager.AutoDepositRequested"/>)
-/// while a Loop or Auto-Lair is running detours to the configured bank /
-/// stash room, offloads the excess coin (<c>dep</c> for a bank;
-/// per-currency <c>hide</c> via <see cref="StashRoomManager.ExecuteStash"/>
-/// for a stash), walks back to where it left off, and restarts the captured
-/// engine. A bare walk-to (or an idle stack) never reroutes. A stash room
-/// that sits on the active route (a resolved loop circuit room, or a marked
-/// Auto-Lair room) spends no detour — the manager stashes it on pass-through
-/// as the engine walks through; only an off-route stash room detours. A
-/// manual walk-through with no engine running never stashes.
-///
-/// Headless: the gate is driven by mutating the snapshot + settings and
-/// calling <see cref="CashManager.OnInventoryChanged"/>; the walker is
-/// advanced room-by-room via <see cref="RoomTracker.NoteRoomObserved"/>
-/// (the same idiom AutoWalkManagerTests uses).
-/// </summary>
+// AutoDepositManager reroute. A wealth /
+// coin gate crossing (signalled by CashManager.AutoDepositRequested)
+// while a Loop or Auto-Lair is running detours to the configured bank /
+// stash room, offloads the excess coin (dep for a bank;
+// per-currency hide via StashRoomManager.ExecuteStash
+// for a stash), walks back to where it left off, and restarts the captured
+// engine. A bare walk-to (or an idle stack) never reroutes. A stash room
+// that sits on the active route (a resolved loop circuit room, or a marked
+// Auto-Lair room) spends no detour — the manager stashes it on pass-through
+// as the engine walks through; only an off-route stash room detours. A
+// manual walk-through with no engine running never stashes.
+//
+// Headless: the gate is driven by mutating the snapshot + settings and
+// calling CashManager.OnInventoryChanged; the walker is
+// advanced room-by-room via RoomTracker.NoteRoomObserved
+// (the same idiom AutoWalkManagerTests uses).
 public sealed class AutoDepositManagerTests : IDisposable
 {
     private readonly string _root;
@@ -101,6 +99,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required ProfileService Profile { get; init; }
         public required RoomGraphManager Graph { get; init; }
         public required CashManager Cash { get; init; }
+        // The clock behind the auto-deposit cooldown.
+        public Func<DateTime> AutoDepositNow { get; set; } = () => DateTime.UtcNow;
         public required RoomTracker Tracker { get; init; }
         public required AutoWalkManager Walker { get; init; }
         public required LoopRunner Loop { get; init; }
@@ -110,6 +110,13 @@ public sealed class AutoDepositManagerTests : IDisposable
         public required Game.Light.AutoLightProvisioner Provisioner { get; init; }
         public required Game.Light.AutoLightShopRouter LightShop { get; init; }
         public required AutoDepositManager AutoDeposit { get; init; }
+        // The game's prompts, as the wire scanner reads them, and the walker's sends.
+        public required WirePromptScanner Prompts { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
+        public required List<string> Moves { get; init; }
+
+        // The game's statline prompt arrives.
+        public void Prompt() => Prompts.Append(Encoding.Latin1.GetBytes("[HP=100/MA=50]:"));
 
         // The shared mutable source of truth: the manager closures read these
         // two members directly, so a test body just assigns them and fires
@@ -125,6 +132,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         public Models.Profile.AutoLightSettings LightSettings { get; } = new();
         public List<Game.Light.LightItem> Catalogue { get; } = new();
         public List<RoomKey> LightShopRooms { get; } = new();
+        // What one torch costs at any shop (null: not known, so any purse pays).
+        public long? TorchPrice { get; set; }
         public List<byte[]> Bought { get; } = new();
 
         public IEnumerable<string> BuyLines() =>
@@ -168,17 +177,17 @@ public sealed class AutoDepositManagerTests : IDisposable
         public IEnumerable<string> StashLines() =>
             Stashed.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'));
 
-        /// <summary>Mutate holdings + fire the inventory-changed re-check
-        /// that arms the auto-deposit gate.</summary>
+        // Mutate holdings + fire the inventory-changed re-check
+        // that arms the auto-deposit gate.
         public void SetWealth(int copper, int silver, int gold, int platinum, int runic, long totalCopperValue)
         {
             SetSnapshotOnly(copper, silver, gold, platinum, runic, totalCopperValue);
             Cash.OnInventoryChanged();
         }
 
-        /// <summary>Set holdings WITHOUT re-firing the Cash gate — models the
-        /// fresh `i` dump that lands at the bank (e.g. a lower figure after an
-        /// unobserved en-route toll).</summary>
+        // Set holdings WITHOUT re-firing the Cash gate — models the
+        // fresh `i` dump that lands at the bank (e.g. a lower figure after an
+        // unobserved en-route toll).
         public void SetSnapshotOnly(int copper, int silver, int gold, int platinum, int runic, long totalCopperValue)
         {
             Snapshot = new InventorySnapshot(
@@ -189,28 +198,14 @@ public sealed class AutoDepositManagerTests : IDisposable
                 DateTimeOffset.UtcNow);
         }
 
-        // Copper values the manager pushed to the on-hand tracker at `dep`
-        // dispatch. Models InventoryManager.NoteAutoDeposit: record the amount and
-        // decrement the snapshot immediately (greedy re-decompose, same as
-        // ApplyTransaction) so the manager's own getSnapshot reads post-deposit
-        // wealth the instant it plans the return leg.
+        // Copper values the manager handed to the on-hand tracker at `dep` dispatch.
+        // The holdings stay what the test last set, as the bank's `i` re-read showed them.
         public List<long> NotedDeposits { get; } = new();
 
         public void NoteAutoDeposit(long copper)
         {
             if (copper <= 0) return;
             NotedDeposits.Add(copper);
-            long wealth = Math.Max(0, Snapshot.Currency.TotalCopperValue - copper);
-            long total = wealth;
-            int runic = (int)(wealth / 1_000_000L); wealth %= 1_000_000L;
-            int plat = (int)(wealth / 10_000L); wealth %= 10_000L;
-            int gold = (int)(wealth / 100L); wealth %= 100L;
-            int silver = (int)(wealth / 10L); wealth %= 10L;
-            int cop = (int)wealth;
-            Snapshot = new InventorySnapshot(
-                new CurrencyHoldings(cop, silver, gold, plat, runic, total),
-                Snapshot.Encumbrance, Snapshot.EquippedItems, Snapshot.CarriedItems,
-                DateTimeOffset.UtcNow);
         }
 
         public void Dispose()
@@ -230,8 +225,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson ?? GraphJson);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), LairsJson);
 
-        ProfileService profile = new();
-        profile.LoadDefaultProfile();
+        ProfileService profile = TestProfiles.Loaded();
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
@@ -241,8 +235,11 @@ public sealed class AutoDepositManagerTests : IDisposable
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
-        walker.SetWireSender(_ => { });
-        LoopRunner loop = new(tracker, coord, graph: graph, bfs: bfs, walker: walker);
+        List<string> moves = new();
+        walker.SetWireSender(b => moves.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        WirePromptScanner prompts = new();
+        LoopRunner loop = new(tracker, coord, promptScanner: prompts, graph: graph, bfs: bfs, walker: walker,
+            postToUi: action => action());
         loop.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
@@ -259,7 +256,8 @@ public sealed class AutoDepositManagerTests : IDisposable
             isEnabled: () => true,
             collectAfterCombatFinished: () => h.Settings.CollectAfterCombatFinished,
             hasEngageableHostiles: () => false,
-            getSnapshot: () => h.Snapshot);
+            getSnapshot: () => h.Snapshot,
+            autoDepositClock: () => h.AutoDepositNow());
         StashRoomManager stash = new(profile,
             readCash: () => h.Settings,
             getSnapshot: () => h.Snapshot,
@@ -274,7 +272,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             roomLightSpell: () => null,
             castRoomLightSpell: _ => false,
             roomLightSpellUp: _ => false,
-            settings: () => h.LightSettings);
+            settings: () => h.LightSettings,
+            lightPrice: _ => h.TorchPrice,
+            shopPrice: (_, _) => h.TorchPrice);
         Game.Light.AutoLightShopRouter lightShop = new(
             shopRoomsSellingItem: _ => h.LightShopRooms,
             currentRoom: () => tracker.State.CurrentRoom?.Key,
@@ -305,7 +305,8 @@ public sealed class AutoDepositManagerTests : IDisposable
                 IReadOnlyList<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(l.Waypoints, bfs, graph);
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
-            });
+            },
+            coordinator: coord);
         // Production drives OnRoomEntered from AppServices' early StateChanged
         // handler (registered ahead of LoopRunner) rather than a self-subscription;
         // mirror that here so Arrive() still triggers the pass-through stash.
@@ -325,6 +326,9 @@ public sealed class AutoDepositManagerTests : IDisposable
             Provisioner = provisioner,
             LightShop = lightShop,
             AutoDeposit = autoDeposit,
+            Prompts = prompts,
+            Moves = moves,
+            Coordinator = coord,
         };
         // Split the manager's single wire by command so `dep` assertions stay
         // isolated from `buy`s the light detour issues on the same wire.
@@ -347,8 +351,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Tracker.NoteRoomObserved(new RoomObservation(r.Name, new HashSet<Direction>(r.Exits.Keys)));
     }
 
-    /// <summary>Mark 1/1 + 1/3, locate at 1/1, start Auto-Lair — the
-    /// resumable "running engine" for these tests.</summary>
+    // Mark 1/1 + 1/3, locate at 1/1, start Auto-Lair — the
+    // resumable "running engine" for these tests.
     private static void StartLair(Harness h)
     {
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -358,9 +362,9 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.True(h.Lair.IsActive);
     }
 
-    /// <summary>Locate at 1/1, start a [1/1, 1/3] loop — the line graph
-    /// expands to the circuit 1/1 → 1/2 → 1/3 → 1/2 → 1/1, so every room
-    /// (1/1, 1/2, 1/3) is a guaranteed per-lap visit.</summary>
+    // Locate at 1/1, start a [1/1, 1/3] loop — the line graph
+    // expands to the circuit 1/1 → 1/2 → 1/3 → 1/2 → 1/1, so every room
+    // (1/1, 1/2, 1/3) is a guaranteed per-lap visit.
     private static void StartLoop(Harness h)
     {
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -507,17 +511,23 @@ public sealed class AutoDepositManagerTests : IDisposable
         ArmBankGate(h);
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        int notedWhenTheReturnLegStarted = -1;
+        h.Walker.Event += e =>
+        {
+            if (e.Kind == WalkEventKind.Started && e.Destination == new RoomKey(1, 1))
+                notedWhenTheReturnLegStarted = h.NotedDeposits.Count;
+        };
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
 
         // The dep fired AND the on-hand tracker was decremented by the same value
-        // the moment the command went out — so the return leg (already destined
-        // for the origin) planned against post-deposit wealth, not the stale
-        // pre-deposit purse that would have routed through an unaffordable toll.
+        // before the return leg started — so that leg planned against post-deposit
+        // wealth, not the stale pre-deposit purse that would have routed through an
+        // unaffordable toll.
         Assert.Equal("dep 5000", Assert.Single(h.DepositLines()));
         Assert.Equal(5000L, Assert.Single(h.NotedDeposits));
-        Assert.Equal(0L, h.Snapshot.Currency.TotalCopperValue);
+        Assert.Equal(1, notedWhenTheReturnLegStarted);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
     }
 
@@ -587,32 +597,6 @@ public sealed class AutoDepositManagerTests : IDisposable
     }
 
     [Fact]
-    public void Deposit_NothingAboveKeep_SendsNoCommandButStillResumes()
-    {
-        using Harness h = NewHarness();
-        StartLair(h);
-        // Trip on the coin-count gate (≥1 coin) so the deposit math can still
-        // come out ≤ keep at the bank.
-        h.Settings.BankRoomKey = "1/3";
-        h.Banks.Add(new RoomKey(1, 3));
-        h.Settings.AutoDepositIfCoinsExceed = 1;
-        h.Settings.KeepOnHandWealth = 10_000; // keep 100 gold worth of copper
-
-        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
-        Arrive(h, new RoomKey(1, 2));
-        Arrive(h, new RoomKey(1, 3));
-        DeliverBankInventory(h);
-
-        // 5000 ≤ 10000 keep → nothing to deposit, but the round-trip still
-        // walks back and resumes.
-        Assert.Empty(h.DepositLines());
-        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
-        Arrive(h, new RoomKey(1, 2));
-        Arrive(h, new RoomKey(1, 1));
-        Assert.True(h.Lair.IsActive);
-    }
-
-    [Fact]
     public void StashOffLairRoute_DetoursStashesAndResumes()
     {
         using Harness h = NewHarness();
@@ -641,17 +625,20 @@ public sealed class AutoDepositManagerTests : IDisposable
     }
 
     [Fact]
-    public void GateCross_NoBankConfigured_DoesNotReroute()
+    public void GateCross_UnparseableBankKey_DoesNotReroute()
     {
         using Harness h = NewHarness();
         StartLair(h);
-        // Gate threshold set but no bank/stash location → nothing fires.
+        // The gate fires, but the bank key names no room: the manager can't
+        // resolve a destination, so the lair keeps running and nothing is sent.
         h.Settings.AutoDepositIfWealthExceeds = 1000;
+        h.Settings.BankRoomKey = "nowhere";
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
 
         Assert.True(h.Lair.IsActive);
         Assert.Empty(h.Deposited);
+        Assert.Empty(h.DepositLines());
     }
 
     [Fact]
@@ -691,7 +678,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Cash.AutoDepositRequested += _ => fires++;
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
 
         // Parseable key that is neither a bank nor a marked stash → aborts.
         h.Settings.BankRoomKey = "1/2";
@@ -727,7 +714,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         h.Settings.KeepOnHandWealth = 10_000;      // nothing lands above the floor
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
         int fires = 0;
         h.Cash.AutoDepositRequested += _ => fires++;
 
@@ -764,7 +751,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         ArmBankGate(h);
 
         DateTime now = DateTime.UtcNow;
-        h.Cash.AutoDepositClock = () => now;
+        h.AutoDepositNow = () => now;
         int fires = 0;
         h.Cash.AutoDepositRequested += _ => fires++;
 
@@ -909,6 +896,7 @@ public sealed class AutoDepositManagerTests : IDisposable
         StartLoop(h);                 // loop [1/1, 1/3], resumable engine
         ArmBankGate(h);               // bank at 1/3
         EnableLightDetour(h);
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
 
         h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
@@ -917,7 +905,8 @@ public sealed class AutoDepositManagerTests : IDisposable
         Arrive(h, new RoomKey(1, 2));
         Arrive(h, new RoomKey(1, 3));
         DeliverBankInventory(h);
-        Assert.Equal("dep 5000", h.DepositLines().Single());
+        // The torch's price stays in the purse for the buy in town.
+        Assert.Equal("dep 4990", h.DepositLines().Single());
 
         // Return leg (1/3 → 1/2 → 1/1) runs dark and nothing is carried → detour
         // to the light shop at 1/4 instead of straight home.
@@ -935,6 +924,288 @@ public sealed class AutoDepositManagerTests : IDisposable
 
         Arrive(h, new RoomKey(1, 1));
         Assert.Equal(LoopState.Running, h.Loop.State);   // engine resumed
+    }
+
+    // The dark-route fixture with a second light shop in the bank's town, two rooms
+    // east of the bank (1/3 ─E─ 1/5 ─E─ 1/6). The shop by the origin (1/4) adds
+    // fewer steps to the way home, but it lies past the dark room.
+    private const string TownShopGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Origin",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Dark",
+            "Light": -200, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Bank",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Shop",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Street",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/6", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Town Shop",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A bank trip buys its light in town before the walk back sets out (user,
+    // 2026-10-17): the shop nearest the bank, not the one by the origin that adds
+    // fewer steps but is reached only through the dark.
+    [Fact]
+    public void BankReturnLegRunsDark_BuysInTheBanksTownBeforeTheWalkBack()
+    {
+        using Harness h = NewHarness(TownShopGraphJson);
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.LightShopRooms.Add(new RoomKey(1, 6));
+        h.TorchPrice = 10;               // priced, with Keep-on-hand at its default 0
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Assert.Equal("dep 4990", h.DepositLines().Single());
+
+        Assert.Equal(new RoomKey(1, 6), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 5));
+        Arrive(h, new RoomKey(1, 6));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
+    // A stash trip whose way back runs dark: the light is planned before the hide and
+    // the hide leaves its price in hand (one gold of the fifty), then the light is
+    // bought in town and the trip walks back.
+    [Fact]
+    public void StashReturnLegRunsDark_HideLeavesTheLightsPrice_ThenBuysInTown()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        // A loop off the stash room, so the trip is a detour, not a pass-through.
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 49 gold crown", Assert.Single(h.StashLines()));
+
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal("buy torch", h.BuyLines().Single());
+        GiveTorch(h);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+    }
+
+    // The bank run's light buy, under way in the shop at 1/4 (the walk back to 1/1
+    // runs dark through 1/2).
+    private static void BankRunBuyingItsLight(Harness h)
+    {
+        StartLoop(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+    }
+
+    // The connection drops while the bank run buys its light: the buy is let go
+    // unrecorded, the reroute ends, nothing walks on the dead link, and the loop is
+    // handed to LoopRunner's restart after a reconnect.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_TheLoopRestartsAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        int sent = h.Moves.Count;
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(sent, h.Moves.Count);
+        Assert.Equal("test", h.Loop.PendingReconnectResumeName);
+        Assert.Contains("errand shops held back none", h.Provisioner.DescribeState());
+
+        // The reconnect, in wire order: the prompt is read ahead of its chunk's
+        // room display.
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
+    }
+
+    // The reconnect lands somewhere else (the bank's room): the loop restarts on the
+    // prompt, as any loop cut off by a drop does, and once the room display is read
+    // its walk goes on from the room it shows.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_TheLoopRestartsFromThere()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(LoopState.Approaching, h.Loop.State);
+        Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
+        Assert.Equal("s", h.Moves.Last());          // planned from the room the reconnect showed
+    }
+
+    // The user's Stop held the trip (the user gate is up) when the link dropped: that
+    // stays a stop, and the loop isn't restarted on the reconnect.
+    [Fact]
+    public void ConnectionDropsWhileTheUsersStopHoldsTheTrip_TheLoopStaysStopped()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController));   // what the user's Stop raises
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Null(h.Loop.PendingReconnectResumeName);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+    }
+
+    // The master switch off at the reconnect: LoopRunner holds the restart for it.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_MasterSwitchOff_TheRestartWaits()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        h.Loop.MasterSwitchOff = () => true;
+
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        Assert.True(h.Loop.ReconnectResumeHeldForMasterSwitch);
+    }
+
+    // A party reform still to see the room: the restarted loop is held behind the
+    // reform's gate.
+    [Fact]
+    public void ConnectionDropsDuringTheLightBuy_PartyReformPending_TheRestartIsHeld()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        BankRunBuyingItsLight(h);
+        h.AutoDeposit.NoteDisconnected();
+        h.Loop.SetReconnectReformProbe(() => true);
+
+        h.Prompt();
+        Assert.True(h.Loop.ReconnectResumeHeldForReform);
+        Assert.Contains(MovementCoordinator.ReconnectReformGate, h.Coordinator.AssertedGates);
+    }
+
+    // The same for a loop's light trip: the loop isn't left stopped.
+    [Fact]
+    public void ConnectionDropsDuringALightTripsBuy_TheLoopRestartsAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        Assert.Equal(LightRestockOutcome.Started,
+            h.AutoDeposit.StartLightRestock(new AutoLightBuyRequest(100, "torch", 1), maxAddedSteps: null, "light for the run"));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // A light trip the drop cut off isn't held as tried: the loop restarted after
+    // the reconnect makes the trip again at once, not after the back-off.
+    [Fact]
+    public void ALightTripCutOffByADrop_IsMadeAgainAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLoop(h);
+        EnableLightDetour(h);
+        // The checks are posted to the UI thread in the client: run once the
+        // dispatch that raised them is over.
+        List<Action> posted = new();
+        void RunPosted()
+        {
+            Action[] due = posted.ToArray();
+            posted.Clear();
+            foreach (Action a in due) a();
+        }
+        h.Provisioner.SetLoopRestock(
+            engineRunning: () => h.Loop.State != LoopState.Idle,
+            restock: buy => h.AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
+            engineRooms: h.Loop.ResolveLoopRoomKeys,
+            defer: posted.Add);
+        // AppServices tells the provisioner of each loop start.
+        h.Loop.Event += e =>
+        {
+            if (e.Kind == LoopEventKind.Started) h.Provisioner.OnEngineStarted(userStarted: e.UserStarted);
+        };
+        h.Provisioner.OnEngineStarted(userStarted: false);
+        RunPosted();
+        Assert.True(h.AutoDeposit.IsLightTrip);
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        h.Prompt();
+        Arrive(h, new RoomKey(1, 4));
+        RunPosted();
+
+        Assert.True(h.AutoDeposit.IsLightTrip);
+    }
+
+    // The stash cutoff's coin counts toward the light's price: with silver the
+    // cutoff, the fifty gold kept in hand pay for the torch, so every silver is
+    // hidden.
+    [Fact]
+    public void StashHoldBack_CountsTheCoinAboveTheCutoff()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 1), new RoomKey(1, 4) })));
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 3) };
+        h.Settings.BankRoomKey = "1/3";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        h.Settings.StashCoinCutoff = StashCoinCutoff.Silver;
+        EnableLightDetour(h);
+        h.TorchPrice = 10;
+
+        h.SetWealth(copper: 0, silver: 20, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5200);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        Assert.Equal("hide 20 silver noble", Assert.Single(h.StashLines()));
+        Assert.Equal(new RoomKey(1, 4), h.Walker.Destination);
     }
 
     [Fact]

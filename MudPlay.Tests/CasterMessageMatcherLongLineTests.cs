@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
@@ -30,8 +29,9 @@ public sealed class CasterMessageMatcherLongLineTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { /* temp cleanup */ }
     }
 
-    private static readonly FieldInfo RegexField =
-        typeof(CasterMessageMatcher).GetField("_regex", BindingFlags.Instance | BindingFlags.NonPublic)!;
+    // The regex a matcher's template compiles to, as TryCreate compiles it.
+    private static Regex RegexOf(CasterMessageMatcher matcher) =>
+        new(CasterMessageMatcher.ShapeOf(matcher.Template)!.Pattern, RegexOptions.CultureInvariant);
 
     // Every distinct templated wording in both realms' catalogues, compiled the way
     // the bulk recognizers compile them.
@@ -96,7 +96,7 @@ public sealed class CasterMessageMatcherLongLineTests : IDisposable
         int ownLineMatched = 0;
         foreach (CasterMessageMatcher matcher in matchers)
         {
-            Regex regex = (Regex)RegexField.GetValue(matcher)!;
+            Regex regex = RegexOf(matcher);
             string own = Filled(matcher.Template);
             if (regex.IsMatch(own)) ownLineMatched++;
 
@@ -153,7 +153,7 @@ public sealed class CasterMessageMatcherLongLineTests : IDisposable
         System.Collections.Concurrent.ConcurrentBag<string> dropped = new();
         Parallel.ForEach(matchers, matcher =>
         {
-            Regex regex = (Regex)RegexField.GetValue(matcher)!;
+            Regex regex = RegexOf(matcher);
             long refusedHere = 0;
             foreach (string line in lines)
             {

@@ -62,9 +62,7 @@ public sealed class AutoPartyManager : IDisposable
     // Mirrors PartySettings.SendJoinToInvited.
     public bool JoinNagEnabled { get; set; } = true;
 
-    // Test seam — overrides DateTime.UtcNow for the TTL math so unit tests don't
-    // have to Thread.Sleep. Defaults to DateTime.UtcNow.
-    public Func<DateTime> NowProvider { get; set; } = () => DateTime.UtcNow;
+    private readonly Func<DateTime> _now;
 
     // Reconnect-rejoin override. When set (AppServices wires it to
     // PartyRejoinCoordinator.IsRememberedLeader), an invite from a sender this
@@ -79,9 +77,6 @@ public sealed class AutoPartyManager : IDisposable
     // not because we invited someone who never joined. Null, or false on Paradigm:
     // every invited row is an invite.
     public Func<string, bool>? LeftBehindOnOurList { get; set; }
-
-    // Test seam — most recent bytes the engine asked to write to the wire.
-    internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     // Per-given-name TTL map suppressing rapid re-invites.
     private readonly Dictionary<string, DateTime> _recentlyInvited =
@@ -103,8 +98,8 @@ public sealed class AutoPartyManager : IDisposable
     public Func<string, bool>? UninvitedForDeath { get; set; }
 
     // Window after an uninvite during which the player won't be auto-invited
-    // again. Default 1 h.
-    public TimeSpan UninviteSuppression { get; set; } = TimeSpan.FromHours(1);
+    // again: an hour.
+    public static readonly TimeSpan UninviteSuppression = TimeSpan.FromHours(1);
 
     // ----- Invite-as-wait-signal (Settings → Party "If leading, wait only") --
     // How long, after auto-inviting a seen player while a loop is running, we
@@ -174,8 +169,8 @@ public sealed class AutoPartyManager : IDisposable
     // Fixed settle delay after crossing a party-splitting teleport before we
     // nudge a room redisplay — about how long every follower's teleport takes to
     // land. Deliberately a constant, not a setting. See ScheduleReformRedisplay.
-    private static readonly TimeSpan ReformRedisplayDelay = TimeSpan.FromSeconds(2);
-    private Avalonia.Threading.DispatcherTimer? _reformRedisplayTimer;
+    internal static readonly TimeSpan ReformRedisplayDelay = TimeSpan.FromSeconds(2);
+    private IDisposable? _reformRedisplayTimer;
 
     // Members whose IsInvited we're watching so a pending invite flipping
     // accepted releases the loop hold.
@@ -229,7 +224,7 @@ public sealed class AutoPartyManager : IDisposable
 
     // Whether the room display now arriving is of a room we aren't standing in: a
     // `look <direction>` peek into the next room, or the room an exit's spell only
-    // passes us through (RoomTracker.IsPeekSuppressed). Unset in tests / before
+    // passes us through (RoomTracker.IsPeekSuppressed). Unset before
     // wiring → never.
     private Func<bool>? _isPeekedDisplay;
     public void SetPeekProbe(Func<bool> isPeekedDisplay) => _isPeekedDisplay = isPeekedDisplay;
@@ -291,14 +286,27 @@ public sealed class AutoPartyManager : IDisposable
 
     // UI-thread tick that walks _activeNags and fires `@join` resends + cap
     // checks. Started on first nag, stopped when the map empties.
-    private Avalonia.Threading.DispatcherTimer? _nagTimer;
+    private IDisposable? _nagTimer;
 
-    public AutoPartyManager(MessageRouter router, PlayerDatabase players, PartyState party, LogService? log = null)
-        : this(router, players, party, trainerMenu: null, log) { }
+    // The nag loop's cadence. Nag decisions are second-resolution, not
+    // millisecond-sensitive.
+    internal static readonly TimeSpan NagTick = TimeSpan.FromMilliseconds(500);
 
+    // Arms one tick after the delay; disposing what it returns cancels it.
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
+
+    public AutoPartyManager(MessageRouter router, PlayerDatabase players, PartyState party, LogService? log = null,
+                            Func<TimeSpan, Action, IDisposable>? schedule = null,
+                            Func<DateTime>? now = null)
+        : this(router, players, party, trainerMenu: null, log, schedule, now: now) { }
+
+    // schedule stands in for the dispatcher's timers.
     public AutoPartyManager(MessageRouter router, PlayerDatabase players, PartyState party,
-                            TrainerMenuTracker? trainerMenu, LogService? log = null)
+                            TrainerMenuTracker? trainerMenu, LogService? log = null,
+                            Func<TimeSpan, Action, IDisposable>? schedule = null,
+                            Func<DateTime>? now = null)
     {
+        _now = now ?? (() => DateTime.UtcNow);
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(players);
         ArgumentNullException.ThrowIfNull(party);
@@ -307,6 +315,7 @@ public sealed class AutoPartyManager : IDisposable
         _party       = party;
         _trainerMenu = trainerMenu;
         _log         = log;
+        _schedule    = schedule ?? DispatcherTicks.Once;
         if (_trainerMenu is not null) _trainerMenu.MenuExited += OnTrainerMenuExited;
 
         _alsoHereSub    = _router.Subscribe(KnownPatterns.RoomAlsoHere,        OnRoomAlsoHere);
@@ -476,7 +485,7 @@ public sealed class AutoPartyManager : IDisposable
                 $"{given}'s uninvite cleared a dead member's slot: auto-invite isn't suppressed.");
             return;
         }
-        _recentlyUninvited[given] = NowProvider();
+        _recentlyUninvited[given] = _now();
         CancelNag(given, reason: "uninvited by leader");
         _log?.Log(LogSeverity.Info, "AutoParty",
             $"Suppressing auto-invite of {given} for {UninviteSuppression.TotalMinutes:0} min (uninvited).");
@@ -528,8 +537,7 @@ public sealed class AutoPartyManager : IDisposable
     // Bind the wire-sender — same shape as
     // Remote.PartyEssentialHandlers.SetWireSender. The main-window VM supplies
     // SendUserInput; pre-binding, the engine still processes events but produces
-    // no wire output (so tests can inspect LastSentForTests without configuring
-    // a real sender).
+    // no wire output.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
     public void Dispose()
@@ -613,10 +621,9 @@ public sealed class AutoPartyManager : IDisposable
     // `invite X` we sent. Catches BOTH the TryAutoInvite auto-path AND the
     // manual-typed path (user types `invite Raijin` at the prompt). Starts the
     // @join nag for X if one isn't already running, so the escalation behaviour
-    // is identical regardless of who initiated the invite. Idempotent — if
-    // TryAutoInvite just fired and already started a nag for X, StartNag would
-    // simply replace the entry with a fresh one (same invited-at timestamp since
-    // both paths use NowProvider()).
+    // is identical regardless of who initiated the invite. Idempotent — a nag
+    // TryAutoInvite already started for X is left running as it is, so the echo
+    // never restarts its countdown.
     private void OnYouInvited(MatchResult match)
     {
         if (match.Groups.Count == 0) return;
@@ -640,7 +647,7 @@ public sealed class AutoPartyManager : IDisposable
             }
         }
         if (_activeNags.ContainsKey(given)) return;
-        StartNag(given, NowProvider());
+        StartNag(given, _now());
         _log?.Log(LogSeverity.Info, "AutoParty",
             $"Started @join nag for {given} on manual `invite` echo.");
     }
@@ -655,7 +662,7 @@ public sealed class AutoPartyManager : IDisposable
         string line = System.Text.Encoding.Latin1.GetString(data).Trim();
         if (!line.StartsWith("invite ", StringComparison.OrdinalIgnoreCase)) return;
         string given = ExtractGiven(line["invite ".Length..].Trim());
-        if (given.Length > 0) _recentlyInvited[given] = NowProvider();
+        if (given.Length > 0) _recentlyInvited[given] = _now();
     }
 
     // Any `invite X` on the wire this recently already covers a deliberate re-invite
@@ -711,7 +718,7 @@ public sealed class AutoPartyManager : IDisposable
         // re-add them. Lazy expiry on read so the map self-prunes.
         if (_recentlyUninvited.TryGetValue(given, out DateTime kickedAt))
         {
-            if (NowProvider() - kickedAt < UninviteSuppression) return;
+            if (_now() - kickedAt < UninviteSuppression) return;
             _recentlyUninvited.Remove(given);
         }
 
@@ -726,7 +733,7 @@ public sealed class AutoPartyManager : IDisposable
 
         // TTL suppression — skip if we've invited them in the cooldown
         // window. Lazy pruning happens here on read.
-        DateTime now = NowProvider();
+        DateTime now = _now();
         if (_recentlyInvited.TryGetValue(given, out DateTime sentAt)
             && now - sentAt < InviteCooldown)
         {
@@ -775,7 +782,7 @@ public sealed class AutoPartyManager : IDisposable
         IReadOnlyList<string> snapshot = _trainerMenu.RosterAtMenuEntry;
         if (snapshot.Count == 0) return;
 
-        DateTime now = NowProvider();
+        DateTime now = _now();
         foreach (string fullName in snapshot)
         {
             string given = ExtractGiven(fullName);
@@ -902,7 +909,8 @@ public sealed class AutoPartyManager : IDisposable
         if (!_activeNags.Remove(given)) return;
         _log?.Log(LogSeverity.Info, "AutoParty",
             $"Stopped @join nag for {given} — {reason}.");
-        if (_activeNags.Count == 0) StopNagTimer();
+        // The same tick expires the invite waits: it keeps running for those.
+        if (_activeNags.Count == 0 && _inviteWaits.Count == 0) StopNagTimer();
     }
 
     // Abort every active nag — used on the became-a-follower transition.
@@ -915,35 +923,30 @@ public sealed class AutoPartyManager : IDisposable
             _log?.Log(LogSeverity.Info, "AutoParty",
                 $"Stopped @join nag for {given} — {reason}.");
         }
-        StopNagTimer();
+        if (_inviteWaits.Count == 0) StopNagTimer();
     }
 
-    // Lazily spin up the dispatcher tick that walks active nags. 500 ms cadence
-    // is fine — nag decisions are second-resolution, not millisecond-sensitive.
-    private void EnsureNagTimerRunning()
+    // Lazily start the tick that walks active nags.
+    private void EnsureNagTimerRunning() => _nagTimer ??= _schedule(NagTick, OnNagTick);
+
+    // One nag tick: the next is armed before this one runs.
+    private void OnNagTick()
     {
-        if (_nagTimer is not null) return;
-        _nagTimer = new Avalonia.Threading.DispatcherTimer(
-            interval: TimeSpan.FromMilliseconds(500),
-            priority: Avalonia.Threading.DispatcherPriority.Background,
-            callback: (_, _) => TickNags());
-        _nagTimer.Start();
+        _nagTimer = _schedule(NagTick, OnNagTick);
+        TickNags();
     }
 
     private void StopNagTimer()
     {
-        _nagTimer?.Stop();
+        _nagTimer?.Dispose();
         _nagTimer = null;
     }
-
-    // Test seam — runs one pass of the nag loop without a real timer.
-    internal void TickNagsForTests() => TickNags();
 
     private void TickNags()
     {
         if (_activeNags.Count == 0 && _inviteWaits.Count == 0) { StopNagTimer(); return; }
         if (MasterOff) return;
-        DateTime now = NowProvider();
+        DateTime now = _now();
 
         ExpireInviteWaits(now);
 
@@ -1065,7 +1068,7 @@ public sealed class AutoPartyManager : IDisposable
     public bool IsReformSettling
         => _reformPendingInvite.Count > 0
         || _reformGiven.Count > 0
-        || NowProvider() < _reformSettleUntil;
+        || _now() < _reformSettleUntil;
 
     public void NotePartySplitTeleport()
     {
@@ -1075,7 +1078,7 @@ public sealed class AutoPartyManager : IDisposable
         if (!_wire.IsBound) return;
         if (MasterOff) return;
 
-        DateTime now = NowProvider();
+        DateTime now = _now();
         bool anyDeferred = false;
         _reformOrigin = _currentRoom?.Invoke();
         foreach (PartyMember m in _party.Members.ToArray())
@@ -1119,7 +1122,7 @@ public sealed class AutoPartyManager : IDisposable
         if (followerGivens is null || followerGivens.Count == 0) return;
         if (!_wire.IsBound) return;
 
-        DateTime now = NowProvider();
+        DateTime now = _now();
         bool anyDeferred = false;
         // The followers are in this room already; nothing to cross.
         _reformOrigin = null;
@@ -1149,24 +1152,14 @@ public sealed class AutoPartyManager : IDisposable
     private void ScheduleReformRedisplay()
     {
         StopReformRedisplay();
-        _reformRedisplayTimer = new Avalonia.Threading.DispatcherTimer(
-            interval: ReformRedisplayDelay,
-            priority: Avalonia.Threading.DispatcherPriority.Background,
-            callback: (_, _) => FireReformRedisplay());
-        _reformRedisplayTimer.Start();
+        _reformRedisplayTimer = _schedule(ReformRedisplayDelay, FireReformRedisplay);
     }
 
     private void StopReformRedisplay()
     {
-        _reformRedisplayTimer?.Stop();
+        _reformRedisplayTimer?.Dispose();
         _reformRedisplayTimer = null;
     }
-
-    // Test seam — runs the redisplay backstop without waiting on a real timer.
-    internal void FireReformRedisplayForTests() => FireReformRedisplay();
-
-    // Test seam — whether a redisplay is waiting to fire.
-    internal bool ReformRedisplayArmedForTests => _reformRedisplayTimer is not null;
 
     private void FireReformRedisplay()
     {
@@ -1208,7 +1201,7 @@ public sealed class AutoPartyManager : IDisposable
         if (!ReformCrossed) return;
         if (!_reformPendingInvite.Remove(given)) return;
         if (!_wire.IsBound) return;
-        DateTime now = NowProvider();
+        DateTime now = _now();
         // Override the re-invite cooldown — the split is a deliberate reform
         // trigger, not the rapid room re-render the cooldown guards against — but
         // not an invite that's already just gone out.
@@ -1281,7 +1274,7 @@ public sealed class AutoPartyManager : IDisposable
         // TrapDelegationManager sees one beat later (MemberFollowConfirmed fires
         // after this roster-driven clear) still reads as in-reform and skips the
         // race-probe look. See IsReformSettling.
-        if (_reformGiven.Remove(given)) _reformSettleUntil = NowProvider() + ReformSettleGrace;
+        if (_reformGiven.Remove(given)) _reformSettleUntil = _now() + ReformSettleGrace;
         _reformPendingInvite.Remove(given);
         _splitReform.Remove(given);
         _log?.Log(LogSeverity.Info, "AutoParty",

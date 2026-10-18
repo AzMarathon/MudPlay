@@ -1296,11 +1296,12 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
         // Under a typed break's hold the combat engine asks to see the room once a
         // fight in it goes quiet; a display that lists nobody is how an emptied room
-        // answers. A `look <direction>` shows the next room and answers nothing.
-        _roomDisplayParser.RoomParsed += _ =>
+        // answers. A `look <direction>` shows the next room and answers nothing. The
+        // display also tells the attack-order holds whether this is the room shown last.
+        _roomDisplayParser.RoomParsed += obs =>
         {
             if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
-                AppServices.Current.Combat.NoteRoomDisplayed();
+                AppServices.Current.Combat.NoteRoomDisplayed(obs);
         };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
@@ -3577,6 +3578,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.DefaultTaskRunner.NotifyDisconnected();
                 // Stop statline reconciliation until the next connect re-arms.
                 AppServices.Current.StatlineReconcile.Disarm();
+                // A prompt the link cut off part-way must not be completed by the
+                // next connection's first bytes.
+                AppServices.Current.PromptScanner.Reset();
                 // Pause Time Analysis accrual: we're no longer in-game, so
                 // the offline span doesn't count. Totals freeze and resume
                 // on the next in-game prompt after reconnect.
@@ -3599,6 +3603,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // wire, or set off again on reconnect.
                 AppServices.Current.DeathRecovery.NotifyDisconnected();
                 AppServices.Current.CorpseHandoff.NotifyDisconnected();
+                // A light buy's window would end in the next session and walk an
+                // errand or a bank run on from wherever the reconnect lands.
+                AppServices.Current.NotifyLightBuysDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.
@@ -5049,9 +5056,6 @@ public partial class MainWindowViewModel : ObservableObject
     // switches to the requested section first).
     private Views.CharacterWorkshop.CharacterWorkshopWindow? _workshop;
 
-    [RelayCommand]
-    private void OpenWorkshopDeath() => OpenWorkshopAt("death");
-
     // Terminal right-click "Workshop: <tab>" deep-link — opens the Workshop on a
     // section (string param = the WorkshopSectionViewModel.Id; a sub-tab's id opens
     // the tab that holds it).
@@ -5982,8 +5986,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void MovementStop()
     {
         // The first Stop holds a money or training errand; a second ends it.
-        if (AppServices.Current.MovementControl.HoldErrandOnStop()) return;
-        AppServices.Current.MovementControl.Stop();
+        if (!AppServices.Current.MovementControl.StopByUser()) return;
         OnUserStopped("stopped by the user", endsTheRun: true);
     }
 
@@ -6246,10 +6249,6 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // ----- Polish commands -----------------------------------------------
-
-    // View → Reset layout. Restores every panel to docked default.
-    [RelayCommand]
-    private void ResetLayout() => AppServices.Current.Panels.ResetToDefault();
 
     // Tools → Open Logs folder…
     [RelayCommand]

@@ -274,9 +274,6 @@ public sealed class AppServices
     // applied at startup, saved on Changed (see the Apply/Persist helpers below).
     public LogDiagnosticState LogDiagnostics { get; } = new();
 
-    // Docking / floating panel framework (single-UserControl reparented).
-    public FloatingPanelHost Panels { get; }
-
     // Per-character top-level window position + size memory. Each
     // window calls WindowLayoutStore.AttachWindow once
     // during construction with a stable id; the store handles
@@ -3028,7 +3025,6 @@ public sealed class AppServices
         Settings.GlobalSettingsChanged += _ => ApplyTerminalColorsFromGlobalSettings();
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
-        Panels = new FloatingPanelHost();
         // Loopback control API. Constructed always, listening only while the
         // Global setting says so — and it follows that setting live, so toggling
         // it opens / closes the socket without a restart. The emulator is fetched
@@ -3659,8 +3655,7 @@ public sealed class AppServices
             bashRestRecovered:             () => BashRestGate(recovered: true),
             log: Log,
             // UI-thread one-shot so the door FSM's response watchdog fires on the
-            // same thread its router-driven handlers run on; keeps Game/Map UI-free
-            // (tests drive result lines synchronously and leave this null).
+            // same thread its router-driven handlers run on; keeps Game/Map UI-free.
             scheduleDelay: (delay, callback) =>
             {
                 var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -3719,10 +3714,6 @@ public sealed class AppServices
         CleanupLogout.SetMasterSwitchCheck(MasterSwitchOff("Cleanup log-off"));
         PromptScanner.RealmLeftPromptObserved += () => CleanupLogout.NoteRealmLeftPrompt();
 
-        // Bridge: load persisted panel layouts on profile load; snapshot back
-        // into the profile DTO just before serialization on save.
-        Profile.ProfileLoaded += p => Panels.ApplyLayouts(p.PanelLayouts);
-
         // PartyManager needs the local character's name so its par-row
         // parser can tag the right row IsSelf=true (par's "Given Family"
         // name is compared against this). The profile name is a label the
@@ -3764,8 +3755,6 @@ public sealed class AppServices
                 Profile.Save();
             }
         };
-        Profile.ProfileClosed += () => Panels.ApplyLayouts(layouts: null);
-        Profile.ProfileSaving += p => p.PanelLayouts = Panels.SnapshotLayouts();
 
         // Bridge: keep the live DisplayConfig in sync with the active BBS.
         // Font size + scrollback are BBS-tier (different BBSes warrant
@@ -4293,7 +4282,7 @@ public sealed class AppServices
         // gate to open (polling the room's open-gate exit, since there's no gate-open
         // line), then move. isGateOpen reads the live open-door directions the room
         // display parses "open gate <dir>" into; scheduleDelay is the same UI-thread
-        // one-shot the door FSM uses (null in tests — they drive lines synchronously).
+        // one-shot the door FSM uses.
         Winch = new Game.Map.WinchManager(
             Router,
             isGateOpen: dir => RoomTracker.State.OpenDoorDirections?.Contains(dir) == true,
@@ -5006,6 +4995,10 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); callback(); };
                 timer.Start();
             });
+        // Which room the holds' room display belongs to, when no display has been seen
+        // since we left the last one (a dark room lit after a fight).
+        Combat.SetConfirmedRoomProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed ? RoomTracker.State.CurrentRoom : null);
 
         // Attack-order re-fire quiet window: a UI-thread one-shot so attack-last /
         // attack-after re-fire once the party's staggered announces have gone quiet.
@@ -5814,7 +5807,7 @@ public sealed class AppServices
         Tick.CombatTickElapsed += Combat.OnCombatTick;
         // Count attack-spell MaxCasts off Combat's own ConfirmedAttackCastCount —
         // incremented directly off each observed cast-result line — instead of
-        // RoundDamageTracker's timer-driven RoundCount. That tracker's 5s window is
+        // RoundDamageTracker's timer-driven round counter. That tracker's 5s window is
         // sized for DPS/session stats, not per-cast precision, and can bundle more
         // than one real cast into a single round for a fast caster, under-counting
         // MaxCasts (report paradigm-20260822-003106). See ReadRoundCount's
@@ -6389,6 +6382,8 @@ public sealed class AppServices
             StatlineReconcile.Arm();
             // Whoever was in the room is not known to be there on the way back in.
             RoomClassifier.NoteGameLeft();
+            // Nor is the fight that was going on in it.
+            Combat.NoteGameLeft();
         };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
@@ -8015,7 +8010,7 @@ public sealed class AppServices
         // arrival shore — on a wall-clock deadline it sizes from the passage's
         // transit-spell rounds. Wire a UI-thread one-shot so OnBoatDeadline runs on
         // the same thread the walker's tracker events do; the injected shape keeps
-        // the Game/Map layer UI-free (tests drive a fake clock instead).
+        // the Game/Map layer UI-free.
         Func<TimeSpan, Action, IDisposable> uiOneShot = (delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -8396,8 +8391,12 @@ public sealed class AppServices
             sightTakenAway: () => Conditions.IsBlinded
                 || Conditions.AnyActive(r => r.Links?.Any(l => string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)
                     && RoomLightSpell.IsDarkeningSpell(l.Number)) == true),
-            log:         Log);
+            log:         Log,
+            // A light trip, and an errand's stop, checks the purse against these.
+            lightPrice:  CheapestPrice,
+            shopPrice:   PathItemBuyCost);
         Profile.ProfileLoaded += _ => AutoLightProvisioner.Forget("profile loaded");
+        Profile.BbsPinApplied += _ => AutoLightProvisioner.Forget("BBS or realm changed");
         GameData.ActiveSetChanged += _ => AutoLightProvisioner.Forget("game data changed");
         RoomTracker.PlayerDeathObserved += () => AutoLightProvisioner.Forget("death");
         AutoLightProvisioner.SetSneakKeptProbe(() => SneakGuard.Holds);
@@ -9736,7 +9735,8 @@ public sealed class AppServices
             partyTollFunding: tolls => PartyToll.FundingNeededFor(tolls),
             readPartyPurses: then => PartyToll.AfterReadingPurses(then),
             // A stash room picked as the Bank in Settings → Cash + Items.
-            stashIsTheBank: room => Movement.IsStash(room) && PathItemBankRoom() == room);
+            stashIsTheBank: room => Movement.IsStash(room) && PathItemBankRoom() == room,
+            lightStop: NewErrandLightStop("the funding errand"));
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
@@ -9780,8 +9780,9 @@ public sealed class AppServices
             believedCopper: room => StashBalances.Believed(room),
             // Reported from the stash room, so the row is the one its hides built.
             noteStashSeen: (took, left) => TransactionHistory.NoteStashWithdrawal(
-                CoinWords(took), CoinWords(left), CurrentRoomLabel()));
-        Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
+                CoinWords(took), CoinWords(left), CurrentRoomLabel()),
+            lightStop: NewErrandLightStop("the stash transfer"));
+        Walker.Event += e => StashTransfer.OnWalkEvent(e);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>
         {
@@ -9796,7 +9797,8 @@ public sealed class AppServices
         // (CP tab) + the armed auto-train (live-exp threshold during a loop)
         // both route through it. Wire-sender bound in MainWindowViewModel.
         TrainerWalk = new Game.TrainerWalkManager(PlayerStats, Stats, GameData, Profile,
-            RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log);
+            RoomTracker, Bfs, Walker, LoopRunner, AutoLair, AutoTrain, Router, Log,
+            lightStop: NewErrandLightStop("the training walk"));
         TrainerWalk.SetFundingRouter(TrainFunding);
         TrainerWalk.RouteTolls = (a, b) => Movement.TollCopperOnRoute(Bfs, a, b);
         TrainerWalk.HasTollFreeRoute = (a, b) => Movement.HasTollFreeRoute(Bfs, a, b);
@@ -9804,7 +9806,7 @@ public sealed class AppServices
         // The errand drives the walker itself, so it needs the same event stream the
         // coordinator watches. TrainerWalkManager ignores walk events while its phase
         // is Funding, so the two never both act on one event.
-        Walker.Event += e => TrainFunding.OnWalkEvent(e.Kind);
+        Walker.Event += e => TrainFunding.OnWalkEvent(e);
         // Shortfall wording comes from the live session earn rate + lap time, which
         // live out here rather than in the train coordinator.
         TrainerWalk.DescribeShortfall = shortfall =>
@@ -9831,7 +9833,8 @@ public sealed class AppServices
             log: Log,
             // A toll on the way to a shop is taken only when the scrolls can still
             // be paid for after it.
-            reserve: copper => Movement.ReservedCopper = copper);
+            reserve: copper => Movement.ReservedCopper = copper,
+            lightStop: NewErrandLightStop("the spell-shop trip"));
         Walker.Event += e => ShopSpells.OnWalkEvent(e);
         AutoBuy.StockListed += stock => ShopSpells.OnShopListed(stock);
         Inventory.Changed += () => ShopSpells.OnInventoryChanged();
@@ -9847,19 +9850,6 @@ public sealed class AppServices
             if (ShopSpells.OnScrollAlreadyKnown() is { } spell) Spellbook.MarkObtainedByName(spell);
         });
         TrainerWalk.SetSpellErrand(ShopSpells);
-        // A walk to the trainer that runs dark stops at a light shop first, as the
-        // bank run's walk home does: the walk-to light router stands down while an
-        // errand has the walker, so the errand provisions its own walk.
-        Game.Light.LightShopBuy trainLightBuyer = new(CountItemCarried,
-            Game.Light.LightShopBuy.PostedTimer(action => Avalonia.Threading.Dispatcher.UIThread.Post(action)), log: Log);
-        TrainerWalk.SetLightShopBuy(trainLightBuyer);
-        Inventory.Changed += trainLightBuyer.OnInventoryChanged;
-        TrainerWalk.PlanLightStop = (from, trainer) =>
-            Walker.TryComputeRouteKeys(from, trainer) is { } route
-            && AutoLightProvisioner.PlanRouteBuy(route) is { } buy
-            && AutoLightShopRouter.TrySelectShop(from, trainer, buy.ItemId, out Game.Map.RoomKey shop)
-                ? (shop, buy)
-                : null;
         TrainerWalk.PlanShopSpells = (from, returnTo, level) =>
             PlanShopSpells(from, returnTo, level, budgetCopper: null);
 
@@ -10035,7 +10025,8 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom,
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement));
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            coordinator: MovementCoordinator);
         // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
         // whose lit light dwindles under Reorder-at: the walk-to shop router stands
         // down while they run, so the buy is a trip of its own off the engine, back
@@ -10047,8 +10038,7 @@ public sealed class AppServices
             engineRunning: () => (LoopRunner.State != Game.Map.LoopState.Idle || AutoLair.IsActive) && !GhSweep.IsActive,
             restock: buy => AutoDeposit.StartLightRestock(buy, maxAddedSteps: null, "light for the run"),
             engineRooms: LoopRunner.ResolveLoopRoomKeys,
-            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
-            lightPrice: CheapestPrice);
+            defer: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         LoopRunner.Event += e =>
         {
             if (e.Kind == Game.Map.LoopEventKind.Started)
@@ -10090,7 +10080,8 @@ public sealed class AppServices
                 || DeathRecovery.SpillSweepActive,
             nearestLoopRoom: NearestLoopRoom,
             nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
-            log: Log);
+            log: Log,
+            lightStop: NewErrandLightStop("the sell detour"));
 
         // Stop holds a money or training errand instead of ending it, and the next
         // walk, loop or Auto-Lair the user starts asks whether to finish it first.
@@ -15406,8 +15397,8 @@ public sealed class AppServices
     private bool _autoSearchFlippedForRouteSearch;
 
     // UI bridge to flip the master Auto-Search toggle (the observable that persists +
-    // updates the toolbar); bound by MainWindowViewModel after construction. Null in
-    // headless/test contexts, where the route-search flip is simply a no-op.
+    // updates the toolbar); bound by MainWindowViewModel after construction. Null until
+    // then, when the route-search flip is simply a no-op.
     public Action<bool>? SetAutoSearchEnabled { get; set; }
 
     // Picking the route picker's "Search en route" card turns Auto-Search on for the
@@ -15480,6 +15471,41 @@ public sealed class AppServices
         _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
         return _lightDetourJourney?.Destination ?? Walker.Destination;
     }
+
+    // The light stop of one errand's own walks (ErrandLightStop): the walk-to light
+    // router stands down while an errand has the walker, so each errand provisions
+    // its walks itself. Each has its own buy, fed the inventory's changes, and is
+    // listed for the bug report.
+    private Game.Light.ErrandLightStop NewErrandLightStop(string errand)
+    {
+        Game.Light.LightShopBuy buyer = new(CountItemCarried,
+            Game.Light.LightShopBuy.PostedTimer(action => Avalonia.Threading.Dispatcher.UIThread.Post(action)), log: Log);
+        Game.Light.ErrandLightStop stop = new(errand,
+            route: (from, to) => Walker.TryComputeRouteKeys(from, to),
+            provisioner: AutoLightProvisioner, shops: AutoLightShopRouter,
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            buyer: buyer, send: cmd => SendGameCommand(cmd), log: Log,
+            lastUnpaidFailure: () => Walker.LastUnpaidFailure);
+        Inventory.Changed += stop.OnInventoryChanged;
+        _errandLightStops.Add((errand, stop));
+        return stop;
+    }
+
+    private readonly List<(string Errand, Game.Light.ErrandLightStop Stop)> _errandLightStops = new();
+
+    // The connection dropped: no light buy under way (an errand's stop, or a bank
+    // run's, light trip's or stock-up's) walks on in the next session or reads the
+    // window's end as a shop that didn't sell.
+    public void NotifyLightBuysDisconnected()
+    {
+        foreach ((string _, Game.Light.ErrandLightStop stop) in _errandLightStops) stop.NoteDisconnected();
+        AutoDeposit.NoteDisconnected();
+    }
+
+    // Each errand's light stop, for the bug report.
+    public string DescribeErrandLightStops() => _errandLightStops.Count == 0
+        ? "none"
+        : string.Join("; ", _errandLightStops.Select(s => $"{s.Errand}: {s.Stop.Describe()}"));
 
     // A training trip is over and the engine is back up: with the pack short of
     // Carry hours of light and a shop selling it close to the way back to the loop,
@@ -15720,9 +15746,9 @@ public sealed class AppServices
         int obtainable = 0;
         foreach (RouteRequirement req in requirements)
         {
-            // Already satisfied (carried) or an optional shortcut → nothing to source;
-            // don't let it veto the auto-obtain, and never source it.
-            if (req.Carried || req.Optional) continue;
+            // Already carried → nothing to source; don't let it veto the auto-obtain,
+            // and never source it.
+            if (req.Carried) continue;
             if (req.Kind is not (RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
                 or RouteRequirementKind.DoorKey))
                 return false;

@@ -23,7 +23,7 @@ namespace MudPlay.Game.Map;
 //      palette, so we anchor on POSITION — the title is the last bright-cyan
 //      line before "Obvious exits:" (the room display is one contiguous block,
 //      so async broadcasts land before it, not between the title and exits).
-//   2. Text fallback: when colour data is absent (tests, replays without
+//   2. Text fallback: when colour data is absent (replays without
 //      attributes) or the realm renders names without bright cyan, return the
 //      first non-blank line that doesn't look like a command echo (single
 //      letters, "look n", "sea sword", bare direction words, etc.).
@@ -80,25 +80,6 @@ public sealed partial class RoomDisplayParser : IDisposable
 
     public void Dispose() => _lines.LineEmitted -= OnLineEmitted;
 
-    // Test seam — feed plain text lines without colour information. Lines fall
-    // through to the text-heuristic path (echo filter + first non-blank line in
-    // the block).
-    internal void FeedTestLines(IEnumerable<string> lines, DateTimeOffset? when = null)
-    {
-        DateTimeOffset stamp = when ?? DateTimeOffset.UtcNow;
-        foreach (string text in lines)
-            HandleLine(new LineExtractor.EmittedLine(text, [], stamp, false));
-    }
-
-    // Test seam — feed pre-built EmittedLines through the real emit entry point
-    // so the colour-anchored detection and prompt-boundary handling are both
-    // exercised.
-    internal void FeedTestEmittedLines(IEnumerable<LineExtractor.EmittedLine> lines)
-    {
-        foreach (LineExtractor.EmittedLine line in lines)
-            OnLineEmitted(line);
-    }
-
     private void OnLineEmitted(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine)
@@ -124,13 +105,15 @@ public sealed partial class RoomDisplayParser : IDisposable
         if (exits.Success)
         {
             HashSet<Direction> dirs = ParseExits(exits.Groups["list"].Value,
-                out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors);
+                out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors,
+                out HashSet<Direction> secretPassages);
             string? name = _brightCyanRoomName ?? FindRoomNameInBuffer();
             if (name is not null)
             {
                 var observation = new RoomObservation(name, dirs,
                     openDoors.Count > 0 ? openDoors : null,
-                    closedDoors.Count > 0 ? closedDoors : null);
+                    closedDoors.Count > 0 ? closedDoors : null,
+                    secretPassages.Count > 0 ? secretPassages : null);
                 RoomParsed?.Invoke(observation);
                 _tracker.NoteRoomObserved(observation, line.Timestamp);
                 _log?.Info("RoomDisplay",
@@ -282,11 +265,13 @@ public sealed partial class RoomDisplayParser : IDisposable
     }
 
     private static HashSet<Direction> ParseExits(string list,
-        out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors)
+        out HashSet<Direction> openDoors, out HashSet<Direction> closedDoors,
+        out HashSet<Direction> secretPassages)
     {
         var result = new HashSet<Direction>();
         openDoors = new HashSet<Direction>();
         closedDoors = new HashSet<Direction>();
+        secretPassages = new HashSet<Direction>();
         if (string.IsNullOrWhiteSpace(list)) return result;
         if (list.Trim().Equals("none", StringComparison.OrdinalIgnoreCase)) return result;
 
@@ -317,6 +302,10 @@ public sealed partial class RoomDisplayParser : IDisposable
                 isClosedDoor = !isOpenDoor;
                 entry = entry[barrier.Length..];
             }
+            // A hidden exit with no label of its own lists as "secret passage <dir>"
+            // (GAME_MECHANICS "Room display parsing — the room title is positional,
+            // not just bright cyan"), and can hide again with no line printed.
+            bool isSecretPassage = entry.StartsWith("secret passage ", StringComparison.Ordinal);
 
             // Sub-split on spaces in case the entry has trailing
             // "and <dir>" or similar (rare).
@@ -344,6 +333,7 @@ public sealed partial class RoomDisplayParser : IDisposable
                 result.Add(d);
                 if (isOpenDoor) openDoors.Add(d);
                 else if (isClosedDoor) closedDoors.Add(d);
+                if (isSecretPassage) secretPassages.Add(d);
             }
         }
         return result;

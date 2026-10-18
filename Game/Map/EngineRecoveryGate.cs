@@ -103,12 +103,13 @@ public sealed class EngineRecoveryGate
     private Action? _combatClearResume;
 
     // Move-free look-sweep for spatial fingerprinting. Created when the wire
-    // sender binds (per-session, on the UI thread). Null in headless tests /
-    // before connect → recovery falls back to the temporal-only footprint.
+    // sender binds (per-session, on the UI thread). Null before
+    // connect → recovery falls back to the temporal-only footprint.
     private RecoveryLookSweep? _sweep;
+    private readonly Func<TimeSpan, Action, IDisposable>? _lookTimeoutSchedule;
 
     // Combat-clear gate: true while a hostile the combat engine will
-    // auto-engage is in the room. Null → no combat gating (tests / no combat
+    // auto-engage is in the room. Null → no combat gating (no combat
     // tracker) → recovery never waits.
     private Func<bool>? _hostilesPresent;
 
@@ -219,14 +220,15 @@ public sealed class EngineRecoveryGate
     // Fires whenever CurrentTier changes. Payload carries previous/new + a reason.
     public event Action<RecoveryTierChangedEvent>? TierChanged;
 
-    // Fires when tier-3 recovery converges. Payload is the recovered anchor.
-    public event Action<RoomKey>? Recovered;
-
     // Fires when tier-3 recovery fails terminally. Caller surfaces the modeless info dialog.
     public event Action<RecoveryFailedEvent>? RecoveryFailed;
 
-    public EngineRecoveryGate(RoomGraphManager graph, RoomTracker tracker, LogService? log = null)
+    // lookTimeoutSchedule arms the look-sweep's per-look timeout (RecoveryLookSweep);
+    // the default is a one-shot on the UI thread's dispatcher.
+    public EngineRecoveryGate(RoomGraphManager graph, RoomTracker tracker, LogService? log = null,
+        Func<TimeSpan, Action, IDisposable>? lookTimeoutSchedule = null)
     {
+        _lookTimeoutSchedule = lookTimeoutSchedule;
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(tracker);
         _graph = graph;
@@ -257,7 +259,7 @@ public sealed class EngineRecoveryGate
     public void SetWireSender(Action<byte[]> sender)
     {
         ArgumentNullException.ThrowIfNull(sender);
-        _sweep ??= new RecoveryLookSweep(_log);
+        _sweep ??= new RecoveryLookSweep(_log, _lookTimeoutSchedule);
         _sweep.SetWireSender(sender);
     }
 
@@ -281,7 +283,7 @@ public sealed class EngineRecoveryGate
 
     // Supply the combat-clear predicate: true while a hostile the combat engine
     // will auto-engage is present. Recovery holds its look-sweep / next reverse
-    // move until it clears. Left unset leaves recovery ungated (tests).
+    // move until it clears. Left unset, recovery is ungated.
     public void SetCombatGate(Func<bool> hostilesPresent)
     {
         ArgumentNullException.ThrowIfNull(hostilesPresent);
@@ -296,9 +298,6 @@ public sealed class EngineRecoveryGate
         if (_hostilesPresent?.Invoke() == true) return;   // still fighting — keep holding
         ResumeAfterCombatClear();
     }
-
-    // Test seam: inject a timer-free look-sweep so the sweep path runs headless.
-    internal void SetLookSweepForTests(RecoveryLookSweep sweep) => _sweep = sweep;
 
     // ----- attach / detach -------------------------------------------
 
@@ -614,7 +613,6 @@ public sealed class EngineRecoveryGate
         ResetTier3Orchestration();
         SetTier(TierLevel.Tier1, "authoritative position resync");
         _log?.Log(LogSeverity.Info, LogSource, $"authoritative resync → anchored {key}");
-        Recovered?.Invoke(key);
         _engine.ResumeAfterRecovery(key);
     }
 
@@ -694,7 +692,7 @@ public sealed class EngineRecoveryGate
     // Check before sending the engine's next planned step. Returns true
     // when the gate is OK with the send. Returns false when the gate has
     // escalated to tier 3 — engine must stop and surrender control until
-    // Recovered fires (or RecoveryFailed).
+    // the engine resumes (or RecoveryFailed fires).
     public bool MayProceedWithPlannedStep()
     {
         if (_engine is null) return true;
@@ -709,7 +707,7 @@ public sealed class EngineRecoveryGate
         if (CurrentTier == TierLevel.Tier3)
         {
             _log?.Log(LogSeverity.Info, LogSource,
-                $"MayProceed=false: tier3 active; engine={_engine.Name} must wait for Recovered/RecoveryFailed");
+                $"MayProceed=false: tier3 active; engine={_engine.Name} must wait for a resume or RecoveryFailed");
             return false;
         }
 
@@ -892,7 +890,6 @@ public sealed class EngineRecoveryGate
         if (CurrentTier != TierLevel.Tier1) SetTier(TierLevel.Tier1, "confirmed-tracker re-anchor");
         _log?.Log(LogSeverity.Info, LogSource,
             $"trust-confirmed: re-anchored to {room.Key} ({room.Name}) instead of tier-3 backtrack — {reason}");
-        Recovered?.Invoke(room.Key);
         _engine.ResumeAfterRecovery(room.Key);
         return true;
     }
@@ -953,7 +950,7 @@ public sealed class EngineRecoveryGate
     {
         if (_engine is null) return;
 
-        // No combat gating wired (headless) → step immediately; otherwise hold
+        // No combat gating wired → step immediately; otherwise hold
         // until a combat tick with the room clear, then dead-reckon.
         if (_hostilesPresent is null) { DoDarkStep(); return; }
 
@@ -995,7 +992,7 @@ public sealed class EngineRecoveryGate
     }
 
     // Peek every exit of the landing room and spatially narrow the footprint by
-    // what the neighbours reveal. No sweep available (headless / no wire / no
+    // what the neighbours reveal. No sweep available (no wire / no
     // exits) → decide on the temporal footprint alone.
     private void StartSweep(IReadOnlySet<Direction> ownExits)
     {
@@ -1207,8 +1204,6 @@ public sealed class EngineRecoveryGate
         {
             _tracker.LocateDeduced(recovered, "tier-2 forward footprint converged");
         }
-
-        Recovered?.Invoke(recovered);
     }
 
     private void FinishTier3Success(RoomKey recovered)
@@ -1238,7 +1233,6 @@ public sealed class EngineRecoveryGate
             _tracker.LocateDeduced(recovered, "tier-3 walk-back footprint converged");
         }
 
-        Recovered?.Invoke(recovered);
         _engine.ResumeAfterRecovery(recovered);
     }
 

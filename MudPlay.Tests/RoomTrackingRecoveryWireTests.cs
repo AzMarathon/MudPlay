@@ -476,7 +476,9 @@ public sealed class RoomTrackingRecoveryWireTests
         }
 
         public void PauseForRecovery(string reason) { }
-        public void ResumeAfterRecovery(RoomKey recoveredAnchor) { }
+        // What the gate resumed the engine at, as the engine sees it.
+        public Action<RoomKey>? Resumed { get; set; }
+        public void ResumeAfterRecovery(RoomKey recoveredAnchor) => Resumed?.Invoke(recoveredAnchor);
         public void AbortFromRecoveryFailure(string detail) => Aborts.Add(detail);
     }
 
@@ -712,7 +714,7 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
         RoomKey? recovered = null;
         bool savedStayed = false;
-        rig.Gate.Recovered += key =>
+        engine.Resumed = key =>
         {
             recovered = key;
             savedStayed = Saved(profile) == Gate && rig.Tracker.State.Confidence == RoomConfidence.Confirmed;
@@ -1114,7 +1116,7 @@ public sealed class RoomTrackingRecoveryWireTests
         rig.ExtraShownExits.Clear();
         Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
         RoomKey? recovered = null;
-        rig.Gate.Recovered += key => recovered = key;
+        engine.Resumed = key => recovered = key;
 
         rig.Gate.NoteEngineStalled("the step's watchdog gave up");
         rig.Pump();
@@ -1152,7 +1154,7 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
         Assert.Equal(A(1), rig.Believed);
         RoomKey? recovered = null;
-        rig.Gate.Recovered += key => recovered = key;
+        engine.Resumed = key => recovered = key;
 
         rig.Gate.NoteEngineStalled("the step's watchdog gave up");
         rig.Pump();

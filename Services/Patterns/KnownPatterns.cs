@@ -60,6 +60,11 @@ public static class KnownPatterns
     // ----- Searching -----------------------------------------------------
     public const string UserSearchFailed     = "search.user-search-failed";
     public const string UserSearchSucceeded  = "search.user-search-succeeded";
+    // An exit of the room we stand in opened or shut in place: a timed exit's
+    // "The exit to the <dir> just opened!" / "…just closed!", and the line a
+    // hidden exit opened by its actions prints when it has none of its own.
+    public const string RoomExitOpenedOrClosed     = "search.room-exit-opened-or-closed";  // (?<direction>) (?<what>opened|closed)
+    public const string RoomConcealedPassageOpened = "search.room-concealed-passage-opened";
 
     // ----- Combat --------------------------------------------------------
     public const string CombatStatus         = "combat.status";   // captures (?<status>Engaged|Off)
@@ -262,8 +267,7 @@ public static class KnownPatterns
     public const string CashOnGround        = "cash.on-ground";
 
     // "You picked up N <coin> pieces." / singular variant — confirmation that a
-    // get succeeded. CashManager updates internal tallies + the auto-deposit
-    // trigger check.
+    // get succeeded. CashManager settles the get and re-checks auto-deposit.
     public const string CashPickedUp        = "cash.picked-up";
 
     // "You dropped N <coin> pieces." — discard confirmation.
@@ -275,8 +279,7 @@ public static class KnownPatterns
 
     // "You hid N <coin> pieces." — stash-room confirmation. Wire shape distinct
     // from CashDropped because the `hide` command is the stash-room verb in stock
-    // MajorMUD. Without this, the held-coin tally goes stale after a stash and
-    // the auto-deposit threshold fires on phantom wealth.
+    // MajorMUD.
     public const string CashHidden          = "cash.hidden";
 
     // "N <coin> drop to the ground." — corpse-spawned cash after a monster kill

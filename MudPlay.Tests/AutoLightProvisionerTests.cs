@@ -87,10 +87,13 @@ public sealed class AutoLightProvisionerTests
         public DateTimeOffset Now = new(2026, 10, 17, 12, 0, 0, TimeSpan.Zero);
         // The light-making spell's caster line, as the Messages data gives it.
         public string? CastLine;
+        // What one copy of a light costs at the cheapest shop (null: not known).
+        public long? LightPrice;
         public readonly List<AutoLightBuyRequest> BuyRequests = new();
         public readonly List<string> Sent = new();
         public readonly MessageRouter Router = new();
         public readonly AutoLightProvisioner Engine;
+        private readonly List<byte[]> _wire = new();
 
         public Harness()
         {
@@ -115,7 +118,8 @@ public sealed class AutoLightProvisionerTests
                 inDarkRoom:  () => InDark,
                 castLineFor: _ => CastLine,
                 sightTakenAway: () => SightTakenAway,
-                now: () => Now);
+                now: () => Now,
+                lightPrice: _ => LightPrice);
             Engine.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
             Engine.SetProvisioner(req => { BuyRequests.Add(req); return true; });
             Engine.AttachRouter(Router);
@@ -138,19 +142,21 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void Disabled_SendsNothing()
+    public void Disabled_RequestsNoBuy()
     {
-        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "lantern" }) };
+        // The same torch-only pack and dark route that hand off a lantern buy when
+        // enabled (BuyPlan_HandsOffToProvisioner_NoWireSend).
+        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "torch" }) };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
     public void DarkRoute_CoveringCarry_SuppressesPredictiveReady()
     {
         // -300 room, worn 0, carried lantern covers — the planner returns a Ready
-        // verdict, but predictive readying is suppressed: a light is `use`d only on
-        // the server's live can't-see line, never ahead of a route.
+        // verdict, but the route-wide ready is suppressed: only the one-room
+        // lookahead or the can't-see line lights.
         Harness h = new() { Snapshot = Snap(carried: new[] { "lantern" }) };
         h.Plan(A);
         Assert.Empty(h.Sent);
@@ -174,37 +180,39 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void WornIlluCoversRoute_SendsNothing()
+    public void WornIlluCoversRoute_RequestsNoBuy()
     {
         // +250 worn illu against a -300 room clears the see threshold on its own
-        // (worn 250 + room -300 = -50 >= -150) → no light to ready.
-        Harness h = new() { WornIllu = 250, Snapshot = Snap(carried: new[] { "lantern" }) };
+        // (worn 250 + room -300 = -50 >= -150) → no light to buy, though only a
+        // torch is carried.
+        Harness h = new() { WornIllu = 250, Snapshot = Snap(carried: new[] { "torch" }) };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
-    public void LitRoute_SendsNothing()
+    public void LitRoute_RequestsNoBuy()
     {
         Harness h = new()
         {
             Graph = GraphOf(RoomAt(A, 0)),
-            Snapshot = Snap(carried: new[] { "lantern" }),
+            Snapshot = Snap(carried: new[] { "torch" }),
         };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
-    public void ReadiedLightAlreadyCovers_SendsNothing()
+    public void ReadiedLightAlreadyCovers_RequestsNoBuy()
     {
-        // Lantern (175) lit and healthy covers the -300 room → leave it be.
+        // Lantern (175) lit and healthy covers the -300 room → nothing to buy,
+        // though the carried torch alone wouldn't cover it.
         Harness h = new()
         {
             Snapshot = Snap(carried: new[] { "torch" }, readied: new ReadiedLight("lantern", 200)),
         };
         h.Plan(A);
-        Assert.Empty(h.Sent);
+        Assert.Empty(h.BuyRequests);
     }
 
     [Fact]
@@ -360,7 +368,7 @@ public sealed class AutoLightProvisionerTests
     public void Reactive_DarkObserved_NothingCarried_SendsNothing()
     {
         // No light in the pack and no room-light spell → nothing to light the room
-        // with here (buying is the route planner's); nothing is cast either.
+        // with; the can't-see line never buys, and nothing is cast either.
         Harness h = new() { Snapshot = Snap(carried: new[] { "5 dagger" }) };
         h.Dark();
         Assert.Empty(h.Sent);
@@ -785,11 +793,14 @@ public sealed class AutoLightProvisionerTests
     }
 
     [Fact]
-    public void RoomEntered_Disabled_SendsNothing()
+    public void RoomEntered_Disabled_DoesNotRemTheLight()
     {
-        Harness h = new() { Enabled = false, Snapshot = Snap(carried: new[] { "5 torch" }) };
+        // Lit by this engine, then the toggle turned off: the light stays readied.
+        Harness h = new() { Snapshot = Snap(carried: new[] { "5 torch" }) };
+        h.Dark();
+        h.Enabled = false;
         h.Enter(0);
-        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "use torch", "" }, h.Sent);
     }
 
     [Fact]
@@ -1437,10 +1448,10 @@ public sealed class AutoLightProvisionerTests
     [InlineData("back-off")]
     public void Loop_TripThatCouldNotBuy_TriedAgain(string how)
     {
-        Harness h = new();
+        Harness h = new() { LightPrice = 1000 };
         int asks = 0;
         h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
-            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
+            engineRooms: () => new[] { A });
         h.Engine.OnEngineStarted(userStarted: false);
         h.Engine.OnEngineStarted(userStarted: false);   // a trip's resume: held back
         Assert.Equal(1, asks);
@@ -1459,16 +1470,47 @@ public sealed class AutoLightProvisionerTests
         Assert.Equal(2, asks);
     }
 
+    // A drop that cuts off a loop trip undoes only that try: three misses before it
+    // still count, so the next miss waits the fourth back-off (80 minutes), not the
+    // first (10).
+    [Fact]
+    public void Loop_TripCutOffByADrop_KeepsTheEarlierMisses()
+    {
+        Harness h = new();
+        int asks = 0;
+        LightRestockOutcome answer = LightRestockOutcome.NotPossible;
+        h.Engine.SetLoopRestock(() => true, _ => { asks++; return answer; }, engineRooms: () => new[] { A });
+        h.Engine.OnEngineStarted(userStarted: false);                 // miss 1
+        h.Now += TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // miss 2
+        h.Now += TimeSpan.FromMinutes(20) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // miss 3
+        Assert.Equal(3, asks);
+
+        answer = LightRestockOutcome.Started;
+        h.Now += TimeSpan.FromMinutes(40) + TimeSpan.FromSeconds(1);
+        h.Poll();                                                     // the 4th: under way
+        Assert.Equal(4, asks);
+        h.Engine.NoteEngineTripCutOff();                              // the drop cuts it off
+
+        answer = LightRestockOutcome.NotPossible;
+        h.Poll();                                                     // free again at once: miss 4
+        Assert.Equal(5, asks);
+        h.Now += TimeSpan.FromMinutes(40) + TimeSpan.FromSeconds(1);
+        h.Poll();
+        Assert.Equal(5, asks);                                        // within the 80-minute back-off
+    }
+
     // A few coppers picked up after the try don't send the loop shopping again;
     // reaching the price of one copy (when it was short of it) does, and a purse
     // that could already pay never does.
     [Fact]
     public void Loop_TripThatCouldNotBuy_WealthCountsOnlyWhenItNowPaysForOne()
     {
-        Harness h = new();
+        Harness h = new() { LightPrice = 1000 };
         int asks = 0;
         h.Engine.SetLoopRestock(() => true, _ => { asks++; return LightRestockOutcome.NotPossible; },
-            engineRooms: () => new[] { A }, lightPrice: _ => 1000);
+            engineRooms: () => new[] { A });
         h.Engine.OnEngineStarted(userStarted: false);
         h.Snapshot = h.Snapshot with { Currency = new CurrencyHoldings(12, 0, 0, 0, 0, 12) };
         h.Poll();

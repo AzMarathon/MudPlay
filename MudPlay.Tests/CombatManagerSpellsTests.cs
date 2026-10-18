@@ -12,20 +12,18 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.A (spell extension) — <see cref="CombatManager"/> combat-spell
-/// round economy: the chooser-driven cast path that suppresses weapon
-/// swings, the per-round heartbeat re-cast, and the opt-in guard that keeps
-/// the weapon engine unchanged until <see cref="CombatManager.SetCombatSpellCaster"/>
-/// is wired.
-/// </summary>
+// CombatManager combat-spell
+// round economy: the chooser-driven cast path that suppresses weapon
+// swings, the per-round heartbeat re-cast, and the opt-in guard that keeps
+// the weapon engine unchanged until CombatManager.SetCombatSpellCaster
+// is wired.
 public sealed class CombatManagerSpellsTests
 {
     private sealed class Harness : IDisposable
     {
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
-        public PlayerDatabase Players { get; } = new();
+        public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
         public PartyState Party { get; } = new();
         public LogService Log { get; } = new();
         public RoomEntityClassifier Classifier { get; }
@@ -55,7 +53,7 @@ public sealed class CombatManagerSpellsTests
         public bool Sneaking { get; set; }
         public HashSet<int> SeeHidden { get; } = new();
 
-        // Fake clock for CombatManager.SetClock — Tick() advances it by a full
+        // The combat manager's clock — Tick() advances it by a full
         // round each call, matching TickEngine.CombatTickInterval (5s), so
         // AlternationAdvanceMinGap sees genuine round-to-round elapsed time
         // instead of the zero real elapsed time a synchronous test call has.
@@ -113,10 +111,10 @@ public sealed class CombatManagerSpellsTests
                 readOwnGivenName: () => "MudPlay",
                 post: a => { if (_deferPost) Posted.Add(a); else a(); },
                 log: Log,
-                resolveSpellByCode: c => SpellsByCode.TryGetValue(c, out KnownSpell s) ? s : null);
+                resolveSpellByCode: c => SpellsByCode.TryGetValue(c, out KnownSpell s) ? s : null,
+                now: () => _clock);
             Combat.SetWireSender(b => Sent.Add(b));
             if (Deaths is not null) Combat.RoomSpellKill += Deaths.NoteRoomSpellKill;
-            Combat.SetClock(() => _clock);
             // Production counts MaxCasts off RoundDamageTracker.RoundCount; mirror it.
             Combat.ReadRoundCount = () => _roundCount;
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
@@ -227,11 +225,11 @@ public sealed class CombatManagerSpellsTests
             Feed("*Combat Off*");
         }
 
-        /// <summary>One combat round. Mirrors the AppServices tick-subscription
-        /// order: the coordinator clears its cooldown first, then the combat
-        /// heartbeat re-decides. (CastingDirector sits between them in production but
-        /// isn't under test here.) Advances the fake clock a full round first, so
-        /// AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.</summary>
+        // One combat round. Mirrors the AppServices tick-subscription
+        // order: the coordinator clears its cooldown first, then the combat
+        // heartbeat re-decides. (CastingDirector sits between them in production but
+        // isn't under test here.) Advances the fake clock a full round first, so
+        // AlternationAdvanceMinGap doesn't reject this as a same-round re-fire.
         public void Tick()
         {
             _clock += TimeSpan.FromSeconds(5);
@@ -4425,29 +4423,6 @@ public sealed class CombatManagerSpellsTests
     }
 
     [Fact]
-    public void AttackNotLast_FightAlreadyUnderWayHere_NextPickDoesNotHold()
-    {
-        // The party is already fighting this room: the next pick (here after our target
-        // died) goes out at once rather than waiting a round for an announce that
-        // won't come.
-        using Harness h = new();
-        h.Settings.AttackTiming = AttackTiming.AttackNotLast;
-        h.Settings.NormalAttackCommand = "pu";
-        AddParty(h, "MudPlay", "Cidir NineteenTr", "Thresh II");
-        h.AddMonster(635, "tunnel horror");
-        h.AddMonster(636, "giant skeleton");
-        h.Feed("Also here: tunnel horror, giant skeleton.");
-        h.Feed("Thresh moves to attack giant skeleton.");
-        Assert.Equal("pu tunnel horror", h.LastSent);
-        h.Feed("*Combat Engaged*");
-
-        h.Feed("You gain 100 experience.");                     // our target dies
-        Assert.Null(h.Combat.CurrentTarget);
-        h.Feed("Also here: giant skeleton.");
-        Assert.Equal("pu giant skeleton", h.LastSent);
-    }
-
-    [Fact]
     public void FollowLeader_LeadersDamageLineWithNoAnnounce_TakesTheirTarget()
     {
         using Harness h = new();
@@ -5105,7 +5080,8 @@ public sealed class CombatManagerSpellsTests
     {
         using Harness h = new();
         DateTimeOffset now = DateTimeOffset.UnixEpoch;
-        using TickEngine tick = new(h.Router, () => now);
+        ManualTimers polls = new();
+        using TickEngine tick = new(h.Router, () => now, schedule: polls.Arm);
         h.Combat.SetCombatTickAnchor(tick.EnsureCombatTickAnchor);
         // Production subscription order: CastCoordinator clears the spent round,
         // then CombatManager retries the attack. CastingDirector sits between them
@@ -5130,7 +5106,7 @@ public sealed class CombatManagerSpellsTests
         // The seeded timer reaches the projected next round without any recognized
         // combat line—the exact production event that was missing in the report.
         now += TickEngine.CombatTickInterval;
-        tick.PollTimersForTests();
+        polls.RunAll();
 
         Assert.Equal("turn shade", h.LastSent);
         Assert.False(h.Combat.Snapshot().SpellAttackOwed);

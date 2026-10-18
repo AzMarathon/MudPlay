@@ -7,13 +7,14 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for <see cref="DeathDetector"/> + the tracker's death-side
-/// state (<c>NoteDeath</c>, <see cref="RoomConfidence.PendingRespawn"/>,
-/// DeathRecord persistence to profile).
-/// </summary>
+// Coverage for DeathDetector + the tracker's death-side
+// state (NoteDeath, RoomConfidence.PendingRespawn,
+// DeathRecord persistence to profile).
 public sealed class DeathDetectorTests : IDisposable
 {
+    // The game's output, fed the way the client receives it.
+    private readonly ServerFeed _feed = new();
+
     private readonly string _root;
 
     public DeathDetectorTests()
@@ -51,6 +52,7 @@ public sealed class DeathDetectorTests : IDisposable
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         DeathDetector detector = new(tracker);
+        detector.AttachLineExtractor(_feed.Lines);
         return (tracker, detector);
     }
 
@@ -67,7 +69,7 @@ public sealed class DeathDetectorTests : IDisposable
         (RoomTracker tracker, DeathDetector detector) = NewDetector();
         tracker.SetLocated(new RoomKey(1, 1));
 
-        detector.FeedTestLine(line);
+        _feed.Line(line);
 
         Assert.Equal(RoomConfidence.PendingRespawn, tracker.State.Confidence);
         Assert.Null(tracker.State.CurrentRoom);                    // cleared until respawn obs
@@ -82,7 +84,7 @@ public sealed class DeathDetectorTests : IDisposable
         (RoomTracker tracker, DeathDetector detector) = NewDetector();
         tracker.SetLocated(new RoomKey(1, 1));
 
-        detector.FeedTestLine(line);
+        _feed.Line(line);
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.NotNull(tracker.State.CurrentRoom);
@@ -103,7 +105,7 @@ public sealed class DeathDetectorTests : IDisposable
         int fired = 0;
         tracker.PlayerDeathObserved += () => fired++;
 
-        detector.FeedTestLine(line);
+        _feed.Line(line);
 
         Assert.Equal(1, fired);
     }
@@ -116,7 +118,7 @@ public sealed class DeathDetectorTests : IDisposable
         int fired = 0;
         tracker.PlayerDeathObserved += () => fired++;
 
-        detector.FeedTestLine("You hit the goblin for 4 damage.");
+        _feed.Line("You hit the goblin for 4 damage.");
 
         Assert.Equal(0, fired);
     }
@@ -133,7 +135,7 @@ public sealed class DeathDetectorTests : IDisposable
         };
         tracker.Hydrate(profile);
 
-        detector.FeedTestLine("You now have 3 lives remaining.");
+        _feed.Line("You now have 3 lives remaining.");
 
         Assert.NotNull(profile.DeathHistory);
         Assert.Single(profile.DeathHistory!);
@@ -156,7 +158,7 @@ public sealed class DeathDetectorTests : IDisposable
         var profile = new CharacterProfile { LastKnownRoom = new RoomRef(1, 1) };
         tracker.Hydrate(profile);
 
-        detector.FeedTestLine("You have 7 lives left.");
+        _feed.Line("You have 7 lives left.");
 
         Assert.NotNull(profile.DeathHistory);
         Assert.Single(profile.DeathHistory!);
@@ -176,14 +178,14 @@ public sealed class DeathDetectorTests : IDisposable
         };
         tracker.Hydrate(profile);
 
-        detector.FeedTestLine("You now have 3 lives remaining.");
+        _feed.Line("You now have 3 lives remaining.");
         // Respawn observation lands at Healer Hall (the next obs).
         tracker.NoteRoomObserved(new RoomObservation("Healer Hall",
             new HashSet<Direction> { Direction.S }));
         Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
 
         // Die again.
-        detector.FeedTestLine("You now have 2 lives remaining.");
+        _feed.Line("You now have 2 lives remaining.");
 
         Assert.Equal(2, profile.DeathHistory!.Count);
         Assert.Equal(3, profile.DeathHistory[0].LivesRemaining);
@@ -200,7 +202,7 @@ public sealed class DeathDetectorTests : IDisposable
         (RoomTracker tracker, DeathDetector detector) = NewDetector();
         tracker.SetLocated(new RoomKey(1, 1));
 
-        detector.FeedTestLine("You now have 4 lives remaining.");
+        _feed.Line("You now have 4 lives remaining.");
         Assert.Equal(RoomConfidence.PendingRespawn, tracker.State.Confidence);
 
         tracker.NoteRoomObserved(new RoomObservation("Healer Hall",
@@ -222,7 +224,7 @@ public sealed class DeathDetectorTests : IDisposable
         tracker.NoteMoveSent(Direction.N);                          // step pending
         Assert.NotNull(profile.RecentSteps);
 
-        detector.FeedTestLine("You now have 3 lives remaining.");
+        _feed.Line("You now have 3 lives remaining.");
 
         // RecentSteps wiped — they're stale post-death; replay
         // shouldn't try walking from the pre-death room.
