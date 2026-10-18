@@ -33,6 +33,7 @@ internal sealed class TrackerWireRig : IDisposable
 
     public ManualClock Clock { get; } = new();
     public LogService Log { get; } = new(capacity: 20000);
+    public GameDataCache Cache { get; }
     public RoomGraphManager Graph { get; }
     public RoomTracker Tracker { get; }
     public EngineRecoveryGate Gate { get; }
@@ -81,16 +82,18 @@ internal sealed class TrackerWireRig : IDisposable
     public TimeSpan AnswerDelay { get; set; } = TimeSpan.FromMilliseconds(400);
 
     // prompt: the statline the game prints; the default isn't one the prompt
-    // scanner's class-default pattern reads.
-    public TrackerWireRig(string roomsJson, string prompt = "[HP=100/100]:")
+    // scanner's class-default pattern reads. paradigm: the set is a Paradigm realm's
+    // (Info.json Legit 2), where `rm` names the room.
+    public TrackerWireRig(string roomsJson, string prompt = "[HP=100/100]:", bool paradigm = false)
     {
         _prompt = prompt;
         _root = Path.Combine(Path.GetTempPath(), "mudplay-wire-rig-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
-        GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
-        Graph = new RoomGraphManager(cache, Log);
+        if (paradigm) File.WriteAllText(Path.Combine(_root, "alpha", "Info.json"), "[{\"Legit\":2}]");
+        Cache = new GameDataCache(_root);
+        Cache.SwitchSet("alpha");
+        Graph = new RoomGraphManager(Cache, Log);
         Graph.OnActiveSetChanged("alpha");
 
         // Each read moves the clock one tick, as the wall clock does between two rows:

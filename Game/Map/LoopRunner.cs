@@ -3129,9 +3129,17 @@ public sealed class LoopRunner : IRecoverableEngine
     public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
 
     // Back in the game, but the tracker isn't sure of the room yet: the restart waits
-    // for the next prompt or a room it is sure of.
+    // for the room. It doesn't wait for good (user, 2026-10-17): once the tracker
+    // can't say where we are (unsure after the reconnect's display was read, or still
+    // waiting on a display at the next prompt) the client's own one-shot locate is
+    // asked (EngineRecoveryGate.TryResyncOnce: `rm`, else `sys st`), and the restart
+    // runs when it answers. A locate that fails, or none to ask, ends the restart.
     private bool _reconnectResumeAwaitsRoom;
     public bool ReconnectResumeAwaitsRoom => _reconnectResumeAwaitsRoom;
+    private int _reconnectUnsureChecks;
+    private bool _reconnectLocateTried;
+    private int _reconnectLocateId;
+    public bool ReconnectResumeLocating { get; private set; }
 
     // A loop an errand stopped (a bank run's light buy) when the connection dropped:
     // restart it on the first prompt after the reconnect, as one running at the drop
@@ -3149,7 +3157,17 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         _pendingReconnectResume = null;
         _reconnectResumeHeldBySwitch = false;
+        ForgetRoomWait();
+    }
+
+    // A locate still out is left to answer nobody.
+    private void ForgetRoomWait()
+    {
         _reconnectResumeAwaitsRoom = false;
+        _reconnectUnsureChecks = 0;
+        _reconnectLocateTried = false;
+        ReconnectResumeLocating = false;
+        _reconnectLocateId++;
     }
 
     // A restart already back in the game, kept waiting on the master switch or on the
@@ -3189,7 +3207,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // A restart held for the master switch or the room goes back to waiting for
         // the next stay's first prompt, which asks both again.
         _reconnectResumeHeldBySwitch = false;
-        _reconnectResumeAwaitsRoom = false;
+        ForgetRoomWait();
         if (State != LoopState.Idle)
         {
             _pendingReconnectResume = _loop;
@@ -3271,19 +3289,67 @@ public sealed class LoopRunner : IRecoverableEngine
         }
         if (!RoomKnownForRestart())
         {
+            if (ReconnectResumeLocating) return;   // its answer restarts the loop or ends the wait
             if (!_reconnectResumeAwaitsRoom)
                 _log?.Info("LoopRunner",
                     $"reconnect: loop '{loop.Name}' waits for the room to be known (tracker {_tracker.State.Confidence} at "
                     + $"{_tracker.State.CurrentRoom?.Key.ToString() ?? "(none)"})");
             _reconnectResumeAwaitsRoom = true;
+            // Pending is a display still to come (one the drop left owed); anything
+            // else unsure is a display read that didn't place us.
+            bool undetermined = _tracker.State.Confidence != RoomConfidence.Pending || ++_reconnectUnsureChecks > 1;
+            if (undetermined) LocateForRestart(loop);
             return;
         }
         _pendingReconnectResume = null;
         _reconnectResumeHeldBySwitch = false;
-        _reconnectResumeAwaitsRoom = false;
+        ForgetRoomWait();
         _log?.Info("LoopRunner",
             $"reconnect: resuming loop '{loop.Name}' from {_tracker.State.CurrentRoom!.Key}");
         RestartAfterReconnect(loop);
+    }
+
+    private void LocateForRestart(Loop loop)
+    {
+        if (_reconnectLocateTried)
+        {
+            EndRestartForUnknownRoom(loop, "the locate named a room the map doesn't have");
+            return;
+        }
+        _reconnectLocateTried = true;
+        int id = ++_reconnectLocateId;
+        string reason = $"loop '{loop.Name}' to restart after a reconnect, tracker {_tracker.State.Confidence}";
+        if (_recovery?.TryResyncOnce?.Invoke(reason,
+                _ => OnRestartLocateAnswered(id),
+                () => OnRestartLocateFailed(id)) == true)
+        {
+            ReconnectResumeLocating = true;
+            _log?.Info("LoopRunner", $"reconnect: loop '{loop.Name}': the room can't be told; asking the game where we are");
+            return;
+        }
+        EndRestartForUnknownRoom(loop, "nothing to ask the game where we are with");
+    }
+
+    // The locator has set the tracker by now; the restart goes as any other does.
+    private void OnRestartLocateAnswered(int id)
+    {
+        if (id != _reconnectLocateId || !ReconnectResumeLocating) return;
+        ReconnectResumeLocating = false;
+        _postToUi(TryRestartAfterReconnect);
+    }
+
+    private void OnRestartLocateFailed(int id)
+    {
+        if (id != _reconnectLocateId || !ReconnectResumeLocating) return;
+        ReconnectResumeLocating = false;
+        if (_pendingReconnectResume is { } loop) EndRestartForUnknownRoom(loop, "the game didn't say where we are");
+    }
+
+    private void EndRestartForUnknownRoom(Loop loop, string why)
+    {
+        _log?.Warn("LoopRunner",
+            $"reconnect: loop '{loop.Name}' is not restarted: the room after the reconnect couldn't be told ({why})");
+        ClearPendingReconnectResume();
     }
 
     private bool RoomKnownForRestart() =>
