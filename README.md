@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.17**
+> **Version 3.184.18**
 > - A loop restarted after a reconnect plans its first step from the room the reconnect shows, not the room before the drop
-> - Unsure of that room, the restart waits until the map is sure of it; Stop calls it off
+> - Unsure of that room, the restart asks the game where you are (rm / sys st) and starts from the answer; with no answer it isn't restarted
+> - Stop calls off a restart still waiting on the room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

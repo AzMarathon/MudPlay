@@ -538,7 +538,7 @@ How to keep it current:
 
 ### CastCoordinatorTests.cs
 - Covers: Game/Spells/CastCoordinator
-- Checks: wire emission; cooldown; failure latches; independent attack vs between-round slots; already-cast attribution.
+- Checks: wire emission; cooldown; failure latches; the cooldown and a fizzle's latch running out on a `ManualClock` with no combat tick; independent attack vs between-round slots; already-cast attribution.
 - Why: reports paradigm-20260923-103506, -20260916-113009, -20260831-091839.
 
 ### CastWalkTeleportTests.cs
@@ -681,22 +681,26 @@ How to keep it current:
 
 ### CombatManagerBreakHoldTests.cs
 - Covers: Game/Combat/CombatManager (user-break hold) + CombatStateTracker, OutboundBreakObserver, HealthManager
-- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge; flee still moves.
+- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves.
+- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, state tracker); each fed line lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time.
 - Why: user 2026-10-10 rulings on manual break.
 
 ### CombatManagerRoomChangeHoldTests.cs
 - Covers: Game/Combat/CombatManager (Attack Not Last and the follow Target Priority holds) with RoomTracker, RoomDisplayParser, DeathDetector, RoomEntityClassifier, DarkRoomCombatWatcher, all driven through the terminal and the line extractor
 - Checks: which room the fight on record belongs to when we change rooms without a move of our own: a teleport, a drag with no drag line, a fear run, a death and respawn, a relog or reconnect. The next room holds its opening until the party attacks or the in-round deadline fires; a room shown again with its fight under way picks on the exits line; rooms the tracker can't place, look-alike rooms, dark fights and no game data; the bug report names a room not yet placed.
+- Time: one `ManualClock` read by every component in the harness (terminal, room tracker, classifier, entry and death watchers, dark-room watcher, combat manager); each flush lands 1 ms after the last and each read is a tick after the one before, so the steps of one flush keep their order. Nothing waits on real time.
 - Why: Attack Not Last and follow Target Priority must never attack ahead of the party in a new room (user rulings 2026-10-17; the attack-order teleport-hold fix).
 
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
 - Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths. Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
+- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live. No private member is reached by reflection.
 - Why: dozens of paradigm reports cited inline.
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
 - Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
+- Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
 - Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
@@ -2123,7 +2127,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 4 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
