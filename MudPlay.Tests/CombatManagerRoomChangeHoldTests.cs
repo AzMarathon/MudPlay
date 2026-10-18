@@ -72,9 +72,9 @@ public sealed class CombatManagerRoomChangeHoldTests
         // The one clock every component here reads, the terminal's line stamps
         // included; nothing waits on real time. Each flush from the server lands a
         // millisecond after the last, and each read is a tick on from the one
-        // before: the steps of one flush (a room left, the next room's roster read,
-        // a hold armed) never read the same instant off the real clock, and the
-        // engine orders them by it.
+        // before. The steps the engine orders by time (a room left, the next room's
+        // roster read, a hold armed) come from different lines of a flush, and the
+        // real clock always reads those apart.
         public ManualClock Clock { get; } = new();
         private static readonly TimeSpan FlushGap = TimeSpan.FromMilliseconds(1);
         private DateTimeOffset ReadClock()

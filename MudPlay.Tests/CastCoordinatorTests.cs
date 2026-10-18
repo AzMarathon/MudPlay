@@ -19,8 +19,10 @@ public sealed class CastCoordinatorTests
         public List<byte[]> Sent { get; } = new();
         public List<(CastFailureReason Reason, string Detail, string? Spell)> Failures { get; } = new();
         public List<string> Casts { get; } = new();
-        // The coordinator's clock: it moves only when a test moves it.
+        // The coordinator's clock, which also stamps the lines fed in: it moves a
+        // millisecond for each line and otherwise only when a test moves it.
         public ManualClock Clock { get; } = new();
+        private static readonly TimeSpan LineGap = TimeSpan.FromMilliseconds(1);
 
         public Harness()
         {
@@ -33,16 +35,18 @@ public sealed class CastCoordinatorTests
 
         public void Feed(string line)
         {
+            Clock.Advance(LineGap);
             Router.Dispatch(new LineExtractor.EmittedLine(
                 line, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false));
+                Clock.Now, IsPromptLine: false));
         }
 
         // A prompt row with a command typed on it, the way the game shows it: the
         // prompt and its echo share the row's timestamp.
         public void FeedEcho(string command)
         {
-            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Clock.Advance(LineGap);
+            DateTimeOffset at = Clock.Now;
             Router.Dispatch(new LineExtractor.EmittedLine(
                 "[HP=609/MA=330]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
             Router.Dispatch(new LineExtractor.EmittedLine(

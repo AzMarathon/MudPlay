@@ -189,10 +189,10 @@ public sealed class CombatManagerSpellsTests
                 Name: name,
                 Links: Array.Empty<GameDataLink>()));
 
-        // Moves the fake clock without the round-boundary side effects Tick()/
+        // Moves the clock without the round-boundary side effects Tick()/
         // TickSameRound()/TickFast() carry (they also bump _roundCount and drive
-        // Cast/Combat's tick) — for tests exercising ConfirmedAttackCastCount's own
-        // real-time grouping window directly.
+        // Cast/Combat's tick): for a test that needs a window to run out rather
+        // than a round to close.
         public void AdvanceClock(TimeSpan by) => Clock.Advance(by);
 
         public void Feed(string line)
@@ -475,9 +475,8 @@ public sealed class CombatManagerSpellsTests
     // running room spell — its *Combat Off* is the channel ending. After a kill had
     // dropped the target, the interrupt's resume found the channel still recorded,
     // re-anchored "without recast" onto a survivor nothing was hitting, and never
-    // attacked. The resume must re-dispatch the room attack instead. (Driven straight
-    // through ResumeEngage: in production the re-engage lands after a timer-driven
-    // arrival settle the harness doesn't run.)
+    // attacked. The resume must re-dispatch the room attack instead. The monster's
+    // next swing is what wakes the resume, as it does live.
     [Fact]
     public void RoomChannel_EndedByInterrupt_ResumeReDispatchesTheRoomAttack()
     {
@@ -490,14 +489,16 @@ public sealed class CombatManagerSpellsTests
 
         h.Feed("Also here: giant rat, dark stalker, muckworm.");
         Assert.Single(h.AllSent, s => s == "blast");
+        h.Feed("*Combat Engaged*");
+        h.Tick();
 
         // A kill dropped the target while the channel was on record; then the buff's
-        // *Combat Off* interrupted and the engine resumes.
+        // *Combat Off* interrupted, and the next swing at us brings the resume.
         h.Feed("You gain 10 experience.");
         Assert.Null(h.Combat.CurrentTarget);
-        typeof(CombatManager)
-            .GetMethod("ResumeEngage", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .Invoke(h.Combat, new object[] { h.Classifier.Current! });
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        h.Feed("The giant rat bites you for 5 damage!");
 
         Assert.Equal(2, h.AllSent.Count(s => s == "blast"));   // re-cast — the channel was broken
     }

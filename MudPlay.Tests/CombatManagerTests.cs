@@ -702,6 +702,7 @@ public sealed class CombatManagerTests
         h.AddMonster(3, "giant rat");
 
         h.Feed("Also here: brigand chief, large brigand, giant rat.");
+        h.Feed("*Combat Engaged*");
         h.Feed("large brigand moves to protect brigand chief");
 
         h.Clock.Advance(ARound);
@@ -711,7 +712,7 @@ public sealed class CombatManagerTests
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
         Assert.Equal("brigand chief", h.Combat.CurrentTarget);
 
-        NewExpRound(h.Combat);
+        h.Combat.OnCombatTick();                                 // a round boundary between the two kills
         h.Clock.Advance(TimeSpan.FromSeconds(2));                // inside the 3 s cooldown
         h.Feed("You gain 10 experience.");                       // the chief
         h.Feed("*Combat Off*");
@@ -749,7 +750,7 @@ public sealed class CombatManagerTests
         h.Feed("Also here: brigand chief.");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        NewExpRound(h.Combat);
+        h.Combat.OnCombatTick();                                 // a round boundary between the two kills
         h.Clock.Advance(ARound);
         int sentBefore = h.Sent.Count;
         h.Feed("You gain 10 experience.");                       // the chief
@@ -4796,13 +4797,6 @@ public sealed class CombatManagerTests
     // game's *Combat Engaged* before it re-reads the room.
     private static readonly TimeSpan ARound = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan EngageConfirmWindow = TimeSpan.FromSeconds(5);
-
-    // A round boundary between two kills, for the per-round exp tally OnCombatTick
-    // zeroes: without one, two kills read as one room spell's.
-    private static void NewExpRound(CombatManager combat) =>
-        typeof(CombatManager).GetField("_expGainsThisRound",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .SetValue(combat, 0);
 
     [Fact]
     public void AttackUnconfirmed_AfterWindow_FiresRoomRefreshCr()
