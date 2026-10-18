@@ -68,7 +68,20 @@ public sealed class CombatManagerRoomChangeHoldTests
     private sealed class Harness : IDisposable
     {
         private readonly string _root;
-        private readonly TerminalEmulator _terminal = new(80, 25);
+        private readonly TerminalEmulator _terminal;
+        // The one clock every component here reads, the terminal's line stamps
+        // included; nothing waits on real time. Each flush from the server lands a
+        // millisecond after the last, and each read is a tick on from the one
+        // before. The steps the engine orders by time (a room left, the next room's
+        // roster read, a hold armed) come from different lines of a flush, and the
+        // real clock always reads those apart.
+        public ManualClock Clock { get; } = new();
+        private static readonly TimeSpan FlushGap = TimeSpan.FromMilliseconds(1);
+        private DateTimeOffset ReadClock()
+        {
+            Clock.Advance(TimeSpan.FromTicks(1));
+            return Clock.Now;
+        }
         public MessageRouter Router { get; } = new();
         public MonsterMessageStore Monsters { get; } = new();
         public PlayerDatabase Players { get; } = new(new ProfileService(), () => null);
@@ -121,27 +134,28 @@ public sealed class CombatManagerRoomChangeHoldTests
             cache.SwitchSet("alpha");
             RoomGraphManager graph = new(cache);
             graph.OnActiveSetChanged("alpha");
-            Tracker = new RoomTracker(graph);
+            Tracker = new RoomTracker(graph, log: null, now: ReadClock);
             Tracker.SetFearProbe(() => Feared);
 
             // Wired in the order the client wires them: the router takes every line
             // first, then the room display parser reads the same lines.
             DefaultPatterns.Seed(Router);
+            _terminal = new TerminalEmulator(80, 25, ReadClock);
             Lines = new LineExtractor(_terminal);
             Lines.LineEmitted += Router.Dispatch;
             Display = new RoomDisplayParser(Lines, Tracker, Log);
             Deaths = new DeathDetector(Tracker, Log);
             Deaths.AttachLineExtractor(Lines);
-            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker, Log);
+            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Tracker, Log, now: ReadClock);
             // Built ahead of the combat engine, as in AppServices: a kill drops the
             // monster from the roster through it.
-            MonsterDeaths = new MonsterDeathWatcher(Router, Log);
+            MonsterDeaths = new MonsterDeathWatcher(Router, Log, now: ReadClock);
             MonsterDeaths.MonsterDied += evt =>
             {
                 if (evt.RoomSpellRoster is null) Combat!.NoteUnattributedDeath();
             };
             Classifier.AttachLineExtractor(Lines);
-            Entry = new RoomEntryWatcher(Router, Classifier, Log);
+            Entry = new RoomEntryWatcher(Router, Classifier, Log, now: ReadClock);
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: _ => new MonsterOverlay(),
                 party: Party,
@@ -149,9 +163,10 @@ public sealed class CombatManagerRoomChangeHoldTests
                 isEnabled: () => true,
                 readOwnGivenName: () => "MudPlay",
                 post: _posted.Add,
-                log: Log);
+                log: Log,
+                now: ReadClock);
             DarkRoom = new DarkRoomCombatWatcher(Router, Tracker, Classifier,
-                currentTarget: () => Combat.CurrentTarget, log: Log);
+                currentTarget: () => Combat.CurrentTarget, now: ReadClock, log: Log);
             Router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.RoomSpellKill += MonsterDeaths.NoteRoomSpellKill;
@@ -189,6 +204,7 @@ public sealed class CombatManagerRoomChangeHoldTests
         // One flush from the server; what it posted runs once it has been read.
         public void Wire(params string[] lines)
         {
+            Clock.Advance(FlushGap);
             _terminal.Feed(Encoding.Latin1.GetBytes(string.Concat(lines.Select(l => l + "\r\n"))));
             DrainPosted();
         }
