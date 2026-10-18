@@ -52,7 +52,7 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
     }
 
     private sealed record World(TrackerWireRig Rig, DefaultTaskRunner Task, LoopRunner Runner, List<string> Notices,
-        ManualTimers Ticks);
+        ManualTimers Ticks, Action<bool> SetSwitchOff);
 
     // The character's Default task is the loop Gate–Yard (or `task`); the map last
     // knew it at Gate (located false: nowhere). paradigm: a Paradigm realm, whose `rm`
@@ -61,6 +61,7 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         bool switchOff = false)
     {
         TrackerWireRig rig = new(Rooms, prompt: "[HP=100/MA=50]:", paradigm: paradigm) { Position = Gate };
+        bool off = switchOff;
         _dispose.Add(rig);
         ManualTimers ticks = new();
         BfsMapper bfs = new(rig.Graph);
@@ -88,14 +89,14 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         DefaultTaskRunner entry = new(rig.Prompts, rig.Tracker, profile, loops, new LairManager(), runner, lair,
             partyState, party, rig.Log, schedule: ticks.Arm, recovery: rig.Gate, postToUi: rig.Post)
         {
-            BlockedByMasterSwitch = _ => switchOff,
+            BlockedByMasterSwitch = _ => off,
         };
         List<string> notices = new();
         entry.SetStartNotice(notices.Add);
         _dispose.AddRange(new IDisposable[] { entry, lair, timers, party });
         if (located) rig.Tracker.SetLocated(Gate);
         entry.NotifyConnected();
-        return new World(rig, entry, runner, notices, ticks);
+        return new World(rig, entry, runner, notices, ticks, value => off = value);
     }
 
     // Put back in another room at the login: the task's loop is planned from there.
@@ -181,5 +182,22 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         Assert.Equal(Gate, w.Rig.Believed);
         Assert.Equal("gy", w.Runner.CurrentLoop?.Name);
         Assert.Equal(new[] { "w", "n" }, w.Rig.Sent);
+    }
+
+    // The switch off at the login: the task is skipped for this connection, not kept.
+    // Switched back on, the next prompts start nothing.
+    [Fact]
+    public void MasterSwitchOffAtTheLogin_ThenBackOn_TheTaskStaysSkipped()
+    {
+        World w = Login(switchOff: true);
+
+        w.Rig.Position = Tower;
+        w.Rig.ShowRoom();
+        w.SetSwitchOff(false);
+        w.Rig.Show("Somebody waves.");
+        w.Rig.Show("Somebody waves again.");
+
+        Assert.Null(w.Runner.CurrentLoop);
+        Assert.Empty(w.Rig.Sent);
     }
 }

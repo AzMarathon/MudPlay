@@ -299,9 +299,6 @@ public sealed class ReconnectRestart<TRun> where TRun : class
 
     private void Locate(TRun run)
     {
-        // TryStart asked the switch just now; a locate is a command sent by itself,
-        // and none goes out with the switch off, whoever owns the start.
-        if (MasterSwitchOff?.Invoke() == true) return;
         if (_locateTried)
         {
             FallBack("the game named a room the map doesn't have");
