@@ -4918,8 +4918,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - **Each reverse move goes out only once the tracker has read the previous one's landing**
       (`RoomTracker.RoomDisplayRead`; `RoomDisplayParser` hands a display to the gate before the tracker).
       Sent first, it was counted in the trail `TryReplayRecover` projects against that display, and in rooms
-      that read alike the tracker confirmed a room one step ahead (PR #1096 probe: Paradigm walk-backs that
-      confirmed a wrong room at some point, 1 → 3, back to main's 1 or below with the order fixed).
+      that read alike the tracker confirmed a room one step ahead. In PR #1096's probe, walker walk-backs that
+      confirmed a wrong room at some point went from main's 1 (Paradigm) and 2 (Stock) to 0 with the order
+      fixed; it was 3 on Paradigm before.
     - **A reverse move that never happens doesn't hold the walk-back.** Refused (the *Refused ("bonked")
       moves* signals), it ends the walk-back the way an exhausted one does (`FailTier3`: the terminal `rm`,
       `sys st`, then Lost), since the way back isn't the way the history says. Dropped by the typing-rate
