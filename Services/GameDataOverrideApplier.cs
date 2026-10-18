@@ -41,15 +41,32 @@ public static class GameDataOverrideApplier
             return true;
         }
 
+        Apply(resolver, table, recordId, tier, overlay, equalsInstalledDefaults);
+        return true;
+    }
+
+    // The two outcomes at a writable tier, which need no confirm.
+    public static void Apply<T>(
+        SettingsResolver resolver,
+        string table,
+        string recordId,
+        SettingsTier tier,
+        T overlay,
+        bool equalsInstalledDefaults) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        ArgumentNullException.ThrowIfNull(overlay);
+        if (tier == SettingsTier.Defaults)
+            throw new ArgumentException("The installed defaults are reset, not written.", nameof(tier));
+
         // A tier whose scope isn't active can't be written (Character with no profile
         // loaded, BBS with no active BBS) — fall back to the most-specific writable
-        // tier so Save never throws. Defaults never reaches here.
+        // tier so Save never throws.
         if (!resolver.CanWriteAt(tier)) tier = resolver.WritableTiers()[0];
 
         if (equalsInstalledDefaults)
             resolver.ClearGameDataAt(tier, table, recordId);
         else
             resolver.WriteGameDataAt(tier, table, recordId, overlay);
-        return true;
     }
 }

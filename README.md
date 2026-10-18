@@ -1,18 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.32**
-> - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
-> - Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
-> - Lost-recovery walk-back waits for the map to read each room before the next move back, and stops cleanly when the game refuses or never answers one
-> - Lost-recovery walk-back also leaves out a step lost to a dropped connection or a teleporting step the game never took
-> - A dark room or "You are blind." right after a reconnect no longer counts the moves sent before the drop as taken, and every one of several lost moves leaves the trail
-> - Unsure of your room, a move into a room that reads like the one held no longer re-confirms the held room
-> - A save right after logging back on, before the room shows, keeps the moves to replay
-> - A character with no saved room starts with no room, not the last character's; one with only a worked-out room saved comes back at it
-> - Lost, or the map rebuilt, also drops a worked-out room saved for the next relog
->
-> See the [version history](CHANGELOG.md) for the full changelog.
+> **Version 3.184.33**
+> - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
+> - A lone `@auto-get on` / `off` is still the Auto-Get Items toggle
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -291,7 +291,7 @@ public static class RemoteCommandCatalog
             ["@auto-bless"]   = new("@auto-bless [on|off]", "toggle the auto-bless engine"),
             ["@auto-light"]   = new("@auto-light [on|off]", "toggle the auto-light engine"),
             ["@auto-cash"]    = new("@auto-cash [on|off]", "toggle the auto-cash engine"),
-            ["@auto-get"]     = new("@auto-get [on|off]", "toggle the auto-get (loot) engine"),
+            ["@auto-get"]     = new("@auto-get [on|off] | <item> [on|off] [max <n>|none]", "toggle the auto-get (loot) engine; with an item, report it or set for this character whether it is picked up and how many to hold at most"),
             ["@auto-sneak"]   = new("@auto-sneak [on|off]", "toggle the auto-sneak engine"),
             ["@auto-hide"]    = new("@auto-hide [on|off]", "toggle the auto-hide engine"),
             ["@auto-search"]  = new("@auto-search [on|off]", "toggle the auto-search engine"),

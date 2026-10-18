@@ -1084,7 +1084,7 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
@@ -1228,6 +1228,7 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
 | `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
 | `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@auto-get <item>` | `@auto-get <item>` · `@auto-get <item> on` · `@auto-get <item> off` · `@auto-get <item> max <n>` · `@auto-get <item> max none` · `@auto-get <item> on max <n>` | Alter settings | One item's Auto-collect and Max to get: reports them, or sets them for this character. |
 | `@events` | `@events` | Alter settings | Your Events by number and name, each on or off. |
 | `@event` | `@event <name>` · `@event <name> on` · `@event <name> off` · the same with a number from `@events` for the name | Alter settings | One of your Events: its state, or switches it on or off. |
 | `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
@@ -2626,9 +2627,50 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 **Situations:**
 
 - **`@auto-heal` and `@auto-rest` are two toggles.** One works your heal and cure casts, the other your resting. `@auto-cash` is the get-cash toggle and `@auto-get` the get-items toggle.
+- **`@auto-get` with an item's name after it** works on that item, not the toggle: see **@auto-get for one item**. A lone `on` or `off` is always the toggle.
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @auto-get for one item
+
+Reports or sets one item's own Auto-Get Items rules: its **Auto-collect** flag and its **Max to get**, the two boxes under *Getting it* in the item's Game Data editor. A change is saved **only for this character**, the same as picking that tier in the editor and saving: the editor shows it at that tier, and the next room you see is collected by it.
+
+**Max to get** is how many copies Auto-Get Items lets you hold. It counts what you carry, wear and have on your key ring, and stops picking the item up once you hold that many: with `max 2` and one in your pack, a pile of three yields one. `max none` (a blank box in the editor) is no limit. `max 0` keeps every copy on the floor. It is the same box Auto-buy buys up to, and the one Auto-obtain for path takes its count from.
+
+**Forms:**
+
+- `@auto-get large shield`: report the item's rules.
+- `@auto-get large shield on`: tick its Auto-collect. `off` unticks it.
+- `@auto-get large shield max 2`: set its Max to get. `max none` clears it.
+- `@auto-get large shield on max 2`: both at once. `max 2 on` works too.
+
+**How a name finds an item.** The same way `@loop` finds a loop, over every item in your game data. A name that is an item's whole name wins outright, with or without `a`, `an`, `the` or a plural `s`. Otherwise an item matches when its name holds **every typed word, in any order**: `@auto-get shield large` finds *large shield*. If nothing matches, it is tried once more without apostrophes, so `kings crown` finds *king's crown*. Exactly one item is used; none, or more than one, is refused. Two records with the same name are one item, the one the engines pick up by that name.
+
+`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`.
+
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
+
+| Reply | When |
+|---|---|
+| `large shield: auto-get on, max 2` | The item's rules after the command, whether or not anything changed. `max none` when it has no Max to get. |
+| any of the above, ending `(cannot be taken)` | The item is marked *Cannot be taken*, so it is never picked up whatever the rules say. |
+| `no item named '<text>'` | **Refusal:** no item's name fits. |
+| `item name '<text>' matches 3: 'large shield', 'large sword', 'small shield'` | **Refusal:** the name fits more than one item. Up to four names are given, fewer when they are long, then `+5 more` for the rest. Nothing is changed. |
+| `bad max '<text>': give a number or none` | **Refusal:** the word after `max` is neither a whole number nor `none`. |
+| `max needs a number or none` | **Refusal:** the command ends in `max`. |
+| `no character loaded` | **Refusal:** a change was asked for with no named character loaded, so there is no character to save it for. A report is still answered. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+With no name before the `on`, `off` or `max` (`@auto-get on max 2`), the command is refused with `usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]`.
+
+**Situations:**
+
+- **Off is saved as off.** A tick on the item for all characters or for the realm no longer collects it for this character.
+- **Back to the installed defaults:** a change that leaves the item as it was installed removes this character's override, as the editor does. If a rule for all characters or for the realm would then show through, the override is kept so the change holds for this character.
+- **Auto-Get Items itself is separate.** Flagging an item doesn't switch the toggle on; send `@auto-get on` for that.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a change is written to the program log with the sender's name, the item and its rules before and after. The bug report's item overrides list shows the item at the Character tier.
 
 #### @events and @event
 
@@ -2960,6 +3002,8 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash + Items) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger. Between inventory reads MudPlay keeps its own running count of your coins and weight (pickups, drops, stashes, deposits, purchases, training fees). When the game shows that count is off — it refuses a coin stash or drop, or a pickup is skipped because you look full — MudPlay sends one `i` to re-read the real figures.
 
 **Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So when you kill a monster whose drop list (Game Data → Monsters) holds an item you've flagged **Auto-collect**, MudPlay re-displays the room (a bare Enter) to see whether it dropped, and a loop or walk waits for that display before moving on. Both halves are needed: **Auto-Get Items** on, and the item flagged Auto-collect in Game Data → Items. Kills of monsters that can't drop a flagged item send nothing extra. A room spell's kill doesn't say which monster died, so the room is re-displayed when any kind of monster it listed could have dropped one.
+
+A party member with **Alter settings** can flag an item for you, or set its Max to get, from chat: see **@auto-get for one item** in *Remote @-commands*.
 
 In a **stash room** the client stashes your excess coin (and any auto-stash items) as you pass through. An **Auto-stash** item goes a whole stack at a time (`hide 9 green dragon hide`), keys on your key ring included; with **Must have minimum** ticked, **Min. to keep** copies stay with you and only the rest are hidden. Having just hidden it, the client deliberately does **not** re-grab that pile — but only the coin a `search` *re-reveals* is skipped. Coin that's plainly visible when you walk in, or that a kill drops on the floor, is still collected there (and, of course, in every ordinary room, including the room right after a stash room).
 

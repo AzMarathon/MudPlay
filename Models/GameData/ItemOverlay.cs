@@ -104,4 +104,12 @@ public sealed record ItemOverlay
     // Maximum count to acquire. "All" is a legit MegaMUD sentinel so we
     // store the raw string here as well.
     public string? MaxToGet { get; init; }
+
+    // Parse a carry-policy count string (MinToKeep / MaxToGet / SellDetourAbove).
+    // Non-negative numeric strings yield their value; blank, null, and the MegaMUD
+    // sentinels ("None" / "All") fall back to the caller's default.
+    public static int ParseCount(string? raw, int fallback) =>
+        int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int v) && v >= 0
+            ? v : fallback;
 }

@@ -4091,6 +4091,8 @@ public sealed class AppServices
         GameData.ActiveSetChanged += TimedSetIndex("item names", ItemNames.OnActiveSetChanged);
         if (GameData.ActiveSet is not null)
             ItemNames.OnActiveSetChanged(GameData.ActiveSet);
+        // The item rules @auto-get <item> works on need the name index above.
+        AutoMode.SetItemRules(new Game.Inventory.AutoGetItemRules(Resolver, ItemNames, ItemOverlaySeed));
 
         // ShopStockIndex — item id → shops stocking it, from Shops.json.
         // Feeds PathItemShopRouter's "who sells this?" lookup.
@@ -15955,8 +15957,8 @@ public sealed class AppServices
     {
         if (itemId <= 0) return 1;
         Models.GameData.ItemOverlay overlay = ResolveItemOverlay(itemId);
-        int floor = ParseCount(overlay.MinToKeep, 0);
-        int cap = ParseCount(overlay.MaxToGet, 0);   // 0 = "All" / blank / unset
+        int floor = Models.GameData.ItemOverlay.ParseCount(overlay.MinToKeep, 0);
+        int cap = Models.GameData.ItemOverlay.ParseCount(overlay.MaxToGet, 0);   // 0 = "All" / blank / unset
         int target = cap > 0 ? cap : Math.Max(1, floor);
         return Math.Max(1, Math.Max(target, floor));
     }
@@ -15999,7 +16001,7 @@ public sealed class AppServices
             // "Detour to sell if above" left blank means no detour (user, 2026-09-29);
             // 0 is a real count — go once above Min. to keep.
             int? above = overlay.SellDetour == true && !string.IsNullOrWhiteSpace(overlay.SellDetourAbove)
-                ? ParseCount(overlay.SellDetourAbove, 0)
+                ? Models.GameData.ItemOverlay.ParseCount(overlay.SellDetourAbove, 0)
                 : null;
             System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> trading = ShopRoomsSellingItem(number);
             var picks = new System.Collections.Generic.HashSet<Game.Map.RoomKey>();
@@ -16018,27 +16020,19 @@ public sealed class AppServices
     // Min. to keep when it's above 0, else everything goes (user, 2026-09-28). Unlike
     // KeepFloor it doesn't wait on Must have minimum.
     private static int SellFloor(Models.GameData.ItemOverlay overlay) =>
-        ParseCount(overlay.MinToKeep, 0);
+        Models.GameData.ItemOverlay.ParseCount(overlay.MinToKeep, 0);
 
     // Keep floor for the discard and stash engines: MinToKeep when the user set
     // MustHaveMinimum, else zero (unbanded → drain to nothing). "None", blank, and
     // non-numeric strings resolve to zero.
     private static int KeepFloor(Models.GameData.ItemOverlay overlay) =>
-        (overlay.MustHaveMinimum ?? false) ? ParseCount(overlay.MinToKeep, 0) : 0;
+        (overlay.MustHaveMinimum ?? false) ? Models.GameData.ItemOverlay.ParseCount(overlay.MinToKeep, 0) : 0;
 
     // Acquisition cap for the buy engine: MaxToGet as an int, with the "All"
     // sentinel and blank / non-numeric strings meaning unbounded (int.MaxValue →
     // buy the whole affordable stock).
     private static int MaxCap(Models.GameData.ItemOverlay overlay) =>
-        ParseCount(overlay.MaxToGet, int.MaxValue);
-
-    // Parse a carry-policy count string (MinToKeep / MaxToGet). Non-negative
-    // numeric strings yield their value; blank, null, and the MegaMUD sentinels
-    // ("None" / "All") fall back to the caller's default.
-    private static int ParseCount(string? raw, int fallback) =>
-        int.TryParse(raw, System.Globalization.NumberStyles.Integer,
-            System.Globalization.CultureInfo.InvariantCulture, out int v) && v >= 0
-            ? v : fallback;
+        Models.GameData.ItemOverlay.ParseCount(overlay.MaxToGet, int.MaxValue);
 
     // Resolve a single carried-inventory entry for Stash: map the loose carry
     // wording to an item Number, read its verbatim Name, and resolve the

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.184.33
+
+- `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
+- A lone `@auto-get on` / `off` is still the Auto-Get Items toggle
+
 ## 3.184.32
 
 - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
