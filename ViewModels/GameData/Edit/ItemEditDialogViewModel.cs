@@ -207,10 +207,13 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
     public IReadOnlyList<SettingsTier> AvailableTiers { get; }
 
-    // The overlay Save would produce from the installed defaults — see the ctor.
-    // On Save an overlay equal to this means the edit matches the seed, so the
-    // caller clears the tier's redundant override (or resets, at the Defaults tier).
-    private readonly ItemOverlay _defaultsBaseline;
+    // The item's own name. A Name left at it is no rename, so it is saved as unset.
+    private readonly string _mdbName;
+
+    // The record as the window opened on it, which Save compares against to hand
+    // back only the boxes the user changed, and the tier Use opened on.
+    private readonly ItemOverlay _opened;
+    private readonly SettingsTier _openedTier;
 
     public string Title => $"Item — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
@@ -258,7 +261,6 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<KeyValuePair<string, string>> mdbInfo,
         IReadOnlyList<ShopSaleRow> shops,
         IReadOnlyList<SettingsTier>? writableTiers = null,
-        ItemOverlay? installedDefaults = null,
         bool isLight = false,
         bool isContainer = false,
         ChestContents? chest = null,
@@ -276,6 +278,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<PlacedInRow>? exitUses = null)
     {
         WccNoStr     = wccNoStr;
+        _mdbName     = mdbName;
         Name         = existing?.Name ?? mdbName;
         // Writable tiers + "Installed defaults" (the reset option, last). The default
         // selection is always a writable tier, never Defaults — see the Monster dialog.
@@ -324,26 +327,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         _editAttachedMessage   = editAttachedMessage;
         AttachedMessageSummary = attachedMessageSummary ?? string.Empty;
 
-        // What Compose produces from the installed defaults (same container gate on
-        // AutoOpen the fields use) — an edit equal to this is a no-op vs the seed.
-        _defaultsBaseline = Compose(
-            installedDefaults?.Name ?? mdbName,
-            installedDefaults?.AutoCollect ?? false,
-            installedDefaults?.AutoDiscard ?? false,
-            isContainer && (installedDefaults?.AutoOpen ?? false),
-            installedDefaults?.AutoBuy ?? false,
-            installedDefaults?.AutoSell ?? false,
-            installedDefaults?.SellDetour ?? false,
-            installedDefaults?.SellDetourAbove ?? string.Empty,
-            string.Join(",", ParseSellShops(installedDefaults?.SellShops).OrderBy(k => k, StringComparer.Ordinal)),
-            installedDefaults?.AutoStash ?? false,
-            installedDefaults?.CannotBeTaken ?? false,
-            installedDefaults?.MustHaveMinimum ?? false,
-            installedDefaults?.LoyalItem ?? false,
-            installedDefaults?.AutoObtainForPath ?? false,
-            installedDefaults?.MinToKeep ?? string.Empty,
-            installedDefaults?.MaxToGet ?? string.Empty);
-
+        _opened = Composed();
+        _openedTier = UseTier;
         _initialized = true;
     }
 
@@ -431,19 +416,20 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private void Save()
     {
-        ItemOverlay overlay = Compose(
-            Name, AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell,
-            SellDetour, SellDetourAbove, SellShopsWire(), AutoStash,
-            CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
-
-        // Record value-equality against the defaults baseline: true means the edit
-        // matches the seed, so the caller clears the tier's redundant override.
-        bool equalsInstalledDefaults = overlay.Equals(_defaultsBaseline);
-        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier, equalsInstalledDefaults));
+        ItemOverlay overlay = Composed();
+        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier,
+            GameDataOverrideApplier.ChangedFields(_opened, overlay),
+            UseTier != _openedTier ? _opened : null));
     }
 
-    // Single overlay construction shared by Save (live fields) and the ctor's
-    // defaults-baseline capture, so the two compare apples-to-apples.
+    private ItemOverlay Composed() => Compose(
+        string.Equals(Name.Trim(), _mdbName, StringComparison.Ordinal) ? string.Empty : Name,
+        AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell,
+        SellDetour, SellDetourAbove, SellShopsWire(), AutoStash,
+        CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
+
+    // The record as the boxes leave it: what the chosen tier is to yield, with a
+    // box left clear as unset. GameDataOverrideApplier.ApplyItemAsync saves it.
     private static ItemOverlay Compose(
         string name, bool autoCollect, bool autoDiscard, bool autoOpen, bool autoBuy,
         bool autoSell, bool sellDetour, string sellDetourAbove, string sellShops,
@@ -475,10 +461,14 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 }
 
 // Returned by ItemEditDialogViewModel on Save. WccNoStr is the item's WCC No as a string
-// — primary key for the overlay write; Overlay is the user's edited overlay payload
-// (boolean flags written only when true); Tier is the tier the overlay should be written at.
+// — primary key for the overlay write; Overlay is the record the boxes describe (a
+// flag left clear is unset); Tier is the tier it is saved at; Changed names the
+// fields the user changed. MovedFrom is the record as the window opened on it when
+// the user moved Use to another tier, null otherwise: the shown values are then
+// saved at the new tier too (GameDataOverrideApplier.ApplyItemAsync).
 public sealed record ItemEditResult(
-    string       WccNoStr,
-    ItemOverlay  Overlay,
-    SettingsTier Tier,
-    bool         EqualsInstalledDefaults);
+    string                WccNoStr,
+    ItemOverlay           Overlay,
+    SettingsTier          Tier,
+    IReadOnlyList<string> Changed,
+    ItemOverlay?          MovedFrom);

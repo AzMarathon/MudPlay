@@ -148,7 +148,7 @@ public sealed class EventRemoteHandler : IDisposable
             IReadOnlyList<ScheduledEvent> found = _events.FindByName(name);
             if (found.Count != 1)
             {
-                ctx.Refuse(found.Count == 0 ? $"{NoneNamedOpening}{Shown(name)}'" : Ambiguous(name, found));
+                ctx.Refuse(found.Count == 0 ? $"{NoneNamedOpening}{WireText.Shortened(name)}'" : Ambiguous(name, found));
                 return;
             }
             e = found[0];
@@ -278,7 +278,7 @@ public sealed class EventRemoteHandler : IDisposable
             .GroupBy(e => e.Name.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => (Label(g.First()), g.Select(e => _events.Events.IndexOf(e) + 1).ToList()))
             .ToList();
-        string head = $"{AmbiguousOpening}{Shown(typed)}' matches {found.Count}";
+        string head = $"{AmbiguousOpening}{WireText.Shortened(typed)}' matches {found.Count}";
 
         List<string> said = new();
         int length = head.Length;
@@ -305,21 +305,8 @@ public sealed class EventRemoteHandler : IDisposable
     // with, the count of the names left out and the advice to use a number.
     private const int RefusalBudget = 155;
 
-    // A name as a reply shows it: in the wire's plain characters, as the engine
-    // would send it anyway, and cut short past NameCap so that no reply built round
-    // one name outgrows a telepath and no entry of the list outgrows a part. A
-    // name cut short is still found by its words. No other reply of the client's
-    // shortens a name, so the form (the start, then "...") is this handler's own.
-    private const int NameCap = 40;
-
-    private static string Shown(string text)
-    {
-        string plain = WireText.Ascii(text.Trim());
-        return plain.Length <= NameCap ? plain : plain[..(NameCap - 3)].TrimEnd() + "...";
-    }
-
     private static string Label(ScheduledEvent e) =>
-        IsNamed(e) ? Shown(e.Name) : Unnamed;
+        IsNamed(e) ? WireText.Shortened(e.Name) : Unnamed;
 
     // An event the client switched off for a missing target says so: switching it
     // on would be refused, and the sender should know why before trying.

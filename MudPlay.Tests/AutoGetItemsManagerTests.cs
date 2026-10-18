@@ -60,9 +60,7 @@ public sealed class AutoGetItemsManagerTests
         // canonical names Auto-sell would sell, and what the coin drop answers when
         // asked to free weight for one (each ask is recorded).
         public HashSet<string> AutoSell { get; } = new(StringComparer.OrdinalIgnoreCase);
-        // canonical name -> the item's Auto-collect rule as the user set it; names
-        // Auto-discard would drop.
-        public Dictionary<string, bool> Rules { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // canonical names Auto-discard would drop.
         public HashSet<string> Discard { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool CoinDropFrees { get; set; }
         public List<(long Weight, string Item)> CoinDropAsks { get; } = new();
@@ -111,7 +109,7 @@ public sealed class AutoGetItemsManagerTests
             int cap = Caps.TryGetValue(key, out int c) ? c : int.MaxValue;
             int weight = Weights.GetValueOrDefault(key);
             return new AutoGetItemsManager.ResolvedItem(number, key, auto, noTake, cap, weight, AutoSell.Contains(key),
-                AutoCollectSet: Rules.TryGetValue(key, out bool rule) ? rule : null, AutoDiscard: Discard.Contains(key));
+                AutoDiscard: Discard.Contains(key));
         }
 
         private static string Strip(string raw)
@@ -207,17 +205,17 @@ public sealed class AutoGetItemsManagerTests
         Assert.Equal(new[] { "get torch" }, h.SentText);
     }
 
-    // The item's own rules decide over Auto-Light: Auto-collect turned off,
-    // auto-discard or auto-sell each keep it on the floor.
+    // A light that can't be taken, or that auto-discard or auto-sell would get rid
+    // of again, stays on the floor for Auto-Light.
     [Theory]
-    [InlineData("rule-off")]
+    [InlineData("cannot-take")]
     [InlineData("discard")]
     [InlineData("sell")]
     public void ALightTheItemRulesKeepOff_IsNotGotForAutoLight(string rule)
     {
         using Harness h = new() { Enabled = false };
         h.Flags["torch"] = false;
-        if (rule == "rule-off") h.Rules["torch"] = false;
+        if (rule == "cannot-take") h.NoTake["torch"] = true;
         if (rule == "discard") h.Discard.Add("torch");
         if (rule == "sell") h.AutoSell.Add("torch");
         h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
@@ -225,6 +223,20 @@ public sealed class AutoGetItemsManagerTests
         h.Feed("You notice a torch here.");
 
         Assert.Empty(h.Sent);
+    }
+
+    // Auto-Light goes by its own settings: a light with Auto-collect off is still
+    // picked up for it (user, 2026-10-17).
+    [Fact]
+    public void ALightWithAutoCollectOff_IsStillGotForAutoLight()
+    {
+        using Harness h = new() { Enabled = true };
+        h.Flags["torch"] = false;
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
     }
 
     // Only the copies Auto-Light asks for come off a pile, and the floor shown

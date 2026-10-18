@@ -173,6 +173,48 @@ public sealed class SettingsResolver
                 $"ResolveGameData<{typeof(T).Name}>('{table}', '{recordId}') produced null.");
     }
 
+    // What the record resolves to from the tiers below `tier` alone: the defaults
+    // record with every lower tier's override laid over it. What an override at
+    // `tier` shadows, and what shows through once it is cleared.
+    public JsonObject ResolveGameDataBelow<T>(string table, string recordId, T defaultsRecord, SettingsTier tier)
+        where T : class
+    {
+        JsonObject merged = ToJsonObject(defaultsRecord);
+        if (_activeSetProvider?.Invoke() is not { } set) return merged;
+        if (tier > SettingsTier.Global)
+            Overlay(merged, ReadOverrideForWrite(SettingsTier.Global, null, table, set, recordId));
+        if (tier > SettingsTier.Bbs)
+            Overlay(merged, ReadOverrideForWrite(SettingsTier.Bbs, ActiveRealmFolder(), table, set, recordId));
+        return merged;
+    }
+
+    // The override `tier` itself holds for the record, field by field, or null
+    // when it holds none.
+    public JsonObject? ReadGameDataAt(SettingsTier tier, string table, string recordId)
+    {
+        if (_activeSetProvider?.Invoke() is not { } set) return null;
+        string? scope = tier switch
+        {
+            SettingsTier.Global    => null,
+            SettingsTier.Bbs       => ActiveRealmFolder(),
+            SettingsTier.Character => _profile.CurrentProfileName,
+            _                      => throw new InvalidOperationException("Defaults tier holds no override."),
+        };
+        return ReadOverrideForWrite(tier, scope, table, set, recordId) is { ValueKind: JsonValueKind.Object } delta
+            ? JsonNode.Parse(delta.GetRawText())!.AsObject()
+            : null;
+    }
+
+    // ReadOverride for a write built from it: the file as it stands, not a copy
+    // cached before another client changed it.
+    private JsonElement? ReadOverrideForWrite(
+        SettingsTier tier, string? scope, string table, string set, string recordId)
+    {
+        if (tier != SettingsTier.Global && string.IsNullOrEmpty(scope)) return null;
+        DropIfChangedOutside(OverridePath(tier, scope, table, set));
+        return ReadOverride(tier, scope, table, set, recordId);
+    }
+
     // Write value as the override for record recordId in table at the specified
     // tier. Lands in the per-set side-file for the currently active game-data
     // set.
@@ -381,7 +423,10 @@ public sealed class SettingsResolver
         string path = AppPaths.OverrideFile(tier, scope, table, set, CharacterBbs(tier));
         // Read for a write: make sure it is the file as it stands.
         DropIfChangedOutside(path);
-        return GetCachedOverrideFile(path) ?? new();
+        // A copy to change: a dictionary in the cache is never changed once there
+        // (other threads read it without the lock); SaveOverrideFile puts the
+        // changed copy in its place, under the lock, once the file is written.
+        return GetCachedOverrideFile(path) is { } cached ? new(cached) : new();
     }
 
     private void SaveOverrideFile(

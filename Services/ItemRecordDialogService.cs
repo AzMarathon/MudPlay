@@ -8,9 +8,9 @@ using MudPlay.ViewModels.GameData.Edit;
 
 namespace MudPlay.Services;
 
-// Opens the item record (edit) dialog by item Number, modelessly, from anywhere —
-// today the Item Finder's double-click, which wants the record itself rather than
-// the whole Game Data Browser. Mirrors the browser Items tab's open flow
+// Opens the item record (edit) dialog by item Number, modelessly, from anywhere
+// outside the Game Data Browser (the Item Finder, the Roomba Master List, the
+// Workshop's item rows, the spell book), and saves what it hands back. Mirrors the browser Items tab's open flow
 // (ItemsSectionViewModel.OpenEditAsync) but keyed on a Number instead of a browser
 // row, and shares the heavy read-only view assembly via ItemMdbViewBuilder. The
 // small orchestration is duplicated on purpose: the browser path is coupled to its
@@ -20,24 +20,30 @@ public sealed class ItemRecordDialogService
 {
     private readonly GameDataCache _cache;
     private readonly SettingsResolver _resolver;
-    private readonly DialogService _dialogs;
+    // Shows the dialog and completes with what it hands back: the record on OK,
+    // null on Cancel. DialogService.OpenWindowAsync in the client.
+    private readonly Func<ItemEditDialogViewModel, Task<ItemEditResult?>> _show;
+    private readonly ConfirmService _confirm;
     private readonly ItemOverlaySeedStore _overlaySeed;
     private readonly ItemSourceIndex _itemSources;
 
     private ItemEditDialogViewModel? _openItemVm;
 
     public ItemRecordDialogService(
-        GameDataCache cache, SettingsResolver resolver, DialogService dialogs,
+        GameDataCache cache, SettingsResolver resolver,
+        Func<ItemEditDialogViewModel, Task<ItemEditResult?>> show, ConfirmService confirm,
         ItemOverlaySeedStore overlaySeed, ItemSourceIndex itemSources)
     {
         ArgumentNullException.ThrowIfNull(cache);
         ArgumentNullException.ThrowIfNull(resolver);
-        ArgumentNullException.ThrowIfNull(dialogs);
+        ArgumentNullException.ThrowIfNull(show);
+        ArgumentNullException.ThrowIfNull(confirm);
         ArgumentNullException.ThrowIfNull(overlaySeed);
         ArgumentNullException.ThrowIfNull(itemSources);
         _cache = cache;
         _resolver = resolver;
-        _dialogs = dialogs;
+        _show = show;
+        _confirm = confirm;
         _overlaySeed = overlaySeed;
         _itemSources = itemSources;
     }
@@ -70,7 +76,7 @@ public sealed class ItemRecordDialogService
         // On-use / proc message editing — same surface the browser Items tab wires,
         // via the shared ItemMessageDialogService (item-claimed messages live with
         // the item, hidden from the Messages tab).
-        ItemMessageDialogService? itemMsg = AppServices.Current?.ItemMessage;
+        ItemMessageDialogService? itemMsg = AppServices.CurrentOrNull?.ItemMessage;
         Func<Task<string?>>? editMsg = itemMsg is not null ? () => itemMsg.OpenAsync(itemNumber) : null;
         string? msgSummary = itemMsg?.SummaryFor(itemNumber);
 
@@ -82,7 +88,6 @@ public sealed class ItemRecordDialogService
             mdbInfo:          mdb.OtherInfo,
             shops:            mdb.Shops,
             writableTiers:    _resolver.WritableTiers(),
-            installedDefaults: seedDefaults,
             isLight:          mdb.IsLight,
             isContainer:      mdb.IsContainer,
             chest:            chest,
@@ -90,8 +95,11 @@ public sealed class ItemRecordDialogService
             givers:           givers,
             shopSalesForCharm: ShopsForCharm,
             droppedBy:        mdb.DroppedBy,
-            castsSpells:      mdb.CastsSpells,
+            placedIn:         mdb.PlacedIn,
             roomCommands:     mdb.RoomCommands,
+            castsSpells:      mdb.CastsSpells,
+            summons:          mdb.Summons,
+            teleportsTo:      mdb.TeleportsTo,
             editAttachedMessage:    editMsg,
             attachedMessageSummary: msgSummary,
             exitUses:         new ItemMdbViewBuilder(_cache, 50).ExitUsesOf(itemNumber));
@@ -103,7 +111,7 @@ public sealed class ItemRecordDialogService
         ItemEditResult? result;
         try
         {
-            result = await _dialogs.OpenWindowAsync<ItemEditDialogViewModel, ItemEditResult>(vm);
+            result = await _show(vm);
         }
         finally
         {
@@ -111,11 +119,10 @@ public sealed class ItemRecordDialogService
         }
         if (result is null) return;
 
-        // Installed-defaults reset / redundant-override cleanup / normal write —
-        // shared with the browser's Items tab.
-        if (AppServices.Current is { } app)
-            await GameDataOverrideApplier.ApplyAsync(
-                _resolver, app.Confirm, "Items", result.WccNoStr,
-                result.Tier, result.Overlay, result.EqualsInstalledDefaults);
+        // Installed-defaults reset or the field-by-field save — shared with the
+        // browser's Items tab.
+        await GameDataOverrideApplier.ApplyItemAsync(
+            _resolver, _confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed,
+            result.MovedFrom);
     }
 }

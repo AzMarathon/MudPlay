@@ -154,9 +154,14 @@ How to keep it current:
 - Checks: - The rest decision: ClassifyRest, ResolveTarget, pre-rest swaps on sit, Default on stand only once recovery is done, re-resting after a hand-typed rest's gear wear, sits confirmed after the rest already ended. - The combat, Auto-All and item-cast rules: SwapToDefaultOnCombat in and out of a fight, no pre-rest swap mid-fight, the Auto-All kill switch, the item-cast hold. - The movement, lair and boss sets (manual-move idle revert, combat debounce, keep-Bossing between bosses), held Equip-menu sets, re-applying gear that came back to the pack, and gear swaps never removing a worn room-hazard counter. A held set deselected mid-fight settles at the clear, or when a boss room comes first, keeping the same set or going through Default to the one wanted.
 - Why: Reports `paradigm-20260815-130733`, `paradigm-20260826-132742`, `paradigm-20260827-125103`, `paradigm-20260914-154019`, `paradigm-20260915-061646`, `paradigm-20260915-124359`, `paradigm-20260916-104923`, `paradigm-20260924-113530`, `paradigm-20260929-115648`, `paradigm-20261008-202210` and `paradigm-20261015-202943`. Also the user's 2026-10-09 ruling on gear that comes back to the pack, and GAME_MECHANICS "Gear swaps interrupt resting, not meditating". Guards against gear thrash and against fighting in rest gear.
 
+### AutoGetItemRemoteTests.cs
+- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyItemAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
+- Checks: the report reads every tier and says *cannot be taken*; `on` / `off` / `max <n>` / `max none` (either order) are saved at the character tier, never Global, and the auto-get engine then collects the item, leaves it, and stops at the max (held copies counted; `max 0` takes none); off holds over a Global or realm tick, on holds when a Global tick it matched is removed, and a change leaves every other field resolving as before; a change back to the installed defaults clears the character override, unless a lower tier would show through; a seeded item reads the stock seed and returns to it; the log line names the sender. Names: exact (with an article) wins, words in any order, apostrophes left out, two records of one name are one item, a name holding `on` or `max` still works; several matches are refused with the names. A lone `on` / `off` / bare `@auto-get` is still the engine toggle and an item change leaves it alone. A first word of `on` / `off` toggles the engine whatever follows; fields the command doesn't name stay unwritten, and a value the character tier holds for another field survives. An item editor open while `@auto-get` changes the item keeps that change on OK, with Use moved to another tier too, and the editor's value wins for a box changed in both. Refusals (no item, ambiguous, bad, over-9999 or missing max, no name, no named character, no Alter settings) carry their reason, are silent with Warn off, and go back on the channel the command came in on; a success is answered with Warn off; the Auto-All switch off ignores the command unanswered.
+- Why: a party member flags an item for auto-get, or sets its max, remotely for this character (user, 2026-10-17).
+
 ### AutoGetItemsManagerTests.cs
 - Covers: Game/Inventory/AutoGetItemsManager. Also one stray theory for Game/Inventory/InventorySnapshot.ParseKeyEntry, which is a production helper but has nothing to do with this class.
-- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off, only as many copies as wanted, once when also flagged, and never when they can't be taken or the item rules keep them off.
+- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
 - Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; the walker leaving before the post-kill survey lands; Roomba headroom.
 
 ### AutoHazardCounterProvisionerTests.cs
@@ -1711,7 +1716,7 @@ How to keep it current:
 
 ### ItemEditDialogViewModelTests.cs
 - Covers: ViewModels/GameData/Edit/ItemEditDialogViewModel
-- Checks: the installed-defaults tier; EqualsInstalledDefaults; sell-detour round-trip and its warning; the Given-by filtering; the exit-uses list cap.
+- Checks: the installed-defaults tier; a cleared box and the item's own name are saved unset, a rename kept; sell-detour round-trip and its warning; the Given-by filtering; the exit-uses list cap.
 - Why: paradigm-20260930-183614
 
 ### ItemEquipFilterTests.cs
@@ -1743,6 +1748,16 @@ How to keep it current:
 - Covers: Services/ItemNameStore
 - Checks: lookup by number; IsRecordName; the off-hand and slot lists and their clearing on a null set; PackStealthOf.
 - Why: item name resolution
+
+### ItemOverrideSaveTests.cs
+- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyItemAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
+- Checks: a character-tier untick over a Global tick is off; a record set back to its installed defaults over a differing Global still yields the defaults, holding only the boxes that differ below; set back with nothing below it clears the override; one box changed leaves the others resolving as before; only changed boxes are saved, so a character save doesn't copy a Global value up and a Global save doesn't copy a character's value down; a realm record set back to its defaults clears; the batch editor saves only its chosen fields, its off over a realm tick is off, back to defaults clears, and its Auto-sell off turns a Global sell detour off too. A save builds on the override file as it stands on disk, not a copy cached before another client changed it. Use moved to another tier copies the shown values there, and OK on the same tier with nothing changed saves nothing. A save that fails to reach the disk leaves the cached record as the file has it. The tiers not saved at are never written.
+- Why: an untick at the character tier left a Global tick showing, and a record set back to its defaults didn't return to them (user, 2026-10-17).
+
+### ItemRecordDialogServiceTests.cs
+- Covers: Services/ItemRecordDialogService (with ItemEditDialogViewModel and GameDataOverrideApplier.ApplyItemAsync)
+- Checks: OK saves the record at the tier picked in Use, by the field-by-field rule (an untick over a Global tick is off); Cancel saves nothing.
+- Why: the item record opened from the Roomba Master List dropped what OK handed back (user, 2026-10-17).
 
 ### ItemSourceIndexTests.cs
 - Covers: Services/ItemSourceIndex
@@ -3117,7 +3132,7 @@ How to keep it current:
 
 ### RemoteCommandHelpTextTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog.Help
-- Checks: the `@help <command>` wording that goes out on the wire ("Syntax - Description") for the commands whose behaviour it describes; every line fits one telepath.
+- Checks: the `@help <command>` wording that goes out on the wire ("Syntax - Description") for the commands whose behaviour it describes, `@auto-get`'s item forms among them; every line fits one telepath.
 - Why: @help accuracy is user-visible; the game truncates long telepaths.
 
 ### RemoteCommandLocalInvokeTests.cs

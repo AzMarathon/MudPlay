@@ -120,6 +120,34 @@ public sealed class ItemNameStore
         return null;
     }
 
+    // The items a name typed in chat stands for, by the rule the remote commands use
+    // for a loop's or an event's name: an exact name wins outright (FindByName, so
+    // an article or a plural still counts); otherwise every item whose name holds
+    // every typed word, in any order; and once more without apostrophes, which
+    // typed chat drops. Items that share one name count once, as the Number
+    // FindByName gives them, so an engine that resolves the name meets the same
+    // record. One result is a match, several an ambiguity for the caller to
+    // report, none a miss. Sorted by name.
+    public IReadOnlyList<int> FindAllByName(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<int>();
+        if (FindByName(query) is int exact) return new[] { exact };
+        IReadOnlyList<int> found = Matching(name => RoomSearchService.NameMatchesTokens(name, query));
+        if (found.Count > 0) return found;
+        string bare = query.Replace("'", "");
+        return Matching(name => RoomSearchService.NameMatchesTokens(name.Replace("'", ""), bare));
+    }
+
+    private IReadOnlyList<int> Matching(Func<string, bool> matches)
+    {
+        List<int> found = new();
+        foreach (int number in _byNormalizedName.Values)
+            if (_names.TryGetValue(number, out string? name) && matches(name))
+                found.Add(number);
+        found.Sort((a, b) => string.Compare(_names[a], _names[b], StringComparison.OrdinalIgnoreCase));
+        return found;
+    }
+
     // True when the text is an item's record name as it stands: no article, no
     // count, nothing reworded. The engine's own lines print that name verbatim,
     // where a textblock's flavour text ("a green potion", "the heavy bloodstone

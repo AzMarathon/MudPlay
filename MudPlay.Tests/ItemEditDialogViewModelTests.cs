@@ -8,8 +8,8 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The Items tab's edit dialog offers "Installed defaults" as a Use option (the
-// reset target) and reports EqualsInstalledDefaults so the applier clears a
-// redundant override instead of writing it. Mirrors MonsterEditDialogViewModelTests.
+// reset target) and hands back the record its boxes describe, which
+// GameDataOverrideApplier.ApplyItemAsync saves (ItemOverrideSaveTests).
 public sealed class ItemEditDialogViewModelTests
 {
     private static readonly IReadOnlyList<KeyValuePair<string, string>> NoInfo =
@@ -26,49 +26,40 @@ public sealed class ItemEditDialogViewModelTests
     }
 
     private static ItemEditDialogViewModel MakeVm(
-        ItemOverlay? existing, ItemOverlay? installedDefaults,
-        SettingsTier currentTier = SettingsTier.Character)
+        ItemOverlay? existing, SettingsTier currentTier = SettingsTier.Character)
         => new(
             wccNoStr: "1", mdbName: "torch", existing: existing,
             currentTier: currentTier, mdbInfo: NoInfo, shops: NoShops,
-            writableTiers: [SettingsTier.Character, SettingsTier.Global],
-            installedDefaults: installedDefaults);
+            writableTiers: [SettingsTier.Character, SettingsTier.Global]);
 
     [Fact]
     public void Picker_OffersInstalledDefaults_ButDefaultsToWritableTier()
     {
-        ItemEditDialogViewModel vm = MakeVm(new ItemOverlay(), new ItemOverlay(),
-                                            currentTier: SettingsTier.Defaults);
+        ItemEditDialogViewModel vm = MakeVm(new ItemOverlay(), currentTier: SettingsTier.Defaults);
         Assert.Contains(SettingsTier.Defaults, vm.AvailableTiers);
         Assert.Equal(SettingsTier.Character, vm.UseTier);
     }
 
+    // A box left clear and the item's own name are unset in the record, the shape
+    // of an untouched installed default.
     [Fact]
-    public void EqualsInstalledDefaults_UnchangedFromSeed_IsTrue()
+    public void Save_LeavesAClearedBox_AndTheItemsOwnName_Unset()
     {
-        ItemOverlay seed = new() { AutoCollect = true };
-        Assert.True(Save(MakeVm(seed, seed)).EqualsInstalledDefaults);
+        ItemEditDialogViewModel vm = MakeVm(new ItemOverlay { AutoStash = true });
+        vm.AutoStash = false;
+
+        ItemOverlay saved = Save(vm).Overlay;
+
+        Assert.Equal(new ItemOverlay(), saved);
     }
 
     [Fact]
-    public void EqualsInstalledDefaults_ChangedFromSeed_IsFalse()
+    public void Save_KeepsARename()
     {
-        ItemOverlay seed = new() { AutoCollect = true };
-        ItemEditDialogViewModel vm = MakeVm(seed, seed);
-        vm.AutoCollect = false;
-        Assert.False(Save(vm).EqualsInstalledDefaults);
-    }
+        ItemEditDialogViewModel vm = MakeVm(null);
+        vm.Name = "old torch";
 
-    [Fact]
-    public void EqualsInstalledDefaults_EditedBackToSeed_IsTrueAgain()
-    {
-        ItemOverlay seed = new();                             // seed: no flags set
-        ItemOverlay existing = new() { AutoStash = true };    // user override
-        ItemEditDialogViewModel vm = MakeVm(existing, seed);
-        Assert.True(vm.AutoStash);
-
-        vm.AutoStash = false;                                 // dragged back to the seed
-        Assert.True(Save(vm).EqualsInstalledDefaults);
+        Assert.Equal("old torch", Save(vm).Overlay.Name);
     }
 
     // Sell detours: the flag, the detour count and the ticked "Sell here" shops round-
@@ -128,12 +119,12 @@ public sealed class ItemEditDialogViewModelTests
     public void UntickingAutoSell_ClearsTheSellDetour()
     {
         ItemEditDialogViewModel vm = MakeVm(
-            new ItemOverlay { AutoSell = true, SellDetour = true, SellDetourAbove = "5" }, null);
+            new ItemOverlay { AutoSell = true, SellDetour = true, SellDetourAbove = "5" });
         vm.AutoSell = false;
         Assert.False(vm.SellDetour);
         Assert.Equal(string.Empty, vm.SellDetourAbove);
 
-        ItemOverlay stale = Save(MakeVm(new ItemOverlay { SellDetour = true, SellDetourAbove = "5" }, null)).Overlay;
+        ItemOverlay stale = Save(MakeVm(new ItemOverlay { SellDetour = true, SellDetourAbove = "5" })).Overlay;
         Assert.Null(stale.SellDetour);
         Assert.Null(stale.SellDetourAbove);
     }

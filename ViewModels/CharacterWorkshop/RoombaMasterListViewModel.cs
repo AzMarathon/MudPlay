@@ -125,7 +125,7 @@ public sealed partial class RoombaMasterListViewModel : ObservableObject, IDispo
     public async Task OpenItemRecordAsync(RoombaMasterListRowViewModel? row)
     {
         if (row is null || row.ItemNumber < 0) return;
-        await ItemRecordOpener.OpenAsync(row.ItemNumber, row.ItemName);
+        await AppServices.Current.ItemRecord.OpenAsync(row.ItemNumber);
     }
 
     // The room-grouped export the Export List button writes: one header per gang-

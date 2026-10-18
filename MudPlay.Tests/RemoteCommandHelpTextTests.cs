@@ -34,6 +34,14 @@ public sealed class RemoteCommandHelpTextTests
         Assert.DoesNotContain("/ heal", Help("@auto-rest").Description);
     }
 
+    // A lone on / off is the engine toggle; after an item's name it is that item's.
+    [Fact]
+    public void AutoGet_ShowsTheItemForms()
+    {
+        Assert.Equal("@auto-get [on|off] | <item> [on|off] [max <n>|none]", Help("@auto-get").Syntax);
+        Assert.Contains("how many to hold at most", Help("@auto-get").Description);
+    }
+
     [Fact]
     public void Dupe_NamesTheQuestPermissionsItCopies() =>
         Assert.Contains("query, roomba and quest permissions", Help("@dupe").Description);

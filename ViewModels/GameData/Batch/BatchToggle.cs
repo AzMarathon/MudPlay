@@ -21,8 +21,7 @@ public static class BatchToggleExtensions
         _ => current,
     };
 
-    // Nullable variant for overlay fields that distinguish "no override" (null)
-    // from an explicit false: On → true, Off → false, Leave → unchanged.
+    // Nullable variant for overlay fields: On → true, Off → false, Leave → unchanged.
     public static bool? Apply(this BatchToggle toggle, bool? current) => toggle switch
     {
         BatchToggle.On => true,

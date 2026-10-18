@@ -45,14 +45,11 @@ public sealed class AutoGetItemsManager : IDisposable
     // flag that wins over AutoCollect — the engine never sends get for it), the
     // MaxToGet carry cap (int.MaxValue = unbounded), the item's carry Weight
     // (MDB Encum; 0 when unknown — such items skip the encumbrance gate), and
-    // whether Auto-sell would sell it (coin may be dropped to fit one of those in).
-    // AutoCollectSet is the item's own Auto-collect rule as the user left it — null
-    // when never set, false when turned off — and AutoDiscard whether Auto-discard
-    // would drop it: the extra collect reason (SetExtraCollect) honours both.
+    // whether Auto-sell would sell it (coin may be dropped to fit one of those in),
+    // and whether Auto-discard would drop it.
     public sealed record ResolvedItem(int Number, string Name, bool AutoCollect,
                                       bool CannotBeTaken, int MaxToGet, int Weight,
-                                      bool AutoSell = false, bool? AutoCollectSet = null,
-                                      bool AutoDiscard = false);
+                                      bool AutoSell = false, bool AutoDiscard = false);
 
     private readonly Func<string, ResolvedItem?> _resolve;
     private readonly Func<int, int> _heldCount;
@@ -392,8 +389,9 @@ public sealed class AutoGetItemsManager : IDisposable
     // .FloorLightsWanted), answering how many copies. It carries its own master
     // toggle, so it is asked whether Auto-Get Items is on or not, and it runs in
     // this same survey pass so a light that is also flagged is got once, under the
-    // same caps, encumbrance and in-flight ledger. The item's own rules decide over
-    // it: Auto-collect turned off, auto-discard and auto-sell each keep it on the
+    // same caps, encumbrance and in-flight ledger. It goes by its own settings, not
+    // the item's Auto-collect (user, 2026-10-17); an item that can't be taken, or
+    // that auto-discard or auto-sell would only get rid of again, stays on the
     // floor. Unbound, nothing extra is collected.
     private Func<ResolvedItem, int>? _extraWanted;
     private string _extraWhy = string.Empty;
@@ -488,7 +486,7 @@ public sealed class AutoGetItemsManager : IDisposable
             int extraLeft = int.MaxValue;
             if (extra)
             {
-                if (_extraWanted is null || item.AutoCollectSet == false || item.AutoDiscard || item.AutoSell) continue;
+                if (_extraWanted is null || item.AutoDiscard || item.AutoSell) continue;
                 extraLeft = _extraWanted(item) - _floorInFlight.GetValueOrDefault(item.Name)
                     - (extraThisSurvey?.GetValueOrDefault(item.Name) ?? 0);
                 if (extraLeft <= 0) continue;

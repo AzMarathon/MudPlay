@@ -1084,7 +1084,7 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
@@ -1228,6 +1228,7 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@roomba` | `@roomba <item>` · `@roomba sync` | Query Roomba | Where an item was last seen; `sync` hands over your whole log. |
 | `@auto-all` | `@auto-all` · `@auto-all on` · `@auto-all off` | Alter settings | The master switch. |
 | `@auto-combat` `@auto-nuke` `@auto-heal` `@auto-rest` `@auto-bless` `@auto-light` `@auto-cash` `@auto-get` `@auto-sneak` `@auto-hide` `@auto-search` | each one bare, or with `on` or `off` | Alter settings | Flips or sets that one auto toggle. |
+| `@auto-get <item>` | `@auto-get <item>` · `@auto-get <item> on` · `@auto-get <item> off` · `@auto-get <item> max <n>` · `@auto-get <item> max none` · `@auto-get <item> on max <n>` | Alter settings | One item's Auto-collect and Max to get: reports them, or sets them for this character. |
 | `@events` | `@events` | Alter settings | Your Events by number and name, each on or off. |
 | `@event` | `@event <name>` · `@event <name> on` · `@event <name> off` · the same with a number from `@events` for the name | Alter settings | One of your Events: its state, or switches it on or off. |
 | `@reset` | `@reset` | Alter settings, or party member | Zeroes your session statistics. |
@@ -2626,9 +2627,53 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 **Situations:**
 
 - **`@auto-heal` and `@auto-rest` are two toggles.** One works your heal and cure casts, the other your resting. `@auto-cash` is the get-cash toggle and `@auto-get` the get-items toggle.
+- **`@auto-get` with an item's name after it** works on that item, not the toggle: see **@auto-get for one item**. When the first word is `on` or `off` it is always the toggle, and anything after it is ignored.
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
+
+#### @auto-get for one item
+
+Reports or sets one item's own Auto-Get Items rules: its **Auto-collect** flag and its **Max to get**, the two boxes under *Getting it* in the item's Game Data editor. A change is saved **only for this character**, the same as picking that tier in the editor and saving: the editor shows it at that tier, and the next room you see is collected by it.
+
+**Max to get** is how many copies Auto-Get Items lets you hold. It counts what you carry, wear and have on your key ring, and stops picking the item up once you hold that many: with `max 2` and one in your pack, a pile of three yields one. `max none` (a blank box in the editor) is no limit. `max 0` keeps every copy on the floor. The largest number taken is 9999.
+
+The same box is read elsewhere. Auto-buy buys up to it: with `max 0` it buys none, and with `max none` it buys all the shop has that you can afford. Auto-obtain for path takes its count per person from it, and reads `0` or none as unset, falling back to Min. to keep (at least 1).
+
+**Forms:**
+
+- `@auto-get large shield`: report the item's rules.
+- `@auto-get large shield on`: tick its Auto-collect. `off` unticks it.
+- `@auto-get large shield max 2`: set its Max to get. `max none` clears it.
+- `@auto-get large shield on max 2`: both at once. `max 2 on` works too.
+
+**How a name finds an item.** The same way `@loop` finds a loop, over every item in your game data. A name that is an item's whole name wins outright, with or without `a`, `an`, `the` or a plural `s`. Otherwise an item matches when its name holds **every typed word, in any order**: `@auto-get shield large` finds *large shield*. If nothing matches, it is tried once more without apostrophes, so `kings crown` finds *king's crown*. Exactly one item is used; none, or more than one, is refused. Two records with the same name are one item, the one the engines pick up by that name.
+
+`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`. When the **first** word is `on` or `off`, the command is the Auto-Get Items toggle and the rest is ignored: `@auto-get on please` switches the toggle on and answers `@auto-get: on`. So an item whose name begins with the word *on* or *off* can't be named here.
+
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
+
+| Reply | When |
+|---|---|
+| `large shield: auto-get on, max 2` | The item's rules after the command, whether or not anything changed. `max none` when it has no Max to get. |
+| any of the above, ending `(cannot be taken)` | The item is marked *Cannot be taken*, so it is never picked up whatever the rules say. |
+| `no item named '<text>'` | **Refusal:** no item's name fits. |
+| `item name '<text>' matches 3: 'large shield', 'large sword', 'small shield'` | **Refusal:** the name fits more than one item. Up to four names are given, fewer when they are long, then `+5 more` for the rest. Nothing is changed. |
+| `bad max '<text>': give a number or none` | **Refusal:** the word after `max` is neither a whole number from 0 to 9999 nor `none`. |
+| `max needs a number or none` | **Refusal:** the command ends in `max`. |
+| `no character loaded` | **Refusal:** a change was asked for with no named character loaded, so there is no character to save it for. A report is still answered. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+With no name before the `max` (`@auto-get max 2`), the command is refused with `usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]`.
+
+**Situations:**
+
+- **A change holds for this character.** What the command sets is kept at the character tier whenever a rule for all characters or for the realm differs from the installed default, so `off` over such a tick stays off, and `on` stays on if that tick is later removed.
+- **Only what the command names changes.** The item's other boxes go on reading as they did.
+- **Back to the installed defaults:** a change that leaves the item as it was installed, with nothing for all characters or for the realm saying otherwise, removes this character's override, as the editor does (see **How an item is saved** under *Game Data*).
+- **Auto-Get Items itself is separate.** Flagging an item doesn't switch the toggle on; send `@auto-get on` for that.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a change is written to the program log with the sender's name, the item and its rules before and after. The bug report's item overrides list shows the item at the Character tier.
 
 #### @events and @event
 
@@ -2960,6 +3005,8 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash + Items) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger. Between inventory reads MudPlay keeps its own running count of your coins and weight (pickups, drops, stashes, deposits, purchases, training fees). When the game shows that count is off — it refuses a coin stash or drop, or a pickup is skipped because you look full — MudPlay sends one `i` to re-read the real figures.
 
 **Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So when you kill a monster whose drop list (Game Data → Monsters) holds an item you've flagged **Auto-collect**, MudPlay re-displays the room (a bare Enter) to see whether it dropped, and a loop or walk waits for that display before moving on. Both halves are needed: **Auto-Get Items** on, and the item flagged Auto-collect in Game Data → Items. Kills of monsters that can't drop a flagged item send nothing extra. A room spell's kill doesn't say which monster died, so the room is re-displayed when any kind of monster it listed could have dropped one.
+
+A party member with **Alter settings** can flag an item for you, or set its Max to get, from chat: see **@auto-get for one item** in *Remote @-commands*.
 
 In a **stash room** the client stashes your excess coin (and any auto-stash items) as you pass through. An **Auto-stash** item goes a whole stack at a time (`hide 9 green dragon hide`), keys on your key ring included; with **Must have minimum** ticked, **Min. to keep** copies stay with you and only the rest are hidden. Having just hidden it, the client deliberately does **not** re-grab that pile — but only the coin a `search` *re-reveals* is skipped. Coin that's plainly visible when you walk in, or that a kill drops on the floor, is still collected there (and, of course, in every ordinary room, including the room right after a stash room).
 
@@ -3907,13 +3954,28 @@ On the **Monsters**, **Items**, and **Players** tables a **Batch edit** button s
 - **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
 - **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
 - **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 16 remote-control permissions (Elevated Commands is listed as **Sysop commands** here), with a **Set all permissions** master to grant or revoke the lot in one move. A player's one-time `@dupe` is re-armed only from that player's own edit dialog (**Reset @dupe**).
-- **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (**Only for this character** / **Only for this realm** / **For all characters (global)**), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
+- **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (**Only for this character** / **Only for this realm** / **For all characters (global)**), the same as the single editor (an item is saved box by box, as under **How an item is saved**); picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
 
 ### The item / monster override editor
 
 Items and Monsters open an editable pane on the left with the read-only **Other Info (from MDB)** on the right.
 
 **For an item** the left side groups its settings by what they do: **Getting it** (Auto-collect, Auto-buy, **Max to get**, Cannot be taken, Auto-open for a container, Auto-obtain for path), **Keeping it** (Must have minimum, **Min. to keep**, Loyal item) and **Getting rid of it** (Auto-sell with its sell-detour options, Auto-stash, Auto-discard), plus the item's on-use message. Hover any box for what it does. The window remembers its size and position.
+
+**How an item is saved.** Pressing OK saves only the boxes you changed, at the tier you pick in **Use**. Each one is saved so that your tier gives what the box shows, whatever the tiers under it say:
+- A box cleared over a tick for all characters or for the realm is saved as off at your tier.
+- A box set back to the item's installed default, with the tiers under it at that default too, is taken off your tier. So an item you set back to how it was installed returns to **Def** in the Use column.
+- If a rule for all characters or for the realm differs, your tier keeps the installed value for that box.
+
+A box you didn't change isn't copied into your tier, so it goes on following the tier it comes from.
+
+**Moving Use to another tier** and pressing OK saves the item at that tier as the window shows it, changed boxes or not. Every box whose shown value differs from what that tier would give otherwise is saved there, by the same rule: a box at its installed default, with nothing under it saying otherwise, isn't written. OK on the tier the window opened on, with nothing changed, saves nothing.
+
+**While the window is open,** another client or a party member's `@auto-get <item>` may change the same item. OK keeps their change for every box you didn't change. If you changed the same box, your value is saved. The window itself doesn't refresh to show their change.
+
+Only the tier you picked is written. The batch editor (for the fields it is told to set, at the tier it picks) and `@auto-get <item>` save the same way. The item record opened from the Item Finder or the Roomba Master List is the same window and saves the same way.
+
+An item saved by an earlier version holds every box at the tier it was saved at. A box you don't change there goes on hiding what the tiers under it say. Picking **Installed defaults** in Use clears it, but that resets the item everywhere: it removes your Global, realm and character edits for that item (the window asks first), not just the tier you were on.
 
 **Opening.** With **Auto-open** ticked on a container (and Auto-Get Items running), a copy that comes into your pack — picked up, bought or handed to you — is opened for you. MudPlay sends `open <container>`, reads your inventory a moment later, and puts what the container gave on the **Chest Offload** list (Workshop → Record Keeping), where you can sell or drop it; it is said to the room only if that tab's **Say loot to the room** box is ticked.
 
@@ -6353,7 +6415,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 - **Keeps a loop lit.** On a loop or an Auto-Lair run it lights rooms the same way from what you carry. When the loop goes through dark rooms you have no light for — when it starts, or later, say when your last light burns out — it stops the run, walks to the shop selling your Preferred light that adds the fewest steps, buys enough for Carry hours, walks back and carries on (the navigation chip reads *Light Trip*). A trip that couldn't buy isn't tried again for that loop until the lights you carry change, you can now pay for one when you couldn't before, or you start a run yourself; otherwise it waits 10 minutes, then twice as long after each try that fails, up to 2 hours. A trip the connection cut off doesn't count as a try. A Roomba sweep is never stopped for a light trip. When the lit light drops below **Reorder at**, it makes the same trip to restock.
 - **Buys a light in town on a bank or stash run.** When an auto-deposit run's way back to the loop goes through dark rooms you have no light for, it walks out to the bank or stash room as it is, deposits or hides your coin, then buys your Preferred light at the shop nearest it (one it can reach without the dark, if there is one) before it sets off back, so the walk home is lit. The deposit, or the hide, leaves the light's price in your purse for that buy. If the connection drops while it buys, it lets the buy go and ends the trip; once you're back in the game the loop starts again the way any loop the drop cut off does (an Auto-Lair run stays stopped), and buys a light if it still needs one. An Event's bank or stash trip ends at the bank; whatever walk comes next makes its own light check.
 - **Stocks up on the way past a shop.** When an auto-deposit bank run or an auto-train trip heads back to the loop and a shop selling your light is at most 25 steps out of the way, it stops there to bring your pack up to Carry hours. It only buys whole lights that fit under the target, and only when there's a dark room ahead or a light lit right now.
-- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. The light's own item rules win: one marked *cannot be taken*, with **Auto-collect** turned off, or set to be auto-discarded or auto-sold, stays on the floor.
+- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. It goes by these settings alone, not the light's **Auto-collect** box: a light with Auto-collect off is picked up all the same. A light marked *cannot be taken* stays on the floor, and so does one set to be auto-discarded or auto-sold, since that engine would only get rid of it again.
 - MudPlay never asks party members for lights.
 
 ### Preferred light

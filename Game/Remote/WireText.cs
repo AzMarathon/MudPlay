@@ -36,6 +36,18 @@ public static class WireText
         return sb.ToString();
     }
 
+    // A name a reply carries, the user's or one the sender typed: in plain
+    // characters, and cut short past NameCap (its start, then "...") so that no
+    // reply built round one name outgrows a telepath and no entry of a list
+    // outgrows a part. A name is still found by the words cut off.
+    private const int NameCap = 40;
+
+    public static string Shortened(string text)
+    {
+        string plain = Ascii(text.Trim());
+        return plain.Length <= NameCap ? plain : plain[..(NameCap - 3)].TrimEnd() + "...";
+    }
+
     private static bool IsPlain(char c) => c is >= ' ' and <= '~';
 
     private static string Spell(char c) => c switch
