@@ -333,8 +333,8 @@ public sealed class HealthManager : IDisposable
     //     engine is active — flee then no-ops, since flee-if-below only fires
     //     while a movement engine is running.
     //   getLastSentDirection — most recent outbound direction, inverted for the
-    //     Backward flee fallback when no reverse path can be computed. Typically
-    //     wired to the last entry on EngineRecoveryGate.ExecutedSinceAnchor.
+    //     Backward flee fallback when no reverse path can be computed. Wired to
+    //     EngineRecoveryGate.LastRouteStep, the route's last step, never a flee's.
     //   findReversePath — (from, to) → the BFS direction list from one room to
     //     another, or null when unreachable. The Backward flee calls this with
     //     (current room, engine JourneyOrigin) to lay the reverse trail. Wired to
@@ -913,6 +913,26 @@ public sealed class HealthManager : IDisposable
     // True while a move is sent but its landing isn't confirmed (RoomTracker Pending).
     // A flee started then is held until the room confirms (see TryFlee).
     public Func<bool>? IsMovePending { get; set; }
+
+    // A flee step went out through the engine: a real move of the character, which
+    // the recovery gate's walk-back history must hold like the engine's own steps
+    // (EngineRecoveryGate.NoteFleeStepSent). Null in tests.
+    public Action<Map.Direction>? FleeMoveSent { get; set; }
+
+    // True while engine sends are held (EngineSendGate.IsLocked): the engine's wire
+    // drops a flee step then. Null in tests: never held.
+    public Func<bool>? EngineSendsHeld { get; set; }
+
+    private void SendFleeMove(Map.IRecoverableEngine engine, Map.Direction direction)
+    {
+        engine.SendBacktrackMove(direction);
+        if (EngineSendsHeld?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, $"flee step {direction} dropped: engine sends are held; not recorded as a move");
+            return;
+        }
+        FleeMoveSent?.Invoke(direction);
+    }
 
     // True while the user has the walk, loop or Auto-Lair run paused (the Pause
     // button, a typed move, a Stop-held errand): MovementController.IsUserPaused. A
@@ -2437,7 +2457,7 @@ public sealed class HealthManager : IDisposable
             $"flee start engine={engine.Name} mode={combat.RunDirection} " +
             $"route=[{string.Join(",", steps)}] first={first} ({reason})");
         _lastFleeMove = first;
-        engine.SendBacktrackMove(first);
+        SendFleeMove(engine, first);
         return true;
     }
 
@@ -2991,7 +3011,7 @@ public sealed class HealthManager : IDisposable
             _fleeFromRoom = _lastKnownRoom;
             Map.Direction next = _fleeQueue.Dequeue();
             _lastFleeMove = next;
-            _fleeEngine.SendBacktrackMove(next);
+            SendFleeMove(_fleeEngine, next);
             _log?.Combat(LogCategory,
                 $"flee step engine={_fleeEngine.Name} dir={next} " +
                 $"remaining={_fleeQueue.Count}");

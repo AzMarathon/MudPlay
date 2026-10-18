@@ -32,6 +32,10 @@ internal sealed class TrackerWireRig : IDisposable
     private readonly Queue<string> _toGame = new();
 
     public ManualClock Clock { get; } = new();
+
+    // The gate's timeouts (the wait for a reverse move's landing), run when a test
+    // says the time is up.
+    public ManualTimers Timers { get; } = new();
     public LogService Log { get; } = new(capacity: 20000);
     public GameDataCache Cache { get; }
     public RoomGraphManager Graph { get; }
@@ -108,7 +112,7 @@ internal sealed class TrackerWireRig : IDisposable
         _lines.LineEmitted += Router.Dispatch;
 
         Tracker = new RoomTracker(Graph, Log, () => Clock.Now);
-        Gate = new EngineRecoveryGate(Graph, Tracker, Log);
+        Gate = new EngineRecoveryGate(Graph, Tracker, Log, timeoutSchedule: Timers.Arm);
         Tracker.SetEngineAttachedProbe(() => Gate.HasAttachedEngine);
         Graph.GraphReloaded += () => Tracker.OnGraphReloaded();
         Gate.RecoveryFailed += Failures.Add;

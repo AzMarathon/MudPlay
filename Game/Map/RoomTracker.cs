@@ -77,6 +77,15 @@ public sealed class RoomTracker
     // the profile closing.
     public bool PositionIsGuess { get; private set; }
 
+    // A relog primed the trail and no room display has been read since: the room
+    // held is the trail's start, and where the character stands is still to be
+    // worked out from the trail against that first display (TryReplayRecover). A
+    // save meanwhile must keep the trail; saving the room held as known would
+    // clear it (PersistCurrentRoomForSave).
+    private bool _trailAwaitsFirstDisplay;
+
+    public bool TrailAwaitsFirstDisplay => _trailAwaitsFirstDisplay;
+
     // Passive, engine-independent grid re-localiser. When we're stuck Lost /
     // ambiguous-Suspect in a block of identically-named rooms (the Soldiers'
     // Quarters grid) and NO navigation engine is attached, EngineRecoveryGate's
@@ -126,6 +135,10 @@ public sealed class RoomTracker
     // Read once per send or line (NoteEventTime): on Paradigm the estimate totals the
     // worn gear's stats, too much to redo for every move it ages.
     private TimeSpan _expectedHopNow = DefaultExpectedHop;
+
+    // The character's expected time per hop as last read (the travel model's
+    // estimate, or the default before it is wired).
+    public TimeSpan ExpectedHop => _expectedHopNow;
     private TimeSpan UnansweredMoveAge { get; set; } = UnansweredMoveFloor;
 
     // A light character's hop with no travel model wired: Paradigm's 1.0 s cap plus
@@ -200,6 +213,11 @@ public sealed class RoomTracker
     // freshly-parsed occupants on the move-confirming transition (the occupants
     // line arrives before the exits line that confirms the move).
     public DateTimeOffset? LastMoveSentAt { get; private set; }
+
+    // How many moves the tracker has counted sent, typed, dragged or an engine's.
+    // The recovery gate reads it to tell an engine send that went out from one that
+    // sent nothing.
+    public int MovesSentCount { get; private set; }
 
     // Whether that move was a manual one: it reached us without a movement engine
     // announcing it and wasn't a party leader's drag. That is a keystroke, and
@@ -350,6 +368,19 @@ public sealed class RoomTracker
     // the like) — raised after the tracker has un-counted it.
     public event Action? MoveBlocked;
 
+    // A move that was sent is un-counted as never made: the game refused it, its
+    // typing-rate limiter dropped it, a cast-on-walk step was never taken, or the
+    // connection dropped before it landed. Carries the move taken off, and is raised
+    // before the tracker settles back on the room it never left, so the recovery gate
+    // drops the step from its walk-back history before an engine re-sends it.
+    public event Action<MoveUncountedEvent>? MoveUncounted;
+
+    // A room display has been read: raised at the end of NoteRoomObserved, however it
+    // came out (a peek dropped included). RoomDisplayParser hands each display to its
+    // RoomParsed listeners first, so a listener that sends a move off a display waits
+    // for this, or the tracker reads that display with the new move already counted.
+    public event Action? RoomDisplayRead;
+
     // A sent or dragged move landed in the room it predicted, shown by that room's
     // own display. Proof the character can move, which a consumer holding a stale
     // "held" condition uses to drop it.
@@ -472,35 +503,35 @@ public sealed class RoomTracker
     // the persisted entries (so a subsequent failed observation triggers replay).
     // The trail starts at LastKnownRoom unless RecentStepsFrom names the room it
     // was begun in instead, one worked out while unsure: the relog then lands there,
-    // still a guess, as the tracker held it before. If the room can't be resolved
-    // (stale profile, different game-data set, graph not yet loaded), the tracker
-    // stays Unknown and the next observation lands normally.
+    // still a guess, as the tracker held it before, even when no room was ever saved
+    // as known. If neither room is saved, or neither resolves (stale profile,
+    // different game-data set, graph not yet loaded), the tracker holds no room
+    // (Unknown), whatever it held for the profile before, and the next observation
+    // lands normally.
     public void Hydrate(CharacterProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
+        _trailAwaitsFirstDisplay = false;
 
-        if (profile.LastKnownRoom is not { } persisted) return;
-        Room? known = _graph.GetRoom(new RoomKey(persisted.Map, persisted.Room));
-        if (known is null)
+        Room? known = null;
+        if (profile.LastKnownRoom is { } persisted)
         {
-            _log?.Log(LogSeverity.Info, "RoomTracker",
-                $"Hydrate: LastKnownRoom {persisted.Map}/{persisted.Room} not in active graph; staying Unknown.");
-            return;
+            known = _graph.GetRoom(new RoomKey(persisted.Map, persisted.Room));
+            if (known is null)
+                _log?.Log(LogSeverity.Info, "RoomTracker",
+                    $"Hydrate: LastKnownRoom {persisted.Map}/{persisted.Room} not in active graph.");
         }
 
         _recentSteps.Clear();
         if (profile.RecentSteps is { } steps) _recentSteps.AddRange(steps);
-        Room room = known;
-        bool guess = false;
+        Room? start = null;
         if (profile.RecentStepsFrom is { } from)
         {
-            if (_graph.GetRoom(new RoomKey(from.Map, from.Room)) is { } start)
-            {
-                room = start;
-                guess = start.Key != known.Key;
-            }
-            else
+            start = _graph.GetRoom(new RoomKey(from.Map, from.Room));
+            // With neither room on the map (another game-data set, a graph not yet
+            // loaded) the saved trail is left alone for a load that can place it.
+            if (start is null && known is not null)
             {
                 // Replayed from the saved room instead, the steps would lead somewhere
                 // they never went; landing sure of the saved room is all that's left.
@@ -512,6 +543,20 @@ public sealed class RoomTracker
                 profile.RecentStepsFrom = null;
             }
         }
+
+        // A character with no room of its own to land on doesn't take on the room the
+        // tracker held for the one before it: its first save would write that room
+        // as its own LastKnownRoom.
+        if ((start ?? known) is not { } room)
+        {
+            _recentSteps.Clear();   // in memory only: the profile keeps its trail
+            if (HoldsAPosition)
+                ForgetPosition(profile.LastKnownRoom is null
+                    ? "Hydrate: the profile has no saved room"
+                    : "Hydrate: the profile's saved room isn't in the active graph");
+            return;
+        }
+        bool guess = start is not null && start.Key != known?.Key;
         _stepsAnchor = room.Key;
         PositionIsGuess = guess;
         // A relog lands as sure as the room it lands in; nothing from an unsure
@@ -528,8 +573,9 @@ public sealed class RoomTracker
         State.SuspectStrikes = 0;
         State.LastUpdatedAt = _now();
         PushHistory(room.Key, State.LastUpdatedAt);
+        _trailAwaitsFirstDisplay = _recentSteps.Count > 0;
         _log?.Log(LogSeverity.Info, "RoomTracker", guess
-            ? $"Hydrate: Confirmed at {room.Name} {room.Key}, a room worked out (not the saved {known.Key}), " +
+            ? $"Hydrate: Confirmed at {room.Name} {room.Key}, a room worked out (not the saved {known?.Key.ToString() ?? "(none)"}), " +
               $"with {_recentSteps.Count} pending replay steps from it."
             : $"Hydrate: Confirmed at {room.Name} {room.Key} with {_recentSteps.Count} pending replay steps from it.");
         RaiseStateChanged(prevConf, RoomConfidence.Confirmed, prev, room);
@@ -558,6 +604,15 @@ public sealed class RoomTracker
         if (_profile is null) return;
         if (State.Confidence != RoomConfidence.Confirmed) return;
         if (State.CurrentRoom is not { } room) return;
+        if (_trailAwaitsFirstDisplay)
+        {
+            // Just relogged, nothing shown yet: the room held is where the trail
+            // starts, not where it ends. Saved as it stands, for the next relog.
+            PersistSteps();
+            _log?.Log(LogSeverity.Debug, "RoomTracker",
+                $"Save before the relog's first room display: kept the {_recentSteps.Count}-step trail from {room.Key} rather than saving that room as known.");
+            return;
+        }
         if (PositionIsGuess)
         {
             _recentSteps.Clear();
@@ -576,6 +631,7 @@ public sealed class RoomTracker
         // room of its own to land on must not save them as its own.
         _recentSteps.Clear();
         _stepsAnchor = null;
+        _trailAwaitsFirstDisplay = false;
         PositionIsGuess = false;
         ResetPassiveLocate();
     }
@@ -831,6 +887,17 @@ public sealed class RoomTracker
                 "Entered a dark room — no name/exits shown; position inferred from moves, combat from attack lines.");
         IsInDarkRoom = true;
 
+        // The first line after a drop that had a move in flight. A dark line can't
+        // say which room it is, so nothing proves the move sent before the drop
+        // landed: it counts as not taken, as a display of the room it left would
+        // count it (ReconcileAfterReconnect).
+        if (_connectionLostMidMove)
+        {
+            _connectionLostMidMove = false;
+            ForgetMovesLostToTheDrop(when, "a dark room");
+            return;
+        }
+
         if (TakeCastLandingLine(when, "is too dark to show")) return;
 
         // Unsure of the room, the dark line still answers the oldest move in flight:
@@ -923,6 +990,15 @@ public sealed class RoomTracker
                 return;
             }
             // window expired — fall through and treat as our own move
+        }
+
+        // As in the dark: the first line after a drop with a move in flight can't
+        // prove the move landed.
+        if (_connectionLostMidMove)
+        {
+            _connectionLostMidMove = false;
+            ForgetMovesLostToTheDrop(when, "a blind-move line");
+            return;
         }
 
         if (TakeCastLandingLine(when, "is shown to a blind character")) return;
@@ -1301,39 +1377,83 @@ public sealed class RoomTracker
         if (!_pending.IsEmpty) _connectionLostMidMove = true;
     }
 
+    // A dark-room or blind-move line was the first thing shown after a drop that had
+    // a move in flight. Neither says which room it is, so nothing proves a move sent
+    // before the drop landed. Sure of the room before, every move in flight is
+    // un-counted and the tracker goes back to the room they left; unsure, the moves
+    // still awaiting an answer are un-counted.
+    private void ForgetMovesLostToTheDrop(DateTimeOffset when, string what)
+    {
+        bool wasPending = State.Confidence == RoomConfidence.Pending;
+        List<PendingMove> lost = wasPending ? _pending.ToList() : _unsureMoves.ConvertAll(u => u.Move);
+        while (_pending.TryDequeue(out _)) { /* drain */ }
+        EndCastCrossing();
+        _unsureMoves.Clear();
+        _cardinalEchoClaim = null;
+        UncountMovesLostToTheDrop(lost, what);
+        if (wasPending)
+            SetConfidence(RoomConfidence.Confirmed, when, $"reconnected to {what}; the moves sent before the drop not taken");
+    }
+
+    // Moves sent before a drop that never landed: off the trail and out of the
+    // recovery gate's walk-back history, newest first, as the trail holds them last.
+    private void UncountMovesLostToTheDrop(List<PendingMove> lost, string what)
+    {
+        for (int i = lost.Count - 1; i >= 0; i--)
+        {
+            DropMostRecentStep();
+            MoveUncounted?.Invoke(new MoveUncountedEvent(lost[i], RateLimited: false));
+        }
+        if (lost.Count > 0)
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Reconnected to {what}: {lost.Count} move(s) sent before the drop ({string.Join(", ", lost.Select(DescribeMove))}) count as not taken.");
+    }
+
     // The first room display after a drop that had a move in flight. The move either
     // landed before the link died or it didn't: whichever of the two rooms the
     // display matches is where we are. When it matches both (an identically-named
     // corridor) or neither, the display can't say, and the ordinary unsure-position
-    // handling takes it from the room we last knew.
+    // handling takes it from the room we last knew. With several moves in flight, a
+    // display of the room they left un-counts them all, unless a room one of them
+    // leads to reads the same.
     private void ReconcileAfterReconnect(RoomObservation observation, DateTimeOffset when)
     {
         Room? source = State.CurrentRoom;
-        Room? target = null;
-        if (_pending.Count == 1 && _pending.TryPeek(out PendingMove head) && source is not null
-            && TryResolvePendingExit(source, head, out RoomExit exit))
-            target = PredictedLanding(exit);
+        List<PendingMove> lost = _pending.ToList();
+        // Where each move in flight would have left us, in turn, as far as the map
+        // can follow them.
+        List<Room> landings = new();
+        for (Room? cursor = source; cursor is not null && landings.Count < lost.Count;)
+        {
+            if (!TryResolvePendingExit(cursor, lost[landings.Count], out RoomExit exit)
+                || PredictedLanding(exit) is not { } next) break;
+            landings.Add(next);
+            cursor = next;
+        }
+        Room? target = lost.Count == 1 && landings.Count == 1 ? landings[0] : null;
         while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
         _unsureMoves.Clear();
         _cardinalEchoClaim = null;
 
         bool atSource = source is not null && MatchesPredicted(source, observation);
-        bool atTarget = target is not null && MatchesPredicted(target, observation);
-        if (atSource && !atTarget)
+        bool atALanding = landings.Exists(r => MatchesPredicted(r, observation));
+        if (atSource && !atALanding)
         {
-            DropMostRecentStep();   // the step it logged was never taken
-            SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop never landed");
+            UncountMovesLostToTheDrop(lost, "the room the moves left");
+            SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the moves sent before the drop never landed");
             return;
         }
-        if (atTarget && !atSource)
+        if (target is not null && atALanding && !atSource)
         {
             SetRoom(target, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop had landed");
             return;
         }
         if (atSource)
         {
-            EnterSuspect(when, "reconnected with a move in flight; the room it left and the room it led to read the same");
+            // In rooms that read alike the display fits the room left and a room the
+            // moves lead to: it can't say how many were taken, so none is un-counted.
+            EnterSuspect(when, "reconnected with moves in flight; the room they left and a room they lead to read the same");
             return;
         }
         State.Confidence = RoomConfidence.Confirmed;
@@ -1345,8 +1465,18 @@ public sealed class RoomTracker
     // this against the expected outcome of any pending move.
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
-        DateTimeOffset when = whenUtc ?? _now();
+        try
+        {
+            ReadRoomDisplay(observation, whenUtc ?? _now());
+        }
+        finally
+        {
+            RoomDisplayRead?.Invoke();
+        }
+    }
 
+    private void ReadRoomDisplay(RoomObservation observation, DateTimeOffset when)
+    {
         if (_suppressObservationUntil is { } until)
         {
             if (when <= until)
@@ -1411,8 +1541,10 @@ public sealed class RoomTracker
             // dead ones to forget before the display is judged.
             if (afterDrop && State.Confidence != RoomConfidence.Pending)
             {
+                List<PendingMove> lost = _unsureMoves.ConvertAll(u => u.Move);
                 while (_pending.TryDequeue(out _)) { /* drain */ }
                 _unsureMoves.Clear();
+                UncountMovesLostToTheDrop(lost, "a room display while unsure of the room");
             }
 
             switch (State.Confidence)
@@ -1447,6 +1579,7 @@ public sealed class RoomTracker
         finally
         {
             _reconcilingDisplay = false;
+            _trailAwaitsFirstDisplay = false;
         }
 
         // The display was of a room we were only passed through, and we are booked
@@ -1642,8 +1775,9 @@ public sealed class RoomTracker
 
         // Drop the most recent pending move + its persisted step — the
         // server refused, so it never happened.
-        DropMostRecentPending();
-        DropNewestUnsureMove("refused");
+        PendingMove? refused = DropMostRecentPending();
+        PendingMove? refusedUnsure = DropNewestUnsureMove("refused");
+        if ((refused ?? refusedUnsure) is { } uncounted) MoveUncounted?.Invoke(new MoveUncountedEvent(uncounted, RateLimited: false));
 
         if (State.Confidence == RoomConfidence.Pending)
         {
@@ -1692,14 +1826,15 @@ public sealed class RoomTracker
         if (!IsSure)
         {
             if (_unsureMoves.Count == 0 || when - _unsureMoves[^1].Move.SentAt > DroppedCommandWindow) return;
-            DropMostRecentPending();
-            DropNewestUnsureMove("dropped by the typing-rate limiter");
+            PendingMove? droppedPending = DropMostRecentPending();
+            PendingMove? droppedUnsure = DropNewestUnsureMove("dropped by the typing-rate limiter");
+            if ((droppedPending ?? droppedUnsure) is { } uncounted) MoveUncounted?.Invoke(new MoveUncountedEvent(uncounted, RateLimited: true));
             return;
         }
         if (State.Confidence != RoomConfidence.Pending || _pending.IsEmpty) return;
         if (LastMoveSentAt is not { } sent || when - sent > DroppedCommandWindow) return;
 
-        DropMostRecentPending();
+        if (DropMostRecentPending() is { } dropped) MoveUncounted?.Invoke(new MoveUncountedEvent(dropped, RateLimited: true));
         RoomConfidence target = _pending.IsEmpty ? RoomConfidence.Confirmed : RoomConfidence.Pending;
         SetConfidence(target, when, "command dropped (typing too quickly)");
         _log?.Log(LogSeverity.Info, "RoomTracker",
@@ -1920,14 +2055,20 @@ public sealed class RoomTracker
 
     // Subscribed by AppServices to RoomGraphManager.GraphReloaded. The active set
     // just rebuilt — drop any per-set state and start over.
-    public void OnGraphReloaded(DateTimeOffset? whenUtc = null)
+    public void OnGraphReloaded(DateTimeOffset? whenUtc = null) => ForgetPosition("graph reloaded", whenUtc);
+
+    private bool HoldsAPosition => State.CurrentRoom is not null || State.Confidence != RoomConfidence.Unknown;
+
+    // Hold no room at all, and nothing that came with it: the moves in flight, the
+    // trail, the confirmed-room history, darkness.
+    private void ForgetPosition(string reason, DateTimeOffset? whenUtc = null)
     {
         DateTimeOffset when = whenUtc ?? _now();
         ClearPendingAndSteps();
         _history.Clear();
         IsInDarkRoom = false;
         EnteredBlind = false;
-        SetRoom(room: null, RoomConfidence.Unknown, when, "graph reloaded");
+        SetRoom(room: null, RoomConfidence.Unknown, when, reason);
     }
 
     // ----- FSM internals ----------------------------------------------
@@ -2089,7 +2230,8 @@ public sealed class RoomTracker
                     // game never echoed the step: it was never taken. Off the queue
                     // with it, or the tracker waits on it for good.
                     EndCastCrossing();
-                    DropMostRecentPending();
+                    if (DropMostRecentPending() is { } neverTaken)
+                        MoveUncounted?.Invoke(new MoveUncountedEvent(neverTaken, RateLimited: false));
                     _log?.Log(LogSeverity.Info, "RoomTracker",
                         $"Move {moveLabel} through a teleporting exit was never answered, and the room asked for is still '{source.Name}' — un-counting the move.");
                     SetConfidence(RoomConfidence.Confirmed, when, $"move {moveLabel} never taken (the room asked for is the one it was leaving)");
@@ -2338,14 +2480,19 @@ public sealed class RoomTracker
         }
 
         Room? current = State.CurrentRoom;
-        if (current is not null && MatchesPredicted(current, observation))
+        IReadOnlyList<RoomKey> fitting = _graph.FindCandidates(observation.Name, observation.Exits);
+        bool unique = current is not null && fitting.Count == 1 && fitting[0] == current.Key;
+        // A display that answers a move shows where the move went, not the room held:
+        // in rooms that read alike it fits the room held all the same, and
+        // re-confirming that would put the map back where the character was before
+        // the move. Only a display only the room held fits still re-confirms it.
+        bool movedOn = answered is not null && !unique;
+        if (current is not null && !movedOn && MatchesPredicted(current, observation))
         {
             // Glitch resolved — server caught up. Back to Confirmed. A display
             // only this room fits makes it known, as any 1-of-1 match does; one
             // that look-alike rooms fit as well says nothing about which of them
             // we're in: a guess, not saved as known.
-            IReadOnlyList<RoomKey> fitting = _graph.FindCandidates(observation.Name, observation.Exits);
-            bool unique = fitting.Count == 1 && fitting[0] == current.Key;
             State.SuspectStrikes = 0;
             ClearPendingAndSteps();
             // The flag is set before the confirm is raised, so its listeners read it.
@@ -2360,9 +2507,8 @@ public sealed class RoomTracker
 
         if (TryFearMove(current, observation, when)) return;
 
-        IReadOnlyList<RoomKey> candidates = _graph.FindCandidates(observation.Name, observation.Exits);
-        if (candidates.Count == 1
-            && _graph.GetRoom(candidates[0]) is { } single)
+        if (fitting.Count == 1
+            && _graph.GetRoom(fitting[0]) is { } single)
         {
             ClearPendingAndSteps();
             SetRoom(single, RoomConfidence.Confirmed, when, "1-of-1 candidate from Suspect", isStrictAnchor: true);
@@ -2385,7 +2531,9 @@ public sealed class RoomTracker
             return;
         }
 
-        EnterSuspect(when, $"suspect mismatch continues; candidates={candidates.Count}");
+        EnterSuspect(when, movedOn && current is not null && MatchesPredicted(current, observation)
+            ? $"a move's display fits the room held, but {fitting.Count} rooms read like it; the room held not re-confirmed"
+            : $"suspect mismatch continues; candidates={fitting.Count}");
     }
 
     // True when the incoming observation is identical to the last one we fully
@@ -2796,13 +2944,14 @@ public sealed class RoomTracker
             $"Move {DescribeMove(dead)} got no answer ({why}); not counted as a move.");
     }
 
-    private void DropNewestUnsureMove(string why)
+    private PendingMove? DropNewestUnsureMove(string why)
     {
-        if (_unsureMoves.Count == 0) return;
+        if (_unsureMoves.Count == 0) return null;
         PendingMove newest = _unsureMoves[^1].Move;
         _unsureMoves.RemoveAt(_unsureMoves.Count - 1);
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"Move {DescribeMove(newest)} {why} while {State.Confidence}; not counted as a move.");
+        return newest;
     }
 
     // A sure tracker turning unsure: the moves still in flight become the unsure
@@ -3352,6 +3501,7 @@ public sealed class RoomTracker
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
         // Sure of the room again: the pending queue tracks every move from here.
         if (IsSure) ResetPassiveLocate();
+        _trailAwaitsFirstDisplay = false;
 
         if (confidence == RoomConfidence.Confirmed && room is not null)
         {
@@ -3373,7 +3523,14 @@ public sealed class RoomTracker
             }
             else if (isGuess) MarkGuess();
         }
-        else if (room is null) PositionIsGuess = false;
+        else if (room is null && PositionIsGuess)
+        {
+            // The guess ends with the room. A start the profile holds for it alone
+            // (a trail of none) goes with it; a start some saved steps were taken
+            // from stays with them.
+            PositionIsGuess = false;
+            PersistSteps();
+        }
 
         _log?.Log(LogSeverity.Info, "RoomTracker",
             $"{prev} → {confidence} ({reason}): " +
@@ -3417,19 +3574,21 @@ public sealed class RoomTracker
     private void EnqueuePending(PendingMove move)
     {
         LastMoveSentAt = move.SentAt;
+        MovesSentCount++;
         _pending.Enqueue(move);
         // Bounded queue — drain oldest entries past the cap.
         while (_pending.Count > PendingQueueCap && _pending.TryDequeue(out _)) { /* drop */ }
     }
 
-    private void DropMostRecentPending()
+    private PendingMove? DropMostRecentPending()
     {
-        if (_pending.IsEmpty) return;
+        if (_pending.IsEmpty) return null;
         // ConcurrentQueue has no remove-tail; rebuild by drain + reinsert.
         var keep = new List<PendingMove>(_pending.Count);
         while (_pending.TryDequeue(out PendingMove m)) keep.Add(m);
         for (int i = 0; i < keep.Count - 1; i++) _pending.Enqueue(keep[i]);
         DropMostRecentStep();
+        return keep.Count > 0 ? keep[^1] : null;
     }
 
     // Peek (without dropping) the cardinal of the most-recently queued pending
@@ -3491,6 +3650,7 @@ public sealed class RoomTracker
         while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
         _stepsAnchor = null;
+        _trailAwaitsFirstDisplay = false;
         if (_recentSteps.Count == 0) return;
         _recentSteps.Clear();
         PersistSteps();
@@ -3515,6 +3675,7 @@ public sealed class RoomTracker
         // RecentSteps reset on Confirmed — clear in-memory + persist.
         _recentSteps.Clear();
         _stepsAnchor = null;
+        _trailAwaitsFirstDisplay = false;
         _profile.RecentSteps = null;
         _profile.RecentStepsFrom = null;
         _ = when;                                                // reserved for future per-step timestamp persistence
@@ -3565,6 +3726,11 @@ public readonly record struct RoomTransition(
     Room? NewRoom,
     DateTimeOffset At,
     bool Displayed = false);
+
+// Payload of RoomTracker.MoveUncounted: the move taken off, and whether the game's
+// typing-rate limiter dropped it (the command never ran, so sending it again can
+// work) rather than the game refusing it.
+public readonly record struct MoveUncountedEvent(PendingMove Move, bool RateLimited);
 
 // Payload of RoomTracker.NameLearned. Carries the room the tracker just adopted
 // by ExitMask + the verbatim observed name it learned. The main window's

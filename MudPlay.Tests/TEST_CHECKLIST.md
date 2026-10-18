@@ -548,7 +548,7 @@ How to keep it current:
 
 ### CastWalkTeleportTests.cs
 - Covers: Game/Map/RoomGraphManager, RoomTracker, AutoWalkManager, LoopRunner, MovementFilter (cast-on-walk exits)
-- Checks: exit landings and item gate; landing booking from two or one displays, dark/blind/follower cases; party-split hold and reinvite for walks and loops.
+- Checks: exit landings and item gate; landing booking from two or one displays, dark/blind/follower cases; party-split hold and reinvite for walks and loops; an engine step the game never took leaves EngineRecoveryGate's walk-back history.
 - Why: reports paradigm-20261007-134305 and -134824 (golden idol passage).
 
 ### CasterMessageMatcherLongLineTests.cs
@@ -3291,9 +3291,9 @@ How to keep it current:
 - Why: Reports `paradigm-20260921-145800`, `paradigm-20260813-201720`, `paradigm-20260811-122610`, `paradigm-20260811-104042`, `paradigm-20260805-224603`, and the 002347 / 141605 / 002430 / 195229 cases.
 
 ### RoomTrackingRecoveryWireTests.cs
-- Covers: Game/Map/RoomTracker (the passive grid re-localiser), Game/Map/EngineRecoveryGate (tier-2 forward footprint, tier-3 walk-back), over TrackerWireRig
-- Checks: the passive re-localiser folds each display with the move it answers: typed-ahead and echoed moves in order, follow drags, text exits through each candidate's own exit, refused, unanswered and blind/dark moves, slow hops and the hop bound, exhausted footprints. The tier-2 forward footprint folds every step's landing in order and drops on a refused step or a teleport; the tier-3 walk-back stops at its cap and declares Lost. A located room from a guess is never saved as the known room: saves, relogs and profile swaps land back on the room held.
-- Why: position recovery in look-alike rooms (#1091, the room-tracking recovery fixes).
+- Covers: Game/Map/RoomTracker (the passive grid re-localiser, the Suspect re-confirm, Hydrate and saves), Game/Map/EngineRecoveryGate (walk-back history, tier-2 forward footprint, tier-3 walk-back), Game/Health/HealthManager (a flee's steps), over TrackerWireRig
+- Checks: the passive re-localiser folds each display with the move it answers: typed-ahead and echoed moves in order, follow drags, text exits through each candidate's own exit, refused, unanswered and blind/dark moves, slow hops and the hop bound, exhausted footprints. A move's display that fits the Suspect room and its look-alikes doesn't re-confirm it. The walk-back history drops a step the game refused or dropped (bonk, rate limit) and holds a flee's steps (a real HealthManager flee wired through FleeMoveSent), so the walk-back retraces the moves made, but not a flee step that never went out (send gate held, engine stopped); the flee fallback reads the route's last step, not the flee's; the tier-2 forward footprint folds the re-sent step, every step's landing in order, and drops on a teleport; a step lost to a dropped connection leaves the history, and a dark-room or blind-move line after the reconnect counts it as not taken; with several in flight, all of them leave the trail and the history, unless the room shown reads like one they lead to (then none, and the map goes unsure); a display read while already unsure un-counts the moves still awaiting an answer. The tier-3 walk-back starts from the failed step's landing when the map is unsure; sends each reverse move only after the tracker has read the last landing (no room confirmed wrong on the way); sends a rate-limit-dropped reverse move again, ends cleanly on a refused one or after the landing timeout (also for a move held for a display the tracker never reads); once ended with the last `rm` out, a display sends no reverse move, and a map sure of its room resumes the engine rather than Lost; stops at its cap and declares Lost. A located room from a guess is never saved as the known room: saves, relogs and profile swaps land back on the room held; a save before a relog's first display keeps the trail; a guess saved with no known room is landed on; a character with no saved room holds no room; a guess ending with no room held takes its saved start with it.
+- Why: position recovery in look-alike rooms (#1091, the room-tracking recovery fixes, and its approved follow-up of 2026-10-17).
 
 ### RoombaHouse.cs
 - Test infrastructure.
@@ -4022,7 +4022,7 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's.
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
 - Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests and AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache).
 - Why: lets the recovery tests run over the wire the way they do live.
 

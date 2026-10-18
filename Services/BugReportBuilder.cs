@@ -2242,7 +2242,12 @@ public static class BugReportBuilder
         // narrowed: a "Lost after walking back" report turns on whether the
         // history was long, the walk-back hit its cap, or the forward footprint
         // was dropped before it could place us.
-        Kv(sb, "Recovery executed steps since anchor", svc.Recovery.ExecutedSinceAnchor.Count.ToString());
+        // The steps themselves, newest last: a flee's steps are among them, and a
+        // step the game refused or dropped is not.
+        IReadOnlyList<Game.Map.Direction> executed = svc.Recovery.ExecutedSinceAnchor;
+        Kv(sb, "Recovery executed steps since anchor",
+            executed.Count == 0 ? "0"
+                : $"{executed.Count} ({(executed.Count > 20 ? "…, " : string.Empty)}{string.Join(", ", executed.Skip(Math.Max(0, executed.Count - 20)))})");
         Kv(sb, "Recovery tier-2 forward footprint", svc.Recovery.Tier2ForwardStatus);
         Kv(sb, "Recovery tier-3 walk-back footprint", svc.Recovery.Tier3Status);
         Kv(sb, "Awaiting rm resync", svc.Recovery.AwaitingAuthoritativeResync.ToString());
@@ -2268,6 +2273,8 @@ public static class BugReportBuilder
         Kv(sb, "Saved trail",
             $"{saved?.RecentSteps?.Count ?? 0} steps from "
             + (saved?.RecentStepsFrom is { } rsf ? $"{rsf.Map}/{rsf.Room} (a room worked out)" : "the known room"));
+        Kv(sb, "Relog trail awaiting the first room display (saves keep it)",
+            svc.RoomTracker.TrailAwaitsFirstDisplay.ToString());
         // A room the data gives no name answers to the name this realm saw for it:
         // "the map lost me in my gang house" turns on whether one is held and on
         // the map, or was never kept.
