@@ -11,10 +11,15 @@ namespace MudPlay.Game.Map;
 // display among them, so the restart is posted past them: planned at the prompt, the
 // first step would go out from the room known before the drop, wherever the
 // reconnect put us. It restarts only with the tracker sure of the room; unsure, it
-// waits for the next prompt or a room the tracker is sure of. With the master switch
-// off it waits for the switch (ResumeAfterMasterSwitch): restarted then, the engine
-// would raise its start events with the user's autos off. A death found out at the
-// login drops it: it would walk a stripped character out of the temple.
+// waits for the next prompt or a room the tracker is sure of, but not for good
+// (user, 2026-10-17): once the tracker can't say where we are (unsure after the
+// reconnect's display was read, or still waiting on a display at the next prompt)
+// the client's own one-shot locate is asked (EngineRecoveryGate.TryResyncOnce:
+// `rm`, else `sys st`), and the restart runs when it answers. A locate that fails,
+// or none to ask, ends the restart. With the master switch off it waits for the
+// switch (ResumeAfterMasterSwitch): restarted then, the engine would raise its start
+// events with the user's autos off. A death found out at the login drops it: it
+// would walk a stripped character out of the temple.
 //
 // A leader's party reform fires off the first room display. The restart runs after
 // the lines that came with its prompt, so a reform whose display was among them has
@@ -34,6 +39,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     private readonly string _owner;
     private readonly RoomTracker _tracker;
     private readonly MovementCoordinator? _coordinator;
+    private readonly EngineRecoveryGate? _recovery;
     private readonly LogService? _log;
     private readonly Action<Action> _postToUi;
     private readonly Func<TimeSpan, Action, IDisposable> _schedule;
@@ -47,7 +53,9 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // a log line names it ("loop 'Ring'"). runningNow: the run the engine has going,
     // as describe names it, or null when it is idle. start: starts the run again.
     // schedule runs the reform hold's time limit (DispatcherTicks.Once live).
-    public ReconnectRestart(string owner, RoomTracker tracker, MovementCoordinator? coordinator, LogService? log,
+    // recovery: the gate whose one-shot locate is asked for a room the tracker can't place.
+    public ReconnectRestart(string owner, RoomTracker tracker, MovementCoordinator? coordinator,
+        EngineRecoveryGate? recovery, LogService? log,
         Action<Action> postToUi, Func<TimeSpan, Action, IDisposable> schedule,
         Func<TRun, string> describe, Func<string?> runningNow, Action<TRun> start)
     {
@@ -60,6 +68,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         _owner = owner;
         _tracker = tracker;
         _coordinator = coordinator;
+        _recovery = recovery;
         _log = log;
         _postToUi = postToUi;
         _schedule = schedule;
@@ -96,6 +105,12 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // Back in the game, but the tracker isn't sure of the room yet.
     public bool AwaitsRoom { get; private set; }
 
+    // The game was asked where we are; its answer restarts the run or ends the wait.
+    public bool Locating { get; private set; }
+    private int _unsureChecks;
+    private bool _locateTried;
+    private int _locateId;
+
     // The restarted run is held until the party reform has seen the room.
     public bool HeldForReform { get; private set; }
 
@@ -125,7 +140,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     {
         ArgumentNullException.ThrowIfNull(stop);
         HeldForMasterSwitch = false;
-        AwaitsRoom = false;
+        ForgetRoomWait();
         if (running is not null)
         {
             Pending = running;
@@ -142,7 +157,17 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     {
         Pending = null;
         HeldForMasterSwitch = false;
+        ForgetRoomWait();
+    }
+
+    // A locate still out is left to answer nobody.
+    private void ForgetRoomWait()
+    {
         AwaitsRoom = false;
+        _unsureChecks = 0;
+        _locateTried = false;
+        Locating = false;
+        _locateId++;
     }
 
     // A restart already back in the game, kept waiting on the master switch or on the
@@ -200,22 +225,67 @@ public sealed class ReconnectRestart<TRun> where TRun : class
                 _log?.Info(_owner,
                     $"reconnect: {_describe(run)} is not restarted with the master switch off; it restarts when the switch is back on");
             HeldForMasterSwitch = true;
-            AwaitsRoom = false;
+            ForgetRoomWait();
             return;
         }
         if (_tracker.State.Confidence != RoomConfidence.Confirmed || _tracker.State.CurrentRoom is not { } room)
         {
+            if (Locating) return;   // its answer restarts the run or ends the wait
             if (!AwaitsRoom)
                 _log?.Info(_owner,
                     $"reconnect: {_describe(run)} waits for the room to be known (tracker {_tracker.State.Confidence} at "
                     + $"{_tracker.State.CurrentRoom?.Key.ToString() ?? "(none)"})");
             AwaitsRoom = true;
+            // Pending is a display still to come (one the drop left owed); anything
+            // else unsure is a display read that didn't place us.
+            bool undetermined = _tracker.State.Confidence != RoomConfidence.Pending || ++_unsureChecks > 1;
+            if (undetermined) Locate(run);
             return;
         }
         Clear();
         _log?.Info(_owner, $"reconnect: resuming {_describe(run)} from {room.Key}");
         BeginReformHoldIfReformAwaits();
         _start(run);
+    }
+
+    private void Locate(TRun run)
+    {
+        if (_locateTried)
+        {
+            EndForUnknownRoom(run, "the locate named a room the map doesn't have");
+            return;
+        }
+        _locateTried = true;
+        int id = ++_locateId;
+        string reason = $"{_describe(run)} to restart after a reconnect, tracker {_tracker.State.Confidence}";
+        if (_recovery?.TryResyncOnce?.Invoke(reason, _ => OnLocateAnswered(id), () => OnLocateFailed(id)) == true)
+        {
+            Locating = true;
+            _log?.Info(_owner, $"reconnect: {_describe(run)}: the room can't be told; asking the game where we are");
+            return;
+        }
+        EndForUnknownRoom(run, "nothing to ask the game where we are with");
+    }
+
+    // The locator has set the tracker by now; the restart goes as any other does.
+    private void OnLocateAnswered(int id)
+    {
+        if (id != _locateId || !Locating) return;
+        Locating = false;
+        _postToUi(TryRestart);
+    }
+
+    private void OnLocateFailed(int id)
+    {
+        if (id != _locateId || !Locating) return;
+        Locating = false;
+        if (Pending is { } run) EndForUnknownRoom(run, "the game didn't say where we are");
+    }
+
+    private void EndForUnknownRoom(TRun run, string why)
+    {
+        _log?.Warn(_owner, $"reconnect: {_describe(run)} is not restarted: the room after the reconnect couldn't be told ({why})");
+        Clear();
     }
 
     // Also for a run the user starts over the restarted one while it is held: it

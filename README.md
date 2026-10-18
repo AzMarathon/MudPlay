@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.18**
+> **Version 3.184.19**
 > - Auto-Lair cut off by a dropped connection restarts once you're back, from the room the reconnect shows, as a loop does
 > - A light buy cut off by a drop hands Auto-Lair to that restart instead of leaving it stopped
 > - A restart still owed after a reconnect gives way to a loop, Auto-Lair run or walk you started meanwhile

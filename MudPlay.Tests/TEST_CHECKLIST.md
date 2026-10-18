@@ -175,8 +175,8 @@ How to keep it current:
 - Why: marks saved as a setup on the wrong set would land in another set's Loops folder, shared by every character on it.
 
 ### AutoLairReconnectRestartTests.cs
-- Covers: Game/Map/AutoLairManager's restart after a reconnect and Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, LairTimerStore, PartyReformCoordinator, PartyDisconnectMovementGate), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, and the lair's timers run on ManualTimers.
-- Checks: a drop mid-run stops the run and sets it aside under its setup name; the reconnect restarts it from the room it shows (another lair's wait room, nothing planned from the room before the drop), or takes up the same leg when it shows the same room; a run a light buy handed over plans from the shown room; a lair entered before the drop keeps its timer through the restart; an unsure room keeps the restart waiting until the tracker is sure, and a Stop drops it then; the master switch off holds it until the switch is back on; a death found out at the login drops it; a run the user had paused comes back paused under the user gate; a party reform whose display came with the prompt holds the run until the follower is back; a dark room keeps it behind its own reform hold.
+- Covers: Game/Map/AutoLairManager's restart after a reconnect and Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, LairTimerStore, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, and the lair's timers run on ManualTimers.
+- Checks: a drop mid-run stops the run and sets it aside under its setup name; the reconnect restarts it from the room it shows (another lair's wait room, nothing planned from the room before the drop), or takes up the same leg when it shows the same room; a run a light buy handed over plans from the shown room; a lair entered before the drop keeps its timer through the restart; an unsure room asks the game (`rm`) and restarts from the room it names, an unanswered `rm` ends the pending restart, and a Stop drops it while it waits; the master switch off holds it until the switch is back on; a death found out at the login drops it; a run the user had paused comes back paused under the user gate; a party reform whose display came with the prompt holds the run until the follower is back; a dark room keeps it behind its own reform hold.
 - Why: a run going at a drop was left active through the outage and picked up its old leg from the room before the drop; one a light buy had stopped stayed stopped (user, 2026-10-17: restart Auto-Lair after a reconnect like a loop).
 
 ### AutoLairSchedulerTests.cs
@@ -543,7 +543,7 @@ How to keep it current:
 
 ### CastCoordinatorTests.cs
 - Covers: Game/Spells/CastCoordinator
-- Checks: wire emission; cooldown; failure latches; independent attack vs between-round slots; already-cast attribution.
+- Checks: wire emission; cooldown; failure latches; the cooldown and a fizzle's latch running out on a `ManualClock` with no combat tick; independent attack vs between-round slots; already-cast attribution.
 - Why: reports paradigm-20260923-103506, -20260916-113009, -20260831-091839.
 
 ### CastWalkTeleportTests.cs
@@ -686,22 +686,26 @@ How to keep it current:
 
 ### CombatManagerBreakHoldTests.cs
 - Covers: Game/Combat/CombatManager (user-break hold) + CombatStateTracker, OutboundBreakObserver, HealthManager
-- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge; flee still moves.
+- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves.
+- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, state tracker); each fed line lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time.
 - Why: user 2026-10-10 rulings on manual break.
 
 ### CombatManagerRoomChangeHoldTests.cs
 - Covers: Game/Combat/CombatManager (Attack Not Last and the follow Target Priority holds) with RoomTracker, RoomDisplayParser, DeathDetector, RoomEntityClassifier, DarkRoomCombatWatcher, all driven through the terminal and the line extractor
 - Checks: which room the fight on record belongs to when we change rooms without a move of our own: a teleport, a drag with no drag line, a fear run, a death and respawn, a relog or reconnect. The next room holds its opening until the party attacks or the in-round deadline fires; a room shown again with its fight under way picks on the exits line; rooms the tracker can't place, look-alike rooms, dark fights and no game data; the bug report names a room not yet placed.
+- Time: one `ManualClock` read by every component in the harness (terminal, room tracker, classifier, entry and death watchers, dark-room watcher, combat manager); each flush lands 1 ms after the last and each read is a tick after the one before, so the steps of one flush keep their order. Nothing waits on real time.
 - Why: Attack Not Last and follow Target Priority must never attack ahead of the party in a new room (user rulings 2026-10-17; the attack-order teleport-hold fix).
 
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
 - Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths. Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
+- Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live. No private member is reached by reflection.
 - Why: dozens of paradigm reports cited inline.
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
 - Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
+- Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
 - Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
@@ -2062,9 +2066,9 @@ How to keep it current:
 - Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
 
 ### LoopReconnectRestartRoomTests.cs
-- Covers: Game/Map/LoopRunner's restart after a reconnect (with RoomTracker, WirePromptScanner, AutoWalkManager, PartyReformCoordinator, PartyDisconnectMovementGate), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
-- Checks: back in the same room the loop restarts from it; put back in another room, the first command is the walk from the shown room, never a step planned from the room before the drop; shown a room the map can't tell from another, nothing is sent until the tracker is sure, then the loop restarts; a Stop drops a restart waiting for the room; with the master switch off the restart waits and then starts from the shown room; a party reform whose room display came with the prompt holds the restarted loop until the follower is back; a room too dark to show the reform keeps the restart behind its own reform hold; a loop a light buy handed over restarts from the shown room; a loop the user starts while the restart is owed is left running.
-- Why: the restart was planned at the prompt, before its room display was read, so after a relog into another room the first step went out from the wrong room.
+- Covers: Game/Map/LoopRunner's restart after a reconnect (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver whose reply timeout runs on ManualTimers, PartyReformCoordinator, PartyDisconnectMovementGate), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
+- Checks: back in the same room the loop restarts from it; put back in another room, the first command is the walk from the shown room, never a step planned from the room before the drop; shown a room the map can't tell from another, the game is asked (`rm`) and the loop restarts from the room the answer names; an unanswered `rm`, or a realm with nothing to ask, ends the pending restart with a warning; with no room display yet, the first prompt waits and the next one asks; a Stop drops a restart waiting on the answer, and the answer restarts nothing; with the master switch off the restart waits and then starts from the shown room; a party reform whose room display came with the prompt holds the restarted loop until the follower is back; a room too dark to show the reform keeps the restart behind its own reform hold; a loop a light buy handed over restarts from the shown room; a loop the user starts while the restart is owed is left running.
+- Why: the restart was planned at the prompt, before its room display was read, so after a relog into another room the first step went out from the wrong room; and it must not wait for good on a room it can't place (user, 2026-10-17).
 
 ### LoopRunnerEmptyRoomCommandTests.cs
 - Covers: Game/Map/LoopRunner (empty-room commands)
@@ -2128,7 +2132,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 4 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
@@ -4013,7 +4017,7 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator and the router are shared with the engines a test wires on.
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's.
 - Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests and AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache).
 - Why: lets the recovery tests run over the wire the way they do live.
 

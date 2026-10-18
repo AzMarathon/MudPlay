@@ -217,7 +217,8 @@ public sealed class AutoLairManager : IDisposable
         MovementCoordinator? coordinator = null,
         Func<TimeSpan, Action, IDisposable>? schedule = null,
         WirePromptScanner? promptScanner = null,
-        Action<Action>? postToUi = null)
+        Action<Action>? postToUi = null,
+        EngineRecoveryGate? recovery = null)
     {
         ArgumentNullException.ThrowIfNull(walker);
         _schedule = schedule ?? DispatcherTicks.Once;
@@ -236,7 +237,7 @@ public sealed class AutoLairManager : IDisposable
         _walker.Event += OnWalkerEvent;
         _tracker.StateChanged += OnTrackerTransition;
         if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
-        _restart = new ReconnectRestart<LairRun>("AutoLair", tracker, coordinator, log,
+        _restart = new ReconnectRestart<LairRun>("AutoLair", tracker, coordinator, recovery, log,
             postToUi ?? PostToUiThread, _schedule,
             describe: Describe,
             runningNow: () => IsActive ? "Auto-Lair" : null,
@@ -480,6 +481,7 @@ public sealed class AutoLairManager : IDisposable
     public string? PendingReconnectResume => _restart.Pending is { } run ? Describe(run) : null;
     public bool ReconnectResumeHeldForMasterSwitch => _restart.HeldForMasterSwitch;
     public bool ReconnectResumeAwaitsRoom => _restart.AwaitsRoom;
+    public bool ReconnectResumeLocating => _restart.Locating;
     public bool ReconnectResumeHeldForReform => _restart.HeldForReform;
 
     // The link dropped. A run going then has no way to know: its walk would step

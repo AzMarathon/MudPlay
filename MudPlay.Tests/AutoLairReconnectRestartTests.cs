@@ -56,13 +56,19 @@ public sealed class AutoLairReconnectRestartTests
         public AutoLairManager Lair { get; }
         private readonly List<IDisposable> _dispose = new();
 
-        // Logged in, standing in `at`, with Den and Cave marked.
-        public World(RoomKey at)
+        // Logged in, standing in `at`, with Den and Cave marked. paradigm: a Paradigm
+        // realm, whose `rm` the recovery gate's one-shot locate asks, wired as
+        // AppServices wires it.
+        public World(RoomKey at, bool paradigm = false)
         {
-            Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:") { Position = at };
+            Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:", paradigm: paradigm) { Position = at };
             Timers = new LairTimerStore(Rig.Cache, Rig.Graph, Rig.Tracker);
             Lair = new AutoLairManager(Rig.Walker, Rig.Tracker, Rig.Graph, new BfsMapper(Rig.Graph), Timers, Rig.Log,
-                Rig.Coordinator, schedule: Ticks.Arm, promptScanner: Rig.Prompts, postToUi: Rig.Post);
+                Rig.Coordinator, schedule: Ticks.Arm, promptScanner: Rig.Prompts, postToUi: Rig.Post, recovery: Rig.Gate);
+            ParadigmPositionResolver resolver = new(Rig.Router, Rig.Tracker, Rig.Gate, Rig.Cache, Rig.Log, schedule: Ticks.Arm);
+            resolver.SetWireSender(Rig.Send);
+            Rig.Gate.TryResyncOnce = resolver.RequestResyncOnce;
+            _dispose.Add(resolver);
             Rig.ShowRoom();
             Assert.Equal(at, Rig.Believed);
             Lair.Mark(Den, RespawnSeconds);
@@ -199,11 +205,11 @@ public sealed class AutoLairReconnectRestartTests
     }
 
     // The reconnect shows a room the map can't tell from another: nothing restarts
-    // until the tracker is sure of the room, and a Stop meanwhile calls it off.
+    // until the game, asked where we are (`rm`), names the room.
     [Fact]
-    public void ReconnectWhereTheTrackerIsUnsure_TheRunWaitsForTheRoom()
+    public void ReconnectWhereTheTrackerIsUnsure_AsksTheGameAndRestartsFromItsAnswer()
     {
-        using World w = new(Gate);
+        using World w = new(Gate, paradigm: true);
         w.Start();
         w.Drop();
         int mark = w.Mark();
@@ -212,31 +218,52 @@ public sealed class AutoLairReconnectRestartTests
 
         Assert.NotEqual(RoomConfidence.Confirmed, w.Rig.Tracker.State.Confidence);
         Assert.False(w.Lair.IsActive);
-        Assert.True(w.Lair.ReconnectResumeAwaitsRoom);
-        Assert.Empty(w.SentSince(mark));
+        Assert.True(w.Lair.ReconnectResumeLocating);
+        Assert.Equal(new[] { "rm" }, w.SentSince(mark));
 
-        w.Rig.Type("s");                                          // the user steps out to the hall
+        w.Rig.NextAnswers.Enqueue("Location: 1,7");
         w.Rig.Pump(limit: 1);
 
-        Assert.Equal(Hall, w.Rig.Believed);
+        Assert.Equal(Passage, w.Rig.Believed);
         Assert.True(w.Lair.IsActive);
-        Assert.False(w.Lair.ReconnectResumeAwaitsRoom);
+        Assert.False(w.Lair.ReconnectResumeLocating);
+        Assert.Null(w.Lair.PendingReconnectResume);
     }
 
+    // The game never answers: the restart is ended, not left waiting.
     [Fact]
-    public void RestartWaitingForTheRoom_IsDroppedByAStop()
+    public void ReconnectWhereTheTrackerIsUnsure_TheLocateFails_TheRestartIsEnded()
     {
-        using World w = new(Gate);
+        using World w = new(Gate, paradigm: true);
         w.Start();
         w.Drop();
         w.Reconnect(Passage);
-        Assert.True(w.Lair.ReconnectResumeAwaitsRoom);
+        Assert.True(w.Lair.ReconnectResumeLocating);
+
+        w.Rig.Pump(limit: 1);                                 // `rm` answered with nothing it reads
+        w.Ticks.Advance(TimeSpan.FromSeconds(5));             // the resolver's reply timeout
+
+        Assert.False(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+        Assert.Contains(w.Rig.Log.Snapshot(), e => e.Source == "AutoLair"
+            && e.Message.Contains("is not restarted: the room after the reconnect couldn't be told"));
+    }
+
+    // The user's Stop while the restart waits on the answer calls it off.
+    [Fact]
+    public void RestartWaitingForTheRoom_IsDroppedByAStop()
+    {
+        using World w = new(Gate, paradigm: true);
+        w.Start();
+        w.Drop();
+        w.Reconnect(Passage);
+        Assert.True(w.Lair.ReconnectResumeLocating);
 
         w.Lair.DropHeldReconnectResume("user stop from toolbar");
-        w.Rig.Type("s");
+        w.Rig.NextAnswers.Enqueue("Location: 1,7");
         w.Rig.Pump(limit: 1);
 
-        Assert.Equal(Hall, w.Rig.Believed);
+        Assert.Equal(Passage, w.Rig.Believed);
         Assert.False(w.Lair.IsActive);
         Assert.Null(w.Lair.PendingReconnectResume);
     }

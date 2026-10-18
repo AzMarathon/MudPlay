@@ -908,7 +908,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
 
         _tracker.StateChanged += OnTrackerStateChanged;
-        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), tracker, coordinator, log, _postToUi, _schedule,
+        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), tracker, coordinator, recovery, log, _postToUi, _schedule,
             describe: l => $"loop '{l.Name}'",
             runningNow: () => State != LoopState.Idle ? $"loop '{_loop?.Name ?? "?"}'" : null,
             start: l => Start(l));
@@ -3122,6 +3122,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     public bool ReconnectResumeHeldForMasterSwitch => _restart.HeldForMasterSwitch;
     public bool ReconnectResumeAwaitsRoom => _restart.AwaitsRoom;
+    public bool ReconnectResumeLocating => _restart.Locating;
 
     // A loop an errand stopped (a bank run's light buy) when the connection dropped.
     public void ResumeOnReconnect(Loop loop, string why) => _restart.SetAside(loop, why);

@@ -9074,7 +9074,7 @@ public sealed class AppServices
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
             Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator,
-            promptScanner: PromptScanner);
+            promptScanner: PromptScanner, recovery: Recovery);
         // Nothing made of one game data's room numbers is saved under another: lair
         // marks on the map are dropped, with a notice, when the set changes to another,
         // as a loop being built is. Posted: a set change can come from inside the line

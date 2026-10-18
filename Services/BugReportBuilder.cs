@@ -2076,6 +2076,8 @@ public static class BugReportBuilder
         Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
             ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
                 ? $"'{pendingLoop}' — when the master switch is back on"
+                : svc.LoopRunner.ReconnectResumeLocating
+                    ? $"'{pendingLoop}' — asked the game where we are (rm / sys st), restarts on its answer"
                 : svc.LoopRunner.ReconnectResumeAwaitsRoom
                     ? $"'{pendingLoop}' — once the room is known (next prompt or a confirmed room)"
                     : $"'{pendingLoop}' — on the next in-game prompt, once its room display is read"
@@ -2085,6 +2087,8 @@ public static class BugReportBuilder
         Kv(sb, "Auto-Lair restart after reconnect", svc.AutoLair.PendingReconnectResume is { } pendingLair
             ? svc.AutoLair.ReconnectResumeHeldForMasterSwitch
                 ? $"{pendingLair} — when the master switch is back on"
+                : svc.AutoLair.ReconnectResumeLocating
+                    ? $"{pendingLair} — asked the game where we are (rm / sys st), restarts on its answer"
                 : svc.AutoLair.ReconnectResumeAwaitsRoom
                     ? $"{pendingLair} — once the room is known (next prompt or a confirmed room)"
                     : $"{pendingLair} — on the next in-game prompt, once its room display is read"
