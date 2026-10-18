@@ -1,10 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.34**
+> **Version 3.184.36**
 > - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
-> - A lone `@auto-get on` / `off` is still the Auto-Get Items toggle
-> - Game Data item and batch editors save box by box: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
+> - `@auto-get` starting with `on` / `off` is always the Auto-Get Items toggle; words after it are ignored
+> - Game Data item and batch editors save only the boxes changed: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
+> - Auto-Light picks lights up off the floor by its own settings, whatever the light's Auto-collect says
+> - The item record opened from the Roomba Master List now saves
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

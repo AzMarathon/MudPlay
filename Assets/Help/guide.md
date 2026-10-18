@@ -2627,7 +2627,7 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 **Situations:**
 
 - **`@auto-heal` and `@auto-rest` are two toggles.** One works your heal and cure casts, the other your resting. `@auto-cash` is the get-cash toggle and `@auto-get` the get-items toggle.
-- **`@auto-get` with an item's name after it** works on that item, not the toggle: see **@auto-get for one item**. A lone `on` or `off` is always the toggle.
+- **`@auto-get` with an item's name after it** works on that item, not the toggle: see **@auto-get for one item**. When the first word is `on` or `off` it is always the toggle, and anything after it is ignored.
 - **It is saved** to your character, like ticking the box yourself.
 - **Master switch off:** ignored, no answer. Only `@auto-all` is followed then.
 - **On your own screen:** a change is written to the program log with the sender's name.
@@ -2649,7 +2649,7 @@ The same box is read elsewhere. Auto-buy buys up to it: with `max 0` it buys non
 
 **How a name finds an item.** The same way `@loop` finds a loop, over every item in your game data. A name that is an item's whole name wins outright, with or without `a`, `an`, `the` or a plural `s`. Otherwise an item matches when its name holds **every typed word, in any order**: `@auto-get shield large` finds *large shield*. If nothing matches, it is tried once more without apostrophes, so `kings crown` finds *king's crown*. Exactly one item is used; none, or more than one, is refused. Two records with the same name are one item, the one the engines pick up by that name.
 
-`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`. Only a lone `on` or `off` is the toggle: `@auto-get on please` asks about an item named *on please*.
+`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`. When the **first** word is `on` or `off`, the command is the Auto-Get Items toggle and the rest is ignored: `@auto-get on please` switches the toggle on and answers `@auto-get: on`. So an item whose name begins with the word *on* or *off* can't be named here.
 
 **Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
@@ -2664,7 +2664,7 @@ The same box is read elsewhere. Auto-buy buys up to it: with `max 0` it buys non
 | `no character loaded` | **Refusal:** a change was asked for with no named character loaded, so there is no character to save it for. A report is still answered. |
 | the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
 
-With no name before the `on`, `off` or `max` (`@auto-get on max 2`), the command is refused with `usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]`.
+With no name before the `max` (`@auto-get max 2`), the command is refused with `usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]`.
 
 **Situations:**
 
@@ -3962,7 +3962,14 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 **For an item** the left side groups its settings by what they do: **Getting it** (Auto-collect, Auto-buy, **Max to get**, Cannot be taken, Auto-open for a container, Auto-obtain for path), **Keeping it** (Must have minimum, **Min. to keep**, Loyal item) and **Getting rid of it** (Auto-sell with its sell-detour options, Auto-stash, Auto-discard), plus the item's on-use message. Hover any box for what it does. The window remembers its size and position.
 
-**How an item is saved.** The tier you pick in **Use** gives what the window shows when you press OK, box by box, whatever the tiers under it say. A box cleared over a tick for all characters or for the realm is saved as off at your tier. A box you leave at the item's installed default, with the tiers under it at that default too, is not saved at your tier at all. So an item you set back to how it was installed returns to **Def** in the Use column. If a rule for all characters or for the realm differs, your tier keeps the installed values for that box. Only the tier you picked is written. The batch editor and `@auto-get <item>` save the same way.
+**How an item is saved.** Pressing OK saves only the boxes you changed, at the tier you pick in **Use**. Each one is saved so that your tier gives what the box shows, whatever the tiers under it say:
+- A box cleared over a tick for all characters or for the realm is saved as off at your tier.
+- A box set back to the item's installed default, with the tiers under it at that default too, is taken off your tier. So an item you set back to how it was installed returns to **Def** in the Use column.
+- If a rule for all characters or for the realm differs, your tier keeps the installed value for that box.
+
+A box you didn't change isn't copied into your tier, so it goes on following the tier it comes from. Only the tier you picked is written. The batch editor (for the fields it is told to set) and `@auto-get <item>` save the same way.
+
+An item saved by an earlier version holds every box at the tier it was saved at. A box you don't change there goes on hiding what the tiers under it say; pick **Installed defaults** in Use to clear the item and start again.
 
 **Opening.** With **Auto-open** ticked on a container (and Auto-Get Items running), a copy that comes into your pack — picked up, bought or handed to you — is opened for you. MudPlay sends `open <container>`, reads your inventory a moment later, and puts what the container gave on the **Chest Offload** list (Workshop → Record Keeping), where you can sell or drop it; it is said to the room only if that tab's **Say loot to the room** box is ticked.
 
@@ -6402,7 +6409,7 @@ Settings → Auto-Light. Everything here only matters once the master **Auto-Lig
 - **Keeps a loop lit.** On a loop or an Auto-Lair run it lights rooms the same way from what you carry. When the loop goes through dark rooms you have no light for — when it starts, or later, say when your last light burns out — it stops the run, walks to the shop selling your Preferred light that adds the fewest steps, buys enough for Carry hours, walks back and carries on (the navigation chip reads *Light Trip*). A trip that couldn't buy isn't tried again for that loop until the lights you carry change, you can now pay for one when you couldn't before, or you start a run yourself; otherwise it waits 10 minutes, then twice as long after each try that fails, up to 2 hours. A trip the connection cut off doesn't count as a try. A Roomba sweep is never stopped for a light trip. When the lit light drops below **Reorder at**, it makes the same trip to restock.
 - **Buys a light in town on a bank or stash run.** When an auto-deposit run's way back to the loop goes through dark rooms you have no light for, it walks out to the bank or stash room as it is, deposits or hides your coin, then buys your Preferred light at the shop nearest it (one it can reach without the dark, if there is one) before it sets off back, so the walk home is lit. The deposit, or the hide, leaves the light's price in your purse for that buy. If the connection drops while it buys, it lets the buy go and ends the trip; once you're back in the game the loop starts again the way any loop the drop cut off does (an Auto-Lair run stays stopped), and buys a light if it still needs one. An Event's bank or stash trip ends at the bank; whatever walk comes next makes its own light check.
 - **Stocks up on the way past a shop.** When an auto-deposit bank run or an auto-train trip heads back to the loop and a shop selling your light is at most 25 steps out of the way, it stops there to bring your pack up to Carry hours. It only buys whole lights that fit under the target, and only when there's a dark room ahead or a light lit right now.
-- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. The light's own item rules win: one marked *cannot be taken*, with **Auto-collect** turned off, or set to be auto-discarded or auto-sold, stays on the floor.
+- **Picks a light up off the floor** when it walks into a room with one on the ground and your pack holds less than Carry hours of light: as many copies as make up the shortfall (with Carry hours `0`, one, and only when you carry none), never a whole pile. This works with **Auto-Get Items** off, and a light that is also flagged for Auto-Get is picked up once. It goes by these settings alone, not the light's **Auto-collect** box: a light with Auto-collect off is picked up all the same. A light marked *cannot be taken* stays on the floor, and so does one set to be auto-discarded or auto-sold, since that engine would only get rid of it again.
 - MudPlay never asks party members for lights.
 
 ### Preferred light

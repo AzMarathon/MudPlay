@@ -166,7 +166,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
                 ItemOverlay o = resolver.ResolveGameData("Items", number.ToString(), seed.GetOverlay(number));
                 return new AutoGetItemsManager.ResolvedItem(number, names.GetName(number)!,
                     o.AutoCollect ?? false, o.CannotBeTaken ?? false,
-                    ItemOverlay.ParseCount(o.MaxToGet, int.MaxValue), 0, AutoCollectSet: o.AutoCollect);
+                    ItemOverlay.ParseCount(o.MaxToGet, int.MaxValue), 0);
             },
             isEnabled: () => true,
             collectAfterCombatFinished: () => false,
@@ -347,7 +347,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
     }
 
     // The command changes the fields it names and nothing else: a rule set for all
-    // characters after the last change is not uncovered by the next (review of #1098).
+    // characters after the last change is not uncovered by the next.
     [Fact]
     public void AChange_LeavesEveryOtherFieldAsItResolved()
     {
@@ -360,6 +360,36 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         r.Ask("@auto-get large shield max none");
 
         Assert.Equal(before with { MaxToGet = null }, r.Overlay(101));
+    }
+
+    // Only the fields the command names are written at the character tier, so a
+    // later Global change to any other still shows through.
+    [Fact]
+    public void FieldsNotNamed_StayUnwritten()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Items", "101", new Dictionary<string, object> { ["AutoSell"] = true });
+
+        r.Ask("@auto-get large shield on");
+
+        Assert.Equal(new[] { "AutoCollect" },
+            r.Resolver.ReadGameDataAt(SettingsTier.Character, "Items", "101")!.Select(p => p.Key));
+        r.Resolver.ClearGameDataAt(SettingsTier.Global, "Items", "101");
+        Assert.False(r.Overlay(101).AutoSell ?? false);
+    }
+
+    // What the character tier already holds for another field stays.
+    [Fact]
+    public void AHeldValueOnAnotherField_Survives()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Items", "101", new Dictionary<string, object> { ["AutoSell"] = true });
+        r.Resolver.WriteGameDataAt(SettingsTier.Character, "Items", "101", new Dictionary<string, object> { ["AutoSell"] = false });
+
+        r.Ask("@auto-get large shield max 2");
+
+        Assert.False(r.Overlay(101).AutoSell);
+        Assert.Equal("2", r.Overlay(101).MaxToGet);
     }
 
     // A change is this character's own: it holds when the lower tier's rule it
@@ -483,13 +513,17 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         Assert.True(r.Overlay(101).AutoCollect);
     }
 
-    // Only a lone on / off is the toggle: anything after it makes it an item's name.
+    // A first word of on / off is the engine toggle, and what follows is ignored
+    // (user, 2026-10-17).
     [Fact]
-    public void OnWithMoreWords_IsAnItemName()
+    public void OnOrOffFirst_TogglesTheEngine_WhateverFollows()
     {
         using Rig r = Build();
 
-        Assert.Equal(Reply("no item named 'on please'"), r.Ask1("@auto-get on please"));
+        Assert.Equal(Reply("@auto-get: off"), r.Ask1("@auto-get off please"));
+        Assert.Equal(Reply("@auto-get: on"), r.Ask1("@auto-get on please"));
+        Assert.Equal(Reply("@auto-get: off"), r.Ask1("@auto-get off large shield max 2"));
+        Assert.Equal(SettingsTier.Defaults, r.TierOf(101));
     }
 
     // ----- Refusals ----------------------------------------------------------------
@@ -503,7 +537,6 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         { "@auto-get large shield on max 99999999999", "bad max '99999999999': give a number or none" },
         { "@auto-get large shield max 10000", "bad max '10000': give a number or none" },
         { "@auto-get large shield max", "max needs a number or none" },
-        { "@auto-get on max 2", "usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]" },
         { "@auto-get max 2", "usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]" },
         { "@auto-get shield off", "item name 'shield' matches 2: 'large shield', 'small shield'" },
     };

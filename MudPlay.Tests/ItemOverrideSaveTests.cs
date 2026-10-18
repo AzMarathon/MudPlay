@@ -54,16 +54,19 @@ public sealed class ItemOverrideSaveTests : IDisposable
 
     private string? GlobalText() => _resolver.ReadGameDataAt(SettingsTier.Global, "Items", Id)?.ToJsonString();
 
-    // The editor as the Items tab opens it, on the record as it resolves, at the
-    // character tier.
-    private ItemEditDialogViewModel Editor(ItemOverlay seed) => new(
+    // The editor as the Items tab opens it, on the record as it resolves, saving
+    // at `tier` (the character tier unless named).
+    private ItemEditDialogViewModel Editor(ItemOverlay seed, SettingsTier tier = SettingsTier.Character) => new(
         wccNoStr: Id, mdbName: "large shield", existing: Resolved(seed),
         currentTier: Tier, mdbInfo: Array.Empty<KeyValuePair<string, string>>(),
         shops: Array.Empty<ShopSaleRow>(),
         writableTiers: [SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global])
     {
-        UseTier = SettingsTier.Character,
+        UseTier = tier,
     };
+
+    private string[] HeldAt(SettingsTier tier) =>
+        _resolver.ReadGameDataAt(tier, "Items", Id)?.Select(p => p.Key).Order().ToArray() ?? Array.Empty<string>();
 
     // OK pressed, and the result saved as the Items tab and the item record
     // window save it.
@@ -74,7 +77,7 @@ public sealed class ItemOverrideSaveTests : IDisposable
         vm.SaveCommand.Execute(null);
         Assert.NotNull(result);
         await GameDataOverrideApplier.ApplyItemAsync(_resolver, new ConfirmService(new DialogService()),
-            result!.WccNoStr, result.Tier, result.Overlay, seed);
+            result!.WccNoStr, result.Tier, result.Overlay, seed, result.Changed);
     }
 
     [Fact]
@@ -165,14 +168,79 @@ public sealed class ItemOverrideSaveTests : IDisposable
         _resolver.WriteGameDataAt(SettingsTier.Bbs, "Items", Id, new ItemOverlay { AutoCollect = true });
         ConfirmService confirm = new(new DialogService());
 
-        ItemOverlay off = new ItemBatchChanges { AutoCollect = BatchToggle.Off }.ApplyTo(Resolved(seed));
-        await GameDataOverrideApplier.ApplyItemAsync(_resolver, confirm, Id, SettingsTier.Character, off, seed);
+        ItemBatchChanges turnOff = new() { AutoCollect = BatchToggle.Off };
+        await GameDataOverrideApplier.ApplyItemAsync(_resolver, confirm, Id, SettingsTier.Character,
+            turnOff.ApplyTo(Resolved(seed)), seed, turnOff.ChosenFields);
         Assert.False(Resolved(seed).AutoCollect);
         Assert.Equal(SettingsTier.Character, Tier);
 
         _resolver.ClearGameDataAt(SettingsTier.Bbs, "Items", Id);
-        ItemOverlay back = new ItemBatchChanges { AutoCollect = BatchToggle.Off }.ApplyTo(Resolved(seed));
-        await GameDataOverrideApplier.ApplyItemAsync(_resolver, confirm, Id, SettingsTier.Character, back, seed);
+        await GameDataOverrideApplier.ApplyItemAsync(_resolver, confirm, Id, SettingsTier.Character,
+            turnOff.ApplyTo(Resolved(seed)), seed, turnOff.ChosenFields);
         Assert.Equal(SettingsTier.Defaults, Tier);
+    }
+
+    // A box left alone is not copied into the tier saved at: a Global value the
+    // character never touched still follows Global.
+    [Fact]
+    public async Task ACharacterSave_DoesNotCopyAGlobalValueUp()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Global, "Items", Id, new Dictionary<string, object> { ["AutoSell"] = true });
+        ItemEditDialogViewModel vm = Editor(seed);
+
+        vm.AutoCollect = true;
+        await Save(vm, seed);
+        Assert.Equal(new[] { "AutoCollect" }, HeldAt(SettingsTier.Character));
+
+        _resolver.ClearGameDataAt(SettingsTier.Global, "Items", Id);
+        Assert.False(Resolved(seed).AutoSell ?? false);
+        Assert.True(Resolved(seed).AutoCollect);
+    }
+
+    // Nor is a character's value copied down into Global.
+    [Fact]
+    public async Task AGlobalSave_DoesNotCopyACharactersValueDown()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
+        ItemEditDialogViewModel vm = Editor(seed, SettingsTier.Global);
+        Assert.True(vm.AutoStash);
+
+        vm.AutoCollect = true;
+        await Save(vm, seed);
+
+        Assert.Equal(new[] { "AutoCollect" }, HeldAt(SettingsTier.Global));
+        Assert.Equal(new[] { "AutoStash" }, HeldAt(SettingsTier.Character));
+    }
+
+    // At the realm tier, what lies below is the installed defaults and Global, not
+    // the realm's own record: a realm record set back to its defaults clears.
+    [Fact]
+    public async Task ARealmRecord_SetBackToItsDefaults_Clears()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Bbs, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
+        ItemEditDialogViewModel vm = Editor(seed, SettingsTier.Bbs);
+
+        vm.AutoStash = false;
+        await Save(vm, seed);
+
+        Assert.Empty(HeldAt(SettingsTier.Bbs));
+        Assert.Equal(SettingsTier.Defaults, Tier);
+    }
+
+    // The batch editor saves only the fields it was told to set.
+    [Fact]
+    public async Task TheBatchEditor_SavesOnlyItsChosenFields()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Global, "Items", Id, new Dictionary<string, object> { ["AutoSell"] = true });
+        ItemBatchChanges turnOn = new() { AutoCollect = BatchToggle.On, ChangeMaxToGet = true, MaxToGet = "3" };
+
+        await GameDataOverrideApplier.ApplyItemAsync(_resolver, new ConfirmService(new DialogService()), Id,
+            SettingsTier.Character, turnOn.ApplyTo(Resolved(seed)), seed, turnOn.ChosenFields);
+
+        Assert.Equal(new[] { "AutoCollect", "MaxToGet" }, HeldAt(SettingsTier.Character));
     }
 }

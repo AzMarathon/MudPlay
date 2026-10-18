@@ -46,8 +46,7 @@ public sealed class ItemBatchChanges
         if (AutoOpen != BatchToggle.Leave) o = o with { AutoOpen = AutoOpen.Apply(o.AutoOpen) };
         if (AutoBuy != BatchToggle.Leave) o = o with { AutoBuy = AutoBuy.Apply(o.AutoBuy) };
         if (AutoSell != BatchToggle.Leave) o = o with { AutoSell = AutoSell.Apply(o.AutoSell) };
-        // A sell detour needs Auto-sell, so turning Auto-sell off clears it too —
-        // false, not null, so a lower tier's detour can't show through.
+        // A sell detour needs Auto-sell, so turning Auto-sell off turns it off too.
         if (AutoSell == BatchToggle.Off) o = o with { SellDetour = false, SellDetourAbove = null };
         if (AutoStash != BatchToggle.Leave) o = o with { AutoStash = AutoStash.Apply(o.AutoStash) };
         if (CannotBeTaken != BatchToggle.Leave) o = o with { CannotBeTaken = CannotBeTaken.Apply(o.CannotBeTaken) };
@@ -57,6 +56,35 @@ public sealed class ItemBatchChanges
         if (ChangeMinToKeep) o = o with { MinToKeep = Blank(MinToKeep) };
         if (ChangeMaxToGet) o = o with { MaxToGet = Blank(MaxToGet) };
         return o;
+    }
+
+    // The fields the batch sets, the only ones saved: a field left at Leave keeps
+    // whatever each item's tier holds for it.
+    public IReadOnlyList<string> ChosenFields
+    {
+        get
+        {
+            List<string> fields = new();
+            void Add(BatchToggle t, string name) { if (t != BatchToggle.Leave) fields.Add(name); }
+            Add(AutoCollect, nameof(ItemOverlay.AutoCollect));
+            Add(AutoDiscard, nameof(ItemOverlay.AutoDiscard));
+            Add(AutoOpen, nameof(ItemOverlay.AutoOpen));
+            Add(AutoBuy, nameof(ItemOverlay.AutoBuy));
+            Add(AutoSell, nameof(ItemOverlay.AutoSell));
+            if (AutoSell == BatchToggle.Off)
+            {
+                fields.Add(nameof(ItemOverlay.SellDetour));
+                fields.Add(nameof(ItemOverlay.SellDetourAbove));
+            }
+            Add(AutoStash, nameof(ItemOverlay.AutoStash));
+            Add(CannotBeTaken, nameof(ItemOverlay.CannotBeTaken));
+            Add(MustHaveMinimum, nameof(ItemOverlay.MustHaveMinimum));
+            Add(LoyalItem, nameof(ItemOverlay.LoyalItem));
+            Add(AutoObtainForPath, nameof(ItemOverlay.AutoObtainForPath));
+            if (ChangeMinToKeep) fields.Add(nameof(ItemOverlay.MinToKeep));
+            if (ChangeMaxToGet) fields.Add(nameof(ItemOverlay.MaxToGet));
+            return fields;
+        }
     }
 
     private static string? Blank(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

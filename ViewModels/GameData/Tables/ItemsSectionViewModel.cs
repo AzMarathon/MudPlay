@@ -156,7 +156,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             ItemOverlay existing = resolver.ResolveGameData<ItemOverlay>("Items", wcc, seedDefaults);
             ItemOverlay updated = result.Changes.ApplyTo(existing);
             await GameDataOverrideApplier.ApplyItemAsync(
-                resolver, AppServices.Current.Confirm, wcc, result.Tier, updated, seedDefaults);
+                resolver, AppServices.Current.Confirm, wcc, result.Tier, updated, seedDefaults,
+                result.Changes.ChosenFields);
         }
         Reload();
     }
@@ -363,7 +364,7 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         // save — one shared path.
         if (_resolverRef is { } resolver && AppServices.Current is { } app)
             await GameDataOverrideApplier.ApplyItemAsync(
-                resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults);
+                resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed);
 
         Reload();
     }

@@ -182,9 +182,9 @@ public sealed class SettingsResolver
         JsonObject merged = ToJsonObject(defaultsRecord);
         if (_activeSetProvider?.Invoke() is not { } set) return merged;
         if (tier > SettingsTier.Global)
-            Overlay(merged, ReadOverride(SettingsTier.Global, null, table, set, recordId));
+            Overlay(merged, ReadOverrideForWrite(SettingsTier.Global, null, table, set, recordId));
         if (tier > SettingsTier.Bbs)
-            Overlay(merged, ReadOverride(SettingsTier.Bbs, ActiveRealmFolder(), table, set, recordId));
+            Overlay(merged, ReadOverrideForWrite(SettingsTier.Bbs, ActiveRealmFolder(), table, set, recordId));
         return merged;
     }
 
@@ -200,9 +200,19 @@ public sealed class SettingsResolver
             SettingsTier.Character => _profile.CurrentProfileName,
             _                      => throw new InvalidOperationException("Defaults tier holds no override."),
         };
-        return ReadOverride(tier, scope, table, set, recordId) is { ValueKind: JsonValueKind.Object } delta
+        return ReadOverrideForWrite(tier, scope, table, set, recordId) is { ValueKind: JsonValueKind.Object } delta
             ? JsonNode.Parse(delta.GetRawText())!.AsObject()
             : null;
+    }
+
+    // ReadOverride for a write built from it: the file as it stands, not a copy
+    // cached before another client changed it.
+    private JsonElement? ReadOverrideForWrite(
+        SettingsTier tier, string? scope, string table, string set, string recordId)
+    {
+        if (tier != SettingsTier.Global && string.IsNullOrEmpty(scope)) return null;
+        DropIfChangedOutside(OverridePath(tier, scope, table, set));
+        return ReadOverride(tier, scope, table, set, recordId);
     }
 
     // Write value as the override for record recordId in table at the specified

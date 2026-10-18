@@ -52,25 +52,40 @@ public static class GameDataOverrideApplier
     }
 
     // An item record saved from the item editor or the batch editor: the
-    // installed-defaults reset as above, otherwise ApplyItemAt over every field.
+    // installed-defaults reset as above, otherwise ApplyItemAt over the fields the
+    // user changed.
     public static async Task<bool> ApplyItemAsync(
         SettingsResolver resolver,
         ConfirmService confirm,
         string recordId,
         SettingsTier tier,
         ItemOverlay wanted,
-        ItemOverlay installedDefaults)
+        ItemOverlay installedDefaults,
+        IReadOnlyCollection<string> fields)
     {
         ArgumentNullException.ThrowIfNull(confirm);
         if (tier == SettingsTier.Defaults)
             return await ResetAsync(resolver, confirm, ItemsTable, recordId);
-        ApplyItemAt(resolver, recordId, tier, wanted, installedDefaults);
+        ApplyItemAt(resolver, recordId, tier, wanted, installedDefaults, fields);
         return true;
     }
 
-    // Save an item so that `tier` yields `wanted` for each field in `fields` (every
-    // field when null), and leave the tier's other fields as they are (user,
-    // 2026-10-17). Per field:
+    // The fields whose value differs between two records of an item: what an edit
+    // changed. A box left alone is not saved, so a tier never takes a copy of a
+    // value another tier gave it.
+    public static IReadOnlyList<string> ChangedFields(ItemOverlay from, ItemOverlay to)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+        JsonObject a = ToJson(from);
+        List<string> changed = new();
+        foreach ((string field, JsonNode? value) in ToJson(to))
+            if (!JsonNode.DeepEquals(value, a[field])) changed.Add(field);
+        return changed;
+    }
+
+    // Save an item so that `tier` yields `wanted` for each field in `fields`, and
+    // leave the tier's other fields as they are (user, 2026-10-17). Per field:
     //   * the wanted value is the installed default, and the tiers below give the
     //     installed default too → the tier holds nothing for it;
     //   * otherwise → the tier holds the wanted value, so a lower tier's different
@@ -89,11 +104,12 @@ public static class GameDataOverrideApplier
         SettingsTier tier,
         ItemOverlay wanted,
         ItemOverlay installedDefaults,
-        IReadOnlyCollection<string>? fields = null)
+        IReadOnlyCollection<string> fields)
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(wanted);
         ArgumentNullException.ThrowIfNull(installedDefaults);
+        ArgumentNullException.ThrowIfNull(fields);
         if (tier == SettingsTier.Defaults)
             throw new ArgumentException("The installed defaults are reset, not written.", nameof(tier));
         if (!resolver.CanWriteAt(tier)) tier = resolver.WritableTiers()[0];
@@ -105,7 +121,7 @@ public static class GameDataOverrideApplier
 
         foreach ((string field, JsonNode? value) in want)
         {
-            if (fields is not null && !fields.Contains(field)) continue;
+            if (!fields.Contains(field)) continue;
             JsonNode? installed = defaults[field];
             JsonNode? shown = below[field];
             if (SameValue(value, installed) && SameValue(shown, installed))

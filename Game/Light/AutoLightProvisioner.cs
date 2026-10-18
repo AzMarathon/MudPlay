@@ -515,8 +515,8 @@ public sealed class AutoLightProvisioner
     // to pick up — none unless AutoLight is on, items are allowed (not spell-only
     // mode) and it is a light that projects illumination; then as many as bring the
     // pack up to Carry hours of light (with Carry hours 0, one when no light is
-    // carried at all). The item's own rules (Auto-collect off, auto-discard,
-    // auto-sell) are the auto-get path's to apply.
+    // carried at all), whatever the item's Auto-collect says. Cannot be taken,
+    // auto-discard and auto-sell are the auto-get path's to apply.
     public int FloorLightsWanted(int itemNumber)
     {
         if (!_isEnabled()) return 0;

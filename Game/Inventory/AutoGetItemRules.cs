@@ -54,8 +54,6 @@ public sealed class AutoGetItemRules
         ItemOverlay seed = _seed.GetOverlay(number);
         ItemOverlay wanted = Resolve(number);
         List<string> fields = new(2);
-        // Off is false, not unset: pinned over a lower tier's tick, the Auto-Light
-        // pickup reads false as the item turned off.
         if (autoCollect is { } on)
         {
             wanted = wanted with { AutoCollect = on };

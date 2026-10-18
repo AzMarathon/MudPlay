@@ -3950,7 +3950,8 @@ public sealed class AppServices
         // surface (the Item Finder's double-click), reusing the browser's read-only
         // view assembly. Deps all constructed above; charm read live off PlayerStats.
         ItemRecord = new ItemRecordDialogService(
-            GameData, Resolver, Dialogs, ItemOverlaySeed, ItemSources);
+            GameData, Resolver, vm => Dialogs.OpenWindowAsync<ViewModels.GameData.Edit.ItemEditDialogViewModel, ViewModels.GameData.Edit.ItemEditResult>(vm),
+            Confirm, ItemOverlaySeed, ItemSources);
 
         // Room graph — seeded from the active set's Rooms.json every time the
         // set switches. Built once per swap; consumers hold typed Room
@@ -15067,7 +15068,7 @@ public sealed class AppServices
             number, name, overlay.AutoCollect ?? false, overlay.CannotBeTaken ?? false,
             MaxCap(overlay), ItemNames.WeightOf(name) ?? 0,
             AutoSell: ResolveAutoSellItem(name) is { Sell: true },
-            AutoCollectSet: overlay.AutoCollect, AutoDiscard: overlay.AutoDiscard ?? false);
+            AutoDiscard: overlay.AutoDiscard ?? false);
     }
 
     // Resolve a carried entry for AutoDiscard: map the loose carry wording to an

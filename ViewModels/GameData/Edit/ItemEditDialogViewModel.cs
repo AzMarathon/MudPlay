@@ -210,6 +210,10 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // The item's own name. A Name left at it is no rename, so it is saved as unset.
     private readonly string _mdbName;
 
+    // The record as the window opened on it, which Save compares against to hand
+    // back only the boxes the user changed.
+    private readonly ItemOverlay _opened;
+
     public string Title => $"Item — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
     // Re-price the bought/sold rows at the picker's charm — the shop membership
@@ -322,6 +326,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         _editAttachedMessage   = editAttachedMessage;
         AttachedMessageSummary = attachedMessageSummary ?? string.Empty;
 
+        _opened = Composed();
         _initialized = true;
     }
 
@@ -409,13 +414,16 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     [RelayCommand]
     private void Save()
     {
-        ItemOverlay overlay = Compose(
-            string.Equals(Name.Trim(), _mdbName, StringComparison.Ordinal) ? string.Empty : Name,
-            AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell,
-            SellDetour, SellDetourAbove, SellShopsWire(), AutoStash,
-            CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
-        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier));
+        ItemOverlay overlay = Composed();
+        CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier,
+            GameDataOverrideApplier.ChangedFields(_opened, overlay)));
     }
+
+    private ItemOverlay Composed() => Compose(
+        string.Equals(Name.Trim(), _mdbName, StringComparison.Ordinal) ? string.Empty : Name,
+        AutoCollect, AutoDiscard, AutoOpen, AutoBuy, AutoSell,
+        SellDetour, SellDetourAbove, SellShopsWire(), AutoStash,
+        CannotBeTaken, MustHaveMinimum, LoyalItem, AutoObtainForPath, MinToKeep, MaxToGet);
 
     // The record as the boxes leave it: what the chosen tier is to yield, with a
     // box left clear as unset. GameDataOverrideApplier.ApplyItemAsync saves it.
@@ -450,9 +458,11 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 }
 
 // Returned by ItemEditDialogViewModel on Save. WccNoStr is the item's WCC No as a string
-// — primary key for the overlay write; Overlay is the record the user wants the tier
-// to yield (a flag left clear is unset); Tier is the tier it is saved at.
+// — primary key for the overlay write; Overlay is the record the boxes describe (a
+// flag left clear is unset); Tier is the tier it is saved at; Changed names the
+// fields the user changed, the only ones saved.
 public sealed record ItemEditResult(
-    string       WccNoStr,
-    ItemOverlay  Overlay,
-    SettingsTier Tier);
+    string                WccNoStr,
+    ItemOverlay           Overlay,
+    SettingsTier          Tier,
+    IReadOnlyList<string> Changed);

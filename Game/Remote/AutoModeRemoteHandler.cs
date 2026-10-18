@@ -29,8 +29,9 @@ namespace MudPlay.Game.Remote;
 // @auto-get also takes an item (user, 2026-10-17): `@auto-get <item>` reports
 // that item's own Auto-collect and Max to get, and `on` / `off` and `max <n>` /
 // `max none` after the name set them for this character (AutoGetItemRules). The
-// switch words are read off the end, so an item's name may hold any words; a
-// lone `on` / `off` is always the engine toggle.
+// switch words are read off the end, so an item's name may hold any words. A
+// first word of `on` / `off` is always the engine toggle, and what follows it is
+// ignored, as for every @auto-* toggle (user, 2026-10-17).
 //
 // All commands require PlayerRemoteControls.AlterSettings per the catalog — a
 // "do something on my behalf" tier.
@@ -154,9 +155,9 @@ public sealed class AutoModeRemoteHandler : IDisposable
         ctx.Reply($"{cmd}: {(wanted ? "on" : "off")}");
     }
 
-    // Anything past a lone on / off names an item.
+    // A first word other than on / off names an item.
     private static bool IsItemForm(IReadOnlyList<string> args) =>
-        args.Count > 1 || (args.Count == 1 && !TryParseOnOff(args[0], out _));
+        args.Count > 0 && !TryParseOnOff(args[0], out _);
 
     private void HandleAutoGetItem(RemoteCommandContext ctx)
     {
