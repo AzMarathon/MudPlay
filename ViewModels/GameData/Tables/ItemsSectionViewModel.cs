@@ -155,9 +155,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
                     : new ItemOverlay();
             ItemOverlay existing = resolver.ResolveGameData<ItemOverlay>("Items", wcc, seedDefaults);
             ItemOverlay updated = result.Changes.ApplyTo(existing);
-            await GameDataOverrideApplier.ApplyAsync(
-                resolver, AppServices.Current.Confirm, "Items", wcc,
-                result.Tier, updated, updated.Equals(seedDefaults));
+            await GameDataOverrideApplier.ApplyItemAsync(
+                resolver, AppServices.Current.Confirm, wcc, result.Tier, updated, seedDefaults);
         }
         Reload();
     }
@@ -324,7 +323,6 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
             mdbInfo:          mdb.OtherInfo,
             shops:            mdb.Shops,
             writableTiers:    _resolverRef?.WritableTiers(),
-            installedDefaults: seedDefaults,
             isLight:          mdb.IsLight,
             isContainer:      mdb.IsContainer,
             chest:            chest,
@@ -361,12 +359,11 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         }
         if (result is null) return;
 
-        // Installed-defaults reset (confirm + wipe all tiers), redundant-override
-        // cleanup (edit == seed → clear the tier), or a normal write — one shared path.
+        // Installed-defaults reset (confirm + wipe all tiers) or the field-by-field
+        // save — one shared path.
         if (_resolverRef is { } resolver && AppServices.Current is { } app)
-            await GameDataOverrideApplier.ApplyAsync(
-                resolver, app.Confirm, "Items", result.WccNoStr,
-                result.Tier, result.Overlay, result.EqualsInstalledDefaults);
+            await GameDataOverrideApplier.ApplyItemAsync(
+                resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults);
 
         Reload();
     }

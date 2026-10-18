@@ -2636,7 +2636,9 @@ Eleven commands, one for each auto toggle on your toolbar and in Settings → Ge
 
 Reports or sets one item's own Auto-Get Items rules: its **Auto-collect** flag and its **Max to get**, the two boxes under *Getting it* in the item's Game Data editor. A change is saved **only for this character**, the same as picking that tier in the editor and saving: the editor shows it at that tier, and the next room you see is collected by it.
 
-**Max to get** is how many copies Auto-Get Items lets you hold. It counts what you carry, wear and have on your key ring, and stops picking the item up once you hold that many: with `max 2` and one in your pack, a pile of three yields one. `max none` (a blank box in the editor) is no limit. `max 0` keeps every copy on the floor. It is the same box Auto-buy buys up to, and the one Auto-obtain for path takes its count from.
+**Max to get** is how many copies Auto-Get Items lets you hold. It counts what you carry, wear and have on your key ring, and stops picking the item up once you hold that many: with `max 2` and one in your pack, a pile of three yields one. `max none` (a blank box in the editor) is no limit. `max 0` keeps every copy on the floor. The largest number taken is 9999.
+
+The same box is read elsewhere. Auto-buy buys up to it: with `max 0` it buys none, and with `max none` it buys all the shop has that you can afford. Auto-obtain for path takes its count per person from it, and reads `0` or none as unset, falling back to Min. to keep (at least 1).
 
 **Forms:**
 
@@ -2647,7 +2649,7 @@ Reports or sets one item's own Auto-Get Items rules: its **Auto-collect** flag a
 
 **How a name finds an item.** The same way `@loop` finds a loop, over every item in your game data. A name that is an item's whole name wins outright, with or without `a`, `an`, `the` or a plural `s`. Otherwise an item matches when its name holds **every typed word, in any order**: `@auto-get shield large` finds *large shield*. If nothing matches, it is tried once more without apostrophes, so `kings crown` finds *king's crown*. Exactly one item is used; none, or more than one, is refused. Two records with the same name are one item, the one the engines pick up by that name.
 
-`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`.
+`on`, `off` and `max <n>` are read off the **end** of what was typed, and the rest is the name. So an item whose name has the word *on* in it still works: `@auto-get rune on stone on`. Only a lone `on` or `off` is the toggle: `@auto-get on please` asks about an item named *on please*.
 
 **Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
@@ -2657,7 +2659,7 @@ Reports or sets one item's own Auto-Get Items rules: its **Auto-collect** flag a
 | any of the above, ending `(cannot be taken)` | The item is marked *Cannot be taken*, so it is never picked up whatever the rules say. |
 | `no item named '<text>'` | **Refusal:** no item's name fits. |
 | `item name '<text>' matches 3: 'large shield', 'large sword', 'small shield'` | **Refusal:** the name fits more than one item. Up to four names are given, fewer when they are long, then `+5 more` for the rest. Nothing is changed. |
-| `bad max '<text>': give a number or none` | **Refusal:** the word after `max` is neither a whole number nor `none`. |
+| `bad max '<text>': give a number or none` | **Refusal:** the word after `max` is neither a whole number from 0 to 9999 nor `none`. |
 | `max needs a number or none` | **Refusal:** the command ends in `max`. |
 | `no character loaded` | **Refusal:** a change was asked for with no named character loaded, so there is no character to save it for. A report is still answered. |
 | the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
@@ -2666,8 +2668,9 @@ With no name before the `on`, `off` or `max` (`@auto-get on max 2`), the command
 
 **Situations:**
 
-- **Off is saved as off.** A tick on the item for all characters or for the realm no longer collects it for this character.
-- **Back to the installed defaults:** a change that leaves the item as it was installed removes this character's override, as the editor does. If a rule for all characters or for the realm would then show through, the override is kept so the change holds for this character.
+- **A change holds for this character.** What the command sets is kept at the character tier whenever a rule for all characters or for the realm differs from the installed default, so `off` over such a tick stays off, and `on` stays on if that tick is later removed.
+- **Only what the command names changes.** The item's other boxes go on reading as they did.
+- **Back to the installed defaults:** a change that leaves the item as it was installed, with nothing for all characters or for the realm saying otherwise, removes this character's override, as the editor does (see **How an item is saved** under *Game Data*).
 - **Auto-Get Items itself is separate.** Flagging an item doesn't switch the toggle on; send `@auto-get on` for that.
 - **Master switch off:** ignored, no answer.
 - **On your own screen:** a change is written to the program log with the sender's name, the item and its rules before and after. The bug report's item overrides list shows the item at the Character tier.
@@ -3951,13 +3954,15 @@ On the **Monsters**, **Items**, and **Players** tables a **Batch edit** button s
 - **Monsters** — Relationship, attack priority, don't-backstab, kill-on-sight, the physical-attack command, and the three spell-override rungs (cast-code + Max + Mana floor).
 - **Items** — the auto flags (collect / discard / open / buy / sell / stash), cannot-be-taken, must-have-minimum, loyal, auto-obtain-for-path, and Min-to-keep / Max-to-get.
 - **Players** — the party behaviours (invite-if-seen, join-if-invited, don't-auto-delete) and all 16 remote-control permissions (Elevated Commands is listed as **Sysop commands** here), with a **Set all permissions** master to grant or revoke the lot in one move. A player's one-time `@dupe` is re-armed only from that player's own edit dialog (**Reset @dupe**).
-- **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (**Only for this character** / **Only for this realm** / **For all characters (global)**), the same as the single editor; picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
+- **Tier** — Monsters and Items write to the tier you pick in the dialog's **Use** dropdown (**Only for this character** / **Only for this realm** / **For all characters (global)**), the same as the single editor (an item is saved box by box, as under **How an item is saved**); picking **Installed defaults** instead **resets** every selected record (after one confirm). Player permissions save to the character, no tier picker.
 
 ### The item / monster override editor
 
 Items and Monsters open an editable pane on the left with the read-only **Other Info (from MDB)** on the right.
 
 **For an item** the left side groups its settings by what they do: **Getting it** (Auto-collect, Auto-buy, **Max to get**, Cannot be taken, Auto-open for a container, Auto-obtain for path), **Keeping it** (Must have minimum, **Min. to keep**, Loyal item) and **Getting rid of it** (Auto-sell with its sell-detour options, Auto-stash, Auto-discard), plus the item's on-use message. Hover any box for what it does. The window remembers its size and position.
+
+**How an item is saved.** The tier you pick in **Use** gives what the window shows when you press OK, box by box, whatever the tiers under it say. A box cleared over a tick for all characters or for the realm is saved as off at your tier. A box you leave at the item's installed default, with the tiers under it at that default too, is not saved at your tier at all. So an item you set back to how it was installed returns to **Def** in the Use column. If a rule for all characters or for the realm differs, your tier keeps the installed values for that box. Only the tier you picked is written. The batch editor and `@auto-get <item>` save the same way.
 
 **Opening.** With **Auto-open** ticked on a container (and Auto-Get Items running), a copy that comes into your pack — picked up, bought or handed to you — is opened for you. MudPlay sends `open <container>`, reads your inventory a moment later, and puts what the container gave on the **Chest Offload** list (Workshop → Record Keeping), where you can sell or drop it; it is said to the room only if that tab's **Say loot to the room** box is ticked.
 

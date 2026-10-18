@@ -7,11 +7,12 @@ namespace MudPlay.Game.Inventory;
 // One item's own Auto-Get Items rules, Auto-collect and Max to get, found by a
 // name typed in chat and read or changed for the loaded character.
 //
-// A change is the Game Data item editor's save at the "only for this character"
-// tier: the item's whole resolved record with the asked fields changed, through
-// GameDataOverrideApplier, so the editor shows it at that tier and
-// AutoGetItemsManager, which resolves an item's rules on every survey, acts on
-// it from the next one.
+// A change is saved at the "only for this character" tier by the rule the Game
+// Data item editor saves by (GameDataOverrideApplier.ApplyItemAt), for the asked
+// fields alone: each holds for this character whatever a lower tier says, and
+// every other field resolves as it did. The editor shows it at that tier, and
+// AutoGetItemsManager, which resolves an item's rules on every survey, acts on it
+// from the next one.
 public sealed class AutoGetItemRules
 {
     private const string Table = "Items";
@@ -50,29 +51,23 @@ public sealed class AutoGetItemRules
     // now resolve.
     public State Change(int number, bool? autoCollect, bool setMax, int? max)
     {
-        string id = Id(number);
         ItemOverlay seed = _seed.GetOverlay(number);
-        ItemOverlay existing = _resolver.ResolveGameData(Table, id, seed);
-        ItemOverlay updated = existing;
-        // Off is written as false, not left null as the editor's untick leaves it:
-        // the batch editor's way, so a lower tier's tick can't show through and
-        // the Auto-Light pickup reads it as turned off.
-        if (autoCollect is { } on) updated = updated with { AutoCollect = on };
-        if (setMax) updated = updated with { MaxToGet = max?.ToString(CultureInfo.InvariantCulture) };
-        if (updated == existing) return StateOf(existing);
-
-        GameDataOverrideApplier.Apply(_resolver, Table, id, SettingsTier.Character,
-            updated, updated.Equals(seed));
-        ItemOverlay now = Resolve(number);
-        // A change that brings the record back to its installed defaults clears the
-        // character's override, which lets a Global or BBS rule for the item show
-        // through. Asked for this character, it has to hold for this character.
-        if (now.AutoCollect != updated.AutoCollect || now.MaxToGet != updated.MaxToGet)
+        ItemOverlay wanted = Resolve(number);
+        List<string> fields = new(2);
+        // Off is false, not unset: pinned over a lower tier's tick, the Auto-Light
+        // pickup reads false as the item turned off.
+        if (autoCollect is { } on)
         {
-            _resolver.WriteGameDataAt(SettingsTier.Character, Table, id, updated);
-            now = Resolve(number);
+            wanted = wanted with { AutoCollect = on };
+            fields.Add(nameof(ItemOverlay.AutoCollect));
         }
-        return StateOf(now);
+        if (setMax)
+        {
+            wanted = wanted with { MaxToGet = max?.ToString(CultureInfo.InvariantCulture) };
+            fields.Add(nameof(ItemOverlay.MaxToGet));
+        }
+        GameDataOverrideApplier.ApplyItemAt(_resolver, Id(number), SettingsTier.Character, wanted, seed, fields);
+        return Read(number);
     }
 
     private ItemOverlay Resolve(int number) =>

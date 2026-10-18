@@ -82,7 +82,6 @@ public sealed class ItemRecordDialogService
             mdbInfo:          mdb.OtherInfo,
             shops:            mdb.Shops,
             writableTiers:    _resolver.WritableTiers(),
-            installedDefaults: seedDefaults,
             isLight:          mdb.IsLight,
             isContainer:      mdb.IsContainer,
             chest:            chest,
@@ -111,11 +110,10 @@ public sealed class ItemRecordDialogService
         }
         if (result is null) return;
 
-        // Installed-defaults reset / redundant-override cleanup / normal write —
-        // shared with the browser's Items tab.
+        // Installed-defaults reset or the field-by-field save — shared with the
+        // browser's Items tab.
         if (AppServices.Current is { } app)
-            await GameDataOverrideApplier.ApplyAsync(
-                _resolver, app.Confirm, "Items", result.WccNoStr,
-                result.Tier, result.Overlay, result.EqualsInstalledDefaults);
+            await GameDataOverrideApplier.ApplyItemAsync(
+                _resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults);
     }
 }

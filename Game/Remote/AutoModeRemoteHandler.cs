@@ -257,13 +257,16 @@ public sealed class AutoModeRemoteHandler : IDisposable
     private static bool IsMaxWord(string word) =>
         string.Equals(word, "max", StringComparison.OrdinalIgnoreCase);
 
-    // A whole number of copies, 0 or more, the values the auto-get engine counts
-    // Max to get in; `none` clears it.
+    // A whole number of copies from 0 to MaxCap, the values the auto-get engine
+    // counts Max to get in; `none` clears it. The cap keeps a number from reading
+    // back as no limit.
+    private const int MaxCap = 9999;
+
     private static bool TryParseMax(string word, out int? max)
     {
         max = null;
         if (string.Equals(word, "none", StringComparison.OrdinalIgnoreCase)) return true;
-        if (int.TryParse(word, NumberStyles.None, CultureInfo.InvariantCulture, out int n))
+        if (int.TryParse(word, NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n <= MaxCap)
         {
             max = n;
             return true;

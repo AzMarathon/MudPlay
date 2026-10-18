@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.33**
+> **Version 3.184.34**
 > - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
 > - A lone `@auto-get on` / `off` is still the Auto-Get Items toggle
+> - Game Data item and batch editors save box by box: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
+>
+> See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

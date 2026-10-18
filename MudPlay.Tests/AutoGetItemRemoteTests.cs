@@ -5,6 +5,7 @@ using MudPlay.Game.Inventory;
 using MudPlay.Game.Remote;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using Xunit;
@@ -54,7 +55,8 @@ public sealed class AutoGetItemRemoteTests : IDisposable
           { "Number": 104, "Name": "rune on stone", "Encum": 1, "ItemType": 0 },
           { "Number": 105, "Name": "maxim scroll", "Encum": 1, "ItemType": 0 },
           { "Number": 106, "Name": "king's crown", "Encum": 2, "ItemType": 2 },
-          { "Number": 107, "Name": "stone wall", "Encum": 0, "ItemType": 0 }
+          { "Number": 107, "Name": "stone wall", "Encum": 0, "ItemType": 0 },
+          { "Number": 172, "Name": "black star key", "Encum": 1, "ItemType": 7 }
         ]
         """;
 
@@ -68,6 +70,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         public required AutoModeRemoteHandler Handler { get; init; }
         public required AutoGetItemsManager Items { get; init; }
         public required LogService Log { get; init; }
+        public required ItemOverlaySeedStore Seed { get; init; }
         // Copies held, by item Number: what the engine's Max to get counts.
         public required Dictionary<int, int> Held { get; init; }
         public List<byte[]> Replies { get; } = new();
@@ -92,7 +95,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         }
 
         public ItemOverlay Overlay(int number) =>
-            Resolver.ResolveGameData("Items", number.ToString(), new ItemOverlay());
+            Resolver.ResolveGameData("Items", number.ToString(), Seed.GetOverlay(number));
 
         public SettingsTier TierOf(int number) => Resolver.GetGameDataSourceTier("Items", number.ToString());
 
@@ -104,9 +107,11 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         }
     }
 
-    // A named character on its own BBS (the character tier needs one), unless
-    // named is false: then the unnamed default draft, which has no tier of its own.
-    private Rig Build(bool named = true)
+    // A named character on its own BBS and realm (the character and realm tiers
+    // need them), unless named is false: then the unnamed default draft, which has
+    // no tier of its own. Seeded, the installed defaults are the stock seed the
+    // client ships; otherwise every item's are blank.
+    private Rig Build(bool named = true, bool seeded = false)
     {
         GameDataCache cache = new(_root);
         cache.SwitchSet(_set);
@@ -114,8 +119,10 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         names.OnActiveSetChanged(_set);
 
         ProfileService profile = TestProfiles.Service();
+        BbsProfileStore boards = new();
         if (named)
         {
+            boards.Save(new BbsProfile { Name = _bbs, Host = "h", Realms = { new RealmProfile { Name = "home" } } });
             profile.CreateProfile(_bbs, "Tester");
             profile.Load(_bbs, "Tester");
         }
@@ -123,7 +130,13 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         {
             profile.LoadDefaultProfile();
         }
-        SettingsResolver resolver = new(new SettingsService(), new BbsProfileStore(), profile, () => cache.ActiveSet);
+        SettingsResolver resolver = new(new SettingsService(), boards, profile, () => cache.ActiveSet);
+        ItemOverlaySeedStore seed = new();
+        if (seeded)
+        {
+            InstallStockSeed();
+            seed.Load(_set);
+        }
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -141,7 +154,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
             BlockedByMasterSwitch = what => controller.Blocks("Remote commands", what),
         };
         AutoModeRemoteHandler handler = new(engine, profile, controller, log);
-        handler.SetItemRules(new AutoGetItemRules(resolver, names, new ItemOverlaySeedStore()));
+        handler.SetItemRules(new AutoGetItemRules(resolver, names, seed));
 
         Dictionary<int, int> held = new();
         AutoGetItemsManager items = new(router,
@@ -150,7 +163,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
                 // How the client resolves a floor entry: the name to its Number, then
                 // the item's rules through every tier.
                 if (names.FindByName(entry) is not int number) return null;
-                ItemOverlay o = resolver.ResolveGameData("Items", number.ToString(), new ItemOverlay());
+                ItemOverlay o = resolver.ResolveGameData("Items", number.ToString(), seed.GetOverlay(number));
                 return new AutoGetItemsManager.ResolvedItem(number, names.GetName(number)!,
                     o.AutoCollect ?? false, o.CannotBeTaken ?? false,
                     ItemOverlay.ParseCount(o.MaxToGet, int.MaxValue), 0, AutoCollectSet: o.AutoCollect);
@@ -163,7 +176,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         Rig rig = new()
         {
             Router = router, Engine = engine, Profile = profile, Resolver = resolver,
-            Controller = controller, Handler = handler, Items = items, Log = log, Held = held,
+            Controller = controller, Handler = handler, Items = items, Log = log, Held = held, Seed = seed,
         };
         items.SetWireSender(b => rig.Game.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         engine.SetWireSender(rig.Replies.Add);
@@ -171,6 +184,19 @@ public sealed class AutoGetItemRemoteTests : IDisposable
     }
 
     private static string Reply(string text) => $"/{Friend} {{{text}}}";
+
+    // The stock item seed where the client keeps it, as its startup puts it there:
+    // copied from the seed the client ships, never changed.
+    private void InstallStockSeed()
+    {
+        string target = AppPaths.ItemOverlaySeedFile("stock");
+        if (File.Exists(target)) return;
+        string shipped = Path.Combine(_root, "shipped");
+        AppPaths.ExtractEmbeddedSeeds(shipped);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        try { File.Copy(Path.Combine(shipped, "ItemOverlay.stock.seed.json"), target); }
+        catch (IOException) when (File.Exists(target)) { /* another test put the same copy there first */ }
+    }
 
     // ----- Report ------------------------------------------------------------------
 
@@ -320,6 +346,66 @@ public sealed class AutoGetItemRemoteTests : IDisposable
             && e.Message == "@auto-get from Friend: 'large shield' (#101) for this character: auto-get off -> on, max none -> 2");
     }
 
+    // The command changes the fields it names and nothing else: a rule set for all
+    // characters after the last change is not uncovered by the next (review of #1098).
+    [Fact]
+    public void AChange_LeavesEveryOtherFieldAsItResolved()
+    {
+        using Rig r = Build();
+        r.Ask("@auto-get large shield max 2");
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Items", "101",
+            new ItemOverlay { MinToKeep = "3", AutoSell = true });
+        ItemOverlay before = r.Overlay(101);
+
+        r.Ask("@auto-get large shield max none");
+
+        Assert.Equal(before with { MaxToGet = null }, r.Overlay(101));
+    }
+
+    // A change is this character's own: it holds when the lower tier's rule it
+    // matched goes away.
+    [Fact]
+    public void On_OverAGlobalTick_IsPinnedForThisCharacter()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Items", "101", new ItemOverlay { AutoCollect = true, MaxToGet = "4" });
+
+        r.Ask("@auto-get large shield on max 4");
+        r.Resolver.ClearGameDataAt(SettingsTier.Global, "Items", "101");
+
+        Assert.True(r.Overlay(101).AutoCollect);
+        Assert.Equal("4", r.Overlay(101).MaxToGet);
+        Assert.Equal(SettingsTier.Character, r.TierOf(101));
+    }
+
+    [Fact]
+    public void ARealmRule_DoesNotShowThroughAChange()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Bbs, "Items", "101", new ItemOverlay { AutoCollect = true, MaxToGet = "5" });
+
+        Assert.Equal(Reply("large shield: auto-get off, max none"), r.Ask1("@auto-get large shield off max none"));
+
+        Assert.Equal(SettingsTier.Character, r.TierOf(101));
+        r.Notice("a large shield");
+        Assert.Empty(r.Game);
+    }
+
+    // An item the client ships flagged: its installed defaults are the seed's, and
+    // setting it back to them leaves no override.
+    [Fact]
+    public void ASeededItem_ReadsItsSeed_AndBackToItShiftsToTheInstalledDefaults()
+    {
+        using Rig r = Build(seeded: true);
+
+        Assert.Equal(Reply("black star key: auto-get on, max 2"), r.Ask1("@auto-get black star key"));
+        Assert.Equal(Reply("black star key: auto-get off, max 5"), r.Ask1("@auto-get black star key off max 5"));
+        Assert.Equal(SettingsTier.Character, r.TierOf(172));
+
+        Assert.Equal(Reply("black star key: auto-get on, max 2"), r.Ask1("@auto-get black star key on max 2"));
+        Assert.Equal(SettingsTier.Defaults, r.TierOf(172));
+    }
+
     // ----- Names -------------------------------------------------------------------
 
     [Fact]
@@ -394,7 +480,16 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         // And an item change leaves the toggle alone.
         r.Ask("@auto-get large shield on");
         Assert.False(Engine());
-        Assert.Equal(SettingsTier.Defaults, r.TierOf(104));
+        Assert.True(r.Overlay(101).AutoCollect);
+    }
+
+    // Only a lone on / off is the toggle: anything after it makes it an item's name.
+    [Fact]
+    public void OnWithMoreWords_IsAnItemName()
+    {
+        using Rig r = Build();
+
+        Assert.Equal(Reply("no item named 'on please'"), r.Ask1("@auto-get on please"));
     }
 
     // ----- Refusals ----------------------------------------------------------------
@@ -406,6 +501,7 @@ public sealed class AutoGetItemRemoteTests : IDisposable
         { "@auto-get large shield max lots", "bad max 'lots': give a number or none" },
         { "@auto-get large shield max -1", "bad max '-1': give a number or none" },
         { "@auto-get large shield on max 99999999999", "bad max '99999999999': give a number or none" },
+        { "@auto-get large shield max 10000", "bad max '10000': give a number or none" },
         { "@auto-get large shield max", "max needs a number or none" },
         { "@auto-get on max 2", "usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]" },
         { "@auto-get max 2", "usage: @auto-get [on|off] or @auto-get <item> [on|off] [max <n>|none]" },

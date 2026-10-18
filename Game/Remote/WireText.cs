@@ -40,7 +40,7 @@ public static class WireText
     // characters, and cut short past NameCap (its start, then "...") so that no
     // reply built round one name outgrows a telepath and no entry of a list
     // outgrows a part. A name is still found by the words cut off.
-    public const int NameCap = 40;
+    private const int NameCap = 40;
 
     public static string Shortened(string text)
     {

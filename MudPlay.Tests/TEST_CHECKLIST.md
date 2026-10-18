@@ -155,8 +155,8 @@ How to keep it current:
 - Why: Reports `paradigm-20260815-130733`, `paradigm-20260826-132742`, `paradigm-20260827-125103`, `paradigm-20260914-154019`, `paradigm-20260915-061646`, `paradigm-20260915-124359`, `paradigm-20260916-104923`, `paradigm-20260924-113530`, `paradigm-20260929-115648`, `paradigm-20261008-202210` and `paradigm-20261015-202943`. Also the user's 2026-10-09 ruling on gear that comes back to the pack, and GAME_MECHANICS "Gear swaps interrupt resting, not meditating". Guards against gear thrash and against fighting in rest gear.
 
 ### AutoGetItemRemoteTests.cs
-- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.Apply (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
-- Checks: the report reads every tier and says *cannot be taken*; `on` / `off` / `max <n>` / `max none` (either order) are saved at the character tier, never Global, and the auto-get engine then collects the item, leaves it, and stops at the max (held copies counted; `max 0` takes none); off is saved as off over a Global tick; a change back to the installed defaults clears the character override, unless a Global rule would show through; the log line names the sender. Names: exact (with an article) wins, words in any order, apostrophes left out, two records of one name are one item, a name holding `on` or `max` still works; several matches are refused with the names. A lone `on` / `off` / bare `@auto-get` is still the engine toggle and an item change leaves it alone. Refusals (no item, ambiguous, bad or missing max, no name, no named character, no Alter settings) carry their reason, are silent with Warn off, and go back on the channel the command came in on; a success is answered with Warn off; the Auto-All switch off ignores the command unanswered.
+- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyItemAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
+- Checks: the report reads every tier and says *cannot be taken*; `on` / `off` / `max <n>` / `max none` (either order) are saved at the character tier, never Global, and the auto-get engine then collects the item, leaves it, and stops at the max (held copies counted; `max 0` takes none); off holds over a Global or realm tick, on holds when a Global tick it matched is removed, and a change leaves every other field resolving as before (review of #1098); a change back to the installed defaults clears the character override, unless a lower tier would show through; a seeded item reads the stock seed and returns to it; the log line names the sender. Names: exact (with an article) wins, words in any order, apostrophes left out, two records of one name are one item, a name holding `on` or `max` still works; several matches are refused with the names. A lone `on` / `off` / bare `@auto-get` is still the engine toggle and an item change leaves it alone. `on please` is an item name. Refusals (no item, ambiguous, bad, over-9999 or missing max, no name, no named character, no Alter settings) carry their reason, are silent with Warn off, and go back on the channel the command came in on; a success is answered with Warn off; the Auto-All switch off ignores the command unanswered.
 - Why: a party member flags an item for auto-get, or sets its max, remotely for this character (user, 2026-10-17).
 
 ### AutoGetItemsManagerTests.cs
@@ -1716,7 +1716,7 @@ How to keep it current:
 
 ### ItemEditDialogViewModelTests.cs
 - Covers: ViewModels/GameData/Edit/ItemEditDialogViewModel
-- Checks: the installed-defaults tier; EqualsInstalledDefaults; sell-detour round-trip and its warning; the Given-by filtering; the exit-uses list cap.
+- Checks: the installed-defaults tier; a cleared box and the item's own name are saved unset, a rename kept; sell-detour round-trip and its warning; the Given-by filtering; the exit-uses list cap.
 - Why: paradigm-20260930-183614
 
 ### ItemEquipFilterTests.cs
@@ -1748,6 +1748,11 @@ How to keep it current:
 - Covers: Services/ItemNameStore
 - Checks: lookup by number; IsRecordName; the off-hand and slot lists and their clearing on a null set; PackStealthOf.
 - Why: item name resolution
+
+### ItemOverrideSaveTests.cs
+- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyItemAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
+- Checks: a character-tier untick over a Global tick is off; a record set back to its installed defaults over a differing Global still yields the defaults, holding only the boxes that differ below; set back with nothing below it clears the override; one box changed leaves the others resolving as before; the batch editor's off over a realm tick is off, and back to defaults clears. The Global tier is never written.
+- Why: an untick at the character tier left a Global tick showing, and a record set back to its defaults didn't return to them (user, 2026-10-17).
 
 ### ItemSourceIndexTests.cs
 - Covers: Services/ItemSourceIndex
