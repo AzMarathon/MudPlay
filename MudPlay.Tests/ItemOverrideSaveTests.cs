@@ -57,16 +57,14 @@ public sealed class ItemOverrideSaveTests : IDisposable
 
     private string? GlobalText() => _resolver.ReadGameDataAt(SettingsTier.Global, "Items", Id)?.ToJsonString();
 
-    // The editor as the Items tab opens it, on the record as it resolves, saving
-    // at `tier` (the character tier unless named).
-    private ItemEditDialogViewModel Editor(ItemOverlay seed, SettingsTier tier = SettingsTier.Character) => new(
+    // The editor as the Items tab opens it: on the record as it resolves, with Use
+    // on the tier it resolves from (the character tier for one at its installed
+    // defaults).
+    private ItemEditDialogViewModel Editor(ItemOverlay seed) => new(
         wccNoStr: Id, mdbName: "large shield", existing: Resolved(seed),
         currentTier: Tier, mdbInfo: Array.Empty<KeyValuePair<string, string>>(),
         shops: Array.Empty<ShopSaleRow>(),
-        writableTiers: [SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global])
-    {
-        UseTier = tier,
-    };
+        writableTiers: [SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global]);
 
     private string[] HeldAt(SettingsTier tier) =>
         _resolver.ReadGameDataAt(tier, "Items", Id)?.Select(p => p.Key).Order().ToArray() ?? Array.Empty<string>();
@@ -80,7 +78,7 @@ public sealed class ItemOverrideSaveTests : IDisposable
         vm.SaveCommand.Execute(null);
         Assert.NotNull(result);
         await GameDataOverrideApplier.ApplyItemAsync(_resolver, new ConfirmService(new DialogService()),
-            result!.WccNoStr, result.Tier, result.Overlay, seed, result.Changed);
+            result!.WccNoStr, result.Tier, result.Overlay, seed, result.Changed, result.MovedFrom);
     }
 
     [Fact]
@@ -92,6 +90,7 @@ public sealed class ItemOverrideSaveTests : IDisposable
         ItemEditDialogViewModel vm = Editor(seed);
         Assert.True(vm.AutoCollect);
 
+        vm.UseTier = SettingsTier.Character;
         vm.AutoCollect = false;
         await Save(vm, seed);
 
@@ -192,6 +191,7 @@ public sealed class ItemOverrideSaveTests : IDisposable
         _resolver.WriteGameDataAt(SettingsTier.Global, "Items", Id, new Dictionary<string, object> { ["AutoSell"] = true });
         ItemEditDialogViewModel vm = Editor(seed);
 
+        vm.UseTier = SettingsTier.Character;
         vm.AutoCollect = true;
         await Save(vm, seed);
         Assert.Equal(new[] { "AutoCollect" }, HeldAt(SettingsTier.Character));
@@ -201,19 +201,64 @@ public sealed class ItemOverrideSaveTests : IDisposable
         Assert.True(Resolved(seed).AutoCollect);
     }
 
-    // Nor is a character's value copied down into Global.
+    // Use moved to another tier and OK pressed, with no box changed: the shown
+    // values that tier wouldn't give otherwise are saved there (user, 2026-10-17).
     [Fact]
-    public async Task AGlobalSave_DoesNotCopyACharactersValueDown()
+    public async Task ATierOnlyChange_CopiesTheShownValuesToTheNewTier()
     {
         ItemOverlay seed = new();
-        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
-        ItemEditDialogViewModel vm = Editor(seed, SettingsTier.Global);
-        Assert.True(vm.AutoStash);
+        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id,
+            new Dictionary<string, object> { ["AutoStash"] = true, ["MaxToGet"] = "3" });
+        ItemEditDialogViewModel vm = Editor(seed);
+        Assert.Equal(SettingsTier.Character, vm.UseTier);
 
-        vm.AutoCollect = true;
+        vm.UseTier = SettingsTier.Global;
         await Save(vm, seed);
 
-        Assert.Equal(new[] { "AutoCollect" }, HeldAt(SettingsTier.Global));
+        Assert.Equal(new[] { "AutoStash", "MaxToGet" }, HeldAt(SettingsTier.Global));
+        Assert.Equal(new[] { "AutoStash", "MaxToGet" }, HeldAt(SettingsTier.Character));
+    }
+
+    // OK on the tier the window opened on, with no box changed, saves nothing.
+    [Fact]
+    public async Task ASameTierOk_WithNoChange_SavesNothing()
+    {
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Global, "Items", Id, new Dictionary<string, object> { ["AutoSell"] = true });
+        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
+        string? global = GlobalText();
+        string? character = _resolver.ReadGameDataAt(SettingsTier.Character, "Items", Id)?.ToJsonString();
+
+        await Save(Editor(seed), seed);
+
+        Assert.Equal(global, GlobalText());
+        Assert.Equal(character, _resolver.ReadGameDataAt(SettingsTier.Character, "Items", Id)?.ToJsonString());
+    }
+
+    // A save that fails to reach the disk leaves the record as the file has it:
+    // the write is made on a copy of the cached file, which takes its place only
+    // once written.
+    [Fact]
+    public void AFailedSave_LeavesTheRecordAsTheFileHasIt()
+    {
+        // A folder made read-only is how the save is made to fail; root writes anyway.
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root") return;
+        ItemOverlay seed = new();
+        _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
+        string folder = Path.GetDirectoryName(AppPaths.OverrideFile(SettingsTier.Character, "Tester", "Items", _set, _bbs))!;
+        UnixFileMode mode = File.GetUnixFileMode(folder);
+        File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            Assert.ThrowsAny<Exception>(() => _resolver.WriteGameDataAt(SettingsTier.Character, "Items", Id,
+                new Dictionary<string, object> { ["AutoStash"] = true, ["LoyalItem"] = true }));
+        }
+        finally
+        {
+            File.SetUnixFileMode(folder, mode);
+        }
+
+        Assert.Null(Resolved(seed).LoyalItem);
         Assert.Equal(new[] { "AutoStash" }, HeldAt(SettingsTier.Character));
     }
 
@@ -224,7 +269,8 @@ public sealed class ItemOverrideSaveTests : IDisposable
     {
         ItemOverlay seed = new();
         _resolver.WriteGameDataAt(SettingsTier.Bbs, "Items", Id, new Dictionary<string, object> { ["AutoStash"] = true });
-        ItemEditDialogViewModel vm = Editor(seed, SettingsTier.Bbs);
+        ItemEditDialogViewModel vm = Editor(seed);
+        Assert.Equal(SettingsTier.Bbs, vm.UseTier);
 
         vm.AutoStash = false;
         await Save(vm, seed);

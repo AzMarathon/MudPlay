@@ -211,8 +211,9 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     private readonly string _mdbName;
 
     // The record as the window opened on it, which Save compares against to hand
-    // back only the boxes the user changed.
+    // back only the boxes the user changed, and the tier Use opened on.
     private readonly ItemOverlay _opened;
+    private readonly SettingsTier _openedTier;
 
     public string Title => $"Item — {(Name.Length > 0 ? Name : $"#{WccNoStr}")}";
 
@@ -327,6 +328,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         AttachedMessageSummary = attachedMessageSummary ?? string.Empty;
 
         _opened = Composed();
+        _openedTier = UseTier;
         _initialized = true;
     }
 
@@ -416,7 +418,8 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     {
         ItemOverlay overlay = Composed();
         CloseRequested?.Invoke(new ItemEditResult(WccNoStr, overlay, UseTier,
-            GameDataOverrideApplier.ChangedFields(_opened, overlay)));
+            GameDataOverrideApplier.ChangedFields(_opened, overlay),
+            UseTier != _openedTier ? _opened : null));
     }
 
     private ItemOverlay Composed() => Compose(
@@ -460,9 +463,12 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 // Returned by ItemEditDialogViewModel on Save. WccNoStr is the item's WCC No as a string
 // — primary key for the overlay write; Overlay is the record the boxes describe (a
 // flag left clear is unset); Tier is the tier it is saved at; Changed names the
-// fields the user changed, the only ones saved.
+// fields the user changed. MovedFrom is the record as the window opened on it when
+// the user moved Use to another tier, null otherwise: the shown values are then
+// saved at the new tier too (GameDataOverrideApplier.ApplyItemAsync).
 public sealed record ItemEditResult(
     string                WccNoStr,
     ItemOverlay           Overlay,
     SettingsTier          Tier,
-    IReadOnlyList<string> Changed);
+    IReadOnlyList<string> Changed,
+    ItemOverlay?          MovedFrom);

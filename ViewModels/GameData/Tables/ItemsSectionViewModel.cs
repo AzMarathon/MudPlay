@@ -364,7 +364,8 @@ public sealed class ItemsSectionViewModel : JsonTableSectionViewModel, IEditable
         // save — one shared path.
         if (_resolverRef is { } resolver && AppServices.Current is { } app)
             await GameDataOverrideApplier.ApplyItemAsync(
-                resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed);
+                resolver, app.Confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed,
+                result.MovedFrom);
 
         Reload();
     }

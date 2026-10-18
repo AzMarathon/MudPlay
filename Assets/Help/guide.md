@@ -3967,7 +3967,13 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 - A box set back to the item's installed default, with the tiers under it at that default too, is taken off your tier. So an item you set back to how it was installed returns to **Def** in the Use column.
 - If a rule for all characters or for the realm differs, your tier keeps the installed value for that box.
 
-A box you didn't change isn't copied into your tier, so it goes on following the tier it comes from. Only the tier you picked is written. The batch editor (for the fields it is told to set) and `@auto-get <item>` save the same way.
+A box you didn't change isn't copied into your tier, so it goes on following the tier it comes from.
+
+**Moving Use to another tier** and pressing OK saves the item at that tier as the window shows it, changed boxes or not. Every box whose shown value differs from what that tier would give otherwise is saved there, by the same rule: a box at its installed default, with nothing under it saying otherwise, isn't written. OK on the tier the window opened on, with nothing changed, saves nothing.
+
+**While the window is open,** another client or a party member's `@auto-get <item>` may change the same item. OK keeps their change for every box you didn't change. If you changed the same box, your value is saved. The window itself doesn't refresh to show their change.
+
+Only the tier you picked is written. The batch editor (for the fields it is told to set, at the tier it picks) and `@auto-get <item>` save the same way. The item record opened from the Item Finder or the Roomba Master List is the same window and saves the same way.
 
 An item saved by an earlier version holds every box at the tier it was saved at. A box you don't change there goes on hiding what the tiers under it say. Picking **Installed defaults** in Use clears it, but that resets the item everywhere: it removes your Global, realm and character edits for that item (the window asks first), not just the tier you were on.
 

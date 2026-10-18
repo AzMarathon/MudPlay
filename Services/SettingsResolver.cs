@@ -423,7 +423,10 @@ public sealed class SettingsResolver
         string path = AppPaths.OverrideFile(tier, scope, table, set, CharacterBbs(tier));
         // Read for a write: make sure it is the file as it stands.
         DropIfChangedOutside(path);
-        return GetCachedOverrideFile(path) ?? new();
+        // A copy to change: a dictionary in the cache is never changed once there
+        // (other threads read it without the lock); SaveOverrideFile puts the
+        // changed copy in its place, under the lock, once the file is written.
+        return GetCachedOverrideFile(path) is { } cached ? new(cached) : new();
     }
 
     private void SaveOverrideFile(

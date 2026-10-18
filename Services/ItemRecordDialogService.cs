@@ -122,6 +122,7 @@ public sealed class ItemRecordDialogService
         // Installed-defaults reset or the field-by-field save — shared with the
         // browser's Items tab.
         await GameDataOverrideApplier.ApplyItemAsync(
-            _resolver, _confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed);
+            _resolver, _confirm, result.WccNoStr, result.Tier, result.Overlay, seedDefaults, result.Changed,
+            result.MovedFrom);
     }
 }

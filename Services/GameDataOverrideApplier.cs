@@ -54,6 +54,12 @@ public static class GameDataOverrideApplier
     // An item record saved from the item editor or the batch editor: the
     // installed-defaults reset as above, otherwise ApplyItemAt over the fields the
     // user changed.
+    //
+    // openedAs is the record as the item editor opened on it, given when the user
+    // moved Use to another tier: OK then also saves at that tier every box whose
+    // shown value differs from what the tier would give otherwise (user,
+    // 2026-10-17), less any box another client or a remote command changed while
+    // the window was open, which the window shows stale.
     public static async Task<bool> ApplyItemAsync(
         SettingsResolver resolver,
         ConfirmService confirm,
@@ -61,13 +67,34 @@ public static class GameDataOverrideApplier
         SettingsTier tier,
         ItemOverlay wanted,
         ItemOverlay installedDefaults,
-        IReadOnlyCollection<string> fields)
+        IReadOnlyCollection<string> fields,
+        ItemOverlay? openedAs = null)
     {
         ArgumentNullException.ThrowIfNull(confirm);
         if (tier == SettingsTier.Defaults)
             return await ResetAsync(resolver, confirm, ItemsTable, recordId);
+        if (openedAs is not null)
+            fields = fields.Union(ShownFields(resolver, recordId, tier, wanted, installedDefaults, openedAs)).ToList();
         ApplyItemAt(resolver, recordId, tier, wanted, installedDefaults, fields);
         return true;
+    }
+
+    // The boxes whose shown value differs from what `tier` gives now (what lies
+    // below it with its own override on top), and that still resolve as they did
+    // when the window opened.
+    private static IEnumerable<string> ShownFields(
+        SettingsResolver resolver, string recordId, SettingsTier tier,
+        ItemOverlay wanted, ItemOverlay installedDefaults, ItemOverlay openedAs)
+    {
+        if (!resolver.CanWriteAt(tier)) tier = resolver.WritableTiers()[0];
+        JsonObject gives = resolver.ResolveGameDataBelow(ItemsTable, recordId, installedDefaults, tier);
+        foreach ((string field, JsonNode? value) in resolver.ReadGameDataAt(tier, ItemsTable, recordId) ?? new JsonObject())
+            gives[field] = value?.DeepClone();
+        JsonObject now = ToJson(resolver.ResolveGameData(ItemsTable, recordId, installedDefaults));
+        JsonObject opened = ToJson(openedAs);
+        foreach ((string field, JsonNode? value) in ToJson(wanted))
+            if (!SameValue(value, gives[field]) && SameValue(now[field], opened[field]))
+                yield return field;
     }
 
     // The fields whose value differs between two records of an item: what an edit

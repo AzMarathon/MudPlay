@@ -8,6 +8,7 @@ using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.ViewModels.GameData.Edit;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -434,6 +435,74 @@ public sealed class AutoGetItemRemoteTests : IDisposable
 
         Assert.Equal(Reply("black star key: auto-get on, max 2"), r.Ask1("@auto-get black star key on max 2"));
         Assert.Equal(SettingsTier.Defaults, r.TierOf(172));
+    }
+
+    // ----- An item editor open meanwhile ------------------------------------------
+
+    // The Game Data item editor as the Items tab opens it on the shield.
+    private static ItemEditDialogViewModel Editor(Rig r) => new(
+        wccNoStr: "101", mdbName: "large shield", existing: r.Overlay(101),
+        currentTier: r.TierOf(101), mdbInfo: Array.Empty<KeyValuePair<string, string>>(),
+        shops: Array.Empty<ShopSaleRow>(),
+        writableTiers: [SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global]);
+
+    private static async Task Ok(Rig r, ItemEditDialogViewModel vm)
+    {
+        ItemEditResult? result = null;
+        vm.CloseRequested += x => result = x;
+        vm.SaveCommand.Execute(null);
+        await GameDataOverrideApplier.ApplyItemAsync(r.Resolver, new ConfirmService(new DialogService()),
+            result!.WccNoStr, result.Tier, result.Overlay, r.Seed.GetOverlay(101), result.Changed, result.MovedFrom);
+    }
+
+    // A box changed in the editor and another changed by @auto-get while it was
+    // open: OK keeps both (user, 2026-10-17).
+    [Fact]
+    public async Task AnOpenEditorsOk_KeepsARemoteChangeMadeWhileItWasOpen()
+    {
+        using Rig r = Build();
+        ItemEditDialogViewModel vm = Editor(r);
+        vm.AutoStash = true;
+
+        r.Ask("@auto-get large shield on max 2");
+        await Ok(r, vm);
+
+        ItemOverlay now = r.Overlay(101);
+        Assert.True(now.AutoStash);
+        Assert.True(now.AutoCollect);
+        Assert.Equal("2", now.MaxToGet);
+    }
+
+    // The same with Use moved to the character tier: the remote change isn't
+    // copied over with the stale value the window shows.
+    [Fact]
+    public async Task AnOpenEditorMovedToAnotherTier_KeepsARemoteChangeMadeWhileItWasOpen()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Items", "101", new Dictionary<string, object> { ["AutoStash"] = true });
+        ItemEditDialogViewModel vm = Editor(r);
+        Assert.Equal(SettingsTier.Global, vm.UseTier);
+        vm.UseTier = SettingsTier.Character;
+
+        r.Ask("@auto-get large shield max 2");
+        await Ok(r, vm);
+
+        Assert.Equal("2", r.Overlay(101).MaxToGet);
+        Assert.True(r.Overlay(101).AutoStash);
+    }
+
+    // The same box changed in both: the editor's OK wins.
+    [Fact]
+    public async Task TheSameBoxChangedInBoth_TheEditorWins()
+    {
+        using Rig r = Build();
+        ItemEditDialogViewModel vm = Editor(r);
+        vm.MaxToGet = "5";
+
+        r.Ask("@auto-get large shield max 2");
+        await Ok(r, vm);
+
+        Assert.Equal("5", r.Overlay(101).MaxToGet);
     }
 
     // ----- Names -------------------------------------------------------------------
