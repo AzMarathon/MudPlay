@@ -333,8 +333,8 @@ public sealed class HealthManager : IDisposable
     //     engine is active — flee then no-ops, since flee-if-below only fires
     //     while a movement engine is running.
     //   getLastSentDirection — most recent outbound direction, inverted for the
-    //     Backward flee fallback when no reverse path can be computed. Typically
-    //     wired to the last entry on EngineRecoveryGate.ExecutedSinceAnchor.
+    //     Backward flee fallback when no reverse path can be computed. Wired to
+    //     EngineRecoveryGate.LastRouteStep, the route's last step, never a flee's.
     //   findReversePath — (from, to) → the BFS direction list from one room to
     //     another, or null when unreachable. The Backward flee calls this with
     //     (current room, engine JourneyOrigin) to lay the reverse trail. Wired to

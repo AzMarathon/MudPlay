@@ -4930,7 +4930,9 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
       limiter, it goes out once more. With no answer in `EngineRecoveryGate.ReverseLandingTimeout` (four
       expected hops plus 5 s, never under 20 s, past the slowest hop in *Per-hop movement speed* with lag),
       counted from when the move is chosen, the walk-back ends the same way. Once ended, a display that comes
-      while that last `rm` or `sys st` is out is no landing of the walk-back's.
+      while that last `rm` or `sys st` is out is no landing of the walk-back's. If the map becomes sure of its
+      room meanwhile, the engine resumes there: at once for a room only one place fits, otherwise when that
+      locate fails (`TryTrustConfirmedTracker`), rather than Lost.
   - **Client policy** *(user, 2026-10-17)*: a room the tier-3 walk-back settles on is a guess too.
     `EngineRecoveryGate.FinishTier3Success` locates it with `LocateDeduced`. The walker and the loop runner
     resume from the key either way, and the bug report's *Recovery anchor* is the gate's own walk-back anchor.
@@ -4975,7 +4977,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - **Why the save saves the room held, not the trail to it:** in rooms that read alike no display
       disagrees with the start, so a replay would never run, and the relog would sit at the start.
     - **A start no longer in the active game data** drops the trail (logged), and the relog lands on
-      `LastKnownRoom`.
+      `LastKnownRoom`. With neither room in the active game data (another set, a graph not yet loaded),
+      the relog holds no room and the profile keeps its trail for a load that can place it.
     - (Before 2026-10-17, a relog after such a settling replayed the new steps from the old anchor, as if
       they had been taken there.)
 

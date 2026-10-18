@@ -1618,6 +1618,45 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal("idle", rig.Gate.Tier3Status);
     }
 
+    // The walk-back ended on a refusal and the last `rm` is out; meanwhile the map
+    // becomes sure of its room. A room only one place fits resumes the engine there
+    // at once; one worked out (its trail replayed) is resumed from when that `rm`
+    // fails. Either way the client isn't declared Lost while the map is sure.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Tier3_TheMapSureWhileTheLastRmIsOut_ResumesRatherThanLost(bool roomOnlyOnePlaceFits)
+    {
+        using TrackerWireRig rig = new(TwinCorridors(cellarWestOf: 6)) { Position = Gate };
+        rig.Gate.TryResyncForced = reason => reason.StartsWith("last resort");
+        PlanEngine engine = WalkBackInHalls(rig);
+        rig.NextAnswers.Enqueue("There is no exit in that direction!");
+        rig.Pump();
+        Assert.True(rig.Gate.AwaitingAuthoritativeResync);
+        RoomKey? resumed = null;
+        engine.Resumed = key => resumed = key;
+
+        if (roomOnlyOnePlaceFits)
+        {
+            rig.Position = Gate;
+            rig.ShowRoom();
+            Assert.Equal(Gate, resumed);
+            Assert.False(rig.Gate.AwaitingAuthoritativeResync);
+        }
+        else
+        {
+            rig.Do("w");
+            rig.Do("w");   // the map replays its trail and settles where the walk went
+            AssertLocatedAt(rig, CorridorA(17));
+            Assert.Null(resumed);
+        }
+        rig.Gate.OnAuthoritativeResyncFailed();
+
+        Assert.Empty(rig.Failures);
+        Assert.Empty(engine.Aborts);
+        Assert.Equal(roomOnlyOnePlaceFits ? Gate : CorridorA(17), resumed);
+    }
+
     // A reverse move held for the tracker to read a display the tracker never reads
     // (a RoomParsed listener ahead of it threw): the wait for its landing still runs
     // out and ends the walk-back.

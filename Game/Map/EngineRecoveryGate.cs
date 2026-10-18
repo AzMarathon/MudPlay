@@ -561,6 +561,12 @@ public sealed class EngineRecoveryGate
                 return;
             }
 
+            // A walk-back that gave up is waiting on the last `rm` or `sys st` before
+            // Lost: a room only one place fits answers it already.
+            if (_awaitingAuthoritative && _resyncStage == ResyncStage.Terminal
+                && TryTrustConfirmedTracker("a room only one place fits, seen while the last-resort locate was out"))
+                return;
+
             if (CurrentTier != TierLevel.Tier1) SetTier(TierLevel.Tier1, "1-of-1 anchor recovered");
             return;
         }
@@ -755,9 +761,13 @@ public sealed class EngineRecoveryGate
             // The last-resort `rm` before the "Lost" dialog also failed (no reply,
             // or a room the active graph doesn't contain) — now it's genuinely
             // Lost. Fall through to the real abort with the reason we deferred.
+            // The map may have become sure of its room meanwhile (a display, a replay
+            // of its trail): that room is where to resume, not Lost.
+            string lostDetail = _pendingLostDetail ?? "rm resync failed";
+            if (TryTrustConfirmedTracker("the last-resort locate failed, but the map is sure of its room")) return;
             _log?.Log(LogSeverity.Warn, LogSource,
                 "terminal rm resync failed; declaring Lost");
-            DeclareLost(_pendingLostDetail ?? "rm resync failed");
+            DeclareLost(lostDetail);
             return;
         }
 
