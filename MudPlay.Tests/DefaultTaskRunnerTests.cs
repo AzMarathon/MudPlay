@@ -68,7 +68,7 @@ public sealed class DefaultTaskRunnerTests
         ProfileService profile = TestProfiles.Service();
 
         DefaultTaskRunner runner = new(
-            prompt, tracker, profile, loops, lairs, loopRunner, autoLair, partyState, party);
+            prompt, tracker, profile, loops, lairs, loopRunner, autoLair, partyState, party, postToUi: a => a());
 
         return new Harness
         {

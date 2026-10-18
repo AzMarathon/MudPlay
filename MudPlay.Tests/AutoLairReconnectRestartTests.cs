@@ -1,0 +1,552 @@
+using System.Collections.Generic;
+using System.Linq;
+using MudPlay.Game;
+using MudPlay.Game.Map;
+using MudPlay.Game.Remote;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+// An Auto-Lair run cut off by a dropped link, restarted after the reconnect, on the
+// wire: the game's chunks go through the prompt scanner first and then the terminal,
+// as MainWindowViewModel feeds them, so the reconnect's prompt is read ahead of the
+// room display that came with it.
+//
+//   1/3 Den (lair)             1/7 Passage   1/8 Passage
+//     |N                         |N            |N
+//   1/2 Yard                     |             |
+//     |N                         |             |
+//   1/1 Gate ─E─ 1/4 Hall ───────┘ ─E─ 1/5 Bend ┘ ─E─ 1/6 Cave (lair)
+//
+// The two passages look the same. Den is waited for from Yard, Cave from Bend.
+public sealed class AutoLairReconnectRestartTests
+{
+    private static readonly RoomKey Gate = new(1, 1);
+    private static readonly RoomKey Yard = new(1, 2);
+    private static readonly RoomKey Den = new(1, 3);
+    private static readonly RoomKey Hall = new(1, 4);
+    private static readonly RoomKey Bend = new(1, 5);
+    private static readonly RoomKey Cave = new(1, 6);
+    private static readonly RoomKey Passage = new(1, 7);
+
+    private const int RespawnSeconds = 600;
+    private const string Setup = "Two dens";
+
+    private static readonly string Rooms = TrackerWireRig.Rooms(new[]
+    {
+        TrackerWireRig.Room(1, 1, "Gate", ("N", "1/2"), ("E", "1/4")),
+        TrackerWireRig.Room(1, 2, "Yard", ("S", "1/1"), ("N", "1/3")),
+        LairRoom(TrackerWireRig.Room(1, 3, "Den", ("S", "1/2")), "1/3"),
+        TrackerWireRig.Room(1, 4, "Hall", ("W", "1/1"), ("E", "1/5"), ("N", "1/7")),
+        TrackerWireRig.Room(1, 5, "Bend", ("W", "1/4"), ("E", "1/6"), ("N", "1/8")),
+        LairRoom(TrackerWireRig.Room(1, 6, "Cave", ("W", "1/5")), "1/6"),
+        TrackerWireRig.Room(1, 7, "Passage", ("S", "1/4")),
+        TrackerWireRig.Room(1, 8, "Passage", ("S", "1/5")),
+    });
+
+    // A room of the rig's with a lair group in it, as the game data tags one.
+    private static string LairRoom(string room, string key) =>
+        room.Replace("\"Lair\":\"\"", $"\"Lair\":\"[1-1-1][1]Group(lair): {key}\"");
+
+    private sealed class World : IDisposable
+    {
+        public TrackerWireRig Rig { get; }
+        public LairTimerStore Timers { get; }
+        public ManualTimers Ticks { get; } = new();
+        public AutoLairManager Lair { get; }
+        public LoopRunner Runner { get; }
+        public MovementController Controller { get; }
+        // The terminal notices the restarts give.
+        public List<string> Notices { get; } = new();
+        // What MasterSwitchOff reads, for a test that sets it.
+        public bool SwitchOff { get; set; } = true;
+        private readonly List<IDisposable> _dispose = new();
+
+        // Logged in, standing in `at`, with Den and Cave marked. paradigm: a Paradigm
+        // realm, whose `rm` the recovery gate's one-shot locate asks, wired as
+        // AppServices wires it.
+        public World(RoomKey at, bool paradigm = false)
+        {
+            Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:", paradigm: paradigm) { Position = at };
+            Timers = new LairTimerStore(Rig.Cache, Rig.Graph, Rig.Tracker);
+            Lair = new AutoLairManager(Rig.Walker, Rig.Tracker, Rig.Graph, new BfsMapper(Rig.Graph), Timers, Rig.Log,
+                Rig.Coordinator, schedule: Ticks.Arm, promptScanner: Rig.Prompts, postToUi: Rig.Post, recovery: Rig.Gate);
+            Runner = new LoopRunner(Rig.Tracker, Rig.Coordinator, Rig.Prompts, Rig.Log, Rig.Graph, Rig.Gate,
+                new BfsMapper(Rig.Graph), Rig.Walker, postToUi: Rig.Post, schedule: Ticks.Arm);
+            Runner.SetWireSender(Rig.Send);
+            Controller = new MovementController(Rig.Walker, Runner, Lair, Rig.Coordinator, Rig.Log);
+            _dispose.Add(Controller);
+            Lair.SetReconnectNotice(Notices.Add);
+            Runner.SetReconnectNotice(Notices.Add);
+            ParadigmPositionResolver resolver = new(Rig.Router, Rig.Tracker, Rig.Gate, Rig.Cache, Rig.Log, schedule: Ticks.Arm);
+            resolver.SetWireSender(Rig.Send);
+            Rig.Gate.TryResyncOnce = resolver.RequestResyncOnce;
+            _dispose.Add(resolver);
+            Rig.ShowRoom();
+            Assert.Equal(at, Rig.Believed);
+            Lair.Mark(Den, RespawnSeconds);
+            Lair.Mark(Cave, RespawnSeconds);
+        }
+
+        public PartyReformCoordinator? Reform { get; private set; }
+
+        // A leader's party, its reform after a reconnect and the hold a dropped
+        // member puts on movement, wired as AppServices wires them.
+        public void LeadParty(string follower)
+        {
+            PartyManager party = new(Rig.Router, new PartyState(), Rig.Log);
+            Reform = new PartyReformCoordinator(Rig.Router, party, log: Rig.Log);
+            PartyDisconnectMovementGate hold = new(party, Rig.Coordinator, Rig.Log, schedule: Ticks.Arm);
+            _dispose.AddRange(new IDisposable[] { hold, Reform, party });
+            PartyReformCoordinator reform = Reform;
+            Lair.SetReconnectReformProbe(() => reform.PendingReform.Count > 0);
+            Rig.Show($"{follower} started to follow you.");
+        }
+
+        public void Start() => Assert.True(Lair.Start(Setup));
+
+        // The link drops, in the order MainWindowViewModel's handler tells the pieces.
+        public void Drop()
+        {
+            Reform?.NoteDisconnected();
+            Runner.NotifyDisconnected();
+            Lair.NotifyDisconnected();
+            Rig.Tracker.NoteConnectionLost();
+            Rig.DropLink();
+        }
+
+        // Back in the game: the realm shows the room `at` and its prompt, in one chunk.
+        public void Reconnect(RoomKey at)
+        {
+            Reform?.Arm();
+            Rig.Position = at;
+            Rig.ShowRoom();
+        }
+
+        public int Mark() => Rig.Sent.Count;
+        public List<string> SentSince(int mark) => Rig.Sent.Skip(mark).ToList();
+
+        public void Dispose()
+        {
+            foreach (IDisposable d in Enumerable.Reverse(_dispose)) d.Dispose();
+            Lair.Dispose();
+            Timers.Dispose();
+            Rig.Dispose();
+        }
+    }
+
+    // A drop mid-run stops the run and sets it aside; the reconnect restarts it from
+    // the room it shows, with nothing planned from the room before the drop.
+    [Fact]
+    public void DropMidRun_ReconnectElsewhere_RestartsFromTheShownRoom()
+    {
+        using World w = new(Gate);
+        w.Start();
+        Assert.Equal(Yard, w.Lair.CurrentWaitRoom);              // Den's wait room, one step north
+        Assert.Equal("n", w.Rig.Sent.Last());
+
+        w.Drop();
+        Assert.False(w.Lair.IsActive);
+        Assert.Equal($"Auto-Lair '{Setup}'", w.Lair.PendingReconnectResume);
+        int mark = w.Mark();
+
+        w.Reconnect(Bend);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+        Assert.Equal(Cave, w.Lair.CurrentTarget);                 // Cave is waited for from here
+        Assert.DoesNotContain("n", w.SentSince(mark));
+        Assert.Equal(Setup, w.Lair.LastRunLairName);
+    }
+
+    // A run an errand had stopped (a light buy) is handed over with the map sure of
+    // the room it dropped in; the reconnect puts the character elsewhere, and the
+    // run plans from there, not from the room before the drop.
+    [Fact]
+    public void ARunHandedOverByALightBuy_RestartsFromTheShownRoom()
+    {
+        using World w = new(Yard);
+        w.Start();
+        w.Lair.Stop("a light buy", willResume: true);
+        w.Drop();
+        w.Lair.ResumeOnReconnect("a light buy the connection cut off");
+        int mark = w.Mark();
+
+        w.Reconnect(Bend);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Equal(Cave, w.Lair.CurrentTarget);                 // from Yard it would be Den
+        Assert.DoesNotContain("n", w.SentSince(mark));
+    }
+
+    // Back in the same room, the run takes up the same leg again.
+    [Fact]
+    public void DropMidRun_ReconnectInTheSameRoom_RestartsFromIt()
+    {
+        using World w = new(Gate);
+        w.Start();
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Gate);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+        w.Rig.Pump(limit: 1);
+        Assert.Equal(Yard, w.Rig.Believed);
+    }
+
+    // A lair entered before the drop keeps its timer through the restart, a nightly
+    // cleanup between the two included: the lair clock runs on wall time, and the run
+    // is the same one. On neither realm does the cleanup refill the lairs (user,
+    // 2026-10-17).
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LairTimersOfTheRun_SurviveTheRestart_ThroughANightlyCleanup(bool paradigm)
+    {
+        using World w = new(Yard, paradigm);
+        w.Start();
+        Assert.Equal(Den, w.Lair.CurrentTarget);
+        w.Ticks.RunAll();                                         // the entry is due: step in
+        w.Rig.Pump(limit: 1);
+        Assert.Equal(Den, w.Rig.Believed);
+        DateTimeOffset? denReady = w.Timers.NextReadyAt(Den, RespawnSeconds);
+        Assert.NotNull(denReady);
+        w.Rig.Show("The system is shutting down in 2 minutes for maintenance.");
+
+        w.Drop();
+        w.Reconnect(Yard);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Equal(denReady, w.Timers.NextReadyAt(Den, RespawnSeconds));
+        Assert.Equal(Cave, w.Lair.CurrentTarget);                 // Den isn't due again yet
+    }
+
+    // The reconnect shows a room the map can't tell from another: nothing restarts
+    // until the game, asked where we are (`rm`), names the room.
+    [Fact]
+    public void ReconnectWhereTheTrackerIsUnsure_AsksTheGameAndRestartsFromItsAnswer()
+    {
+        using World w = new(Gate, paradigm: true);
+        w.Start();
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Passage);
+
+        Assert.NotEqual(RoomConfidence.Confirmed, w.Rig.Tracker.State.Confidence);
+        Assert.False(w.Lair.IsActive);
+        Assert.True(w.Lair.ReconnectResumeLocating);
+        Assert.Equal(new[] { "rm" }, w.SentSince(mark));
+
+        w.Rig.NextAnswers.Enqueue("Location: 1,7");
+        w.Rig.Pump(limit: 1);
+
+        Assert.Equal(Passage, w.Rig.Believed);
+        Assert.True(w.Lair.IsActive);
+        Assert.False(w.Lair.ReconnectResumeLocating);
+        Assert.Null(w.Lair.PendingReconnectResume);
+    }
+
+    // The game never answers: the run isn't left waiting, nor ended. It starts from
+    // the room the map believes, as it did before the wait, and the terminal says so.
+    [Fact]
+    public void ReconnectWhereTheTrackerIsUnsure_TheLocateFails_StartsFromTheBelievedRoom()
+    {
+        using World w = new(Gate, paradigm: true);
+        w.Start();
+        w.Drop();
+        w.Reconnect(Passage);
+        Assert.True(w.Lair.ReconnectResumeLocating);
+
+        w.Rig.Pump(limit: 1);                                 // `rm` answered with nothing it reads
+        w.Ticks.Advance(TimeSpan.FromSeconds(4));             // the resolver's reply timeout
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+        Assert.Contains(w.Notices, n => n.StartsWith($"[Auto-Lair '{Setup}' started from 1/1 after the reconnect, though the map isn't sure", StringComparison.Ordinal));
+    }
+
+    // The user's Stop while the restart waits on the answer calls it off.
+    [Fact]
+    public void RestartWaitingForTheRoom_IsDroppedByAStop()
+    {
+        using World w = new(Gate, paradigm: true);
+        w.Start();
+        w.Drop();
+        w.Reconnect(Passage);
+        Assert.True(w.Lair.ReconnectResumeLocating);
+
+        Assert.True(w.Controller.StopByUser());              // the toolbar's Stop
+        w.Rig.NextAnswers.Enqueue("Location: 1,7");
+        w.Rig.Pump(limit: 1);
+
+        Assert.Equal(Passage, w.Rig.Believed);
+        Assert.False(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+    }
+
+    // With the master switch off the run waits for it, and restarts from the room
+    // the reconnect showed when it is back on.
+    [Fact]
+    public void ReconnectWithTheMasterSwitchOff_RestartsWhenItIsBackOn()
+    {
+        using World w = new(Gate);
+        bool off = true;
+        w.Lair.MasterSwitchOff = () => off;
+        w.Start();
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Bend);
+
+        Assert.False(w.Lair.IsActive);
+        Assert.True(w.Lair.ReconnectResumeHeldForMasterSwitch);
+        Assert.Empty(w.SentSince(mark));
+
+        off = false;
+        w.Lair.ResumeAfterMasterSwitch();
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Equal(Cave, w.Lair.CurrentTarget);
+    }
+
+    // A death found out at the login: the run set aside at the drop is not restarted.
+    [Fact]
+    public void ADeathFoundOutAtTheLogin_DropsTheRunSetAside()
+    {
+        using World w = new(Gate);
+        w.Rig.Tracker.Hydrate(new MudPlay.Models.Profile.CharacterProfile());
+        w.Rig.Tracker.SetLocated(Gate);
+        w.Start();
+        w.Drop();
+
+        w.Rig.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null));
+        w.Reconnect(Gate);
+
+        Assert.False(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+    }
+
+    // A run the user had paused comes back paused, under the user gate, and takes no
+    // step until Resume.
+    [Fact]
+    public void ARunPausedByTheUser_ComesBackPaused()
+    {
+        using World w = new(Gate);
+        w.Start();
+        w.Lair.Pause();
+        w.Drop();
+        Assert.False(w.Lair.IsActive);
+        Assert.Contains(MovementCoordinator.UserGate, w.Rig.Coordinator.AssertedGates);   // the pause outlasts the drop
+        int mark = w.Mark();
+
+        w.Reconnect(Gate);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.True(w.Lair.IsPaused);
+        Assert.Contains(MovementCoordinator.UserGate, w.Rig.Coordinator.AssertedGates);
+        Assert.Empty(w.SentSince(mark));
+
+        w.Lair.Resume();
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+    }
+
+    // A Resume pressed while the link is down counts: the run comes back running.
+    [Fact]
+    public void AResumePressedDuringTheOutage_TheRunComesBackRunning()
+    {
+        using World w = new(Gate);
+        w.Start();
+        w.Lair.Pause();
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Controller.Resume();
+        w.Reconnect(Gate);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.False(w.Lair.IsPaused);
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+    }
+
+    // ----- a run started while the restart is still owed -----------------------------
+
+    // The lair's restart held in the game by the master switch, with Den's wait
+    // room shown: the restart is owed while the user, an event or a command starts
+    // something.
+    private static World HeldInTheGame(bool forTheLoop = false)
+    {
+        World w = new(Gate);
+        if (forTheLoop)
+        {
+            w.Runner.MasterSwitchOff = () => w.SwitchOff;
+            Assert.True(w.Runner.Start(new Loop("gy", new[] { Gate, Yard })));
+        }
+        else
+        {
+            w.Lair.MasterSwitchOff = () => w.SwitchOff;
+            w.Start();
+        }
+        w.Drop();
+        w.Reconnect(Gate);
+        Assert.True(forTheLoop ? w.Runner.ReconnectResumeHeldForMasterSwitch : w.Lair.ReconnectResumeHeldForMasterSwitch);
+        return w;
+    }
+
+    // A loop started meanwhile, whoever started it (the user, an event, a remote
+    // `@loop`, the Navigation Manager's Go: each is LoopRunner.Start), is the run now.
+    // The lair's restart is dropped at once, with a notice, and doesn't come back
+    // when that loop is over.
+    [Fact]
+    public void ALoopStartedMeanwhile_DropsTheLairsRestart()
+    {
+        using World w = HeldInTheGame();
+
+        Assert.True(w.Runner.Start(new Loop("gy", new[] { Gate, Yard })));
+
+        Assert.Null(w.Lair.PendingReconnectResume);
+        Assert.Contains($"[Auto-Lair '{Setup}' not restarted after the reconnect: loop 'gy' was started]", w.Notices);
+        w.Runner.Stop("the event's loop is over");
+        w.SwitchOff = false;
+        w.Lair.ResumeAfterMasterSwitch();
+        w.Rig.Show("Somebody waves.");
+        Assert.False(w.Lair.IsActive);
+    }
+
+    // The other way round: an Auto-Lair run started meanwhile drops the loop's.
+    [Fact]
+    public void AnAutoLairRunStartedMeanwhile_DropsTheLoopsRestart()
+    {
+        using World w = HeldInTheGame(forTheLoop: true);
+
+        w.Start();
+
+        Assert.Null(w.Runner.PendingReconnectResumeName);
+        Assert.Contains("[Loop 'gy' not restarted after the reconnect: Auto-Lair was started]", w.Notices);
+        w.Lair.Stop();
+        w.SwitchOff = false;
+        w.Runner.ResumeAfterMasterSwitch();
+        Assert.Equal(LoopState.Idle, w.Runner.State);
+    }
+
+    // A walk the user picked a route for drops it too.
+    [Fact]
+    public void AWalkTheUserStarts_DropsTheLairsRestart()
+    {
+        using World w = HeldInTheGame();
+
+        Assert.True(w.Rig.Walker.WalkTo(Bend, preferTeleportFree: true));
+
+        Assert.Null(w.Lair.PendingReconnectResume);
+        Assert.Contains($"[Auto-Lair '{Setup}' not restarted after the reconnect: a walk you started was started]", w.Notices);
+    }
+
+    // So does a leg of a walk the user started: a side trip, or the walk back an
+    // errand hands over, goes on the user's journey.
+    [Fact]
+    public void ALegOfTheUsersJourney_DropsTheLairsRestart()
+    {
+        using World w = HeldInTheGame();
+
+        w.Rig.Walker.BeginJourney(new WalkJourney(Bend, PreferTeleportFree: true));
+        Assert.True(w.Rig.Walker.WalkTo(Hall, supersedeSilently: true));
+
+        Assert.Null(w.Lair.PendingReconnectResume);
+    }
+
+    // A walk the client started by itself (an errand's) is not the user's choice:
+    // the restart waits for it, says so, and comes once it is over. The walk is held
+    // here, so the map is sure of the room: it is the walk, not the room, that waits.
+    [Fact]
+    public void AWalkStartedOnItsOwn_MakesTheLairsRestartWait_ThenItComes()
+    {
+        using World w = HeldInTheGame();
+        w.Rig.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        Assert.True(w.Rig.Walker.WalkTo(Hall));
+        Assert.NotEqual(WalkState.Idle, w.Rig.Walker.State);
+        Assert.Equal(RoomConfidence.Confirmed, w.Rig.Tracker.State.Confidence);
+
+        w.SwitchOff = false;
+        w.Lair.ResumeAfterMasterSwitch();
+
+        Assert.False(w.Lair.IsActive);
+        Assert.Equal("the walk to 1/4", w.Lair.ReconnectResumeWaitsFor);
+        Assert.Contains($"[Auto-Lair '{Setup}' restarts after the walk to 1/4 ends]", w.Notices);
+
+        w.Rig.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+        w.Rig.Pump(limit: 1);                                     // the walk lands; its prompt asks again
+
+        Assert.Equal(Hall, w.Rig.Believed);
+        Assert.True(w.Lair.IsActive);
+        Assert.Null(w.Lair.ReconnectResumeWaitsFor);
+    }
+
+    // Stop while the restart waits behind such a walk ends both: nothing restarts.
+    [Fact]
+    public void Stop_WhileTheRestartWaitsBehindAWalk_NothingRestarts()
+    {
+        using World w = HeldInTheGame();
+        w.Rig.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        Assert.True(w.Rig.Walker.WalkTo(Hall));
+        w.SwitchOff = false;
+        w.Lair.ResumeAfterMasterSwitch();
+        Assert.NotNull(w.Lair.ReconnectResumeWaitsFor);
+
+        Assert.True(w.Controller.StopByUser());
+        w.Rig.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+        w.Rig.Show("Somebody waves.");
+
+        Assert.Equal(WalkState.Idle, w.Rig.Walker.State);
+        Assert.False(w.Lair.IsActive);
+        Assert.Null(w.Lair.PendingReconnectResume);
+    }
+
+    // A leader's reconnect: the reform reads the display that came with the prompt,
+    // so its hold is up when the run restarts, and no step goes out until the
+    // follower is back.
+    [Fact]
+    public void ReconnectWithAPartyReform_TheRunRestartsBehindTheReformsHold()
+    {
+        using World w = new(Gate);
+        w.LeadParty("Tank");
+        w.Start();
+        w.Drop();
+        int mark = w.Mark();
+
+        w.Reconnect(Gate);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.Empty(w.SentSince(mark));
+        Assert.Contains(MovementCoordinator.MemberDisconnectGate, w.Rig.Coordinator.AssertedGates);
+        Assert.False(w.Lair.ReconnectResumeHeldForReform);
+
+        w.Rig.Show("Tank started to follow you.");
+
+        Assert.Equal(new[] { "n" }, w.SentSince(mark));
+    }
+
+    // A room too dark to show the reform anything: the run restarts behind the
+    // reform hold of its own.
+    [Fact]
+    public void ReconnectIntoADarkRoomWithAPartyReform_TheRunIsHeldForTheReform()
+    {
+        using World w = new(Gate);
+        w.LeadParty("Tank");
+        w.Start();
+        w.Lair.Stop("a light buy", willResume: true);
+        w.Lair.ResumeOnReconnect("a light buy the connection cut off");
+        w.Drop();
+        w.Rig.DarkRooms.Add(Gate);
+        int mark = w.Mark();
+
+        w.Reconnect(Gate);
+
+        Assert.True(w.Lair.IsActive);
+        Assert.True(w.Lair.ReconnectResumeHeldForReform);
+        Assert.Contains(MovementCoordinator.ReconnectReformGate, w.Rig.Coordinator.AssertedGates);
+        Assert.Empty(w.SentSince(mark));
+    }
+}

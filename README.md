@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.28**
+> **Version 3.184.32**
 > - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
 > - Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
 > - Lost-recovery walk-back waits for the map to read each room before the next move back, and stops cleanly when the game refuses or never answers one

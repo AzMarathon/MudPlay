@@ -2070,15 +2070,17 @@ public static class BugReportBuilder
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
         // A loop set aside by a dropped link restarts on the first prompt back in the
-        // game, held until the party reform has seen the room when one is pending: a
-        // "walked off without the party after a relog" report needs which it was.
-        Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
-            ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
-                ? $"'{pendingLoop}' — when the master switch is back on"
-                : $"'{pendingLoop}' — on the next in-game prompt"
-            : svc.LoopRunner.ReconnectResumeHeldForReform
-                ? "restarted — held until the party reform has seen the room"
-                : "(none pending)");
+        // game once the room is known, held until the party reform has seen the room
+        // when one is pending: a "walked off without the party after a relog" or
+        // "stepped out of the wrong room" report needs which it was.
+        Kv(sb, "Loop restart after reconnect", DescribeReconnectRestart(
+            svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop ? $"'{pendingLoop}'" : null,
+            svc.LoopRunner.ReconnectResumeHeldForMasterSwitch, svc.LoopRunner.ReconnectResumeLocating,
+            svc.LoopRunner.ReconnectResumeAwaitsRoom, svc.LoopRunner.ReconnectResumeWaitsFor, svc.LoopRunner.ReconnectResumeHeldForReform));
+        Kv(sb, "Auto-Lair restart after reconnect", DescribeReconnectRestart(
+            svc.AutoLair.PendingReconnectResume,
+            svc.AutoLair.ReconnectResumeHeldForMasterSwitch, svc.AutoLair.ReconnectResumeLocating,
+            svc.AutoLair.ReconnectResumeAwaitsRoom, svc.AutoLair.ReconnectResumeWaitsFor, svc.AutoLair.ReconnectResumeHeldForReform));
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
@@ -2223,6 +2225,10 @@ public static class BugReportBuilder
         Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
         Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
         Kv(sb, "Default task stood down for a hang-up death", svc.DefaultTaskRunner.StoodDownForDeath.ToString());
+        // The start at a login waits for the room the login shows, and asks the game
+        // when the map can't tell it.
+        Kv(sb, "Default task waiting for the room", svc.DefaultTaskRunner.LocatingRoom ? "yes — asked the game where we are (rm / sys st)"
+            : svc.DefaultTaskRunner.AwaitsRoom ? "yes — until the map is sure of it" : "no");
 
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it
@@ -3359,4 +3365,15 @@ public static class BugReportBuilder
         try { return read(); }
         catch { return fallback; }
     }
+
+    // A run waiting to restart after a reconnect (pending: how it is named, or null),
+    // and what it waits on.
+    private static string DescribeReconnectRestart(string? pending, bool heldForSwitch, bool locating, bool awaitsRoom,
+        string? waitsFor, bool heldForReform) => pending is not null
+        ? waitsFor is not null ? $"{pending} — waiting for {waitsFor} (a walk the client started) to end"
+            : heldForSwitch ? $"{pending} — when the master switch is back on"
+            : locating ? $"{pending} — asked the game where we are (rm / sys st), restarts on its answer"
+            : awaitsRoom ? $"{pending} — once the room is known (next prompt or a confirmed room)"
+            : $"{pending} — on the next in-game prompt, once its room display is read"
+        : heldForReform ? "restarted — held until the party reform has seen the room" : "(none pending)";
 }

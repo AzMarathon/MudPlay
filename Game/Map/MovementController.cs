@@ -304,7 +304,7 @@ public sealed class MovementController : IDisposable
 
         _walker.Event += OnWalkerEvent;
         _loops.Event += OnLoopEvent;
-        _autoLair.ActiveChanged += OnAutoLairBool;
+        _autoLair.ActiveChanged += OnAutoLairActiveChanged;
         _autoLair.PausedChanged += OnAutoLairBool;
         // GatesChanged, not PauseStateChanged: the coarse signal stays silent
         // when a gate stacks on an already-paused engine (e.g. the user pressing
@@ -313,6 +313,30 @@ public sealed class MovementController : IDisposable
         // Resume button never re-enables. The fine-grained signal fires on
         // every assert/clear and is a superset of PauseStateChanged.
         _coordinator.GatesChanged += OnCoordinatorGatesChanged;
+
+        // A restart owed after a reconnect and a run started meanwhile: a loop or an
+        // Auto-Lair run, whoever started it (the user, an event, a remote command, the
+        // Default task), and a walk the user started, are the run now and drop the
+        // restart; a walk the client started by itself makes it wait.
+        _loops.SetAutomaticWalkProbe(AutomaticWalkGoing);
+        _autoLair.SetAutomaticWalkProbe(AutomaticWalkGoing);
+    }
+
+    // A walk the user started: its journey states a route preference or a picked
+    // route (a route card's commit, the approach of a loop the user started), and so
+    // do its side trips and return legs. A walk nobody chose a route for is the
+    // client's own (an errand's, a flee's).
+    private bool UsersWalk => _walker.Journey is { } journey && (journey.PreferTeleportFree is not null || journey.PickedRoute);
+
+    private string? AutomaticWalkGoing() =>
+        _walker.State != WalkState.Idle && !UsersWalk && _loops.State == LoopState.Idle && !_autoLair.IsActive
+            ? _walker.Destination is { } to ? $"the walk to {to}" : "a walk"
+            : null;
+
+    private void SupersedeReconnectRestarts(string by)
+    {
+        _loops.SupersedeReconnectResume(by);
+        _autoLair.SupersedeReconnectResume(by);
     }
 
     // Coalesced run-state across all three engines. Priority mirrors
@@ -419,7 +443,8 @@ public sealed class MovementController : IDisposable
         Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop(reason);
         if (_loops.State != LoopState.Idle) _loops.Stop(reason);
-        _loops.DropResumeHeldForMasterSwitch(reason);
+        _loops.DropHeldReconnectResume(reason);
+        _autoLair.DropHeldReconnectResume(reason);
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
         _walker.Stop(reason);
@@ -501,6 +526,7 @@ public sealed class MovementController : IDisposable
         try { Stop(reason); }
         finally { GameDataChangeStop = null; }
         _loops.ClearPendingReconnectResume();
+        _autoLair.ClearPendingReconnectResume();
         _loops.Unstage();
 
         if (stopped.Count == 0 && dropped.Count == 0) return null;
@@ -523,6 +549,7 @@ public sealed class MovementController : IDisposable
     {
         List<string> dropped = HeldLoops();
         _loops.ClearPendingReconnectResume();
+        _autoLair.ClearPendingReconnectResume();
         _loops.Unstage();
         if (dropped.Count == 0) return null;
         string what = Sentence(string.Join(" and ", dropped) + " dropped");
@@ -535,6 +562,7 @@ public sealed class MovementController : IDisposable
     {
         List<string> held = new();
         if (_loops.PendingReconnectResumeName is { } resume) held.Add($"loop '{resume}', held for a reconnect,");
+        if (_autoLair.PendingReconnectResume is { } lair) held.Add($"{lair}, held for a reconnect,");
         if (_loops.StagedLoop is { } staged) held.Add($"loop '{staged.Name}', loaded to start,");
         return held;
     }
@@ -590,8 +618,25 @@ public sealed class MovementController : IDisposable
             "Auto-All restored — navigation resumed.");
     }
 
-    private void OnWalkerEvent(WalkEvent _) => StateChanged?.Invoke();
-    private void OnLoopEvent(LoopEvent _) => StateChanged?.Invoke();
+    private void OnWalkerEvent(WalkEvent e)
+    {
+        if (e.Kind == WalkEventKind.Started && UsersWalk && _loops.State == LoopState.Idle && !_autoLair.IsActive)
+            SupersedeReconnectRestarts("a walk you started");
+        StateChanged?.Invoke();
+    }
+
+    private void OnLoopEvent(LoopEvent e)
+    {
+        if (e.Kind == LoopEventKind.Started) SupersedeReconnectRestarts($"loop '{_loops.CurrentLoop?.Name ?? "?"}'");
+        StateChanged?.Invoke();
+    }
+
+    private void OnAutoLairActiveChanged(bool active)
+    {
+        if (active) SupersedeReconnectRestarts("Auto-Lair");
+        OnAutoLairBool(active);
+    }
+
     private void OnAutoLairBool(bool _)
     {
         ForgetTypedMoveOnceResumed();
@@ -614,7 +659,7 @@ public sealed class MovementController : IDisposable
         _disposed = true;
         _walker.Event -= OnWalkerEvent;
         _loops.Event -= OnLoopEvent;
-        _autoLair.ActiveChanged -= OnAutoLairBool;
+        _autoLair.ActiveChanged -= OnAutoLairActiveChanged;
         _autoLair.PausedChanged -= OnAutoLairBool;
         _coordinator.GatesChanged -= OnCoordinatorGatesChanged;
     }

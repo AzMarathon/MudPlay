@@ -1,6 +1,6 @@
 # Version history
 
-## 3.184.28
+## 3.184.32
 
 - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
 - Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
@@ -11,6 +11,18 @@
 - A save right after logging back on, before the room shows, keeps the moves to replay
 - A character with no saved room starts with no room, not the last character's; one with only a worked-out room saved comes back at it
 - Lost, or the map rebuilt, also drops a worked-out room saved for the next relog
+
+## 3.184.21
+
+- Auto-Lair cut off by a dropped connection restarts once you're back, from the room the reconnect shows, as a loop does
+- A light buy cut off by a drop hands Auto-Lair to that restart instead of leaving it stopped
+- A loop or Auto-Lair run started meanwhile, or a walk you start, takes the place of a restart still owed; a walk the client starts makes it wait
+
+## 3.184.19
+
+- A loop restarted after a reconnect, and the Default task at a login, plan from the room the game shows, not the room before
+- Unsure of that room, they ask the game (rm / sys st), and with no answer start from the room the map believes, with a notice
+- Stop calls off a restart still waiting on the room
 
 ## 3.184.17
 

@@ -136,7 +136,7 @@ How to keep it current:
 
 ### AutoDepositManagerTests.cs
 - Covers: Game/Cash/AutoDepositManager (with Game/Cash/CashManager gate, Game/Cash/StashRoomManager, Game/Map/AutoWalkManager / LoopRunner / AutoLairManager, Game/Light/AutoLightProvisioner + AutoLightShopRouter)
-- Checks: a wealth/coin gate crossing while looping or lairing stops the engine, walks to the bank (re-reads `i`, sends `dep <wealth − keep>`) or to an off-route stash room (`hide`), walks back (a loop resumes at its nearest room) and restarts the engine. Idle and plain walk-to never reroute; an on-route stash is stashed on pass-through. Sell-first hand-over. Aborts, user stops and zero-deposit trips re-arm the gate after the cooldown. A dark return leg detours via a light shop (only with Auto-Light on and a stocking shop): with a priced torch and Keep-on-hand 0 the deposit leaves the torch's price in hand (`dep 4990`), the light is bought before the walk back at the shop in the bank's town rather than one past the dark, and a stash run's hide leaves the price too (`hide 49 gold crown` of 50; the coin above the stash cutoff counts toward it). A disconnect during the buy: nothing is sent while the link is down, the loop restarts on the reconnect (from the room the display shows), held by the master switch or a pending reform, stays stopped under the user's Stop, and a cut-off light trip is made again. Light restock trips while a loop or Auto-Lair runs: a dark circuit with no light, a reorder, no shop selling the light (the loop keeps running), none without an engine; a bank return leg short of Carry hours stocks up at a nearby shop. LoopStarted says the user started it only for the user's own start. The return leg starts after the deposit is noted; an unparseable bank key reroutes nothing.
+- Checks: a wealth/coin gate crossing while looping or lairing stops the engine, walks to the bank (re-reads `i`, sends `dep <wealth − keep>`) or to an off-route stash room (`hide`), walks back (a loop resumes at its nearest room) and restarts the engine. Idle and plain walk-to never reroute; an on-route stash is stashed on pass-through. Sell-first hand-over. Aborts, user stops and zero-deposit trips re-arm the gate after the cooldown. A dark return leg detours via a light shop (only with Auto-Light on and a stocking shop): with a priced torch and Keep-on-hand 0 the deposit leaves the torch's price in hand (`dep 4990`), the light is bought before the walk back at the shop in the bank's town rather than one past the dark, and a stash run's hide leaves the price too (`hide 49 gold crown` of 50; the coin above the stash cutoff counts toward it). A disconnect during the buy: nothing is sent while the link is down, the loop restarts on the reconnect (from the room the display shows), held by the master switch or a pending reform, stays stopped under the user's Stop, and a cut-off light trip is made again; an Auto-Lair run's bank run is handed to Auto-Lair's own restart and is up again at the first prompt back. Light restock trips while a loop or Auto-Lair runs: a dark circuit with no light, a reorder, no shop selling the light (the loop keeps running), none without an engine; a bank return leg short of Carry hours stocks up at a nearby shop. LoopStarted says the user started it only for the user's own start. The return leg starts after the deposit is noted; an unparseable bank key reroutes nothing.
 - Why: reports paradigm-20260730-125716 (gate wedged after a no-deposit trip), paradigm-20260819-054200 (pass-through `hide` ordering), "Report #5 / #1" (stop mid-reroute resurrected the old loop); toll-stale deposit amount; user 2026-09-30 / 2026-10-05 (nearest loop room, sale before bank); user 2026-10-17 (buy the light before heading back). The harness records each deposit handed to the on-hand tracker; the holdings are what each test sets, as the bank's `i` re-read shows them.
 
 ### AutoDiscardInventoryWiringTests.cs
@@ -173,6 +173,11 @@ How to keep it current:
 - Covers: Game/Map/AutoLairManager (MarksGameData, DropMarksOfOtherGameData, RestoreMarks, MarksOfOtherGameDataDropped)
 - Checks: marks are stamped with the game-data set they were placed on and dropped (with a notice and an Info log) when another or no set becomes active, kept when the same set is re-read (case-insensitive). Marking under a new set starts a fresh set. An event's restore puts marks back only on their own set.
 - Why: marks saved as a setup on the wrong set would land in another set's Loops folder, shared by every character on it.
+
+### AutoLairReconnectRestartTests.cs
+- Covers: Game/Map/AutoLairManager's restart after a reconnect through Game/Map/ReconnectRestart, with LoopRunner and MovementController beside it (the restarts' give-way wiring and the toolbar Stop live there), RoomTracker, WirePromptScanner, AutoWalkManager and its journeys, LairTimerStore, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator and PartyDisconnectMovementGate, on TrackerWireRig with the timers on ManualTimers.
+- Checks: a drop mid-run stops the run and sets it aside under its setup name; the reconnect restarts it from the room it shows, or takes up the same leg in the same room; a run a light buy handed over plans from the shown room; a lair entered before the drop keeps its timer through the restart, a nightly cleanup between included, on each realm; an unsure room asks the game (`rm`) and restarts from the answer, and with no answer starts from the room believed with a terminal notice; the toolbar's Stop drops it while it waits; the master switch off holds it; a death found out at the login drops it (through RoomTracker.NoteUnwitnessedDeath, the call the hang-up check makes; HangupItemRecheckTests drives that check); a run the user had paused comes back paused, and a Resume pressed during the outage counts; a reform whose display came with the prompt holds it until the follower is back; a dark room keeps it behind its own reform hold; a loop started meanwhile (any starter) drops the lair's restart with a notice and it doesn't come back after that loop, an Auto-Lair run started meanwhile drops the loop's, a walk the user starts drops it, as does a leg of the user's journey; a walk the client started by itself (held, so the map is sure of the room) makes it wait with a notice and its own waiting state, and it comes once the walk is over; Stop while it waits behind such a walk ends both, and nothing restarts.
+- Why: a run going at a drop was left active through the outage and picked up its old leg from the room before the drop; one a light buy had stopped stayed stopped (user, 2026-10-17: restart Auto-Lair after a reconnect like a loop); a run you start yourself wins over a restart, and the client's own walks must neither drop it nor be run over by it (review of #1097, 2026-10-17).
 
 ### AutoLairSchedulerTests.cs
 - Covers: Game/Map/AutoLairScheduler (PickNext, LairCandidate/LairDecision, with FlatTravelCostModel)
@@ -989,6 +994,11 @@ How to keep it current:
 - Checks: a draft's Save writes nothing; naming and realm assignment; discard; startup-animation round-trip; template sanitising; one-time reset.
 - Why: user 2026-10-12 (sessions must not write the template).
 
+### DefaultTaskLoginRoomTests.cs
+- Covers: Game/DefaultTaskRunner's start at a login through Game/Map/ReconnectRestart (with LoopRunner, LoopManager, RoomTracker, WirePromptScanner, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver), on TrackerWireRig, the profile from TestProfiles with the Default task set to a loop.
+- Checks: logged in to another room than the one the map had, the task's loop is planned from the shown room; logged in to a room the map can't tell, with nothing to ask, the task starts from the room believed with a terminal notice; with "Do nothing" nothing is asked of the game and nothing said; with the master switch off no `rm` goes out and nothing starts, and switched back on the next prompts start nothing; with no room known at all the task waits for one with no time limit and no notice, and starts once the map has one.
+- Why: the task started at the first prompt, ahead of the room display that came with it, and planned from the room before (review of #1095, 2026-10-17).
+
 ### DefaultTaskRunnerTests.cs
 - Covers: Game/DefaultTaskRunner.
 - Checks: the party-rebuild hold arms only on a reconnect after a party session; latches clear on profile load; a hang-up death calls the task off; Dispose.
@@ -1355,7 +1365,7 @@ How to keep it current:
 
 ### GameDataSwitchStopsMovementTests.cs
 - Covers: Game/Map/StopOnGameDataChange, MovementController, LoopRunner, AutoWalkManager, AutoLairManager, RoutePlanInFlight, PathItemFloorCollector, HeldLoopsOnProfileSwap
-- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices; no-op for the same set; plans in flight are dropped; route item needs forgotten; loop stamps; profile swaps drop held loops.
+- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped; route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
 - Why: room numbers differ between sets.
 
 ### GameDataTableSectionTests.cs
@@ -2060,6 +2070,11 @@ How to keep it current:
 - Why: two clients sharing a set's Loops folder.
 - Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
 
+### LoopReconnectRestartRoomTests.cs
+- Covers: Game/Map/LoopRunner's restart after a reconnect through Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate; the runner's and the resolver's timers on ManualTimers), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
+- Checks: back in the same room the loop restarts from it; put back in another room, the first command is the walk from the shown room, never a step planned from the room before the drop; shown a room the map can't tell from another, the game is asked (`rm`) and the loop restarts from the room the answer names; with the `rm` unanswered, or nothing to ask on Stock, it starts from the room the map believes with a terminal notice (also for a drop between two lookalike rooms, which goes on from the room it left); with no room believed at all it is dropped with a notice; with no display and no further prompt the 12 s limit starts it from the room believed; with no display, the first prompt waits and the next one asks; a no-answer to a locate from before another drop neither starts the loop offline nor ends the next restart; a Stop drops a restart waiting on the answer; the master switch holds it; a reform whose display came with the prompt holds the restarted loop until the follower is back; a dark room keeps it behind its own reform hold; a loop a light buy handed over restarts from the shown room; a loop the user starts while the restart is owed is left running.
+- Why: the restart was planned at the prompt, before its room display was read, so after a relog into another room the first step went out from the wrong room; and it must not wait for good on a room it can't place (user, 2026-10-17).
+
 ### LoopRunnerEmptyRoomCommandTests.cs
 - Covers: Game/Map/LoopRunner (empty-room commands)
 - Checks: a `nomonsters` room command waits for the room to clear, a refusal with a monster present holds instead of recovering, the time limit ends the loop with a reason unless a fight holds it.
@@ -2067,7 +2082,7 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds, flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
 - Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, …).
 
 ### LoopSettingsStoreTests.cs
@@ -4007,8 +4022,8 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock, the gate's timeouts on ManualTimers
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests).
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests and AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs
