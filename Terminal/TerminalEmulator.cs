@@ -67,14 +67,16 @@ public sealed class TerminalEmulator
     // True when the current sequence began with "CSI ?" (DEC private mode).
     private bool _privateMode;
 
-    // The clock rows are stamped with: as each fed batch writes them and as each completes.
+    // The clock rows are stamped with: the time a line reaches every parser that
+    // reads one, so a parser timing moves against lines can be run on a clock of
+    // its own.
     private readonly Func<DateTimeOffset> _now;
 
     public TerminalEmulator(int cols, int rows, Func<DateTimeOffset>? now = null)
     {
         Screen = new TerminalScreen(cols, rows);
         _scrollBottom = rows - 1;
-        _now = now ?? (() => DateTimeOffset.Now);
+        _now = now ?? (static () => DateTimeOffset.Now);
     }
 
     // Resize the underlying screen and reset the scroll region.

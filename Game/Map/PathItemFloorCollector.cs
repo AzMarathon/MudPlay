@@ -6,7 +6,7 @@ namespace MudPlay.Game.Map;
 
 // Collects a demanded path item the moment it's revealed on the room floor —
 // independent of the Auto-Get engine. Closes a real gap: AutoSearchManager fires
-// `sea` while a NeedKind.PathItem is outstanding, but the revealed item is only
+// `sea` while a path-item need is outstanding, but the revealed item is only
 // picked up by AutoGetItemsManager, which needs its own master toggle ON and the
 // item flagged AutoCollect. So a counter you searched up for a route (the gypsy
 // rope) sat on the floor uncollected unless it happened to be an auto-get item.
@@ -53,7 +53,7 @@ public sealed class PathItemFloorCollector : IDisposable
     // The collect pass, run off the floor-survey event.
     internal void CollectRevealed()
     {
-        foreach (Need n in _needs.Outstanding(NeedKind.PathItem))
+        foreach (Need n in _needs.Outstanding())
         {
             if (!int.TryParse(n.Descriptor, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
                 continue;

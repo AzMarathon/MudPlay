@@ -7,11 +7,9 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for <see cref="DeathDetector"/> + the tracker's death-side
-/// state (<c>NoteDeath</c>, <see cref="RoomConfidence.PendingRespawn"/>,
-/// DeathRecord persistence to profile).
-/// </summary>
+// Coverage for DeathDetector + the tracker's death-side
+// state (NoteDeath, RoomConfidence.PendingRespawn,
+// DeathRecord persistence to profile).
 public sealed class DeathDetectorTests : IDisposable
 {
     // The game's output, fed the way the client receives it.
@@ -100,8 +98,8 @@ public sealed class DeathDetectorTests : IDisposable
     public void DeathMessage_FiresPlayerDeathObserved_ForBothPhrasings(string line)
     {
         // The engine-quiescence bridges (movement halt, loop stop, combat-target
-        // wipe) ride RoomTracker.PlayerDeathObserved so a miracle-save death — which
-        // never prints "slain by" — halts as surely as a plain death.
+        // wipe) ride RoomTracker.PlayerDeathObserved so a death by damage (the
+        // miracle-save readout) halts as surely as a suicide.
         (RoomTracker tracker, DeathDetector detector) = NewDetector();
         tracker.SetLocated(new RoomKey(1, 1));
         int fired = 0;

@@ -1074,8 +1074,15 @@ public sealed class LoopRunner : IRecoverableEngine
     public bool Start(Loop loop, bool userStarted = false)
     {
         _userApproach = userStarted;
-        return StartInternal(loop, isRecovery: false, gateFallback: true);
+        _startingForUser = userStarted;
+        try { return StartInternal(loop, isRecovery: false, gateFallback: true); }
+        finally { _startingForUser = false; }
     }
+
+    // True only inside a Start the user asked for, so the Started event it raises
+    // says so; a recovery re-plan, a resume or any other caller's start leaves it
+    // false.
+    private bool _startingForUser;
 
     // Why this loop can't be run at all, or null when it can: it has a waypoint in a
     // room no route enters. Asked before the walk to the loop too, so nobody is
@@ -1361,7 +1368,7 @@ public sealed class LoopRunner : IRecoverableEngine
             // Ahead of Started: a loop with nothing to walk never started, and the
             // caller is told so.
             if (FailIfNothingToWalk()) return false;
-            Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
+            Raise(new LoopEvent(LoopEventKind.Started, loop.Name, UserStarted: _startingForUser));
             BeginCircle();
             return true;
         }
@@ -1376,7 +1383,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 $"Start branch=no-walker: walker={_walker is not null} bfs={_bfs is not null} currentKey={currentKey?.ToString() ?? "(null)"}; expanding from waypoint 0");
             ExpandSteps();
             if (FailIfNothingToWalk()) return false;
-            Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
+            Raise(new LoopEvent(LoopEventKind.Started, loop.Name, UserStarted: _startingForUser));
             BeginCircle();
             return true;
         }
@@ -1422,7 +1429,7 @@ public sealed class LoopRunner : IRecoverableEngine
         ExpandSteps();
         if (FailIfNothingToWalk()) return false;
         State = LoopState.Approaching;
-        Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
+        Raise(new LoopEvent(LoopEventKind.Started, loop.Name, UserStarted: _startingForUser));
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
         JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(currentKey.Value, closest.Value) : null;
@@ -1474,7 +1481,7 @@ public sealed class LoopRunner : IRecoverableEngine
             // timed or announced as a wrap.
             _partialLap = firstRun;
         }
-        Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
+        Raise(new LoopEvent(LoopEventKind.Started, loop.Name, UserStarted: _startingForUser));
         if (entry.Equals(from))
         {
             _log?.Info("LoopRunner",
@@ -3115,6 +3122,16 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _reconnectResumeHeldBySwitch;
     public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
 
+    // A loop an errand stopped (a bank run's light buy) when the connection dropped:
+    // restart it on the first prompt after the reconnect, as one running at the drop
+    // is, with the same guards.
+    public void ResumeOnReconnect(Loop loop, string why)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        _pendingReconnectResume = loop;
+        _log?.Info("LoopRunner", $"reconnect: loop '{loop.Name}' will restart on the first in-game prompt ({why})");
+    }
+
     // Reset States, and a death found out at the login: don't restart the loop on
     // the next prompt after a reconnect.
     public void ClearPendingReconnectResume()
@@ -3962,4 +3979,7 @@ public enum LoopEventKind
 }
 
 // WillResume is set on a Stopped whose caller restarts the loop itself afterwards.
-public readonly record struct LoopEvent(LoopEventKind Kind, string Detail, bool WillResume = false);
+// UserStarted (Started only): the user pressed Start on the loop (Start's
+// userStarted), not a resume, a recovery re-plan, an event, a remote command or a
+// sweep.
+public readonly record struct LoopEvent(LoopEventKind Kind, string Detail, bool WillResume = false, bool UserStarted = false);

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.183.42**
+> **Version 3.184.17**
 > - Combat tests run on one manual clock the whole engine reads, with no real-time waits
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

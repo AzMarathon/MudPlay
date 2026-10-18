@@ -15,7 +15,7 @@ public sealed class MonsterDropRouterTests
     private static readonly RoomKey Spawn2 = new(1, 160);
 
     private static Need PathNeed(int id)
-        => new(NeedKind.PathItem, id.ToString(), "test", DateTimeOffset.Now);
+        => new(id.ToString(), "test", DateTimeOffset.Now);
 
     private sealed class Harness
     {
@@ -213,18 +213,6 @@ public sealed class MonsterDropRouterTests
         MonsterDropRouter r = h.Build();
 
         r.OnNeedPosted(PathNeed(42));
-
-        Assert.Equal(0, h.ConfirmCalls);
-        Assert.False(r.DetourActive);
-    }
-
-    [Fact]
-    public void OnNeedPosted_NonPathItemNeed_Ignored()
-    {
-        var h = new Harness().WithSingleSpawn();
-        MonsterDropRouter r = h.Build();
-
-        r.OnNeedPosted(new Need(NeedKind.LightSource, "illu>=1", "test", DateTimeOffset.Now));
 
         Assert.Equal(0, h.ConfirmCalls);
         Assert.False(r.DetourActive);

@@ -1035,7 +1035,7 @@ public sealed class HealthManager : IDisposable
         // PromptParser writes Hp + MaxHp before flipping HasPromptData, so a real
         // live character is never at Hp <= 0 here. PlayerDroppedGate holds the
         // engine + movement gates for the whole dropped window; recovery routing
-        // for an actual death runs through DeathLineWatcher.
+        // for an actual death runs through RoomTracker.PlayerDeathObserved.
         if (_state.Hp <= 0) return;
 
         // Rest-interruption recovery on a resting-state change. Two-step

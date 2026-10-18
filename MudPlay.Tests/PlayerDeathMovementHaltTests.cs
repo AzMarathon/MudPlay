@@ -8,15 +8,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// The death-stop bridge: on our own death it full-stops every movement engine
-/// (the wired stopper) and CLEARS <see cref="MovementCoordinator.UserGate"/> — a
-/// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
-/// a manual/remote nav action afterward runs freely. It rides
-/// <see cref="RoomTracker.PlayerDeathObserved"/>, which fires for BOTH death
-/// phrasings, so a miracle-save death ("You have N lives left.") stops as surely
-/// as a plain "slain by" one.
-/// </summary>
+// The death-stop bridge: on our own death it full-stops every movement engine
+// (the wired stopper) and CLEARS MovementCoordinator.UserGate — a
+// clean stop, same as the Nav Stop button, so nothing survives to re-drive us and
+// a manual/remote nav action afterward runs freely. It rides
+// RoomTracker.PlayerDeathObserved, which fires for BOTH death
+// lives readouts, so a death by damage ("You have N lives left.") stops as surely
+// as a suicide ("You now have N lives remaining.").
 public sealed class PlayerDeathMovementHaltTests
 {
     private sealed class Harness : IDisposable
@@ -61,9 +59,8 @@ public sealed class PlayerDeathMovementHaltTests
             Halt.SetEngineStopper(() => EngineStopCount++);
         }
 
-        // A miracle-save death — the phrasing that DeathLineWatcher's "slain by"
-        // watcher never sees. RoomTracker.NoteDeath fires PlayerDeathObserved
-        // regardless of phrasing.
+        // A miracle-save death. RoomTracker.NoteDeath fires PlayerDeathObserved
+        // whichever lives readout it was.
         public void Die() => Tracker.NoteDeath(6, "You have 6 lives left.");
 
         public bool SentCarriageReturn =>

@@ -1296,11 +1296,12 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
         // Under a typed break's hold the combat engine asks to see the room once a
         // fight in it goes quiet; a display that lists nobody is how an emptied room
-        // answers. A `look <direction>` shows the next room and answers nothing.
-        _roomDisplayParser.RoomParsed += _ =>
+        // answers. A `look <direction>` shows the next room and answers nothing. The
+        // display also tells the attack-order holds whether this is the room shown last.
+        _roomDisplayParser.RoomParsed += obs =>
         {
             if (!AppServices.Current.RoomTracker.IsPeekSuppressed())
-                AppServices.Current.Combat.NoteRoomDisplayed();
+                AppServices.Current.Combat.NoteRoomDisplayed(obs);
         };
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
@@ -3602,6 +3603,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // wire, or set off again on reconnect.
                 AppServices.Current.DeathRecovery.NotifyDisconnected();
                 AppServices.Current.CorpseHandoff.NotifyDisconnected();
+                // A light buy's window would end in the next session and walk an
+                // errand or a bank run on from wherever the reconnect lands.
+                AppServices.Current.NotifyLightBuysDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.

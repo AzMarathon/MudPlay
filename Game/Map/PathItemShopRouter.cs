@@ -5,7 +5,7 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// Active fulfiller for NeedKind.PathItem needs backed by a shop: when a
+// Active fulfiller for path-item needs backed by a shop: when a
 // one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item we're not
 // carrying, and a shop in the active set stocks that item, detour to the shop
 // that adds the fewest steps, buy the needed count (the whole party shortfall
@@ -184,7 +184,6 @@ public sealed class PathItemShopRouter : IDisposable
     // stocks the item, or we can't compute a route.
     public void OnNeedPosted(Need need)
     {
-        if (need.Kind != NeedKind.PathItem) return;
         if (_phase != Phase.Idle) return;
         if (_engineWalkActive()) return;
 

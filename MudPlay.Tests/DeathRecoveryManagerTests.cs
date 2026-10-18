@@ -13,16 +13,14 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Pins <see cref="DeathRecoveryManager"/>'s stock corpse-recovery flow: on
-/// re-entering the death room, auto-recover reads the "You notice" survey and, if
-/// our "corpse of &lt;given-name&gt;" is on the floor, sends ONE
-/// <c>recover corpse &lt;name&gt;</c>; the single "You have recovered the corpse
-/// of &lt;name&gt;." line finalises. When the corpse is NOT in the survey the pile
-/// is marked Missing (terminal) so it never spam-retries. (The <c>@comeback</c>
-/// party-pickup flow is a separate concern owned by
-/// <see cref="MudPlay.Game.Remote.PartyComebackManager"/>.)
-/// </summary>
+// Pins DeathRecoveryManager's stock corpse-recovery flow: on
+// re-entering the death room, auto-recover reads the "You notice" survey and, if
+// our "corpse of <given-name>" is on the floor, sends ONE
+// recover corpse <name>; the single "You have recovered the corpse
+// of <name>." line finalises. When the corpse is NOT in the survey the pile
+// is marked Missing (terminal) so it never spam-retries. (The @comeback
+// party-pickup flow is a separate concern owned by
+// MudPlay.Game.Remote.PartyComebackManager.)
 public sealed partial class DeathRecoveryManagerTests
 {
     private sealed class GraphHarness : IDisposable
@@ -33,7 +31,6 @@ public sealed partial class DeathRecoveryManagerTests
         private readonly MessageRouter _router;
         public ProfileService Profile { get; } = TestProfiles.Service();
         public RoomTracker Tracker { get; }
-        public DeathLineWatcher Watcher { get; }
         public GroundItemTracker Ground { get; }
         public DeathRecoveryManager Recovery { get; }
         // The game's output as the client receives it, stamped on the harness clock.
@@ -119,9 +116,8 @@ public sealed partial class DeathRecoveryManagerTests
             LogService log = new();
             Tracker = new RoomTracker(graph, log: null, now: Now);
             Tracker.AttachInventorySnapshot(() => Snapshot);
-            Watcher = new DeathLineWatcher(_router, log);
             Ground = new GroundItemTracker(_router, new CurrencyNaming());
-            Recovery = new DeathRecoveryManager(Watcher, Profile, Tracker, log, now: Now);
+            Recovery = new DeathRecoveryManager(Profile, Tracker, log, now: Now);
             Feed = new ServerFeed(clock: Now);
             Recovery.AttachLineExtractor(Feed.Lines);
             Recovery.AttachGroundItems(Ground);
@@ -217,7 +213,6 @@ public sealed partial class DeathRecoveryManagerTests
             foreach (IDisposable engine in _engines) engine.Dispose();
             Recovery.Dispose();
             Ground.Dispose();
-            Watcher.Dispose();
             try { Directory.Delete(_root, recursive: true); } catch { /* best-effort */ }
         }
     }
@@ -915,6 +910,25 @@ public sealed partial class DeathRecoveryManagerTests
         h.Feed.Line("You took an iron sword.");
 
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);   // the helm isn't waited for
+    }
+
+    // The Workshop grid is told of a death when its record is written, at the lives
+    // readout (RoomTracker.PlayerDeathObserved): the death line before it has no
+    // record to show yet.
+    [Fact]
+    public void ADeath_RefreshesTheRecordsGrid_OnceItsRecordIsWritten()
+    {
+        using GraphHarness h = new();
+        h.EnterGates();
+        int countAtRefresh = -1;
+        h.Recovery.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DeathRecoveryManager.Records)) countAtRefresh = h.Recovery.Records.Count;
+        };
+
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+
+        Assert.Equal(1, countAtRefresh);
     }
 
     [Fact]

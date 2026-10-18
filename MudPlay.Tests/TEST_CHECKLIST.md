@@ -6,7 +6,7 @@ How to keep it current:
 - Adding, removing, renaming or repurposing a test updates its file's entry in the same change.
 - Every entry names the client behaviour it protects. A test that can't name one is deleted, not added.
 - Tests drive the client's real input and output paths: game output through `ServerFeed`, chat through `ChatLines`, the wire through each engine's `SetWireSender`, time through injected schedulers (`ManualTimers`) and clocks (`ManualClock` or a `now` parameter). Never a test-only hook or a `…ForTests` member in production.
-- A file that is test infrastructure (a helper, fixture, collection or guard) says so. A test entry point production still carries for a test is named in the entry of the file that uses it, with the reason it is kept.
+- A file that is test infrastructure (a helper, fixture, collection or guard) says so. A seam production still carries for a test (an internal constructor, a barrier, a widened method) is a named seam: a `Named seam:` line in the entry of the file that uses it, with the reason it is kept.
 
 ### AbilBreakdownParserTests.cs
 - Covers: Game/AbilBreakdownParser (AbilBreakdownParser, AbilBreakdown)
@@ -136,8 +136,8 @@ How to keep it current:
 
 ### AutoDepositManagerTests.cs
 - Covers: Game/Cash/AutoDepositManager (with Game/Cash/CashManager gate, Game/Cash/StashRoomManager, Game/Map/AutoWalkManager / LoopRunner / AutoLairManager, Game/Light/AutoLightProvisioner + AutoLightShopRouter)
-- Checks: a wealth/coin gate crossing while looping or lairing stops the engine, walks to the bank (re-reads `i`, sends `dep <wealth − keep>`) or to an off-route stash room (`hide`), walks back (a loop resumes at its nearest room) and restarts the engine. Idle and plain walk-to never reroute; an on-route stash is stashed on pass-through. Sell-first hand-over. Aborts, user stops and zero-deposit trips re-arm the gate after the cooldown. A dark return leg detours via a light shop (only with Auto-Light on and a stocking shop).
-- Why: reports paradigm-20260730-125716 (gate wedged after a no-deposit trip), paradigm-20260819-054200 (pass-through `hide` ordering), "Report #5 / #1" (stop mid-reroute resurrected the old loop); toll-stale deposit amount; user 2026-09-30 / 2026-10-05 (nearest loop room, sale before bank).
+- Checks: a wealth/coin gate crossing while looping or lairing stops the engine, walks to the bank (re-reads `i`, sends `dep <wealth − keep>`) or to an off-route stash room (`hide`), walks back (a loop resumes at its nearest room) and restarts the engine. Idle and plain walk-to never reroute; an on-route stash is stashed on pass-through. Sell-first hand-over. Aborts, user stops and zero-deposit trips re-arm the gate after the cooldown. A dark return leg detours via a light shop (only with Auto-Light on and a stocking shop): with a priced torch and Keep-on-hand 0 the deposit leaves the torch's price in hand (`dep 4990`), the light is bought before the walk back at the shop in the bank's town rather than one past the dark, and a stash run's hide leaves the price too (`hide 49 gold crown` of 50; the coin above the stash cutoff counts toward it). A disconnect during the buy: nothing is sent while the link is down, the loop restarts on the reconnect (from the room the display shows), held by the master switch or a pending reform, stays stopped under the user's Stop, and a cut-off light trip is made again. Light restock trips while a loop or Auto-Lair runs: a dark circuit with no light, a reorder, no shop selling the light (the loop keeps running), none without an engine; a bank return leg short of Carry hours stocks up at a nearby shop. LoopStarted says the user started it only for the user's own start. The return leg starts after the deposit is noted; an unparseable bank key reroutes nothing.
+- Why: reports paradigm-20260730-125716 (gate wedged after a no-deposit trip), paradigm-20260819-054200 (pass-through `hide` ordering), "Report #5 / #1" (stop mid-reroute resurrected the old loop); toll-stale deposit amount; user 2026-09-30 / 2026-10-05 (nearest loop room, sale before bank); user 2026-10-17 (buy the light before heading back). The harness records each deposit handed to the on-hand tracker; the holdings are what each test sets, as the bank's `i` re-read shows them.
 
 ### AutoDiscardInventoryWiringTests.cs
 - Covers: Game/Inventory/AutoDiscardManager with the real Game/Inventory/InventoryManager and Game/Inventory/BulkCommandPacer, wired as AppServices wires them (Changed, FullInventoryParsed, ItemHidden, ItemSold).
@@ -156,7 +156,7 @@ How to keep it current:
 
 ### AutoGetItemsManagerTests.cs
 - Covers: Game/Inventory/AutoGetItemsManager. Also one stray theory for Game/Inventory/InventorySnapshot.ParseKeyEntry, which is a production helper but has nothing to do with this class.
-- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops.
+- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off, only as many copies as wanted, once when also flagged, and never when they can't be taken or the item rules keep them off.
 - Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; the walker leaving before the post-kill survey lands; Roomba headroom.
 
 ### AutoHazardCounterProvisionerTests.cs
@@ -184,29 +184,24 @@ How to keep it current:
 - Checks: the shipped defaults the scheduler runs on (heuristic, engage timeout, Auto cost mode, flat hop time), the measured two-band hop times 0.7/1.7 s by bucket with the Unknown→Light fallback, and the encumbrance-gated model's hop→duration math (live encumbrance read, zero/negative hops, 0.1 s floor).
 - Why: realm-correct hop timing out of the box; a 0 s/hop bucket would collapse scheduler scoring.
 
-### AutoLightManagerTests.cs
-- Covers: Game/Light/AutoLightManager
-- Checks: A "pitch black" / "very dark" line posts one deduped LightSource need when AutoLight is on. Lit and penalized lines don't post. Disabled or disposed posts nothing.
-- Why: originally the reactive light-need poster. Note that no client code consumes the posted need.
-
 ### AutoLightPlannerTests.cs
 - Covers: Game/Light/AutoLightPlanner
-- Checks: The ready/buy/reorder/none verdict for lit and dark routes. Carried, preferred and worn-illu coverage. Catalogue buy sizing from CarryHours. Reorder threshold, latching inputs and provisioning-off cases. The room-light spell as a coverage tier and spell-only mode.
+- Checks: Whether a lit or dark route buys: a carried light that covers, the carried Preferred light and worn illu each mean no buy (the client acts only on Buy and Reorder). Catalogue buy sizing from CarryHours. Reorder threshold, latching inputs and provisioning-off cases (with no light that covers, nothing to do). The room-light spell as a coverage tier and spell-only mode.
 - Why: the decision core behind auto-light provisioning (whether to detour to a shop and how many to buy).
 
 ### AutoLightProvisionerTests.cs
 - Covers: Game/Light/AutoLightProvisioner
-- Checks: The route plan only provisions (Buy/Reorder handed to the shop router, with a reorder latch) and never `use`s. Reactive `use` on a can't-see line (count-stripped name, preferred vs strongest, no downgrade, pending latch, bare-CR redisplay, room-light spell fallback). Predictive one-room lookahead `use`. `rem` on entering a seeable room. Burn-out clears the latches.
+- Checks: The route plan only provisions (Buy/Reorder handed to the shop router, or to a light trip while a loop runs, with a back-off that doubles and resets on a lit circuit; the light's price is a constructor parameter). Its master toggle, worn illu, a lit route and a readied light that covers each mean no buy hand-off for a pack that would otherwise buy; with the toggle off, a light this engine lit isn't put away. Predictive one-room lookahead and reactive can't-see lighting: the room-light buff goes first (cast one room ahead, a light item only for what it leaves short), a light-making spell casts, reads the inventory on its cast line and lights the item it made; a spell found not enough is latched for the dark stretch. Spell-only mode; floor lights up to the Carry-hours shortfall; stock-up to Carry hours; `rem` on entering a seeable room; burn-out clears the latches; sight taken away never latches.
 - Why: the over-lit-town report (route-wide ready suppressed), the 154840 / 175844 stuck-blind cases (burn-out latches), and the lights-a-torch-but-doesn't-recheck report (bare CR, GAME_MECHANICS "Light sources").
 
 ### AutoLightSettingsTests.cs
-- Covers: Models/Profile/AutoLightSettings
-- Checks: DTO defaults (CarryHours 6, ReorderThresholdMinutes 60, auto-pick, items allowed) and JSON round-trip.
-- Why: the defaults are what the engine uses for a character with no saved AutoLight section (AppServices.ReadSection).
+- Covers: ViewModels/Settings/AutoLightSectionViewModel (Apply and the load from the profile), Models/Profile/AutoLightSettings
+- Checks: DTO defaults (CarryHours 6, ReorderThresholdMinutes 60, auto-pick, items allowed). The tab stores a named light by name, auto-pick as no name, spell-only as the flag with no name, clamps the hours, and a fresh tab reads each back.
+- Why: the defaults are what the engine uses for a character with no saved AutoLight section (AppServices.ReadSection); the engine reads the stored section, and a stored empty or label name would be resolved as a light.
 
 ### AutoLightShopRouterTests.cs
 - Covers: Game/Light/AutoLightShopRouter
-- Checks: The provisioning detour: master-toggle and engine-walk gates, fewest-added-steps reachable shop, buy batch only for the missing delta, resume on the first copy or a found-en-route copy, timeout and unreachable-shop resume, user-redirect abandon, self-supersede Stopped not read as a takeover, and per-destination failure suppression.
+- Checks: The provisioning detour: master-toggle and engine-walk gates, fewest-added-steps reachable shop, buy batch only for the missing delta, resume on the first copy or a found-en-route copy, timeout and unreachable-shop resume, user-redirect abandon, self-supersede Stopped not read as a takeover, and per-destination failure suppression. Describe names the detour in flight; TrySelectNearbyShop takes a shop only within the added-step allowance.
 - Why: a re-announced dark route must not loop the detour forever without buying (the supersede-Stopped report).
 
 ### AutoModeControllerTests.cs
@@ -231,7 +226,7 @@ How to keep it current:
 
 ### AutoPartyManagerTests.cs
 - Covers: Game/AutoPartyManager (with Game/TrainerMenuTracker and Game/Map/MovementCoordinator as real collaborators)
-- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu.
+- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu.
 - Why: - Reports `paradigm-20261004-061346`, `stock-20260801-002423`, `stock-20260924-145545`, `stock-20260924-175224`, `paradigm-20260930-192042`, `paradigm-20260923-092317`, `stock-20260731-015726`. - GAME_MECHANICS "A follower who can't move is left behind", and the chime-teleport arrival ordering (Party chapter). - Guards against invite spam, a stranded loop hold, and a leader walking off without a split party.
 
 ### AutoSearchManagerTests.cs
@@ -555,6 +550,7 @@ How to keep it current:
 - Covers: Game/Spells/CasterMessageMatcher (literal walk)
 - Checks: the walk never refuses a regex match (catalogue + exhaustive small cases); floor lists reach few regexes.
 - Why: report paradigm-20261009-164508 (freeze on long lines).
+- Named seam: CasterMessageMatcher.ShapeOf with TemplateShape and PlaceholderRole (internal): the regex a template compiles to, the step TryCreate builds from, so the walk is checked against that regex.
 
 ### CasterMessageMatcherTests.cs
 - Covers: Game/Spells/CasterMessageMatcher
@@ -689,15 +685,22 @@ How to keep it current:
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, state tracker); each fed line lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time.
 - Why: user 2026-10-10 rulings on manual break.
 
+### CombatManagerRoomChangeHoldTests.cs
+- Covers: Game/Combat/CombatManager (Attack Not Last and the follow Target Priority holds) with RoomTracker, RoomDisplayParser, DeathDetector, RoomEntityClassifier, DarkRoomCombatWatcher, all driven through the terminal and the line extractor
+- Checks: which room the fight on record belongs to when we change rooms without a move of our own: a teleport, a drag with no drag line, a fear run, a death and respawn, a relog or reconnect. The next room holds its opening until the party attacks or the in-round deadline fires; a room shown again with its fight under way picks on the exits line; rooms the tracker can't place, look-alike rooms, dark fights and no game data; the bug report names a room not yet placed.
+- Time: one `ManualClock` read by every component in the harness (terminal, room tracker, classifier, entry and death watchers, dark-room watcher, combat manager); each flush lands 1 ms after the last and each read is a tick after the one before, so the steps of one flush keep their order. Nothing waits on real time.
+- Why: Attack Not Last and follow Target Priority must never attack ahead of the party in a new room (user rulings 2026-10-17; the attack-order teleport-hold fix).
+
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
-- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths.
+- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths. Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live.
 - Why: dozens of paradigm reports cited inline.
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
 - Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
+- Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it. No private timestamp is set by reflection.
 - Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
@@ -888,7 +891,7 @@ How to keep it current:
 
 ### DeathFloorTracerTests.cs
 - Covers: Game/Health/DeathFloorTracer.
-- Checks: a slow death refines PlayerDiesAtHp; overkills are discarded; live-survival refine; guards.
+- Checks: a slow death only ever lowers PlayerDiesAtHp (to one below the last HP survived), never raises it; a bleed ended by a hit and other overkills are discarded; live-survival refine; guards.
 - Why: report 193417; the death-floor estimate.
 
 ### DeathGroundSweepTests.cs
@@ -898,7 +901,7 @@ How to keep it current:
 
 ### DeathLineWatcherTests.cs
 - Covers: Game/Combat/DeathLineWatcher.
-- Checks: the "slain by" line fires PlayerDied with the killer; Warn log; dispose.
+- Checks: `You have been killed!` fires PlayerDied once per death, ahead of the lives readout, and reaches the floor tracer with the last HP survived; a Warn row; other lines don't fire; dispose.
 - Why: the death trigger for recovery, the floor tracer and sounds.
 
 ### DeathLogRenderTests.cs
@@ -948,7 +951,7 @@ How to keep it current:
 
 ### DeathRecoveryManagerTests.cs
 - Covers: Game/Recovery/DeathRecoveryManager (core flow; shared GraphHarness).
-- Checks: corpse recovery by live name; Missing never re-arms; auto-equip order and pacing in combat; held re-equip under Auto-All off; hand-backs; Stock floor gets, stacks, returned and staying items.
+- Checks: corpse recovery by live name; Missing never re-arms; auto-equip order and pacing in combat; held re-equip under Auto-All off; hand-backs; Stock floor gets, stacks, returned and staying items. A death refreshes the records grid once its record is written.
 - Why: reports stock-20260828-104653, paradigm-20261004-201808, paradigm-20260926-102406.
 
 ### DeathRecoveryManagerVerdictTests.cs
@@ -1107,7 +1110,6 @@ How to keep it current:
 - Covers: Game/Map/EngineRecoveryGate (+ FootprintMatcher, RecoveryLookSweep, RoomTracker)
 - Checks: the tier ladder, rm/sysop-locate fast paths, forced and terminal rm, the confusion retry cap, teleport never reversed, look-sweep/dark/combat gating, forward footprint, FailTier3 detach safety.
 - Why: issue #455 / report paradigm-20260902-223159; Crash-20260908-181131; Darkwood "Lost" reports.
-- Test entry point kept: EngineRecoveryGate.SetLookSweepForTests and RecoveryLookSweep.FireLookTimeoutForTests: held with the room-tracking PR (#1091), to be replaced once it lands.
 
 ### EngineReplyLinesTests.cs
 - Covers: Game/EngineReplyLines
@@ -1143,6 +1145,16 @@ How to keep it current:
 - Covers: Game/Inventory/EquipmentWeaponSync.ApplyWeapons
 - Checks: normal/alternate weapons come from the Default set; backstab from an enabled Backstab set else Default; stale values cleared.
 - Why: gear sets are the single source of combat weapons.
+
+### ErrandLightStopTests.cs
+- Covers: Game/Light/ErrandLightStop through each real errand: training (TrainerWalkManager.TrainNow), funding (Game/Train/TrainFundingRouter.Begin), stash transfer (Game/Cash/StashTransferRunner.Start), sell detour (Game/Inventory/SellDetourManager.Evaluate off a walk-to) and spell shops (Game/Train/ShopSpellErrand.Begin); the shared shop choice, purse check and back-off on Game/Light/AutoLightProvisioner, and Game/Light/LightShopBuy
+- Checks: per errand, a walk that runs dark buys first, then walks on; no buy in spell-only mode, with a torch carried, with a bright room-light buff, with Auto-Light off, or with a purse that can't pay; a lit shop behind the start beats shops in and past the dark; a shop that didn't sell is passed over by the next errand of any kind; an errand cancelled during the buy doesn't walk on. Edges: the closest shop past the dark when every shop is; the look-ahead (lit first leg, dark later leg) for funding and stash; the back-off passing; a buy window passing walks on; a light found on the way means no buy; buy on arrival; a walk started during the buy; the funding and sell-detour walks stopped before the shop; a disconnect during the buy; one stop a run; the picked shop's price; the training bill and the scroll money kept; a shop the map can't reach held back, a failed walk with a way there not; Train Now trying a held shop again; a buy on arrival waiting for its own walk; the trainer walk re-priced after funding and on the chain; a shop missed for a toll not held back.
+- Why: user 2026-10-17 (every errand that walks into the dark buys its light first), applied to each walk type. The shop choice, purse and back-off are shared, so they are pinned through every errand.
+
+### ErrandLightWorld.cs
+- Covers: test infrastructure (the shared world for every errand's light stop)
+- Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them.
+- Why: every errand's test drives the same real planning and buying paths.
 
 ### EventEditDialogViewModelTests.cs
 - Covers: ViewModels/Settings/EventEditDialogViewModel
@@ -1282,7 +1294,7 @@ How to keep it current:
 
 ### FootprintMatcherTests.cs
 - Covers: Game/Map/FootprintMatcher
-- Checks: seeding, step narrowing, trap/no-exit drops, exhaustion, neighbour filter (look-sweep), blind steps, merge convergence.
+- Checks: seeding (an empty seed neither converged nor exhausted), step narrowing with each candidate's own exit, trap/no-exit drops, exhaustion, a set that never grows over steps that don't narrow, neighbour filter (look-sweep), blind steps, merge convergence.
 - Why: recovery and passive relocation in look-alike rooms.
 
 ### GameDataBrowserViewModelTests.cs
@@ -1309,7 +1321,7 @@ How to keep it current:
 - Covers: Game/Map/StopOnGameDataChange + MovementController with HeldDetourResume/PvpFight, DefaultTaskRunner, PartyTrainCoordinator
 - Checks: a game-data change drops the run a fight held, the default task held for the party, and a training trip in a wait; without the hook each would start on the other set's rooms.
 - Why: runs restarting on wrong room numbers.
-- Test entry point kept: PartyTrainCoordinator.RunTripForTests: the real start needs a running movement engine.
+- Named seam: PartyTrainCoordinator.RunTripAsync is internal, so the test starts a trip with a set decision: the leader tick's own start needs a running movement engine, MudPlay partners and their status reports.
 
 ### GameDataDeltaTests.cs
 - Covers: Services/SettingsResolver game-data deltas, ViewModels MonstersSectionViewModel
@@ -1932,6 +1944,11 @@ How to keep it current:
 - Checks: visibility bands with strict boundaries, illumination added to room light, light strength needed to see, server phrasing.
 - Why: map tooltip and auto-light route predictor share one formula.
 
+### LightShopBuyTests.cs
+- Covers: Game/Light/LightShopBuy
+- Checks: one `buy` per copy short of the target at the shop an errand walked to; the first fresh copy ends it, with no buy left in progress; the buy window passing with no copy ends it unbought; a cancelled buy says nothing.
+- Why: Auto-Light light trips buy only what is short and never hang at the shop.
+
 ### LineExtractorTests.cs
 - Covers: Terminal/LineExtractor
 - Checks: cell row → text/attributes (trim rules), soft-wrap stitching (incl. 1000 rows), hard breaks kept, slow-line notice (no line text leaked), prompt/content split with rest/meditate tags.
@@ -2041,7 +2058,7 @@ How to keep it current:
 - Covers: Game/Map/NavFolderWatcher, LoopManager, LairManager, NavFolderManager
 - Checks: another client's loop/lair writes, deletes, moves seen on the second beat; own writes not echoed; unreadable files and folders handled; running loops keep their copy; walk and parse run off the UI thread.
 - Why: two clients sharing a set's Loops folder.
-- Test entry point kept: NavFolderWatcher.InFlight: the poll hands work across threads by design, so a test needs the barrier to know a pass is done.
+- Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
 
 ### LoopRunnerEmptyRoomCommandTests.cs
 - Covers: Game/Map/LoopRunner (empty-room commands)
@@ -2105,7 +2122,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 6 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
@@ -2577,7 +2594,7 @@ How to keep it current:
 
 ### ParadigmRoomSpellSeedTests.cs
 - Covers: the Paradigm message seed, Game/MessageCandidateWatcher
-- Checks: Room-spell flavour wordings and shipped Ids; recognised, not staged.
+- Checks: Room-spell flavour wordings and shipped Ids; recognised, nothing staged.
 - Why: paradigm-20261010-145330; unrecognized-line floods.
 
 ### PartyAilmentTrackerTests.cs
@@ -2597,12 +2614,12 @@ How to keep it current:
 
 ### PartyDeathRosterCleanupTests.cs
 - Covers: Game/PartyDeathRosterCleanup
-- Checks: A dead member who then shows as invited is uninvited once combat clears; scoped to leader, movement and roster.
-- Why: Loop stalls on PartyInviteGate.
+- Checks: a member's death in our room (`<Name> is dead.`) asks one `par` unless one is on its way or the timer's is due; the first reply read settles it: not listed, the roster drops them; listed [Invited], a leader uninvites them once combat clears (Paradigm), never when they follow or are invited again first. Followers and a dead leader ask nothing; pending recruits and non-members are ignored; reconnects drop a `par` from before; a new `par` cadence starts the timer's countdown over; the master switch holds the `par`; decisions logged at Info; the client's own uninvite doesn't suppress auto-invite, the user's does.
+- Why: user, 2026-10-17 (a dead member is settled by the next `par`); loop stalls on PartyInviteGate.
 
 ### PartyDisconnectDeathTests.cs
 - Covers: Game/PartyManager
-- Checks: Disconnect, hang-up, left-realm and par-drop grace windows; auto-invite on re-entry; leader drop dissolves the party; custom logoff line; member death.
+- Checks: Disconnect, hang-up, left-realm, par-drop and custom-logoff grace windows (seen through @comeback eligibility, WasRecentlyPartied); auto-invite on re-entry, spent by the invite; leader drop dissolves the party.
 - Why: Re-invite of lost members; stock-20260801-002423.
 
 ### PartyDisconnectMovementGateTests.cs
@@ -2789,7 +2806,7 @@ How to keep it current:
 - Covers: Services/PerformanceMonitor
 - Checks: timings only while collecting; the per-minute summary (count, p50, p95, max) resets; stall lines and their summary; measured scopes are summarised.
 - Why: the performance log's content.
-- Test entry point kept: PerformanceMonitor.CollectTo and its internal constructor: the real output is a file written from a watcher thread off the dispatcher.
+- Named seam: PerformanceMonitor.CollectTo and its internal constructor: the real output is a file written from a watcher thread off the dispatcher.
 
 ### PeriodicDamageRoomSpellsTests.cs
 - Covers: Services/RoomSpellDamageIndex, ViewModels/Settings/PeriodicDamageRoomSpellsSectionViewModel
@@ -3026,13 +3043,12 @@ How to keep it current:
 - Covers: Services/RecentLogFile
 - Checks: two-file rolling time and size bounds; writes off the logging thread; paused under Auto-collect; prune across processes; a stalled disk drops the oldest and says so; failure notes; disk error ends the file.
 - Why: the always-on last-minutes log for hang reports.
-- Test entry point kept: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
+- Named seam: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
 
 ### RecoveryLookSweepTests.cs
 - Covers: Game/Map/RecoveryLookSweep
-- Checks: `look <dir>` per exit in order, each after the last render; a timed-out arm is skipped; cancel.
+- Checks: `look <dir>` per exit in order, each after the last render; a timed-out arm is skipped; a render stops its look's timeout and the next look gets its own; cancel. The per-look timeout runs on an injected scheduler.
 - Why: move-free position recovery.
-- Test entry point kept: RecoveryLookSweep's useTimer constructor switch and FireLookTimeoutForTests: held with the room-tracking PR (#1091), to be replaced once it lands.
 
 ### RegenDiagnosticsRecorderTests.cs
 - Covers: Game/RegenDiagnosticsRecorder
@@ -3191,7 +3207,7 @@ How to keep it current:
 
 ### RoomLightSpellResolverTests.cs
 - Covers: Game/Light/RoomLightSpellResolver (with LightItemIndex)
-- Checks: The room-light spell's illumination comes from Illu/RoomIllu MinBase, or from the light item a textblock spell gives (TB in MinBase or AbilVal). Unknown, non-light and non-light-item spells give 0.
+- Checks: The room-light spell's illumination comes from Illu/RoomIllu MinBase, or from the light item a textblock spell gives (TB in MinBase or AbilVal). Unknown, non-light and non-light-item spells give 0. The cast-code lookups (Stock starlight a buff, illuminate a light ball; Paradigm illuminate a buff; the spell-book name over the Short column; one row per code); darkening spells; the Add-buff dialog keeps "only when dark" for a light spell picked by its code.
 - Why: Auto-light's estimate of a cast light spell's illumination on both realms.
 
 ### RoomRedisplayCoordinatorTests.cs
@@ -3258,6 +3274,11 @@ How to keep it current:
 - Covers: Game/Map/RoomTracker
 - Checks: The confidence state machine: first observation, predicted moves, subset exits, blocked moves, silent desync, manual locate, graph reload, StateChanged. Also: the Suspect strike ladder; door-tolerant re-anchor; go-path text exits; dark-room and blind-move advance; the echo-claim and peek windows; manual-move detection; reconnect with a move in flight; hydrate, replay and persist of the profile anchor; death capture; fear moves.
 - Why: Reports `paradigm-20260921-145800`, `paradigm-20260813-201720`, `paradigm-20260811-122610`, `paradigm-20260811-104042`, `paradigm-20260805-224603`, and the 002347 / 141605 / 002430 / 195229 cases.
+
+### RoomTrackingRecoveryWireTests.cs
+- Covers: Game/Map/RoomTracker (the passive grid re-localiser), Game/Map/EngineRecoveryGate (tier-2 forward footprint, tier-3 walk-back), over TrackerWireRig
+- Checks: the passive re-localiser folds each display with the move it answers: typed-ahead and echoed moves in order, follow drags, text exits through each candidate's own exit, refused, unanswered and blind/dark moves, slow hops and the hop bound, exhausted footprints. The tier-2 forward footprint folds every step's landing in order and drops on a refused step or a teleport; the tier-3 walk-back stops at its cap and declares Lost. A located room from a guess is never saved as the known room: saves, relogs and profile swaps land back on the room held.
+- Why: position recovery in look-alike rooms (#1091, the room-tracking recovery fixes).
 
 ### RoombaHouse.cs
 - Test infrastructure.
@@ -3442,13 +3463,13 @@ How to keep it current:
 - Covers: ViewModels/Settings/SettingsWindowViewModel.ApplyDirty
 - Checks: On exit, changed sections are saved and untouched ones left alone. A changed section with a SaveWarning is held on exit, but applied on an answered OK/Apply.
 - Why: CLAUDE.md "Edit windows": client exit saves pending settings without prompting (user, 2026-10-08).
-- Test entry point kept: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
+- Named seam: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
 
 ### SettingsSearchTests.cs
 - Covers: ViewModels/Settings/SettingsWindowViewModel (search)
 - Checks: The search highlights matches without hiding sections, as one phrase (trimmed, case-insensitive), over the views' shown text including tooltips. A blank search never reads the views; shown text re-runs a search already typed; the search survives section changes; the count uses Help's wording.
 - Why: Settings search has to behave like the Help window's search.
-- Test entry point kept: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
+- Named seam: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
 
 ### SetupGuideTests.cs
 - Covers: ViewModels/Guides/GuideViewModel, GuideCatalogue, GuideProbes
@@ -3655,6 +3676,11 @@ How to keep it current:
 - Checks: default priority order 1..10 and empty spell slots; bless slots serialise sparsely and keep a slot out of the realm's range.
 - Why: CastingDirector's between-round order (user, 2026-10-06)
 
+### SplitReformJoinNagTests.cs
+- Covers: Game/AutoPartyManager (party-split reform with the @join nag)
+- Checks: after a party-splitting teleport the leader invites each member as they land; the @join nag runs its 3 nags before the wait may end; a rejoin after the first nag is never uninvited; with no rejoin the existing fallback runs; longer waits and resend intervals; an `{Ok}` reply; nags turned off; the master switch at the split or midway holds the nags and the uninvite.
+- Why: user, 2026-10-17: "it should invite, wait for the @join nag to kick in. After the 3 nags, if they don't join, then follow the behavior we have in the client".
+
 ### StackedPackEntryTests.cs
 - Covers: Game/Inventory/InventoryManager + InventorySnapshot (PackCount, PackNames, IsCarriedOrWorn), Game/Inventory/EquipmentManager
 - Checks: a pile is one counted entry from an `i` read and from gets; a weapon, off-hand, set piece, backstab armour or location item held as a pile is still equipped; a different item's pile doesn't match
@@ -3688,7 +3714,7 @@ How to keep it current:
 
 ### StashRoomManagerTests.cs
 - Covers: Game/Cash/StashRoomManager
-- Checks: coin `hide N <coin>` lowest-first, limited by StashCoinCutoff; flagged items/keys hidden (Paradigm counted, Min. to keep honoured, a number in an item's name isn't a count); gates (Auto-get-cash, room match, nothing left on a re-visit); StashExecuted event
+- Checks: coin `hide N <coin>` lowest-first, limited by StashCoinCutoff; flagged items/keys hidden (Paradigm counted, Min. to keep honoured, a number in an item's name isn't a count); gates (Auto-get-cash, room match, nothing left on a re-visit)
 - Why: GAME_MECHANICS stash/stacking rules; auto-stash Min. to keep (user, 2026-10-08)
 
 ### StashTransferProgressTests.cs
@@ -3979,6 +4005,12 @@ How to keep it current:
 - Checks: a click runs the first option or the saved pick; Choose sets and saves without running; an unknown saved pick falls back to the first; the tooltip names the pick.
 - Why: a ▾ mis-pick must not fire a sweep like Drop everything.
 
+### TrackerWireRig.cs
+- Test infrastructure.
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests).
+- Why: lets the recovery tests run over the wire the way they do live.
+
 ### TrainBudgetCalculatorTests.cs
 - Covers: Game/Calculators/TrainBudgetCalculator
 - Checks: bankable levels (inclusive threshold, cap, no chart/level); fractional banked levels; LevelsToTrain reserve and "do not train above" ceiling; WithinCeiling; FormatBankableLevels rounds down.
@@ -4038,6 +4070,11 @@ How to keep it current:
 - Covers: Game/TrainerScreenGate, Services/EngineSendGate
 - Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume, holds compose with others, Dispose releases.
 - Why: background sends leaking into the `train stats` form.
+
+### TrainerWalkLightStopTests.cs
+- Covers: Game/Light/ErrandLightStop on the training walk (Game/TrainerWalkManager), driven through TrainNow on ErrandLightWorld
+- Checks: a shop in the start room buys at once, then walks to the trainer; a shop that is a stop-before boss room walks on to the trainer without buying, and the run doesn't hang; a walk the user starts during the buy ends the run and keeps the user's walk; a stopped walk to the shop ends the run.
+- Why: training walks through dark rooms with no light (Auto-Light); the edges the training walk's own light stop handled, now on the shared stop.
 
 ### TransactionHistoryTrackerTests.cs
 - Covers: Game/Cash/TransactionHistoryTracker

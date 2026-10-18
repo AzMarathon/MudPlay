@@ -284,7 +284,7 @@ The test checklist:
 
 Real paths only:
 - Tests drive the client's real input and output paths: game output as bytes through `ServerFeed` (a `TerminalEmulator` + `LineExtractor`), chat through `ChatLines` and the router, the wire through each engine's `SetWireSender`, and time through injected schedulers (`ManualTimers`) and clocks (`ManualClock` or an optional `now` parameter). Profiles start the way the client starts them (`TestProfiles`).
-- Never a test-only hook: no `…ForTests` member, test-only constructor, reflection into private members, or copy of production logic inside the test. A seam production still carries for a test is named, with its reason, in the checklist entry of the file that uses it.
+- Never a test-only hook: no `…ForTests` member, test-only constructor, reflection into private members, or copy of production logic inside the test. A seam production still carries for a test (an internal constructor, a completion barrier, a method widened to internal) is a **named seam**: it keeps a name that says what it does, never `…ForTests`, and a `Named seam:` line with its reason goes in the checklist entry of the file that uses it.
 - A test that deletes folders through the app's stores calls `ScratchRoot.Require()` first, and the suite runs with `MUDPLAY_DATA_ROOT` set to a scratch folder.
 
 ## What this file is not

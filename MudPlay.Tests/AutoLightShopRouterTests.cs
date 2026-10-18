@@ -8,14 +8,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoLightShopRouter"/> — the provisioning detour that turns the
-/// provisioner's <see cref="AutoLightAction.Buy"/> verdict into a walk-to-shop /
-/// <c>buy</c> run and resumes to the original destination. Exercises the master-
-/// toggle gate, engine-walk suppression, fewest-added-steps shop pick, the buy
-/// batch, resume-on-first-copy (one covers the dark route), and the failure
-/// suppression that keeps a re-announced dark route from looping the detour.
-/// </summary>
+// AutoLightShopRouter — the provisioning detour that turns the
+// provisioner's AutoLightAction.Buy verdict into a walk-to-shop /
+// buy run and resumes to the original destination. Exercises the master-
+// toggle gate, engine-walk suppression, fewest-added-steps shop pick, the buy
+// batch, resume-on-first-copy (one covers the dark route), and the failure
+// suppression that keeps a re-announced dark route from looping the detour.
 public sealed class AutoLightShopRouterTests
 {
     private static readonly RoomKey Cur = new(1, 100);
@@ -437,5 +435,31 @@ public sealed class AutoLightShopRouterTests
 
         Assert.Empty(h.Walks);
         Assert.False(r.DetourActive);
+    }
+
+    // "Near" for a stock-up in passing: the shop may add at most the allowance to
+    // the walk from `from` to `to` (3 + 4 − a direct 5 = 2 added steps here).
+    [Fact]
+    public void TrySelectNearbyShop_TakesAShopWithinTheAddedStepAllowance_Only()
+    {
+        var h = new Harness().WithSingleShop();
+        h.Dist[(Cur, Dest)] = 5;
+        AutoLightShopRouter r = h.Build();
+
+        Assert.True(r.TrySelectNearbyShop(Cur, Dest, LanternId, maxAddedSteps: 2, out RoomKey shop));
+        Assert.Equal(ShopA, shop);
+        Assert.False(r.TrySelectNearbyShop(Cur, Dest, LanternId, maxAddedSteps: 1, out _));
+        Assert.Empty(h.Walks);
+    }
+
+    [Fact]
+    public void Describe_NamesTheDetourInFlight()
+    {
+        var h = new Harness().WithSingleShop();
+        AutoLightShopRouter r = h.Build();
+        Assert.Equal("idle", r.Describe());
+
+        r.OnBuyRequested(Buy(3));
+        Assert.Contains("'lantern' x3", r.Describe());
     }
 }

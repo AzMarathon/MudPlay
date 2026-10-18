@@ -25,7 +25,7 @@ public sealed class PathItemSummonRouterTests
     private static string Decode(byte[] b) => Encoding.Latin1.GetString(b).TrimEnd('\r');
 
     private static Need PathNeed(int id, int qty = 1)
-        => new(NeedKind.PathItem, id.ToString(), "test", DateTimeOffset.Now, qty);
+        => new(id.ToString(), "test", DateTimeOffset.Now, qty);
 
     // The ONLY shape MonsterDeathWatcher ever emits: a kill inferred from the
     // generic "exp gain + *Combat Off*" pair, carrying no identity at all (the

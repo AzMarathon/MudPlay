@@ -6,12 +6,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="DeathFloorTracer"/> slow-vs-overkill classification and the
-/// death-floor refine writeback. A slow death (gradual bleed to the floor)
-/// refines <see cref="RealmProfile.PlayerDiesAtHp"/>; an overkill (killed from
-/// positive HP, or a big single drop past the floor) is discarded.
-/// </summary>
+// DeathFloorTracer slow-vs-overkill classification and the
+// death-floor refine writeback. A slow death (gradual bleed to the floor)
+// refines RealmProfile.PlayerDiesAtHp; an overkill (killed from
+// positive HP, or a big single drop past the floor) is discarded.
 public sealed class DeathFloorTracerTests
 {
     private sealed class Harness : IDisposable
@@ -45,10 +43,15 @@ public sealed class DeathFloorTracerTests
         public void Dispose() => Tracer.Dispose();
     }
 
-    // ----- slow deaths refine the floor ------------------------------
+    // ----- slow deaths lower the floor --------------------------------
+    //
+    // The HP a death comes at is never printed: the last prompt before the death
+    // line is an HP the character survived, so the floor is at least one below it.
 
+    // A slow death whose last reading is above the floor says nothing new: the
+    // floor is never raised to it.
     [Fact]
-    public void SlowDeath_BledToFloor_RefinesToMeasuredHp()
+    public void SlowDeath_ShallowerThanTheFloor_NeverRaisesIt()
     {
         using Harness h = new();
         h.SetMaxHp(200);
@@ -56,36 +59,51 @@ public sealed class DeathFloorTracerTests
         h.Feed(40, 0, -4, -8, -12, -16, -20);
         h.Tracer.RecordDeath();
 
-        Assert.Equal(-20, h.Realm!.PlayerDiesAtHp);   // refined from the -25 seed
-        Assert.Equal(1, h.SaveCount);
+        Assert.Equal(-25, h.Realm!.PlayerDiesAtHp);
+        Assert.Equal(0, h.SaveCount);
     }
 
+    // Bleeding -5, -6, -7, then a hit kills. -7 was the last HP survived; saving it
+    // as the floor would read the character as dead from -8 down to the real floor,
+    // where the emergency hang-up stops firing.
     [Fact]
-    public void SlowDeath_DeeperThanSeed_LearnsDeeperFloor()
+    public void BleedThenAHitKills_TheFloorStaysWhereItWas()
     {
         using Harness h = new();
         h.SetMaxHp(200);
-        h.Feed(30, 0, -8, -16, -24, -32, -40);      // bleed steps of 8, dies at -40
-        h.Tracer.RecordDeath();
-
-        Assert.Equal(-40, h.Realm!.PlayerDiesAtHp);
-        // Two writes: the live-survival path refines to -33 the moment the char is
-        // seen bleeding on from a survived -32 (below the -25 seed), then the death
-        // itself refines to the measured -40. Both are correct; the final floor is
-        // the deeper -40.
-        Assert.Equal(2, h.SaveCount);
-    }
-
-    [Fact]
-    public void SlowDeath_MatchingCurrentFloor_ConfirmsWithoutSaving()
-    {
-        using Harness h = new();
-        h.SetMaxHp(200);
-        h.Feed(40, 0, -5, -10, -15, -20, -25);      // dies exactly at the -25 seed
+        h.Feed(40, 0, -5, -6, -7);
         h.Tracer.RecordDeath();
 
         Assert.Equal(-25, h.Realm!.PlayerDiesAtHp);
-        Assert.Equal(0, h.SaveCount);               // no change → no persist
+        Assert.Equal(0, h.SaveCount);
+    }
+
+    [Fact]
+    public void SlowDeath_DeeperThanSeed_LowersToOneBelowTheLastHpSurvived()
+    {
+        using Harness h = new();
+        h.SetMaxHp(200);
+        h.Feed(30, 0, -8, -16, -24, -32, -40);      // bleed steps of 8, last read -40
+        h.Tracer.RecordDeath();
+
+        Assert.Equal(-41, h.Realm!.PlayerDiesAtHp);
+        // Two writes: the live-survival path lowers it to -33 the moment the char is
+        // seen bleeding on from a survived -32 (below the -25 seed), then the death
+        // shows -40 was survived too.
+        Assert.Equal(2, h.SaveCount);
+    }
+
+    // A last reading at the floor itself proves the floor is deeper.
+    [Fact]
+    public void SlowDeath_LastReadAtTheFloor_LowersItByOne()
+    {
+        using Harness h = new();
+        h.SetMaxHp(200);
+        h.Feed(40, 0, -5, -10, -15, -20, -25);
+        h.Tracer.RecordDeath();
+
+        Assert.Equal(-26, h.Realm!.PlayerDiesAtHp);
+        Assert.Equal(1, h.SaveCount);
     }
 
     // ----- overkills are discarded -----------------------------------
@@ -246,7 +264,7 @@ public sealed class DeathFloorTracerTests
     {
         using Harness h = new();
         h.SetMaxHp(200);
-        h.Feed(40, 0, -4, -8, -12, -16, -20);
+        h.Feed(40, 0, -4, -8, -12, -16, -20, -24, -28);
         h.Tracer.RecordDeath();                      // refines once
         Assert.Equal(1, h.SaveCount);
 
@@ -254,6 +272,6 @@ public sealed class DeathFloorTracerTests
         // fresh trajectory has nothing to measure.
         h.Tracer.RecordDeath();
         Assert.Equal(1, h.SaveCount);
-        Assert.Equal(-20, h.Realm!.PlayerDiesAtHp);
+        Assert.Equal(-29, h.Realm!.PlayerDiesAtHp);
     }
 }

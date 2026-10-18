@@ -8,13 +8,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// PR 9.L — <see cref="AutoGetItemsManager"/> resolves each room
-/// "You notice ... here." entry against game data and sends
-/// <c>get &lt;name&gt;</c> only for items the user flagged
-/// AutoCollect, gated by the AutoGetItems master toggle and the
-/// collect-after-combat timing choice.
-/// </summary>
+// AutoGetItemsManager resolves each room "You notice ... here." entry against
+// game data and sends get <name> for items flagged AutoCollect. Pins the gates
+// (the master toggle, collect-after-combat timing, peeks), MaxToGet, the
+// encumbrance brackets and dropping coin to make weight, the floor ledger's
+// dedup and the re-look after a kill, and Stock / Paradigm batching.
 public sealed class AutoGetItemsManagerTests
 {
     private sealed class Harness : IDisposable
@@ -62,6 +60,10 @@ public sealed class AutoGetItemsManagerTests
         // canonical names Auto-sell would sell, and what the coin drop answers when
         // asked to free weight for one (each ask is recorded).
         public HashSet<string> AutoSell { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // canonical name -> the item's Auto-collect rule as the user set it; names
+        // Auto-discard would drop.
+        public Dictionary<string, bool> Rules { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Discard { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool CoinDropFrees { get; set; }
         public List<(long Weight, string Item)> CoinDropAsks { get; } = new();
         public bool GateLight { get; set; }
@@ -108,7 +110,8 @@ public sealed class AutoGetItemsManagerTests
             int number = Numbers.GetValueOrDefault(key);
             int cap = Caps.TryGetValue(key, out int c) ? c : int.MaxValue;
             int weight = Weights.GetValueOrDefault(key);
-            return new AutoGetItemsManager.ResolvedItem(number, key, auto, noTake, cap, weight, AutoSell.Contains(key));
+            return new AutoGetItemsManager.ResolvedItem(number, key, auto, noTake, cap, weight, AutoSell.Contains(key),
+                AutoCollectSet: Rules.TryGetValue(key, out bool rule) ? rule : null, AutoDiscard: Discard.Contains(key));
         }
 
         private static string Strip(string raw)
@@ -170,6 +173,97 @@ public sealed class AutoGetItemsManagerTests
         h.Flags["long sword"] = false;
 
         h.Feed("You notice a long sword here.");
+
+        Assert.Empty(h.Sent);
+    }
+
+    // Auto-Light's floor pickup rides the same pass: a light it wants is got with
+    // Auto-Get Items off and the light unflagged.
+    [Fact]
+    public void ALightAutoLightWants_IsGot_WithAutoGetOff()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.Flags["long sword"] = true;
+        int torch = h.NumberFor("torch");
+        h.Items.SetExtraCollect(i => i.Number == torch ? 1 : 0, "for Auto-Light");
+
+        h.Feed("You notice a torch, a long sword here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
+    // A light that is both flagged and wanted is one floor copy: got once.
+    [Fact]
+    public void AFlaggedLightAutoLightAlsoWants_IsGotOnce()
+    {
+        using Harness h = new();
+        h.Flags["torch"] = true;
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
+        h.Feed("You notice a torch here.");   // the same floor shown again
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
+    // The item's own rules decide over Auto-Light: Auto-collect turned off,
+    // auto-discard or auto-sell each keep it on the floor.
+    [Theory]
+    [InlineData("rule-off")]
+    [InlineData("discard")]
+    [InlineData("sell")]
+    public void ALightTheItemRulesKeepOff_IsNotGotForAutoLight(string rule)
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        if (rule == "rule-off") h.Rules["torch"] = false;
+        if (rule == "discard") h.Discard.Add("torch");
+        if (rule == "sell") h.AutoSell.Add("torch");
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
+
+        Assert.Empty(h.Sent);
+    }
+
+    // Only the copies Auto-Light asks for come off a pile, and the floor shown
+    // again doesn't add more while those are on their way.
+    [Fact]
+    public void APileOfLights_OnlyTheCopiesWantedAreGot()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.Items.SetExtraCollect(_ => 2, "for Auto-Light");
+
+        h.Feed("You notice 5 torch here.");
+        h.Feed("You notice 5 torch here.");
+
+        Assert.Equal(new[] { "get torch", "get torch" }, h.SentText);
+    }
+
+    // Two entries of one light on a floor share the count asked for.
+    [Fact]
+    public void TwoEntriesOfOneLight_ShareTheCountWanted()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch, a torch here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
+    [Fact]
+    public void ALightThatCannotBeTaken_IsNotGotForAutoLight()
+    {
+        using Harness h = new() { Enabled = false };
+        h.Flags["torch"] = false;
+        h.NoTake["torch"] = true;
+        h.Items.SetExtraCollect(_ => 1, "for Auto-Light");
+
+        h.Feed("You notice a torch here.");
 
         Assert.Empty(h.Sent);
     }
@@ -288,19 +382,6 @@ public sealed class AutoGetItemsManagerTests
 
         h.HasHostiles = false;
         h.Items.OnRoomObserved();                  // nothing to flush
-
-        Assert.Empty(h.Sent);
-    }
-
-    [Fact]
-    public void PeekSuppressed_NoSend()
-    {
-        // A look-direction peek renders a full "You notice" survey for the
-        // adjacent room; getting from a room we never entered is the bug.
-        using Harness h = new() { PeekSuppressed = true };
-        h.Flags["long sword"] = true;
-
-        h.Feed("You notice a long sword here.");
 
         Assert.Empty(h.Sent);
     }

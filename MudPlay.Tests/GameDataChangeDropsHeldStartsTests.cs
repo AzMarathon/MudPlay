@@ -526,7 +526,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
             new(PartyTrainReadiness.Ready, Level: 5, ClassNumber: classNumber, LevelsToTrain: 1,
                 CostCopper: 0, CashCopper: 0, SpareCopper: 0, BankCopper: 0, BankName: null, EtaSeconds: 0);
         trip.Timers.Clear();   // the coordinator's own ticks, not the trip's
-        trip.Running = trip.Pump.Run(() => coordinator.RunTripForTests(
+        trip.Running = trip.Pump.Run(() => coordinator.RunTripAsync(
             new PartyTrainDecision(PartyTrainVerdict.Fire, new[] { "Bob", "Cid" }, Array.Empty<string>(), Array.Empty<string>(), "test"),
             new List<PartyTrainParticipant>
             {

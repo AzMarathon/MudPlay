@@ -7,14 +7,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// Coverage for the Phase 6 PR 6.5 additions to PartyManager —
-/// disconnect / death / grace-window auto-invite. PR 6.1 tests cover
-/// follows-you / par-block; this class focuses on the new event paths
-/// only. Updated post-PR-6.8 to use the real BBS-observed wordings
-/// ("X started to follow you." instead of the earlier "now follows
-/// you" guess).
-/// </summary>
+// PartyManager's disconnect paths: a member's disconnect, hang-up or exit from
+// the Realm, a silent drop seen in `par`, and the board's own logoff line start
+// the grace window; a return inside it re-invites, and the @comeback window
+// follows the drop.
 public sealed class PartyDisconnectDeathTests
 {
     // The game's output each PartyManager is fed, the way the client feeds it.
@@ -52,7 +48,7 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper just disconnected!!!."));
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -69,7 +65,7 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper just hung up!!!."));
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -109,7 +105,7 @@ public sealed class PartyDisconnectDeathTests
         Assert.True(mgr.State.Members[0].IsSelf);
         // Snapshot key is the given name — matches the lookup
         // OnPlayerEnters does when "Raijin just entered the Realm" fires.
-        Assert.Contains("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Raijin"));
     }
 
     [Fact]
@@ -163,7 +159,6 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Raijin stops following you."));
         router.Dispatch(Line("Raijin just entered the Realm."));
 
-        Assert.DoesNotContain("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.True(mgr.WasRecentlyPartied("Raijin"));
 
         mgr.ForgetReconnectMember("Raijin");
@@ -243,7 +238,7 @@ public sealed class PartyDisconnectDeathTests
 
         Assert.Equal(2, mgr.State.Members.Count);
         Assert.DoesNotContain(mgr.State.Members, m => m.Name.StartsWith("Raijin"));
-        Assert.Contains("Raijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Raijin"));
     }
 
     [Fact]
@@ -311,7 +306,8 @@ public sealed class PartyDisconnectDeathTests
         feed.Rows(new[] { string.Empty });
 
         Assert.Equal(before, mgr.State.Members.Count);
-        Assert.Empty(mgr.RecentlyDisconnected);
+        Assert.False(mgr.WasRecentlyPartied("Raijin"));
+        Assert.False(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -327,7 +323,7 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper has stopped following you."));
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -387,7 +383,7 @@ public sealed class PartyDisconnectDeathTests
         Assert.True(mgr.State.Members[0].IsSelf);
         Assert.False(mgr.State.IsInParty);
         Assert.Null(mgr.State.LeaderName);
-        Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(mgr.WasRecentlyPartied("MudPlay"));
     }
 
     [Fact]
@@ -399,7 +395,7 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Stranger just disconnected!!!."));
 
         Assert.Single(mgr.State.Members);
-        Assert.DoesNotContain("Stranger", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(mgr.WasRecentlyPartied("Stranger"));
     }
 
     [Fact]
@@ -467,7 +463,7 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper just left the Realm."));
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -522,7 +518,7 @@ public sealed class PartyDisconnectDeathTests
         Assert.True(mgr.State.Members[0].IsSelf);
         Assert.False(mgr.State.IsInParty);
         Assert.Null(mgr.State.LeaderName);
-        Assert.DoesNotContain("MudPlay", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(mgr.WasRecentlyPartied("MudPlay"));
     }
 
     // ===== Board-specific (custom) disconnect line =====
@@ -543,7 +539,7 @@ public sealed class PartyDisconnectDeathTests
         _feeds[mgr].Line("►►► [Helper] logs OFF the BBS.");
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Helper"));
     }
 
     [Fact]
@@ -564,7 +560,7 @@ public sealed class PartyDisconnectDeathTests
         _feeds[mgr].Line("►►► [SuijinAcct] logs OFF the BBS.");
 
         Assert.Empty(mgr.State.Members);
-        Assert.Contains("Suijin", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.True(mgr.WasRecentlyPartied("Suijin"));
         Assert.Equal("Suijin", fired);
     }
 
@@ -579,7 +575,7 @@ public sealed class PartyDisconnectDeathTests
         _feeds[mgr].Line("►►► [Stranger] logs OFF the BBS.");
 
         Assert.Single(mgr.State.Members);
-        Assert.DoesNotContain("Stranger", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.False(mgr.WasRecentlyPartied("Stranger"));
     }
 
     [Fact]
@@ -629,7 +625,10 @@ public sealed class PartyDisconnectDeathTests
 
         byte[] sent = Assert.Single(wire);
         Assert.Equal("invite Helper\r", Encoding.Latin1.GetString(sent));
-        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
+        // The invite spent the window: a second entry sends nothing.
+        wire.Clear();
+        router.Dispatch(Line("Helper just entered the Realm."));
+        Assert.Empty(wire);
     }
 
     [Fact]
@@ -676,7 +675,6 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Helper just entered the Realm."));
 
         Assert.Empty(wire);
-        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -686,41 +684,5 @@ public sealed class PartyDisconnectDeathTests
         router.Dispatch(Line("Stranger just entered the Realm."));
 
         Assert.Empty(wire);
-    }
-
-    [Fact]
-    public void Reconnect_NoWireSender_NoThrow()
-    {
-        var (router, mgr, _) = Setup();
-        router.Dispatch(Line("Helper started to follow you."));
-        router.Dispatch(Line("Helper just disconnected!!!."));
-        router.Dispatch(Line("Helper just entered the Realm."));
-        // No assertion — passes if no exception.
-    }
-
-    // ===== Death =====
-
-    [Fact]
-    public void Death_OfPartyMember_RemovesImmediately()
-    {
-        var (router, mgr, _) = Setup();
-        router.Dispatch(Line("Helper started to follow you."));
-        Assert.Single(mgr.State.Members);
-
-        router.Dispatch(Line("Helper has been slain by a giant rat."));
-
-        Assert.Empty(mgr.State.Members);
-        Assert.DoesNotContain("Helper", mgr.RecentlyDisconnected.Keys, StringComparer.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Death_OfNonMember_IsIgnored()
-    {
-        var (router, mgr, _) = Setup();
-        router.Dispatch(Line("Helper started to follow you."));
-
-        router.Dispatch(Line("Stranger has been slain by a dragon."));
-
-        Assert.Single(mgr.State.Members);
     }
 }

@@ -72,6 +72,7 @@ public sealed class TrainerWalkManager : IDisposable
     private readonly AutoLairManager _autoLair;
     private readonly AutoTrainManager _autoTrain;
     private readonly LogService? _log;
+    private readonly Game.Light.ErrandLightStop? _lightStop;
     private readonly WireSender _wire = new();
     private readonly IDisposable _trainSub;
     private readonly IDisposable _nextLevelSub;
@@ -98,6 +99,8 @@ public sealed class TrainerWalkManager : IDisposable
     private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
     private RoomKey _runFrom;         // where a walk run started — the shop leg plans its way back here
     private bool _spellTripTried;     // the shop leg has had its one go this run
+    private long _trainBill;          // what the run has still to pay, as funding budgets it
+    private long _trainScrolls;       // the spell scrolls in that bill
     private bool _spellsOnly;         // a shop leg started by hand: no training, no train report
     private bool _fundingWithSpells;  // the funding errand in flight is collecting scroll money too
 
@@ -136,7 +139,12 @@ public sealed class TrainerWalkManager : IDisposable
     public TrainerWalkManager(PlayerStats stats, StatParser statParser, GameDataCache gameData,
                               ProfileService profile, RoomTracker tracker, BfsMapper bfs,
                               AutoWalkManager walker, LoopRunner loopRunner, AutoLairManager autoLair,
-                              AutoTrainManager autoTrain, MessageRouter router, LogService? log = null)
+                              AutoTrainManager autoTrain, MessageRouter router, LogService? log = null,
+                              // Auto-Light's stop for a walk to a trainer that runs dark: the
+                              // walk is this run's, so the stop is too, since the walk-to light
+                              // router stands down while an errand has the walker. Unwired,
+                              // the walks go as they are.
+                              Game.Light.ErrandLightStop? lightStop = null)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(statParser);
@@ -160,6 +168,7 @@ public sealed class TrainerWalkManager : IDisposable
         _autoLair = autoLair;
         _autoTrain = autoTrain;
         _log = log;
+        _lightStop = lightStop;
 
         _walker.Event += OnWalkEvent;
         _trainSub = router.Subscribe(KnownPatterns.TrainAttainLevel, OnTrained);
@@ -338,6 +347,7 @@ public sealed class TrainerWalkManager : IDisposable
         // on — the user asking to train now has better information than our
         // projection of when they'd be able to afford it.
         _fundingRetryAt = DateTimeOffset.MinValue;
+        _lightStop?.NoteUserStarted();
         _ = TrainNowAsync();
     }
 
@@ -613,11 +623,7 @@ public sealed class TrainerWalkManager : IDisposable
         {
             SendTrain();
         }
-        // planThroughAcquirableGates: the trainer may sit behind (or the walk home
-        // may re-enter) a gated area — key-doors, hidden exits, summon-drop keys,
-        // multi-action gates — that a plain walk can't route through (report
-        // paradigm-20260913-022254, same class of strand as the bank run).
-        else if (_walker.WalkTo(room, planThroughAcquirableGates: true))
+        else if (WalkToTrainerRoom(room))
         {
             _phase = Phase.Walking;
             _log?.Info("AutoTrain", $"Walking to {t.Name} ({t.Map}/{t.Room}) to train.");
@@ -629,6 +635,29 @@ public sealed class TrainerWalkManager : IDisposable
                 ? $"Route to trainer {t.Name} ({t.Map}/{t.Room}) blocked by your avoid in room {blocked.Map}/{blocked.Room} — skipping."
                 : $"No path to trainer {t.Name} ({t.Map}/{t.Room}).");
         }
+    }
+
+    // planThroughAcquirableGates: the trainer may sit behind (or the walk home may
+    // re-enter) a gated area — key-doors, hidden exits, summon-drop keys,
+    // multi-action gates — that a plain walk can't route through (report
+    // paradigm-20260913-022254, same class of strand as the bank run). A walk that
+    // runs dark goes by a light shop first (ErrandLightStop), once per run.
+    // The walk back to where the run started is looked at too, and the buy leaves
+    // the training bill in the purse.
+    private bool WalkToTrainerRoom(RoomKey room) =>
+        _lightStop?.Walk(room, WalkThroughGates, LightStopTakenOver,
+            ahead: _walkRun ? [_runFrom] : null, keepCopper: _trainBill) ?? WalkThroughGates(room);
+
+    private bool WalkThroughGates(RoomKey room) => _walker.WalkTo(room, planThroughAcquirableGates: true);
+
+    // The walk to the trainer was stopped, or a walk started, while the light stop
+    // had it: someone has taken over, so the run ends and the engine stays down.
+    private void LightStopTakenOver(string detail)
+    {
+        if (_phase != Phase.Walking) return;
+        _resume = default;
+        _runTakenOver = true;
+        Finish($"Light stop taken over: {detail} — run cancelled; the loop stays stopped.");
     }
 
     // Ask the funding errand whether this run can be paid for. Returns true when the
@@ -704,9 +733,15 @@ public sealed class TrainerWalkManager : IDisposable
         _fundingWithSpells = scrolls > 0;
         if (scrolls <= 0) spells = null;
 
+        // What the trainer walks' light stop leaves in the purse: the bill funding
+        // budgets, fees, scrolls and the tolls on the way.
+        Game.Train.TrainTripTolls? tolls = TripTolls(itinerary, from, spells);
+        _trainScrolls = scrolls;
+        _trainBill = cost + scrolls + Math.Max(0, tolls?.CopperFrom(from) ?? 0);
+
         var trainerRoom = new RoomKey(first.Map, first.Room);
         Game.Train.TrainFundingHandoff handoff = Game.Train.TrainFundingHandoffRule.For(
-            _funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)),
+            _funding.Begin(cost + scrolls, trainerRoom, tolls),
             _refusal.RecoveryClaimed);
 
         // The scrolls come off the bill before either short answer is taken as final.
@@ -752,6 +787,20 @@ public sealed class TrainerWalkManager : IDisposable
                 Finish("Not enough money to train — staying armed.");
                 return Game.Train.TrainFundingHandoff.Abandon;
         }
+    }
+
+    // What is left to pay from a trainer the run has out-levelled: the fees of the
+    // levels still to train and the tolls on the way, with the scrolls funding
+    // counted. The levels trained so far are paid.
+    private long BillFrom(RoomKey from)
+    {
+        int levels = LevelsThisRun();
+        if (levels <= 0) return _trainScrolls;
+        IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
+            TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
+            ReadDisabledTrainers(), from, _bfs.DistanceMemo());
+        return Game.Train.TrainItineraryPlanner.TotalCost(itinerary) + _trainScrolls
+            + Math.Max(0, TripTolls(itinerary, from, null)?.CopperFrom(from) ?? 0);
     }
 
     // The scrolls the shop leg would buy once this run's levels are trained, walking
@@ -843,6 +892,9 @@ public sealed class TrainerWalkManager : IDisposable
         // Re-select from where the errand left us: the bank we withdrew at may sit
         // nearer a different branch of the same trainer.
         _target = SelectNearest(cur.Key) ?? t;
+        // The tolls on the way to the bank are paid: what the trainer walk's light
+        // stop leaves in hand is the bill from here.
+        if (_trainBill > 0) _trainBill = BillFrom(cur.Key);
         WalkToTrainer(_target.Value, cur.Key);
     }
 
@@ -917,8 +969,7 @@ public sealed class TrainerWalkManager : IDisposable
         {
             SendStatRefresh();
         }
-        // planThroughAcquirableGates: same gated-area reasoning as the train walk.
-        else if (_walker.WalkTo(room, planThroughAcquirableGates: true))
+        else if (WalkToTrainerRoom(room))
         {
             _phase = Phase.Walking;
             _log?.Info("AutoTrain", $"Walking to {t.Name} ({t.Map}/{t.Room}) to allocate CP.");
@@ -951,13 +1002,17 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _trainBill = 0;
+        _trainScrolls = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
         _alteredStats.Reset();
+        _lightStop?.BeginRun();
     }
 
     private void OnWalkEvent(WalkEvent e)
     {
+        if (_lightStop?.OnWalkEvent(e) == true) return;
         if (_phase != Phase.Walking) return;
         RoomKey? trainerRoom = _target is { } t ? new RoomKey(t.Map, t.Room) : null;
         // Events for some other walk (a user walk-to that replaced ours, a detour
@@ -1096,7 +1151,8 @@ public sealed class TrainerWalkManager : IDisposable
 
         if (pick is not { } next) return false;
         var room = new RoomKey(next.Map, next.Room);
-        if (!_walker.WalkTo(room, planThroughAcquirableGates: true)) return false;
+        if (_trainBill > 0) _trainBill = BillFrom(cur.Key);
+        if (!WalkToTrainerRoom(room)) return false;
 
         _target = next;
         _phase = Phase.Walking;
@@ -1429,6 +1485,7 @@ public sealed class TrainerWalkManager : IDisposable
         bool takenOver = _runTakenOver;
         _runTakenOver = false;
         ReserveForTraining?.Invoke(0);
+        _lightStop?.Cancel();
         _phase = Phase.Idle;
         _target = null;
         _resume = default;
@@ -1450,6 +1507,8 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _trainBill = 0;
+        _trainScrolls = 0;
         _spellsOnly = false;
         _fundingWithSpells = false;
 

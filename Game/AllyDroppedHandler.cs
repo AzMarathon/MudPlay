@@ -163,10 +163,9 @@ public sealed partial class AllyDroppedHandler : IDisposable
 
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberDropped, OnDropped));
         _subs.Add(_router.Subscribe(KnownPatterns.UserAidedAlly,      OnAided));
-        // Any way a tracked ally can leave the picture — died, slain, logged off,
+        // Any way a tracked ally can leave the picture — died, logged off,
         // disconnected, or walked out — resolves the rescue so the hold releases.
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberDied,    OnAllyGone));
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberDeath,   OnAllyGone));
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerDisconnects,  OnAllyGone));
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerHungUp,       OnAllyGone));
         _subs.Add(_router.Subscribe(KnownPatterns.PlayerExits,        OnAllyGone));

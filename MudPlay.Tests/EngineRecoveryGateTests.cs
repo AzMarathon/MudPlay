@@ -225,13 +225,12 @@ public sealed class EngineRecoveryGateTests : IDisposable
             gate.NoteEngineStepSent(Direction.N);
     }
 
-    private static RecoveryLookSweep RecordingSweep(out List<string> wire)
+    // The wire the gate's look-sweep peeks on, bound as the main window binds it.
+    private static List<string> SweepWire(EngineRecoveryGate gate)
     {
         var captured = new List<string>();
-        wire = captured;
-        var sweep = new RecoveryLookSweep(log: null, useTimer: false);
-        sweep.SetWireSender(b => captured.Add(Encoding.Latin1.GetString(b)));
-        return sweep;
+        gate.SetWireSender(b => captured.Add(Encoding.Latin1.GetString(b)));
+        return captured;
     }
 
     [Fact]
@@ -579,16 +578,15 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_InPlaceLookSweep_BreaksTwin_WithoutBacktrack()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker);
+        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
-        RecoveryLookSweep sweep = RecordingSweep(out List<string> wire);
+        List<string> wire = SweepWire(gate);
 
         ParkSuspectAtFork(tracker, Direction.N, Direction.E);
         Assert.Equal(RoomConfidence.Suspect, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 2), tracker.State.CurrentRoom!.Key);
 
         gate.Attach(engine);                     // anchor seeds 1/2
-        gate.SetLookSweepForTests(sweep);
         for (int i = 0; i < EngineRecoveryGate.Tier2StepBudget; i++)
             gate.NoteEngineStepSent(Direction.N);
 
@@ -662,9 +660,9 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_DarkRoom_SkipsLookSweep_ReverseWalksInstead()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr-dark", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker);
+        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
-        RecoveryLookSweep sweep = RecordingSweep(out List<string> wire);
+        List<string> wire = SweepWire(gate);
 
         ParkSuspectAtFork(tracker, Direction.N, Direction.E);
         tracker.NoteDarkRoomEntered();           // flag the fork as unseeable
@@ -672,7 +670,6 @@ public sealed class EngineRecoveryGateTests : IDisposable
         Assert.Equal(RoomConfidence.Suspect, tracker.State.Confidence);
 
         gate.Attach(engine);
-        gate.SetLookSweepForTests(sweep);
         for (int i = 0; i < EngineRecoveryGate.Tier2StepBudget; i++)
             gate.NoteEngineStepSent(Direction.N);
 
@@ -692,16 +689,15 @@ public sealed class EngineRecoveryGateTests : IDisposable
     public void Tier3_CombatGate_HoldsLookSweep_UntilClear()
     {
         (RoomGraphManager graph, RoomTracker tracker) = NewGraphAndTracker("twinnbr-combat", TwinNeighbourGraphJson);
-        var gate = new EngineRecoveryGate(graph, tracker);
+        var gate = new EngineRecoveryGate(graph, tracker, lookTimeoutSchedule: new ManualTimers().Arm);
         var engine = new RecordingEngine();
-        RecoveryLookSweep sweep = RecordingSweep(out List<string> wire);
+        List<string> wire = SweepWire(gate);
 
         bool hostiles = true;
         gate.SetCombatGate(() => hostiles);
 
         ParkSuspectAtFork(tracker, Direction.N, Direction.E);
         gate.Attach(engine);
-        gate.SetLookSweepForTests(sweep);
         for (int i = 0; i < EngineRecoveryGate.Tier2StepBudget; i++)
             gate.NoteEngineStepSent(Direction.N);
 
