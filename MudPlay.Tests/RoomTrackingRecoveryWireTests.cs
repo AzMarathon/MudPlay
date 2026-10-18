@@ -464,15 +464,24 @@ public sealed class RoomTrackingRecoveryWireTests
             Direction dir = Plan.Dequeue();
             _rig.Tracker.NoteMoveSent(dir);
             _rig.Gate.NoteEngineStepSent(dir);
-            _rig.Send(Encoding.Latin1.GetBytes(dir.ToToken() + "\r"));
+            (Wire ?? _rig.Send)(Encoding.Latin1.GetBytes(dir.ToToken() + "\r"));
             return true;
         }
 
+        // The engine's wire, as the client wraps it (EngineSendGate); the rig's own
+        // by default.
+        public Action<byte[]>? Wire { get; set; }
+
+        // A stopped engine sends nothing, as LoopRunner's backtrack doesn't once the
+        // loop is stopped.
+        public bool Stopped { get; set; }
+
         public void SendBacktrackMove(Direction direction)
         {
+            if (Stopped) return;
             Backtracks.Add(direction);
             _rig.Tracker.NoteMoveSent(direction);
-            _rig.Send(Encoding.Latin1.GetBytes(direction.ToToken() + "\r"));
+            (Wire ?? _rig.Send)(Encoding.Latin1.GetBytes(direction.ToToken() + "\r"));
         }
 
         public void PauseForRecovery(string reason) { }
@@ -1072,27 +1081,28 @@ public sealed class RoomTrackingRecoveryWireTests
     // lacks, and the engine's watchdog gives up. The walk-back undoes the run's step
     // too, so it retraces the way taken and settles at the Gate; reversing only the
     // engine's steps would send it south out of a room with no south exit.
-    [Fact]
-    public void AFleeStep_IsInTheWalkBackHistory_SoTheWalkBackRetracesIt()
+    // A rig walked E, E, N from the Gate into BendA(3) by an engine, with a
+    // HealthManager wired as the client wires it, its flee run through that engine.
+    private static (TrackerWireRig Rig, PlanEngine Engine, Game.PlayerState State, Game.Health.HealthManager Health) WalkIntoTheBend()
     {
-        using TrackerWireRig rig = new(BendWorld()) { Position = Gate };
+        TrackerWireRig rig = new(BendWorld()) { Position = Gate };
         rig.ShowRoom();
         PlanEngine engine = new(rig);
         rig.Gate.Attach(engine);
         Game.PlayerState state = new();
-        using Game.Health.HealthManager health = new(state, new MovementCoordinator(rig.Log),
+        Game.Health.HealthManager health = new(state, new MovementCoordinator(rig.Log),
             readSettings: () => new HealthSettings(),
             isEnabled: () => true,
             readHangupCommand: () => string.Empty,
             getActiveMovementEngine: () => engine,
-            getLastSentDirection: () => rig.Gate.ExecutedSinceAnchor.Count > 0 ? rig.Gate.ExecutedSinceAnchor[^1] : null,
+            getLastSentDirection: () => rig.Gate.LastRouteStep,
             readCombatSettings: () => new CombatSettings { RunDirection = RunDirection.Backward, RunDistance = 1 },
             readGeneralSettings: null,
             hasEngageableHostiles: () => true,
             log: rig.Log,
             hasHostileInRoom: () => true,
             post: action => action());
-        health.FleeMoveSent = rig.Gate.NoteEngineStepSent;
+        health.FleeMoveSent = rig.Gate.NoteFleeStepSent;
         foreach (Direction dir in new[] { Direction.E, Direction.E, Direction.N })
         {
             engine.Plan.Enqueue(dir);
@@ -1100,11 +1110,26 @@ public sealed class RoomTrackingRecoveryWireTests
             rig.Pump();
         }
         Assert.Equal(BendA(3), rig.Position);
+        return (rig, engine, state, health);
+    }
 
+    // HP falls in a fight: the flee's run starts.
+    private static void LowHp(Game.PlayerState state)
+    {
         state.MaxHp = 200;
         state.InCombat = true;
         state.HasPromptData = true;
         state.Hp = 30;
+    }
+
+    [Fact]
+    public void AFleeStep_IsInTheWalkBackHistory_SoTheWalkBackRetracesIt()
+    {
+        (TrackerWireRig rig, PlanEngine engine, Game.PlayerState state, Game.Health.HealthManager health) = WalkIntoTheBend();
+        using TrackerWireRig _ = rig;
+        using Game.Health.HealthManager __ = health;
+
+        LowHp(state);
         rig.Pump();
         Assert.Equal(BendA(2), rig.Position);
         Assert.Equal(new[] { Direction.E, Direction.E, Direction.N, Direction.S }, rig.Gate.ExecutedSinceAnchor);
@@ -1125,6 +1150,47 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Equal(Gate, rig.Position);
         Assert.Empty(rig.Failures);
         Assert.Equal(new[] { Direction.S, Direction.S, Direction.N, Direction.S, Direction.W, Direction.W }, engine.Backtracks);
+    }
+
+    // A flee step that never went out is no move: the engine's sends were held (the
+    // send gate drops them), or the engine had stopped and sent nothing.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AFleeStepThatNeverWentOut_IsNotInTheWalkBackHistory(bool sendsHeld)
+    {
+        (TrackerWireRig rig, PlanEngine engine, Game.PlayerState state, Game.Health.HealthManager health) = WalkIntoTheBend();
+        using TrackerWireRig _ = rig;
+        using Game.Health.HealthManager __ = health;
+        Services.EngineSendGate sends = new();
+        engine.Wire = sends.WrapEngineSender(rig.Send, routeSteps: true);
+        health.EngineSendsHeld = () => sends.IsLocked;
+        if (sendsHeld) sends.Hold("a dropped character");
+        else engine.Stopped = true;
+
+        LowHp(state);
+        rig.Pump();
+
+        Assert.Equal(BendA(3), rig.Position);
+        Assert.Equal(new[] { Direction.E, Direction.E, Direction.N }, rig.Gate.ExecutedSinceAnchor);
+    }
+
+    // A flee with no way planned turns back along the last step of the route. It
+    // never takes the flee's own step for that: reversed, it would run straight back
+    // into the room just fled.
+    [Fact]
+    public void AFleeWithNoWayPlanned_TurnsBackAlongTheRoute_NotTheFlee()
+    {
+        (TrackerWireRig rig, PlanEngine engine, Game.PlayerState state, Game.Health.HealthManager health) = WalkIntoTheBend();
+        using TrackerWireRig _ = rig;
+        using Game.Health.HealthManager __ = health;
+
+        LowHp(state);
+        rig.Pump();
+
+        Assert.Equal(Direction.S, engine.Backtracks.Single());
+        Assert.Equal(Direction.S, rig.Gate.ExecutedSinceAnchor[^1]);
+        Assert.Equal(Direction.N, rig.Gate.LastRouteStep);
     }
 
     // ----- where tier 3 starts -------------------------------------------
@@ -1391,7 +1457,7 @@ public sealed class RoomTrackingRecoveryWireTests
         rig.Pump();
         Assert.Empty(rig.Failures);
 
-        rig.Timers.Advance(EngineRecoveryGate.ReverseLandingTimeout);
+        rig.Timers.Advance(rig.Gate.ReverseLandingTimeout);
 
         RecoveryFailedEvent failed = Assert.Single(rig.Failures);
         Assert.Contains("no answer", failed.Detail);
@@ -1474,6 +1540,99 @@ public sealed class RoomTrackingRecoveryWireTests
         AssertLocatedAt(rig, Gate);
         Assert.Empty(rig.Gate.ExecutedSinceAnchor);
         Assert.Null(profile.RecentSteps);
+    }
+
+    // Several moves in flight at the drop, in rooms that read alike: the display
+    // after the reconnect fits the room they left and the rooms they lead to, so it
+    // can't say how many were taken. None is un-counted, and the map goes unsure.
+    [Fact]
+    public void SeveralStepsBeforeADrop_InRoomsThatReadAlike_NoneIsUnCounted()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(5) };
+        rig.Tracker.Hydrate(new CharacterProfile { LastKnownRoom = new RoomRef(CorridorA(5).Map, CorridorA(5).Room) });
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        engine.Plan.Enqueue(Direction.E);
+        engine.Plan.Enqueue(Direction.E);
+        rig.NextAnswers.Enqueue("");   // the link goes before the game answers either
+        rig.NextAnswers.Enqueue("");
+        Assert.True(engine.Step());
+        Assert.True(engine.Step());
+        rig.Pump();
+
+        rig.Tracker.NoteConnectionLost();
+        rig.ShowRoom();
+
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        Assert.Equal(new[] { Direction.E, Direction.E }, rig.Gate.ExecutedSinceAnchor);
+    }
+
+    // A move sent while the map was already unsure of the room, then the drop: the
+    // first display after the reconnect un-counts it, as a dark or blind line does.
+    [Fact]
+    public void AStepSentWhileUnsure_ADisplayAfterTheReconnect_UnCountsIt()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = CorridorA(10) };
+        rig.Tracker.Hydrate(new CharacterProfile { LastKnownRoom = new RoomRef(CorridorA(10).Map, CorridorA(10).Room) });
+        rig.ShowRoom();
+        rig.ExtraShownExits[rig.Position] = new[] { Direction.N };
+        rig.Do("l");
+        rig.ExtraShownExits.Clear();
+        Assert.Equal(RoomConfidence.Suspect, rig.Tracker.State.Confidence);
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        engine.Plan.Enqueue(Direction.E);
+        rig.NextAnswers.Enqueue("");   // the link goes before the game answers
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(new[] { Direction.E }, rig.Gate.ExecutedSinceAnchor);
+
+        rig.Tracker.NoteConnectionLost();
+        rig.ShowRoom();
+
+        Assert.Empty(rig.Gate.ExecutedSinceAnchor);
+    }
+
+    // The walk-back ended (no answer in time, or a refusal) and the last `rm` is out:
+    // a display that comes before its answer is no landing of the walk-back's. It
+    // sends no reverse move and folds nothing.
+    [Theory]
+    [InlineData("")]
+    [InlineData("There is no exit in that direction!")]
+    public void Tier3_EndedWithTheLastRmOut_ADisplayBeforeItsAnswerSendsNoReverseMove(string answer)
+    {
+        using TrackerWireRig rig = new(TwinCorridors(cellarWestOf: 6)) { Position = Gate };
+        rig.Gate.TryResyncForced = reason => reason.StartsWith("last resort");
+        PlanEngine engine = WalkBackInHalls(rig);
+        rig.NextAnswers.Enqueue(answer);
+        rig.Pump();
+        if (answer.Length == 0) rig.Timers.Advance(rig.Gate.ReverseLandingTimeout);
+        Assert.True(rig.Gate.AwaitingAuthoritativeResync);
+        Assert.Empty(rig.Failures);
+        int sent = engine.Backtracks.Count;
+
+        rig.Do("l");
+
+        Assert.Equal(sent, engine.Backtracks.Count);
+        Assert.Equal("idle", rig.Gate.Tier3Status);
+    }
+
+    // A reverse move held for the tracker to read a display the tracker never reads
+    // (a RoomParsed listener ahead of it threw): the wait for its landing still runs
+    // out and ends the walk-back.
+    [Fact]
+    public void Tier3_AReverseMoveHeldForADisplayNeverRead_StillEndsAfterTheWait()
+    {
+        using TrackerWireRig rig = new(TwinCorridors(cellarWestOf: 6)) { Position = Gate };
+        WalkBackInHalls(rig);
+
+        rig.Gate.OnRoomObserved(new RoomObservation("Hall", new HashSet<Direction> { Direction.W, Direction.E }));
+        Assert.Contains("held until the map reads the landing", rig.Gate.Tier3Status);
+        rig.Timers.Advance(rig.Gate.ReverseLandingTimeout);
+
+        RecoveryFailedEvent failed = Assert.Single(rig.Failures);
+        Assert.Contains("no answer", failed.Detail);
     }
 
     // A step sent just before the connection dropped, which the first display after

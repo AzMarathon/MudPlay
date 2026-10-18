@@ -5032,10 +5032,7 @@ public sealed class AppServices
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal || d.AutoRest),
             readHangupCommand: () => GameCommands.ExitCommand,
             getActiveMovementEngine: ResolveActiveMovementEngine,
-            getLastSentDirection: () =>
-                Recovery.ExecutedSinceAnchor.Count > 0
-                    ? Recovery.ExecutedSinceAnchor[^1]
-                    : (Game.Map.Direction?)null,
+            getLastSentDirection: () => Recovery.LastRouteStep,
             readCombatSettings: () =>
                 ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"),
             readGeneralSettings: () =>
@@ -5074,7 +5071,8 @@ public sealed class AppServices
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             selfIsPartyLeader: () => PartyState.IsInParty && PartyState.SelfIsLeader);
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
-        Health.FleeMoveSent = Recovery.NoteEngineStepSent;
+        Health.FleeMoveSent = Recovery.NoteFleeStepSent;
+        Health.EngineSendsHeld = () => EngineGate.IsLocked;
         // MovementControl is built further down; the lambda reads it when a Flee
         // monster is seen.
         Health.IsNavigationPausedByUser = () => MovementControl.IsUserPaused;

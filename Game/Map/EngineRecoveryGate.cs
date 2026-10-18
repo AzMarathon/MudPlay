@@ -54,7 +54,9 @@ public sealed class EngineRecoveryGate
 
     // A step the engine sent, and when the tracker counted it sent: what a refusal
     // the tracker un-counts (RoomTracker.MoveUncounted) is matched against.
-    private readonly record struct ExecutedStep(Direction Direction, DateTimeOffset? SentAt);
+    // Flee marks a step a flee sent through the engine (HealthManager): a move the
+    // walk-back reverses like any other, but not one of the engine's own route.
+    private readonly record struct ExecutedStep(Direction Direction, DateTimeOffset? SentAt, bool Flee = false);
     private readonly FootprintMatcher _tier3;
 
     // Tier-2 FORWARD localiser. The same SLAM accumulator as _tier3, but stepped
@@ -118,14 +120,33 @@ public sealed class EngineRecoveryGate
 
     // The reverse move in flight (when the tracker counted it sent), and the wait for
     // its landing: a move the game never answers in that time ends the walk-back
-    // rather than holding the engine paused for good.
+    // rather than holding the engine paused for good. The wait starts when the move
+    // is chosen, held or sent, so a held move whose display is never read can't hang
+    // it either. _reverseAttempt tells a late timer from the current one.
     private DateTimeOffset? _reverseSentAt;
     private bool _reverseResent;
     private IDisposable? _reverseLandingTimer;
+    private int _reverseAttempt;
 
-    // Well past the slowest documented hop (GAME_MECHANICS "Per-hop movement speed":
-    // ~3.1 s on Paradigm, heavily loaded) with lag on top.
-    public static readonly TimeSpan ReverseLandingTimeout = TimeSpan.FromSeconds(10);
+    // How long a reverse move's landing is waited for: four of the character's
+    // expected hops plus five seconds, never under the floor. The floor is well past
+    // the slowest documented hop (GAME_MECHANICS "Per-hop movement speed": ~3.1 s on
+    // Paradigm, heavily loaded) with ordinary lag on top.
+    public static readonly TimeSpan ReverseLandingTimeoutFloor = TimeSpan.FromSeconds(20);
+
+    public TimeSpan ReverseLandingTimeout
+    {
+        get
+        {
+            TimeSpan scaled = _tracker.ExpectedHop * 4 + TimeSpan.FromSeconds(5);
+            return scaled > ReverseLandingTimeoutFloor ? scaled : ReverseLandingTimeoutFloor;
+        }
+    }
+
+    // How many moves the tracker had counted at the last step the gate recorded: a
+    // step whose send the tracker never counted (an engine that sent nothing) isn't
+    // one that happened.
+    private int _movesCountedAtLastStep;
 
     // Combat-clear gate: true while a hostile the combat engine will
     // auto-engage is in the room. Null → no combat gating (no combat
@@ -353,6 +374,7 @@ public sealed class EngineRecoveryGate
 
         Room? here = _tracker.State.CurrentRoom;
         _anchor = here?.Key;
+        _movesCountedAtLastStep = _tracker.MovesSentCount;
 
         _log?.Log(LogSeverity.Info, LogSource,
             $"Tier1.attach engine={engine.Name} anchor={(_anchor?.ToString() ?? "(none)")} confidence={_tracker.State.Confidence}");
@@ -408,15 +430,46 @@ public sealed class EngineRecoveryGate
             }
             return;
         }
-        // Every engine tells the tracker of a move before the gate, so the tracker's
-        // latest send is this step's.
-        _executedSinceAnchor.Add(new ExecutedStep(direction, _tracker.LastMoveSentAt));
+        RecordStep(direction, flee: false);
     }
 
-    // A move the game refused or dropped never happened: the walk-back must not
-    // reverse it, and the forward footprint must not fold it. Only an engine step is
-    // in the history, so a typed move, a drag or one of the walk-back's own reverse
-    // moves matches nothing here. The engine re-sends a refused step as a new one.
+    // A flee step went out through the engine (HealthManager.FleeMoveSent): a real
+    // move, reversed by the walk-back like the engine's own steps.
+    public void NoteFleeStepSent(Direction direction)
+    {
+        if (_engine is null) return;
+        RecordStep(direction, flee: true);
+    }
+
+    // The last step of the engine's own route since the anchor, a flee's steps
+    // passed over: what a flee with nowhere better to run reverses, so it never
+    // runs back into the room it just fled. Null with none.
+    public Direction? LastRouteStep
+    {
+        get
+        {
+            int at = _executedSinceAnchor.FindLastIndex(s => !s.Flee);
+            return at < 0 ? null : _executedSinceAnchor[at].Direction;
+        }
+    }
+
+    // Every engine tells the tracker of a move before the gate, so the tracker's
+    // latest send is this step's. A flee step the tracker never counted (a stopped
+    // engine sends nothing) didn't happen; an engine's own step always comes after
+    // its own count.
+    private void RecordStep(Direction direction, bool flee)
+    {
+        int counted = _tracker.MovesSentCount;
+        if (flee && counted == _movesCountedAtLastStep)
+        {
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"flee step {direction} not recorded: no move went out with it.");
+            return;
+        }
+        _movesCountedAtLastStep = counted;
+        _executedSinceAnchor.Add(new ExecutedStep(direction, _tracker.LastMoveSentAt, flee));
+    }
+
     private void OnTrackerReadDisplay()
     {
         _trackerReadingDisplay = false;
@@ -426,6 +479,10 @@ public sealed class EngineRecoveryGate
         SendReverse(held);
     }
 
+    // A move the game refused or dropped never happened: the walk-back must not
+    // reverse it, and the forward footprint must not fold it. Only an engine step is
+    // in the history, so a typed move, a drag or one of the walk-back's own reverse
+    // moves matches nothing here. The engine re-sends a refused step as a new one.
     private void OnMoveUncounted(MoveUncountedEvent uncounted)
     {
         if (_engine is null) return;
@@ -873,6 +930,8 @@ public sealed class EngineRecoveryGate
             _tier3.Reset(seeds);
             ownExits = new HashSet<Direction>(here.Exits.Keys);
             seededFrom = $"observation '{here.Name}'";
+            // An unsure tracker holds the room the newest landed step left, so that
+            // step carries the held room's candidates to where the character stands.
             if (landing is { } unfit && unfit.Landed > 0)
             {
                 Direction step = _executedSinceAnchor[unfit.Landed - 1].Direction;
@@ -1102,6 +1161,7 @@ public sealed class EngineRecoveryGate
         _log?.Log(LogSeverity.Info, LogSource,
             $"Tier3.backtrack: reverse({lastSent})={_lastBacktrackReverse} (reverse move {_tier3ReverseSteps}/{Tier3DepthCeiling}, history remaining={_executedSinceAnchor.Count})");
         _reverseResent = false;
+        ArmReverseLandingWait();
         if (_trackerReadingDisplay) _reverseAwaitingRead = _lastBacktrackReverse;
         else SendReverse(_lastBacktrackReverse);
     }
@@ -1109,35 +1169,43 @@ public sealed class EngineRecoveryGate
     private void SendReverse(Direction reverse)
     {
         if (_engine is null) return;
-        _reverseLandingTimer?.Dispose();
         _reverseSentAt = null;
+        int countedBefore = _tracker.MovesSentCount;
         _engine.SendBacktrackMove(reverse);
         if (_tier3Phase != Tier3Phase.AwaitingLanding) return;   // a send that ended the walk-back
-        // Every engine tells the tracker of the move as it sends it.
+        // Every engine tells the tracker of the move as it sends it; one that sent
+        // nothing leaves the wait to run out.
+        if (_tracker.MovesSentCount == countedBefore) return;
+        _movesCountedAtLastStep = _tracker.MovesSentCount;
         _reverseSentAt = _tracker.LastMoveSentAt;
-        DateTimeOffset? sent = _reverseSentAt;
-        _reverseLandingTimer = (_timeoutSchedule ?? DispatcherTicks.Once)(ReverseLandingTimeout, () =>
+    }
+
+    private void ArmReverseLandingWait()
+    {
+        _reverseLandingTimer?.Dispose();
+        int attempt = ++_reverseAttempt;
+        TimeSpan wait = ReverseLandingTimeout;
+        _reverseLandingTimer = (_timeoutSchedule ?? DispatcherTicks.Once)(wait, () =>
         {
-            if (_tier3Phase != Tier3Phase.AwaitingLanding || _reverseSentAt != sent) return;
+            if (_tier3Phase != Tier3Phase.AwaitingLanding || attempt != _reverseAttempt) return;
             _log?.Log(LogSeverity.Warn, LogSource,
-                $"Tier3.no-answer: reverse move {_lastBacktrackReverse} got no landing in {ReverseLandingTimeout.TotalSeconds:0} s; ending the walk-back.");
-            EndReverseWait();
-            FailTier3($"reverse move {_lastBacktrackReverse} got no answer in {ReverseLandingTimeout.TotalSeconds:0} s");
+                $"Tier3.no-answer: reverse move {_lastBacktrackReverse} got no landing in {wait.TotalSeconds:0} s; ending the walk-back.");
+            FailTier3($"reverse move {_lastBacktrackReverse} got no answer in {wait.TotalSeconds:0} s");
         });
     }
 
     // The reverse move in flight never happened. One the typing-rate limiter dropped
     // never ran, so it goes out once more. One the game refused can't be made from
-    // here: the way back isn't the way the history says (a one-way exit, or we aren't
-    // where the footprint holds), so the walk-back ends the way an exhausted one does.
+    // here: a door shut behind us, a one-way exit, or a footprint off the true room
+    // all refuse it, and the walk-back ends the way an exhausted one does.
     private void OnReverseMoveUncounted(bool rateLimited)
     {
-        EndReverseWait();
         if (rateLimited && !_reverseResent)
         {
             _log?.Log(LogSeverity.Info, LogSource,
                 $"Tier3.reverse-dropped: reverse move {_lastBacktrackReverse} dropped by the typing-rate limiter; sending it again.");
             _reverseResent = true;
+            ArmReverseLandingWait();
             SendReverse(_lastBacktrackReverse);
             return;
         }
@@ -1151,6 +1219,7 @@ public sealed class EngineRecoveryGate
         _reverseLandingTimer?.Dispose();
         _reverseLandingTimer = null;
         _reverseSentAt = null;
+        _reverseAttempt++;
     }
 
     private void ResetTier3Orchestration()
@@ -1339,6 +1408,10 @@ public sealed class EngineRecoveryGate
     private void FailTier3(string detail)
     {
         if (_engine is null) return;
+        // The walk-back is over, whatever the ladder does next: a display that comes
+        // while the last `rm` or `sys st` is out must not be read as a landing and
+        // send another reverse move.
+        ResetTier3Orchestration();
         if (TryTerminalResync(detail)) return;
         // Mirror the terminal `rm` with a sysop `sys st` last resort — but only if
         // one hasn't already been spent this episode (TrySysopGroundTruth's own

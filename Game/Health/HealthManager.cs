@@ -916,12 +916,21 @@ public sealed class HealthManager : IDisposable
 
     // A flee step went out through the engine: a real move of the character, which
     // the recovery gate's walk-back history must hold like the engine's own steps
-    // (EngineRecoveryGate.NoteEngineStepSent). Null in tests.
+    // (EngineRecoveryGate.NoteFleeStepSent). Null in tests.
     public Action<Map.Direction>? FleeMoveSent { get; set; }
+
+    // True while engine sends are held (EngineSendGate.IsLocked): the engine's wire
+    // drops a flee step then. Null in tests: never held.
+    public Func<bool>? EngineSendsHeld { get; set; }
 
     private void SendFleeMove(Map.IRecoverableEngine engine, Map.Direction direction)
     {
         engine.SendBacktrackMove(direction);
+        if (EngineSendsHeld?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, $"flee step {direction} dropped: engine sends are held; not recorded as a move");
+            return;
+        }
         FleeMoveSent?.Invoke(direction);
     }
 
