@@ -365,7 +365,7 @@ public sealed class LoopRunner : IRecoverableEngine
             if (_loop is { } running) yield return running;
             if (LastRunLoop is { } last) yield return last;
             if (StagedLoop is { } staged) yield return staged;
-            if (_pendingReconnectResume is { } resume) yield return resume;
+            if (_restart.Pending is { } resume) yield return resume;
         }
     }
 
@@ -908,11 +908,11 @@ public sealed class LoopRunner : IRecoverableEngine
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
 
         _tracker.StateChanged += OnTrackerStateChanged;
-        // A death found out at the login (the hang-up penalty killed the character
-        // after the link was gone) stops the engines, but the loop set aside when
-        // the link dropped is not running yet: the first prompt would start it and
-        // walk a stripped character out of the temple.
-        _tracker.PlayerDeathInferred += ClearPendingReconnectResume;
+        _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), "reconnect", tracker, coordinator, recovery, log,
+            _postToUi, _schedule,
+            describe: l => $"loop '{l.Name}'",
+            runningNow: () => State != LoopState.Idle ? $"loop '{_loop?.Name ?? "?"}'" : null,
+            start: l => Start(l));
         _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnPauseChanged;
         if (_promptScanner is not null)
@@ -1274,9 +1274,9 @@ public sealed class LoopRunner : IRecoverableEngine
                     $"Start: superseding active loop '{_loop?.Name ?? "?"}' (state={State}) with '{loop.Name}'");
                 // Stopping ends a reconnect hold, but the run that replaces this one
                 // must wait for the party reform just the same.
-                bool heldForReform = ReconnectResumeHeldForReform;
+                bool heldForReform = _restart.HeldForReform;
                 Stop("superseded by new loop");
-                if (heldForReform && _reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
+                if (heldForReform) _restart.BeginReformHoldIfReformAwaits();
             }
             else
             {
@@ -1823,7 +1823,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // is needed on our side for the approach phase.
         if (State == LoopState.Approaching) _walker?.Stop("loop stopped");
         Reset();
-        EndReconnectReformHold("the loop was stopped");
+        _restart.EndReformHold("the loop was stopped");
         Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}", willResume));
     }
 
@@ -3105,64 +3105,38 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
-    // Set by NotifyDisconnected when a running/paused/recovering loop is torn down
-    // because the connection dropped. Captures the loop definition so the first
-    // real in-game prompt after reconnect can restart it from scratch via a
-    // genuine Start() call — see NotifyDisconnected's rationale.
-    private Loop? _pendingReconnectResume;
+    // The loop NotifyDisconnected set aside (or an errand handed over), restarted
+    // from scratch by a genuine Start() on the first in-game prompt after the
+    // reconnect once the room is known — see NotifyDisconnected's rationale and
+    // ReconnectRestart for the guards.
+    private readonly ReconnectRestart<Loop> _restart;
 
     // True while the master switch (Auto-All) is off. The restart after a
     // reconnect is an engine starting by itself, so it waits for the switch:
     // restarted then, the loop would raise its start events (the session reset,
     // the party's @reset, the base-modes settle) with the user's autos off.
-    public Func<bool>? MasterSwitchOff { get; set; }
-
-    // The first game prompt came with the switch off: the restart is owed, and
-    // ResumeAfterMasterSwitch runs it.
-    private bool _reconnectResumeHeldBySwitch;
-    public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
-
-    // A loop an errand stopped (a bank run's light buy) when the connection dropped:
-    // restart it on the first prompt after the reconnect, as one running at the drop
-    // is, with the same guards.
-    public void ResumeOnReconnect(Loop loop, string why)
+    public Func<bool>? MasterSwitchOff
     {
-        ArgumentNullException.ThrowIfNull(loop);
-        _pendingReconnectResume = loop;
-        _log?.Info("LoopRunner", $"reconnect: loop '{loop.Name}' will restart on the first in-game prompt ({why})");
+        get => _restart.MasterSwitchOff;
+        set => _restart.MasterSwitchOff = value;
     }
 
-    // Reset States, and a death found out at the login: don't restart the loop on
-    // the next prompt after a reconnect.
-    public void ClearPendingReconnectResume()
-    {
-        _pendingReconnectResume = null;
-        _reconnectResumeHeldBySwitch = false;
-    }
+    public bool ReconnectResumeHeldForMasterSwitch => _restart.HeldForMasterSwitch;
+    public bool ReconnectResumeAwaitsRoom => _restart.AwaitsRoom;
+    public bool ReconnectResumeLocating => _restart.Locating;
 
-    // A restart kept waiting on the master switch is the user's to call off: a
-    // Stop, or another character loaded. One still waiting for the reconnect's
-    // first prompt is left as it always was.
-    public void DropResumeHeldForMasterSwitch(string why)
-    {
-        if (!_reconnectResumeHeldBySwitch) return;
-        _log?.Info("LoopRunner",
-            $"reconnect: loop '{_pendingReconnectResume?.Name}' will not be restarted when the master switch is back on ({why})");
-        ClearPendingReconnectResume();
-    }
+    // The terminal notice for a restart made from a room the map isn't sure of, or
+    // not made at all.
+    public void SetReconnectNotice(Action<string> notice) => _restart.Notice = notice;
 
-    // The master switch is back on, in the game: restart the loop the reconnect
-    // set aside.
-    public void ResumeAfterMasterSwitch()
-    {
-        if (!_reconnectResumeHeldBySwitch) return;
-        _reconnectResumeHeldBySwitch = false;
-        if (_pendingReconnectResume is not { } loop) return;
-        _pendingReconnectResume = null;
-        _log?.Info("LoopRunner",
-            $"reconnect: resuming loop '{loop.Name}' now the master switch is back on");
-        RestartAfterReconnect(loop);
-    }
+    // A loop an errand stopped (a bank run's light buy) when the connection dropped.
+    public void ResumeOnReconnect(Loop loop, string why) => _restart.SetAside(loop, why);
+
+    public void ClearPendingReconnectResume() => _restart.Clear();
+
+    public void DropHeldReconnectResume(string why) => _restart.DropHeld(why);
+
+    public void ResumeAfterMasterSwitch() => _restart.ResumeAfterMasterSwitch();
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
@@ -3176,76 +3150,22 @@ public sealed class LoopRunner : IRecoverableEngine
     // walker, Recovering's local retry, an attached gate) — and remember the loop
     // so the first genuine in-game prompt after reconnect restarts it fresh, with
     // no stale recovery state left to misread.
-    public void NotifyDisconnected()
-    {
-        // A restart held for the master switch goes back to waiting for the next
-        // stay's first prompt, which asks the switch again.
-        _reconnectResumeHeldBySwitch = false;
-        if (State != LoopState.Idle)
-        {
-            _pendingReconnectResume = _loop;
-            Stop("disconnected — will resume on reconnect", willResume: true);
-        }
-        // A reform hold belongs to the connection that just ended. Dropped after the
-        // stop, which drops it too: lifting it first would let the held loop step.
-        EndReconnectReformHold("disconnected");
-    }
+    public void NotifyDisconnected() =>
+        _restart.NoteDisconnected(State != LoopState.Idle ? _loop : null,
+            () => Stop("disconnected — will resume on reconnect", willResume: true));
 
-    // Reports whether a leader's party reform is still waiting for the first room
-    // display after a reconnect (PartyReformCoordinator.PendingReform). Unset
-    // before wiring → no reform, so the restarted loop steps at once.
-    private Func<bool>? _reformAwaitsRoom;
-
-    public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom)
-    {
-        ArgumentNullException.ThrowIfNull(reformAwaitsRoom);
-        _reformAwaitsRoom = reformAwaitsRoom;
-    }
+    // PartyReformCoordinator.PendingReform. Unset before wiring → no reform, so the
+    // restarted loop steps at once.
+    public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom) => _restart.SetReformProbe(reformAwaitsRoom);
 
     // For the bug report: the loop waiting to restart after a reconnect, and whether
     // the restarted loop is being held until the party reform has seen the room.
-    public string? PendingReconnectResumeName => _pendingReconnectResume?.Name;
-    public bool ReconnectResumeHeldForReform { get; private set; }
-
-    // The reform reads the first room display, which a lit room prints within the
-    // second. A room too dark to display never gives it one, and the loop mustn't
-    // wait on that for good.
-    internal static readonly TimeSpan ReconnectReformHoldMax = TimeSpan.FromSeconds(5);
-    private IDisposable? _reconnectHoldTimer;
+    public string? PendingReconnectResumeName => _restart.Pending?.Name;
+    public bool ReconnectResumeHeldForReform => _restart.HeldForReform;
 
     private void OnPromptObserved(PromptObservation _)
     {
-        // The first genuine in-game prompt after a reconnect restarts the loop
-        // NotifyDisconnected set aside.
-        //
-        // A leader's party reform fires off the first room display, and the prompt
-        // that came with that display is read off the wire before its lines are
-        // handled: started bare, the loop sent its first step before the reform's
-        // hold went up and walked the leader out on the followers (report
-        // paradigm-20260923-092317). So when a reform has yet to see the room, the
-        // loop is started behind a hold of its own, dropped once the reform has
-        // had its look, by which time the reform's own holds are up. Started and
-        // held, rather than left waiting to start, the loop is a paused run like
-        // any other: Stop stops it, and a member's @comeback finds an engine to
-        // resume.
-        if (_pendingReconnectResume is { } loop)
-        {
-            if (MasterSwitchOff?.Invoke() == true)
-            {
-                if (!_reconnectResumeHeldBySwitch)
-                    _log?.Info("LoopRunner",
-                        $"reconnect: loop '{loop.Name}' is not restarted with the master switch off; it restarts when the switch is back on");
-                _reconnectResumeHeldBySwitch = true;
-                return;
-            }
-            _pendingReconnectResume = null;
-            _reconnectResumeHeldBySwitch = false;
-            _log?.Info("LoopRunner",
-                $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
-            RestartAfterReconnect(loop);
-            return;
-        }
-        ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
+        if (_restart.OnPrompt()) return;
         if (!_awaitingCommandReplies || _commandPromptsOwed == 0 || State != LoopState.Running) return;
         if (--_commandPromptsOwed > 0) return;
         // Prompts are read off the wire ahead of the lines that came with them, so
@@ -3253,54 +3173,6 @@ public sealed class LoopRunner : IRecoverableEngine
         // Decide once they have.
         int step = _index;
         _postToUi(() => { if (_index == step) FinishCommandWaitIfAnswered(); });
-    }
-
-    private void RestartAfterReconnect(Loop loop)
-    {
-        if (_reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
-        Start(loop);
-        ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
-    }
-
-    private void BeginReconnectReformHold()
-    {
-        if (ReconnectResumeHeldForReform) return;
-        ReconnectResumeHeldForReform = true;
-        _log?.Info("LoopRunner", "reconnect: holding movement until the party reform has seen the room");
-        _coordinator.AssertGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner),
-            "the party reform has yet to see the room");
-        _reconnectHoldTimer?.Dispose();
-        _reconnectHoldTimer = _schedule(ReconnectReformHoldMax, OnReconnectHoldElapsed);
-    }
-
-    // linesStillToCome: called from a prompt, whose lines (the room display the
-    // reform is waiting for among them) haven't been handled yet, so the hold is
-    // looked at again once they have.
-    private void ReleaseReconnectHoldOnceReformSawRoom(bool linesStillToCome)
-    {
-        if (!ReconnectResumeHeldForReform) return;
-        if (_reformAwaitsRoom?.Invoke() != true)
-        {
-            EndReconnectReformHold("the party reform has seen the room");
-            return;
-        }
-        if (linesStillToCome) _postToUi(() => ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: false));
-    }
-
-    private void OnReconnectHoldElapsed()
-    {
-        _reconnectHoldTimer = null;
-        EndReconnectReformHold($"no room display for the party reform within {ReconnectReformHoldMax.TotalSeconds:0}s");
-    }
-
-    private void EndReconnectReformHold(string why)
-    {
-        if (!ReconnectResumeHeldForReform) return;
-        ReconnectResumeHeldForReform = false;
-        _reconnectHoldTimer?.Dispose();
-        _reconnectHoldTimer = null;
-        _log?.Info("LoopRunner", $"reconnect: movement hold for the party reform dropped ({why})");
-        _coordinator.ClearGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner), why);
     }
 
     // Auto-recovery entry: a mid-circuit step landed somewhere we didn't plan for

@@ -9451,6 +9451,9 @@ public sealed class AppServices
             NoticeUnpaid($"[Navigation: no walk to {where} - {reason}]");
         });
         LoopRunner.SetUnpaidCrossingHandler(reason => NoticeUnpaid($"[Navigation: {reason}]"));
+        // Posted: the restart can be decided inside the line pump, where writing to
+        // the terminal re-enters it.
+        LoopRunner.SetReconnectNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
         Walker.Event += e =>
         {
             if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
@@ -10623,10 +10626,11 @@ public sealed class AppServices
         // holding for the party-reform window on a party-session reconnect.
         DefaultTaskRunner = new Game.DefaultTaskRunner(
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
-            LoopRunner, AutoLair, PartyState, Party, Log)
+            LoopRunner, AutoLair, PartyState, Party, Log, recovery: Recovery)
         {
             BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
         };
+        DefaultTaskRunner.SetStartNotice(text => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(text)));
         // A change of game data calls off a task still waiting out the party-rebuild
         // window: the loop or Auto-Lair it would start was picked from the old
         // data's catalogue.
@@ -11351,7 +11355,7 @@ public sealed class AppServices
         _collectOwedInRoom = null;
         _masterSwitchSettleOwed = false;
         _masterSwitchEventsOwed = false;
-        LoopRunner.DropResumeHeldForMasterSwitch("another profile was loaded");
+        LoopRunner.DropHeldReconnectResume("another profile was loaded");
         MovementControl.ReleaseFromAutoAll();
     }
 

@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.17**
-> - Combat tests run on one manual clock the whole engine reads, with no real-time waits
+> **Version 3.184.19**
+> - A loop restarted after a reconnect, and the Default task at a login, plan from the room the game shows, not the room before
+> - Unsure of that room, they ask the game (rm / sys st), and with no answer start from the room the map believes, with a notice
+> - Stop calls off a restart still waiting on the room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

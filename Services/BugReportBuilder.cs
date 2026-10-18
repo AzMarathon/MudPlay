@@ -2070,12 +2070,17 @@ public static class BugReportBuilder
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
         // A loop set aside by a dropped link restarts on the first prompt back in the
-        // game, held until the party reform has seen the room when one is pending: a
-        // "walked off without the party after a relog" report needs which it was.
+        // game once the room is known, held until the party reform has seen the room
+        // when one is pending: a "walked off without the party after a relog" or
+        // "stepped out of the wrong room" report needs which it was.
         Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
             ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
                 ? $"'{pendingLoop}' — when the master switch is back on"
-                : $"'{pendingLoop}' — on the next in-game prompt"
+                : svc.LoopRunner.ReconnectResumeLocating
+                    ? $"'{pendingLoop}' — asked the game where we are (rm / sys st), restarts on its answer"
+                : svc.LoopRunner.ReconnectResumeAwaitsRoom
+                    ? $"'{pendingLoop}' — once the room is known (next prompt or a confirmed room)"
+                    : $"'{pendingLoop}' — on the next in-game prompt, once its room display is read"
             : svc.LoopRunner.ReconnectResumeHeldForReform
                 ? "restarted — held until the party reform has seen the room"
                 : "(none pending)");
@@ -2223,6 +2228,10 @@ public static class BugReportBuilder
         Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
         Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
         Kv(sb, "Default task stood down for a hang-up death", svc.DefaultTaskRunner.StoodDownForDeath.ToString());
+        // The start at a login waits for the room the login shows, and asks the game
+        // when the map can't tell it.
+        Kv(sb, "Default task waiting for the room", svc.DefaultTaskRunner.LocatingRoom ? "yes — asked the game where we are (rm / sys st)"
+            : svc.DefaultTaskRunner.AwaitsRoom ? "yes — until the map is sure of it" : "no");
 
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it

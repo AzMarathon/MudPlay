@@ -1082,6 +1082,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         h.Runner.NotifyDisconnected();
 
         swap.Load("bbs/Alice");
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // the reconnect's room display
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
         Assert.Empty(swap.Notices);
@@ -1101,6 +1102,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
 
         swap.Rename("bbs/Alicia");
         swap.Load("bbs/Alicia");
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // the reconnect's room display
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
 
         Assert.Empty(swap.Notices);

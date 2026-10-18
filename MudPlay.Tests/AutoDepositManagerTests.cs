@@ -1058,9 +1058,10 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Null(h.Loop.PendingReconnectResumeName);
     }
 
-    // The reconnect lands somewhere else (the bank's room): the loop restarts on the
-    // prompt, as any loop cut off by a drop does, and once the room display is read
-    // its walk goes on from the room it shows.
+    // The reconnect lands somewhere else (the bank's room): the loop restarts, as any
+    // loop cut off by a drop does, and its walk goes on from the room the display
+    // shows. (LoopReconnectRestartRoomTests has the restart waiting for that display
+    // on the wire.)
     [Fact]
     public void ConnectionDropsDuringTheLightBuy_ReconnectElsewhere_TheLoopRestartsFromThere()
     {

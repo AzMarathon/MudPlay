@@ -12,14 +12,14 @@ namespace MudPlay.Game;
 // confirmed in-game — the same effect as hitting Run on that loop / lair in the
 // Navigation window, closest-waypoint routing included.
 //
-// Fire trigger: we need BOTH signals of "in the game world" before starting —
-//   * the first WirePromptScanner.PromptObserved (the canonical "we're in
-//     MajorMUD" marker), AND
-//   * a known current room (RoomTracker.State.CurrentRoom != null) so the runner
-//     routes from where we actually are rather than expanding from waypoint 0.
-// MajorMUD prints the room before the prompt, so the room is normally known by
-// the first prompt; we still gate on both and fire on whichever lands second to
-// stay correct if the ordering ever slips.
+// Fire trigger: the first WirePromptScanner.PromptObserved of the connection (the
+// canonical "we're in MajorMUD" marker), with the room it came with known, so the
+// runner routes from where we actually are. The prompt is read off the wire ahead
+// of the room display in its chunk, so the start waits for those lines and for the
+// tracker to be sure of the room, as a loop's restart after a reconnect does
+// (ReconnectRestart: the locate, the fall-back to the room believed, the time
+// limit); otherwise a login into another room than the one known before planned
+// the task from the old room.
 //
 // Party-rebuild hold: when this game entry is a reconnect (a prior in-session
 // disconnect) AND we were in a party before that drop, we hold for the
@@ -53,6 +53,10 @@ public sealed class DefaultTaskRunner : IDisposable
     private readonly PartyManager _party;
     private readonly LogService? _log;
 
+    // The start at this game entry, waiting for its prompt and its room.
+    private readonly ReconnectRestart<GameEntry> _entry;
+    private sealed record GameEntry;
+
     // Live per-connection latches.
     private bool _isConnected;
     private bool _inGameConfirmed;   // first prompt seen this connection
@@ -83,7 +87,9 @@ public sealed class DefaultTaskRunner : IDisposable
         PartyState partyState,
         PartyManager party,
         LogService? log = null,
-        Func<TimeSpan, Action, IDisposable>? schedule = null)
+        Func<TimeSpan, Action, IDisposable>? schedule = null,
+        EngineRecoveryGate? recovery = null,
+        Action<Action>? postToUi = null)
     {
         ArgumentNullException.ThrowIfNull(prompt);
         _schedule = schedule ?? DispatcherTicks.Once;
@@ -106,8 +112,19 @@ public sealed class DefaultTaskRunner : IDisposable
         _party = party;
         _log = log;
 
+        _entry = new ReconnectRestart<GameEntry>("DefaultTask", "login", tracker, coordinator: null, recovery, log,
+            postToUi ?? PostToUiThread, _schedule,
+            describe: _ => "the default task",
+            runningNow: static () => null,
+            start: _ => StartOnEntry())
+        {
+            // Skipped with the switch off, not kept (SkippedForMasterSwitch), and a
+            // login the map can't place waits for a room as it always did.
+            MasterSwitchOff = () => BlockedByMasterSwitch?.Invoke("default task") == true,
+            KeepForMasterSwitch = false,
+            WaitForAnyRoom = true,
+        };
         _prompt.PromptObserved += OnPromptObserved;
-        _tracker.StateChanged += OnRoomStateChanged;
         _tracker.PlayerDeathInferred += OnDeathInferred;
         _partyState.PropertyChanged += OnPartyStateChanged;
         _profile.ProfileLoaded += OnProfileLoaded;
@@ -120,8 +137,8 @@ public sealed class DefaultTaskRunner : IDisposable
         _disposed = true;
 
         _prompt.PromptObserved -= OnPromptObserved;
-        _tracker.StateChanged -= OnRoomStateChanged;
         _tracker.PlayerDeathInferred -= OnDeathInferred;
+        _entry.Detach();
         _partyState.PropertyChanged -= OnPartyStateChanged;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _profile.ProfileClosed -= OnProfileClosed;
@@ -142,6 +159,17 @@ public sealed class DefaultTaskRunner : IDisposable
     // because the character turned out to have died while the link was down.
     public bool StoodDownForDeath { get; private set; }
 
+    // The start waiting for the room the login shows: still to be told, or asked of
+    // the game.
+    public bool AwaitsRoom => _entry.AwaitsRoom || _entry.AwaitsAnyRoom;
+    public bool LocatingRoom => _entry.Locating;
+
+    // The terminal notice for a start made from a room the map isn't sure of, or not
+    // made at all.
+    public void SetStartNotice(Action<string> notice) => _entry.Notice = notice;
+
+    private static void PostToUiThread(Action action) => Avalonia.Threading.Dispatcher.UIThread.Post(action);
+
     // ----- telnet-driven notifications -------------------------------
 
     // MainWindowVM calls this right after its TelnetClient.Connected handler runs.
@@ -152,6 +180,7 @@ public sealed class DefaultTaskRunner : IDisposable
         _taskFired = false;
         _sawPartyThisConnection = false;
         StoodDownForDeath = false;
+        _entry.Clear();
         CancelHold();
     }
 
@@ -168,6 +197,7 @@ public sealed class DefaultTaskRunner : IDisposable
         }
         _isConnected = false;
         _inGameConfirmed = false;
+        _entry.Clear();
         CancelHold();
     }
 
@@ -175,12 +205,17 @@ public sealed class DefaultTaskRunner : IDisposable
 
     private void OnPromptObserved(PromptObservation _)
     {
-        if (!_isConnected || _inGameConfirmed) return;
-        _inGameConfirmed = true;
-        MaybeFire();
+        if (!_isConnected) return;
+        if (!_inGameConfirmed)
+        {
+            _inGameConfirmed = true;
+            // Only a task that walks waits for the room; "Do nothing" has none to wait
+            // for, and nothing is asked of the game for it.
+            if (!_taskFired && ReadGeneralOrDefault().DefaultTask is InitialTask.BeginLoop or InitialTask.BeginAutoLair)
+                _entry.SetAside(new GameEntry(), "entered the game");
+        }
+        _entry.OnPrompt();
     }
-
-    private void OnRoomStateChanged(RoomTransition _) => MaybeFire();
 
     // RoomTracker.PlayerDeathInferred: the character died while the link was down
     // and stands stripped in the temple. The death stops the engines that are
@@ -199,14 +234,13 @@ public sealed class DefaultTaskRunner : IDisposable
         _log?.Info("DefaultTask", "the character died while the link was down — the default task is not started on this connection.");
     }
 
-    // Fire once when connected, the first prompt has landed, and the current
-    // room is known — whichever of prompt / room arrives second triggers it.
-    private void MaybeFire()
+    // Once per connection, when the game entry's start has its room.
+    private bool StartOnEntry()
     {
-        if (_taskFired || !_isConnected || !_inGameConfirmed) return;
-        if (_tracker.State.CurrentRoom is null) return;
+        if (_taskFired || !_isConnected) return false;
         _taskFired = true;
         FireDefaultTask();
+        return true;
     }
 
     // ----- party observation -----------------------------------------

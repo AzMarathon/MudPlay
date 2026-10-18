@@ -989,6 +989,11 @@ How to keep it current:
 - Checks: a draft's Save writes nothing; naming and realm assignment; discard; startup-animation round-trip; template sanitising; one-time reset.
 - Why: user 2026-10-12 (sessions must not write the template).
 
+### DefaultTaskLoginRoomTests.cs
+- Covers: Game/DefaultTaskRunner's start at a login through Game/Map/ReconnectRestart (with LoopRunner, LoopManager, RoomTracker, WirePromptScanner, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver), on TrackerWireRig, the profile from TestProfiles with the Default task set to a loop.
+- Checks: logged in to another room than the one the map had, the task's loop is planned from the shown room; logged in to a room the map can't tell, with nothing to ask, the task starts from the room believed with a terminal notice; with "Do nothing" nothing is asked of the game and nothing said; with the master switch off no `rm` goes out and nothing starts, and switched back on the next prompts start nothing; with no room known at all the task waits for one with no time limit and no notice, and starts once the map has one.
+- Why: the task started at the first prompt, ahead of the room display that came with it, and planned from the room before (review of #1095, 2026-10-17).
+
 ### DefaultTaskRunnerTests.cs
 - Covers: Game/DefaultTaskRunner.
 - Checks: the party-rebuild hold arms only on a reconnect after a party session; latches clear on profile load; a hang-up death calls the task off; Dispose.
@@ -2060,6 +2065,11 @@ How to keep it current:
 - Why: two clients sharing a set's Loops folder.
 - Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
 
+### LoopReconnectRestartRoomTests.cs
+- Covers: Game/Map/LoopRunner's restart after a reconnect through Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate; the runner's and the resolver's timers on ManualTimers), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
+- Checks: back in the same room the loop restarts from it; put back in another room, the first command is the walk from the shown room, never a step planned from the room before the drop; shown a room the map can't tell from another, the game is asked (`rm`) and the loop restarts from the room the answer names; with the `rm` unanswered, or nothing to ask on Stock, it starts from the room the map believes with a terminal notice (also for a drop between two lookalike rooms, which goes on from the room it left); with no room believed at all it is dropped with a notice; with no display and no further prompt the 12 s limit starts it from the room believed; with no display, the first prompt waits and the next one asks; a no-answer to a locate from before another drop neither starts the loop offline nor ends the next restart; a Stop drops a restart waiting on the answer; the master switch holds it; a reform whose display came with the prompt holds the restarted loop until the follower is back; a dark room keeps it behind its own reform hold; a loop a light buy handed over restarts from the shown room; a loop the user starts while the restart is owed is left running.
+- Why: the restart was planned at the prompt, before its room display was read, so after a relog into another room the first step went out from the wrong room; and it must not wait for good on a room it can't place (user, 2026-10-17).
+
 ### LoopRunnerEmptyRoomCommandTests.cs
 - Covers: Game/Map/LoopRunner (empty-room commands)
 - Checks: a `nomonsters` room command waits for the room to clear, a refusal with a monster present holds instead of recovering, the time limit ends the loop with a reason unless a fight holds it.
@@ -2067,7 +2077,7 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds, flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
 - Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, …).
 
 ### LoopSettingsStoreTests.cs
@@ -4007,8 +4017,8 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests).
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's.
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests and LoopReconnectRestartRoomTests).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs

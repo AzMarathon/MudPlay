@@ -71,6 +71,15 @@ public sealed class PartyComebackManagerTests : IDisposable
 
     private sealed class Harness : IDisposable
     {
+        // Work the loop runner posts to the UI thread, run when a test says the
+        // lines that came with a prompt have been handled.
+        public required List<Action> Posted { get; init; }
+        public void Drain()
+        {
+            Action[] batch = Posted.ToArray();
+            Posted.Clear();
+            foreach (Action a in batch) a();
+        }
         public required MessageRouter Router { get; init; }
         public required PartyState PartyState { get; init; }
         public required PlayerDatabase Players { get; init; }
@@ -151,7 +160,8 @@ public sealed class PartyComebackManagerTests : IDisposable
         AutoWalkManager walker = new(graph, bfs, tracker, coord);
         walker.SetWireSender(_ => { });
         WirePromptScanner prompt = new();
-        LoopRunner loop = new(tracker, coord, promptScanner: prompt, graph: graph, bfs: bfs, walker: walker);
+        List<Action> posted = new();
+        LoopRunner loop = new(tracker, coord, promptScanner: prompt, graph: graph, bfs: bfs, walker: walker, postToUi: posted.Add);
         LairTimerStore timers = new(cache, graph, tracker);
         AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
         MonsterMessageStore monsters = new();
@@ -174,6 +184,7 @@ public sealed class PartyComebackManagerTests : IDisposable
             Tracker = tracker,
             Walker = walker,
             Loop = loop,
+            Posted = posted,
             Lair = lair,
             Timers = timers,
             Comeback = comeback,
@@ -814,6 +825,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Loop.NotifyDisconnected();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
+        h.Drain();                                                  // the restart, after the prompt's lines
         Assert.Equal(LoopState.Paused, h.Loop.State);
         Assert.True(h.Loop.ReconnectResumeHeldForReform);
 
