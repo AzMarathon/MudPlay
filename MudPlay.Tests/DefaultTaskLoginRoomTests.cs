@@ -51,18 +51,26 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         catch { /* best-effort temp cleanup */ }
     }
 
-    private sealed record World(TrackerWireRig Rig, DefaultTaskRunner Task, LoopRunner Runner, List<string> Notices);
+    private sealed record World(TrackerWireRig Rig, DefaultTaskRunner Task, LoopRunner Runner, List<string> Notices,
+        ManualTimers Ticks);
 
-    // The character's Default task is the loop Gate–Yard; the map last knew it at Gate.
-    private World Login()
+    // The character's Default task is the loop Gate–Yard (or `task`); the map last
+    // knew it at Gate (located false: nowhere). paradigm: a Paradigm realm, whose `rm`
+    // the recovery gate's one-shot locate asks. switchOff: the master switch is off.
+    private World Login(InitialTask task = InitialTask.BeginLoop, bool paradigm = false, bool located = true,
+        bool switchOff = false)
     {
-        TrackerWireRig rig = new(Rooms, prompt: "[HP=100/MA=50]:") { Position = Gate };
+        TrackerWireRig rig = new(Rooms, prompt: "[HP=100/MA=50]:", paradigm: paradigm) { Position = Gate };
         _dispose.Add(rig);
         ManualTimers ticks = new();
         BfsMapper bfs = new(rig.Graph);
         LoopRunner runner = new(rig.Tracker, rig.Coordinator, rig.Prompts, rig.Log, rig.Graph, rig.Gate, bfs, rig.Walker,
             postToUi: rig.Post, schedule: ticks.Arm);
         runner.SetWireSender(rig.Send);
+        ParadigmPositionResolver resolver = new(rig.Router, rig.Tracker, rig.Gate, rig.Cache, rig.Log, schedule: ticks.Arm);
+        resolver.SetWireSender(rig.Send);
+        rig.Gate.TryResyncOnce = resolver.RequestResyncOnce;
+        _dispose.Add(resolver);
         LoopManager loops = new(bfs, rig.Graph);
         loops.LoadAll(_loopSet);
         loops.Save(new Loop("gy", new[] { Gate, new RoomKey(1, 2) }));
@@ -75,16 +83,19 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         profile.Current!.Settings = new Dictionary<string, JsonElement>
         {
             ["General"] = JsonSerializer.SerializeToElement(
-                new GeneralSettings { DefaultTask = InitialTask.BeginLoop, DefaultLoopName = "gy" }),
+                new GeneralSettings { DefaultTask = task, DefaultLoopName = "gy" }),
         };
-        DefaultTaskRunner task = new(rig.Prompts, rig.Tracker, profile, loops, new LairManager(), runner, lair,
-            partyState, party, rig.Log, schedule: ticks.Arm, recovery: rig.Gate, postToUi: rig.Post);
+        DefaultTaskRunner entry = new(rig.Prompts, rig.Tracker, profile, loops, new LairManager(), runner, lair,
+            partyState, party, rig.Log, schedule: ticks.Arm, recovery: rig.Gate, postToUi: rig.Post)
+        {
+            BlockedByMasterSwitch = _ => switchOff,
+        };
         List<string> notices = new();
-        task.SetStartNotice(notices.Add);
-        _dispose.AddRange(new IDisposable[] { task, lair, timers, party });
-        rig.Tracker.SetLocated(Gate);
-        task.NotifyConnected();
-        return new World(rig, task, runner, notices);
+        entry.SetStartNotice(notices.Add);
+        _dispose.AddRange(new IDisposable[] { entry, lair, timers, party });
+        if (located) rig.Tracker.SetLocated(Gate);
+        entry.NotifyConnected();
+        return new World(rig, entry, runner, notices, ticks);
     }
 
     // Put back in another room at the login: the task's loop is planned from there.
@@ -114,5 +125,61 @@ public sealed class DefaultTaskLoginRoomTests : IDisposable
         Assert.Equal("gy", w.Runner.CurrentLoop?.Name);
         Assert.Equal(new[] { "n" }, w.Rig.Sent);
         Assert.Contains(w.Notices, n => n.StartsWith("[The default task started from 1/1 after the login", StringComparison.Ordinal));
+    }
+
+    // "Do nothing" has no room to wait for: nothing is asked of the game for it, and
+    // the terminal says nothing.
+    [Fact]
+    public void DoNothing_ALoginTheMapCantPlace_SendsNothingAndSaysNothing()
+    {
+        World w = Login(InitialTask.DoNothing, paradigm: true);
+
+        w.Rig.Position = Corridor;
+        w.Rig.ShowRoom();
+        w.Rig.Show("Somebody waves.");
+
+        Assert.Empty(w.Rig.Sent);
+        Assert.Empty(w.Notices);
+        Assert.False(w.Task.AwaitsRoom);
+    }
+
+    // With the master switch off the task is skipped, and the game isn't asked where
+    // we are for it.
+    [Fact]
+    public void MasterSwitchOff_ALoginTheMapCantPlace_AsksTheGameNothing()
+    {
+        World w = Login(paradigm: true, switchOff: true);
+
+        w.Rig.Position = Corridor;
+        w.Rig.ShowRoom();
+        w.Rig.Show("Somebody waves.");
+
+        Assert.Empty(w.Rig.Sent);
+        Assert.Empty(w.Notices);
+        Assert.Null(w.Runner.CurrentLoop);
+    }
+
+    // With no room known at all the task waits for one, with no time limit and no
+    // notice, as it always did, and starts once the map knows where it is.
+    [Fact]
+    public void LoginWithNoRoomKnownAtAll_TheTaskWaitsForOne()
+    {
+        World w = Login(located: false);
+
+        w.Rig.Position = Corridor;
+        w.Rig.ShowRoom();
+        w.Ticks.Advance(TimeSpan.FromMinutes(1));
+
+        Assert.Null(w.Rig.Tracker.State.CurrentRoom);
+        Assert.Empty(w.Rig.Sent);
+        Assert.Empty(w.Notices);
+        Assert.True(w.Task.AwaitsRoom);
+
+        w.Rig.Type("w");                                          // the user steps out to the gate
+        w.Rig.Pump(limit: 1);
+
+        Assert.Equal(Gate, w.Rig.Believed);
+        Assert.Equal("gy", w.Runner.CurrentLoop?.Name);
+        Assert.Equal(new[] { "w", "n" }, w.Rig.Sent);
     }
 }

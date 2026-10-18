@@ -372,18 +372,7 @@ public sealed class AutoLairManager : IDisposable
     // descriptor for a coord-list run). A label-less call — a resume of the same
     // run from Trainer / comeback paths — keeps the prior name but re-stamps the
     // time so the last-run ordering stays fresh.
-    //
-    // userStarted: the user pressed Start (the Navigation window, a favourite), against
-    // an event, a remote command, the Default task or a resume starting it.
-    public bool Start(string? label = null, bool userStarted = false)
-    {
-        bool started = StartRun(label, keepLairTimers: false);
-        if (started) RunStartedByUser = userStarted;
-        return started;
-    }
-
-    // The run going was started by the user; kept until the next start.
-    public bool RunStartedByUser { get; private set; }
+    public bool Start(string? label = null) => StartRun(label, keepLairTimers: false);
 
     // keepLairTimers: the restart after a reconnect is the same run, and the lair
     // timers it kept are wall-clock, so they still hold, through the board's nightly
@@ -462,10 +451,9 @@ public sealed class AutoLairManager : IDisposable
 
     // ----- restart after a reconnect -----------------------------------
 
-    // The run a dropped link cut off: its setup name, and whether the user had
-    // started it. The marks and their overrides stay with the manager through the
-    // stop, and the restart runs the ones held then.
-    private sealed record LairRun(string? Label, bool ByUser);
+    // The run a dropped link cut off: its setup name. The marks and their overrides
+    // stay with the manager through the stop, and the restart runs the ones held then.
+    private sealed record LairRun(string? Label);
 
     private readonly ReconnectRestart<LairRun> _restart;
     private readonly WirePromptScanner? _promptScanner;
@@ -486,9 +474,14 @@ public sealed class AutoLairManager : IDisposable
     // reform to see the room.
     public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom) => _restart.SetReformProbe(reformAwaitsRoom);
 
-    // A loop or a walk that is going while the restart is owed: one the user started
-    // wins over it; one started on its own makes it wait.
-    public void SetOtherRunProbe(Func<(string What, bool ByUser)?> otherRun) => _restart.OtherRun = otherRun;
+    // Another run started while the restart is owed (MovementController).
+    public void SupersedeReconnectResume(string by) => _restart.SupersededBy(by);
+
+    // A walk the client started by itself, going while the restart is owed: the
+    // restart waits for it (MovementController).
+    public void SetAutomaticWalkProbe(Func<string?> automaticWalk) => _restart.WaitFor = automaticWalk;
+
+    public string? ReconnectResumeWaitsFor => _restart.WaitingFor;
 
     // The terminal notice for a restart made from a room the map isn't sure of, or
     // not made at all.
@@ -511,7 +504,7 @@ public sealed class AutoLairManager : IDisposable
     public void NotifyDisconnected()
     {
         bool paused = IsPaused;
-        _restart.NoteDisconnected(IsActive ? new LairRun(LastRunLairName, RunStartedByUser) : null, () =>
+        _restart.NoteDisconnected(IsActive ? new LairRun(LastRunLairName) : null, () =>
         {
             Stop("disconnected — will resume on reconnect", willResume: true);
             if (paused) _coordinator?.AssertGate(MovementCoordinator.UserGate);
@@ -519,7 +512,7 @@ public sealed class AutoLairManager : IDisposable
     }
 
     // A run an errand stopped (a bank run's light buy) when the connection dropped.
-    public void ResumeOnReconnect(string why) => _restart.SetAside(new LairRun(LastRunLairName, RunStartedByUser), why);
+    public void ResumeOnReconnect(string why) => _restart.SetAside(new LairRun(LastRunLairName), why);
 
     // Reset States, a profile swap or a change of game data.
     public void ClearPendingReconnectResume() => _restart.Clear();
@@ -543,7 +536,6 @@ public sealed class AutoLairManager : IDisposable
             _log?.Warn("AutoLair", $"reconnect: {Describe(run)} could not be restarted");
             return false;
         }
-        RunStartedByUser = run.ByUser;
         if (paused) Pause();
         return true;
     }

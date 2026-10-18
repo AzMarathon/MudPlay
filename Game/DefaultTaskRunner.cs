@@ -116,7 +116,14 @@ public sealed class DefaultTaskRunner : IDisposable
             postToUi ?? PostToUiThread, _schedule,
             describe: _ => "the default task",
             runningNow: static () => null,
-            start: _ => StartOnEntry());
+            start: _ => StartOnEntry())
+        {
+            // Skipped with the switch off, not kept (SkippedForMasterSwitch), and a
+            // login the map can't place waits for a room as it always did.
+            MasterSwitchOff = () => BlockedByMasterSwitch?.Invoke("default task") == true,
+            KeepForMasterSwitch = false,
+            WaitForAnyRoom = true,
+        };
         _prompt.PromptObserved += OnPromptObserved;
         _tracker.PlayerDeathInferred += OnDeathInferred;
         _partyState.PropertyChanged += OnPartyStateChanged;
@@ -154,7 +161,7 @@ public sealed class DefaultTaskRunner : IDisposable
 
     // The start waiting for the room the login shows: still to be told, or asked of
     // the game.
-    public bool AwaitsRoom => _entry.AwaitsRoom;
+    public bool AwaitsRoom => _entry.AwaitsRoom || _entry.AwaitsAnyRoom;
     public bool LocatingRoom => _entry.Locating;
 
     // The terminal notice for a start made from a room the map isn't sure of, or not
@@ -202,7 +209,10 @@ public sealed class DefaultTaskRunner : IDisposable
         if (!_inGameConfirmed)
         {
             _inGameConfirmed = true;
-            if (!_taskFired) _entry.SetAside(new GameEntry(), "entered the game");
+            // Only a task that walks waits for the room; "Do nothing" has none to wait
+            // for, and nothing is asked of the game for it.
+            if (!_taskFired && ReadGeneralOrDefault().DefaultTask is InitialTask.BeginLoop or InitialTask.BeginAutoLair)
+                _entry.SetAside(new GameEntry(), "entered the game");
         }
         _entry.OnPrompt();
     }

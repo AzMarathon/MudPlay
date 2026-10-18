@@ -989,9 +989,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // silently switches to a teleport a re-plan happens to find shorter (report: search-en-route
     // found the raft, then the re-plan pivoted onto the Black Wastelands vortex).
     private bool _activePreferTeleportFree;
-
-    // The walk going was started by the user (it stated a route preference).
-    public bool StartedForUser { get; private set; }
     private bool _activeAvoidTraps;
     // True when the active walk overrides the user's avoid list (the picker's
     // "route through avoided rooms" choice). A mid-walk replan must keep it, or the
@@ -1173,11 +1170,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // taken; its journey is not reported through Journey (WalkJourney.OwnedLeg).
         bool ownedLeg = false)
     {
-        // A walk that states its route preference is one the user started (a route
-        // card's commit, the approach of a loop the user started); null is a walk
-        // nobody chose a route for. Read before a journey's leg takes the journey's.
-        if (!_replanningInPlace) StartedForUser = preferTeleportFree is not null;
-
         // A silent walk while a journey stands is one of its legs, and is planned by
         // the journey's rules where it states none of its own.
         if (supersedeSilently && !_replanningInPlace && _journey is { } standing)

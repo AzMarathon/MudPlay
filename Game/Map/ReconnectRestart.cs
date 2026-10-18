@@ -16,11 +16,12 @@ namespace MudPlay.Game.Map;
 // else `sys st`), and the run starts from the room it names. With nothing to ask,
 // no answer, or no room known within RoomWaitMax, the run starts from the room the
 // tracker believes, as it did before it waited, and the recovery gate it attaches
-// to puts it right; only with no room believed at all is it not started. Either way
-// the terminal says so.
+// to puts it right; only with no room believed at all is it not started (or, with
+// WaitForAnyRoom, kept until the map has one). Either way the terminal says so.
 //
 // With the master switch off it waits for the switch (ResumeAfterMasterSwitch):
-// started then, the engine would raise its start events with the user's autos off.
+// started then, the engine would raise its start events with the user's autos off;
+// nor is the game asked where we are while it is off.
 // A death found out at the login drops it: it would walk a stripped character out
 // of the temple.
 //
@@ -51,7 +52,6 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     private int _unsureChecks;
     private bool _locateTried;
     private int _waitId;
-    private string? _waitingFor;
 
     // owner: the engine, as its log lines and gate holds name it. occasion: what the
     // start follows, as a notice reads it ("reconnect", "login"). describe: the run
@@ -99,17 +99,27 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // The run waiting to start, or null.
     public TRun? Pending { get; private set; }
 
-    // True while the master switch (Auto-All) is off. Unset: the owner applies the
-    // switch itself.
+    // True while the master switch (Auto-All) is off. Nothing is started, and the game
+    // is never asked where we are, while it is.
     public Func<bool>? MasterSwitchOff { get; set; }
 
-    // A run of another engine that is going (a walk, the other of loop and
-    // Auto-Lair), as describe names a run, and whether the user started it. Unset:
-    // none looked at.
-    public Func<(string What, bool ByUser)?>? OtherRun { get; set; }
+    // With the switch off, keep the start for when it is back on (a restart) rather
+    // than let it go (the Default task: by then the user is at the keys).
+    public bool KeepForMasterSwitch { get; set; } = true;
 
-    // A terminal notice, for a start made from a room the map isn't sure of or one
-    // not made at all.
+    // With no room believed at all, wait for one with no time limit rather than let
+    // the start go (the Default task at a login, as it always waited).
+    public bool WaitForAnyRoom { get; set; }
+
+    // A walk the client started by itself that is going, as a notice names it, or
+    // null: the start waits for it to end. Unset: none looked at.
+    public Func<string?>? WaitFor { get; set; }
+
+    // The walk the start is waiting behind, or null.
+    public string? WaitingFor { get; private set; }
+
+    // A terminal notice, for a start made from a room the map isn't sure of, one not
+    // made at all, one another run took the place of, and one waiting behind a walk.
     public Action<string>? Notice { get; set; }
 
     // The first game prompt came with the switch off: the start is owed, and
@@ -118,6 +128,9 @@ public sealed class ReconnectRestart<TRun> where TRun : class
 
     // Back in the game, but the tracker isn't sure of the room yet.
     public bool AwaitsRoom { get; private set; }
+
+    // No room believed at all, and the start waits for one (WaitForAnyRoom).
+    public bool AwaitsAnyRoom { get; private set; }
 
     // The game was asked where we are; its answer starts the run.
     public bool Locating { get; private set; }
@@ -168,7 +181,8 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     {
         Pending = null;
         HeldForMasterSwitch = false;
-        _waitingFor = null;
+        AwaitsAnyRoom = false;
+        WaitingFor = null;
         ForgetRoomWait();
     }
 
@@ -177,8 +191,19 @@ public sealed class ReconnectRestart<TRun> where TRun : class
     // waiting for the first prompt is left as it always was.
     public void DropHeld(string why)
     {
-        if (!HeldForMasterSwitch && !AwaitsRoom) return;
+        if (!HeldForMasterSwitch && !AwaitsRoom && !AwaitsAnyRoom && WaitingFor is null) return;
         _log?.Info(_owner, $"{_occasion}: {(Pending is { } p ? _describe(p) : "(nothing)")} will not be started ({why})");
+        Clear();
+    }
+
+    // Another run started while the start is owed: a loop or an Auto-Lair run,
+    // whoever started it, or a walk the user started (MovementController says which).
+    // That run is the one going now; started after it, this one would take its place.
+    public void SupersededBy(string by)
+    {
+        if (Pending is not { } run) return;
+        _log?.Info(_owner, $"{_occasion}: {_describe(run)} will not be started: {by} was started");
+        Notice?.Invoke($"[{Capitalised(_describe(run))} not restarted after the {_occasion}: {by} was started]");
         Clear();
     }
 
@@ -208,6 +233,7 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         // Posted, so the rest of the display (and the party reform reading it) is
         // handled before the run plans its first step.
         if (AwaitsRoom && t.NewConfidence == RoomConfidence.Confirmed) _postToUi(() => TryStart(fromBelief: null));
+        else if (AwaitsAnyRoom && t.NewRoom is not null) _postToUi(() => TryStart(fromBelief: "no room was known when it was due"));
     }
 
     // fromBelief: why the run is started from the room the tracker believes, unsure
@@ -223,25 +249,27 @@ public sealed class ReconnectRestart<TRun> where TRun : class
             Clear();
             return;
         }
-        // Another engine's run: the user's is the run now, as one of this engine's is.
-        // One started on its own (an errand's walk, an event) isn't the user's choice
-        // and doesn't call the start off: it waits, and the next prompt asks again.
-        if (OtherRun?.Invoke() is { } other)
+        // A walk the client started by itself (an errand, a flee) goes on; the start
+        // waits for it, and the next prompt asks again.
+        if (WaitFor?.Invoke() is { } walk)
         {
-            if (other.ByUser)
+            if (WaitingFor != walk)
             {
-                _log?.Info(_owner, $"{_occasion}: {_describe(run)} is not started; the user started {other.What} meanwhile");
+                _log?.Info(_owner, $"{_occasion}: {_describe(run)} waits for {walk} to end");
+                Notice?.Invoke($"[{Capitalised(_describe(run))} restarts after {walk} ends]");
+            }
+            WaitingFor = walk;
+            return;
+        }
+        WaitingFor = null;
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            if (!KeepForMasterSwitch)
+            {
+                _log?.Info(_owner, $"{_occasion}: {_describe(run)} is not started: the master switch is off");
                 Clear();
                 return;
             }
-            if (_waitingFor != other.What)
-                _log?.Info(_owner, $"{_occasion}: {_describe(run)} waits for {other.What} to end");
-            _waitingFor = other.What;
-            return;
-        }
-        _waitingFor = null;
-        if (MasterSwitchOff?.Invoke() == true)
-        {
             if (!HeldForMasterSwitch)
                 _log?.Info(_owner,
                     $"{_occasion}: {_describe(run)} is not started with the master switch off; it starts when the switch is back on");
@@ -257,6 +285,14 @@ public sealed class ReconnectRestart<TRun> where TRun : class
         }
         if (_tracker.State.CurrentRoom is not { } room)
         {
+            if (WaitForAnyRoom)
+            {
+                if (!AwaitsAnyRoom)
+                    _log?.Info(_owner, $"{_occasion}: {_describe(run)} waits for the map to know a room ({fromBelief})");
+                ForgetRoomWait();
+                AwaitsAnyRoom = true;
+                return;
+            }
             _log?.Warn(_owner, $"{_occasion}: {_describe(run)} is not started: the map has no room to start it from ({fromBelief})");
             Notice?.Invoke($"[{Capitalised(_describe(run))} not started after the {_occasion}: the map has no room to start it from]");
             Clear();
@@ -295,6 +331,9 @@ public sealed class ReconnectRestart<TRun> where TRun : class
 
     private void Locate(TRun run)
     {
+        // TryStart asked the switch just now; a locate is a command sent by itself,
+        // and none goes out with the switch off, whoever owns the start.
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (_locateTried)
         {
             FallBack("the game named a room the map doesn't have");

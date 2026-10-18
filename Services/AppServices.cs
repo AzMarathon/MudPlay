@@ -10528,13 +10528,6 @@ public sealed class AppServices
         // so its first step can't go out ahead of the reform's hold.
         LoopRunner.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
         AutoLair.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
-        // A restart still owed after a reconnect gives way to a run the user started
-        // meanwhile on another engine.
-        LoopRunner.SetOtherRunProbe(() => AutoLair.IsActive ? ("Auto-Lair", AutoLair.RunStartedByUser)
-            : Walker.State != Game.Map.WalkState.Idle ? ("a walk", Walker.StartedForUser) : null);
-        AutoLair.SetOtherRunProbe(() => LoopRunner.State != Game.Map.LoopState.Idle
-                ? ($"loop '{LoopRunner.CurrentLoop?.Name ?? "?"}'", LoopRunner.RunStartedByUser)
-            : Walker.State != Game.Map.WalkState.Idle ? ("a walk", Walker.StartedForUser) : null);
 
         // Reconnect-recovery cross-wiring — done here (after PartyRejoin exists)
         // because these hooks bridge the leader-side comeback manager and the

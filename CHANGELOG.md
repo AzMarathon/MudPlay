@@ -4,7 +4,7 @@
 
 - Auto-Lair cut off by a dropped connection restarts once you're back, from the room the reconnect shows, as a loop does
 - A light buy cut off by a drop hands Auto-Lair to that restart instead of leaving it stopped
-- A restart still owed after a reconnect gives way to a loop, Auto-Lair run or walk you start meanwhile, and waits for one started by itself
+- A loop or Auto-Lair run started meanwhile, or a walk you start, takes the place of a restart still owed; a walk the client starts makes it wait
 
 ## 3.184.19
 

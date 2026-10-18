@@ -1073,7 +1073,6 @@ public sealed class LoopRunner : IRecoverableEngine
     // uses only the teleports allowed to those (AutoWalkManager.SetAutomaticWalkTeleports).
     public bool Start(Loop loop, bool userStarted = false)
     {
-        RunStartedByUser = userStarted;
         _userApproach = userStarted;
         _startingForUser = userStarted;
         try { return StartInternal(loop, isRecovery: false, gateFallback: true); }
@@ -3133,13 +3132,14 @@ public sealed class LoopRunner : IRecoverableEngine
     // A loop an errand stopped (a bank run's light buy) when the connection dropped.
     public void ResumeOnReconnect(Loop loop, string why) => _restart.SetAside(loop, why);
 
-    // The run going was started by the user (Start's userStarted), not by an event,
-    // a remote command, a sweep or a resume; kept until the next Start.
-    public bool RunStartedByUser { get; private set; }
+    // Another run started while the restart is owed (MovementController).
+    public void SupersedeReconnectResume(string by) => _restart.SupersededBy(by);
 
-    // An Auto-Lair run or a walk that is going while the restart is owed: one the
-    // user started wins over it; one started on its own makes it wait.
-    public void SetOtherRunProbe(Func<(string What, bool ByUser)?> otherRun) => _restart.OtherRun = otherRun;
+    // A walk the client started by itself, going while the restart is owed: the
+    // restart waits for it (MovementController).
+    public void SetAutomaticWalkProbe(Func<string?> automaticWalk) => _restart.WaitFor = automaticWalk;
+
+    public string? ReconnectResumeWaitsFor => _restart.WaitingFor;
 
     public void ClearPendingReconnectResume() => _restart.Clear();
 

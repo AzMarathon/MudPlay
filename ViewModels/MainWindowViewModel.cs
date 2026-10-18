@@ -5641,7 +5641,7 @@ public partial class MainWindowViewModel : ObservableObject
             s.AutoLair.Clear();
             foreach (Models.Profile.LairMarker m in setup.Markers)
                 s.AutoLair.Mark(new Game.Map.RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-            s.AutoLair.Start(userStarted: true);
+            s.AutoLair.Start();
         });
     }
 
