@@ -242,7 +242,8 @@ public sealed class AutoDepositManagerTests : IDisposable
             postToUi: action => action());
         loop.SetWireSender(_ => { });
         LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager lair = new(walker, tracker, graph, bfs, timers);
+        AutoLairManager lair = new(walker, tracker, graph, bfs, timers, promptScanner: prompts,
+            postToUi: action => action());
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -1075,6 +1076,36 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(LoopState.Approaching, h.Loop.State);
         Assert.Equal(new RoomKey(1, 1), h.Walker.Destination);
         Assert.Equal("s", h.Moves.Last());          // planned from the room the reconnect showed
+    }
+
+    // An Auto-Lair run's bank run buying its light when the link drops: the run is
+    // handed to Auto-Lair's own restart after a reconnect, as a loop is, and is up
+    // again once back in the game.
+    [Fact]
+    public void ConnectionDropsDuringALairBankRunsLightBuy_TheLairRestartsAfterTheReconnect()
+    {
+        using Harness h = NewHarness(DarkGraphJson);
+        StartLair(h);
+        ArmBankGate(h);
+        EnableLightDetour(h);
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+        Assert.False(h.Lair.IsActive);                       // the errand took over
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 3));
+        DeliverBankInventory(h);
+        Arrive(h, new RoomKey(1, 2));
+        Arrive(h, new RoomKey(1, 1));
+        Arrive(h, new RoomKey(1, 4));
+        Assert.Single(h.BuyLines());
+
+        h.AutoDeposit.NoteDisconnected();
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.False(h.Lair.IsActive);
+        Assert.Equal("Auto-Lair", h.Lair.PendingReconnectResume);
+
+        h.Prompt();
+        Assert.True(h.Lair.IsActive);
+        Assert.Null(h.Lair.PendingReconnectResume);
     }
 
     // The user's Stop held the trip (the user gate is up) when the link dropped: that

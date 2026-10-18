@@ -9073,7 +9073,8 @@ public sealed class AppServices
         // lair to enter based on respawn timers + travel cost, parks
         // at a wait-room one hop short, then steps in on the tick.
         AutoLair = new Game.Map.AutoLairManager(
-            Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator);
+            Walker, RoomTracker, RoomGraph, Bfs, LairTimers, Log, MovementCoordinator,
+            promptScanner: PromptScanner);
         // Nothing made of one game data's room numbers is saved under another: lair
         // marks on the map are dropped, with a notice, when the set changes to another,
         // as a loop being built is. Posted: a set change can come from inside the line
@@ -10522,6 +10523,13 @@ public sealed class AppServices
         // A loop restarting after a reconnect waits for that reform to see the room,
         // so its first step can't go out ahead of the reform's hold.
         LoopRunner.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
+        AutoLair.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
+        // A restart still owed after a reconnect gives way to a run the user started
+        // meanwhile on another engine.
+        LoopRunner.SetOtherRunProbe(() => AutoLair.IsActive ? "Auto-Lair"
+            : Walker.State != Game.Map.WalkState.Idle ? "a walk" : null);
+        AutoLair.SetOtherRunProbe(() => LoopRunner.State != Game.Map.LoopState.Idle ? $"loop '{LoopRunner.CurrentLoop?.Name ?? "?"}'"
+            : Walker.State != Game.Map.WalkState.Idle ? "a walk" : null);
 
         // Reconnect-recovery cross-wiring — done here (after PartyRejoin exists)
         // because these hooks bridge the leader-side comeback manager and the
@@ -11299,6 +11307,7 @@ public sealed class AppServices
 
         MovementControl.RefuseResume = () => RefuseStartForMasterSwitch("Run", "resume");
         LoopRunner.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
+        AutoLair.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
 
         AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
         AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
@@ -11352,6 +11361,7 @@ public sealed class AppServices
         _masterSwitchSettleOwed = false;
         _masterSwitchEventsOwed = false;
         LoopRunner.DropHeldReconnectResume("another profile was loaded");
+        AutoLair.DropHeldReconnectResume("another profile was loaded");
         MovementControl.ReleaseFromAutoAll();
     }
 
@@ -11474,6 +11484,7 @@ public sealed class AppServices
         // A loop the last reconnect set aside, not restarted while the switch was
         // off. Behind the freeze still, so its first step waits for the holds.
         LoopRunner.ResumeAfterMasterSwitch();
+        AutoLair.ResumeAfterMasterSwitch();
         // Ahead of the release: the walk it frees plans on a purse that is being
         // read, with its tolls closed, not on one known to be wrong.
         SendOwedInventoryReads();
@@ -15804,6 +15815,7 @@ public sealed class AppServices
         GhSweep.Stop(reason);
         Walker.ReleaseAbandonedCombatHold();
         LoopRunner.ClearPendingReconnectResume();
+        AutoLair.ClearPendingReconnectResume();
         MazeSolver.Cancel(reason);
         PyramidSolver.Cancel(reason);
 

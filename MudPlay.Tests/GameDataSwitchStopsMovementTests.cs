@@ -164,7 +164,8 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         LoopRunner runner = new(tracker, coord, promptScanner: prompt, log: log, graph: graph, recovery: gate, bfs: bfs,
             filter: filter, postToUi: a => a(), schedule: ticks.Arm);
         LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager lairs = new(walker, tracker, graph, bfs, timers, log, coord, schedule: ticks.Arm);
+        AutoLairManager lairs = new(walker, tracker, graph, bfs, timers, log, coord, schedule: ticks.Arm,
+            promptScanner: prompt, postToUi: a => a());
         MovementController controller = new(walker, runner, lairs, coord, log);
         _dispose.Add(controller);
         _dispose.Add(lairs);
@@ -388,6 +389,34 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
 
         Assert.Equal("Loop 'ab', held for a reconnect, dropped", ended);
         Assert.Null(h.Runner.PendingReconnectResumeName);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
+        h.LetTimePass();
+
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    // An Auto-Lair run set aside at a drop is dropped the same way: its marks stay
+    // with the same set, but nothing starts at the first prompt back.
+    [Fact]
+    public void TheActiveSetReadInAgain_DropsAnAutoLairRunHeldForAReconnect()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Lairs.Mark(new RoomKey(1, 1));
+        h.Lairs.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lairs.Start("Two dens"));
+        h.Lairs.NotifyDisconnected();
+        Assert.Equal("Auto-Lair 'Two dens'", h.Lairs.PendingReconnectResume);
+        string[] sent = h.Sent.ToArray();
+
+        string? ended = h.ReadInAgain();
+
+        Assert.Equal("Auto-Lair 'Two dens', held for a reconnect, dropped", ended);
+        Assert.Null(h.Lairs.PendingReconnectResume);
+        Assert.Equal(2, h.Lairs.Marked.Count);
 
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
@@ -1065,6 +1094,29 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.Equal(new[] { "[Loop 'ab', held for a reconnect, dropped: another character was loaded]" }, swap.Notices);
         Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "Movement"
             && e.Message == "Loop 'ab', held for a reconnect, dropped: another character was loaded");
+        h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
+        h.LetTimePass();
+        Assert.Equal(sent, h.Sent);
+        Assert.True(h.Idle);
+    }
+
+    // An Auto-Lair run set aside at a drop goes with the character too.
+    [Fact]
+    public void AnAutoLairRunHeldForAReconnect_IsDropped_WhenAnotherCharacterIsLoaded()
+    {
+        Harness h = OnAlpha();
+        Swap swap = SwapOn(h);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Lairs.Mark(new RoomKey(1, 1));
+        h.Lairs.Mark(new RoomKey(1, 3));
+        Assert.True(h.Lairs.Start("Two dens"));
+        h.Lairs.NotifyDisconnected();
+        string[] sent = h.Sent.ToArray();
+
+        swap.Load("bbs/Bob");
+
+        Assert.Equal(new[] { "[Auto-Lair 'Two dens', held for a reconnect, dropped: another character was loaded]" }, swap.Notices);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));
         h.LetTimePass();
         Assert.Equal(sent, h.Sent);

@@ -2082,6 +2082,15 @@ public static class BugReportBuilder
             : svc.LoopRunner.ReconnectResumeHeldForReform
                 ? "restarted — held until the party reform has seen the room"
                 : "(none pending)");
+        Kv(sb, "Auto-Lair restart after reconnect", svc.AutoLair.PendingReconnectResume is { } pendingLair
+            ? svc.AutoLair.ReconnectResumeHeldForMasterSwitch
+                ? $"{pendingLair} — when the master switch is back on"
+                : svc.AutoLair.ReconnectResumeAwaitsRoom
+                    ? $"{pendingLair} — once the room is known (next prompt or a confirmed room)"
+                    : $"{pendingLair} — on the next in-game prompt, once its room display is read"
+            : svc.AutoLair.ReconnectResumeHeldForReform
+                ? "restarted — held until the party reform has seen the room"
+                : "(none pending)");
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");

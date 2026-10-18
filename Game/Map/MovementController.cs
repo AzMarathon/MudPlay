@@ -420,6 +420,7 @@ public sealed class MovementController : IDisposable
         if (_autoLair.IsActive) _autoLair.Stop(reason);
         if (_loops.State != LoopState.Idle) _loops.Stop(reason);
         _loops.DropHeldReconnectResume(reason);
+        _autoLair.DropHeldReconnectResume(reason);
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
         _walker.Stop(reason);
@@ -501,6 +502,7 @@ public sealed class MovementController : IDisposable
         try { Stop(reason); }
         finally { GameDataChangeStop = null; }
         _loops.ClearPendingReconnectResume();
+        _autoLair.ClearPendingReconnectResume();
         _loops.Unstage();
 
         if (stopped.Count == 0 && dropped.Count == 0) return null;
@@ -523,6 +525,7 @@ public sealed class MovementController : IDisposable
     {
         List<string> dropped = HeldLoops();
         _loops.ClearPendingReconnectResume();
+        _autoLair.ClearPendingReconnectResume();
         _loops.Unstage();
         if (dropped.Count == 0) return null;
         string what = Sentence(string.Join(" and ", dropped) + " dropped");
@@ -535,6 +538,7 @@ public sealed class MovementController : IDisposable
     {
         List<string> held = new();
         if (_loops.PendingReconnectResumeName is { } resume) held.Add($"loop '{resume}', held for a reconnect,");
+        if (_autoLair.PendingReconnectResume is { } lair) held.Add($"{lair}, held for a reconnect,");
         if (_loops.StagedLoop is { } staged) held.Add($"loop '{staged.Name}', loaded to start,");
         return held;
     }

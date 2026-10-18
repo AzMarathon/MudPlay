@@ -33,6 +33,7 @@ internal sealed class TrackerWireRig : IDisposable
 
     public ManualClock Clock { get; } = new();
     public LogService Log { get; } = new(capacity: 20000);
+    public GameDataCache Cache { get; }
     public RoomGraphManager Graph { get; }
     public RoomTracker Tracker { get; }
     public EngineRecoveryGate Gate { get; }
@@ -88,9 +89,9 @@ internal sealed class TrackerWireRig : IDisposable
         _root = Path.Combine(Path.GetTempPath(), "mudplay-wire-rig-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
-        GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
-        Graph = new RoomGraphManager(cache, Log);
+        Cache = new GameDataCache(_root);
+        Cache.SwitchSet("alpha");
+        Graph = new RoomGraphManager(Cache, Log);
         Graph.OnActiveSetChanged("alpha");
 
         // Each read moves the clock one tick, as the wall clock does between two rows:
