@@ -2228,6 +2228,10 @@ public static class BugReportBuilder
         Kv(sb, "Default task party-hold armed", svc.DefaultTaskRunner.PendingPartyRebuildHold.ToString());
         Kv(sb, "Default task holding now", svc.DefaultTaskRunner.IsHoldingForParty.ToString());
         Kv(sb, "Default task stood down for a hang-up death", svc.DefaultTaskRunner.StoodDownForDeath.ToString());
+        // The start at a login waits for the room the login shows, and asks the game
+        // when the map can't tell it.
+        Kv(sb, "Default task waiting for the room", svc.DefaultTaskRunner.LocatingRoom ? "yes — asked the game where we are (rm / sys st)"
+            : svc.DefaultTaskRunner.AwaitsRoom ? "yes — until the map is sure of it" : "no");
 
         // Recovery gate + Paradigm rm re-sync — a "walker got lost / stuck
         // mid-walk" report needs the tier the gate climbed to, the anchor it
