@@ -1,6 +1,6 @@
 # Version history
 
-## 3.184.25
+## 3.184.27
 
 - Lost-recovery walk-back no longer reverses a step the game refused or dropped, and does reverse a flee's steps
 - Lost-recovery walk-back starts from the room the failed step landed in, not the room before it
@@ -11,6 +11,10 @@
 - A save right after logging back on, before the room shows, keeps the moves to replay
 - A character with no saved room starts with no room, not the last character's; one with only a worked-out room saved comes back at it
 - Lost, or the map rebuilt, also drops a worked-out room saved for the next relog
+
+## 3.184.17
+
+- Combat tests run on one manual clock the whole engine reads, with no real-time waits
 
 ## 3.184.16
 

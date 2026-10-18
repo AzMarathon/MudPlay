@@ -69,13 +69,20 @@ public sealed class CombatManagerTests
         // combat manager's own handler for the line. Only with wireDeathWatcher.
         public MonsterDeathWatcher? Deaths { get; }
 
+        // The one clock every component here reads; nothing waits on real time.
+        // Each line fed in lands a millisecond after the one before (the game's
+        // lines never share an instant), and a test that needs a round or a window
+        // to pass moves it by itself.
+        public ManualClock Clock { get; } = new();
+        private static readonly TimeSpan LineGap = TimeSpan.FromMilliseconds(1);
+
         public Harness(bool wireDeathWatcher = false)
         {
             DefaultPatterns.Seed(Router);
-            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log);
+            Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log, now: () => Clock.Now);
             if (wireDeathWatcher)
             {
-                Deaths = new MonsterDeathWatcher(Router, Log);
+                Deaths = new MonsterDeathWatcher(Router, Log, now: () => Clock.Now);
                 Deaths.MonsterDied += evt =>
                 {
                     if (evt.RoomSpellRoster is null) Combat!.NoteUnattributedDeath();
@@ -89,7 +96,8 @@ public sealed class CombatManagerTests
                 isEnabled: () => AutoCombatEnabled,
                 readOwnGivenName: () => OwnName,
                 post: a => { if (DeferUi) _uiJobs.Enqueue(a); else a(); },
-                log: Log);
+                log: Log,
+                now: () => Clock.Now);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetWeaponActuator((w, oh, force) => { Swaps.Add((w, oh)); SwapForced.Add(force); },
                 readWornWeapon: () => WornWeapon);
@@ -136,9 +144,10 @@ public sealed class CombatManagerTests
 
         public void Feed(string line)
         {
+            Clock.Advance(LineGap);
             LineExtractor.EmittedLine emitted = new(
                 line, Array.Empty<CellAttributes>(),
-                DateTimeOffset.UtcNow, IsPromptLine: false);
+                Clock.Now, IsPromptLine: false);
             Router.Dispatch(emitted);
         }
 
@@ -146,7 +155,8 @@ public sealed class CombatManagerTests
         // text as a second line carrying the same timestamp.
         public void FeedEchoed(string command)
         {
-            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Clock.Advance(LineGap);
+            DateTimeOffset at = Clock.Now;
             Router.Dispatch(new LineExtractor.EmittedLine(
                 "[HP=43/MA=39]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
             Router.Dispatch(new LineExtractor.EmittedLine(
@@ -641,7 +651,7 @@ public sealed class CombatManagerTests
         h.Feed("large brigand moves to protect brigand chief");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("You gain 10 experience.");
         h.Feed("*Combat Off*");
         Assert.Equal("large brigand", h.Combat.CurrentTarget);   // the survivor was re-picked
@@ -650,7 +660,7 @@ public sealed class CombatManagerTests
         h.Feed("Also here: large brigand.");
         Assert.Null(h.Combat.Snapshot().GuardBlockedTarget);
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         int sentBefore = h.Sent.Count;
         h.Feed("*Combat Off*");
 
@@ -671,7 +681,7 @@ public sealed class CombatManagerTests
         h.Feed("Also here: brigand chief, large brigand, small brigand.");
         h.Feed("large brigand moves to protect brigand chief");
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("You gain 10 experience.");
         h.Feed("*Combat Off*");
         h.Feed("Also here: brigand chief, small brigand.");
@@ -692,24 +702,25 @@ public sealed class CombatManagerTests
         h.AddMonster(3, "giant rat");
 
         h.Feed("Also here: brigand chief, large brigand, giant rat.");
+        h.Feed("*Combat Engaged*");
         h.Feed("large brigand moves to protect brigand chief");
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("You gain 10 experience.");                       // the guard
         h.Feed("*Combat Off*");
         h.Feed("Also here: brigand chief, giant rat.");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
         Assert.Equal("brigand chief", h.Combat.CurrentTarget);
 
-        NewExpRound(h.Combat);
-        BackdateLastAttack(h.Combat);
+        h.Combat.OnCombatTick();                                 // a round boundary between the two kills
+        h.Clock.Advance(TimeSpan.FromSeconds(2));                // inside the 3 s cooldown
         h.Feed("You gain 10 experience.");                       // the chief
         h.Feed("*Combat Off*");
         Assert.Equal(2, h.CrRefreshSends);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
         Assert.Contains("not judged yet", h.Combat.LastGuardRosterCheck);
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(TimeSpan.FromSeconds(1.7));              // past the attack guard, inside the 2 s wait for the read
         int sentBefore = h.Sent.Count;
         h.Feed("*Combat Off*");                                  // the rat fight's
         Assert.DoesNotContain(h.Sent.Skip(sentBefore),
@@ -733,14 +744,14 @@ public sealed class CombatManagerTests
         h.Feed("Also here: brigand chief, large brigand.");
         h.Feed("large brigand moves to protect brigand chief");
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("You gain 10 experience.");                       // the guard
         h.Feed("*Combat Off*");
         h.Feed("Also here: brigand chief.");
         Assert.Equal("brigand chief", h.Combat.Snapshot().GuardBlockedTarget);
 
-        NewExpRound(h.Combat);
-        BackdateLastAttack(h.Combat);
+        h.Combat.OnCombatTick();                                 // a round boundary between the two kills
+        h.Clock.Advance(ARound);
         int sentBefore = h.Sent.Count;
         h.Feed("You gain 10 experience.");                       // the chief
         h.Feed("*Combat Off*");
@@ -766,7 +777,7 @@ public sealed class CombatManagerTests
         h.Feed("large brigand moves to protect brigand chief");
         h.Dark = true;
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         int sentBefore = h.Sent.Count;
         h.Feed("You gain 10 experience.");                       // the last guard
         h.Feed("*Combat Off*");
@@ -790,7 +801,7 @@ public sealed class CombatManagerTests
         h.Feed("Also here: brigand chief.");
         h.Feed("large brigand moves to protect brigand chief");
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         int sentBefore = h.Sent.Count;
         h.Feed("You gain 10 experience.");                       // the last guard
         h.Feed("*Combat Off*");
@@ -2314,7 +2325,7 @@ public sealed class CombatManagerTests
         h.Combat.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(OffRoundDamageLinesTests.MagmaHeat));
         h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("*Combat Off*");
 
         h.Feed("You are seared by the flames for 28 damage!");
@@ -3680,7 +3691,7 @@ public sealed class CombatManagerTests
 
         h.Feed("Also here: cave bear.");
         Assert.Equal("a cave bear", h.LastSent);
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         fleeing = true;
         h.Combat.NoteBetweenRoundCast();
@@ -4112,7 +4123,7 @@ public sealed class CombatManagerTests
         // A full round elapsed before the interrupting cast — backdate the
         // swing stamp so the resume isn't mistaken for a redundant double on
         // the heels of a fresh swing (see ResumeAfterAttackGuard).
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         // In-between cast turns combat off; no room re-display, no Engaged.
         // No resume yet — Off by itself is ambiguous.
@@ -4139,10 +4150,11 @@ public sealed class CombatManagerTests
 
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
+        h.Feed("*Combat Engaged*");
 
-        // Resume happens a round later — backdate so the guard doesn't read it
-        // as a double on a fresh swing (see ResumeAfterAttackGuard).
-        BackdateLastAttack(h.Combat);
+        // Resume happens a round later, so the guard doesn't read it as a double
+        // on a fresh swing (see ResumeAfterAttackGuard).
+        h.Clock.Advance(ARound);
 
         // In-between cast: Off, no Engaged. No resume on the Off line.
         h.Feed("*Combat Off*");
@@ -4235,8 +4247,7 @@ public sealed class CombatManagerTests
         Assert.Contains("hasn't answered it", h.Combat.LastResumeDecision);
     }
 
-    // The guard is 1.5 s from the attack. The stamps it reads are wall-clock
-    // (the injected combat clock doesn't reach them), so the attack is aged instead.
+    // The guard is 1.5 s from the attack.
     [Theory]
     [InlineData(1.4, 1)]
     [InlineData(1.6, 2)]
@@ -4245,7 +4256,7 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
-        BackdateLastAttack(h.Combat, attackAgeSeconds);
+        h.Clock.Advance(TimeSpan.FromSeconds(attackAgeSeconds));
 
         h.Feed("*Combat Off*");
         h.Feed("The giant rat bites you for 5 damage!");
@@ -4258,11 +4269,13 @@ public sealed class CombatManagerTests
     {
         // The Off that ends an answered attack a moment after a kill is the kill's
         // own. If the corpse is still on the roster, the guard keeps a swing off it.
+        // No death watcher here, so nothing takes the rat off the roster: the
+        // removal that can fail, failed.
         using Harness h = new();
         h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
         h.Feed("*Combat Engaged*");
-        SetStamp(h.Combat, "_lastDeathAt", DateTimeOffset.Now);
+        h.Feed("You gain 100 experience.");
 
         h.Feed("*Combat Off*");
         h.Feed("Forged punches giant rat for 28 damage!");
@@ -4390,10 +4403,10 @@ public sealed class CombatManagerTests
         using Harness h = new();
         h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         h.Combat.NoteTypedGearCommand("eq sword");
-        SetStamp(h.Combat, "_betweenRoundCastAt", DateTimeOffset.Now - TimeSpan.FromSeconds(3.1));
+        h.Clock.Advance(TimeSpan.FromSeconds(3.1));
         h.Feed("*Combat Off*");
 
         Assert.Single(h.Sent);
@@ -4434,7 +4447,7 @@ public sealed class CombatManagerTests
         // The heal fires a round into the fight — backdate the swing stamp so
         // the resume isn't suppressed as a fresh-swing double (see
         // ResumeAfterAttackGuard).
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         // CastingDirector sent a heal; the server stops our auto-attack.
         h.Combat.NoteBetweenRoundCast();
@@ -4462,7 +4475,7 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);
         Assert.Equal("a large orc rogue", h.LastSent);
 
-        // No BackdateLastAttack — the swing is FRESH (within the guard). The
+        // No time passes — the swing is FRESH (within the guard). The
         // director heals immediately after engaging, then the cast turns
         // combat off. The resume must still fire on this Off line.
         h.Combat.NoteBetweenRoundCast();
@@ -4528,7 +4541,7 @@ public sealed class CombatManagerTests
 
         // Age the swing so the fresh-swing guard isn't the suppressor — the
         // between-round branch bypasses that guard anyway, isolating the death guard.
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         // The trog dies but the death can't be pinned to a roster slot (flavored
         // wording), so the roster still lists it and a re-display is forced. This
@@ -4562,9 +4575,10 @@ public sealed class CombatManagerTests
 
         h.Feed("Also here: cave bear.");
         Assert.Equal("a cave bear", h.LastSent);
+        h.Feed("*Combat Engaged*");
         int sentAfterEngage = h.Sent.Count;
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
 
         // A routine per-round *Combat Off* — no between-round cast armed, no recent
         // exp gain, so neither of OnCombatStatus's own kill-inference branches fire.
@@ -4597,9 +4611,10 @@ public sealed class CombatManagerTests
 
         h.Feed("Also here: cave bear.");
         Assert.Equal("a cave bear", h.LastSent);
+        h.Feed("*Combat Engaged*");
         int sentAfterEngage = h.Sent.Count;
 
-        BackdateLastAttack(h.Combat);
+        h.Clock.Advance(ARound);
         h.Feed("*Combat Off*");
         h.Combat.OnCombatTick();
         Assert.Equal(sentAfterEngage, h.Sent.Count);   // queued, not yet sent
@@ -4667,6 +4682,7 @@ public sealed class CombatManagerTests
 
         // THEN the kill's death→re-observe re-engages the survivor — a fresh swing
         // that post-dates the bless.
+        h.Clock.Advance(TimeSpan.FromMilliseconds(500));
         h.Combat.NoteUnattributedDeath();
         Assert.Equal("a short bugbear", h.LastSent);
         Assert.Equal("short bugbear", h.Combat.CurrentTarget);
@@ -4777,38 +4793,10 @@ public sealed class CombatManagerTests
 
     // ----- engage-verification safety net ------------------------------
 
-    // Backdate the private engage-wait timestamp so the next
-    // tick sees the confirmation window as elapsed — lets the test
-    // exercise the timeout path without sleeping the real clock.
-    private static void ExpireEngageWindow(CombatManager combat)
-    {
-        System.Reflection.FieldInfo f = typeof(CombatManager).GetField(
-            "_awaitingEngageSince",
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic)!;
-        Assert.NotNull(f.GetValue(combat));   // must actually be awaiting
-        f.SetValue(combat, DateTimeOffset.Now - TimeSpan.FromSeconds(30));
-    }
-
-    // Backdate the last-swing stamp so the interrupt-resume guard
-    // sees the attack as a full round old — the real timing when a mob swing
-    // or between-round cast resumes. The guard only suppresses a resume that
-    // lands right on the heels of a fresh swing (see ResumeAfterAttackGuard),
-    // so time-compressed tests must age the stamp to exercise a real resume.
-    private static void BackdateLastAttack(CombatManager combat, double seconds = 5) =>
-        SetStamp(combat, "_lastAttackSentAt", DateTimeOffset.Now - TimeSpan.FromSeconds(seconds));
-
-    // A round boundary between two kills, for the per-round exp tally OnCombatTick
-    // zeroes: without one, two kills read as one room spell's.
-    private static void NewExpRound(CombatManager combat) =>
-        typeof(CombatManager).GetField("_expGainsThisRound",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .SetValue(combat, 0);
-
-    private static void SetStamp(CombatManager combat, string field, DateTimeOffset value) =>
-        typeof(CombatManager).GetField(field,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .SetValue(combat, value);
+    // A round, and the engage-verify window: how long the engine waits for the
+    // game's *Combat Engaged* before it re-reads the room.
+    private static readonly TimeSpan ARound = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan EngageConfirmWindow = TimeSpan.FromSeconds(5);
 
     [Fact]
     public void AttackUnconfirmed_AfterWindow_FiresRoomRefreshCr()
@@ -4825,7 +4813,7 @@ public sealed class CombatManagerTests
         Assert.Equal("a giant rat", h.LastSent);
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
 
-        ExpireEngageWindow(h.Combat);
+        h.Clock.Advance(EngageConfirmWindow);
         h.Combat.OnCombatTick();
 
         Assert.Equal(2, h.Sent.Count);
@@ -4844,7 +4832,7 @@ public sealed class CombatManagerTests
         h.Feed("Also here: giant rat.");
         Assert.Single(h.Sent);
 
-        ExpireEngageWindow(h.Combat);        // the window has run out…
+        h.Clock.Advance(EngageConfirmWindow);   // the window has run out…
         h.Feed("*Combat Engaged*");          // …but the server confirms
         h.Combat.OnCombatTick();
 
