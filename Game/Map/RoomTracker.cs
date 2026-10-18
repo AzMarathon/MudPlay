@@ -883,7 +883,7 @@ public sealed class RoomTracker
         if (_connectionLostMidMove)
         {
             _connectionLostMidMove = false;
-            ForgetMovesLostToTheDrop(when);
+            ForgetMovesLostToTheDrop(when, "a dark room");
             return;
         }
 
@@ -979,6 +979,15 @@ public sealed class RoomTracker
                 return;
             }
             // window expired — fall through and treat as our own move
+        }
+
+        // As in the dark: the first line after a drop with a move in flight can't
+        // prove the move landed.
+        if (_connectionLostMidMove)
+        {
+            _connectionLostMidMove = false;
+            ForgetMovesLostToTheDrop(when, "a blind-move line");
+            return;
         }
 
         if (TakeCastLandingLine(when, "is shown to a blind character")) return;
@@ -1357,24 +1366,36 @@ public sealed class RoomTracker
         if (!_pending.IsEmpty) _connectionLostMidMove = true;
     }
 
-    // A dark-room line was the first thing shown after a drop that had a move in
-    // flight. Sure of the room before, the tracker goes back to the room the move
-    // left, the move un-counted; unsure, the moves are only forgotten.
-    private void ForgetMovesLostToTheDrop(DateTimeOffset when)
+    // A dark-room or blind-move line was the first thing shown after a drop that had
+    // a move in flight. Neither says which room it is, so nothing proves a move sent
+    // before the drop landed. Sure of the room before, every move in flight is
+    // un-counted and the tracker goes back to the room they left; unsure, the moves
+    // still awaiting an answer are un-counted.
+    private void ForgetMovesLostToTheDrop(DateTimeOffset when, string what)
     {
         bool wasPending = State.Confidence == RoomConfidence.Pending;
-        PendingMove? newest = null;
-        while (_pending.TryDequeue(out PendingMove drained)) newest = drained;
+        List<PendingMove> lost = wasPending ? _pending.ToList() : _unsureMoves.ConvertAll(u => u.Move);
+        while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
         _unsureMoves.Clear();
         _cardinalEchoClaim = null;
-        if (newest is not { } lost) return;
-        DropMostRecentStep();
-        MoveUncounted?.Invoke(new MoveUncountedEvent(lost, RateLimited: false));
-        _log?.Log(LogSeverity.Info, "RoomTracker",
-            $"Reconnected into a dark room: move {DescribeMove(lost)} sent before the drop counts as not taken.");
+        UncountMovesLostToTheDrop(lost, what);
         if (wasPending)
-            SetConfidence(RoomConfidence.Confirmed, when, "reconnected into a dark room; the move sent before the drop not taken");
+            SetConfidence(RoomConfidence.Confirmed, when, $"reconnected to {what}; the moves sent before the drop not taken");
+    }
+
+    // Moves sent before a drop that never landed: off the trail and out of the
+    // recovery gate's walk-back history, newest first, as the trail holds them last.
+    private void UncountMovesLostToTheDrop(List<PendingMove> lost, string what)
+    {
+        for (int i = lost.Count - 1; i >= 0; i--)
+        {
+            DropMostRecentStep();
+            MoveUncounted?.Invoke(new MoveUncountedEvent(lost[i], RateLimited: false));
+        }
+        if (lost.Count > 0)
+            _log?.Log(LogSeverity.Info, "RoomTracker",
+                $"Reconnected to {what}: {lost.Count} move(s) sent before the drop ({string.Join(", ", lost.Select(DescribeMove))}) count as not taken.");
     }
 
     // The first room display after a drop that had a move in flight. The move either
@@ -1389,8 +1410,8 @@ public sealed class RoomTracker
         if (_pending.Count == 1 && _pending.TryPeek(out PendingMove head) && source is not null
             && TryResolvePendingExit(source, head, out RoomExit exit))
             target = PredictedLanding(exit);
-        PendingMove? newest = null;
-        while (_pending.TryDequeue(out PendingMove drained)) newest = drained;
+        List<PendingMove> lost = _pending.ToList();
+        while (_pending.TryDequeue(out _)) { /* drain */ }
         EndCastCrossing();
         _unsureMoves.Clear();
         _cardinalEchoClaim = null;
@@ -1399,9 +1420,8 @@ public sealed class RoomTracker
         bool atTarget = target is not null && MatchesPredicted(target, observation);
         if (atSource && !atTarget)
         {
-            DropMostRecentStep();   // the step it logged was never taken
-            if (newest is { } lost) MoveUncounted?.Invoke(new MoveUncountedEvent(lost, RateLimited: false));
-            SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop never landed");
+            UncountMovesLostToTheDrop(lost, "the room the moves left");
+            SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the moves sent before the drop never landed");
             return;
         }
         if (atTarget && !atSource)

@@ -1423,6 +1423,59 @@ public sealed class RoomTrackingRecoveryWireTests
         Assert.Empty(rig.Gate.ExecutedSinceAnchor);
     }
 
+    // A blind-move line is the same: it can't say which room it is.
+    [Fact]
+    public void AStepBeforeADrop_ABlindLineAfterTheReconnect_CountsItAsNotTaken()
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = Gate };
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        engine.Plan.Enqueue(Direction.E);
+        rig.NextAnswers.Enqueue("");   // the link goes before the game answers
+        Assert.True(engine.Step());
+        rig.Pump();
+
+        rig.Tracker.NoteConnectionLost();
+        rig.NextAnswers.Enqueue("You are blind.");
+        rig.Do("l");
+
+        AssertLocatedAt(rig, Gate);
+        Assert.Empty(rig.Gate.ExecutedSinceAnchor);
+    }
+
+    // Several moves in flight when the link went, and the reconnect shows the room
+    // they all left (lit or dark): every one of them is off the trail and out of
+    // the walk-back history, not only the newest.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SeveralStepsBeforeADrop_AllLeaveTheTrailAndTheHistory(bool dark)
+    {
+        using TrackerWireRig rig = new(TwinCorridors()) { Position = Gate };
+        CharacterProfile profile = new();
+        rig.Tracker.Hydrate(profile);
+        rig.ShowRoom();
+        PlanEngine engine = new(rig);
+        rig.Gate.Attach(engine);
+        engine.Plan.Enqueue(Direction.E);
+        engine.Plan.Enqueue(Direction.E);
+        rig.NextAnswers.Enqueue("");   // the link goes before the game answers either
+        rig.NextAnswers.Enqueue("");
+        Assert.True(engine.Step());
+        Assert.True(engine.Step());
+        rig.Pump();
+        Assert.Equal(2, profile.RecentSteps?.Count);
+
+        rig.Tracker.NoteConnectionLost();
+        if (dark) rig.DarkRooms.Add(Gate);
+        rig.ShowRoom();
+
+        AssertLocatedAt(rig, Gate);
+        Assert.Empty(rig.Gate.ExecutedSinceAnchor);
+        Assert.Null(profile.RecentSteps);
+    }
+
     // A step sent just before the connection dropped, which the first display after
     // the reconnect shows never landed, leaves the walk-back history.
     [Fact]

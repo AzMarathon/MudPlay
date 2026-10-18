@@ -4995,7 +4995,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - The tracker keeps position by projecting the sent direction onto the current room's graph edge (`RoomTracker.NoteDarkRoomEntered`): when the pending move resolves to a known neighbour it advances there; when the edge is unmapped it holds the last position (stays Pending) rather than guessing.
-- **Client policy** *(user, 2026-10-17)*: a dark line that is the first thing shown after a dropped connection that had a move in flight doesn't advance the tracker. A dark line can't say which room it is, so the move sent before the drop counts as not taken, as a display of the room it left would count it (`ForgetMovesLostToTheDrop`, beside `ReconcileAfterReconnect`); it leaves the walk-back history too (*Nav-recovery authoritative locate (`rm` / `sys st`)*).
+- **Client policy** *(user, 2026-10-17)*: a dark line that is the first thing shown after a dropped connection that had a move in flight doesn't advance the tracker. A dark line can't say which room it is, so the move sent before the drop counts as not taken, as a display of the room it left would count it (`ForgetMovesLostToTheDrop`, beside `ReconcileAfterReconnect`); it leaves the walk-back history too (*Nav-recovery authoritative locate (`rm` / `sys st`)*). With several moves in flight, every one of them leaves the trail and the history, on this path and on a display of the room they left (user, 2026-10-17).
 
 ### Moving while blind
 *Status: CONFIRMED (capture 2026-07-11)*
@@ -5009,6 +5009,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - Only the period form drives dead-reckoning: `RoomTracker.NoteBlindMove` advances along the pending move's mapped edge just like `NoteDarkRoomEntered`, but leaves `IsInDarkRoom` untouched (carried light can't cure blindness, and the dark-room attack-line combat path must not switch on).
+- **Client policy** *(user, 2026-10-17)*: a `You are blind.` that is the first thing shown after a dropped connection with a move in flight advances nothing: the move counts as not taken, as for a dark line (*Dark rooms — no name, no exits, traversal inferred from no bonk*).
 
 ### Light sources
 *Status: CONFIRMED (verbs; bare-CR redisplay user 2026-08-11; visibility user 2026-07-24; burnout line capture 2026-07-11)*
