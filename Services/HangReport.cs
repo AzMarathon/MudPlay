@@ -67,51 +67,60 @@ public static class HangReport
         public static Gathered Nothing(string why) => new([], [], null, [], null, why);
     }
 
-    // Reads the sources on a thread of its own, waiting at most timeout. The
-    // log line saying a report is being written is the reader's last act, for
-    // the same reason: logging may be what the UI thread is stuck in.
+    // Reads the sources on a thread of its own, waiting at most timeout, and
+    // takes whatever it had read by then. The program log is read from its ring,
+    // which is never locked across a disk write; the session's names come last,
+    // since one of them (the log file's name) waits on the program log's file
+    // writer, which a stalled disk can hold. The log line saying a report is
+    // being written is the reader's last act, for the same reason.
     public static Gathered Gather(Sources? sources, string fileName, TimeSpan unresponsive, TimeSpan timeout)
     {
         if (sources is null) return Gathered.Nothing("the client had not finished starting");
         Gathered? result = null;
+        // Not disposed: a reader that outlives the wait still sets it.
+        ManualResetEventSlim read = new();
         Thread reader = new(() =>
         {
-            Gathered read;
-            try { read = Read(sources); }
+            try { Read(sources, gathered => Volatile.Write(ref result, gathered)); }
             catch (Exception ex)
             {
                 // Only the type: a message may quote a path or a name the scrub would have masked.
-                read = Gathered.Nothing($"reading them failed ({ex.GetType().Name})");
+                if (Volatile.Read(ref result) is null)
+                    Volatile.Write(ref result, Gathered.Nothing($"reading them failed ({ex.GetType().Name})"));
             }
-            Volatile.Write(ref result, read);
+            read.Set();
             sources.Log.Warn("Performance",
                 $"The UI thread has not answered for {Seconds(unresponsive)}: writing {fileName} to the Desktop");
         })
         { IsBackground = true, Name = "Hang report reader" };
         reader.Start();
-        if (reader.Join(timeout) && Volatile.Read(ref result) is { } done) return done;
-        return Gathered.Nothing(
+        read.Wait(timeout);
+        return Volatile.Read(ref result) ?? Gathered.Nothing(
             $"they did not answer within {timeout.TotalSeconds.ToString("0", CultureInfo.InvariantCulture)} s: "
-            + "the frozen UI thread may hold a lock one of them needs (the program log, the profile)");
+            + "the frozen UI thread may hold a lock one of them needs (the profile)");
     }
 
-    private static Gathered Read(Sources sources)
+    // Publishes the logs and commands as soon as they are read, then again with
+    // the session's names.
+    private static void Read(Sources sources, Action<Gathered> publish)
     {
         BugReportScrub.Scrubber scrubber;
         try { scrubber = sources.Scrubber(); }
         catch (Exception ex)
         {
-            return Gathered.Nothing(
-                $"the saved account details could not be read ({ex.GetType().Name}), so they could not be masked");
+            publish(Gathered.Nothing(
+                $"the saved account details could not be read ({ex.GetType().Name}), so they could not be masked"));
+            return;
         }
         BugReportChatCensor censor = BugReportChatCensor.Default;
-        IReadOnlyList<(string, string)> session = sources.Session();
         List<string> commands = BugReportSentCommands.Build(sources.SentCommands, censor).Entries?
             .TakeLast(CommandsShown).ToList() ?? [];
         string problems = BugReportLogSections.Problems(sources.Log, censor).Body;
         List<string> log = BugReportLogSections.ProgramLog(sources.Log, censor).Entries?
             .TakeLast(LogEntriesShown).ToList() ?? [];
-        return new Gathered(session, commands, problems, log, scrubber, null);
+        Gathered logs = new([("Session", "(not read: its names did not answer in time)")], commands, problems, log, scrubber, null);
+        publish(logs);
+        publish(logs with { Session = sources.Session() });
     }
 
     public static string Build(Snapshot snapshot, Gathered gathered)

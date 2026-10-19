@@ -27,9 +27,10 @@ namespace MudPlay.Services;
 // second with collecting off, which costs one post a second. A ping still
 // unanswered after HangAfter is a freeze, the kind that leaves the window white
 // until the user kills the client, with no exception for CrashReporter to catch.
-// The probe then writes Hang-<ts>.md to the Desktop (HangReport) from its own
-// thread, from what Measure left behind: the scopes open on the UI thread, each
-// with the file and member it was opened in, and the ones that ran just before.
+// The probe then has Hang-<ts>.md written to the Desktop (HangReport), off the
+// UI thread and off its own, from what Measure left behind: the scopes open on
+// the UI thread, each with the file and member it was opened in, and the ones
+// that ran just before.
 //
 // Kept out of the program log for the same reason as MemoryUsageLog: a line per
 // hitch would bury the entries an operator reads. With collecting off nothing is
@@ -163,24 +164,34 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     }
 
     // What the probe runs on. In the client: a thread of its own, pinging the
-    // Avalonia dispatcher, writing to the Desktop.
+    // Avalonia dispatcher, writing to the Desktop. WriteAside runs the report's
+    // file work in order off the probe's thread; RunAside runs work that may
+    // block (a log line, the performance log's summary) on a thread of its own.
     internal sealed record ProbeHost(
         Action<Action> PingUi,
         Action<TimeSpan, Action> Schedule,
         Func<long> Timestamp,
         Func<DateTimeOffset> Now,
-        Func<string> ReportFolder)
+        Func<string> ReportFolder,
+        Action<Action> WriteAside,
+        Action<Action> RunAside)
     {
         public static ProbeHost Client()
         {
             ProbeThread thread = new();
+            WriteLane lane = new();
             return new ProbeHost(
                 a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
                 thread.Schedule,
                 Stopwatch.GetTimestamp,
                 () => DateTimeOffset.Now,
-                CrashReporter.ReportFolder);
+                CrashReporter.ReportFolder,
+                lane.Add,
+                RunOnOwnThread);
         }
+
+        private static void RunOnOwnThread(Action work) =>
+            new Thread(() => work()) { IsBackground = true, Name = "UI probe aside" }.Start();
     }
 
     // Collects into sink instead of a file.
@@ -404,6 +415,14 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     }
 
     // ----- The probe ---------------------------------------------------------
+    //
+    // The probe thread never touches a disk. A stalled disk (an antivirus scan, a
+    // file Windows holds) is one of the things a freeze can be, and a probe that
+    // waited on it would go silent with the UI. So the Hang file and its later
+    // lines go to the write lane (ProbeHost.WriteAside), one after another, and
+    // the log lines and the performance log's summary each to a thread of their
+    // own (ProbeHost.RunAside): the program log's file writer may be what the UI
+    // thread is stuck in.
 
     private void ProbeTick()
     {
@@ -416,7 +435,8 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         {
             // A diagnostic must not take the client down, and on this thread any
             // throw would: this tick is lost, the next one runs as usual.
-            _hangSources?.Log.Warn("Performance", $"UI probe tick failed: {ex.GetType().Name}: {ex.Message}");
+            string line = $"UI probe tick failed: {ex.GetType().Name}: {ex.Message}";
+            if (_hangSources?.Log is { } log) probe.RunAside(() => log.Warn("Performance", line));
         }
         probe.Schedule(_collecting ? WatchInterval : IdleInterval, _tick);
     }
@@ -437,7 +457,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         {
             if (_hang is { } ended)
             {
-                Recovered(ended, Interlocked.Read(ref _pingAnsweredAt));
+                Recovered(probe, ended, Interlocked.Read(ref _pingAnsweredAt));
                 _hang = null;
             }
             if (Elapsed(_lastPingAt, now) >= (_collecting ? PingInterval : IdleInterval) - TimeSpan.FromMilliseconds(1))
@@ -453,21 +473,20 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             if (_collecting && waited.TotalMilliseconds >= StallMs && InnermostScope() is { } doing)
                 lock (_pingLock) _seenDuringPing.Add(doing);
             long armed = Interlocked.Read(ref _armedAt);
-            if (_hang is { } hang) StillHung(hang, now);
+            if (_hang is { } hang) StillHung(probe, hang, now);
             else if (waited >= HangAfter && armed != 0 && posted >= armed && !Debugger.IsAttached)
-            {
-                Hang hung = Hung(probe, posted, now);
-                _hang = hung;
-                _freezesSeen++;
-                NoteFreeze(hung, $"at {probe.Now():HH:mm:ss}, still going");
-            }
+                _hang = Hung(probe, posted, now);
         }
 
         if (_collecting)
         {
             bool summaryDue;
             lock (_statsLock) summaryDue = DateTime.UtcNow - _since.AtUtc >= SummaryInterval;
-            if (summaryDue) Write(Summary());
+            if (summaryDue)
+            {
+                string summary = Summary();
+                probe.RunAside(() => Write(summary));
+            }
         }
     }
 
@@ -493,73 +512,102 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         if (ms >= StallMs) RecordStall(ms, causes.Count == 0 ? "unattributed" : string.Join(", ", causes));
     }
 
-    // A hang being reported: the ping it is counted from, and the file it went to,
-    // or why none was written.
-    private sealed class Hang(long postedAt, string? path, string? noFile = null)
+    // A hang being reported: the ping it is counted from, and, filled in on the
+    // write lane, the file it went to or why none was written. The probe never
+    // reads Path or NoFile; it only hands the lane work.
+    private sealed class Hang(long postedAt, int number, string? noFile = null)
     {
         public long PostedAt { get; } = postedAt;
-        public string? Path { get; } = path;
-        public string? NoFile { get; } = noFile;
+        public int Number { get; } = number;
+        public string? Path { get; set; }
+        public string? NoFile { get; set; } = noFile;
         public int NextMilestone { get; set; }
     }
 
     private Hang Hung(ProbeHost probe, long posted, long now)
     {
-        if (_reportsWritten >= MaxHangReports)
-            return new Hang(posted, null, $"the session's {MaxHangReports} are written");
-        if (_lastReportAt != 0 && Elapsed(_lastReportAt, now) < ReportGap)
-            return new Hang(posted, null, $"one was written less than {ReportGap.TotalMinutes:0} minutes before");
+        int number = ++_freezesSeen;
+        DateTimeOffset at = probe.Now();
+        string? why = _reportsWritten >= MaxHangReports ? $"the session's {MaxHangReports} are written"
+            : _lastReportAt != 0 && Elapsed(_lastReportAt, now) < ReportGap
+                ? $"one was written less than {ReportGap.TotalMinutes:0} minutes before"
+                : null;
+        Hang hang = new(posted, number, why);
+        if (why is not null)
+        {
+            probe.WriteAside(() => NoteFreeze(hang, $"at {at:HH:mm:ss}, still going"));
+            return hang;
+        }
 
-        HangReport.Snapshot snapshot = TakeSnapshot(posted, now, probe.Now());
-        string name = $"{HangReport.FilePrefix}{snapshot.At:yyyyMMdd-HHmmss}.md";
-        HangReport.Gathered gathered = HangReport.Gather(_hangSources, name, snapshot.Unresponsive, GatherTimeout);
         _reportsWritten++;
         _lastReportAt = now;
+        HangReport.Snapshot snapshot = TakeSnapshot(posted, now, at);
+        HangReport.Sources? sources = _hangSources;
+        probe.WriteAside(() => WriteReport(probe, hang, snapshot, sources));
+        return hang;
+    }
+
+    // On the write lane. A Desktop that can't be written is given up quietly:
+    // the bug report's freeze line and the recovery log line say why.
+    private void WriteReport(ProbeHost probe, Hang hang, HangReport.Snapshot snapshot, HangReport.Sources? sources)
+    {
+        string name = $"{HangReport.FilePrefix}{snapshot.At:yyyyMMdd-HHmmss}.md";
+        HangReport.Gathered gathered = HangReport.Gather(sources, name, snapshot.Unresponsive, GatherTimeout);
         try
         {
             string folder = probe.ReportFolder();
             Directory.CreateDirectory(folder);
             string path = Path.Combine(folder, name);
             File.WriteAllText(path, HangReport.Build(snapshot, gathered));
-            return new Hang(posted, path);
+            hang.Path = path;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new Hang(posted, null, $"the Desktop could not be written ({ex.GetType().Name})");
+            hang.NoFile = $"the Desktop could not be written ({ex.GetType().Name})";
         }
+        NoteFreeze(hang, $"at {snapshot.At:HH:mm:ss}, still going");
     }
 
+    // On the write lane.
     private void NoteFreeze(Hang hang, string how)
     {
-        _freezesNote = $"{_freezesSeen}; the last {how}"
+        _freezesNote = $"{hang.Number}; the last {how}"
             + (hang.Path is { } path ? $", written to {Path.GetFileName(path)}" : $", no Hang file: {hang.NoFile}");
     }
 
-    private void StillHung(Hang hang, long now)
+    private void StillHung(ProbeHost probe, Hang hang, long now)
     {
         if (hang.NextMilestone >= StillHungAt.Length) return;
         TimeSpan waited = Elapsed(hang.PostedAt, now);
         if (waited < StillHungAt[hang.NextMilestone]) return;
         while (hang.NextMilestone < StillHungAt.Length && waited >= StillHungAt[hang.NextMilestone]) hang.NextMilestone++;
-        if (hang.Path is null) return;
+        DateTimeOffset at = probe.Now();
         HangReport.Frame? innermost;
         lock (_uiLock)
-            innermost = _depth > 0 ? ToFrame(in _stack[Math.Min(_depth, MaxDepth) - 1], now, _probe!.Now()) : null;
-        Append(hang.Path, HangReport.StillLine(_probe!.Now(), waited, innermost));
+            innermost = _depth > 0 ? ToFrame(in _stack[Math.Min(_depth, MaxDepth) - 1], now, at) : null;
+        string line = HangReport.StillLine(at, waited, innermost);
+        probe.WriteAside(() => Append(hang, line));
     }
 
-    private void Recovered(Hang hang, long answeredAt)
+    private void Recovered(ProbeHost probe, Hang hang, long answeredAt)
     {
         TimeSpan lasted = answeredAt > hang.PostedAt ? Elapsed(hang.PostedAt, answeredAt) : HangAfter;
-        NoteFreeze(hang, $"ended {_probe!.Now():HH:mm:ss} after {HangReport.Seconds(lasted)}");
-        if (hang.Path is not null) Append(hang.Path, HangReport.RecoveredLine(_probe!.Now(), lasted));
-        string where = hang.Path is not null ? $"; see {Path.GetFileName(hang.Path)}" : $" (no Hang file: {hang.NoFile})";
-        _hangSources?.Log.Warn("Performance",
-            $"The UI thread answered again after {HangReport.Seconds(lasted)} unresponsive{where}");
+        DateTimeOffset at = probe.Now();
+        LogService? log = _hangSources?.Log;
+        probe.WriteAside(() =>
+        {
+            Append(hang, HangReport.RecoveredLine(at, lasted));
+            NoteFreeze(hang, $"ended {at:HH:mm:ss} after {HangReport.Seconds(lasted)}");
+            string line = $"The UI thread answered again after {HangReport.Seconds(lasted)} unresponsive"
+                + (hang.Path is { } path ? $"; see {Path.GetFileName(path)}" : $" (no Hang file: {hang.NoFile})");
+            if (log is not null) probe.RunAside(() => log.Warn("Performance", line));
+        });
     }
 
-    private static void Append(string path, string text)
+    // On the write lane: a line added to a report that was written.
+    private static void Append(Hang hang, string text)
     {
+        if (hang.Path is not { } path) return;
         try { File.AppendAllText(path, text); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -729,6 +777,51 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 }
                 Thread.Sleep(next.Delay);
                 next.Tick();
+            }
+        }
+    }
+
+    // The report's file work, in order, on one background thread. A write stuck
+    // on the disk holds back only the work after it; past MaxQueued waiting, the
+    // newest is dropped, since a lane that stuck will not catch up.
+    private sealed class WriteLane
+    {
+        private const int MaxQueued = 64;
+        private readonly object _gate = new();
+        private readonly Queue<Action> _work = new();
+        private Thread? _thread;
+
+        public void Add(Action work)
+        {
+            lock (_gate)
+            {
+                if (_work.Count >= MaxQueued) return;
+                _work.Enqueue(work);
+                if (_thread is null)
+                {
+                    _thread = new Thread(Run) { IsBackground = true, Name = "Hang report writer" };
+                    _thread.Start();
+                }
+                else Monitor.Pulse(_gate);
+            }
+        }
+
+        private void Run()
+        {
+            while (true)
+            {
+                Action next;
+                lock (_gate)
+                {
+                    while (_work.Count == 0) Monitor.Wait(_gate);
+                    next = _work.Dequeue();
+                }
+                try { next(); }
+                catch (Exception)
+                {
+                    // A report that fails in a way not foreseen is given up quietly:
+                    // the client goes on, and the next report still has its chance.
+                }
             }
         }
     }

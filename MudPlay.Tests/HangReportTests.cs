@@ -24,10 +24,13 @@ public sealed class HangReportTests
         public LogService Log { get; } = new();
         public SentCommandTrail Sent { get; } = new();
 
-        public Rig(Func<bool>? onUiThread = null, Func<BugReportScrub.Scrubber>? scrubber = null, bool arm = true)
+        // writeAside: where the report's file work goes; by default it runs at once.
+        public Rig(Func<bool>? onUiThread = null, Func<BugReportScrub.Scrubber>? scrubber = null, bool arm = true,
+            Action<Action>? writeAside = null)
         {
             Monitor = new PerformanceMonitor(onUiThread ?? (() => true),
-                new PerformanceMonitor.ProbeHost(Posted.Add, Timers.Schedule, Clock.Timestamp, () => Clock.Now, () => Folder));
+                new PerformanceMonitor.ProbeHost(Posted.Add, Timers.Schedule, Clock.Timestamp, () => Clock.Now, () => Folder,
+                    writeAside ?? (work => work()), work => work()));
             Monitor.HangSources = new HangReport.Sources(Log, Sent,
                 scrubber ?? (() => BugReportScrub.Build(
                     [new(BugReportScrub.LoginPasswordLabel, LoginPassword), new(BugReportScrub.CorpsePasswordLabel, CorpsePassword)],
@@ -215,6 +218,61 @@ public sealed class HangReportTests
         Assert.DoesNotContain("## Program log", report);
         Assert.Contains("not included: the saved account details could not be read (IOException)", report);
         Assert.Contains("1. `profile save` at `MudPlay.Tests/HangReportTests.cs:", report);
+    }
+
+    [Fact]
+    public void The_probe_goes_on_while_the_report_is_stuck_on_the_disk()
+    {
+        List<Action> stuck = new();
+        using Rig rig = new(writeAside: stuck.Add);
+        using (rig.Monitor.Measure("stuck")) rig.Pass(40);
+
+        // The disk never answered, and the probe went on ticking: the milestones are queued behind the report.
+        Assert.Empty(rig.Reports);
+        Assert.Equal(3, stuck.Count);
+        rig.Answer();
+        rig.Pass(1);
+        foreach (Action work in stuck.ToArray()) work();
+
+        string report = rig.Report;
+        Assert.Contains("still not answering after 30.0 s", report);
+        Assert.True(report.IndexOf("after 15.0 s", StringComparison.Ordinal) < report.IndexOf("answered again", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_log_write_stuck_on_the_ui_thread_keeps_neither_the_report_nor_its_log_tail()
+    {
+        Thread? ui = null;
+        using Rig rig = new(onUiThread: () => Thread.CurrentThread == ui);
+        rig.Log.Info("Telnet", "before the stall");
+        using ManualResetEventSlim entered = new(), release = new();
+        // As the program log's file writer does: every entry written on the
+        // logging thread, here one whose disk never answers.
+        rig.Log.EntryAdded += _ =>
+        {
+            if (Thread.CurrentThread != ui) return;
+            entered.Set();
+            release.Wait();
+        };
+        ui = new Thread(() =>
+        {
+            using (rig.Monitor.Measure("program log file write")) rig.Log.Info("Combat", "the line being written");
+        });
+        ui.Start();
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+        try
+        {
+            rig.Pass(6);
+            string report = rig.Report;
+            Assert.Contains("1. `program log file write` at `MudPlay.Tests/HangReportTests.cs:", report);
+            Assert.Contains("[Info]  Telnet: before the stall", report);
+            Assert.Contains("[Info]  Combat: the line being written", report);
+        }
+        finally
+        {
+            release.Set();
+            ui.Join();
+        }
     }
 
     [Fact]
