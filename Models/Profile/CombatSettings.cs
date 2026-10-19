@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Combat" settings — drives Game.Combat.CombatManager target
@@ -84,6 +86,7 @@ public sealed class CombatSettings
     // How many runs one hit-and-run backstab may take, the first included: a monster
     // that chases us into the retreat room is run from again until this is spent, then
     // we stand and fight instead of hunting for an empty room to re-sneak in.
+    [SettingRange(1, 20)]
     public int HitAndRunMaxRuns { get; set; } = 3;
 
     // Combat-off override for stealth runners. When sprinting a walk-to route
@@ -143,10 +146,12 @@ public sealed class CombatSettings
 
     // Skip the room if fewer than this many hostiles are present. Range 0–20.
     // Default 0 (no minimum).
+    [SettingRange(0, 20)]
     public int MinMonstersInRoom { get; set; }
 
     // Skip the room if more than this many hostiles are present. Range 1–20
     // (rooms cap at 20 NPCs). Default 20.
+    [SettingRange(1, 20)]
     public int MaxMonstersInRoom { get; set; } = 20;
 
     // When a room was engaged via a room spell (multi-attack AoE), finish it to
@@ -158,6 +163,7 @@ public sealed class CombatSettings
     public bool KillAllEngaged { get; set; }
 
     // Rooms to flee before re-evaluating. Range 1–100. Default 2.
+    [SettingRange(1, 100)]
     public int RunDistance { get; set; } = 2;
 
     // Direction strategy when fleeing. Forward continues along the active walker
@@ -186,12 +192,14 @@ public sealed class CombatSettings
     // spell phase. 0 = physical forever (the physical phase never ends, so the
     // cycle never reaches the spell phase — degenerates to PhysicalFirst-style
     // behavior). Only consulted when ActionOrder is CustomRoundCycle. Default 1.
+    [SettingRange(0, 999)]
     public int CycleRoundsPhysical { get; set; } = 1;
 
     // Rounds to spend in the cycle's SPELL phase before switching back to
     // physical. 0 = spells for the rest of the fight once reached — "spells
     // till death" (the phase never ends, so the cycle never returns to
     // physical). Only consulted when ActionOrder is CustomRoundCycle. Default 1.
+    [SettingRange(0, 999)]
     public int CycleRoundsSpell { get; set; } = 1;
 
     // Which phase the cycle opens on for a fresh target. False (default) opens
@@ -248,6 +256,7 @@ public sealed class CombatSettings
     // (0–100). At or below this %, the drain is cast instead of the attack;
     // above it, the engine reverts to the normal pick. 0 = never (drain off even
     // when a spell is configured).
+    [SettingRange(0, 100)]
     public int DrainHpTrigger { get; set; } = 50;
 
     // When true, the drain overrides the room AoE (multi-attack) too. Default
@@ -297,16 +306,19 @@ public sealed class CombatSpellSlot
 
     // Only cast when at least this many hostiles are in the room. 0 = no
     // minimum. Ignored for single-target rows.
+    [SettingRange(0, 20)]
     public int MinEnemies { get; set; }
 
     // Cap on back-to-back fires within one room / engagement. null (blank in the
     // editor) = no limit — cast as often as the slot's other gates allow; 0 =
     // never cast (an explicit off switch that keeps the spell name configured);
     // N > 0 = at most N casts per room.
+    [SettingRange(0, 100)]
     public int? MaxCastsPerRoom { get; set; }
 
     // Minimum mana required to cast — interpreted per
     // CombatSettings.SpellManaThresholdMode.
+    [SettingRange(0, 100_000)]
     public int MinManaPerCast { get; set; }
 
     // Deep copy — combat spell profiles snapshot these slots and must never share

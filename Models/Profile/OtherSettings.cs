@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Other" settings — the misc bucket. Stored as the "Other" entry
@@ -12,6 +14,7 @@ public sealed class OtherSettings
     //
     // The engine still hard-blocks suicide commands while the lives count is
     // unknown (no stat screen read yet) — the conservative default.
+    [SettingRange(0, 9)]
     public int MaxSuicideLivesThreshold { get; set; } = 5;
 
     // Note: the ailment-handling toggles (the four "Ignore X" @wait gates
@@ -32,6 +35,7 @@ public sealed class OtherSettings
     // <dir> attempts we'll make after the trap has been spotted before giving
     // up. Default 5, range 1..50. A trap that goes off and leaves HP low holds the
     // next try for the rest that follows (TrapDisarmManager.SetRestHold).
+    [SettingRange(1, 50)]
     public int MaxTrapDisarmAttempts { get; set; } = 5;
 
     // Location-based auto-equip rules. Each names an item to wear while inside a
@@ -55,6 +59,7 @@ public sealed class OtherSettings
     // the estimated `sn` chance under this many percent, instead of resending `sn`
     // into a refusal in every room. 0 never stands down; 1 stands down only when a
     // sneak can't take at all. Default 15 per user direction (2026-10-07).
+    [SettingRange(0, 95)]
     public int SneakStandDownChance { get; set; } = 15;
 
     // ----- Door / lock handling --------------------------------------
@@ -62,6 +67,7 @@ public sealed class OtherSettings
     // Walker's max pick <dir> retries before giving up on a single door. Picking
     // is probabilistic — the skill can fail even when the value meets the door
     // requirement. Default 10 per user direction.
+    [SettingRange(1, 100)]
     public int MaxPickAttempts { get; set; } = 10;
 
     // When true, the walker prefers pick <dir> over bash <dir> on doors where
@@ -72,6 +78,7 @@ public sealed class OtherSettings
     // Walker max sea <dir> retries when revealing a hidden exit ((Hidden)
     // modifier) along the path. Default 20 — mirrors the trap-search cap since
     // it's the same verb, kept separate so the user can tune them independently.
+    [SettingRange(1, 100)]
     public int MaxHiddenSearchAttempts { get; set; } = 20;
 
     // Note: the former "search rooms if item needed" opt-in was retired — arming
@@ -127,6 +134,7 @@ public sealed class OtherSettings
     // isn't a meaningful number, just noise). Default 999, range 1..999999.
     // Char-tier; edited directly in Monster Intel (not Settings → Other —
     // changing it shouldn't mean leaving the window).
+    [SettingRange(1, 999999)]
     public int RoundsToKillCap { get; set; } = 999;
 
     // Monster Intel "Edit Attacks" picker state, Char-tier, edited in the window.

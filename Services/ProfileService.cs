@@ -652,7 +652,15 @@ public sealed class ProfileService
         ArgumentNullException.ThrowIfNull(reference);
         if (IsCurrent(reference)) return Current?.Realm;
         if (!PairUsable("Reading a profile's realm", reference.Bbs, reference.Name)) return null;
-        return JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(reference.Bbs, reference.Name))?.Realm;
+        // The realm alone: the Recent menu, Profile Management and the realm catalogue
+        // ask this of every saved character, and reading each whole profile (its
+        // records, its values checked) for one string held up the UI thread.
+        return JsonStore.Load<RealmOnly>(AppPaths.CharacterProfileFile(reference.Bbs, reference.Name))?.Realm;
+    }
+
+    private sealed class RealmOnly
+    {
+        public string? Realm { get; set; }
     }
 
     // Assign a saved character to a realm of its BBS. The loaded character is

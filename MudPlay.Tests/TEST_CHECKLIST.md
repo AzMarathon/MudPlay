@@ -1493,6 +1493,12 @@ How to keep it current:
 - Checks: hidden stacks not taken while visible copies lie there; split stacks; Stock re-search misses; knocked-away echoes; custom statline; counted-get refusals; latest display wins; one log line per room; linear floor counts.
 - Why: each case once lost items or their record.
 
+### GlobalSettingsFileCollection.cs
+- Test infrastructure.
+- Covers: (xUnit collection definition, no production class)
+- Checks: runs the test classes that write the data root's one `global.json` on their own, never alongside another test.
+- Why: every SettingsService reads that file; another test's would read the values written into it.
+
 ### GlobalSettingsTests.cs
 - Covers: Models/Settings/GlobalSettings.StartupProfile
 - Checks: auto-load last profile only when on and one exists; default off.
@@ -3518,6 +3524,11 @@ How to keep it current:
 - Checks: The search highlights matches without hiding sections, as one phrase (trimmed, case-insensitive), over the views' shown text including tooltips. A blank search never reads the views; shown text re-runs a search already typed; the search survives section changes; the count uses Help's wording.
 - Why: Settings search has to behave like the Help window's search.
 - Named seam: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
+
+### SettingsValueHardeningTests.cs
+- Covers: Services/SettingsValueGuard (through JsonStore.Load), SettingRangeAttribute, SettingsService, BbsProfileStore, ProfileService.Load / Save, SettingsResolver, PlayerDatabase.PurgeStale, Terminal/TerminalScreen and ScrollbackBuffer bounds
+- Checks: out-of-range numbers in `bbs.json`, `profile.json` and `global.json` (a Global-tier section among them) load at their field's limits with a Warn naming the field, tier, value found and value used; a 100000 x 100000 terminal and a two-billion-row scrollback load as 200 x 100 / 100000, and the screen built from them stays under 16 MB; the screen and the ring cut an oversized request to their own bounds; fractional terminal columns / rows and font sizes round, clamp and warn; a number too big for its type, or text in a number field, costs only that field: the rest of the character loads, and the next save writes the character back whole; a value left out first has the file copied to `<file>.unreadable-<UTC time>-NN.bak`, one copy per state of the file and the newest three kept even when five are made within one second, the Warn naming it, and a profile copy leaving them behind; a bad value deep in a recursive section (a context menu's entries' entries) is found; undefined enums in structs (a player's remote controls) and in lists are caught; a section past repair is left as written and the profile loads; a key written twice is read last-wins and still checked; an enum number the enum lacks is left out (a section's) or reset to the default (a file's own); a read warns only what the last read of the same file didn't, so a value fixed and broken again warns again; a profile that isn't JSON fails, and saving the default-profile draft pinned to its BBS leaves the file untouched; `PurgeStale` copes with any window. SettingRangeCoverageTests: every number on a settings type has a range, every default lies in its range, and no range is narrower than the Settings window's NumericUpDown for the same field.
+- Why: a fuzz of the settings files (every number at 100000) made startup allocate ~34 GB through TerminalCols x TerminalRows; `int.MaxValue` crashed startup in PurgeStale and in the scrollback ring; one unreadable number in a profile dropped the user onto the default profile.
 
 ### SetupGuideTests.cs
 - Covers: ViewModels/Guides/GuideViewModel, GuideCatalogue, GuideProbes

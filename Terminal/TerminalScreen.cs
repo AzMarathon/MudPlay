@@ -27,6 +27,12 @@ public sealed class TerminalScreen
     public int Cols { get; private set; }
     public int Rows { get; private set; }
 
+    // The largest grid the screen will make, whatever it is asked for. The cells are
+    // one array of cols × rows, so a damaged 100000 × 100000 setting overflowed the
+    // product and asked for some 34 GB. A size past these is cut to them.
+    public const int MaxCols = 1000;
+    public const int MaxRows = 1000;
+
     // Wall-clock time of the Feed batch currently being processed. The emulator
     // sets this once per Feed so per-cell Put writes can stamp their row without
     // each calling DateTimeOffset.Now on the parse hot path; all cells in one
@@ -53,6 +59,8 @@ public sealed class TerminalScreen
 
     public TerminalScreen(int cols, int rows)
     {
+        cols = Math.Clamp(cols, 1, MaxCols);
+        rows = Math.Clamp(rows, 1, MaxRows);
         Cols = cols;
         Rows = rows;
         _cells = new Cell[cols * rows];
@@ -86,9 +94,11 @@ public sealed class TerminalScreen
     // shrinking rows drops the top-most lines (so the newest server content
     // stays visible) and pushes them into Scrollback so the user can still
     // find them via the Backscroll window. Columns always preserve the left
-    // edge.
+    // edge. A size outside 1 to MaxCols × 1 to MaxRows is cut into it.
     public void Resize(int cols, int rows)
     {
+        cols = Math.Clamp(cols, 1, MaxCols);
+        rows = Math.Clamp(rows, 1, MaxRows);
         if (cols == Cols && rows == Rows) return;
         var fresh = new Cell[cols * rows];
         Array.Fill(fresh, Cell.Blank);
