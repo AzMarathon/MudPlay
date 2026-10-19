@@ -29,6 +29,19 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
     // The section on screen: the selected tab, or its selected sub-tab.
     public WorkshopSectionViewModel? ActiveSection => SelectedSection?.Leaf;
 
+    // A tab switch builds the tab's section and view, inside the change notice
+    // the tab strip answers: measured whole, so a hang there names the tab.
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SelectedSection) || AppServices.CurrentOrNull?.Performance is not { } performance)
+        {
+            base.OnPropertyChanged(e);
+            return;
+        }
+        using PerformanceMonitor.Scope scope = performance.Measure("Workshop tab " + (SelectedSection?.Id ?? "(none)"));
+        base.OnPropertyChanged(e);
+    }
+
     // A group tab opens on its first sub-tab without a sub-tab change, so the page
     // a guide waits for is reported from here as well as from the group.
     partial void OnSelectedSectionChanged(WorkshopSectionViewModel? value)

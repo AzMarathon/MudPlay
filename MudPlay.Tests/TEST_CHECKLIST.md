@@ -1528,6 +1528,13 @@ How to keep it current:
 - Checks: ask commands that open a door on the guard's own room, with ability gates; other rooms/no opener/no name empty; Read answers each room as Resolve.
 - Why: the grove shadow guard door (Phoenix quest).
 
+### HangReportTests.cs
+- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking), Services/HangReport
+- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it.
+- Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18).
+- Named seam: PerformanceMonitor.ProbeHost and the internal constructor that takes it: the client's probe is a thread of its own pinging the Avalonia dispatcher and writing to the Desktop; the test gives it ManualTimers, a ManualClock, a ping queue it answers by hand and a folder of its own.
+- Named seam: PerformanceMonitor.NoteWindowOpened / NoteWindowClosed / NoteWindowFocused, internal: the client calls them from Avalonia's window class handlers, which need real windows.
+
 ### HangupDeathArrivalRoomsTests.cs
 - Covers: Game/Recovery/HangupDeathArrivalRooms, GameDataCache.ActiveSetIsVanillaStock, RoomGraphManager.CouldBeTakenFor
 - Checks: where a room's dead arrive (Stock list, Paradigm Albion, learned rooms) and whether the first room back says a death, per list trust; look-alike arrival rooms.
@@ -2836,7 +2843,7 @@ How to keep it current:
 - Covers: Services/PerformanceMonitor
 - Checks: timings only while collecting; the per-minute summary (count, p50, p95, max) resets; stall lines and their summary; measured scopes are summarised.
 - Why: the performance log's content.
-- Named seam: PerformanceMonitor.CollectTo and its internal constructor: the real output is a file written from a watcher thread off the dispatcher.
+- Named seam: PerformanceMonitor.CollectTo and its internal constructor (no probe): the real output is a file written from the probe thread off the dispatcher.
 
 ### PeriodicDamageRoomSpellsTests.cs
 - Covers: Services/RoomSpellDamageIndex, ViewModels/Settings/PeriodicDamageRoomSpellsSectionViewModel

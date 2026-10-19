@@ -3249,7 +3249,7 @@ public static class BugReportBuilder
 
     // ----- Helpers -------------------------------------------------------
 
-    private static string RealmLabel(RealmType realm) => realm switch
+    internal static string RealmLabel(RealmType realm) => realm switch
     {
         RealmType.ParaMud => "paradigm",
         _ => "stock",

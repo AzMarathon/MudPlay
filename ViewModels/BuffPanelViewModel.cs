@@ -1011,6 +1011,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     private void Persist()
     {
         if (_profile.Current is not { } p) return;
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Buff Watchdog save");
         p.PartyBuffs = _settings;
         _profile.Save();
         // Re-evaluate the caster now so a just-checked member's buff queues right away

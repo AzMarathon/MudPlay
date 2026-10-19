@@ -1,5 +1,12 @@
 # Version history
 
+## 3.185.0
+
+- A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line
+- The Hang file adds how long the freeze lasted if the client comes back; the Program Log warns of it too
+- Bug reports list the freezes seen this session
+- Help: new *If the client freezes* section
+
 ## 3.184.38
 
 - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character

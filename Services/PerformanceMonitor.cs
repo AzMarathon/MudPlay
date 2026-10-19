@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -15,22 +17,54 @@ namespace MudPlay.Services;
 // happens, with what was running, and a summary line every minute says what the
 // regular work cost, so a session's file shows when it lagged and why.
 //
-// Stalls are found by a ping: every PingInterval a watcher thread posts a no-op at
-// the lowest dispatcher priority, which runs only once the UI thread has caught up
-// on everything ahead of it. The wait before it runs is the stall. While a ping is
-// overdue the watcher samples what the UI thread said it was doing (Measure), and
-// a window that opened or closed during the stall is named too.
+// Stalls are found by a ping: a probe thread posts a no-op at the lowest
+// dispatcher priority, which runs only once the UI thread has caught up on
+// everything ahead of it. The wait before it runs is the stall. While a ping is
+// overdue the probe samples what the UI thread said it was doing (Measure), and a
+// window that opened or closed during the stall is named too.
+//
+// The probe runs for the whole session, whatever Auto-collect logs says: once a
+// second with collecting off, which costs one post a second. A ping still
+// unanswered after HangAfter is a freeze, the kind that leaves the window white
+// until the user kills the client, with no exception for CrashReporter to catch.
+// The probe then writes Hang-<ts>.md to the Desktop (HangReport) from its own
+// thread, from what Measure left behind: the scopes open on the UI thread, each
+// with the file and member it was opened in, and the ones that ran just before.
 //
 // Kept out of the program log for the same reason as MemoryUsageLog: a line per
-// hitch would bury the entries an operator reads. With collecting off (the
-// default) nothing is pinged, timed or written, and the watcher thread doesn't exist.
+// hitch would bury the entries an operator reads. With collecting off nothing is
+// timed or written to the performance log.
 public sealed class PerformanceMonitor : IAsyncDisposable
 {
     public const double StallMs = 50;
     private static readonly TimeSpan PingInterval = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan WatchInterval = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan SummaryInterval = TimeSpan.FromMinutes(1);
     private const int SamplesPerTiming = 1024;
+
+    public static readonly TimeSpan HangAfter = TimeSpan.FromSeconds(5);
+    // A probe tick this much later than it was due means the probe itself was
+    // stopped (the machine slept, a debugger paused the process): the ping's age
+    // then says nothing about the UI thread, and is counted again from here.
+    private static readonly TimeSpan ProbeLate = TimeSpan.FromSeconds(3);
+    // A hang still going at each of these gets a line in its report, with the
+    // innermost scope at that moment: a scope that changes is a loop, not a wait.
+    private static readonly TimeSpan[] StillHungAt =
+        [TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(5)];
+    // One report per freeze, and freezes in a row don't carpet the Desktop.
+    public static readonly TimeSpan ReportGap = TimeSpan.FromMinutes(2);
+    public const int MaxHangReports = 5;
+    // How long the report waits for the logs and the session's names, read on a
+    // thread of their own: the frozen UI thread may hold a lock one of them takes.
+    private static readonly TimeSpan GatherTimeout = TimeSpan.FromSeconds(2);
+
+    // The UI thread's open scopes kept, and the finished ones remembered.
+    private const int MaxDepth = 32;
+    public const int ActivityCapacity = 50;
+    // A scope that finished like one of the last few (a render each frame, a feed
+    // each packet) adds to that row instead of pushing older rows out.
+    private const int CollapseWindow = 8;
 
     private const string HeaderLine =
         "# 'stall' lines: the UI thread fell behind by the time shown, while doing what follows. " +
@@ -38,12 +72,12 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         "then CPU, memory and GC over that minute, then the types most allocated (sampled).";
 
     private readonly LogDiagnosticState? _diagnostics;
-    private readonly Action<Action>? _postLowPriority;
     private readonly Func<bool> _onUiThread;
-    // The watcher thread only exists while the log file is open. Each start takes a
-    // new run number; a thread leaves its loop once it's no longer the current run
-    // (collecting was turned off, or off and on again).
-    private int _watcherRun;
+    private readonly Func<long> _timestamp;
+    private readonly ProbeHost? _probe;
+    // Made once, not per tick and per ping.
+    private readonly Action _tick, _onPing;
+    private volatile bool _disposed;
 
     // Where lines go: the open log file, or a test's sink. Null while not collecting.
     private readonly object _gate = new();
@@ -53,16 +87,39 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private AllocationSampler? _allocations;
     private volatile bool _collecting;
 
-    // What the UI thread is doing, set by Measure on the UI thread and read by the
-    // watcher. A plain reference write is atomic; volatile keeps it fresh.
-    private volatile string? _activity;
+    // What the UI thread is doing: the scopes Measure opened on it and hasn't
+    // closed, outermost first, and the last ones it closed. Written on the UI
+    // thread, read by the probe; the lock is never held for more than a copy.
+    private readonly object _uiLock = new();
+    private readonly Frame[] _stack = new Frame[MaxDepth];
+    private int _depth;
+    private readonly Ran[] _ran = new Ran[ActivityCapacity];
+    private int _ranHead, _ranCount;
 
-    // Stopwatch timestamp of the ping in flight; 0 when none is.
-    private long _pingPostedAt;
-    private long _lastPingAt;
-    private readonly HashSet<string> _seenDuringPing = new();
+    // The windows open, by type, and the last opened, closed or focused.
+    private readonly object _windowLock = new();
+    private readonly List<string> _openWindows = new();
     private (string What, long At)? _lastWindowEvent;
+    private (string Name, long At)? _lastFocused;
+
+    // Timestamp of the ping in flight; 0 when none is. Read by both threads.
+    private long _pingPostedAt;
+    private long _pingAnsweredAt;
+    // The probe's own state, touched only on the probe's thread.
+    private long _lastPingAt, _lastTickAt;
+    private readonly HashSet<string> _seenDuringPing = new();
     private readonly object _pingLock = new();
+    private Hang? _hang;
+    private int _reportsWritten;
+    private long _lastReportAt;
+    // Pings posted before this (a timestamp) don't count toward a hang: the
+    // client's own start, before its window is up, may keep the UI thread for seconds.
+    private long _armedAt;
+
+    private volatile HangReport.Sources? _hangSources;
+    // For a bug report: the freezes seen this session. Written by the probe.
+    private int _freezesSeen;
+    private volatile string _freezesNote = "none";
 
     // The minute being summed up, reset by each summary.
     private readonly object _statsLock = new();
@@ -71,36 +128,60 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private double _stalledMs, _worstStallMs;
     private Baseline _since = Baseline.Now();
 
-    // The production monitor: follows Auto-collect logs, pings the Avalonia
-    // dispatcher from its own thread, and names windows as they open.
+    // The production monitor: follows Auto-collect logs, probes the Avalonia
+    // dispatcher from its own thread, and names windows as they open, close and
+    // take focus.
     public PerformanceMonitor(LogDiagnosticState diagnostics)
-        : this(a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
-               () => Dispatcher.UIThread.CheckAccess())
+        : this(() => Dispatcher.UIThread.CheckAccess(), ProbeHost.Client(), diagnostics)
     {
-        _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
-        _diagnostics.Changed += SyncWriter;
         Window.WindowOpenedEvent.AddClassHandler<Window>(
-            (window, _) => NoteWindowEvent($"opening {window.GetType().Name}"), RoutingStrategies.Direct);
+            (window, _) => NoteWindowOpened(window.GetType().Name), RoutingStrategies.Direct);
         Window.WindowClosedEvent.AddClassHandler<Window>(
-            (window, _) => NoteWindowEvent($"closing {window.GetType().Name}"), RoutingStrategies.Direct);
-        SyncWriter();
+            (window, _) => NoteWindowClosed(window.GetType().Name), RoutingStrategies.Direct);
+        Window.IsActiveProperty.Changed.AddClassHandler<Window>((window, e) =>
+        {
+            if (e.GetNewValue<bool>()) NoteWindowFocused(window.GetType().Name);
+        });
     }
 
-    // A monitor with no watcher thread or file behind it; stalls and timings are fed in directly.
-    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread)
+    // probe: what the probe runs on, or null for a monitor with no probe, whose
+    // stalls and timings are fed in directly.
+    internal PerformanceMonitor(Func<bool> onUiThread, ProbeHost? probe = null, LogDiagnosticState? diagnostics = null)
     {
-        _postLowPriority = postLowPriority;
         _onUiThread = onUiThread;
+        _probe = probe;
+        _timestamp = probe?.Timestamp ?? Stopwatch.GetTimestamp;
+        _diagnostics = diagnostics;
+        if (_diagnostics is not null)
+        {
+            _diagnostics.Changed += SyncWriter;
+            SyncWriter();
+        }
+        _tick = ProbeTick;
+        _onPing = OnPing;
+        _probe?.Schedule(IdleInterval, _tick);
     }
 
-    private void StartWatcher()
+    // What the probe runs on. In the client: a thread of its own, pinging the
+    // Avalonia dispatcher, writing to the Desktop.
+    internal sealed record ProbeHost(
+        Action<Action> PingUi,
+        Action<TimeSpan, Action> Schedule,
+        Func<long> Timestamp,
+        Func<DateTimeOffset> Now,
+        Func<string> ReportFolder)
     {
-        int run = Interlocked.Increment(ref _watcherRun);
-        new Thread(() => Watch(run)) { IsBackground = true, Name = "UI stall probe", Priority = ThreadPriority.AboveNormal }
-            .Start();
+        public static ProbeHost Client()
+        {
+            ProbeThread thread = new();
+            return new ProbeHost(
+                a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
+                thread.Schedule,
+                Stopwatch.GetTimestamp,
+                () => DateTimeOffset.Now,
+                CrashReporter.ReportFolder);
+        }
     }
-
-    private void StopWatcher() => Interlocked.Increment(ref _watcherRun);
 
     // Collects into sink instead of a file.
     internal void CollectTo(Action<string>? sink)
@@ -115,6 +196,22 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     // True while the log file is open.
     public bool IsCollecting => _collecting;
+
+    // Where a hang report reads the session, the sent commands and the program
+    // log from, and the scrub it passes them through. Until set, a report holds
+    // only what the monitor itself saw.
+    public HangReport.Sources? HangSources
+    {
+        get => _hangSources;
+        set => _hangSources = value;
+    }
+
+    // The freezes seen this session and the last one's file, for a bug report.
+    public string FreezesThisSession => _freezesNote;
+
+    // From now on a ping left unanswered for HangAfter is reported. Called once
+    // the main window has opened.
+    public void ArmHangReports() => Interlocked.CompareExchange(ref _armedAt, Math.Max(1, _timestamp()), 0);
 
     // Open or close the file to match Auto-collect logs. Once a write fails, stay
     // closed for the session, as the other diagnostic files do.
@@ -134,7 +231,6 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                     _sink = WriteToFile;
                     _collecting = true;
                     _allocations = new AllocationSampler();
-                    StartWatcher();
                 }
                 catch (IOException) { _broken = true; }
                 catch (UnauthorizedAccessException) { _broken = true; }
@@ -147,7 +243,6 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 _collecting = false;
                 _allocations?.Dispose();
                 _allocations = null;
-                StopWatcher();
             }
         }
         closing?.Dispose();
@@ -169,7 +264,6 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             _writer = null;
             _sink = null;
             _collecting = false;
-            StopWatcher();
         }
     }
 
@@ -178,45 +272,95 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         lock (_gate) _sink?.Invoke(line);
     }
 
-    // Times a piece of work under name. On the UI thread it is also what a stall
-    // seen meanwhile is put down to. Nested scopes restore the outer name. Free
-    // while not collecting.
-    public Scope Measure(string name)
+    // ----- Measure ---------------------------------------------------------
+
+    // Times a piece of work under name. On the UI thread the scope is also put on
+    // the stack a hang report prints, with the file, member and line it was opened
+    // at (filled in by the compiler), and once closed among the last activities.
+    // Nested scopes stack. Off the UI thread it is free while not collecting.
+    public Scope Measure(string name,
+        [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0)
     {
-        if (!_collecting) return default;
-        bool onUi = _onUiThread();
-        string? outer = null;
-        if (onUi)
+        bool timed = _collecting;
+        if (!_onUiThread()) return timed ? new Scope(this, name, -1, _timestamp(), timed: true) : default;
+        long start = _timestamp();
+        int depth;
+        lock (_uiLock)
         {
-            outer = _activity;
-            _activity = name;
+            depth = _depth++;
+            if (depth < MaxDepth) _stack[depth] = new Frame(name, file, member, line, start);
         }
-        return new Scope(this, name, onUi, outer, Stopwatch.GetTimestamp());
+        return new Scope(this, name, depth, start, timed);
     }
 
     public readonly struct Scope : IDisposable
     {
         private readonly PerformanceMonitor? _monitor;
         private readonly string _name;
-        private readonly bool _onUi;
-        private readonly string? _outer;
+        private readonly int _depth;
         private readonly long _start;
+        private readonly bool _timed;
 
-        internal Scope(PerformanceMonitor monitor, string name, bool onUi, string? outer, long start)
+        internal Scope(PerformanceMonitor monitor, string name, int depth, long start, bool timed)
         {
             _monitor = monitor;
             _name = name;
-            _onUi = onUi;
-            _outer = outer;
+            _depth = depth;
             _start = start;
+            _timed = timed;
         }
 
-        public void Dispose()
+        public void Dispose() => _monitor?.Close(_name, _depth, _start, _timed);
+    }
+
+    private void Close(string name, int depth, long start, bool timed)
+    {
+        long end = _timestamp();
+        double ms = Ms(start, end);
+        if (timed && _collecting) Record(name, ms);
+        if (depth < 0) return;
+        lock (_uiLock)
         {
-            if (_monitor is null) return;
-            _monitor.Record(_name, Stopwatch.GetElapsedTime(_start).TotalMilliseconds);
-            if (_onUi) _monitor._activity = _outer;
+            if (depth < MaxDepth)
+            {
+                NoteRan(in _stack[depth], end, ms);
+                _stack[depth] = default;
+            }
+            // Back to the depth this scope was opened at, so a scope left open by
+            // a throw that skipped its Dispose can't keep the stack deep.
+            _depth = depth;
         }
+    }
+
+    // Under _uiLock.
+    private void NoteRan(in Frame f, long end, double ms)
+    {
+        for (int i = 0; i < Math.Min(_ranCount, CollapseWindow); i++)
+        {
+            ref Ran r = ref _ran[(_ranHead - 1 - i + ActivityCapacity) % ActivityCapacity];
+            if (r.Line != f.Line || !string.Equals(r.Name, f.Name, StringComparison.Ordinal)
+                || !string.Equals(r.File, f.File, StringComparison.Ordinal))
+                continue;
+            r.Count++;
+            r.LastEnd = end;
+            r.LastMs = ms;
+            r.TotalMs += ms;
+            r.MaxMs = Math.Max(r.MaxMs, ms);
+            return;
+        }
+        _ran[_ranHead] = new Ran
+        {
+            Name = f.Name, File = f.File, Member = f.Member, Line = f.Line,
+            FirstStart = f.Start, LastEnd = end, LastMs = ms, TotalMs = ms, MaxMs = ms, Count = 1,
+        };
+        _ranHead = (_ranHead + 1) % ActivityCapacity;
+        if (_ranCount < ActivityCapacity) _ranCount++;
+    }
+
+    private string? InnermostScope()
+    {
+        lock (_uiLock)
+            return _depth > 0 ? _stack[Math.Min(_depth, MaxDepth) - 1].Name : null;
     }
 
     internal void Record(string name, double ms)
@@ -232,55 +376,237 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         }
     }
 
-    private void NoteWindowEvent(string what)
-    {
-        if (!_collecting) return;
-        lock (_pingLock) _lastWindowEvent = (what, Stopwatch.GetTimestamp());
-    }
+    // ----- Windows -----------------------------------------------------------
 
-    private void Watch(int run)
+    // The window class handlers call these on the UI thread with the window's
+    // type name: the probe reads names, never a window.
+    internal void NoteWindowOpened(string name)
     {
-        while (Volatile.Read(ref _watcherRun) == run)
+        lock (_windowLock)
         {
-            Thread.Sleep(WatchInterval);
-            long now = Stopwatch.GetTimestamp();
-            long posted = Interlocked.Read(ref _pingPostedAt);
-            if (posted == 0)
-            {
-                if (Stopwatch.GetElapsedTime(_lastPingAt, now) >= PingInterval)
-                {
-                    _lastPingAt = now;
-                    Interlocked.Exchange(ref _pingPostedAt, now);
-                    _postLowPriority!(OnPing);
-                }
-            }
-            else if (Stopwatch.GetElapsedTime(posted, now).TotalMilliseconds >= StallMs
-                     && _activity is { } doing)
-            {
-                lock (_pingLock) _seenDuringPing.Add(doing);
-            }
-
-            bool due;
-            lock (_statsLock) due = DateTime.UtcNow - _since.AtUtc >= SummaryInterval;
-            if (due) Write(Summary());
+            _openWindows.Add(name);
+            _lastWindowEvent = ($"opening {name}", _timestamp());
         }
     }
 
+    internal void NoteWindowClosed(string name)
+    {
+        lock (_windowLock)
+        {
+            _openWindows.Remove(name);
+            _lastWindowEvent = ($"closing {name}", _timestamp());
+        }
+    }
+
+    internal void NoteWindowFocused(string name)
+    {
+        lock (_windowLock) _lastFocused = (name, _timestamp());
+    }
+
+    // ----- The probe ---------------------------------------------------------
+
+    private void ProbeTick()
+    {
+        if (_disposed || _probe is not { } probe) return;
+        try
+        {
+            Probe(probe);
+        }
+        catch (Exception ex)
+        {
+            // A diagnostic must not take the client down, and on this thread any
+            // throw would: this tick is lost, the next one runs as usual.
+            _hangSources?.Log.Warn("Performance", $"UI probe tick failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        probe.Schedule(_collecting ? WatchInterval : IdleInterval, _tick);
+    }
+
+    private void Probe(ProbeHost probe)
+    {
+        long now = _timestamp();
+        TimeSpan due = _collecting ? WatchInterval : IdleInterval;
+        if (_lastTickAt != 0 && Elapsed(_lastTickAt, now) - due > ProbeLate)
+        {
+            long inFlight = Interlocked.Read(ref _pingPostedAt);
+            if (inFlight != 0) Interlocked.CompareExchange(ref _pingPostedAt, now, inFlight);
+        }
+        _lastTickAt = now;
+
+        long posted = Interlocked.Read(ref _pingPostedAt);
+        if (posted == 0)
+        {
+            if (_hang is { } ended)
+            {
+                Recovered(ended, Interlocked.Read(ref _pingAnsweredAt));
+                _hang = null;
+            }
+            if (Elapsed(_lastPingAt, now) >= (_collecting ? PingInterval : IdleInterval) - TimeSpan.FromMilliseconds(1))
+            {
+                _lastPingAt = now;
+                Interlocked.Exchange(ref _pingPostedAt, now);
+                probe.PingUi(_onPing);
+            }
+        }
+        else
+        {
+            TimeSpan waited = Elapsed(posted, now);
+            if (_collecting && waited.TotalMilliseconds >= StallMs && InnermostScope() is { } doing)
+                lock (_pingLock) _seenDuringPing.Add(doing);
+            long armed = Interlocked.Read(ref _armedAt);
+            if (_hang is { } hang) StillHung(hang, now);
+            else if (waited >= HangAfter && armed != 0 && posted >= armed && !Debugger.IsAttached)
+            {
+                Hang hung = Hung(probe, posted, now);
+                _hang = hung;
+                _freezesSeen++;
+                NoteFreeze(hung, $"at {probe.Now():HH:mm:ss}, still going");
+            }
+        }
+
+        if (_collecting)
+        {
+            bool summaryDue;
+            lock (_statsLock) summaryDue = DateTime.UtcNow - _since.AtUtc >= SummaryInterval;
+            if (summaryDue) Write(Summary());
+        }
+    }
+
+    // On the UI thread: it has caught up.
     private void OnPing()
     {
+        long answered = _timestamp();
+        Interlocked.Exchange(ref _pingAnsweredAt, answered);
         long posted = Interlocked.Exchange(ref _pingPostedAt, 0);
-        if (posted == 0) return;
-        double ms = Stopwatch.GetElapsedTime(posted).TotalMilliseconds;
+        if (posted == 0 || !_collecting) return;
+        double ms = Ms(posted, answered);
         List<string> causes;
         lock (_pingLock)
         {
             causes = _seenDuringPing.ToList();
             _seenDuringPing.Clear();
+        }
+        lock (_windowLock)
+        {
             if (_lastWindowEvent is { } window && window.At >= posted)
                 causes.Add(window.What);
         }
         if (ms >= StallMs) RecordStall(ms, causes.Count == 0 ? "unattributed" : string.Join(", ", causes));
     }
+
+    // A hang being reported: the ping it is counted from, and the file it went to,
+    // or why none was written.
+    private sealed class Hang(long postedAt, string? path, string? noFile = null)
+    {
+        public long PostedAt { get; } = postedAt;
+        public string? Path { get; } = path;
+        public string? NoFile { get; } = noFile;
+        public int NextMilestone { get; set; }
+    }
+
+    private Hang Hung(ProbeHost probe, long posted, long now)
+    {
+        if (_reportsWritten >= MaxHangReports)
+            return new Hang(posted, null, $"the session's {MaxHangReports} are written");
+        if (_lastReportAt != 0 && Elapsed(_lastReportAt, now) < ReportGap)
+            return new Hang(posted, null, $"one was written less than {ReportGap.TotalMinutes:0} minutes before");
+
+        HangReport.Snapshot snapshot = TakeSnapshot(posted, now, probe.Now());
+        string name = $"{HangReport.FilePrefix}{snapshot.At:yyyyMMdd-HHmmss}.md";
+        HangReport.Gathered gathered = HangReport.Gather(_hangSources, name, snapshot.Unresponsive, GatherTimeout);
+        _reportsWritten++;
+        _lastReportAt = now;
+        try
+        {
+            string folder = probe.ReportFolder();
+            Directory.CreateDirectory(folder);
+            string path = Path.Combine(folder, name);
+            File.WriteAllText(path, HangReport.Build(snapshot, gathered));
+            return new Hang(posted, path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new Hang(posted, null, $"the Desktop could not be written ({ex.GetType().Name})");
+        }
+    }
+
+    private void NoteFreeze(Hang hang, string how)
+    {
+        _freezesNote = $"{_freezesSeen}; the last {how}"
+            + (hang.Path is { } path ? $", written to {Path.GetFileName(path)}" : $", no Hang file: {hang.NoFile}");
+    }
+
+    private void StillHung(Hang hang, long now)
+    {
+        if (hang.NextMilestone >= StillHungAt.Length) return;
+        TimeSpan waited = Elapsed(hang.PostedAt, now);
+        if (waited < StillHungAt[hang.NextMilestone]) return;
+        while (hang.NextMilestone < StillHungAt.Length && waited >= StillHungAt[hang.NextMilestone]) hang.NextMilestone++;
+        if (hang.Path is null) return;
+        HangReport.Frame? innermost;
+        lock (_uiLock)
+            innermost = _depth > 0 ? ToFrame(in _stack[Math.Min(_depth, MaxDepth) - 1], now, _probe!.Now()) : null;
+        Append(hang.Path, HangReport.StillLine(_probe!.Now(), waited, innermost));
+    }
+
+    private void Recovered(Hang hang, long answeredAt)
+    {
+        TimeSpan lasted = answeredAt > hang.PostedAt ? Elapsed(hang.PostedAt, answeredAt) : HangAfter;
+        NoteFreeze(hang, $"ended {_probe!.Now():HH:mm:ss} after {HangReport.Seconds(lasted)}");
+        if (hang.Path is not null) Append(hang.Path, HangReport.RecoveredLine(_probe!.Now(), lasted));
+        string where = hang.Path is not null ? $"; see {Path.GetFileName(hang.Path)}" : $" (no Hang file: {hang.NoFile})";
+        _hangSources?.Log.Warn("Performance",
+            $"The UI thread answered again after {HangReport.Seconds(lasted)} unresponsive{where}");
+    }
+
+    private static void Append(string path, string text)
+    {
+        try { File.AppendAllText(path, text); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The report stands as first written; the log line on recovery says how long it lasted.
+        }
+    }
+
+    private HangReport.Snapshot TakeSnapshot(long posted, long now, DateTimeOffset wall)
+    {
+        List<HangReport.Frame> frames = new();
+        List<HangReport.Activity> recent = new();
+        int depth;
+        lock (_uiLock)
+        {
+            depth = _depth;
+            for (int i = 0; i < Math.Min(depth, MaxDepth); i++) frames.Add(ToFrame(in _stack[i], now, wall));
+            for (int i = 0; i < _ranCount; i++)
+            {
+                ref Ran r = ref _ran[(_ranHead - _ranCount + i + ActivityCapacity) % ActivityCapacity];
+                recent.Add(new HangReport.Activity(r.Name, r.File, r.Member, r.Line,
+                    Wall(r.FirstStart, now, wall), Wall(r.LastEnd, now, wall), r.LastMs, r.Count, r.MaxMs, r.TotalMs));
+            }
+        }
+        recent.Sort((a, b) => a.LastEndedAt.CompareTo(b.LastEndedAt));
+        string[] open;
+        (string What, DateTimeOffset At)? lastEvent = null;
+        (string Name, DateTimeOffset At)? lastFocused = null;
+        lock (_windowLock)
+        {
+            open = _openWindows.ToArray();
+            if (_lastWindowEvent is { } e) lastEvent = (e.What, Wall(e.At, now, wall));
+            if (_lastFocused is { } f) lastFocused = (f.Name, Wall(f.At, now, wall));
+        }
+        return new HangReport.Snapshot(wall, Elapsed(posted, now), frames, depth, recent, open, lastEvent, lastFocused);
+    }
+
+    private HangReport.Frame ToFrame(in Frame f, long now, DateTimeOffset wall) =>
+        new(f.Name, f.File, f.Member, f.Line, Wall(f.Start, now, wall), Elapsed(f.Start, now));
+
+    private static DateTimeOffset Wall(long at, long now, DateTimeOffset wallNow) => wallNow - Elapsed(at, now);
+
+    private static TimeSpan Elapsed(long from, long to) =>
+        TimeSpan.FromSeconds((double)(to - from) / Stopwatch.Frequency);
+
+    private static double Ms(long from, long to) => (double)(to - from) * 1000 / Stopwatch.Frequency;
+
+    // ----- Stalls and the minute's summary -----------------------------------
 
     internal void RecordStall(double ms, string cause)
     {
@@ -338,7 +664,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        StopWatcher();
+        _disposed = true;
         _allocations?.Dispose();
         if (_diagnostics is not null) _diagnostics.Changed -= SyncWriter;
         DebugLogWriter? writer;
@@ -350,6 +676,61 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             _collecting = false;
         }
         if (writer is not null) await writer.DisposeAsync();
+    }
+
+    // A scope open on the UI thread.
+    private readonly record struct Frame(string Name, string File, string Member, int Line, long Start);
+
+    // A scope the UI thread closed, or a run of alike ones.
+    private struct Ran
+    {
+        public string Name, File, Member;
+        public int Line, Count;
+        public long FirstStart, LastEnd;
+        public double LastMs, TotalMs, MaxMs;
+    }
+
+    // The client's probe: one background thread that sleeps out each delay and
+    // runs the tick, which schedules the next. Its own thread rather than a timer,
+    // so a starved thread pool can't silence it.
+    private sealed class ProbeThread
+    {
+        private readonly object _gate = new();
+        private (TimeSpan Delay, Action Tick)? _next;
+        private Thread? _thread;
+
+        public void Schedule(TimeSpan delay, Action tick)
+        {
+            lock (_gate)
+            {
+                _next = (delay, tick);
+                if (_thread is null)
+                {
+                    _thread = new Thread(Run)
+                    {
+                        IsBackground = true, Name = "UI responsiveness probe", Priority = ThreadPriority.AboveNormal,
+                    };
+                    _thread.Start();
+                }
+                else Monitor.Pulse(_gate);
+            }
+        }
+
+        private void Run()
+        {
+            while (true)
+            {
+                (TimeSpan Delay, Action Tick) next;
+                lock (_gate)
+                {
+                    while (_next is null) Monitor.Wait(_gate);
+                    next = _next.Value;
+                    _next = null;
+                }
+                Thread.Sleep(next.Delay);
+                next.Tick();
+            }
+        }
     }
 
     // What the program allocates most, by type, from the runtime's own sampling: an

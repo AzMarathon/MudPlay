@@ -1,15 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.38**
-> - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
-> - `@auto-get` starting with `on` / `off` is always the Auto-Get Items toggle; words after it are ignored
-> - Game Data item and batch editors save only the boxes changed: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
-> - Moving an item's Use tier and pressing OK saves the shown values at the new tier
-> - Auto-Light picks lights up off the floor by its own settings, whatever the light's Auto-collect says
-> - The item record opened from the Roomba Master List now saves
-> - An open item editor no longer overwrites a change made by another client or `@auto-get` meanwhile
-> - A game-data override save that fails to reach the disk no longer shows as saved
+> **Version 3.185.0**
+> - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line
+> - The Hang file adds how long the freeze lasted if the client comes back; the Program Log warns of it too
+> - Bug reports list the freezes seen this session
+> - Help: new *If the client freezes* section
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

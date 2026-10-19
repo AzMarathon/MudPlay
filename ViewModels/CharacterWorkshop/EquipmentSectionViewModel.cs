@@ -439,6 +439,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private void OnRowEdited(EquipmentSlotRowViewModel row)
     {
         if (_suppress) return;
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Equipment slot edit");
         PersistRowsToSet();
         if (SelectedSet is { } set)
         {
@@ -465,7 +466,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         // Tell the other open editors (Settings → Combat's weapon boxes) — but not
         // ourselves: our rows already are the new state.
         _notifyingSetsEdited = true;
-        try { _equipment.NotifySetsEdited(); }
+        try
+        {
+            using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("gear sets edited: listeners");
+            _equipment.NotifySetsEdited();
+        }
         finally { _notifyingSetsEdited = false; }
     }
 
@@ -594,6 +599,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // character still sees the slot's full item list rather than an empty one.
     private void RefreshAvailableItems()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Equipment slot item lists");
         int level = _stats.Level;
         ClassEquipProfile cls = ItemEquipFilter.ResolveClassProfile(_gameData, _stats.Class);
         AlignmentBucket? bucket = ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm);

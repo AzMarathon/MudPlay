@@ -4583,7 +4583,7 @@ Reach for this when reporting a display or parsing glitch — it shows exactly w
 
 **What it contains**, in this order:
 
-- **Your description**, then **Session** and **Client and connection**: the build and when the client was started, your system, the connection, which diagnostics were on, the open windows, and where the log files are.
+- **Your description**, then **Session** and **Client and connection**: the build and when the client was started, your system, the connection, which diagnostics were on, the open windows, any freezes this session (see *If the client freezes*), and where the log files are.
 - **Holds and waits**: everything that can make the client sit still. The send gate and what it dropped, every movement gate with who raised it, why and since when, how long each engine has been in its state, and what each is waiting on. **Pending work** lists what the smaller engines have queued.
 - **The live state**: player, party, inventory, movement and navigation, combat, spells.
 - **What is configured**: combat profiles, room markers, the Workshop, your triggers, aliases and macros, who may send you remote commands, your deaths, changed keybindings, monster and item overrides, every setting.
@@ -7086,7 +7086,7 @@ The window also has a **Simulate buttons** menu, which shows test-only Simulate 
 
 **Default:** Off
 **What it does:** When on, MudPlay writes out full on-disk diagnostic files (program log, memory log, combat-trace log, performance log) for the session, under the data folder's `Logs/` directory, instead of only keeping recent lines in memory.
-**The performance log** (`…-performance.log`) is for lag and stutters. MudPlay keeps checking whether its window is keeping up. Every moment it fell behind by 50 ms or more gets a `stall` line saying how long it lasted and what it was busy with: incoming game text, opening or closing a window (named), saving your profile, reading game data, or drawing the terminal or the map. Once a minute a `summary` line adds up that minute: the stalls, how long each kind of work took, the client's CPU, memory and garbage-collection activity, and which kinds of objects it allocated most (sampled) — the churn that causes garbage-collection pauses. Nothing is measured while the setting is off.
+**The performance log** (`…-performance.log`) is for lag and stutters. MudPlay keeps checking whether its window is keeping up. Every moment it fell behind by 50 ms or more gets a `stall` line saying how long it lasted and what it was busy with: incoming game text, opening or closing a window (named), saving your profile, reading game data, or drawing the terminal or the map. Once a minute a `summary` line adds up that minute: the stalls, how long each kind of work took, the client's CPU, memory and garbage-collection activity, and which kinds of objects it allocated most (sampled) — the churn that causes garbage-collection pauses. Nothing is timed or written to this log while the setting is off. The freeze watch that writes a `Hang-` file (see *If the client freezes*) runs whether this is on or off.
 **When you might change it:** Turn on before a play session where you're trying to reproduce and capture an intermittent bug, or one where the client felt laggy.
 
 ### Hop timing
@@ -7564,5 +7564,11 @@ Open the **Program Log** (F4) — it records what the engines decided and why. M
 
 Use the menu-bar **Bug Report** button, or right-click the terminal → **Bug report…**. A small window asks what went wrong; type a line or two and press **Write report**. It writes a Markdown snapshot of your current state — movement, player, settings, program log, and scrollback — to your Desktop, ready to attach to a GitHub issue, so a problem can be diagnosed from the exact moment it happened.
 
+
+## If the client freezes
+
+If the client's window goes white or stops answering, and Windows offers to end the program or wait, choose **Wait** if you can. After about 5 seconds without an answer the client writes a file named `Hang-<date>-<time>.md` to your Desktop, next to where bug reports and `Crash-` files land. The file names the code the client was running when it stopped, with the windows that were open, the last commands sent, and the end of the program log. Your login name, passwords and other players' corpse passwords are masked, as in a bug report. If the client comes back, the file's last lines say how long the freeze lasted. Once it's back, the Program Log has a warning saying the same thing.
+
+Attach the `Hang-` file to a bug report on GitHub, with a line on what you were clicking. Attach the log file the Hang file names under *Log to send with this* too. The client always watches for a freeze; there is nothing to turn on. A freeze within 2 minutes of the last file gets no file of its own, though the Program Log still notes it, and at most 5 files are written in a session. A bug report lists the freezes seen this session.
 
 **Help → Report an issue…** opens the project's GitHub issues page in your browser, where you file the report and attach that snapshot. **Help → About MudPlay** shows the version, license, and bundled-component credits — handy when a report needs the exact build you're on.
