@@ -1049,6 +1049,11 @@ How to keep it current:
 - Checks: IsAchievable and ChooseVerb across stat requirements, the bash ceiling and the pick preference.
 - Why: the walker must not try an impossible verb.
 
+### DoorsHeldOpenTests.cs
+- Covers: Game/Map/DoorsHeldOpen, with DoorOpenManager.OpenedByUs, MovementFilter.IsExitHeldOpen / BfsMapper, MovementRefusalDetector.DoorShutHere and the shipped bare-lock seed, on one router fed by a `ServerFeed`; time on a `ManualClock`.
+- Checks: in through the guardroom's key exit with the key's last charge, both sides are held, and a character who can't open the door plans back through it until the 300 s are up and not after; a bash holds the far side only when it is a door (Thrag's door, whose outside is a key exit); `The door to the west just locked!` lets the side go; a door with an "any" figure is held for good; someone else's "already open" starts nothing, and Clear forgets everything.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (*Stock: when an opened or unlocked door locks again*, and the open/bash mirroring); the user's ruling of 2026-10-18 to build the door-open timer for report `paradigm-20261018-192819`.
+
 ### DraggedTrackerTests.cs
 - Covers: Game/DraggedTracker
 - Checks: the dragger is recorded only while mortally wounded, overwritten by a new dragger, cleared on recovery, stopped by dispose.

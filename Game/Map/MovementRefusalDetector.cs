@@ -82,7 +82,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
             if (doorChange.Groups["what"].Value.Equals("opened", StringComparison.OrdinalIgnoreCase))
                 _tracker.NoteNamedDoorOpened(doorDir);
             else
+            {
+                RaiseDoorShutHere(doorDir);
                 _tracker.NoteNamedDoorClosed(doorDir, when);
+            }
             _log?.Info("MoveRefusal", $"door to {doorDir.ToLongName()} {doorChange.Groups["what"].Value}: {text.Trim()}");
             return;
         }
@@ -92,7 +95,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
             if (seen.Groups["what"].Value.Equals("open", StringComparison.OrdinalIgnoreCase))
                 _tracker.NoteNamedDoorOpened(seenDir);
             else
+            {
+                RaiseDoorShutHere(seenDir);
                 _tracker.NoteNamedDoorClosed(seenDir, when);
+            }
             _log?.Info("MoveRefusal", $"saw the door to {seenDir.ToLongName()} {seen.Groups["what"].Value}ed: {text.Trim()}");
             return;
         }
@@ -279,6 +285,17 @@ public sealed partial class MovementRefusalDetector : IDisposable
     // (@0x418196 / @0x4181c9; gate @0x418134 / @0x418167); Paradigm assumed the same
     // (user, 2026-10-18).
     public event Action<RoomKey, Direction, bool>? ShutDoorBonked;
+
+    // A door of the room we stand in, still, shut or locked by someone else or by the
+    // game's relock: (room, direction). Mid-move the line could be about either room,
+    // so nothing is said then.
+    public event Action<RoomKey, Direction>? DoorShutHere;
+
+    private void RaiseDoorShutHere(Direction dir)
+    {
+        if (DoorShutHere is null || _tracker.State is not { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here }) return;
+        DoorShutHere(here.Key, dir);
+    }
 
     // The kind the refusal's exact words name, or null for wording that names neither.
     private static bool? ShutDoorKind(string text) => text.Trim() switch

@@ -205,7 +205,7 @@ public sealed class DoorOpenManager : IDisposable
         _pickOkSub      = _router.Subscribe(KnownPatterns.DoorPickSuccess,      OnPickSuccess);
         _pickFailSub    = _router.Subscribe(KnownPatterns.DoorPickFailure,      OnPickFailure);
         _notLockedSub   = _router.Subscribe(KnownPatterns.DoorPickNotLocked,    OnPickNotLocked);
-        _openedSub      = _router.Subscribe(KnownPatterns.DoorOpenedNow,        OnOpened);
+        _openedSub      = _router.Subscribe(KnownPatterns.DoorOpenedNow,        OnOpenedNow);
         _alreadyOpenSub = _router.Subscribe(KnownPatterns.DoorAlreadyOpen,      OnOpened);
         _lockedSub      = _router.Subscribe(KnownPatterns.DoorIsLocked,         OnIsLocked);
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
@@ -666,6 +666,7 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is null) return;
         _log?.Info("Door", $"bash {_current.DirectionShort} succeeded.");
         LearnBareLock(bashable: true, "the bash opened it");
+        RaiseOpenedByUs(byBash: true);
         SucceedCurrent();
     }
 
@@ -797,6 +798,25 @@ public sealed class DoorOpenManager : IDisposable
             if (_state == DoorState.WaitingUseKey) _keyChargeSpent = true;
             SendOpen();
         }
+    }
+
+    // Our own `open` opened it (not "already open": someone else did, at a time we
+    // don't know).
+    private void OnOpenedNow(MatchResult m)
+    {
+        if (_state is DoorState.WaitingOpen or DoorState.WaitingOpenFirst) RaiseOpenedByUs(byBash: false);
+        OnOpened(m);
+    }
+
+    // Told the side and how, when the request's own command opened the door, in the
+    // room confirmed to hold it (DoorsHeldOpen).
+    public event Action<RoomKey, Direction, bool>? OpenedByUs;
+
+    private void RaiseOpenedByUs(bool byBash)
+    {
+        if (_current is not { } cur || _doorRoom is not { } room) return;
+        if (_confirmedRoom?.Invoke() is { } now && now != room) return;
+        OpenedByUs?.Invoke(room, cur.Direction, byBash);
     }
 
     private void OnOpened(MatchResult _)

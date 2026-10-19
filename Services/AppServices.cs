@@ -1354,7 +1354,8 @@ public sealed class AppServices
     // Set in the constructor's wiring before the first profile loads.
     public Game.Map.BareKeyLockBook BareKeyLocks { get; private set; } = null!;
     public BareKeyLockStore BareKeyLockStore { get; private set; } = null!;
-
+    // The door sides the client opened that can't have locked again yet. Set beside it.
+    public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
 
@@ -6628,6 +6629,24 @@ public sealed class AppServices
         Door.SetBareLockBook(BareKeyLocks, DirectionWordNamesSomeoneHere);
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
+
+        // The doors the client opened and that can't have locked again yet: a route
+        // back through one needs no key (user, 2026-10-18). Forgotten on a relog, a
+        // change of character or realm, and a change of game data.
+        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow, Log);
+        Door.OpenedByUs += DoorsHeldOpen.NoteOpened;
+        Movement.HeldOpenProbe = DoorsHeldOpen.IsHeldOpen;
+        Movement.HeldOpenVersionProvider = () => DoorsHeldOpen.Version;
+        InGameCapture.InGameChanged += inGame => DoorsHeldOpen.Clear(inGame ? "entered the game" : "left the game");
+        Profile.ProfileLoaded += _ => DoorsHeldOpen.Clear("another character or realm");
+        Profile.BbsPinApplied += _ => DoorsHeldOpen.Clear("another realm");
+        RoomGraph.GraphReloaded += () => DoorsHeldOpen.Clear("game data reloaded");
+        // A held side the room shows shut, standing in it, has locked or been shut.
+        RoomTracker.RoomDisplayRead += () =>
+        {
+            if (RoomTracker.State is { Confidence: Game.Map.RoomConfidence.Confirmed, CurrentRoom: { } here, ClosedDoorDirections: { } shut })
+                foreach (Game.Map.Direction dir in shut) DoorsHeldOpen.NoteShut(here.Key, dir);
+        };
         Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.184.41
+
+- A door the client opened stays open to routes for the 5 minutes it can't lock again, so the way back needs no key
+- The door across it counts too when the game opened both; a door marked any picklocks/strength stays open for good
+- A held door is let go when it's seen shut or the game says it closed or locked, and on a relog, a change of character, realm or game data
+
 ## 3.184.40
 
 - A door the game data gives only a key for is bashed where it's known to be a door, or where nobody in the room could be hit by the bash; a list of Stock's doors ships with the client and each realm learns the rest

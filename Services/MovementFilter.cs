@@ -257,6 +257,20 @@ public sealed class MovementFilter : IRoomFilter
         || (IsHazardEntryBlocked(in exit) && !SharesHazardStoodIn(in exit))
         || IsAlignmentGateBlocked(in exit);
 
+    // Whether the client opened the door from a room into another and it can't have
+    // locked again yet (DoorsHeldOpen.IsHeldOpen). Unset → never.
+    public Func<RoomKey, RoomKey, bool>? HeldOpenProbe { get; set; }
+
+    // A door held open is passable whatever its lock asks, but only its lock: a level
+    // window, a toll, a hazard beyond or any other gate on the exit still stands.
+    public bool IsExitHeldOpen(RoomKey from, in RoomExit exit)
+    {
+        if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
+        if (HeldOpenProbe?.Invoke(from, exit.Target) != true) return false;
+        ExitBlockReason others = DescribeExitBlock(in exit) & ~(ExitBlockReason.LockedDoor | ExitBlockReason.Door);
+        return others == ExitBlockReason.None;
+    }
+
     // Same gate checks as IsExitBlocked, but reports which kinds fire rather
     // than a single bool — so a failed walk names the actual obstacle. A
     // key-locked door surfaces as LockedDoor (not the pack-item Item reason)
@@ -429,9 +443,12 @@ public sealed class MovementFilter : IRoomFilter
     // side learned since changes what a door plan may count on.
     public Func<int>? BareLockBookVersionProvider { get; set; }
 
+    // The version of the doors held open (DoorsHeldOpen.Version).
+    public Func<int>? HeldOpenVersionProvider { get; set; }
+
     public int DoorRuleStamp => HashCode.Combine(
         StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke(),
-        BareLockBookVersionProvider?.Invoke());
+        BareLockBookVersionProvider?.Invoke(), HeldOpenVersionProvider?.Invoke());
 
     public string? DescribeDoorRefusal(in RoomExit exit)
     {

@@ -21,6 +21,7 @@ public sealed class WalkAroundRoomsFilter : IRoomFilter
     public bool IsAvoided(RoomKey key) => _around.Contains(key) || (_inner?.IsAvoided(key) ?? false);
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
     public bool IsExitRefused(RoomKey from, in RoomExit exit) => _inner?.IsExitRefused(from, in exit) ?? false;
+    public bool IsExitHeldOpen(RoomKey from, in RoomExit exit) => _inner?.IsExitHeldOpen(from, in exit) ?? false;
     public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;
     public string? DescribeDoorRefusal(in RoomExit exit) => _inner?.DescribeDoorRefusal(in exit);
     public string? DescribePurseFor(in RoomExit exit) => _inner?.DescribePurseFor(in exit);
