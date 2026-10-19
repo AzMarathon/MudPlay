@@ -64,6 +64,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
         // than bonk the shut door again (the mid-combat door-closed bonk loop).
         if (DoorIsClosed().IsMatch(text))
         {
+            // Read before the move is reverted: the refusal is of this move.
+            if (ShutDoorBonked is not null && _tracker.CardinalInFlight() is { } bonk
+                && ShutDoorKind(text) is { } bashable)
+                ShutDoorBonked(bonk.From, bonk.Dir, bashable);
             _tracker.NoteDoorClosed(when);
             _log?.Info("MoveRefusal", $"door closed: {text.Trim()}");
             return;
@@ -78,7 +82,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
             if (doorChange.Groups["what"].Value.Equals("opened", StringComparison.OrdinalIgnoreCase))
                 _tracker.NoteNamedDoorOpened(doorDir);
             else
+            {
+                RaiseDoorShutHere(doorDir);
                 _tracker.NoteNamedDoorClosed(doorDir, when);
+            }
             _log?.Info("MoveRefusal", $"door to {doorDir.ToLongName()} {doorChange.Groups["what"].Value}: {text.Trim()}");
             return;
         }
@@ -88,7 +95,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
             if (seen.Groups["what"].Value.Equals("open", StringComparison.OrdinalIgnoreCase))
                 _tracker.NoteNamedDoorOpened(seenDir);
             else
+            {
+                RaiseDoorShutHere(seenDir);
                 _tracker.NoteNamedDoorClosed(seenDir, when);
+            }
             _log?.Info("MoveRefusal", $"saw the door to {seenDir.ToLongName()} {seen.Groups["what"].Value}ed: {text.Trim()}");
             return;
         }
@@ -267,6 +277,33 @@ public sealed partial class MovementRefusalDetector : IDisposable
     // it (GAME_MECHANICS "Toll exits"); any other coin wording is left unvalued. An
     // NPC's line names no figure, so its price is the fare the data has on the exit.
     public event Action<RoomExit?, long?>? PaidCrossingRefused;
+
+    // Our own move into a shut door was refused, in words that say which kind of exit
+    // it is: (room left, direction, a door or gate that bashes). Stock 1.11p
+    // `_move_user` refuses a key exit with `There is a closed door in that direction!`
+    // (@0x417ae5) and a door or gate with `The door is Closed!` / `The door is closed!`
+    // (@0x418196 / @0x4181c9; gate @0x418134 / @0x418167); Paradigm assumed the same
+    // (user, 2026-10-18).
+    public event Action<RoomKey, Direction, bool>? ShutDoorBonked;
+
+    // A door of the room we stand in, still, shut or locked by someone else or by the
+    // game's relock: (room, direction). Mid-move the line could be about either room,
+    // so nothing is said then.
+    public event Action<RoomKey, Direction>? DoorShutHere;
+
+    private void RaiseDoorShutHere(Direction dir)
+    {
+        if (DoorShutHere is null || _tracker.State is not { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here }) return;
+        DoorShutHere(here.Key, dir);
+    }
+
+    // The kind the refusal's exact words name, or null for wording that names neither.
+    private static bool? ShutDoorKind(string text) => text.Trim() switch
+    {
+        "There is a closed door in that direction!" => false,
+        "The door is closed!" or "The door is Closed!" or "The gate is closed!" or "The gate is Closed!" => true,
+        _ => null,
+    };
 
     // True while the line in hand is the price refusal of a room command.
     private bool _priceRefusalInHand;

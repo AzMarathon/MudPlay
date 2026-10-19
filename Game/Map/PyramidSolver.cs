@@ -1126,7 +1126,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             $"F3 step {_stepIndex + 1}: opening the door {dir.ToLongName()} out of 12/{here.Key.Room}"
             + (exit.KeyItemId > 0 ? $" with key {exit.KeyItemId}" : "")
             + (_doorOpenAttempts > 1 ? $" (go {_doorOpenAttempts}/{MaxDoorOpenAttempts})" : ""));
-        _openDoor!(dir, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "pyramid",
+        (int doorReq, bool doorBash) = DoorPolicy.Openers(in exit);
+        _openDoor!(dir, doorReq, doorBash, exit.KeyItemId, "pyramid",
             result => OnDoorReply(ticket, dir, result));
     }
 

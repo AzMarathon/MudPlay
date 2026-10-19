@@ -152,6 +152,7 @@ public sealed class DoorOpenManagerTests
     public void UseKey_WrongKey_FailsAtOnce()
     {
         using Harness h = new();
+        h.Stats.Picklocks = 0;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 0, canBash: false, keyItemId: 172, "walker", r => result = r);
         Assert.Equal("use black star key w", h.LastSent);
@@ -206,6 +207,7 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 0, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         Assert.Equal("pick w", h.LastSent);
 
@@ -229,6 +231,7 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.N, 0, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         Assert.Equal("pick n", h.LastSent);
 
@@ -336,6 +339,7 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = false };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.S, 0, canBash: false, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         Assert.Equal("pick s", h.LastSent);
     }
@@ -379,6 +383,7 @@ public sealed class DoorOpenManagerTests
         h.Stats.Picklocks = 303;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         for (int i = 0; i < 3; i++)
         {
@@ -387,7 +392,7 @@ public sealed class DoorOpenManagerTests
         }
 
         Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
-        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(4, h.Sent.Count);           // the open, then three picks
     }
 
     // The Ancient Coliseum's door down: Picklocks just over the lock, so a pick is
@@ -401,6 +406,7 @@ public sealed class DoorOpenManagerTests
         h.Stats.Picklocks = 303;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         for (int i = 0; i < 3; i++)
         {
@@ -410,7 +416,7 @@ public sealed class DoorOpenManagerTests
         }
 
         Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
-        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(4, h.Sent.Count);           // the open, then three picks
         Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
     }
 
@@ -418,8 +424,9 @@ public sealed class DoorOpenManagerTests
     public void KeyMissing_FailsWithoutCallingTheDoorUnopenable()
     {
         using Harness h = new();
+        h.Stats.Picklocks = 0;
         DoorOpenResult? result = null;
-        h.Mgr.Enqueue(Direction.N, 0, canBash: true, keyItemId: 172, "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.N, DoorPolicy.BareKeyLockPickRequirement, canBash: false, keyItemId: 172, "walker", r => result = r);
         Assert.Equal("use black star key n", h.LastSent);
 
         h.Line("You don't have black star key.");
@@ -438,6 +445,7 @@ public sealed class DoorOpenManagerTests
         h.Stats.Picklocks = 303;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 172, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         h.Line("Your skill fails you this time.");
         h.Line("Your skill fails you this time.");
@@ -461,11 +469,13 @@ public sealed class DoorOpenManagerTests
         DoorOpenResult? second = null;
         h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 0, "walker",
             _ => h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 0, "walker", r => second = r));
-        Assert.Single(h.Sent);
+        h.Line("The door is locked.");                    // the open ahead of the pick
+        Assert.Equal("pick d", h.LastSent);
 
         h.Line("Your skill fails you this time.");
 
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("open d", h.LastSent);                // the second request, afresh
+        h.Line("The door is locked.");
         Assert.Equal("pick d", h.LastSent);
         Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
         h.Line("Your skill fails you this time.");
@@ -500,6 +510,7 @@ public sealed class DoorOpenManagerTests
         h.Stats.Picklocks = 300;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.E, 250, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         Assert.Equal("pick e", h.LastSent);
     }
@@ -563,18 +574,38 @@ public sealed class DoorOpenManagerTests
     // ----- keyed-door FSM (commit 3) --------------------------------
 
     [Fact]
-    public void KeyedDoor_StatAltMet_TriesBashFirst_SavesKey()
+    public void KeyedDoor_WithPicklocks_PicksFirst_ThenBashes_BeforeTheKey()
     {
-        // Keyed door with bashable alternative. Player meets stats.
-        // Manager prefers bash → save the key charge.
-        using Harness h = new();
+        // Client policy (user's rulings, 2026-10-18): with Picklocks, a keyed door is
+        // picked first, then bashed where a bash is allowed, and its key is the last
+        // resort. The bash setting doesn't change it.
+        using Harness h = new() { MaxPick = 1 };
         h.Stats.Strength = 100;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 50, canBash: true, keyItemId: 172, "walker", r => result = r);
 
+        Assert.Equal("open w", h.LastSent);
+        h.Line("The door is locked.");
+        Assert.Equal("pick w", h.LastSent);
+        h.Line("Your skill fails you this time.");
         Assert.Equal("bash w", h.LastSent);
-        h.Line("you bashed the door open.");
+        Assert.DoesNotContain(h.AllSent, c => c.StartsWith("use ", StringComparison.Ordinal));
+        h.Line("You bashed the door open.");
         Assert.IsType<DoorOpenResult.Opened>(result);
+    }
+
+    // A keyed door that can't be bashed: the picks, then the key.
+    [Fact]
+    public void KeyedDoor_WithPicklocks_NoBash_PicksThenTheKey()
+    {
+        using Harness h = new() { MaxPick = 1 };
+        h.Stats.Strength = 100;
+        h.Mgr.Enqueue(Direction.W, 50, canBash: false, keyItemId: 172, "walker", _ => { });
+
+        h.Line("The door is locked.");
+        Assert.Equal("pick w", h.LastSent);
+        h.Line("Your skill fails you this time.");
+        Assert.Equal("use black star key w", h.LastSent);
     }
 
     [Fact]
@@ -624,6 +655,7 @@ public sealed class DoorOpenManagerTests
         h.Stats.Picklocks = 100;   // can pick
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.S, 50, canBash: false, keyItemId: 172, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         Assert.Equal("pick s", h.LastSent);
         h.Line("Your lockpicking skill fails you.");
@@ -747,7 +779,7 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 0, true, keyItemId: 0, "walker", r => result = r);
-        Assert.Equal("pick w", h.LastSent);
+        Assert.Equal("open w", h.LastSent);        // opened ahead of the pick
 
         h.Line("The door is already open.");
 
@@ -778,6 +810,7 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.N, 50, canBash: false, keyItemId: 172, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
 
         h.Line("You successfully unlock the door.");      // pick OK
         Assert.Equal("open n", h.LastSent);
@@ -801,7 +834,7 @@ public sealed class DoorOpenManagerTests
 
         resting = false;
         h.Mgr.NotifyRestHoldChanged();
-        Assert.Equal("pick w", h.LastSent);
+        Assert.Equal("open w", h.LastSent);         // the open ahead of the pick waited too
     }
 
     // A door someone else opens while our try is held still completes the request.
@@ -847,12 +880,13 @@ public sealed class DoorOpenManagerTests
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 0, canBash: true, keyItemId: 0, "walker", r => result = r);
+        h.Line("The door is locked.");                    // the open ahead of the pick
         Assert.Equal("pick w", h.LastSent);
 
         h.Line("Your command had no effect.");
 
         Assert.IsType<DoorOpenResult.NotHere>(result);
-        Assert.Single(h.AllSent);
+        Assert.Equal(new[] { "open w", "pick w" }, h.AllSent);
     }
 
     // An open there is told so in its own words.

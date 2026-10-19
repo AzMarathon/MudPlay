@@ -362,8 +362,8 @@ How to keep it current:
 
 ### BlockedExitDescriberTests.cs
 - Covers: Game/Map/BlockedExitDescriber, RoomExit.TryParseWire
-- Checks: blocked-exit text names the direction, the barrier room, the key name or id, and the picklocks/strength needed.
-- Why: a blocked walk must not be confused with the door's far side.
+- Checks: blocked-exit text names the direction, the barrier room, the key name or id (with "or a pick" on a bare `(Key: N)` lock), and the picklocks/strength needed.
+- Why: a blocked walk must not be confused with the door's far side; report `paradigm-20261018-192819` (a bare key lock can be picked).
 
 ### BoatPassageResolverTests.cs
 - Covers: Game/Map/BoatPassageResolver
@@ -553,7 +553,7 @@ How to keep it current:
 
 ### CastWalkTeleportTests.cs
 - Covers: Game/Map/RoomGraphManager, RoomTracker, AutoWalkManager, LoopRunner, MovementFilter (cast-on-walk exits)
-- Checks: exit landings and item gate; landing booking from two or one displays, dark/blind/follower cases; party-split hold and reinvite for walks and loops; an engine step the game never took leaves EngineRecoveryGate's walk-back history.
+- Checks: exit landings and item gate; landing booking from two or one displays, dark/blind/follower cases; party-split hold and reinvite for walks and loops; an engine step the game never took leaves EngineRecoveryGate's walk-back history. A display of the room passed through is not reported as the landing's (`RoomTracker.RoomShown`); the landing's own display is.
 - Why: reports paradigm-20261007-134305 and -134824 (golden idol passage).
 
 ### CasterMessageMatcherLongLineTests.cs
@@ -1041,13 +1041,18 @@ How to keep it current:
 
 ### DoorOpenManagerTests.cs
 - Covers: Game/Map/DoorOpenManager
-- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; keyed-door fallbacks; "no effect"/left-room ends as NotHere; queue order.
-- Why: reports stock-20260730-182812, paradigm-20260924-053941; doors that hung the walker.
+- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; the opening order (a keyless door's preferred verb then the other; a keyed door picked first with Picklocks, then bashed where it can be, then keyed) with the `open` sent ahead of a first pick; "no effect"/left-room ends as NotHere; queue order.
+- Why: reports stock-20260730-182812, paradigm-20260924-053941, paradigm-20261018-192819; doors that hung the walker.
 
 ### DoorPolicyTests.cs
 - Covers: Game/Map/DoorPolicy
 - Checks: IsAchievable and ChooseVerb across stat requirements, the bash ceiling and the pick preference.
 - Why: the walker must not try an impossible verb.
+
+### DoorsHeldOpenTests.cs
+- Covers: Game/Map/DoorsHeldOpen (ForgetOn, ReleaseOn, NoteRoomShown, NoteSeenOpen), with DoorOpenManager.OpenedByUs / SeenOpen, MovementFilter.IsExitHeldOpen / IsExitRefused / BfsMapper, AutoWalkManager's walk-start item announce, RoomTracker.RoomShown through a RoomDisplayParser, MovementRefusalDetector.DoorShutHere / ShutDoorBonked, InGameCapture, ProfileService and RoomGraphManager.GraphReloaded, and the shipped bare-lock seed, on one router fed by a `ServerFeed`; time on a `ManualClock`.
+- Checks: in through the guardroom's key exit with the key's last charge, both sides are held, and a character who can't open the door plans back through it until 60 s before the 300 s are up and not after; the `[or any picklocks]` key exit goes with the window; a bash, and a pick then `open`, hold the far side only when it is a door; our `open` of a door found shut or "not locked" holds it; a display showing it open holds it and each sighting starts the window again; "already open" holds that side alone; a held door into a hazard room whose counter isn't carried stays shut; a held door isn't refused for a pick that had no effect, until its window ends; the walk-start announce asks no key for a held door; nothing is held when the success line comes with the tracker elsewhere or unsure; `just locked!` lets the side go only when confirmed, not mid-move; `You see … close the door …` and a refused move let it go, through the same `DoorsHeldOpen.ReleaseOn` the main window calls; a confirmed display showing it closed lets it go, one showing it open keeps it, and a dropped peek or an unplaced display don't; nor does one showing the door open start a hold; an "any" door or gate is held for good; entering the game, a profile load and a game-data reload forget everything.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (*Stock: when an opened or unlocked door locks again*, and the open/bash mirroring); the user's rulings of 2026-10-18 to build the door-open timer for report `paradigm-20261018-192819` and that a door counts as open from the moment it is witnessed open, for as long as it stays open.
 
 ### DraggedTrackerTests.cs
 - Covers: Game/DraggedTracker
@@ -1714,8 +1719,8 @@ How to keep it current:
 
 ### ItemChargeTrackerTests.cs
 - Covers: Game/Inventory/ItemChargeTracker
-- Checks: Paradigm charge counts read from `look` and saved; recharge after cleanup; auto-look; counting down from use lines; refusals; stacks; dropping the last copy.
-- Why: paradigm-20260926-220239, -20261002-140153, -20260928-053429
+- Checks: Paradigm charge counts read from `look` and saved; recharge after cleanup; auto-look; counting down from use lines; refusals; stacks; dropping the last copy; a look answered `You do not see <item> here!` forgets the count and takes the item off the pack (InventoryManager.NoteNotHeld, fed through a `ServerFeed`).
+- Why: paradigm-20260926-220239, -20261002-140153, -20260928-053429, -20261018-192819
 
 ### ItemDamageModelTests.cs
 - Covers: Game/Inventory/ItemDamageModel, ItemFinderEntry.BuildCatalog
@@ -1821,6 +1826,12 @@ How to keep it current:
 - Covers: Services/JsonStore
 - Checks: round-trip; no temp files left behind; concurrent saves to the same file don't fail.
 - Why: two clients crashing on the same boss-timers.json
+
+### KeyDoorRulesTests.cs
+- Covers: Game/Map/DoorOpenManager, DoorPolicy (Openers, PlannedOpeners, OpeningOrder), BareKeyLockBook, BashTargetWord.NamesSomeoneIn over a real Game/Combat/RoomEntityClassifier, RoomGraphManager.ApplyBareLockKinds, MovementRefusalDetector.ShutDoorBonked with RoomTracker.CardinalInFlight, Services/BareKeyLockStore (the shipped seed, extracted by AppPaths.ExtractEmbeddedSeeds, and a realm's file shared by two clients), Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, ViewModels/GameData/Tables/DoorsSectionViewModel and DoorsRowInfo, with AutoWalkManager and LoopRunner, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
+- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: at 1/1790 with Strength 111, no Picklocks and no key the walker bashes west, and the answer makes it a door on the realm; with no Picklocks a bash goes ahead of a carried key; `You do not have <key>.` takes a held key off the ring and the walk fails naming it. Stock's `You don't have green metal key w.` is read; a "have" line naming another item, a longer key name, or quoted in chat isn't. A key's last-charge line takes the copy used off the ring, only after a key of ours fitted. The shipped seed knows Stock's 21 bare sides (10 bashable); a seeded key exit is never bashed and is keyed; Thrag's door from inside is bashed. A side the seed calls a door is still a try until the realm answers it as one. A try is bashed only with a whole roster that the direction word names nobody in, on a realm with PvP off, and checked again before it goes out (someone who came in during the picks stops it); it is capped at the pick tries, and so is a bare-shaped request whose room isn't confirmed. A bash or a miss counts once per request as a door, `Your command had no effect.` as a key exit, a weapon or skill refusal for nothing, and an answer once the tracker is unsure not at all; one answer never overturns the seed, a second does. A loop at a bare lock it can't try, with no key or Picklocks, goes round it instead of retrying. A refused move into a bare lock is learned by its wording only for our one move in flight (not a drag, not two typed ahead). The realm's record is per realm, kept with its last-answered time; a user's kind beats the seed and answers and is kept; reset to the seed and forget-all reach the file; two clients' changes are both kept, and one client's change reaches the other at its next door request and when its Doors tab is shown; a change made while the lock is held lands with the next write, over what the other client wrote meanwhile. On a PvP realm a side not answered as a door is planned as a key exit (the walk names its key) until it answers as a door. The edit dialog saves the kind chosen, saves nothing when the choice is unchanged, and shows a change to the side while open; "Forget learned…" with nothing learned says so. The Doors tab lists every bare lock with its kind and source, its edits reach the book and the map, and "Forget learned…" asks first. Keyed doors: with Picklocks an `open`, then picks, then the key when no bash; a door only shut opens with no pick; no Picklocks and no bash, the key. A pick answered "no effect" is left out for the session and the route keeps off the door. The route filter: a door or unknown lock passable by bash, a key exit shut without key or a fair pick, the key opening everything; with no stat screen a key exit stays shut.
+- Named seam: `DoorsSectionViewModel.Apply` (the dialog's edit made to a side) is public so the edit can be driven without opening the dialog window.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, target-match, key and relock rules read from Stock's engine; the user's rulings of 2026-10-18 on bashing unknown doors, the seed, the Doors tab and the opener order; the no-trial-on-PvP and two-answer Client policies) and "Refused ("bonked") moves", and "Item charges (`Uses` / `UseCount`)".
 
 ### KeybindEditDialogViewModelTests.cs
 - Covers: ViewModels/Keybind/KeybindEditDialogViewModel
@@ -2467,7 +2478,7 @@ How to keep it current:
 
 ### MovementFilterTests.cs
 - Covers: Services/MovementFilter (+ BfsMapper integration)
-- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
+- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
 - Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354.
 
 ### MovementRefusalDetectorTests.cs
@@ -3321,7 +3332,7 @@ How to keep it current:
 
 ### RoomTooltipBuilderTests.cs
 - Covers: Game/Map/RoomTooltipBuilder
-- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids, level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
+- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids, an "any picklocks" figure and the bare `(Key: N)` lock's alternative by what is known of it, level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
 - Why: Reports `paradigm-20260911-010954`, `paradigm-20261007-194642`; user, 2026-09-30 (pick chance). The map tooltip and the Room Info panel both build from this.
 
 ### RoomTrackerTests.cs
@@ -3377,7 +3388,7 @@ How to keep it current:
 
 ### RouteChoicePlannerTests.cs
 - Covers: Services/RouteChoicePlanner, with Game/Map/BfsMapper, Services/MovementFilter, PathItemShopRouter, LoopExpander, AutoWalkManager (lake crossings)
-- Checks: - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route. Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
+- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route. Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
 - Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10.
 
 ### RouteDetailsColoringTests.cs

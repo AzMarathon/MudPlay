@@ -144,6 +144,26 @@ public readonly partial record struct RoomExit(
     // exit that an action cell happens to name keeps its own rule.
     public bool AcceptsActions => Hint is RoomExitHint.MultiActionHidden or RoomExitHint.Door or RoomExitHint.KeyLocked;
 
+    // A key lock whose cell names no picklocks / strength alternative: `(Key: 475)`.
+    // The game data writes it for a lock modifier of 0 on a door or gate and on a
+    // key exit alike, two exit kinds the cell can't tell apart (GAME_MECHANICS
+    // "Locked doors — picking, opening and bashing"). DoorPolicy.Openers says
+    // what that leaves open.
+    public bool IsBareKeyLock =>
+        Hint == RoomExitHint.KeyLocked && KeyItemId > 0 && StatRequirement <= 0
+        && RawHint?.Contains("picklocks", StringComparison.OrdinalIgnoreCase) != true;
+
+    // On a bare key lock, whether it is known to bash (BareKeyLockBook). Stamped on
+    // by the room map, which knows the side the exit leaves from; Unknown on a
+    // parsed cell and on every other exit.
+    public BareLockBash BareLockBash { get; init; }
+
+    // On a bare key lock, whether this realm's game has answered a bash there as a
+    // door, or the user set it one (BareKeyLockBook.AnsweredAsDoorHere). Stamped
+    // beside BareLockBash. Any other bash there is a try, and no try is made on a PvP
+    // realm, so a route there can count on a bash only at such a side.
+    public bool BareLockAnsweredAsDoor { get; init; }
+
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
 

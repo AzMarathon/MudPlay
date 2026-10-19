@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.3**
+> **Version 3.185.5**
 > - A setting written by name in a hand-edited profile (`"HpThresholdMode": "Absolute"`) now reads, where the automation used to run that whole section on defaults
 > - A MegaMUD-imported profile's Health, Combat, General, Party and Cash settings now reach the automation and the Settings tabs
-> - An @-command or toolbar toggle no longer resets the rest of a section it couldn't read
+> - An @-command, toolbar toggle or profile upgrade never resets a section: one it can't read at all is left as stored, with a warning
 > - A settings section that can't be read is used as its defaults with a Program Log warning, never silently
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

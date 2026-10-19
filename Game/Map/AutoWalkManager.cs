@@ -1692,9 +1692,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // 8/461's south gate must not be sent to fight the obsidian statue for
             // a key they don't need. The planning pass has already released its
             // gate suspension by this point, so the filter reads true here.
+            // A door the client has seen open that can't have locked again needs no key.
             if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0
                 && _doorKeySummonable is { } summonable && summonable(exit.KeyItemId)
                 && Filter?.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.LockedDoor) == true
+                && Filter?.IsExitHeldOpen(cur, in exit) != true
                 && !required.Contains(exit.KeyItemId))
                 required.Add(exit.KeyItemId);
             // The hazard sits on the room being entered, so resolve the hop's
@@ -2789,16 +2791,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
             _awaitingDoorOpen = true;
+            (int doorReq, bool doorBash) = DoorPolicy.Openers(in exit);
             _log?.Info("Walker",
                 $"step {_index + 1}/{_path!.Count}: opening door {step.Direction}"
-                + (exit.StatRequirement > 0
-                    ? $" (req {exit.StatRequirement}, canBash {exit.CanBash})"
-                    : "")
-                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId})" : "")
+                + (doorReq > 0 ? $" (req {doorReq}, canBash {doorBash})" : "")
+                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId}{(exit.IsBareKeyLock ? ", no alternative in the data" : "")})" : "")
                 // A poor-odds lock is only on a plan that found no short way round it.
                 + (Filter?.IsPoorOddsDoor(in exit) == true && Filter.DescribeDoorRefusal(in exit) is { } odds
                     ? $": no way round within {DoorPolicy.PoorPickDetourSteps} extra steps; {odds}" : ""));
-            _doorEnqueuer(step.Direction, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "walker", OnDoorReply);
+            _doorEnqueuer(step.Direction, doorReq, doorBash, exit.KeyItemId, "walker", OnDoorReply);
             return;
         }
 

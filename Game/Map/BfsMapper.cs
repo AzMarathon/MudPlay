@@ -333,7 +333,7 @@ public sealed class BfsMapper
                     if (filter.CrossingTerms(next) is not { Met: true }) continue;
                     if ((filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) != ExitBlockReason.None) continue;
                 }
-                else if (filter.IsExitBlocked(in exit)) continue;
+                else if (filter.IsExitBlocked(in exit) && !filter.IsExitHeldOpen(here, in exit)) continue;
 
                 (int Closed, int Hops) nextCost = (cost.Closed + (closed ? 1 : 0), cost.Hops + 1);
                 if (best.TryGetValue(next, out (int Closed, int Hops) prior) && prior.CompareTo(nextCost) <= 0) continue;
@@ -392,7 +392,7 @@ public sealed class BfsMapper
                 bool closed = filter.IsClosedToRoutes(next);
                 if (closed
                         ? (filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) != ExitBlockReason.None
-                        : filter.IsExitBlocked(in exit))
+                        : filter.IsExitBlocked(in exit) && !filter.IsExitHeldOpen(here, in exit))
                     continue;
 
                 parent[next] = (here, dir);
@@ -495,8 +495,9 @@ public sealed class BfsMapper
                 // Movement restriction on the exit itself (Form-A level
                 // gate) — non-traversable when the player doesn't meet
                 // it, unless the caller is probing with gates ignored.
-                if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
-                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit)) continue;
+                bool heldOpen = filter is not null && filter.IsExitHeldOpen(here, in exit);
+                if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit) && !heldOpen) continue;
+                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit) && !heldOpen) continue;
 
                 // Destination room must still exist in the graph.
                 if (_graph.GetRoom(next) is null) continue;
@@ -611,9 +612,10 @@ public sealed class BfsMapper
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (filter is not null && filter.IsExitRefused(here, in exit)) continue;
                 if (filter is not null && filter.IsAvoided(next)) continue;
-                if (filter is not null && filter.IsExitBlocked(exit)) continue;
+                bool heldOpen = filter is not null && filter.IsExitHeldOpen(here, in exit);
+                if (filter is not null && filter.IsExitBlocked(exit) && !heldOpen) continue;
                 if (_graph.GetRoom(next) is null) continue;
-                if (filter is not null && filter.IsPoorOddsDoor(in exit))
+                if (filter is not null && filter.IsPoorOddsDoor(in exit) && !heldOpen)
                 {
                     if (roundPoorOddsDoors) continue;
                     usedPoorOddsDoor = true;
@@ -854,8 +856,9 @@ public sealed class BfsMapper
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
                 if (filter is not null && filter.IsExitRefused(here, in exit)) continue;
                 if (!ignoreAvoids && filter is not null && filter.IsAvoided(next)) continue;
-                if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
-                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit)) continue;
+                bool heldOpen = filter is not null && filter.IsExitHeldOpen(here, in exit);
+                if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit) && !heldOpen) continue;
+                if (roundPoorOddsDoors && filter is not null && filter.IsPoorOddsDoor(in exit) && !heldOpen) continue;
                 if (_graph.GetRoom(next) is null) continue;
 
                 (int Traps, int Hops) nextCost =

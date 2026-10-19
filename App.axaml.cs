@@ -120,6 +120,9 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.AliasEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.AliasEditDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.Edit.DoorEditDialogViewModel,
+                MudPlay.Views.GameData.Edit.DoorEditDialog>();
 
             // Bosses tab dialogs — the mark-timer picker and the boss-list editor.
             AppServices.Current.Dialogs.RegisterWindow<

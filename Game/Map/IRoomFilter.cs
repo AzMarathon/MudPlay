@@ -59,6 +59,12 @@ public interface IRoomFilter
     // leaves from, which is why this takes the room.
     bool IsExitRefused(RoomKey from, in RoomExit exit) => false;
 
+    // A door out of `from` the client has seen open and that hasn't had time to lock
+    // again (DoorsHeldOpen): passable whatever its own lock would ask, as long as
+    // nothing else about the exit blocks it. Takes the room for the reason
+    // IsExitRefused does. Default never.
+    bool IsExitHeldOpen(RoomKey from, in RoomExit exit) => false;
+
     // A door the crosser can open only by picking it, at a poor chance per try
     // (DoorPolicy.IsPoorOddsPick). Not a gate: the search goes round it when a short
     // way round exists and through it otherwise. Default never; only the stat-aware

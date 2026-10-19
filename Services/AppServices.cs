@@ -1350,7 +1350,13 @@ public sealed class AppServices
     public Game.Cash.StashLedger StashBalances { get; } = new();
     // Persists StashBalances in the active realm's folder, shared by its characters.
     public StashBalanceStore StashStore { get; private set; } = null!;
-
+    // Which bare `(Key: N)` locks bash (the seed and the realm's record), and its files.
+    // Set in the constructor's wiring before the first profile loads.
+    public Game.Map.BareKeyLockBook BareKeyLocks { get; private set; } = null!;
+    public BareKeyLockStore BareKeyLockStore { get; private set; } = null!;
+    // The door sides the client has seen open that can't have locked again yet. Set
+    // beside it.
+    public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
 
@@ -6625,6 +6631,43 @@ public sealed class AppServices
         // Fill in charges for any carried charged item we don't know yet, whenever the
         // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
         Inventory.Changed += () => ItemCharges.EnsureChargesKnown();
+
+        // An item the game shows gone comes off what is held at once, ahead of the next
+        // `i`: a key the door handler found missing or used up, an item a charge look
+        // found nowhere. Routing and the door handler read the held list.
+        ItemCharges.NotHeld += Inventory.NoteNotHeld;
+        Door.SetKeyLossSink(Inventory.NoteItemGone);
+
+        // Which bare `(Key: N)` locks bash: the shipped seed, then what the game has
+        // answered on this realm. The map is stamped with it for the route planner,
+        // and the door handler reads it at the door (report paradigm-20261018-192819).
+        BareKeyLocks = new Game.Map.BareKeyLockBook((room, dir) =>
+            RoomGraph.GetRoom(room) is { } r && r.Exits.TryGetValue(dir, out Game.Map.RoomExit exit) ? exit : null, Log);
+        BareKeyLockStore = new BareKeyLockStore(BareKeyLocks, Log);
+        BareKeyLockStore.LoadSeed(AppPaths.DefaultBareKeyLocksSeedFile);
+        RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
+        BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
+        Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
+        Movement.BareLockTrialsAllowedProbe = () => ResolveActiveRealm()?.Realm.PvpEnabled != true;
+        Door.SetBareLockBook(BareKeyLocks,
+            word => Game.Map.BashTargetWord.NamesSomeoneIn(RoomClassifier, word),
+            pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);
+        Movement.UnpickableDoorProbe = Door.IsUnpickable;
+        Profile.ProfileLoaded += _ => Door.ForgetSession();
+
+        // The doors the client has seen open and that can't have locked again yet: a
+        // route back through one needs no key (user, 2026-10-18). Forgotten on a relog,
+        // a change of character or realm, and a change of game data.
+        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow, Log);
+        Door.OpenedByUs += DoorsHeldOpen.NoteOpened;
+        Door.SeenOpen += DoorsHeldOpen.NoteSeenOpen;
+        Movement.HeldOpenProbe = DoorsHeldOpen.IsHeldOpen;
+        Movement.HeldOpenVersionProvider = () => DoorsHeldOpen.Version;
+        DoorsHeldOpen.ForgetOn(InGameCapture, Profile, RoomGraph);
+        RoomTracker.RoomShown += DoorsHeldOpen.NoteRoomShown;
+        Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
+        Profile.ProfileClosed += () => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
 
         // @uses [item] — remaining charges of a carried limited-use item; bare lists all.
         ItemUsesQuery = new Game.Remote.ItemUsesQueryHandler(RemoteCommands, CarriedCharges);

@@ -617,7 +617,8 @@ public static class KnownPatterns
     public const string DoorAlreadyOpen       = "door.opened.already";     // "is already open"
     public const string DoorIsLocked          = "door.islocked";           // "is locked" (open hit a keyed door)
     public const string DoorKeyUnlockSuccess  = "door.key.unlocked";       // "successfully unlocked" (after use <key> <dir>)
-    public const string DoorKeyUnknown        = "door.key.unknown";        // "have no <item>" / "you don't have" (use <key> failed)
+    public const string DoorKeyUnknown        = "door.key.unknown";        // "have no <item>" / "you don't have" / "you do not have" (use <key> failed)
+    public const string DoorKeyUsedUp         = "door.key.usedup";         // "The key breaks and crumbles apart." / "It's uses gone, <item> disappears…"
 
     // ----- Winch (gate-controlling) — drives WinchManager ----------------
     // A `pull winch` prerequisite that opens a gate a beat later. Success winds the
