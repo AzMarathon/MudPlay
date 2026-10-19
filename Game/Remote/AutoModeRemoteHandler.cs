@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
@@ -148,7 +147,11 @@ public sealed class AutoModeRemoteHandler : IDisposable
         if (current != wanted)
         {
             set(general.AutoMode, wanted);
-            WriteGeneral(profile, general);
+            if (!WriteGeneral(profile, general))
+            {
+                ctx.Refuse(SettingsUnreadable);
+                return;
+            }
             _log?.Log(LogSeverity.Info, LogCategory,
                 $"{cmd} from {ctx.Sender}: {(current ? "on" : "off")} -> {(wanted ? "on" : "off")}");
         }
@@ -376,19 +379,17 @@ public sealed class AutoModeRemoteHandler : IDisposable
         return false;
     }
 
-    private static GeneralSettings ReadGeneral(CharacterProfile profile)
+    private static GeneralSettings ReadGeneral(CharacterProfile profile) => SettingsSection.Read<GeneralSettings>(profile, TabKey);
+
+    // False when the stored section can't be read and so was left as it is: nothing
+    // changed, and the engines still run on its defaults.
+    private bool WriteGeneral(CharacterProfile profile, GeneralSettings general)
     {
-        if (profile.Settings is null) return new GeneralSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new GeneralSettings();
-        try { return JsonSerializer.Deserialize<GeneralSettings>(json.GetRawText()) ?? new GeneralSettings(); }
-        catch { return new GeneralSettings(); }
+        if (!SettingsSection.Write(profile, TabKey, general, "a remote auto-mode command")) return false;
+        _profile.Save();
+        return true;
     }
 
-    private void WriteGeneral(CharacterProfile profile, GeneralSettings general)
-    {
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(general);
-        _profile.Save();
-    }
+    // The refusal when the change can't be stored (WriteGeneral false).
+    private const string SettingsUnreadable = "my General settings can't be read; change it in Settings";
 }

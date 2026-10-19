@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.Profile;
@@ -216,10 +215,10 @@ public sealed class CombatProfileStagingSession : IDisposable
 
         profile.Settings ??= new();
         if (BuildFullCombat is { } build)
-            profile.Settings["Combat"] = JsonSerializer.SerializeToElement(build());
+            profile.Settings["Combat"] = SettingsSection.ToElement(build());
         if (BuildFullSpells is { } buildSpells)
-            profile.Settings["Spells"] = JsonSerializer.SerializeToElement(buildSpells());
-        profile.Settings["Health"] = JsonSerializer.SerializeToElement(Active.Health.Clone());
+            profile.Settings["Spells"] = SettingsSection.ToElement(buildSpells());
+        profile.Settings["Health"] = SettingsSection.ToElement(Active.Health.Clone());
         // Carry the stored schema version: a blob written back at version 0 re-runs the
         // one-time back-fills on the next load, overwriting every profile's own values
         // with the active one's.

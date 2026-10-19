@@ -406,20 +406,8 @@ public sealed class AutoTrainManager : IDisposable
 
     // The character's live AutoTrainer settings (the "AutoTrainer" profile section), or
     // defaults when unset / malformed. Mirrors TrainerWalkManager.ReadSettings.
-    private AutoTrainerSettings ReadAutoTrainerSettings()
-    {
-        if (_profile.Current?.Settings is { } settings
-            && settings.TryGetValue("AutoTrainer", out System.Text.Json.JsonElement json))
-        {
-            try
-            {
-                return System.Text.Json.JsonSerializer.Deserialize<AutoTrainerSettings>(json)
-                    ?? new AutoTrainerSettings();
-            }
-            catch { /* malformed settings → defaults */ }
-        }
-        return new AutoTrainerSettings();
-    }
+    private AutoTrainerSettings ReadAutoTrainerSettings() =>
+        SettingsSection.Read<AutoTrainerSettings>(_profile.Current, "AutoTrainer");
 
     private void StartReplay()
     {

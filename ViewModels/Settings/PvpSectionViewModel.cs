@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.GameData;
@@ -170,7 +169,7 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         ClearDirty();
     }
@@ -276,21 +275,7 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         return text;
     }
 
-    private PvpSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new PvpSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new PvpSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<PvpSettings>(json) ?? new PvpSettings();
-        }
-        catch
-        {
-            // Malformed section — fall back to defaults rather than throwing.
-            return new PvpSettings();
-        }
-    }
+    private PvpSettings ReadOrDefault() => SettingsSection.Read<PvpSettings>(_profile.Current, TabKey);
 
     private void ClearDirty()
     {

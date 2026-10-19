@@ -90,17 +90,17 @@ public sealed class SettingsResolver
         Overlay(merged, _activeBbs?.Settings,        tabName);
         Overlay(merged, _profile.Current?.Settings,  tabName);
 
-        return merged.Deserialize<T>(JsonStore.Options)
-            ?? throw new InvalidOperationException(
-                $"Resolve<{typeof(T).Name}>('{tabName}') produced a null deserialization result.");
+        return SettingsSection.Read<T>(merged, tabName);
     }
 
     // Write value into tier's file as the delta for tabName, then persist the
-    // tier file to disk. SettingsTier.Defaults is read-only and throws.
-    public void WriteAt<T>(SettingsTier tier, string tabName, T value) where T : class
+    // tier file to disk. SettingsTier.Defaults is read-only and throws. A character
+    // section that can't be read is left as stored (SettingsSection.Write): the value
+    // was resolved without it. False then, with nothing written.
+    public bool WriteAt<T>(SettingsTier tier, string tabName, T value) where T : class, new()
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
-        JsonElement asJson = JsonSerializer.SerializeToElement(value, JsonStore.Options);
+        JsonElement asJson = SettingsSection.ToElement(value);
 
         switch (tier)
         {
@@ -122,13 +122,13 @@ public sealed class SettingsResolver
 
             case SettingsTier.Character:
                 CharacterProfile chr = RequireLoadedProfile();
-                chr.Settings ??= new();
-                chr.Settings[tabName] = asJson;
+                if (!SettingsSection.Write(chr, tabName, value, $"a {tabName} edit")) return false;
                 _profile.Save();
                 break;
         }
 
         Log?.Info("Settings", $"write: '{tabName}' → {tier} tier");
+        return true;
     }
 
     // ----- Game-data record overrides (per-set side-files) ---------------

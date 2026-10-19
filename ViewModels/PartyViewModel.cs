@@ -1,7 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -154,15 +153,7 @@ public sealed partial class PartyViewModel : ObservableObject, IDisposable
 
     private void RefreshFromPartySettings() => LocalRank = ReadPartySettings().Rank;
 
-    private PartySettings ReadPartySettings()
-    {
-        if (_profile?.Current is not { } profile
-            || profile.Settings is null
-            || !profile.Settings.TryGetValue("Party", out JsonElement json))
-            return new PartySettings();
-        try { return JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings(); }
-        catch { return new PartySettings(); }
-    }
+    private PartySettings ReadPartySettings() => SettingsSection.Read<PartySettings>(_profile?.Current, "Party");
 
     // Per-row Uninvite. Sends uninvite X on the wire when the local character
     // is the party leader — covers BOTH the withdraw-pending-invite path

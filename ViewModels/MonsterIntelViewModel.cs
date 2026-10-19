@@ -860,6 +860,12 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (SelectedEntry is not null) RebuildDetail();
     }
 
+    // Store this window's picks on the character tier. When they can't be stored
+    // (the Other section can't be read; SettingsSection.Write warns) they stay as
+    // picked for the session: they are this window's own view, and nothing else
+    // reads them.
+    private void SaveOther(OtherSettings dto) => _ = _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+
     // Char-tier resolve-then-write, mirroring OnRoundsToKillCapChanged — never a
     // bare new OtherSettings, so this doesn't clobber the tab's other fields.
     private void SaveAttackSettings()
@@ -868,7 +874,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.MonsterIntelHiddenAttacks = _hiddenAttackKeys.OrderBy(k => k, System.StringComparer.Ordinal).ToList();
         dto.MonsterIntelRoundsAttack = _roundsAttackKey;
-        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+        SaveOther(dto);
     }
 
     // ----- Apply Debuffs picker -----
@@ -927,7 +933,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.MonsterIntelAppliedDebuffs =
             _appliedDebuffKeys.OrderBy(k => k, System.StringComparer.OrdinalIgnoreCase).ToList();
-        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+        SaveOther(dto);
     }
 
     // Short "what it strips" label for one debuff spell's picker row.
@@ -1007,7 +1013,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.MonsterIntelAppliedBuffs =
             _appliedBuffKeys.OrderBy(k => k, System.StringComparer.OrdinalIgnoreCase).ToList();
-        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+        SaveOther(dto);
     }
 
     // low / high: the buff at the bottom and the top of its roll. A value the cast
@@ -1103,7 +1109,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (_suppressCapPersist || !_hasCharacterContext) return;
         OtherSettings dto = _resolver.Resolve<OtherSettings>("Other");
         dto.RoundsToKillCap = value;
-        _resolver.WriteAt(SettingsTier.Character, "Other", dto);
+        SaveOther(dto);
         RowsView.Refresh();
         RaiseCountChanged();
     }

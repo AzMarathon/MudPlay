@@ -53,7 +53,7 @@ public sealed class StatusBarViewModel : IDisposable
     {
         ArgumentNullException.ThrowIfNull(settings);
         // Every global-settings save lands here; only a changed layout rebuilds.
-        string layout = JsonSerializer.Serialize(settings);
+        string layout = SettingsSection.ToElement(settings).GetRawText();
         if (layout == _applied) return false;
         _applied = layout;
 

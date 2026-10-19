@@ -1,7 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -491,7 +490,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
 
         ApplyToServices(dto);
@@ -574,20 +573,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
         return map.Count == 0 ? null : map;
     }
 
-    private TalkSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new TalkSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new TalkSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<TalkSettings>(json) ?? new TalkSettings();
-        }
-        catch
-        {
-            return new TalkSettings();
-        }
-    }
+    private TalkSettings ReadOrDefault() => SettingsSection.Read<TalkSettings>(_profile.Current, TabKey);
 
     private static void ApplyToServices(TalkSettings dto)
     {

@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -101,7 +100,11 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             _ => TargetPriority.Default,
         };
         dto.TargetPriorityMemberName = opt.NeedsName ? name : null;
-        WriteCombat(profile, dto);
+        if (!WriteCombat(profile, dto))
+        {
+            ctx.Refuse(SettingsUnreadable);
+            return;
+        }
         _log?.Log(LogSeverity.Info, LogCategory,
             $"@atkprio from {ctx.Sender}: {opt.Num} {opt.Label}{NameSuffix(name)}");
         ctx.Reply(SetReply("@atkprio", opt, name));
@@ -136,7 +139,11 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             _ => AttackTiming.Default,
         };
         dto.AttackAfterPlayerName = opt.NeedsName ? name : null;
-        WriteCombat(profile, dto);
+        if (!WriteCombat(profile, dto))
+        {
+            ctx.Refuse(SettingsUnreadable);
+            return;
+        }
         _log?.Log(LogSeverity.Info, LogCategory,
             $"@atkorder from {ctx.Sender}: {opt.Num} {opt.Label}{NameSuffix(name)}");
         ctx.Reply(SetReply("@atkorder", opt, name));
@@ -216,18 +223,17 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
 
     // ----- Profile I/O ----------------------------------------------------
 
-    private CombatSettings ReadCombat()
+    private CombatSettings ReadCombat() => SettingsSection.Read<CombatSettings>(_profile.Current, TabKey);
+
+    // False when the stored section can't be read and so was left as it is: nothing
+    // changed, and the engines still run on its defaults.
+    private bool WriteCombat(CharacterProfile profile, CombatSettings dto)
     {
-        if (_profile.Current is not { Settings: { } settings }) return new CombatSettings();
-        if (!settings.TryGetValue(TabKey, out JsonElement json)) return new CombatSettings();
-        try { return JsonSerializer.Deserialize<CombatSettings>(json.GetRawText()) ?? new CombatSettings(); }
-        catch { return new CombatSettings(); }
+        if (!SettingsSection.Write(profile, TabKey, dto, "a remote attack-targeting command")) return false;
+        _profile.Save();
+        return true;
     }
 
-    private void WriteCombat(CharacterProfile profile, CombatSettings dto)
-    {
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
-        _profile.Save();
-    }
+    // The refusal when the change can't be stored (WriteCombat false).
+    private const string SettingsUnreadable = "my Combat settings can't be read; change it in Settings";
 }

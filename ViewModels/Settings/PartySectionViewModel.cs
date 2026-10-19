@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.Profile;
@@ -314,7 +313,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         PartySettings dto = BuildDto();
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         _profile.NotifyMutated();
 
@@ -389,21 +388,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     private static string? NullIfBlank(string? s) =>
         string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
-    private PartySettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new PartySettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new PartySettings();
-        try
-        {
-            return JsonSerializer.Deserialize<PartySettings>(json) ?? new PartySettings();
-        }
-        catch
-        {
-            // Malformed delta — fall back to defaults rather than throwing.
-            return new PartySettings();
-        }
-    }
+    private PartySettings ReadOrDefault() => SettingsSection.Read<PartySettings>(_profile.Current, TabKey);
 
     private static void ApplyToServices(PartySettings dto)
     {

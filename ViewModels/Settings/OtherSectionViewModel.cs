@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -276,7 +275,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
 
         // PlayerCleanupDays + the two solver toggles live at Global tier (one
@@ -358,20 +357,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         ApplyToServices(dto);
     }
 
-    private OtherSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new OtherSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new OtherSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<OtherSettings>(json) ?? new OtherSettings();
-        }
-        catch
-        {
-            return new OtherSettings();
-        }
-    }
+    private OtherSettings ReadOrDefault() => SettingsSection.Read<OtherSettings>(_profile.Current, TabKey);
 
     private static void ApplyToServices(OtherSettings dto)
     {

@@ -212,20 +212,8 @@ public partial class MainWindowViewModel : ObservableObject
     // reference links even before the user touches the editor.
     private void RefreshHelpLinks()
     {
-        HelpWebsitesSettings dto = new();
-        if (AppServices.Current.Settings.Current.Settings is { } bucket
-            && bucket.TryGetValue("HelpWebsites", out System.Text.Json.JsonElement json))
-        {
-            try
-            {
-                dto = System.Text.Json.JsonSerializer.Deserialize<HelpWebsitesSettings>(json.GetRawText())
-                      ?? new HelpWebsitesSettings();
-            }
-            catch
-            {
-                dto = new HelpWebsitesSettings();
-            }
-        }
+        HelpWebsitesSettings dto =
+            SettingsSection.Read<HelpWebsitesSettings>(AppServices.Current.Settings.Current, "HelpWebsites");
 
         HelpLinks.Clear();
         foreach (HelpWebsite link in dto.Links)
@@ -6840,8 +6828,7 @@ public partial class MainWindowViewModel : ObservableObject
             if (!trainer.AutoTrain)
             {
                 trainer.AutoTrain = true;
-                profile.Settings["AutoTrainer"] =
-                    System.Text.Json.JsonSerializer.SerializeToElement(trainer);
+                SettingsSection.Write(profile, "AutoTrainer", trainer, "re-enabling auto-train on reconnect");
             }
         }
 
@@ -7247,8 +7234,12 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto.AutoMode);
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle"))
+        {
+            // The button has already flipped: show what is really in effect.
+            SyncAutoEngineTogglesFromProfile();
+            return;
+        }
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("AutoMode", $"User turned {flag} {(value ? "on" : "off")}.");
     }
@@ -7265,8 +7256,12 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto);
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle"))
+        {
+            // The button has already flipped: show what is really in effect.
+            SyncAutoEngineTogglesFromProfile();
+            return;
+        }
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("General", $"User turned {flag} {(value ? "on" : "off")}.");
     }
@@ -7309,42 +7304,12 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     private static Models.Profile.AutoTrainerSettings ReadAutoTrainerFromProfile(
-        Models.Profile.CharacterProfile profile)
-    {
-        if (profile.Settings is null) return new Models.Profile.AutoTrainerSettings();
-        if (!profile.Settings.TryGetValue("AutoTrainer", out System.Text.Json.JsonElement json))
-            return new Models.Profile.AutoTrainerSettings();
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<Models.Profile.AutoTrainerSettings>(
-                       json.GetRawText())
-                   ?? new Models.Profile.AutoTrainerSettings();
-        }
-        catch
-        {
-            // Malformed AutoTrainer JSON → treat as unset rather than crash the
-            // reseed; the settings tab rewrites it cleanly on next Save.
-            return new Models.Profile.AutoTrainerSettings();
-        }
-    }
+        Models.Profile.CharacterProfile profile) =>
+        SettingsSection.Read<Models.Profile.AutoTrainerSettings>(profile, "AutoTrainer");
 
     private static Models.Profile.GeneralSettings ReadGeneralFromProfile(
-        Models.Profile.CharacterProfile profile)
-    {
-        if (profile.Settings is null) return new Models.Profile.GeneralSettings();
-        if (!profile.Settings.TryGetValue("General", out System.Text.Json.JsonElement json))
-            return new Models.Profile.GeneralSettings();
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<Models.Profile.GeneralSettings>(
-                       json.GetRawText())
-                   ?? new Models.Profile.GeneralSettings();
-        }
-        catch
-        {
-            return new Models.Profile.GeneralSettings();
-        }
-    }
+        Models.Profile.CharacterProfile profile) =>
+        SettingsSection.Read<Models.Profile.GeneralSettings>(profile, "General");
 
     // Open InfoDialogs are tracked per title so a menu / hotkey re-press reuses the existing one.
     private readonly Dictionary<string, InfoDialog> _infoDialogs = new(StringComparer.Ordinal);
