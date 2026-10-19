@@ -75,6 +75,8 @@ public static class BugReportContext
 
         Part(sb, () => LogFiles(sb, svc));
         Part(sb, () => Kv(sb, "Open windows", OpenWindows()));
+        Part(sb, () => Kv(sb, $"Freezes this session (UI thread silent {HangReport.Seconds(PerformanceMonitor.HangAfter)} or more)",
+            svc.Performance.FreezesThisSession));
         Part(sb, () => GameData(sb, svc));
         Part(sb, () => OtherSettings(sb, svc));
         return sb.ToString();

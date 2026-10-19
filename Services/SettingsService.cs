@@ -37,6 +37,7 @@ public sealed class SettingsService
     // read it, what this client changed is applied on top of theirs.
     public void Save()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("global settings save");
         System.Text.Json.Nodes.JsonNode? mine = AsNode(_current);
         if (_stamp.ChangedOutside(AppPaths.GlobalSettingsFile) && ReadFile() is { } theirs)
         {

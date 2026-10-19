@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using MudPlay.Services;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -30,6 +31,7 @@ public sealed class LazyWorkshopSection : WorkshopSectionViewModel
         get
         {
             if (_section is not null) return _section;
+            using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("build Workshop tab", Id);
             _section = _create();
             _section.LayoutChanged += OnSectionLayoutChanged;
             return _section;

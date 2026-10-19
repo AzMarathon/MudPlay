@@ -617,6 +617,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private void OnStatsChanged(object? sender, PropertyChangedEventArgs e)
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("CP Allocation refresh on a stat change");
         RefreshBaseline();
         ReconcileTrainedRows();
     }
