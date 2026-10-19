@@ -173,13 +173,13 @@ public sealed class AutoTrainManager : IDisposable
     // rests on the last `stat`, and the paths that act on this read a fresh one first.
     public bool CanTrainNow => CurrentRow(out CharacterPlanContext ctx) is { } row && HasWork(ctx, row);
 
-    // Why the current level's plan row can't be applied as things stood at the
-    // last `stat`, or null. Stock refuses `train stats` while a stat is altered.
+    // Why the plan row due at the current level can't be applied as things stood
+    // at the last `stat`, or null. Stock refuses `train stats` while a stat is altered.
     public string? HoldReason =>
         CurrentRow(out CharacterPlanContext ctx) is { } row && HasWork(ctx, row) ? StatsAlteredHold(ctx) : null;
 
-    // Begin a pass for the current level's plan, on the word of the `stat` screen
-    // just read: the caller stands at the trainer and has refreshed it. No-op when
+    // Begin a pass for the plan row due at the current level, on the word of the
+    // `stat` screen just read: the caller stands at the trainer and has refreshed it. No-op when
     // already busy, no wire is bound, there's nothing to raise, or the row is held.
     // Drives the screen asynchronously; subscribe to StateChanged for progress.
     public void TrainNow()
@@ -422,12 +422,12 @@ public sealed class AutoTrainManager : IDisposable
             _phase = Phase.Idle;
             if (_formBefore is { } form && CpApplyCheck.FromForm(form, form, _rowTargets) == CpApplyOutcome.Applied)
             {
-                _log?.Info("AutoTrain", "The trainer screen shows this level's plan already trained.");
+                _log?.Info("AutoTrain", "The trainer screen shows the plan row already trained.");
                 Conclude(CpApplyOutcome.Applied);
             }
             else
             {
-                LastApplyNote ??= "the trainer screen shows nothing this level's plan can raise";
+                LastApplyNote ??= "the trainer screen shows nothing the plan row can raise";
                 _log?.Info("AutoTrain", $"Auto-train stats — {LastApplyNote}; the form is yours.");
                 ManualApplyLevel = null;
             }
@@ -688,7 +688,7 @@ public sealed class AutoTrainManager : IDisposable
         else
         {
             LastApplyNote ??= outcome == CpApplyOutcome.Partial
-                ? "only part of this level's plan was spent"
+                ? "only part of the plan row was spent"
                 : "no CP was spent";
             _log?.Info("AutoTrain", $"CP plan not applied — {LastApplyNote}. Plan row kept.");
         }

@@ -176,10 +176,11 @@ public sealed partial class PartyInventoryProbe : IDisposable
         {
             // A member still owed an answer whose reply isn't read is counted as
             // holding none, so name the line: an unread reply shape looks just
-            // like a member who never answered.
+            // like a member who never answered. Quoted in the game's own
+            // `X telepaths: …` shape, which the bug report's chat censor masks.
             if (_pending.Any(p => !p.Completed && p.Remaining.Contains(given)))
                 _log?.Info("PartyInventory",
-                    $"{given} telepathed '{entry.Message}' while an @have count waits on them — not read as a count.");
+                    $"An @have count waits on {given}, and this answer is not read as a count: {entry.Speaker} telepaths: {entry.Message}");
             return;
         }
 
@@ -244,19 +245,19 @@ public sealed partial class PartyInventoryProbe : IDisposable
         message = message.Trim();
         if (message.Length >= 2 && message[0] == '{' && message[^1] == '}') message = message[1..^1].Trim();
 
+        // A count too big for an int is unread, not thrown: a throw here would
+        // cancel every handler still due on the line.
         Match countOnly = HaveCountOnlyReply().Match(message);
         if (countOnly.Success)
         {
-            count = int.Parse(countOnly.Groups[1].Value, CultureInfo.InvariantCulture);
             query = null;
-            return true;
+            return TryCount(countOnly.Groups[1].Value, out count);
         }
         Match yes = HaveYesReply().Match(message);
         if (yes.Success)
         {
-            count = int.Parse(yes.Groups[1].Value, CultureInfo.InvariantCulture);
             query = yes.Groups[2].Value;
-            return true;
+            return TryCount(yes.Groups[1].Value, out count);
         }
         Match no = HaveNoReply().Match(message);
         if (no.Success)
@@ -269,6 +270,9 @@ public sealed partial class PartyInventoryProbe : IDisposable
         query = string.Empty;
         return false;
     }
+
+    private static bool TryCount(string digits, out int count) =>
+        int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out count);
 
     private static string Normalize(string s) =>
         string.Join(' ', s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

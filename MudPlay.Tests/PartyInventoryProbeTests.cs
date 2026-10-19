@@ -26,6 +26,7 @@ public sealed class PartyInventoryProbeTests
         public readonly List<byte[]> Wire = new();
         public readonly List<Action> Windows = new();
         public readonly PartyInventoryProbe Probe;
+        public readonly LogService Log = new();
 
         public Harness()
         {
@@ -34,7 +35,7 @@ public sealed class PartyInventoryProbeTests
             Chat = new ChatRouter(Router);
             Broadcaster = new PartyBroadcaster(State);
             Broadcaster.SetWireSender(Wire.Add);
-            Probe = new PartyInventoryProbe(Broadcaster, Chat, State, armWindow: Windows.Add, log: null);
+            Probe = new PartyInventoryProbe(Broadcaster, Chat, State, armWindow: Windows.Add, log: Log);
         }
 
         public void AddMember(string name, bool self = false, bool invited = false)
@@ -229,6 +230,47 @@ public sealed class PartyInventoryProbeTests
 
         Assert.Empty(forwarded);                      // three passes for three: none to buy
         Assert.Empty(gateWire);                       // and nobody short to hand one to
+    }
+
+    // A member's answer the probe can't read is quoted in the program log, and a
+    // bug report must mask chat there like anywhere else: the line is written in
+    // the `X telepaths: …` shape the censor knows.
+    [Fact]
+    public void AnUnreadAnswer_IsLogged_AndCensoredInTheBugReport()
+    {
+        var h = new Harness();
+        h.AddMember("Boost Pressure");
+        h.GoInParty();
+
+        _ = h.Probe.QueryAsync(942, "mine pass");
+        h.Reply("Boost", "{you flibber}");
+
+        BugReportBuilder.Section section =
+            BugReportLogSections.ProgramLog(h.Log, StandInCensor.Of("flibber"));
+        string logged = Assert.Single(section.Entries!, e => e.Contains("telepaths:"));
+        Assert.Contains("[censored]", logged);
+        Assert.DoesNotContain("flibber", logged);
+    }
+
+    // A count too big for an int used to throw out of the chat handler and cancel
+    // the rest of the line's handlers. It is unread instead: logged, not counted.
+    [Theory]
+    [InlineData("{yes: 99999999999}")]
+    [InlineData("{yes - 99999999999x 'rope'}")]
+    public async Task ACountTooBigToRead_IsLoggedAndNotCounted(string reply)
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", reply);
+        h.FireWindows();
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, r.Replied);
+        Assert.Equal(new[] { "Bob" }, r.Unanswered);
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains("not read as a count"));
     }
 
     // The members who were asked and didn't answer are named, so the route card

@@ -1173,7 +1173,7 @@ How to keep it current:
 
 ### ErrandLightWorld.cs
 - Covers: test infrastructure (the shared world for every errand's light stop)
-- Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them.
+- Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them; a Half-Orc race row; NewTrainer's `stat` parser reading the server rows and its sends (trainer and CP pass) seen by the parser and trainer-screen tracker and recorded in TrainerSent.
 - Why: every errand's test drives the same real planning and buying paths.
 
 ### EventEditDialogViewModelTests.cs
@@ -2698,7 +2698,7 @@ How to keep it current:
 
 ### PartyInventoryProbeTests.cs
 - Covers: Game/Remote/PartyInventoryProbe (+ PartyPathItemGate)
-- Checks: @have broadcast; reply parsing including brace-wrapped and count-only (with or without MegaMUD's full stop); window; unanswered members; invitees. Two members' `{Yes: 1.}` answers, fed as the game sent them, leave nothing to buy.
+- Checks: @have broadcast; reply parsing including brace-wrapped and count-only (with or without MegaMUD's full stop); window; unanswered members; invitees. Two members' `{Yes: 1.}` answers, fed as the game sent them, leave nothing to buy. An answer it can't read, or a count too big for an int, is logged and not counted, and the log line is masked by the bug report's chat censor.
 - Why: Party path-item counts; report `paradigm-20261019-041600` (two mine passes bought that the party held).
 
 ### PartyLevelBoundsTests.cs
@@ -4145,6 +4145,11 @@ How to keep it current:
 - Covers: Game/TrainerScreenGate, Services/EngineSendGate
 - Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume, holds compose with others, Dispose releases.
 - Why: background sends leaking into the `train stats` form.
+
+### TrainerWalkCpPlanTests.cs
+- Covers: Game/TrainerWalkManager (with AutoTrainManager, StatParser, on the ErrandLightWorld stack)
+- Checks: a TrainInPlace run that trains past the CP plan's last row opens `train stats` after its confirming `stat`.
+- Why: report `paradigm-20261018-221236` (only an exact-level row counted, so a plan ending at 35 was never applied at 39).
 
 ### TrainerWalkLightStopTests.cs
 - Covers: Game/Light/ErrandLightStop on the training walk (Game/TrainerWalkManager), driven through TrainNow on ErrandLightWorld

@@ -65,6 +65,12 @@ internal sealed class ErrandLightWorld : IDisposable
             "ClassRest": 0, "Markup%": 0, "Assigned To": "Room 1/3" } ]
         """;
 
+    // The race a `stat` screen names, so a CP plan has race bounds to work in.
+    private const string Races = """
+        [ { "Name": "Half-Orc", "mSTR": 55, "xSTR": 160, "mINT": 30, "xINT": 130, "mWIL": 30, "xWIL": 135,
+            "mAGL": 45, "xAGL": 145, "mHEA": 55, "xHEA": 165, "mCHM": 30, "xCHM": 120 } ]
+        """;
+
     private readonly string _root;
     private readonly ServerFeed _server;
     private readonly List<IDisposable> _dispose = new();
@@ -116,6 +122,7 @@ internal sealed class ErrandLightWorld : IDisposable
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
         File.WriteAllText(Path.Combine(_root, "alpha", "Shops.json"), shops ?? Shops);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), "[]");
+        File.WriteAllText(Path.Combine(_root, "alpha", "Races.json"), Races);
 
         Cache = new GameDataCache(_root);
         Cache.SwitchSet("alpha");
@@ -190,18 +197,31 @@ internal sealed class ErrandLightWorld : IDisposable
         return stop;
     }
 
-    // The training coordinator for a character at level 1 with the exp to train,
-    // its walks to the trainer at 1/3 provisioned by its own light stop.
-    public TrainerWalkManager NewTrainer()
+    // What the training coordinator and its CP pass put on the wire, in order.
+    public List<string> TrainerSent { get; } = new();
+
+    // The training coordinator for a character at `level` (1 unless given) with the
+    // exp to train, its walks to the trainer at 1/3 provisioned by its own light
+    // stop. Its `stat` parser reads the server rows, and what it sends is seen by
+    // the parser and the trainer-screen tracker as the client's own sends are.
+    public TrainerWalkManager NewTrainer(int level = 1)
     {
-        PlayerStats stats = new() { Level = 1, Exp = 5_000_000 };
+        PlayerStats stats = new() { Level = level, Exp = 5_000_000 };
         StatParser parser = new(stats);
+        parser.AttachLineExtractor(Lines);
         TrainerMenuTracker menu = new(Router, new PartyState());
         AutoTrainManager autoTrain = new(stats, parser, Cache, Inventory, Profile, menu,
             new ListedEffectCatalog(new MessageStore(), Cache), Router);
         TrainerWalkManager trainer = new(stats, parser, Cache, Profile, Tracker, Bfs, Walker, Loop, Lair,
             autoTrain, Router, lightStop: NewStop("the training walk"));
-        trainer.SetWireSender(_ => { });
+        void Send(byte[] bytes)
+        {
+            parser.ObserveOutbound(bytes);
+            menu.ObserveOutbound(bytes);
+            TrainerSent.Add(System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r'));
+        }
+        trainer.SetWireSender(Send);
+        autoTrain.SetWireSender(Send);
         _dispose.AddRange(new IDisposable[] { parser, menu, autoTrain, trainer });
         return trainer;
     }

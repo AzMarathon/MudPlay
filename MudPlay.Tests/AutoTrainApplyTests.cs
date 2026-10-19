@@ -246,7 +246,7 @@ public sealed class AutoTrainApplyTests : IDisposable
 
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(0, _committed);
-        Assert.Equal("only part of this level's plan was spent", manager.LastApplyNote);
+        Assert.Equal("only part of the plan row was spent", manager.LastApplyNote);
     }
 
     [Fact]
