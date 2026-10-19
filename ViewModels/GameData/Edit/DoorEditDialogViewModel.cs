@@ -12,7 +12,7 @@ namespace MudPlay.ViewModels.GameData.Edit;
 // differs from what the side reads as, so opening and saving pins nothing; Reset to
 // seed returns the reset; Cancel returns null. While it is open, a change to the side
 // (an answer learned, another client's edit) is shown in StaleNote.
-public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogViewModel<DoorEdit>
+public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogViewModel<DoorEdit>, IDisposable
 {
     public event Action<DoorEdit?>? CloseRequested;
 
@@ -102,7 +102,14 @@ public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogV
 
     private void Close(DoorEdit? edit)
     {
-        if (_book is not null) _book.Changed -= OnBookChanged;
+        Dispose();
         CloseRequested?.Invoke(edit);
+    }
+
+    // The book outlives the dialog: the window drops the watch when it closes, the
+    // title-bar X included, which the view-model never sees.
+    public void Dispose()
+    {
+        if (_book is not null) _book.Changed -= OnBookChanged;
     }
 }
