@@ -392,6 +392,15 @@ public sealed class RoomTracker
     // for this, or the tracker reads that display with the new move already counted.
     public event Action? RoomDisplayRead;
 
+    // A room display read that left the tracker confirmed in a room: (that room, the
+    // doors the display shows closed). Not raised for a dropped peek, whose display is
+    // another room's, nor for one that left the tracker unsure; raised ahead of
+    // RoomDisplayRead.
+    public event Action<RoomKey, IReadOnlySet<Direction>?>? RoomShown;
+
+    // The display in hand was dropped as a peek.
+    private bool _displayDropped;
+
     // A sent or dragged move landed in the room it predicted, shown by that room's
     // own display. Proof the character can move, which a consumer holding a stale
     // "held" condition uses to drop it.
@@ -1476,12 +1485,15 @@ public sealed class RoomTracker
     // this against the expected outcome of any pending move.
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
+        _displayDropped = false;
         try
         {
             ReadRoomDisplay(observation, whenUtc ?? _now());
         }
         finally
         {
+            if (!_displayDropped && State is { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here })
+                RoomShown?.Invoke(here.Key, observation.ClosedDoorDirections);
             RoomDisplayRead?.Invoke();
         }
     }
@@ -1505,6 +1517,7 @@ public sealed class RoomTracker
                 if (!ObservationLooksLikePendingMoveOutcome(observation, when))
                 {
                     _suppressObservationUntil = null;
+                    _displayDropped = true;
                     _log?.Log(LogSeverity.Info, "RoomTracker",
                         $"Dropped peek observation: '{observation.Name}'.");
                     return;

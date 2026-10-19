@@ -2,9 +2,10 @@
 
 ## 3.185.3
 
-- A door the client opened stays open to routes for the 5 minutes it can't lock again, so the way back needs no key
-- The door across it counts too when the game opened both; a door marked any picklocks/strength stays open for good
-- A held door is let go when it's seen shut or the game says it closed or locked, and on a relog, a change of character, realm or game data
+- A door the client unlocked stays open to routes while it can't lock again (5 minutes on Stock, 2 on Paradigm, less the last minute), so the way back needs no key
+- The door across it counts too when the game opened both; a door marked any picklocks/strength stays open for good; a door someone else unlocked doesn't count
+- A held door is let go when it's seen shut, the game says it closed or locked, or a move into it is refused, and on a relog, a change of character, realm or game data
+- A walk doesn't go to fetch the key of a door it holds open
 
 ## 3.185.2
 

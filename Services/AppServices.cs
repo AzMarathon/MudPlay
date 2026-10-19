@@ -6653,20 +6653,13 @@ public sealed class AppServices
         // The doors the client opened and that can't have locked again yet: a route
         // back through one needs no key (user, 2026-10-18). Forgotten on a relog, a
         // change of character or realm, and a change of game data.
-        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow, Log);
+        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow,
+            paradigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, Log);
         Door.OpenedByUs += DoorsHeldOpen.NoteOpened;
         Movement.HeldOpenProbe = DoorsHeldOpen.IsHeldOpen;
         Movement.HeldOpenVersionProvider = () => DoorsHeldOpen.Version;
-        InGameCapture.InGameChanged += inGame => DoorsHeldOpen.Clear(inGame ? "entered the game" : "left the game");
-        Profile.ProfileLoaded += _ => DoorsHeldOpen.Clear("another character or realm");
-        Profile.BbsPinApplied += _ => DoorsHeldOpen.Clear("another realm");
-        RoomGraph.GraphReloaded += () => DoorsHeldOpen.Clear("game data reloaded");
-        // A held side the room shows shut, standing in it, has locked or been shut.
-        RoomTracker.RoomDisplayRead += () =>
-        {
-            if (RoomTracker.State is { Confidence: Game.Map.RoomConfidence.Confirmed, CurrentRoom: { } here, ClosedDoorDirections: { } shut })
-                foreach (Game.Map.Direction dir in shut) DoorsHeldOpen.NoteShut(here.Key, dir);
-        };
+        DoorsHeldOpen.ForgetOn(InGameCapture, Profile, RoomGraph);
+        RoomTracker.RoomShown += DoorsHeldOpen.NoteRoomShown;
         Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());

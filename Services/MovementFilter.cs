@@ -432,6 +432,7 @@ public sealed class MovementFilter : IRoomFilter
     {
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
         if (UnpickableDoorProbe?.Invoke(from, exit.Target) != true) return false;
+        if (HeldOpenProbe?.Invoke(from, exit.Target) == true) return false;
         if (exit.KeyItemId > 0 && InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
         if (StrengthProvider?.Invoke() is not { } strength) return false;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;

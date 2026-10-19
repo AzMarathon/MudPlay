@@ -1310,6 +1310,7 @@ public partial class MainWindowViewModel : ObservableObject
         _movementRefusalDetector.PaidCrossingRefused += AppServices.Current.OnPaidCrossingRefused;
         _movementRefusalDetector.ShutDoorBonked += AppServices.Current.BareKeyLocks.NoteRefusedMove;
         _movementRefusalDetector.DoorShutHere += AppServices.Current.DoorsHeldOpen.NoteShut;
+        _movementRefusalDetector.ShutDoorBonked += (room, dir, _) => AppServices.Current.DoorsHeldOpen.NoteShut(room, dir);
         // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
         // confirms a move's landing on that causal signal rather than guessing by
         // timing — the fix for phantom-advancing through identically-named grids.
