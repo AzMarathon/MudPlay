@@ -14,11 +14,22 @@ namespace MudPlay.Services;
 // the window smooth. A single-flight writer serializes writes and always persists
 // the LATEST tail, so a burst of appends collapses to one rewrite and no two
 // writes race. Rare operations that must be immediately visible (Close, Truncate,
-// SetMaxLines) write synchronously via Flush. I/O failures (a locked file, a
+// SetMaxLines) wait for the write via Flush. I/O failures (a locked file, a
 // permission flap) are swallowed — a log that can't be written must never take
-// down the feature it's recording.
+// down the feature it's recording. Any other write failure is logged and still
+// frees the writer. Flush runs on the UI thread (profile swap, Clear chatlog, the
+// line-count picker), so it hands the write to the same background writer and
+// waits at most _flushWait: a stuck disk or a dead writer must never freeze the
+// client.
 public sealed class RollingLogFile
 {
+    // Long enough for any healthy rewrite of a few thousand lines, short enough
+    // that a stuck disk costs a pause rather than a hang.
+    private static readonly TimeSpan DefaultFlushWait = TimeSpan.FromSeconds(3);
+
+    private readonly LogService _log;
+    private readonly Action<string, string[]> _write;
+    private readonly TimeSpan _flushWait;
     private readonly object _gate = new();       // guards _lines / _path / the flush flags
     private readonly object _writeGate = new();   // serializes the actual file writes
     private readonly List<string> _lines = new();
@@ -32,11 +43,24 @@ public sealed class RollingLogFile
     private bool _flushAgain;
 
     // Set (signalled) whenever no background flush is queued or running. Reset when a
-    // flush is scheduled, set again when the writer finishes. Flush() waits on it so a
-    // caller that reads the file right after Flush()/Close() can't race a background
-    // write that was still queued (the app reads the in-memory Snapshot, so this only
-    // matters for a direct-file reader).
+    // flush is scheduled, set again when the writer finishes, however it ends. Flush()
+    // waits on it, for at most FlushWait, so a caller that reads the file right after
+    // Flush()/Close() can't race a background write that was still queued (the app
+    // reads the in-memory Snapshot, so this only matters for a direct-file reader).
     private readonly System.Threading.ManualResetEventSlim _idle = new(initialState: true);
+
+    public RollingLogFile(LogService log) : this(log, File.WriteAllLines, DefaultFlushWait) { }
+
+    // The file write and the Flush bound are injectable so a failing or stuck disk
+    // can be reproduced; the client always uses File.WriteAllLines and DefaultFlushWait.
+    internal RollingLogFile(LogService log, Action<string, string[]> write, TimeSpan flushWait)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        ArgumentNullException.ThrowIfNull(write);
+        _log = log;
+        _write = write;
+        _flushWait = flushWait;
+    }
 
     public bool IsOpen
     {
@@ -112,14 +136,21 @@ public sealed class RollingLogFile
             if (_path is null) return;
             _lines.Add(line);
             TrimLocked();
-            // Coalesced single-flight: if a background flush is already in flight,
-            // just mark that it must run again with the newer tail; otherwise claim
-            // the slot and queue one. Only the false→true transition schedules work,
-            // so there is never more than one background flush at a time.
-            if (_flushRunning) _flushAgain = true;
-            else { _flushRunning = true; _idle.Reset(); schedule = true; }
+            schedule = RequestFlushLocked();
         }
         if (schedule) Task.Run(BackgroundFlush);
+    }
+
+    // Coalesced single-flight: if a background flush is already in flight, just
+    // mark that it must run again with the newer tail; otherwise claim the slot and
+    // tell the caller to queue one. Only the false→true transition schedules work,
+    // so there is never more than one background flush at a time.
+    private bool RequestFlushLocked()
+    {
+        if (_flushRunning) { _flushAgain = true; return false; }
+        _flushRunning = true;
+        _idle.Reset();
+        return true;
     }
 
     // Wipe the file and the in-memory tail. Driven by the user's explicit Clear
@@ -131,65 +162,95 @@ public sealed class RollingLogFile
         Flush();
     }
 
-    // Block until the current tail is on disk. Appends persist asynchronously (off
-    // the caller's thread); Flush forces a synchronous write — used by Close /
-    // Truncate / SetMaxLines and available to callers that need the file current now.
+    // Block until the current tail is on disk, or until _flushWait runs out. Appends
+    // persist asynchronously (off the caller's thread); Flush requests a write of the
+    // current tail and waits for it — used by Close / Truncate / SetMaxLines and
+    // available to callers that need the file current now. The write itself runs on
+    // the background writer, so the wait is the only thing that can hold the caller.
     public void Flush()
     {
-        // Drain any queued / in-flight background flush first so no write can land
-        // after we return, then write the current tail synchronously.
-        _idle.Wait();
-        lock (_writeGate)
+        string path;
+        bool schedule;
+        lock (_gate)
         {
-            string? path;
-            string[] snapshot;
-            lock (_gate)
-            {
-                if (_path is null) return;
-                path = _path;
-                snapshot = _lines.ToArray();
-            }
-            WriteToDisk(path, snapshot);
+            if (_path is null) return;
+            path = _path;
+            schedule = RequestFlushLocked();
         }
+        if (schedule) Task.Run(BackgroundFlush);
+        if (_idle.Wait(_flushWait)) return;
+
+        // The request stays queued and the next write replaces the whole file, so a
+        // still-open file catches up to the current tail once the disk answers. A
+        // Close carrying on drops what was not yet written.
+        _log.Warn("SessionLog",
+            $"Writing {Path.GetFileName(path)} did not finish within {_flushWait.TotalSeconds:0.#}s; " +
+            "carrying on, recent lines may be unwritten");
     }
 
-    // The background writer. Holds _writeGate for its whole run so it never races a
-    // synchronous Flush or another background flush; takes _gate only briefly to
-    // snapshot the tail and check the re-run flag, so an Append (which needs only
-    // _gate) is never blocked by the disk I/O itself. Loops while appends keep
-    // arriving mid-write, then releases the single-flight slot.
+    // The background writer. Holds _writeGate for its whole run so it never races
+    // another background flush; takes _gate only briefly to snapshot the tail and
+    // check the re-run flag, so an Append or a Flush (which need only _gate) is
+    // never blocked by the disk I/O itself. Loops while appends keep
+    // arriving mid-write, then releases the single-flight slot. The normal exits
+    // release under the same _gate hold that saw no re-run pending, so an Append
+    // can't slip between the check and the release; the finally frees the slot on
+    // any other way out, since a slot left claimed would stall every later Flush.
     private void BackgroundFlush()
     {
-        lock (_writeGate)
+        bool released = false;
+        try
         {
-            while (true)
+            lock (_writeGate)
             {
-                string path;
-                string[] snapshot;
-                lock (_gate)
+                while (true)
                 {
-                    if (_path is null) { _flushRunning = false; _flushAgain = false; _idle.Set(); return; }
-                    path = _path;
-                    snapshot = _lines.ToArray();
-                    _flushAgain = false;
-                }
-                WriteToDisk(path, snapshot);
-                lock (_gate)
-                {
-                    if (!_flushAgain) { _flushRunning = false; _idle.Set(); return; }
+                    string path;
+                    string[] snapshot;
+                    lock (_gate)
+                    {
+                        if (_path is null) { ReleaseFlushLocked(); released = true; return; }
+                        path = _path;
+                        snapshot = _lines.ToArray();
+                        _flushAgain = false;
+                    }
+                    WriteToDisk(path, snapshot);
+                    lock (_gate)
+                    {
+                        if (!_flushAgain) { ReleaseFlushLocked(); released = true; return; }
+                    }
                 }
             }
         }
+        finally
+        {
+            if (!released) lock (_gate) { ReleaseFlushLocked(); }
+        }
     }
 
-    private static void WriteToDisk(string path, string[] lines)
+    private void ReleaseFlushLocked()
+    {
+        _flushRunning = false;
+        _flushAgain = false;
+        _idle.Set();
+    }
+
+    // Every write replaces the whole file, so the next one carries whatever a failed
+    // one missed.
+    private void WriteToDisk(string path, string[] lines)
     {
         try
         {
-            File.WriteAllLines(path, lines);
+            _write(path, lines);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+        catch (Exception ex)
+        {
+            _log.Error("SessionLog",
+                $"Writing {Path.GetFileName(path)} failed ({ex.GetType().Name}: {ex.Message}); " +
+                "recent lines may be unwritten until the next write");
+        }
     }
 
     private bool TrimLocked()
