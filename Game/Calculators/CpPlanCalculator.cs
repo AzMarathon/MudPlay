@@ -38,6 +38,20 @@ public static class CpPlanCalculator
 {
     private const int StatCount = 6;
 
+    // The plan row a character at `level` trains toward: the highest row at or
+    // below it, or null. Rows are cumulative targets, so one for a level already
+    // passed is still owed: several `train`s in a row can jump past every row, and
+    // a plan ending at 35 still has to be spent at 39. Rows above `level` aren't
+    // due yet.
+    public static CpPlanEntry? RowDueAt(IEnumerable<CpPlanEntry>? plan, int level)
+    {
+        if (plan is null) return null;
+        CpPlanEntry? due = null;
+        foreach (CpPlanEntry e in plan)
+            if (e.Level <= level && (due is null || e.Level > due.Level)) due = e;
+        return due;
+    }
+
     public static IReadOnlyList<CpRowResult> Compute(
         CpPlanEntry baseline,
         IReadOnlyList<CpPlanEntry> rows,

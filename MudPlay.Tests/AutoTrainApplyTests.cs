@@ -72,7 +72,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         catch { /* best-effort cleanup */ }
     }
 
-    private AutoTrainManager Build(bool paradigm, int rowStrength = 136)
+    private AutoTrainManager Build(bool paradigm, int rowStrength = 136, List<CpPlanEntry>? plan = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
@@ -83,7 +83,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         var gameData = new GameDataCache(_root);
         gameData.SwitchSet("set");
 
-        _profile.Current!.CharacterPlan = new List<CpPlanEntry> { new(31, rowStrength, 40, 30, 100, 60, 30) };
+        _profile.Current!.CharacterPlan = plan ?? new List<CpPlanEntry> { new(31, rowStrength, 40, 30, 100, 60, 30) };
 
         var manager = new AutoTrainManager(_stats, _parser, gameData, _inventory, _profile, _trainer,
                                            new ListedEffectCatalog(new MessageStore(), gameData), _router,
@@ -144,14 +144,15 @@ public sealed class AutoTrainApplyTests : IDisposable
         _feed.Coloured(runs.Select(r => (r.Text, r.Colour, Bold: false)));
     }
 
-    // A level-31 `stat` screen: Strength and Agility as given, with an optional
-    // effect line under the stats.
-    private void FeedStat(string str, int strColour, string agl, int aglColour, string? effect = null, int cp = 26)
+    // A `stat` screen, level 31 unless given: Strength and Agility as given, with an
+    // optional effect line under the stats.
+    private void FeedStat(string str, int strColour, string agl, int aglColour, string? effect = null, int cp = 26,
+                          int level = 31)
     {
         _parser.ObserveOutbound(Encoding.Latin1.GetBytes("stat\r"));
         Feed(("Name: ", Green), ("Someone Somewhere              ", Cyan), ("Lives/CP: ", Green), ($"    9/{cp}", Cyan));
         Feed(("Race: ", Green), ("Half-Orc    ", Cyan), ("Exp: ", Green), ("125379954       ", Cyan), ("Perception: ", Green), ("    50", Cyan));
-        Feed(("Class: ", Green), ("Mystic     ", Cyan), ("Level: ", Green), ("31            ", Cyan), ("Stealth: ", Green), ("      107", Cyan));
+        Feed(("Class: ", Green), ("Mystic     ", Cyan), ("Level: ", Green), ($"{level,-14}", Cyan), ("Stealth: ", Green), ("      107", Cyan));
         Feed(("Hits: ", Green), ("  318/321   ", Cyan), ("Armour Class: ", Green), (" 26/6  ", Cyan), ("Thievery: ", Green), ("       0", Cyan));
         Feed(("Strength: ", Green), (str.PadRight(7), strColour), ("Agility:", Green), (agl.PadRight(12), aglColour), ("Tracking:     ", Green), ("   0", Cyan));
         Feed(("Intellect: ", Green), ("40     ", Cyan), ("Health:  ", Green), ("60          ", Cyan), ("Martial Arts: ", Green), ("  97", Cyan));
@@ -160,7 +161,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         _feed.Line("[HP=318/KAI=14]:");
     }
 
-    private void CleanStat(int cp = 26) => FeedStat(" 133", Cyan, " 100", Cyan, cp: cp);
+    private void CleanStat(int cp = 26, int level = 31) => FeedStat(" 133", Cyan, " 100", Cyan, cp: cp, level: level);
 
     // Strength and Agility in red under an effect the (empty) catalogue here can't
     // name: a reading nothing may be planned from.
@@ -461,6 +462,42 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Equal(1, _committed);
         Assert.True(_trainer.IsInputMenuActive);
+    }
+
+    // Report paradigm-20261018-221236: the character trained 30 → 39 by hand with a
+    // plan whose last row was level 35, opened `train stats`, and nothing was typed:
+    // only a row for exactly the current level was looked for. The latest row at or
+    // below the level is the one owed; a row above it isn't due yet.
+    [Fact]
+    public void UsersOwnForm_AfterTrainingPastThePlansLastRow_AppliesTheLatestRowBelowTheLevel()
+    {
+        AutoTrainManager manager = Build(paradigm: true, plan: new List<CpPlanEntry>
+        {
+            new(29, 134, 40, 30, 100, 60, 30),
+            new(30, 136, 40, 30, 100, 60, 30),
+            new(33, 140, 40, 30, 100, 60, 30),
+        });
+        AutoTrainStatsOn();
+        CleanStat(cp: 1, level: 29);
+        foreach (int level in new[] { 30, 31 })
+        {
+            _feed.Line("[HP=318/KAI=14]:train");
+            _feed.Line("You hand over 88450 copper farthings to train to the next level!");
+            _feed.Line($"Welcome to level {level}!");
+            _feed.Line("You gain 0 additional lives.");
+            _feed.Line(level > 30 ? "You gain 25 CPs" : "You gain 20 CPs");
+        }
+        _feed.Line("[HP=318/KAI=14]:");
+        Assert.Equal((31, 46), (_stats.Level, _stats.Cp));
+        _screen = FormText(133, 46);
+        _onTyped = text => { if (text == "136") _screen = FormText(136, 22); };
+
+        UserTypesTrainStats();
+        Settle();
+        Assert.False(manager.IsBusy);
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
     }
 
     // ----- Stock: no training with a stat altered ------------------------------

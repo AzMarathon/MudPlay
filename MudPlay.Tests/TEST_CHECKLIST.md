@@ -251,8 +251,8 @@ How to keep it current:
 
 ### AutoTrainApplyTests.cs
 - Covers: Game/AutoTrainManager (with StatParser, TrainerMenuTracker)
-- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass.
-- Why: report `paradigm-20260930-160602`.
+- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
+- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39).
 
 ### AutoTrainSequenceBuilderTests.cs
 - Covers: Game/AutoTrainSequenceBuilder
@@ -2698,8 +2698,8 @@ How to keep it current:
 
 ### PartyInventoryProbeTests.cs
 - Covers: Game/Remote/PartyInventoryProbe (+ PartyPathItemGate)
-- Checks: @have broadcast; reply parsing including brace-wrapped and count-only; window; unanswered members; invitees.
-- Why: Party path-item counts.
+- Checks: @have broadcast; reply parsing including brace-wrapped and count-only (with or without MegaMUD's full stop); window; unanswered members; invitees. Two members' `{Yes: 1.}` answers, fed as the game sent them, leave nothing to buy.
+- Why: Party path-item counts; report `paradigm-20261019-041600` (two mine passes bought that the party held).
 
 ### PartyLevelBoundsTests.cs
 - Covers: Game/Map/PartyLevelBounds

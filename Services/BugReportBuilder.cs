@@ -1993,6 +1993,10 @@ public static class BugReportBuilder
         sb.Append("- effect lines on that screen: ").Append(s.ActiveEffects.Count == 0
             ? "(none)"
             : string.Join(" | ", s.ActiveEffects.Select(e => e.Timed ? e.Text + " (timed)" : e.Text))).Append('\n');
+        sb.Append("- plan row due at level ").Append(s.Level).Append(": ")
+          .Append(Game.Calculators.CpPlanCalculator.RowDueAt(svc.Profile.Current?.CharacterPlan, s.Level) is { } due
+              ? $"the level-{due.Level} row; something to apply with {s.Cp} CP: {(svc.AutoTrain.CanTrainNow ? "yes" : "no")}"
+              : "(none at or below it)").Append('\n');
         sb.Append("- auto-train hold: ").Append(svc.AutoTrain.HoldReason ?? "(none)").Append('\n');
         sb.Append("- Stock wait at the trainer for altered stats: ")
           .Append(svc.TrainerWalk.AlteredStatsWaitSeconds).Append("s, `stat` read again every ")

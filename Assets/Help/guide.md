@@ -2034,7 +2034,7 @@ Says whether you hold an item, and how many.
 
 **Situations:**
 
-- **The asking side:** a MudPlay leader whose route needs an item asks the party `@have <item>` by itself and has a member with a spare hand it over. It reads the `yes - …` and `no - …` answers, which are sent whatever the Warn setting says.
+- **The asking side:** a MudPlay leader whose route needs an item asks the party `@have <item>` by itself and has a member with a spare hand it over. It reads the `yes - …` and `no - …` answers, which are sent whatever the Warn setting says, and a MegaMUD member's bare count (`yes: 1`, or `Yes: 1.` with its full stop). A member whose answer it can't read is counted as holding none, and the program log quotes the line.
 
 #### @what
 
@@ -3255,6 +3255,8 @@ When it can't put a single number on a marked stat — an effect it doesn't reco
 **Before saving, the trainer screen must show exactly what MudPlay typed.** If it doesn't — a value the screen refused, or one that landed in the wrong box — MudPlay stops without pressing SAVE and leaves the screen open for you to finish or leave, because spent CP can't be taken back. The program log says what it saw. Automation stays paused for as long as that screen is open, and **Train now** and **Apply this level** do nothing until you close it: `train stats` is never typed into a screen that is already up.
 
 **A row is only cleared once the game shows it was applied** — the trainer screen closed having shown every stat of the row trained, or (when the screen can't be read) exactly the row's CP gone on a `stat` read afterwards. If the points weren't spent, or only some were, the row stays and the program log says why.
+
+**Which row is applied.** The row for your level, or, when the plan has none, the latest row below it: each row is the stats you mean to have by that level, so training past the plan's last row (say from 30 to 39 with a plan that ends at 35) still applies that row with the CP you have. Rows above your level wait until you reach them. This holds for **Train now**, a training trip and your own `train stats`.
 
 **Your own `train stats`.** With Auto-train stats on, opening the screen yourself applies the plan — but only when the screen shows something the plan can raise. Otherwise MudPlay types nothing and the screen stays yours.
 

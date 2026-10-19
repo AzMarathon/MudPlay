@@ -98,8 +98,9 @@ public sealed partial class PartyInventoryProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HaveNoReply();
 
-    // A MegaMUD member answers `@have` with a bare count and no item echo.
-    [GeneratedRegex(@"^yes:\s*(\d+)\s*$",
+    // A MegaMUD member answers `@have` with a bare count and no item echo, with or
+    // without a closing full stop (`{yes: 1}`, `{Yes: 1.}`).
+    [GeneratedRegex(@"^yes:\s*(\d+)\s*\.?\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex HaveCountOnlyReply();
 
@@ -170,9 +171,17 @@ public sealed partial class PartyInventoryProbe : IDisposable
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
         if (string.IsNullOrEmpty(entry.Speaker)) return;
         if (string.IsNullOrEmpty(entry.Message)) return;
-        if (!TryParseHaveReply(entry.Message, out int count, out string? echoedQuery)) return;
-
         string given = GivenName(entry.Speaker);
+        if (!TryParseHaveReply(entry.Message, out int count, out string? echoedQuery))
+        {
+            // A member still owed an answer whose reply isn't read is counted as
+            // holding none, so name the line: an unread reply shape looks just
+            // like a member who never answered.
+            if (_pending.Any(p => !p.Completed && p.Remaining.Contains(given)))
+                _log?.Info("PartyInventory",
+                    $"{given} telepathed '{entry.Message}' while an @have count waits on them — not read as a count.");
+            return;
+        }
 
         if (echoedQuery is null)
         {
