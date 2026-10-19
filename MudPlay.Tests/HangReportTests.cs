@@ -24,13 +24,16 @@ public sealed class HangReportTests
         public LogService Log { get; } = new();
         public SentCommandTrail Sent { get; } = new();
 
-        // writeAside: where the report's file work goes; by default it runs at once.
+        // writeAside / runAside: where the report's file work and the probe's log
+        // lines go; by default each runs at once.
         public Rig(Func<bool>? onUiThread = null, Func<BugReportScrub.Scrubber>? scrubber = null, bool arm = true,
-            Action<Action>? writeAside = null)
+            Action<Action>? writeAside = null, Action<Action>? runAside = null)
         {
+            // The Desktop is there already: the client never makes one.
+            Directory.CreateDirectory(Folder);
             Monitor = new PerformanceMonitor(onUiThread ?? (() => true),
                 new PerformanceMonitor.ProbeHost(Posted.Add, Timers.Schedule, Clock.Timestamp, () => Clock.Now, () => Folder,
-                    writeAside ?? (work => work()), work => work()));
+                    writeAside ?? (work => work()), runAside ?? (work => work())));
             Monitor.HangSources = new HangReport.Sources(Log, Sent,
                 scrubber ?? (() => BugReportScrub.Build(
                     [new(BugReportScrub.LoginPasswordLabel, LoginPassword), new(BugReportScrub.CorpsePasswordLabel, CorpsePassword)],
@@ -218,6 +221,110 @@ public sealed class HangReportTests
         Assert.DoesNotContain("## Program log", report);
         Assert.Contains("not included: the saved account details could not be read (IOException)", report);
         Assert.Contains("1. `profile save` at `MudPlay.Tests/HangReportTests.cs:", report);
+    }
+
+    [Fact]
+    public void A_freeze_under_way_when_the_window_opens_counts_from_then()
+    {
+        using Rig rig = new(arm: false);
+        rig.Pass(1);                        // the ping goes out while the client is still starting
+        rig.Clock.Advance(TimeSpan.FromMilliseconds(500));
+        rig.Monitor.ArmHangReports();
+        rig.Pass(4);
+        Assert.Empty(rig.Reports);          // 4 s since the arm
+        rig.Pass(1);
+        Assert.Single(rig.Reports);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("Freeze watch armed: a UI thread silent 5.0 s", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_known_long_operation_under_its_threshold_writes_nothing()
+    {
+        using Rig rig = new();
+        using (rig.Monitor.MeasureLong("game-data set switch", "data-Paradigm"))
+        using (rig.Monitor.Measure("parse", "Rooms"))
+            rig.Pass(29);
+        rig.Answer();
+        rig.PassAnswering(5);
+        Assert.Empty(rig.Reports);
+    }
+
+    [Fact]
+    public void A_known_long_operation_past_its_threshold_is_reported_as_one()
+    {
+        using Rig rig = new();
+        using (rig.Monitor.MeasureLong("game-data set switch", "data-Paradigm")) rig.Clock.Advance(TimeSpan.FromSeconds(3));
+        using (rig.Monitor.MeasureLong("game-data set switch", "data-Stock"))
+        using (rig.Monitor.Measure("parse", "Rooms"))
+        {
+            rig.Pass(30);
+            Assert.Empty(rig.Reports);
+            rig.Pass(1);
+        }
+
+        string report = rig.Report;
+        Assert.Contains("- **Inside a known long operation**: `game-data set switch data-Stock`, open 31.0 s: "
+            + "this session it has taken up to 3.0 s, 3.0 s the last time. Such work is reported only past 30.0 s", report);
+        Assert.Contains("2. `parse Rooms` at `MudPlay.Tests/HangReportTests.cs:", report);
+    }
+
+    [Fact]
+    public void A_stall_while_collecting_is_written_with_what_the_ui_thread_was_doing()
+    {
+        using Rig rig = new();
+        List<string> lines = new();
+        rig.Monitor.CollectTo(lines.Add);
+        rig.Pass(1);                        // a ping in flight; the probe now looks every 20 ms
+        using (rig.Monitor.Measure("parse", "Rooms"))
+            for (int i = 0; i < 10; i++)
+            {
+                rig.Clock.Advance(TimeSpan.FromMilliseconds(20));
+                rig.Timers.Advance(TimeSpan.FromMilliseconds(20));
+            }
+        rig.Answer();
+
+        Assert.Equal(["stall 200 ms  parse Rooms"], lines);
+    }
+
+    [Fact]
+    public void A_sleep_inside_a_hang_ends_its_figures()
+    {
+        using Rig rig = new();
+        rig.Pass(7);                        // reported at 6 s
+        rig.Clock.Advance(TimeSpan.FromMinutes(10));   // the machine slept
+        rig.Pass(1);
+        rig.Answer();
+        rig.PassAnswering(2);
+
+        string report = rig.Report;
+        Assert.Contains("the freeze watch was itself stopped for 601.0 s", report);
+        Assert.DoesNotContain("answered again", report);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.StartsWith("The freeze watch was itself stopped", StringComparison.Ordinal));
+        Assert.DoesNotContain(rig.Log.Snapshot(), e => e.Message.StartsWith("The UI thread answered again", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Log_lines_left_waiting_on_a_stuck_log_are_dropped_and_counted()
+    {
+        List<Action> held = new();
+        using Rig rig = new(runAside: held.Add);
+        rig.Pass(7);
+        rig.Answer();
+        rig.PassAnswering(1);               // recovery: its log line is out, the log not answering
+        rig.Pass(10);                       // a second freeze, inside the gap
+        rig.Answer();
+        rig.PassAnswering(1);
+        Assert.Single(held);
+
+        held[0]();                          // the log answers
+        held.Clear();
+        rig.PassAnswering((int)PerformanceMonitor.ReportGap.TotalSeconds);
+        rig.Pass(7);
+        rig.Answer();
+        rig.PassAnswering(1);
+        held.Single()();
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.EndsWith(
+            "(1 earlier line(s) from the freeze watch dropped: the log did not answer)", StringComparison.Ordinal));
     }
 
     [Fact]

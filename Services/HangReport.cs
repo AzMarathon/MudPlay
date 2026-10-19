@@ -6,10 +6,11 @@ namespace MudPlay.Services;
 
 // The Hang-<timestamp>.md PerformanceMonitor writes to the Desktop when the UI
 // thread stops answering: the white window the OS offers to end, which throws
-// nothing for CrashReporter to catch. Everything here runs on the probe's thread
-// while the UI thread is stuck, so nothing in it touches a window or a control:
-// the code location comes from what Measure recorded (names, files, lines), the
-// rest from services that read under locks of their own.
+// nothing for CrashReporter to catch. Everything here runs off the UI thread
+// (on the monitor's write lane) while the UI thread is stuck, so nothing in it
+// touches a window or a control: the code location comes from what Measure
+// recorded (names, files, lines), the rest from services that read under locks
+// of their own.
 //
 // The point of the file is to name the code the UI thread was in: each scope
 // open on it, outermost first, with the source file, member and line it was
@@ -25,7 +26,7 @@ public static class HangReport
     public const string FilePrefix = "Hang-";
     public const int CommandsShown = 50;
     public const int LogEntriesShown = 200;
-    public const string AfterwardsHeading = "## Afterwards";
+    private const string AfterwardsHeading = "## Afterwards";
 
     // Where the report reads the session from. Session: name and value pairs
     // (character, BBS, realm, the log file to send), read at the hang.
@@ -52,7 +53,8 @@ public static class HangReport
         IReadOnlyList<Activity> Recent,
         IReadOnlyList<string> OpenWindows,
         (string What, DateTimeOffset At)? LastWindowEvent,
-        (string Name, DateTimeOffset At)? LastFocused);
+        (string Name, DateTimeOffset At)? LastFocused,
+        string? LongOperation = null);
 
     // What was read from the Sources, not yet masked; Build masks it with
     // Scrubber. Missing says why the sections are absent, when they are.
@@ -148,6 +150,9 @@ public static class HangReport
             $"{ClientEnvironment.ProcessStart:yyyy-MM-dd HH:mm:ss}, process {ClientEnvironment.ProcessId}"));
         Kv(sb, "UI thread unresponsive", $"{Seconds(snapshot.Unresponsive)} when this was written "
             + $"(since {Time(snapshot.At - snapshot.Unresponsive)})");
+        if (snapshot.LongOperation is { } longOperation)
+            Kv(sb, "Inside a known long operation", longOperation + ". Such work is reported only past "
+                + Seconds(PerformanceMonitor.LongHangAfter) + ", and this one ran past it");
         foreach ((string key, string value) in gathered.Session) Kv(sb, key, value);
         if (gathered.Missing is { } why)
             Kv(sb, "Session, commands and log", "not included: " + why);
@@ -237,6 +242,10 @@ public static class HangReport
             ? $"`{f.Name}` at `{SourcePath(f.File)}:{f.Line}`, in `{f.Member}`, open {Seconds(f.OpenFor)}"
             : "none")
         + ".\n";
+
+    public static string InterruptedLine(DateTimeOffset at, TimeSpan stopped) =>
+        $"- {Time(at)}: the freeze watch was itself stopped for {Seconds(stopped)} (the machine slept, or the "
+        + "process was paused). The figures above end there; a freeze that went on after it is counted anew.\n";
 
     public static string RecoveredLine(DateTimeOffset at, TimeSpan lasted) =>
         $"- {Time(at)}: the UI thread answered again. The hang lasted {Seconds(lasted)}.\n";

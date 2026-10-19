@@ -87,7 +87,7 @@ internal static class JsonStore
     // As Save, in another form than the shared one (see Load).
     public static void Save<T>(string path, T value, JsonSerializerOptions options) where T : class
     {
-        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("json save " + Path.GetFileName(path));
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("json save", path);
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 

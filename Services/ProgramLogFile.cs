@@ -82,7 +82,9 @@ public sealed class ProgramLogFile : IAsyncDisposable
         // The write is flushed on the logging thread, often the UI thread: a disk
         // that stalls (an antivirus scan, a file Windows holds) stalls it here,
         // and so does waiting on _gate behind another thread's stalled write.
-        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("program log file write");
+        // _writer is read unlocked only to skip measuring when nothing is written.
+        using PerformanceMonitor.Scope? scope = _writer is null ? null
+            : AppServices.CurrentOrNull?.Performance.Measure("program log file write");
         lock (_gate)
         {
             if (_writer is null) return;

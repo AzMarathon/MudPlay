@@ -273,7 +273,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             base.OnPropertyChanged(e);
             return;
         }
-        using PerformanceMonitor.Scope scope = performance.Measure("Settings section " + (SelectedSection?.Id ?? "(none)"));
+        using PerformanceMonitor.Scope scope = performance.Measure("Settings section", SelectedSection?.Id ?? "(none)");
         base.OnPropertyChanged(e);
     }
 

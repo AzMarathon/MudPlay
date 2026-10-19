@@ -54,6 +54,8 @@ public sealed class CorpseHandoffManager
     private readonly Action<TimeSpan, Action> _scheduleAfter;
     private readonly Func<DateTimeOffset> _now;
 
+    // Added on the UI thread, read by a hang report's scrub off it: guarded.
+    private readonly object _passwordsLock = new();
     private readonly HashSet<string> _sessionPasswords = new(StringComparer.Ordinal);
 
     // Each name typed in a command not yet answered by its recovery, and when it
@@ -120,7 +122,10 @@ public sealed class CorpseHandoffManager
             : Array.Empty<CorpseHandoffRecord>();
 
     // Passwords typed this session, for the bug report's mask. Never written anywhere.
-    public IReadOnlyCollection<string> SessionPasswords => _sessionPasswords;
+    public IReadOnlyCollection<string> SessionPasswords
+    {
+        get { lock (_passwordsLock) return _sessionPasswords.ToArray(); }
+    }
 
     public bool HandoffActive => _handoff is not null;
 
@@ -140,7 +145,7 @@ public sealed class CorpseHandoffManager
     public void ObserveCommand(string command, bool usersOwn)
     {
         if (!CorpseRecoveryLines.TryParseRecoverWithPassword(command, out string name, out string password)) return;
-        _sessionPasswords.Add(password.Trim());
+        lock (_passwordsLock) _sessionPasswords.Add(password.Trim());
         if (!usersOwn) return;
         if (IsSelf(name))
         {

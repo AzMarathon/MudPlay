@@ -2981,7 +2981,7 @@ public sealed class AppServices
         // the probe's thread while the UI thread is frozen (HangReport.Gather),
         // masked by the bug report's own scrub.
         Performance.HangSources = new HangReport.Sources(Log, SentCommands,
-            () => BugReportBuilder.BuildScrubber(this, compiled: false),
+            () => BugReportBuilder.BuildScrubberOffUiThread(this),
             () =>
             [
                 ("Character", Profile.CurrentProfileName ?? "(none loaded)"),

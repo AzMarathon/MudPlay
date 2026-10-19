@@ -38,7 +38,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
             base.OnPropertyChanged(e);
             return;
         }
-        using PerformanceMonitor.Scope scope = performance.Measure("Workshop tab " + (SelectedSection?.Id ?? "(none)"));
+        using PerformanceMonitor.Scope scope = performance.Measure("Workshop tab", SelectedSection?.Id ?? "(none)");
         base.OnPropertyChanged(e);
     }
 
