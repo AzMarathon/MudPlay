@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Health" settings — drives Game.Health.HealthManager passive
@@ -21,13 +23,16 @@ public sealed class HealthSettings
     public ThresholdMode HpThresholdMode { get; set; } = ThresholdMode.Percentage;
 
     // Stop resting once HP reaches this value (per HpThresholdMode). Default 95 (%).
+    [SettingRange(0, 100_000)]
     public int RestMaxHp { get; set; } = 95;
 
     // Assert HealthRecovery gate when HP falls below this value. Default 60 (%).
+    [SettingRange(0, 100_000)]
     public int RestIfBelowHp { get; set; } = 60;
 
     // Trigger flee behavior when HP falls below this value. 0 disables the
     // HP flee entirely (never run on HP). Default 20 (%).
+    [SettingRange(0, 100_000)]
     public int RunIfBelowHp { get; set; } = 20;
 
     // Drop the connection when HP falls below this emergency threshold. Default 5 (%).
@@ -37,6 +42,7 @@ public sealed class HealthSettings
     // realm's death floor (RealmProfile.PlayerDiesAtHp), letting the player set the
     // hangup deep in the bleeding-out band, closer to death. There is no zero
     // sentinel: turning the auto-hangup off is GeneralSettings.DisableHangups.
+    [SettingRange(-999, 100_000)]
     public int HangIfBelowHp { get; set; } = 5;
 
     // "Sys goto wimpy instead of hanging": when set, the emergency low-HP escape
@@ -58,14 +64,17 @@ public sealed class HealthSettings
 
     // Cast the rest-time heal spell (SpellsSettings.MinorHealSpell) during a
     // rest cycle when HP drops below this value. Default 80 (%).
+    [SettingRange(0, 100_000)]
     public int HealRestTrigger { get; set; } = 80;
 
     // Cast SpellsSettings.MinorHealSpell during combat when HP drops below this
     // value. Default 70 (%).
+    [SettingRange(0, 100_000)]
     public int MinorHealCombatTrigger { get; set; } = 70;
 
     // Cast SpellsSettings.MajorHealSpell during combat when HP drops below this
     // value. Default 40 (%).
+    [SettingRange(0, 100_000)]
     public int MajorHealCombatTrigger { get; set; } = 40;
 
     // Cast SpellsSettings.EmergencyHealSpell — falling back to Major then Minor
@@ -74,6 +83,7 @@ public sealed class HealthSettings
     // ignores HealIfAboveMaCombat/Resting (see CastingDirector.PickEmergencySelfHeal):
     // an emergency spends whatever mana is left rather than conserving the pool
     // for later — there might not BE a later. Default 20 (%).
+    [SettingRange(0, 100_000)]
     public int EmergencyHealTrigger { get; set; } = 20;
 
     // ----- MA / Kai -------------------------------------------------
@@ -83,30 +93,36 @@ public sealed class HealthSettings
     public ThresholdMode MaThresholdMode { get; set; } = ThresholdMode.Percentage;
 
     // Stop resting (caster pool) once MA reaches this value. Default 95 (%).
+    [SettingRange(0, 100_000)]
     public int RestMaxMa { get; set; } = 95;
 
     // Assert ManaRecovery gate when MA falls below this value. Default 30 (%).
+    [SettingRange(0, 100_000)]
     public int RestIfBelowMa { get; set; } = 30;
 
     // Trigger flee behavior when the caster pool drops below this. 0 disables
     // the MA flee entirely (never run on mana). Default 10 (%).
+    [SettingRange(0, 100_000)]
     public int RunIfBelowMa { get; set; } = 10;
 
     // LEGACY: the one mana floor every buff shared. Each buff slot carries its own
     // now (BuffSlot.BlessIfAboveMa); profile schema 5 copied this value onto the
     // slots that existed then. Kept so an older profile still loads and migrates,
     // and its default stays the 70 those profiles were playing with.
+    [SettingRange(0, 100_000)]
     public int BlessIfAboveMa { get; set; } = 70;
 
     // Mana-floor for heal spells while resting / idle (out of combat):
     // CastingDirector only casts a heal when the caster pool sits at or above
     // this value (per MaThresholdMode), so a low pool regenerates instead of
     // being drained on heals. 0 disables the gate. Default 50 (%).
+    [SettingRange(0, 100_000)]
     public int HealIfAboveMaResting { get; set; } = 50;
 
     // Mana-floor for heal spells while in combat — same meaning as
     // HealIfAboveMaResting but applied during combat, where survival usually
     // outweighs mana conservation. 0 disables the gate (always heal). Default 0.
+    [SettingRange(0, 100_000)]
     public int HealIfAboveMaCombat { get; set; }
 
     // ----- Resting Options ------------------------------------------

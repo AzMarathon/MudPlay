@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // One curated destination for the `sys goto` sysop power (BbsCredentials.SysopGotos).
@@ -21,6 +23,7 @@ public sealed class SysopGotoLocation
     // dangerous for the character, so menus grey the row out and the router won't
     // take the hop. 0 means ungated. This is a client-side judgement the user
     // encodes, not a game rule — all goto rooms are safe rooms.
+    [SettingRange(0, 1000)]
     public int MinLevel { get; set; }
 
     // The starter locations a fresh credential ships with, so the table isn't empty

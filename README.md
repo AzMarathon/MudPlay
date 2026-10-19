@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.0**
-> - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line
-> - The Hang file adds how long the freeze lasted if the client comes back; the Program Log warns of it too
-> - The Hang file notes memory use when the freeze began, as it went on, and in the minutes before
-> - Loading or switching a game-data set counts as a freeze only past 30 seconds
-> - Bug reports list the freezes seen this session
-> - Help: new *If the client freezes* section
+> **Version 3.185.1**
+> - Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
+> - One unreadable value in a profile no longer drops the client onto the default profile; only that setting takes its default
+> - A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
+> - A huge player-cleanup window no longer crashes startup
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

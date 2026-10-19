@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character setting for the route Details window: colour each monster's name by
@@ -13,10 +15,12 @@ public sealed class MonsterHitColorSettings
     public bool Enabled { get; set; }
 
     // Green→yellow boundary (%): a monster whose hit% is at or below this reads green.
+    [SettingRange(0, 100)]
     public int GreenMax { get; set; } = DefaultGreenMax;
 
     // Yellow→red boundary (%): above GreenMax and at or below this reads yellow; above
     // this reads red.
+    [SettingRange(0, 100)]
     public int YellowMax { get; set; } = DefaultYellowMax;
 
     public const int DefaultGreenMax = 15;

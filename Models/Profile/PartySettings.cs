@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Party" settings — drives the party services
@@ -13,6 +15,7 @@ public sealed class PartySettings
     public bool ParPollOnTimer { get; set; } = true;
 
     // Cadence for the timed par, in seconds. MegaMUD default is 5; range 1..60.
+    [SettingRange(1, 60)]
     public int ParPollFrequencySec { get; set; } = 5;
 
     // When a combat round we fought in closes.
@@ -38,6 +41,7 @@ public sealed class PartySettings
     // missing without a per-player signal), we record the moment and re-invite
     // them if they re-enter the realm within this window. Stored as total
     // seconds. Range 0..3600 (1 hour). Default 90.
+    [SettingRange(0, 3600)]
     public int IfLeadingWaitTotalSec { get; set; } = 90;
 
     // Leader-side recovery reach — the farthest, in BFS room-hops from our
@@ -48,6 +52,7 @@ public sealed class PartySettings
     // distance the leader telepaths @forget instead of walking, so a member who
     // reconnects on the far side of the map isn't chased across it. Range
     // 1..500; default 30 rooms.
+    [SettingRange(1, 500)]
     public int ReturnDistanceRooms { get; set; } = 30;
 
     // "If leading, accept @comeback for up to" — minutes after a member drops (or
@@ -55,6 +60,7 @@ public sealed class PartySettings
     // failed search stopped for them to resume. As a follower, the same value is how
     // long a drop can last before we stop sending @comeback on re-entry — past it
     // the party has moved on. Range 0..60; 0 turns @comeback rejoin off. Default 2.
+    [SettingRange(0, 60)]
     public int AcceptComebackMinutes { get; set; } = 2;
 
     // When leading a party, drop incoming @wait broadcasts so the leader's
@@ -104,16 +110,19 @@ public sealed class PartySettings
     // Seconds to wait after sending invite X before sending the first follow-up
     // /X @join nag. Range 1..60, default 5. Drives Game.AutoPartyManager's nag
     // escalation.
+    [SettingRange(1, 60)]
     public int JoinNagInitialDelaySec { get; set; } = 5;
 
     // Cadence for the @join resend after the initial nag fires. Range 1..60,
     // default 10. Stops once the target joins, telepaths us back, or
     // JoinNagMaxTotalSec elapses.
+    [SettingRange(1, 60)]
     public int JoinNagFrequencySec { get; set; } = 10;
 
     // Hard cap on the total nag window measured from the initial invite. Past
     // this many seconds we give up and stop sending @join. Range 5..600,
     // default 55.
+    [SettingRange(5, 600)]
     public int JoinNagMaxTotalSec { get; set; } = 55;
 
     // Master enable for the @join follow-up nag. When true (default), after
@@ -159,15 +168,18 @@ public sealed class PartySettings
 
     // Cast Minor party heal when any party member's HP% falls below this value.
     // Default 70.
+    [SettingRange(0, 100)]
     public int MinorHealMemberThresholdPercent { get; set; } = 70;
 
     // Cast Major party heal when any party member's HP% falls below this value.
     // Default 40 — mirrors self-heal's MajorHealCombatTrigger default.
+    [SettingRange(0, 100)]
     public int MajorHealMemberThresholdPercent { get; set; } = 40;
 
     // Minimum number of party members below threshold for the engine to switch
     // from single-target to AOE / group heal. Default 2. Clamped to ≥ 2 at
     // engine time so a misconfig can't fire AOE on a single hurt member.
+    [SettingRange(2, 6)]
     public int AoeMinMembers { get; set; } = 2;
 
     // ----- Capacity --------------------------------------------------
@@ -178,6 +190,7 @@ public sealed class PartySettings
     // Combat default, so it's a no-op until the user tightens it).
     // CombatSettings.MinMonstersInRoom still applies — only the upper bound is
     // party-scoped.
+    [SettingRange(1, 20)]
     public int MaxMonstersWhenPartying { get; set; } = 20;
 
     // ----- Vitals gate ----------------------------------------------
@@ -188,6 +201,7 @@ public sealed class PartySettings
     // member to rest / be healed before moving on. 0 (default) disables the
     // gate. Range 0..100. Members whose HP% hasn't been observed yet
     // (HpPercent == 0) don't trip it. Consumed by Game.PartyVitalsWatcher.
+    [SettingRange(0, 100)]
     public int WaitIfMemberBelowPercent { get; set; }
 
     // LEGACY: the two switches every party-buff cast shared. Each buff slot's own

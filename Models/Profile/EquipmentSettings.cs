@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character equipment-manager state — the trigger-purposed gear sets. One
@@ -36,6 +38,7 @@ public sealed class EquipmentSettings
 
     // Seconds without a typed move before a hand-moving While Moving set reverts to
     // Default. Clamped to 1+ where it's read.
+    [SettingRange(1, 600)]
     public int WhileMovingManualIdleSeconds { get; set; } = 10;
 
     // Opt-in: stepping out of a boss room keeps the Bossing set on while a walk-to is

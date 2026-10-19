@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Settings;
 
 // One realm on a BBS. A board can host several versions of the game, picked from
@@ -38,6 +40,7 @@ public sealed class RealmProfile
     // knob, not a per-character stat. Seeded at the standard -25; clamp consumers
     // treat any positive value as 0. The emergency auto-hangup reads this so it
     // keeps firing through the whole bleeding-out window.
+    [SettingRange(-999, 0)]
     public int PlayerDiesAtHp { get; set; } = -25;
 
     // Let the client trace the realm's true death floor from observed *slow*
@@ -71,15 +74,21 @@ public sealed class RealmProfile
     // percentages and drops up to this many items. The HP pair starts at the
     // game's own initial values; the item count at 0, since most boards that
     // penalise take HP only.
+    [SettingRange(0, 100)]
     public int HangupPvpHpFromPercent { get; set; } = 25;
+    [SettingRange(0, 100)]
     public int HangupPvpHpToPercent { get; set; } = 50;
+    [SettingRange(0, 100)]
     public int HangupPvpItemsDropped { get; set; }
 
     // The board penalises a hang-up in a fight with a monster too, with its own
     // HP share and item count.
     public bool HangupPvePenaltyEnabled { get; set; }
+    [SettingRange(0, 100)]
     public int HangupPveHpFromPercent { get; set; } = 25;
+    [SettingRange(0, 100)]
     public int HangupPveHpToPercent { get; set; } = 50;
+    [SettingRange(0, 100)]
     public int HangupPveItemsDropped { get; set; }
 
     // The board penalises every hang-up made in the game, in a fight or not, at the
@@ -98,6 +107,7 @@ public sealed class RealmProfile
     // arrive and never that a room is the wrong one. Written and read by
     // Game.Recovery.StandardListContradictions; no setting shows it, and a bug
     // report does.
+    [SettingRange(0, int.MaxValue)]
     public int DeathsContradictingStandardArrivalRooms { get; set; }
 
     // The game-data set those deaths were seen on. The count is evidence about

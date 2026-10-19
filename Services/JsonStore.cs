@@ -32,7 +32,10 @@ internal static class JsonStore
         if (ReadWithRetry(path) is not { } json) return null;
         try
         {
-            return JsonSerializer.Deserialize<T>(json, Options);
+            // The settings files are read with their numbers held in range.
+            return SettingsValueGuard.TierOf(typeof(T)) is { } tier
+                ? SettingsValueGuard.Deserialize<T>(json, path, tier)
+                : JsonSerializer.Deserialize<T>(json, Options);
         }
         catch (JsonException ex)
         {

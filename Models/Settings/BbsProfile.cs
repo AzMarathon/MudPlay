@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Settings;
 
@@ -19,6 +20,7 @@ public sealed class BbsProfile
     public string Host { get; set; } = string.Empty;
 
     // TCP port; defaults to the Telnet well-known port.
+    [SettingRange(1, 65535)]
     public int Port { get; set; } = 23;
 
     // Optional URL the user wants the Help → {BBS site} ↗ menu entry to
@@ -35,9 +37,11 @@ public sealed class BbsProfile
     // ----- Connection / retry behaviour -----
 
     // How many connect attempts (initial + retries) before giving up.
+    [SettingRange(1, 9999)]
     public int MaxRedials { get; set; } = 3;
 
     // Seconds to wait between connect attempts.
+    [SettingRange(1, 300)]
     public int RedialPauseSeconds { get; set; } = 5;
 
     // Never give up: retry forever at a fixed 3s pause. Overrides both
@@ -52,6 +56,7 @@ public sealed class BbsProfile
     // a "shutting down in N minutes" announcement, the client arms a
     // reconnect at warning_observed_at + N + CleanupPeriodMinutes. 0 means
     // "dial back the moment shutdown_at is past."
+    [SettingRange(0, 600)]
     public int CleanupPeriodMinutes { get; set; }
 
     // Reconnect automatically when the previous connect attempt failed.
@@ -74,6 +79,7 @@ public sealed class BbsProfile
     // so once the idle elapses the OS declares the socket dead within ~30s.
     // The ReconnectOnNoResponse toggle then decides whether to auto-dial
     // back.
+    [SettingRange(0, 3600)]
     public int NoResponseTimeoutSeconds { get; set; } = 20;
 
     // Manage the whole nightly-cleanup cycle for this BBS. Two halves:
@@ -120,18 +126,22 @@ public sealed class BbsProfile
     // Terminal columns to advertise via Telnet NAWS at connect-time.
     // Defaults to 80 — MajorMUD's hard-coded rendering grid; non-game BBS
     // doors that reflow can push higher.
+    [SettingRange(40, 200)]
     public int TerminalCols { get; set; } = 80;
 
     // Terminal rows to advertise via Telnet NAWS. Defaults to 25.
+    [SettingRange(20, 100)]
     public int TerminalRows { get; set; } = 25;
 
     // How many scrolled-off rows the backscroll ring retains. A change applies
     // at once: the ring is resized in place, dropping the oldest rows when it
     // shrinks.
+    [SettingRange(100, 100_000)]
     public int ScrollbackLines { get; set; } = 4_000;
 
     // How many rows one mouse-wheel notch scrolls in the Backscroll window.
     // Line-by-line (1) is exhaustingly slow through a big buffer; default 5.
+    [SettingRange(1, 50)]
     public int BackscrollWheelLines { get; set; } = 5;
 
     // Per-tab settings deltas at the BBS tier — same shape as

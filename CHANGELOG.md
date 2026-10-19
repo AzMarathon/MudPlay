@@ -1,5 +1,12 @@
 # Version history
 
+## 3.185.1
+
+- Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
+- One unreadable value in a profile no longer drops the client onto the default profile; only that setting takes its default
+- A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
+- A huge player-cleanup window no longer crashes startup
+
 ## 3.185.0
 
 - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line

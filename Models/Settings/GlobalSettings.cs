@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Settings;
 
@@ -56,6 +57,7 @@ public sealed class GlobalSettings
     // How many recent profiles the File → Recent submenu actually shows
     // (Settings → General, Global tier). The full retained list keeps up to
     // MaxRecentProfilesShown so raising this reveals more without re-loading.
+    [SettingRange(0, MaxRecentProfilesShown)]
     public int RecentProfilesShown { get; set; } = 5;
 
     // Fallback game-data set name used when no BBS is pinned (or the pinned
@@ -68,6 +70,7 @@ public sealed class GlobalSettings
     // this window get dropped at startup so the table doesn't accumulate
     // one-shot tourists from every session. Per-record DontAutoDelete opts
     // out. 0 or negative disables auto-cleanup entirely.
+    [SettingRange(0, 3650)]
     public int PlayerCleanupDays { get; set; } = 90;
 
     // Per-line navigation-line appearance overrides (colour + thickness), edited in
@@ -105,7 +108,9 @@ public sealed class GlobalSettings
         set { if (value == false) MapOtherFloors = Game.Map.OtherFloorsMode.Off; }
     }
     public const int MaxMapOtherFloorsLevels = 99;
+    [SettingRange(1, MaxMapOtherFloorsLevels)]
     public int MapOtherFloorsLevels { get; set; } = 10;
+    [SettingRange(0, 100)]
     public int MapOtherFloorsMaxOverlapPercent { get; set; } = 50;
     // Whether route lines run on through the other floors' rooms. Off keeps them
     // to the floor shown: where the game's own layout of two floors doesn't line
@@ -117,7 +122,9 @@ public sealed class GlobalSettings
     // (Global tier), persisted on drop and re-clamped into the visible map when
     // the legend is toggled back on (so a position left off-view by a since-shrunk
     // window snaps back). Both non-null or both null — a half-set pair is ignored.
+    [SettingRange(-100_000, 100_000)]
     public double? MapLegendX { get; set; }
+    [SettingRange(-100_000, 100_000)]
     public double? MapLegendY { get; set; }
 
     // Master enable for the Great Pyramid climb solver — when true (default) a
@@ -142,11 +149,13 @@ public sealed class GlobalSettings
     // Only surface a token route when it saves at least this many rooms over the
     // overland walk (a token use costs gold, a daily charge, and wipes buffs, so it's
     // only worth offering for a big saving). Install-wide; default 50.
+    [SettingRange(1, 300)]
     public int TokenRouteMinRoomsShorter { get; set; } = 50;
 
     // How many seconds the Navigation map holds where the user browsed to (a pan,
     // zoom, floor step or Center on…) before it follows the player again.
     // Install-wide; 0 = follow again straight away. Surfaced in Settings → Other.
+    [SettingRange(0, 300)]
     public int MapRecenterHoldSeconds { get; set; } = 15;
 
     // Party token-route behaviour when some members fail to token across after the
@@ -174,6 +183,7 @@ public sealed class GlobalSettings
     public bool LocalApiEnabled { get; set; }
 
     // Port for the above. 6683 spells MMUD on a phone keypad.
+    [SettingRange(1024, 65535)]
     public int LocalApiPort { get; set; } = LocalApiDefaultPort;
 
     // Whether the API may issue commands that end the session or can't be undone:

@@ -2919,6 +2919,9 @@ public sealed class AppServices
         // per-BBS folders. Runs BEFORE any store touches disk; idempotent on
         // already-migrated trees.
         LogService bootstrapLog = new(LogService.SessionCapacity);
+        // A settings value read out of range is said from the first read on, the
+        // migration's included.
+        SettingsValueGuard.Clamped += line => bootstrapLog.Warn("Settings", line);
         DataMigration.RunIfNeeded(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);

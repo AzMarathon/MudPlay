@@ -75,17 +75,19 @@ public sealed class TerminalEmulator
     public TerminalEmulator(int cols, int rows, Func<DateTimeOffset>? now = null)
     {
         Screen = new TerminalScreen(cols, rows);
-        _scrollBottom = rows - 1;
+        _scrollBottom = Screen.Rows - 1;
         _now = now ?? (static () => DateTimeOffset.Now);
     }
 
     // Resize the underlying screen and reset the scroll region.
     public void Resize(int cols, int rows)
     {
-        if (cols == Screen.Cols && rows == Screen.Rows) return;
+        int wasCols = Screen.Cols, wasRows = Screen.Rows;
         Screen.Resize(cols, rows);
+        // The screen may have cut the size to its bounds.
+        if (Screen.Cols == wasCols && Screen.Rows == wasRows) return;
         _scrollTop = 0;
-        _scrollBottom = rows - 1;
+        _scrollBottom = Screen.Rows - 1;
         ScreenResized?.Invoke();
         ScreenUpdated?.Invoke();
     }

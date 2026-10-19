@@ -7278,6 +7278,8 @@ Any other startup arguments are the standard ones Avalonia consumes; the app doe
 
 This section is a compact, technical lookup table for every setting documented above — useful if you're hand-editing a profile/settings JSON file, writing about MudPlay, or just want the exact property name behind a UI label. "Location" gives the C# file where the setting is defined.
 
+**Values out of range in a hand-edited file.** When MudPlay reads `global.json`, a `bbs.json` or a `profile.json`, every number is held to the range its setting allows — the "Allowed Values" below, which are the limits the Settings window itself enforces. A value outside it (a 100000-column terminal, a cleanup window of millions of days) is used at the nearest limit; a fraction where a whole number goes is rounded; a value its field can't hold at all (text where a number goes) is left at its default. Each one is written to the Program Log as a **Warn** naming the setting, the file, the value found and the value used, and the rest of the file loads as normal — one bad value no longer stops a profile from loading. The file isn't rewritten when it's read; the next save of that file writes the value used.
+
 ### General / Toolbar / Statline
 
 | Setting | Default | Allowed Values | Config Key | Location |
@@ -7519,7 +7521,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Give up a paused event after (minutes standing still) | `5` | 1–120 | `CharacterProfile.EventSuspendedIdleMinutes` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Sound/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 | Sounds enabled / Master volume | true / 80 | bool / 0–100 | `SoundSettings.Enabled` / `MasterVolume` | Models/Profile/SoundSettings.cs |
-| Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
+| Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / 1–1000000 (0 = the cue's default) | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
 
 ### Diagnostics / Log Pane / Equipment
 
@@ -7533,7 +7535,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Capture unrecognized messages | `true` | bool (Global) | `GlobalSettings.LogDiagnostics.CaptureUnrecognizedMessages` | Models/Settings/LogDiagnosticsSettings.cs |
 | Equipment sets (gear loadouts, edited in the Player Workshop's Equipment Manager) | empty list, seeded per trigger type | list of `EquipmentSet` | `EquipmentSettings.Sets` | Models/Profile/EquipmentSettings.cs |
 | Equipment: swap to Default on combat / before lairs | `false` / `false` | bool | `SwapToDefaultOnCombat` / `SwapToDefaultBeforeLairs` | Models/Profile/EquipmentSettings.cs |
-| Equipment: While Moving on manual moves / idle seconds | `false` / `10` | bool / seconds | `WhileMovingOnManualMoves` / `WhileMovingManualIdleSeconds` | Models/Profile/EquipmentSettings.cs |
+| Equipment: While Moving on manual moves / idle seconds | `false` / `10` | bool / 1–600 seconds | `WhileMovingOnManualMoves` / `WhileMovingManualIdleSeconds` | Models/Profile/EquipmentSettings.cs |
 | Equipment: keep Bossing set between bosses | `false` | bool | `KeepBossingBetweenBosses` | Models/Profile/EquipmentSettings.cs |
 | Roomba: search rooms for hidden items / searches per room (realm-wide) | `false` / `3` | bool / 1–20 | `RoombaSettings.SearchForHidden` / `SearchesPerRoom` | Models/Profile/RoombaSettings.cs |
 | Roomba: rooms this character actively manages | none | list of `map/room` | `CharacterProfile.GhManagedRooms` | Models/Profile/CharacterProfile.cs |

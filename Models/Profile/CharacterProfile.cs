@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MudPlay.Game.Map;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -107,8 +108,11 @@ public sealed class CharacterProfile
     // given up. Null is the default (EventManager.DefaultMaxQueued /
     // DefaultMaxQueueWaitMinutes / DefaultSuspendedIdleMinutes). Per-character,
     // like the events themselves.
+    [SettingRange(1, 100)]
     public int? EventQueueLimit { get; set; }
+    [SettingRange(1, 1440)]
     public int? EventQueueWaitMinutes { get; set; }
+    [SettingRange(1, 120)]
     public int? EventSuspendedIdleMinutes { get; set; }
 
     // Per-character keybindings for built-in app actions (toolbar + menu
@@ -208,6 +212,7 @@ public sealed class CharacterProfile
     // the toolbar layout so reordering or editing the layout never drops a pick.
     public Dictionary<string, string>? ToolbarSplitChoices { get; set; }
 
+    [SettingRange(0, 1)]
     public Dictionary<string, double>? SplitterRatios { get; set; }
 
     // Snapshot of the most recent stat + exp observations. Written by
@@ -304,6 +309,7 @@ public sealed class CharacterProfile
     // after upgrading; cleared (nulled + saved) once migrated. Never written to
     // after that point — do not read these directly outside that migration.
     public List<GhRoomLabel>? GhRoomLabels { get; set; }
+    [SettingRange(1, 20)]
     public int? GhSearchesPerRoom { get; set; }
     public bool? GhSearchForHidden { get; set; }
 
@@ -336,6 +342,7 @@ public sealed class CharacterProfile
 
     // Widths the user dragged the Bosses tab's columns to, by column key. A column
     // with no entry keeps its built-in width.
+    [SettingRange(0, 32767)]
     public Dictionary<string, double>? BossColumnWidths { get; set; }
 
     // Per-table column-visibility choices in the Game Data Browser, keyed by the
@@ -503,6 +510,7 @@ public sealed class CharacterProfile
     // fixed extent in DIPs, plus whether it was a vertical (config top/bottom → a height)
     // or horizontal (config left/right → a width) split, so a persisted height isn't
     // applied as a width after a layout change. 0 = never dragged (use the default).
+    [SettingRange(0, 32767)]
     public double BuffWatchdogConfigExtent { get; set; }
     public bool BuffWatchdogConfigExtentVertical { get; set; }
 

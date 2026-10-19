@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // One row of the Character Workshop's CP Allocation plan — the target value of
@@ -11,13 +13,20 @@ namespace MudPlay.Models.Profile;
 // minus equipment bonuses.
 public sealed class CpPlanEntry
 {
+    [SettingRange(0, 1000)]
     public int Level { get; set; }
 
+    [SettingRange(0, 999)]
     public int Strength { get; set; }
+    [SettingRange(0, 999)]
     public int Intellect { get; set; }
+    [SettingRange(0, 999)]
     public int Willpower { get; set; }
+    [SettingRange(0, 999)]
     public int Agility { get; set; }
+    [SettingRange(0, 999)]
     public int Health { get; set; }
+    [SettingRange(0, 999)]
     public int Charm { get; set; }
 
     public CpPlanEntry() { }

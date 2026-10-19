@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Settings;
 
 // The Program Log window's switches, kept in GlobalSettings.LogDiagnostics.
@@ -36,5 +38,6 @@ public sealed class LogDiagnosticsSettings
     // Gate for Services.SessionStatsLog, and how often it writes. Default off,
     // every 5 minutes.
     public bool SessionStatistics { get; set; }
+    [SettingRange(LogDiagnosticState.MinSessionStatisticsMinutes, LogDiagnosticState.MaxSessionStatisticsMinutes)]
     public int SessionStatisticsMinutes { get; set; } = 5;
 }

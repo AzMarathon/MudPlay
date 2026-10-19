@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Cash" settings — drives Game.Cash.CashManager's per-currency
@@ -15,6 +17,7 @@ public sealed class CashSettings
     // Auto-deposit trigger — fire when total held wealth (copper value) exceeds
     // this value. 0 disables the trigger. CashManager raises AutoDepositRequested;
     // AutoDepositManager runs the bank / stash trip.
+    [SettingRange(0, 100_000_000)]
     public long AutoDepositIfWealthExceeds { get; set; }
 
     // Auto-deposit trigger — fire when the total number of physical coins held
@@ -23,6 +26,7 @@ public sealed class CashSettings
     // AutoDepositIfWealthExceeds: either gate firing triggers the deposit
     // (OR logic), and the single-fire guard re-arms only once BOTH gates fall
     // back below their thresholds.
+    [SettingRange(0, 100_000_000)]
     public long AutoDepositIfCoinsExceed { get; set; }
 
     // The bank or stash room an auto-deposit trip walks to. A bank is a Shops
@@ -39,6 +43,7 @@ public sealed class CashSettings
     // KeepOnHandWealth used to be a raw copper value; with the default Copper
     // denomination it still reads back as the same copper amount, so old
     // profiles migrate cleanly.)
+    [SettingRange(0, 100_000_000)]
     public long KeepOnHandWealth { get; set; }
     public CoinDenomination KeepOnHandDenomination { get; set; } = CoinDenomination.Copper;
 
@@ -79,6 +84,7 @@ public sealed class CashSettings
     // A bank run that comes due while Auto-sell items are carried sells them first
     // at a shop this many steps or fewer from the bank (SellDetourManager's
     // SellAheadOfBankRun). 0 never adds the stop.
+    [SettingRange(0, 500)]
     public int SellOnBankRunWithinSteps { get; set; } = 25;
 
     // ----- Coin encumbrance gate + cascade ---------------------------

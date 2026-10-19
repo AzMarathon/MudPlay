@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -13,6 +14,7 @@ public sealed class SoundSettings
     public bool Enabled { get; set; } = true;
 
     // 0–100. Every cue's own volume scales against it.
+    [SettingRange(0, 100)]
     public int MasterVolume { get; set; } = 80;
 
     // Keyed by cue id.
@@ -26,6 +28,8 @@ public sealed class SoundCueSettings
 {
     public bool Enabled { get; set; }
     public string Sound { get; set; } = string.Empty;
+    [SettingRange(0, 100)]
     public int Volume { get; set; } = 100;
+    [SettingRange(0, 1_000_000)]
     public int Every { get; set; }
 }

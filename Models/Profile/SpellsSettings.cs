@@ -1,4 +1,5 @@
 using MudPlay.Game;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -27,37 +28,47 @@ public sealed class SpellsSettings
     // Priority slot for the last-resort EmergencyHealSpell. Defaults to 1 so an
     // emergency leads every between-round cast, but it's user-reorderable like
     // any other slot.
+    [SettingRange(1, 10)]
     public int PriorityEmergencyHeal { get; set; } = 1;
 
     // Priority slot shared by Party tab's Major single-target heal and Major
     // AOE party heal.
+    [SettingRange(1, 10)]
     public int PriorityMajorPartyHeal { get; set; } = 2;
 
     // Priority slot shared by Party tab's Minor single-target heal and Minor
     // AOE party heal.
+    [SettingRange(1, 10)]
     public int PriorityMinorPartyHeal { get; set; } = 3;
 
     // Priority slot for this tab's MajorHealSpell.
+    [SettingRange(1, 10)]
     public int PriorityMajorSelfHeal { get; set; } = 4;
 
     // Priority slot for the buffs ticked "Priority buff" in the Buff Watchdog:
     // the ones worth casting ahead of a minor heal (a damage shield, a ward).
+    [SettingRange(1, 10)]
     public int PriorityPriorityBuffs { get; set; } = 5;
 
     // Priority slot for this tab's MinorHealSpell.
+    [SettingRange(1, 10)]
     public int PriorityMinorSelfHeal { get; set; } = 6;
 
     // Priority slot for the downed-ally rescue heal. Formerly hardcoded to lead;
     // now a reorderable slot.
+    [SettingRange(1, 10)]
     public int PriorityDownedAllyHeal { get; set; } = 7;
 
     // Priority slot for cure spells (the four cure-* picks below).
+    [SettingRange(1, 10)]
     public int PriorityCuring { get; set; } = 8;
 
     // Priority slot for every other buff / bless cast.
+    [SettingRange(1, 10)]
     public int PriorityBuffing { get; set; } = 9;
 
     // Priority slot for between-round debuffs (CombatSettings' debuff slots).
+    [SettingRange(1, 10)]
     public int PriorityDebuffing { get; set; } = 10;
 
     // ----- Healing / regeneration -----------------------------------
@@ -95,6 +106,7 @@ public sealed class SpellsSettings
     // a better one. null disables rerolling (the spell then just recasts on
     // expiry). Seeded from the spell's level-scaled roll range on the Spells
     // tab.
+    [SettingRange(-999, 999)]
     public int? ManaRegenRerollThreshold { get; set; }
 
     // Maximum consecutive rerolls of the MaRegenSpell per cast cycle before
@@ -102,6 +114,7 @@ public sealed class SpellsSettings
     // streak can't drain the mana pool. Rerolling also hard-stops early if
     // paying for the next cast would drop mana below the buff floor. Defaults to
     // 3.
+    [SettingRange(0, 20)]
     public int ManaRegenRerollCap { get; set; } = 3;
 
     // LEGACY: the old dedicated "cast when HP / mana is full" picks. A buff slot's
@@ -158,6 +171,7 @@ public sealed class SpellsSettings
     // the tracked timer running out). Only non-default values for filled slots
     // persist, so a profile that never touches the pickers stays clean and the
     // out-of-range picks round-trip like BlessSlots itself.
+    [SettingRange(-999, 999)]
     public Dictionary<int, int> BlessSlotRecastMargins { get; set; } = new();
 
     // Default recast lead when a bless slot (self or party) doesn't override it.

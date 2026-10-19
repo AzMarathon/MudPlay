@@ -23,6 +23,11 @@ public sealed class ScrollbackBuffer
     // Default ring capacity.
     public const int DefaultCapacity = 4_000;
 
+    // The most rows the ring will hold, whatever it is asked for: ten times the
+    // Settings window's own ceiling. The ring's array is made at full capacity, so a
+    // damaged setting of two billion rows was a 16 GB allocation that failed startup.
+    public const int MaxCapacity = 1_000_000;
+
     // One captured row. Cells is a defensive copy owned by the buffer;
     // mutating it after Append doesn't affect anything since the source row
     // was copied at append time. SoftWrapped marks a row the emulator ended by
@@ -49,6 +54,7 @@ public sealed class ScrollbackBuffer
     public ScrollbackBuffer(int capacity = DefaultCapacity)
     {
         if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
+        capacity = Math.Min(capacity, MaxCapacity);
         Capacity = capacity;
         _ring = new Row[capacity];
     }
@@ -99,10 +105,11 @@ public sealed class ScrollbackBuffer
     // Resize the ring to newCapacity in place. Shrinking discards the oldest
     // rows first (the newest newCapacity rows survive). Growing leaves the
     // existing rows intact and reserves empty space for future appends. No-op
-    // if the capacity is unchanged.
+    // if the capacity is unchanged. A capacity past MaxCapacity gets MaxCapacity.
     public void SetCapacity(int newCapacity)
     {
         if (newCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(newCapacity));
+        newCapacity = Math.Min(newCapacity, MaxCapacity);
         if (newCapacity == Capacity) return;
 
         int keep = Math.Min(_count, newCapacity);

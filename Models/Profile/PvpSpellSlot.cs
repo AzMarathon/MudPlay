@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // One PvP spell on Settings → PvP. What it does in a fight depends on the spell: a
@@ -11,9 +13,11 @@ public sealed class PvpSpellSlot
 
     // Most casts (a between-round spell) or rounds (a combat spell) in one fight.
     // Null = no limit.
+    [SettingRange(0, 100)]
     public int? MaxCasts { get; set; }
 
     // Don't use the spell below this much mana. Read like the Combat tab's slots:
     // a percentage or a mana figure, by CombatSettings.SpellManaThresholdMode.
+    [SettingRange(0, 9999)]
     public int MinManaPerCast { get; set; }
 }
