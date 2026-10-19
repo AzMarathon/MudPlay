@@ -100,7 +100,11 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             _ => TargetPriority.Default,
         };
         dto.TargetPriorityMemberName = opt.NeedsName ? name : null;
-        WriteCombat(profile, dto);
+        if (!WriteCombat(profile, dto))
+        {
+            ctx.Refuse(SettingsUnreadable);
+            return;
+        }
         _log?.Log(LogSeverity.Info, LogCategory,
             $"@atkprio from {ctx.Sender}: {opt.Num} {opt.Label}{NameSuffix(name)}");
         ctx.Reply(SetReply("@atkprio", opt, name));
@@ -135,7 +139,11 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
             _ => AttackTiming.Default,
         };
         dto.AttackAfterPlayerName = opt.NeedsName ? name : null;
-        WriteCombat(profile, dto);
+        if (!WriteCombat(profile, dto))
+        {
+            ctx.Refuse(SettingsUnreadable);
+            return;
+        }
         _log?.Log(LogSeverity.Info, LogCategory,
             $"@atkorder from {ctx.Sender}: {opt.Num} {opt.Label}{NameSuffix(name)}");
         ctx.Reply(SetReply("@atkorder", opt, name));
@@ -217,9 +225,15 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
 
     private CombatSettings ReadCombat() => SettingsSection.Read<CombatSettings>(_profile.Current, TabKey);
 
-    private void WriteCombat(CharacterProfile profile, CombatSettings dto)
+    // False when the stored section can't be read and so was left as it is: nothing
+    // changed, and the engines still run on its defaults.
+    private bool WriteCombat(CharacterProfile profile, CombatSettings dto)
     {
-        SettingsSection.Write(profile, TabKey, dto, "a remote attack-targeting command");
+        if (!SettingsSection.Write(profile, TabKey, dto, "a remote attack-targeting command")) return false;
         _profile.Save();
+        return true;
     }
+
+    // The refusal when the change can't be stored (WriteCombat false).
+    private const string SettingsUnreadable = "my Combat settings can't be read; change it in Settings";
 }

@@ -415,9 +415,9 @@ public static class SettingsValueGuard
     public static bool TryReadSection(JsonNode section, Type type, string key, string where, out object? value) =>
         TryReadSection(type, key, where, () => section.Deserialize(type, JsonStore.Options), () => section, out value);
 
-    // Raise line on Clamped for source, as a read of source would: said once while
-    // source keeps saying it.
-    public static void Say(string source, string line) => Report(source, new List<string> { line });
+    // Raise line on Clamped every time it is said: one line per thing that happened
+    // (a skipped write is a user's action that didn't take).
+    public static void Say(string line) => Clamped?.Invoke(line);
 
     private const string FieldDefault = "the default";
 

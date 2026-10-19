@@ -169,11 +169,14 @@ public sealed class AutoModeController
             Wired[i].Set(am, false);
         }
         lock (_skipLock) { _skipped.Clear(); }
+        // The switch engages even when the toggles can't be saved: it is what holds
+        // every automatic system, and switching everything off must never fail.
         _killEngaged = true;
-        if (wereOn.Count > 0) WriteGeneral(profile, general);
+        bool saved = wereOn.Count == 0 || WriteGeneral(profile, general);
 
         _log?.Log(LogSeverity.Info, LogCategory,
             $"Master switch OFF ({by}). Toggles switched off: {(wereOn.Count > 0 ? string.Join(", ", wereOn) : "none were on")}."
+            + (saved ? string.Empty : $" {NotSaved}")
             + (inFlight.Length > 0 ? $" {inFlight}" : string.Empty));
         SwitchedByUserPress = by == ByUserPress;
         KillSwitchToggled?.Invoke(true);
@@ -216,7 +219,12 @@ public sealed class AutoModeController
 
         _snapshot = null;
         _killEngaged = false;
-        if (changed) WriteGeneral(profile, general);
+        if (changed && !WriteGeneral(profile, general))
+        {
+            // Nothing was ticked: the engines run on what the stored section reads as.
+            am = ReadGeneral(profile).AutoMode;
+            source = NotSaved;
+        }
 
         List<string> nowOn = new();
         foreach ((string name, Func<AutoActionDefaults, bool> get, _) in Wired)
@@ -325,8 +333,7 @@ public sealed class AutoModeController
 
         general.AutoModeBase = result.Base;
         general.AutoMode = result.Live;
-        WriteGeneral(profile, general);
-        return result;
+        return WriteGeneral(profile, general) ? result : null;
     }
 
     // "Remote commands 3, Triggers 12" — the skip counters as one phrase.
@@ -340,9 +347,14 @@ public sealed class AutoModeController
 
     private static GeneralSettings ReadGeneral(CharacterProfile profile) => SettingsSection.Read<GeneralSettings>(profile, TabKey);
 
-    private void WriteGeneral(CharacterProfile profile, GeneralSettings general)
+    // False when the stored section can't be read and so was left as it is: no
+    // toggle changed.
+    private bool WriteGeneral(CharacterProfile profile, GeneralSettings general)
     {
-        SettingsSection.Write(profile, TabKey, general, "an auto-mode switch");
+        if (!SettingsSection.Write(profile, TabKey, general, "an auto-mode switch")) return false;
         _profile.Save();
+        return true;
     }
+
+    private const string NotSaved = "The toggles were left as they are: the General settings can't be read.";
 }

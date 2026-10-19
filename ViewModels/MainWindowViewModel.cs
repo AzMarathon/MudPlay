@@ -7234,7 +7234,12 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto.AutoMode);
-        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle")) return;
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle"))
+        {
+            // The button has already flipped: show what is really in effect.
+            SyncAutoEngineTogglesFromProfile();
+            return;
+        }
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("AutoMode", $"User turned {flag} {(value ? "on" : "off")}.");
     }
@@ -7251,7 +7256,12 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto);
-        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle")) return;
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle"))
+        {
+            // The button has already flipped: show what is really in effect.
+            SyncAutoEngineTogglesFromProfile();
+            return;
+        }
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("General", $"User turned {flag} {(value ? "on" : "off")}.");
     }

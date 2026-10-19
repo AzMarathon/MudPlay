@@ -245,6 +245,83 @@ public sealed class SettingsSectionReadTests : IDisposable
         Assert.Contains(warns, w => w.StartsWith($"{who} section Health can't be read, so a Health edit", StringComparison.Ordinal));
     }
 
+    // The client side of an @-command against a section it can't store: the sender
+    // is told it didn't take (or nothing, with Settings → Talk's warn off), never
+    // the success reply, and the change isn't logged as made. Each try is warned.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RemoteToggle_OnAnUnreadableSection_IsRefused_NotReportedDone(bool warnOnDenial)
+    {
+        WriteProfile("""{ "Name": "Hero", "Settings": { "General": 5, "Combat": [ 1 ] } }""");
+        ProfileService profiles = LoadHero();
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        PlayerDatabase players = new(new ProfileService(), () => null);
+        RemoteCommandManager engine = new(new ChatRouter(router), new PartyState(), players) { WarnOnDenial = warnOnDenial };
+        List<string> sent = new();
+        engine.SetWireSender(b => sent.Add(System.Text.Encoding.Latin1.GetString(b)));
+        players.RecordObservation("Tank", null, null, null, null, null, null, DateTime.UtcNow);
+        players.EditCustomization("Tank", new PlayerCustomization(RemoteControls: PlayerRemoteControls.AlterSettings));
+        LogService log = new();
+        using AutoModeRemoteHandler auto = new(engine, profiles, new AutoModeController(profiles), log);
+        using AttackTargetingRemoteHandler targeting = new(engine, profiles, log);
+
+        ChatLines.Hear(router, new ChatLine(ChatChannel.TelepathIncoming, "Tank", "@auto-combat off"));
+        ChatLines.Hear(router, new ChatLine(ChatChannel.TelepathIncoming, "Tank", "@auto-combat off"));
+        ChatLines.Hear(router, new ChatLine(ChatChannel.TelepathIncoming, "Tank", "@atkprio 2"));
+
+        Assert.DoesNotContain(sent, l => l.Contains("@auto-combat: off", StringComparison.Ordinal));
+        Assert.DoesNotContain(sent, l => l.Contains("@atkprio:", StringComparison.Ordinal));
+        if (warnOnDenial)
+        {
+            Assert.Equal(2, sent.Count(l => l.Contains("my General settings can't be read", StringComparison.Ordinal)));
+            Assert.Single(sent, l => l.Contains("my Combat settings can't be read", StringComparison.Ordinal));
+        }
+        else Assert.Empty(sent);
+        Assert.DoesNotContain(log.Snapshot(), e => e.Message.Contains("on -> off", StringComparison.Ordinal)
+                                                 || e.Message.StartsWith("@atkprio from", StringComparison.Ordinal));
+        Assert.Equal(2, Warns().Count(w => w.Contains("section General can't be read, so a remote auto-mode command", StringComparison.Ordinal)));
+        Assert.Equal("5", LoadHero().Current!.Settings!["General"].GetRawText());
+    }
+
+    // The master switch still holds everything with an unreadable General section
+    // (switching everything off must never fail), but no toggle is changed or
+    // settled that can't be stored.
+    [Fact]
+    public void MasterSwitch_OnAnUnreadableSection_StillHolds_AndSettlesNothing()
+    {
+        WriteProfile("""{ "Name": "Hero", "Settings": { "General": 5 } }""");
+        ProfileService profiles = LoadHero();
+        AutoModeController controller = new(profiles);
+
+        controller.TurnOff();
+        Assert.True(controller.KillSwitchEngaged);
+        controller.TurnOn();
+        Assert.False(controller.KillSwitchEngaged);
+        Assert.Null(controller.ReconcileToBase("test"));
+        Assert.Equal("5", LoadHero().Current!.Settings!["General"].GetRawText());
+    }
+
+    // The skip is for a section that can't be read, never for one that merely holds
+    // the defaults (written out, or empty): those are written as asked.
+    [Fact]
+    public void SectionHoldingOnlyDefaults_IsStillWritten()
+    {
+        string talk = SettingsSection.ToElement(new TalkSettings()).GetRawText();
+        WriteProfile($$"""{ "Name": "Hero", "Settings": { "Talk": {{talk}}, "General": { } } }""");
+        ProfileService profiles = LoadHero();
+
+        profiles.UpdateSection<TalkSettings>("Talk", t => t.LogConversations = !new TalkSettings().LogConversations);
+        Assert.True(SettingsSection.Write(profiles.Current!, "General", new GeneralSettings { DisableHangups = true }, "a test write"));
+        profiles.Save();
+
+        CharacterProfile back = LoadHero().Current!;
+        Assert.Equal(!new TalkSettings().LogConversations, SettingsSection.Read<TalkSettings>(back, "Talk").LogConversations);
+        Assert.True(SettingsSection.Read<GeneralSettings>(back, "General").DisableHangups);
+        Assert.DoesNotContain(Warns(), w => w.Contains("can't be read", StringComparison.Ordinal));
+    }
+
     // A section put in memory since the file was read (a write, an import) and the
     // tiers merged are held to their fields the way a file's sections are: a number
     // out of its range at the nearer end, an enum number the enum lacks at the default.

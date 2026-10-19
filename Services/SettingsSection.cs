@@ -69,7 +69,7 @@ public static class SettingsSection
         profile.Settings ??= new Dictionary<string, JsonElement>();
         if (profile.Settings.TryGetValue(key, out JsonElement stored) && !Check<T>(stored, key, "Character", profile).Read)
         {
-            SettingsValueGuard.Say($"{Where("Character", profile)} section {key} write",
+            SettingsValueGuard.Say(
                 $"{Where("Character", profile)} section {key} can't be read, so {writer} didn't write over it; it is left as stored.");
             return false;
         }

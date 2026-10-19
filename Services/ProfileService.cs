@@ -546,14 +546,14 @@ public sealed class ProfileService
         CharacterProfile profile = ReadDefaultProfileFile();
         GeneralSettings general = ReadGeneralSection(profile);
         general.ShowStartupMudAnimation = value;
-        WriteGeneralSection(profile, general);
+        if (!WriteGeneralSection(profile, general)) return;
         Directory.CreateDirectory(Path.GetDirectoryName(_defaultProfileFile)!);
         JsonStore.Save(_defaultProfileFile, profile);
     }
 
     private static GeneralSettings ReadGeneralSection(CharacterProfile profile) => SettingsSection.Read<GeneralSettings>(profile, "General");
 
-    private static void WriteGeneralSection(CharacterProfile profile, GeneralSettings general) =>
+    private static bool WriteGeneralSection(CharacterProfile profile, GeneralSettings general) =>
         SettingsSection.Write(profile, "General", general, "the startup-animation switch");
 
     // Move the loaded named profile's folder from its current BBS (and name) to

@@ -96,8 +96,8 @@ public sealed class SettingsResolver
     // Write value into tier's file as the delta for tabName, then persist the
     // tier file to disk. SettingsTier.Defaults is read-only and throws. A character
     // section that can't be read is left as stored (SettingsSection.Write): the value
-    // was resolved without it.
-    public void WriteAt<T>(SettingsTier tier, string tabName, T value) where T : class, new()
+    // was resolved without it. False then, with nothing written.
+    public bool WriteAt<T>(SettingsTier tier, string tabName, T value) where T : class, new()
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
         JsonElement asJson = SettingsSection.ToElement(value);
@@ -122,12 +122,13 @@ public sealed class SettingsResolver
 
             case SettingsTier.Character:
                 CharacterProfile chr = RequireLoadedProfile();
-                if (!SettingsSection.Write(chr, tabName, value, $"a {tabName} edit")) return;
+                if (!SettingsSection.Write(chr, tabName, value, $"a {tabName} edit")) return false;
                 _profile.Save();
                 break;
         }
 
         Log?.Info("Settings", $"write: '{tabName}' → {tier} tier");
+        return true;
     }
 
     // ----- Game-data record overrides (per-set side-files) ---------------
