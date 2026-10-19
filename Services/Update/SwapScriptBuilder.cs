@@ -25,7 +25,9 @@ namespace MudPlay.Services.Update;
 // list entries are held by UpdatePlan to plain names with no shell syntax in them.
 // Either helper refuses to start when a value it needs is missing or the staging
 // folder isn't an update's own: it touches nothing but a note in the failure log,
-// and starts the old build again so the user still has a client.
+// and starts the old build again so the user still has a client — both only when
+// the program it names is a file directly in the install folder it names, and the
+// restart only once there was a client to wait for.
 //
 // In the cmd helper a name or path that comes from the user's folder (the
 // program's name may be "MudPlay (1).exe") is always quoted: unquoted on an echo or
@@ -74,14 +76,22 @@ public static class SwapScriptBuilder
           sleep 0.5
         }
 
+        # Only a program that is a regular file directly in the install folder is
+        # started, and only that folder gets the note: values that don't agree are
+        # not trusted to name either. With no client to wait for, nothing is started
+        # (it could overlap one still closing), and the note says so.
         refuse() {
+          local why="$1" note="$DST/MudPlay-update-failed.log"
+          local ours=0
+          if [ -n "$DST" ] && [ -n "$EXE" ] && [ -d "$DST" ] && [ "${EXE%/*}" = "${DST%/}" ] \
+             && [ -f "$EXE" ] && [ ! -L "$EXE" ]; then ours=1; fi
+          [ "$ours" = 1 ] && [ -z "$PID" ] && why="$why; MudPlay was not restarted (no client to wait for)"
           wait_old
-          local note="$DST/MudPlay-update-failed.log"
-          if [ -n "$DST" ] && [ -d "$DST" ] && [ ! -L "$note" ] && [ ! -d "$note" ]; then
+          if [ "$ours" = 1 ] && [ ! -L "$note" ] && [ ! -d "$note" ]; then
             printf '[%s] MudPlay update refused before starting: %s - nothing was changed\n' \
-              "$(date '+%F %T')" "$1" >"$note" 2>/dev/null || true
+              "$(date '+%F %T')" "$why" >"$note" 2>/dev/null || true
           fi
-          if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+          if [ "$ours" = 1 ] && [ -n "$PID" ]; then
             "$EXE" ${ARGS[@]+"${ARGS[@]}"} </dev/null >/dev/null 2>&1 &
           fi
           exit 2
@@ -268,6 +278,7 @@ public static class SwapScriptBuilder
         if not exist "%STAGE%\" set "REFUSED=the staging folder isn't there"
         if not exist "%INSTALL%" set "REFUSED=the file list isn't there"
         if not exist "%NEWEXE%" set "REFUSED=the new program isn't there"
+        for %%I in ("%EXE%") do if /i not "%%~xI"==".exe" set "REFUSED=the program to replace isn't an .exe"
         if defined REFUSED goto refused
 
         for %%I in ("%EXE%") do set "EXENAME=%%~nxI"
@@ -470,10 +481,20 @@ public static class SwapScriptBuilder
         rem touched. The old build is started again so the user isn't left without a
         rem client, and a note goes in the failure log beside it when the install
         rem folder is known (never through a link or over a folder of that name).
+        rem Only an .exe that is a file directly in the install folder is started, and
+        rem only that folder gets the note: values that don't agree are not trusted to
+        rem name either, and start given anything but an .exe would run whatever the
+        rem file's association says. With no client to wait for, nothing is started
+        rem (it could overlap one still closing), and the note says so.
         :refused
+        set "OURS="
+        set "DSTS=%DST%"
+        if defined DSTS if not "%DSTS:~-1%"=="\" set "DSTS=%DSTS%\"
+        if defined DSTS if defined EXE if exist "%DST%\" for %%I in ("%EXE%") do if /i "%%~dpI"=="%DSTS%" if /i "%%~xI"==".exe" if exist "%%~fI" if not exist "%%~fI\" set "OURS=1"
+        if defined OURS if not defined PID set "REFUSED=%REFUSED%; MudPlay was not restarted (no client to wait for)"
         call :waitold
-        if defined DST if exist "%DST%\" call :refusednote
-        if defined EXE if exist "%EXE%" if not exist "%EXE%\" start "" "%EXE%" %ARGS%
+        if defined OURS call :refusednote
+        if defined OURS if defined PID start "" "%EXE%" %ARGS%
         exit /b 2
 
         rem Wait for the app to exit, so no file is overwritten while open and no

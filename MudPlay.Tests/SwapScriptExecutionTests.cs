@@ -208,20 +208,109 @@ public sealed partial class SwapScriptExecutionTests
 
         Assert.Equal(2, box.RunRaw(request));
 
-        bool noted = fault != "dst";
+        // Without both the install folder and its program, neither is trusted.
+        bool ours = fault is not ("dst" or "exe");
         string failLog = box.Installed("MudPlay-update-failed.log");
-        Assert.Equal((noted ? before.Append("MudPlay-update-failed.log") : before).Order(StringComparer.Ordinal),
+        Assert.Equal((ours ? before.Append("MudPlay-update-failed.log") : before).Order(StringComparer.Ordinal),
             box.InstalledNames());
-        if (noted) Assert.Contains("MudPlay update refused before starting", File.ReadAllText(failLog));
+        if (ours) Assert.Contains("MudPlay update refused before starting", File.ReadAllText(failLog));
         Assert.Equal(users, box.SnapshotUserFiles());
         Assert.Contains("launched-old", box.InstalledText("MudPlay"));
         Assert.True(Directory.Exists(box.Stage));
         Assert.Equal("mine", File.ReadAllText(Path.Combine(foreign, "keep.txt")));
         Assert.False(File.Exists(Path.Combine(box.Root, "swap.log")));
-        if (fault == "exe")
-            Assert.False(File.Exists(Path.Combine(box.Root, "launched-old")), "relaunched with no program named");
-        else
+        if (ours)
             Assert.Empty(box.Relaunched("old"));
+        else
+            Assert.False(box.LaunchedWithin("old"), "relaunched a program it couldn't trust");
+    }
+
+    // A refusal starts only the program directly in the install folder, and notes
+    // only there: a DST naming someone else's folder, or an EXE outside DST, runs
+    // nothing and writes nothing.
+    [Theory]
+    [InlineData("foreign-dst")]
+    [InlineData("exe-outside-dst")]
+    public void Posix_ARefusal_NeverRunsOrWritesWhereTheValuesDontAgree(string fault)
+    {
+        if (!Bash) return;
+        using var box = new Sandbox(["MudPlay"]);
+        box.NewBuild(["MudPlay"]);
+        UpdatePlan plan = box.Plan();
+        string list = plan.WriteList(box.Stage);
+        string foreign = box.Foreign();
+        File.WriteAllText(Path.Combine(foreign, "keep.txt"), "mine");
+        string marker = Path.Combine(box.Root, "foreign-ran");
+        string evil = Path.Combine(box.Root, "elsewhere", "evil");
+        Directory.CreateDirectory(Path.GetDirectoryName(evil)!);
+        File.WriteAllText(evil, $"#!/usr/bin/env bash\ntouch '{marker}'\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(evil, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        SwapRequest request = box.Request(plan, list, profile: "", reconnect: false) with { Stage = "" };
+        request = fault == "foreign-dst"
+            ? request with { InstallDir = foreign, Exe = evil }
+            : request with { Exe = evil };
+        string[] before = box.InstalledNames();
+
+        Assert.Equal(2, box.RunRaw(request));
+
+        Thread.Sleep(500);
+        Assert.False(File.Exists(marker), "a refusal ran a program outside the install folder");
+        Assert.Equal(new[] { "keep.txt" }, Directory.GetFiles(foreign).Select(Path.GetFileName).OfType<string>());
+        Assert.Equal(before, box.InstalledNames());
+        Assert.False(box.LaunchedWithin("old"));
+    }
+
+    // With no client to wait for, a refusal starts nothing (it could overlap one
+    // still closing) and says so in its note.
+    [Fact]
+    public void Posix_ARefusalWithNoPid_RestartsNothing_AndSaysSo()
+    {
+        if (!Bash) return;
+        using var box = new Sandbox(["MudPlay"]);
+        box.NewBuild(["MudPlay"]);
+        UpdatePlan plan = box.Plan();
+        SwapRequest request = box.Request(plan, plan.WriteList(box.Stage), profile: "", reconnect: false) with { Pid = "" };
+
+        Assert.Equal(2, box.RunRaw(request));
+
+        Assert.Contains("MudPlay was not restarted (no client to wait for)",
+            File.ReadAllText(box.Installed("MudPlay-update-failed.log")));
+        Assert.False(box.LaunchedWithin("old"));
+    }
+
+    // The refusal's note is never written through a link, nor over a folder, of the
+    // failure log's name.
+    [Theory]
+    [InlineData("link")]
+    [InlineData("folder")]
+    public void Posix_ARefusalsNote_NeverGoesThroughALinkOrOverAFolder(string kind)
+    {
+        if (!Bash) return;
+        using var box = new Sandbox(["MudPlay"]);
+        box.NewBuild(["MudPlay"]);
+        UpdatePlan plan = box.Plan();
+        string failLog = box.Installed("MudPlay-update-failed.log");
+        if (kind == "link")
+        {
+            File.CreateSymbolicLink(failLog, box.Installed("photo.jpg"));
+        }
+        else
+        {
+            Directory.CreateDirectory(failLog);
+            File.WriteAllText(Path.Combine(failLog, "inside.txt"), "mine");
+        }
+        Dictionary<string, byte[]> users = box.SnapshotUserFiles();
+        SwapRequest request = box.Request(plan, plan.WriteList(box.Stage), profile: "", reconnect: false) with { NewExe = "" };
+
+        Assert.Equal(2, box.RunRaw(request));
+
+        Assert.Equal(users, box.SnapshotUserFiles());
+        if (kind == "link")
+            Assert.True(new FileInfo(failLog).LinkTarget is not null);
+        else
+            Assert.Equal("mine", File.ReadAllText(Path.Combine(failLog, "inside.txt")));
+        Assert.Empty(box.Relaunched("old"));
     }
 
     // ----- How the helper is started ------------------------------------------
@@ -378,11 +467,19 @@ public sealed partial class SwapScriptExecutionTests
         // touches nothing else.
         string refused = Section(s, ":refused");
         Assert.Contains("call :waitold", refused);
-        Assert.Contains("if defined DST if exist \"%DST%\\\" call :refusednote", refused);
-        Assert.Contains("if defined EXE if exist \"%EXE%\" if not exist \"%EXE%\\\" start \"\" \"%EXE%\" %ARGS%", refused);
+        // Only an .exe that is a file directly in the install folder is started or
+        // noted beside, and only with a client to have waited for.
+        Assert.Contains("for %%I in (\"%EXE%\") do if /i \"%%~dpI\"==\"%DSTS%\" if /i \"%%~xI\"==\".exe\" if exist \"%%~fI\" if not exist \"%%~fI\\\" set \"OURS=1\"", refused);
+        Assert.Contains("if defined OURS if not defined PID set \"REFUSED=%REFUSED%; MudPlay was not restarted (no client to wait for)\"", refused);
+        Assert.Contains("if defined OURS call :refusednote", refused);
+        Assert.Contains("if defined OURS if defined PID start \"\" \"%EXE%\" %ARGS%", refused);
+        Assert.Single(refused.Split('\n'), l => l.Contains("start ", StringComparison.Ordinal));
         Assert.Contains("exit /b 2", refused);
+        // Every other start is past the checks, which refuse a program that isn't an .exe.
+        Assert.Contains("for %%I in (\"%EXE%\") do if /i not \"%%~xI\"==\".exe\" set \"REFUSED=", s);
         string note = Section(s, ":refusednote");
         Assert.Contains("if defined FAILATTR if not \"%FAILATTR:l=%\"==\"%FAILATTR%\" goto :eof", note);
+        Assert.Contains("if defined FAILATTR if not \"%FAILATTR:d=%\"==\"%FAILATTR%\" goto :eof", note);
         Assert.Contains(">\"%DST%\\MudPlay-update-failed.log\" echo", note);
         Assert.DoesNotContain("del ", refused + note);
     }
@@ -541,6 +638,14 @@ public sealed partial class SwapScriptExecutionTests
             for (int i = 0; i < 200 && !File.Exists(done); i++) Thread.Sleep(50);
             Assert.True(File.Exists(done), $"the {build} build was never relaunched");
             return File.ReadAllLines(Path.Combine(Root, $"argv-{build}.txt"));
+        }
+
+        // Whether that build was started at all, given a second for a backgrounded start.
+        public bool LaunchedWithin(string build)
+        {
+            string done = Path.Combine(Root, $"launched-{build}");
+            for (int i = 0; i < 20 && !File.Exists(done); i++) Thread.Sleep(50);
+            return File.Exists(done);
         }
 
         public string Installed(string name) => Path.Combine(Install, name);
