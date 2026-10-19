@@ -2924,6 +2924,9 @@ public sealed class AppServices
         // per-BBS folders. Runs BEFORE any store touches disk; idempotent on
         // already-migrated trees.
         LogService bootstrapLog = new(LogService.SessionCapacity);
+        // A settings value read out of range is said from the first read on, the
+        // migration's included.
+        SettingsValueGuard.Clamped += line => bootstrapLog.Warn("Settings", line);
         DataMigration.RunIfNeeded(bootstrapLog);
 
         _current = new AppServices(bootstrapLog);
@@ -6641,9 +6644,10 @@ public sealed class AppServices
             RoomGraph.GetRoom(room) is { } r && r.Exits.TryGetValue(dir, out Game.Map.RoomExit exit) ? exit : null, Log);
         BareKeyLockStore = new BareKeyLockStore(BareKeyLocks, Log);
         BareKeyLockStore.LoadSeed(AppPaths.DefaultBareKeyLocksSeedFile);
-        RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup);
-        BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup);
+        RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
+        BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
         Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
+        Movement.BareLockTrialsAllowedProbe = () => ResolveActiveRealm()?.Realm.PvpEnabled != true;
         Door.SetBareLockBook(BareKeyLocks,
             word => Game.Map.BashTargetWord.NamesSomeoneIn(RoomClassifier, word),
             pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);

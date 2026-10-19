@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Auto-Light" settings — drives the auto-light provisioning
@@ -16,11 +18,13 @@ public sealed class AutoLightSettings
     // (e.g. 6 h ÷ a lantern's 2 h = 3 lanterns). 0 disables provisioning —
     // the engine still readies a single light on demand but won't stock up.
     // Default 6.
+    [SettingRange(0, 48)]
     public int CarryHours { get; set; } = 6;
 
     // Minutes of remaining burn time at which the engine paths out to a shop,
     // restocks to CarryHours, and returns — before the light runs dry
     // mid-route. 0 disables the reorder run. Default 60.
+    [SettingRange(0, 600)]
     public int ReorderThresholdMinutes { get; set; } = 60;
 
     // Game name of the light source to buy and ready. null / empty means

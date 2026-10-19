@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // One of the cast pass's buff timers on the character, as SavedBuffTimers keeps it.
@@ -8,10 +10,13 @@ public sealed class SavedBuffTimer
 
     // What it had left when the timers stopped. Below zero for one that had already
     // run out and was being kept for the wait a negative recast margin asks for.
+    [SettingRange(-1_000_000, 1_000_000)]
     public int RemainingSec { get; set; }
 
     // The slot's recast margin and the buff's full length, as the timer carried them.
+    [SettingRange(-999, 999)]
     public int MarginSec { get; set; }
+    [SettingRange(0, 1_000_000)]
     public int TotalSec { get; set; }
 
     // The card a draw item dealt, null for anything else.

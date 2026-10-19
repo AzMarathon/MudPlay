@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 
 namespace MudPlay.Models.GameData;
 
@@ -39,6 +40,7 @@ public sealed class ScheduledEvent
 
     // Cadence amount paired with EveryUnit when TriggerType is Every; null
     // otherwise.
+    [SettingRange(1, 86400)]
     public int? EveryAmount { get; set; }
 
     // Cadence unit paired with EveryAmount. Null when TriggerType is not
@@ -85,15 +87,18 @@ public sealed class ScheduledEvent
     // minutes before an early window / guaranteed spawn / cleanup it fires.
     public string? BossName { get; set; }
     public EventBossMoment? BossMoment { get; set; }
+    [SettingRange(0, 1440)]
     public int? BossLeadMinutes { get; set; }
     // Which early spawn window (a Bosses tab column) an EarlyWindow moment watches,
     // as its fraction of the full timer — Paradigm 0.80 / 0.90 / 0.95 (-20% / -10% /
     // -5%), Stock 0.875. Null = the earliest.
+    [SettingRange(0, 1)]
     public double? BossWindowFraction { get; set; }
 
     // ----- Action parameters -----------------------------------------
 
     // How long EventActionType.Wait stands still.
+    [SettingRange(1, 86400)]
     public int? WaitSeconds { get; set; }
 
     // The stash room and the bank room for EventActionType.StashTransfer. Coords,
@@ -106,14 +111,18 @@ public sealed class ScheduledEvent
     // A loop or auto-lair never ends by itself; these end it so the Then step
     // runs. Whichever is reached first wins; none set = it runs until stopped
     // by hand, and Then never runs.
+    [SettingRange(1, 100_000)]
     public int? StopAfterLaps { get; set; }
+    [SettingRange(1, 100_000)]
     public int? StopAfterMinutes { get; set; }
     // Stop at a moment on this boss's timer (BossDef.Name) — the same choices as a
     // Boss trigger: a timer column hitting 0, the guaranteed spawn, the kill, a
     // cleanup reset, optionally minutes early.
     public string? StopBossName { get; set; }
     public EventBossMoment? StopBossMoment { get; set; }
+    [SettingRange(0, 1)]
     public double? StopBossWindowFraction { get; set; }
+    [SettingRange(0, 1440)]
     public int? StopBossLeadMinutes { get; set; }
     // Stop once all of these hold.
     public List<EventCondition>? StopConditions { get; set; }

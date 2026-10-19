@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "General" settings — what to do on logon and the master on/off
@@ -86,6 +88,7 @@ public sealed class GeneralSettings
 
     // Terminal canvas font size in points. Null = 12 (the default). Char-tier;
     // relocated here from the per-BBS Display settings.
+    [SettingRange(8, 32)]
     public double? TerminalFontSize { get; set; }
 
     // Navigation map hover-tooltip font family as an avares:// URI. Null = the
@@ -96,6 +99,7 @@ public sealed class GeneralSettings
 
     // Navigation map hover-tooltip font size in points. Null = 13 (the size the
     // tooltip has always rendered at). Char-tier.
+    [SettingRange(8, 32)]
     public double? NavTooltipFontSize { get; set; }
 
     // LIVE on/off state for every auto-engine — the state the toolbar toggles

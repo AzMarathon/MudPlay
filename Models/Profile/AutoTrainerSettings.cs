@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -27,18 +28,21 @@ public sealed class AutoTrainerSettings
     // the trip happens: a threshold at or below the keep reserve can never train
     // anything, so the trigger treats it as "fire as soon as there's something
     // above the reserve to train".
+    [SettingRange(0, 60)]
     public int FireAtBankedLevels { get; set; }
 
     // Buffer of trainable-but-untrained levels to always keep banked. Auto-train
     // (and the manual Train Now) stops once this many levels are still reachable
     // from banked exp, so the character always carries a reserve. 0 (the
     // default) trains every banked level.
+    [SettingRange(0, 60)]
     public int LevelsToKeep { get; set; }
 
     // Level ceiling: auto-train will train UP TO this level but never above it
     // (reach N, then stop) — a guard against over-levelling / "OP"-ing a character
     // once the exp + level-buffer gates would otherwise keep training. 0 (the
     // default) = no ceiling.
+    [SettingRange(0, 200)]
     public int DoNotTrainAbove { get; set; }
 
     // When on, broadcast "I can now train to level: N" on AnnounceChannel each
@@ -63,10 +67,12 @@ public sealed class AutoTrainerSettings
     // How many party members (the leader counting as one) must be ready before the
     // leader goes; whoever isn't ready then sits the trip out. A party where everyone
     // who counts is ready goes even when that's fewer than this.
+    [SettingRange(1, 6)]
     public int PartyMinReady { get; set; } = 2;
 
     // A member who isn't ready and sits more than this many levels above the rest
     // of the party (a power-leveler) is never waited for. 0 = no gap rule.
+    [SettingRange(0, 200)]
     public int PartyLevelGap { get; set; } = 5;
 
     // Never party-train from level 10 to 11: that trainer is a solo effort, so a
@@ -77,6 +83,7 @@ public sealed class AutoTrainerSettings
     // altered stat to clear before it leaves the CP plan for later. Stock refuses
     // `train stats` while a spell or item is on a stat; Paradigm trains through
     // one, so nothing there waits. 0 = don't wait.
+    [SettingRange(0, 600)]
     public int AlteredStatsWaitSeconds { get; set; } = 120;
     public const int MaxAlteredStatsWaitSeconds = 600;
 

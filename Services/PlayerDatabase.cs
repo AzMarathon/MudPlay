@@ -645,7 +645,9 @@ public sealed class PlayerDatabase
     {
         TakeInOutsideChanges();
         if (days <= 0) return 0;
-        DateTime cutoff = nowUtc.AddDays(-days);
+        // A window reaching back past the calendar's start keeps everyone; AddDays
+        // would throw on it.
+        DateTime cutoff = days >= (nowUtc - DateTime.MinValue).TotalDays ? DateTime.MinValue : nowUtc.AddDays(-days);
         int removed = 0;
         // Both dicts share the same key (GivenName) so the customization
         // lookup for the DontAutoDelete flag is a direct hit.

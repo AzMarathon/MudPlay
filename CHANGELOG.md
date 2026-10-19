@@ -1,13 +1,13 @@
 # Version history
 
-## 3.185.3
+## 3.185.4
 
 - A door the client sees open stays open to routes for the 5 minutes it can't lock again (less the last minute), whoever opened it, so the way back needs no key; each new sighting starts the 5 minutes again
 - The door across it counts too when our own open or bash opened both; a door marked any picklocks/strength stays open for good
 - A held door is let go when it's seen shut, the game says it closed or locked, or a move into it is refused, and on a relog, a change of character, realm or game data
 - A walk doesn't go to fetch the key of a door it holds open
 
-## 3.185.2
+## 3.185.3
 
 - A door the game data gives only a key for is bashed where your realm has answered it as a door; elsewhere a bash is only tried when nobody in the room could be hit by it and the realm has no PvP; a list of Stock's doors ships with the client and each realm learns the rest, two agreeing answers to overturn the list
 - Game Data → Doors tab: see where each such door's kind comes from, set or reset it, or forget what the realm learned
@@ -19,6 +19,14 @@
 - A pick that has no effect isn't tried at that door again this session, and routes go round it
 - A key door marked any picklocks shows it on the map
 - bug reports addressed: paradigm-20261018-192819
+
+## 3.185.2
+
+- Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
+- One unreadable value in a profile no longer drops the client onto the default profile; only that setting is left out
+- A file with a value left out is first copied beside it (`<file>.unreadable-<time>.bak`), so a save can't lose the original
+- A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
+- A huge player-cleanup window no longer crashes startup
 
 ## 3.185.1
 

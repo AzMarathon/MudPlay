@@ -364,7 +364,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsLockedDoorImpassable(in RoomExit exit, Func<int, bool> carries)
     {
         if (exit.KeyItemId > 0 && carries(exit.KeyItemId)) return false;   // have the key
-        if (exit is { IsBareKeyLock: true, BareLockBash: BareLockBash.NotBashable })
+        if (exit is { IsBareKeyLock: true, BareLockBash: BareLockBash.NotBashable } || BareLockBashNotCountedOn(in exit))
         {
             // Its key is then what the route picker offers to fetch, as for a door
             // its pick can't open: a pick at poor odds counts as none, the way such a
@@ -397,7 +397,7 @@ public sealed class MovementFilter : IRoomFilter
         if (StrengthProvider?.Invoke() is not { } strength) return true;
         if (PicklocksProvider?.Invoke() is not { } picks) return true;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return DoorPolicy.IsAchievable(req, canBash, strength, picks, maxBash);
     }
 
@@ -417,7 +417,7 @@ public sealed class MovementFilter : IRoomFilter
         if (StrengthProvider?.Invoke() is not { } strength) return false;
         if (PicklocksProvider?.Invoke() is not { } picks) return false;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return DoorPolicy.IsPoorOddsPick(req, canBash, strength, picks, maxBash);
     }
 
@@ -436,7 +436,7 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.KeyItemId > 0 && InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
         if (StrengthProvider?.Invoke() is not { } strength) return false;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return !DoorPolicy.IsAchievable(req, canBash, strength, playerPicklocks: 0, maxBash);
     }
 
@@ -447,9 +447,22 @@ public sealed class MovementFilter : IRoomFilter
     // The version of the doors held open (DoorsHeldOpen.Version).
     public Func<int>? HeldOpenVersionProvider { get; set; }
 
+    // Whether the door handler may try a bash at a bare key lock not answered as a
+    // door on this realm: not on a PvP realm (DoorOpenManager.TrialBashUnsafe). Unset
+    // → it may.
+    public Func<bool>? BareLockTrialsAllowedProbe { get; set; }
+
+    private bool BareLockTrialsAllowed => BareLockTrialsAllowedProbe?.Invoke() ?? true;
+
+    // A bare lock the handler would only try a bash at, where it may not: planned as
+    // the key exit it may be, so its key is what the route picker offers.
+    private bool BareLockBashNotCountedOn(in RoomExit exit) =>
+        exit.IsBareKeyLock && exit.BareLockBash != BareLockBash.NotBashable
+        && !exit.BareLockAnsweredAsDoor && !BareLockTrialsAllowed;
+
     public int DoorRuleStamp => HashCode.Combine(
         StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke(),
-        BareLockBookVersionProvider?.Invoke(), HeldOpenVersionProvider?.Invoke());
+        BareLockBookVersionProvider?.Invoke(), HeldOpenVersionProvider?.Invoke(), BareLockTrialsAllowed);
 
     public string? DescribeDoorRefusal(in RoomExit exit)
     {
@@ -457,11 +470,15 @@ public sealed class MovementFilter : IRoomFilter
         bool shut = exit.Hint == RoomExitHint.Door ? IsImpassableDoorBlocked(in exit) : IsItemGateBlocked(in exit);
         if (!shut && !IsPoorOddsDoor(in exit)) return null;
         if (StrengthProvider?.Invoke() is not { } strength || PicklocksProvider?.Invoke() is not { } picks)
-            return exit.IsBareKeyLock ? $"needs its key (item {exit.KeyItemId}), not carried, or a pick: it is a key exit (no stat screen read)" : null;
+            return exit.IsBareKeyLock
+                ? $"needs its key (item {exit.KeyItemId}), not carried, or a pick: "
+                  + (BareLockBashNotCountedOn(in exit) ? "no bash is tried on a PvP realm until it has answered as a door" : "it is a key exit")
+                  + " (no stat screen read)"
+                : null;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         string odds = DoorPolicy.DescribeOdds(req, canBash, strength, picks, maxBash,
-            exit.IsBareKeyLock ? exit.BareLockBash : null);
+            exit.IsBareKeyLock ? exit.BareLockBash : null, bareLockBashTried: !BareLockBashNotCountedOn(in exit));
         return exit.KeyItemId > 0 ? $"its key (item {exit.KeyItemId}) isn't carried; {odds}" : odds;
     }
 

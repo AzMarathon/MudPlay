@@ -328,6 +328,8 @@ public sealed class DoorOpenManager : IDisposable
         _verbAttempts = 0;
         _keyChargeSpent = false;
         _learnedThisRequest = false;
+        // Another client on the realm may have learned this side, or the user set it.
+        _bareLocks?.SyncWithRecord();
         DecideBareLockBash();
         StartChosenVerb();
     }

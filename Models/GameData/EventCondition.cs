@@ -1,4 +1,5 @@
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 
 namespace MudPlay.Models.GameData;
 
@@ -9,6 +10,7 @@ public sealed class EventCondition
 {
     public EventConditionStat Stat { get; set; }
     public EventComparison Comparison { get; set; }
+    [SettingRange(0, 999_999_999_999)]
     public long Value { get; set; }
     public CoinDenomination Denomination { get; set; } = CoinDenomination.Copper;
 }

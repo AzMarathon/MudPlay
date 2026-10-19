@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.3**
+> **Version 3.185.4**
 > - A door the client sees open stays open to routes for the 5 minutes it can't lock again (less the last minute), whoever opened it, so the way back needs no key; each new sighting starts the 5 minutes again
 > - The door across it counts too when our own open or bash opened both; a door marked any picklocks/strength stays open for good
 > - A held door is let go when it's seen shut, the game says it closed or locked, or a move into it is refused, and on a relog, a change of character, realm or game data

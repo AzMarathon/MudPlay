@@ -156,14 +156,23 @@ public sealed class RoomGraphManager
     // What is known of each bare key lock's bash, stamped on as each graph is built,
     // before its listeners plan on it. Unset → every bare lock reads Unknown.
     private Func<RoomKey, Direction, BareLockBash>? _bareLockKinds;
+    private Func<RoomKey, Direction, bool>? _bareLockAnsweredAsDoor;
 
-    public void SetBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf) => _bareLockKinds = kindOf;
+    // answeredAsDoor: whether the side has answered a bash as a door on this realm.
+    // Unset → none has.
+    public void SetBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf,
+        Func<RoomKey, Direction, bool>? answeredAsDoor = null)
+    {
+        _bareLockKinds = kindOf;
+        _bareLockAnsweredAsDoor = answeredAsDoor;
+    }
 
     // Stamp every bare key lock on the map with what is known of whether it bashes
     // (BareKeyLockBook), for the route planner, which sees an exit without the room
     // it leaves. The room is replaced the way a learned name replaces it. Returns
     // how many sides changed.
-    public int ApplyBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf)
+    public int ApplyBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf,
+        Func<RoomKey, Direction, bool>? answeredAsDoor = null)
     {
         ArgumentNullException.ThrowIfNull(kindOf);
         int changed = 0;
@@ -174,8 +183,9 @@ public sealed class RoomGraphManager
             {
                 if (!exit.IsBareKeyLock) continue;
                 BareLockBash kind = kindOf(room.Key, dir);
-                if (kind == exit.BareLockBash) continue;
-                exits = (exits ?? ExitsOf(room)).With(dir, exit with { BareLockBash = kind });
+                bool answered = answeredAsDoor?.Invoke(room.Key, dir) == true;
+                if (kind == exit.BareLockBash && answered == exit.BareLockAnsweredAsDoor) continue;
+                exits = (exits ?? ExitsOf(room)).With(dir, exit with { BareLockBash = kind, BareLockAnsweredAsDoor = answered });
                 changed++;
             }
             if (exits is null) continue;
@@ -938,7 +948,7 @@ public sealed class RoomGraphManager
     private void Reloaded(GameDataCache.Load load)
     {
         LoadedFor = load;
-        if (_bareLockKinds is { } kinds) ApplyBareLockKinds(kinds);
+        if (_bareLockKinds is { } kinds) ApplyBareLockKinds(kinds, _bareLockAnsweredAsDoor);
         ForgetDerived();
         GraphReloaded?.Invoke();
     }

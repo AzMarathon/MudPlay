@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Persisted snapshot of the most recent Game.PlayerStats capture — written by
@@ -26,6 +28,7 @@ public sealed class LastKnownStats
     public string Class { get; set; } = string.Empty;
 
     // ----- Progression ---------------------------------------------------
+    [SettingRange(0, 1_000_000)]
     public int Level { get; set; }
     // long, not int — Paradigm exp passes int32 (2.1B) into the hundreds of
     // billions. See PlayerStats._exp.
@@ -47,22 +50,37 @@ public sealed class LastKnownStats
     public int MaxArmourClass { get; set; }
 
     // ----- Primary stats -------------------------------------------------
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Strength { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Intellect { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Willpower { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Agility { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Health { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Charm { get; set; }
 
     // ----- Secondary skills ----------------------------------------------
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Perception { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Stealth { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Thievery { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Traps { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Picklocks { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Tracking { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int MartialArts { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int MagicRes { get; set; }
+    [SettingRange(-1_000_000, 1_000_000)]
     public int Spellcasting { get; set; }
 
     // ----- What the screen said about its own numbers ---------------------
