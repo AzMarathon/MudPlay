@@ -26,6 +26,7 @@ public sealed class PartyInventoryProbeTests
         public readonly List<byte[]> Wire = new();
         public readonly List<Action> Windows = new();
         public readonly PartyInventoryProbe Probe;
+        public readonly LogService Log = new();
 
         public Harness()
         {
@@ -34,7 +35,7 @@ public sealed class PartyInventoryProbeTests
             Chat = new ChatRouter(Router);
             Broadcaster = new PartyBroadcaster(State);
             Broadcaster.SetWireSender(Wire.Add);
-            Probe = new PartyInventoryProbe(Broadcaster, Chat, State, armWindow: Windows.Add, log: null);
+            Probe = new PartyInventoryProbe(Broadcaster, Chat, State, armWindow: Windows.Add, log: Log);
         }
 
         public void AddMember(string name, bool self = false, bool invited = false)
@@ -114,6 +115,7 @@ public sealed class PartyInventoryProbeTests
     [InlineData("{yes - 1x 'rope and grapple'}", 1)]
     [InlineData("{no - nothing matching 'rope and grapple'}", 0)]
     [InlineData("{yes: 1}", 1)]                       // MegaMUD's reply, no item echo
+    [InlineData("{Yes: 1.}", 1)]                      // and with its full stop (paradigm-20261019-041600)
     public async Task BraceWrappedReplies_AreCounted(string reply, int held)
     {
         var h = new Harness();
@@ -182,6 +184,93 @@ public sealed class PartyInventoryProbeTests
         Assert.False(held);
         // Bob never answered, so he is taken to hold none: a copy each for the two.
         Assert.Equal((175, 2), Assert.Single(forwarded));
+    }
+
+    // Report paradigm-20261019-041600: the leader holds a mine pass, both members
+    // answer `{Yes: 1.}`, and the client still bought two at the Miner's Guild. The
+    // full stop kept either answer from being read, so both were counted as holding
+    // none. Fed as the game sent it, prompt and cursor moves included.
+    [Fact]
+    public async Task BothMembersAnsweringYesWithAFullStop_NothingIsBought()
+    {
+        var h = new Harness();
+        var feed = new ServerFeed(h.Router);
+        h.AddMember("Raijin", self: true);
+        h.AddMember("Boost Pressure");
+        h.AddMember("Fujin");
+        h.GoInParty();
+        List<(int Id, int Qty)> forwarded = new();
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new Game.Map.PartyPathItemGate(
+            isCarried: _ => true,
+            selfCount: _ => 1,
+            query: (id, name) => h.Probe.QueryAsync(id, name),
+            itemName: _ => "mine pass",
+            isEnabled: _ => true,
+            perPersonQuantity: _ => 1,
+            searchEnabled: () => false,
+            inParty: () => true,
+            selfIsLeader: () => true,
+            selfGivenName: () => "Raijin",
+            forward: (ids, qty) => forwarded.Add((ids[0], qty)),
+            post: a => a(),
+            holdWalk: _ => { },
+            releaseWalk: _ => released.TrySetResult());
+        List<string> gateWire = new();
+        gate.SetWireSender(b => gateWire.Add(Encoding.Latin1.GetString(b)));
+
+        gate.OnPathItemsRequired(new[] { 942 });
+        Assert.Equal(new[] { "/Boost @have mine pass\r", "/Fujin @have mine pass\r" },
+                     h.Wire.Select(Encoding.Latin1.GetString));
+        const string Prompt = "\u001b[79D\u001b[K\u001b[0;37m[HP=\u001b[0;37m456\u001b[0;37m/MA=\u001b[0;37m164\u001b[0;37m]:\u001b[0m\u001b[79D\u001b[K";
+        feed.Raw(Prompt + "\u001b[0;32mBoost telepaths: \u001b[0;37m{Yes: 1.}\r\n");
+        feed.Raw(Prompt + "\u001b[0;32mFujin telepaths: \u001b[0;37m{Yes: 1.}\r\n");
+        h.FireWindows();                              // the 4 s window closes behind the answers
+        await released.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(forwarded);                      // three passes for three: none to buy
+        Assert.Empty(gateWire);                       // and nobody short to hand one to
+    }
+
+    // A member's answer the probe can't read is quoted in the program log, and a
+    // bug report must mask chat there like anywhere else: the line is written in
+    // the `X telepaths: …` shape the censor knows.
+    [Fact]
+    public void AnUnreadAnswer_IsLogged_AndCensoredInTheBugReport()
+    {
+        var h = new Harness();
+        h.AddMember("Boost Pressure");
+        h.GoInParty();
+
+        _ = h.Probe.QueryAsync(942, "mine pass");
+        h.Reply("Boost", "{you flibber}");
+
+        BugReportBuilder.Section section =
+            BugReportLogSections.ProgramLog(h.Log, StandInCensor.Of("flibber"));
+        string logged = Assert.Single(section.Entries!, e => e.Contains("telepaths:"));
+        Assert.Contains("[censored]", logged);
+        Assert.DoesNotContain("flibber", logged);
+    }
+
+    // A count too big for an int used to throw out of the chat handler and cancel
+    // the rest of the line's handlers. It is unread instead: logged, not counted.
+    [Theory]
+    [InlineData("{yes: 99999999999}")]
+    [InlineData("{yes - 99999999999x 'rope'}")]
+    public async Task ACountTooBigToRead_IsLoggedAndNotCounted(string reply)
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", reply);
+        h.FireWindows();
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, r.Replied);
+        Assert.Equal(new[] { "Bob" }, r.Unanswered);
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains("not read as a count"));
     }
 
     // The members who were asked and didn't answer are named, so the route card

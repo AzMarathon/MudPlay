@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.6**
-> - Program-log switch race test no longer fails when its loggers finish before the switch flips
+> **Version 3.185.8**
+> - CP plan applies its latest row at or below your level, so training past the plan's last row still spends it
+> - A MegaMUD member's `@have` answer with a full stop (`Yes: 1.`) is counted, so a party holding its passes buys none
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

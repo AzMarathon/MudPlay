@@ -166,20 +166,20 @@ public sealed class AutoTrainManager : IDisposable
     // True while a train session (our send → exit → checked) is in flight.
     public bool IsBusy => _phase != Phase.Idle || _verifying;
 
-    // True when the current level has a plan row with something to apply: an
-    // affordable raise by the `stat` reading, or, when that reading can't say, a
-    // row and CP for the trainer screen (or a fresh `stat`) to settle. A row held
-    // on Stock by HoldReason still counts: the hold rests on the last `stat`, and
-    // the paths that act on this read a fresh one first.
+    // True when the plan row due at the current level (CpPlanCalculator.RowDueAt)
+    // has something to apply: an affordable raise by the `stat` reading, or, when
+    // that reading can't say, a row and CP for the trainer screen (or a fresh
+    // `stat`) to settle. A row held on Stock by HoldReason still counts: the hold
+    // rests on the last `stat`, and the paths that act on this read a fresh one first.
     public bool CanTrainNow => CurrentRow(out CharacterPlanContext ctx) is { } row && HasWork(ctx, row);
 
-    // Why the current level's plan row can't be applied as things stood at the
-    // last `stat`, or null. Stock refuses `train stats` while a stat is altered.
+    // Why the plan row due at the current level can't be applied as things stood
+    // at the last `stat`, or null. Stock refuses `train stats` while a stat is altered.
     public string? HoldReason =>
         CurrentRow(out CharacterPlanContext ctx) is { } row && HasWork(ctx, row) ? StatsAlteredHold(ctx) : null;
 
-    // Begin a pass for the current level's plan, on the word of the `stat` screen
-    // just read: the caller stands at the trainer and has refreshed it. No-op when
+    // Begin a pass for the plan row due at the current level, on the word of the
+    // `stat` screen just read: the caller stands at the trainer and has refreshed it. No-op when
     // already busy, no wire is bound, there's nothing to raise, or the row is held.
     // Drives the screen asynchronously; subscribe to StateChanged for progress.
     public void TrainNow()
@@ -341,7 +341,7 @@ public sealed class AutoTrainManager : IDisposable
 
     // The user opened the in-game `train stats` screen themselves (InputMenuEntered is the
     // realm-independent signal, armed off their outbound `train stats`). With Auto-train
-    // stats ON and an unapplied plan for the current level, drive the SAME CP replay Train
+    // stats ON and an unapplied plan row due at the current level, drive the SAME CP replay Train
     // Now would — the user's own `train stats` IS the trigger, no button press needed. The
     // screen is already coming up, so we skip the send and go straight to the
     // await-render → replay machinery (the not-at-a-trainer / prompt-returned abort still
@@ -364,13 +364,13 @@ public sealed class AutoTrainManager : IDisposable
             if (_profile.Current?.CharacterPlan is { Count: > 0 })
                 _log?.Info("AutoTrain",
                     $"Auto-train stats — nothing in the CP plan to apply at level {_stats.Level} with {_stats.Cp} CP "
-                    + "(no row for this level, or it's already applied); allocate by hand, or `train` first.");
+                    + "(no row at or below this level, or it's already applied); allocate by hand, or `train` first.");
             return;
         }
 
         BeginPass(row, explicitApply: false, manualEntry: true);
         _log?.Info("AutoTrain",
-            "Auto-train stats — you opened the train-stats screen; applying the CP plan.");
+            $"Auto-train stats — you opened the train-stats screen; applying the CP plan's level-{DueRow()?.Level} row.");
         AwaitMenu();
     }
 
@@ -422,12 +422,12 @@ public sealed class AutoTrainManager : IDisposable
             _phase = Phase.Idle;
             if (_formBefore is { } form && CpApplyCheck.FromForm(form, form, _rowTargets) == CpApplyOutcome.Applied)
             {
-                _log?.Info("AutoTrain", "The trainer screen shows this level's plan already trained.");
+                _log?.Info("AutoTrain", "The trainer screen shows the plan row already trained.");
                 Conclude(CpApplyOutcome.Applied);
             }
             else
             {
-                LastApplyNote ??= "the trainer screen shows nothing this level's plan can raise";
+                LastApplyNote ??= "the trainer screen shows nothing the plan row can raise";
                 _log?.Info("AutoTrain", $"Auto-train stats — {LastApplyNote}; the form is yours.");
                 ManualApplyLevel = null;
             }
@@ -688,7 +688,7 @@ public sealed class AutoTrainManager : IDisposable
         else
         {
             LastApplyNote ??= outcome == CpApplyOutcome.Partial
-                ? "only part of this level's plan was spent"
+                ? "only part of the plan row was spent"
                 : "no CP was spent";
             _log?.Info("AutoTrain", $"CP plan not applied — {LastApplyNote}. Plan row kept.");
         }
@@ -721,16 +721,16 @@ public sealed class AutoTrainManager : IDisposable
     private static bool StatFiguresUsable(CharacterPlanContext ctx) =>
         ctx.BaselineTrusted || ctx.Reading.State == StatReadingState.Unverified;
 
-    // The saved plan's row for the current level (STR/INT/WIL/AGL/HEA/CHM), or
-    // null when there's no character or no row.
+    // The saved plan's row due at the current level (STR/INT/WIL/AGL/HEA/CHM), or
+    // null when there's no character or no row at or below the level.
     private int[]? CurrentRow(out CharacterPlanContext ctx)
     {
         ctx = ResolveContext();
-        if (!ctx.HasCharacter || _profile.Current?.CharacterPlan is not { } plan) return null;
-        foreach (CpPlanEntry e in plan)
-            if (e.Level == _stats.Level) return ToArray(e);
-        return null;
+        if (!ctx.HasCharacter || DueRow() is not { } due) return null;
+        return ToArray(due);
     }
+
+    private CpPlanEntry? DueRow() => CpPlanCalculator.RowDueAt(_profile.Current?.CharacterPlan, _stats.Level);
 
     // Whether the row leaves something to do. By the `stat` figures when they can
     // be used: an affordable raise. When they can't, only the trainer screen can

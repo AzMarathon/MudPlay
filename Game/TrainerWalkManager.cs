@@ -1252,10 +1252,11 @@ public sealed class TrainerWalkManager : IDisposable
         bool wantCp = _cpOnlyRun || _applyCp;
 
         // Apply the CP plan when the run wants it (Train Now, @train both-toggles,
-        // or the CP reconcile) and a row exists for the target level. CpPlanEntry
-        // rows are cumulative targets, so applying that level's row against the
-        // accumulated CP budget covers every level we trained through in one pass.
-        bool hasPlan = _profile.Current?.CharacterPlan?.Any(e => e.Level == targetLevel) ?? false;
+        // or the CP reconcile) and a row is due at the target level. CpPlanEntry
+        // rows are cumulative targets, so applying the latest row at or below that
+        // level against the accumulated CP budget covers every level we trained
+        // through in one pass, a plan that ends below the level included.
+        bool hasPlan = CpPlanCalculator.RowDueAt(_profile.Current?.CharacterPlan, targetLevel) is not null;
         if (wantCp && hasPlan)
         {
             if (_autoTrain.HoldReason is { } hold)
