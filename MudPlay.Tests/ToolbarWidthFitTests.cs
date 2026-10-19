@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 using MudPlay.Views;
 using Xunit;
 
@@ -16,8 +18,41 @@ public sealed class ToolbarWidthFitTests
     private const double Terminal = 660;
 
     private static double? Fit(double width, double needed, bool grew, double terminal = Terminal,
-        WindowState state = WindowState.Normal) =>
-        ToolbarWidthFit.Next(state, width, needed, grew, terminal, Min, Screen);
+        WindowState state = WindowState.Normal, bool userEdit = true) =>
+        ToolbarWidthFit.Next(userEdit, state, width, needed, grew, terminal, Min, Screen);
+
+    // A profile loaded or closed, or startup, brings its own toolbar: the window
+    // keeps its (saved) size whichever way the toolbar's width went.
+    [Fact]
+    public void AToolbarThatWasntTheUsersEdit_NeverResizesTheWindow()
+    {
+        Assert.Null(Fit(1000, 700, grew: false, userEdit: false));
+        Assert.Null(Fit(660, 900, grew: true, userEdit: false));
+    }
+
+    // Only a layout the user changed counts as their edit: a save that leaves the
+    // layout as it was, a profile load and a profile close don't.
+    [Fact]
+    public void ToolbarConfig_MarksOnlyAChangedLayoutFromAnEditAsTheUsers()
+    {
+        var config = new ToolbarConfig();
+        var one = new ToolbarSettings { Layout = [new ToolbarItem { ActionId = "a" }] };
+        var two = new ToolbarSettings { Layout = [new ToolbarItem { ActionId = "a" }, new ToolbarItem { ActionId = "b" }] };
+        bool seen = false;
+        config.Layout.CollectionChanged += (_, _) => seen = config.LastApplyWasUserEdit;
+
+        config.ApplyFrom(one);
+        Assert.False(config.LastApplyWasUserEdit);
+        config.ApplyFrom(two, userEdit: true);
+        Assert.True(config.LastApplyWasUserEdit);
+        Assert.True(seen, "the layout's own change handlers must see the edit");
+        config.ApplyFrom(two, userEdit: true);
+        Assert.False(config.LastApplyWasUserEdit);
+        config.ApplyFrom(one);
+        Assert.False(config.LastApplyWasUserEdit);
+        config.ApplyFrom(new ToolbarSettings());
+        Assert.False(config.LastApplyWasUserEdit);
+    }
 
     [Fact]
     public void Growing_FitsTheToolbar_UpToTheScreen()

@@ -132,11 +132,18 @@ public partial class MainWindow : Window
                 Height = (double.IsNaN(Height) ? ClientSize.Height : Height) + (b.Height - was);
             }));
 
-        // A shortcut added to a horizontal toolbar widens the window by what the strip
-        // outgrew, and a narrower toolbar narrows it again, never cutting off the
-        // terminal (ToolbarWidthFit).
-        // Like the status bar, the first layout only records the width, so a saved
-        // window size is never overridden at launch.
+        // A shortcut the user adds to a horizontal toolbar widens the window by what
+        // the strip outgrew, and one they remove narrows it again, never cutting off
+        // the terminal (ToolbarWidthFit). Only their own toolbar edit counts: the
+        // layout change it makes is marked until the layout pass it causes is over,
+        // so a profile load, a profile close, startup (whose first layout only
+        // records the width) or a button's badge changing width never resizes the
+        // window or overrides its saved size.
+        AppServices.Current.Toolbar.Layout.CollectionChanged += (_, _) =>
+        {
+            _toolbarEdited = AppServices.Current.Toolbar.LastApplyWasUserEdit;
+            Dispatcher.UIThread.Post(() => _toolbarEdited = false, DispatcherPriority.Background);
+        };
         WatchToolbarWidth(TopToolbarItems);
         WatchToolbarWidth(BottomToolbarItems);
 
@@ -418,11 +425,14 @@ public partial class MainWindow : Window
             double cap = Screens.ScreenFromWindow(this) is { } screen
                 ? screen.WorkingArea.Width / screen.Scaling
                 : double.MaxValue;
-            if (ToolbarWidthFit.Next(WindowState, ClientSize.Width, needed, grew, TerminalNeeds(), MinWidth, cap)
-                is { } width)
+            if (ToolbarWidthFit.Next(_toolbarEdited, WindowState, ClientSize.Width, needed, grew,
+                    TerminalNeeds(), MinWidth, cap) is { } width)
                 Width = width;
         };
     }
+
+    // True from the user's toolbar edit until the layout pass it causes is over.
+    private bool _toolbarEdited;
 
     // The window width that shows the terminal's whole grid at its natural size: the
     // grid plus everything beside the terminal's scroll area (margins, chrome, a

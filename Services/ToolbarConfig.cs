@@ -41,14 +41,28 @@ public sealed partial class ToolbarConfig : ObservableObject
     // True when the vertical-right toolbar border should render.
     public bool ShowRight  => Visible && Position == ToolbarPosition.Right;
 
+    // True while the layout last applied came from the user editing it and differs
+    // from the one before: buttons added, removed or reordered through Settings →
+    // Toolbar + Shortcuts, saved to the profile. False for a profile load, a profile
+    // close, startup, or a save that left the layout as it was. Set before Layout
+    // changes, so its CollectionChanged handlers read the new value. The main window
+    // resizes for the toolbar only on an edit (ToolbarWidthFit).
+    public bool LastApplyWasUserEdit { get; private set; }
+
     // Replace the live layout + visibility / position with values from dto.
-    public void ApplyFrom(ToolbarSettings dto)
+    // userEdit says the dto is the user's own toolbar edit rather than a profile
+    // being loaded or closed.
+    public void ApplyFrom(ToolbarSettings dto, bool userEdit = false)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        ReplaceAll(dto.Layout is { Count: > 0 } ? dto.Layout : ToolbarDefaults.Build());
+        IReadOnlyList<ToolbarItem> items = dto.Layout is { Count: > 0 } ? dto.Layout : ToolbarDefaults.Build();
+        LastApplyWasUserEdit = userEdit && !items.Select(Key).SequenceEqual(Layout.Select(Key));
+        ReplaceAll(items);
         Visible  = dto.Visible;
         Position = dto.Position;
     }
+
+    private static (ToolbarItemKind, string?) Key(ToolbarItem item) => (item.Kind, item.ActionId);
 
     private void ReplaceAll(IEnumerable<ToolbarItem> items)
     {

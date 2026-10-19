@@ -41,6 +41,14 @@ public sealed record UpdateCheckResult(
         new(UpdateAvailability.Error, current, null, null, null, null, null, error);
 }
 
+// What the swap helper is handed: the PID to wait for, the extracted build and its
+// executable, the install folder and the running executable, the work folder, the
+// relaunch's profile and reconnect flag (either may be empty), and the list of the
+// build's other files.
+public sealed record SwapRequest(
+    string Pid, string NewRoot, string NewExe, string InstallDir, string Exe,
+    string Stage, string Profile, string Reconnect, string InstallList);
+
 // Outcome of an apply attempt. Relaunching == true means the swap helper is running
 // and the app is about to exit; the caller should quit. On failure nothing was
 // changed (the install is untouched — the swap only happens after this exits).

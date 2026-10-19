@@ -87,6 +87,8 @@ public sealed class UpdateInstaller
             }
             string installList = plan.WriteList(work);
             _log?.Info("Update", $"update plan for {installDir}: {plan.Describe()}");
+            foreach (string line in RetiredFiles.CleanAbandonedSwapCopies(exe))
+                _log?.Info("Update", line);
 
             // Write the swap helper OUTSIDE the work dir (it deletes work at the end,
             // so `rm -rf work` mustn't remove the helper before it's done). The helper
@@ -103,9 +105,9 @@ public sealed class UpdateInstaller
             // is recoverable; everything below assumes we're on our way out.
             UpdateRelaunch relaunch = await prepareExit().ConfigureAwait(false);
 
-            SpawnSwap(scriptPath, windows,
-                Environment.ProcessId.ToString(), newRoot, installDir, exe, work,
-                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "", installList);
+            Process.Start(SwapStartInfo(scriptPath, windows, new SwapRequest(
+                Environment.ProcessId.ToString(), newRoot, Path.Combine(newRoot, plan.NewExe), installDir, exe,
+                work, relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "", installList)));
             _log?.Info("Update", "swap helper launched — exiting to let it replace the install"
                                  + $" (relaunch: profile={relaunch.ProfileToken ?? "none"},"
                                  + $" reconnect={relaunch.Reconnect})");
@@ -193,19 +195,25 @@ public sealed class UpdateInstaller
         return staging;
     }
 
-    private static void SpawnSwap(string scriptPath, bool windows, params string[] args)
+    // How the swap helper is started. Every value goes through the environment,
+    // never the command line: cmd re-parses its command line, so a folder named
+    // "R&D" would end the command at the "&", and more than two quotes on it lose
+    // their meaning. The cmd line itself names only the script, by its own file
+    // name (ours: "mudplay-swap-<guid>.cmd") from its own folder, so nothing the
+    // user named is on it; /d skips any AutoRun command and /v:off delayed
+    // expansion, either of which could rewrite the script's lines.
+    public static ProcessStartInfo SwapStartInfo(string scriptPath, bool windows, SwapRequest request)
     {
         var psi = new ProcessStartInfo
         {
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = Path.GetTempPath(),
+            WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? Path.GetTempPath(),
         };
         if (windows)
         {
             psi.FileName = "cmd.exe";
-            psi.ArgumentList.Add("/c");
-            psi.ArgumentList.Add(scriptPath);
+            psi.Arguments = $"/d /v:off /s /c \"\"{Path.GetFileName(scriptPath)}\"\"";
         }
         else
         {
@@ -213,8 +221,16 @@ public sealed class UpdateInstaller
             psi.ArgumentList.Add("bash");
             psi.ArgumentList.Add(scriptPath);
         }
-        foreach (string a in args) psi.ArgumentList.Add(a);
-        Process.Start(psi);
+        psi.Environment["MUDPLAY_SWAP_PID"] = request.Pid;
+        psi.Environment["MUDPLAY_SWAP_NEW"] = request.NewRoot;
+        psi.Environment["MUDPLAY_SWAP_NEWEXE"] = request.NewExe;
+        psi.Environment["MUDPLAY_SWAP_DST"] = request.InstallDir;
+        psi.Environment["MUDPLAY_SWAP_EXE"] = request.Exe;
+        psi.Environment["MUDPLAY_SWAP_STAGE"] = request.Stage;
+        psi.Environment["MUDPLAY_SWAP_PROFILE"] = request.Profile;
+        psi.Environment["MUDPLAY_SWAP_RECONNECT"] = request.Reconnect;
+        psi.Environment["MUDPLAY_SWAP_INSTALL"] = request.InstallList;
+        return psi;
     }
 
     private static string ComputeSha256(string path)

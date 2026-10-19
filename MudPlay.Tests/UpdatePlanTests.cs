@@ -59,10 +59,42 @@ public sealed class UpdatePlanTests : IDisposable
 
         UpdatePlan plan = Build();
 
-        Assert.Equal(new[] { "MudPlay", "extra.dat" }, plan.Install);
-        Assert.Equal(new[] { "MudPlay" }, plan.Replaced);
+        // The executable goes to the helper on its own, never on the list.
+        Assert.Equal("MudPlay", plan.NewExe);
+        Assert.Equal("MudPlay", plan.ExeName);
+        Assert.Equal(new[] { "extra.dat" }, plan.Install);
+        Assert.Empty(plan.Replaced);
         Assert.Equal("replacing MudPlay; adding extra.dat; removing nothing", plan.Describe());
         Assert.Equal(plan.Install, File.ReadAllLines(plan.WriteList(_root)));
+    }
+
+    // A browser may save the program as "MudPlay (1)": the release's executable is
+    // installed under that running name.
+    [Fact]
+    public void Build_ARenamedProgram_GetsTheReleasesExecutableUnderItsOwnName()
+    {
+        Files(Install, "MudPlay (1)");
+        Files(NewRoot, UpdatePlan.ReleaseExeName, "extra.dat");
+
+        UpdatePlan? plan = UpdatePlan.Build(Install, "MudPlay (1)", NewRoot, out string? refusal);
+
+        Assert.True(plan is not null, refusal);
+        Assert.Equal(UpdatePlan.ReleaseExeName, plan!.NewExe);
+        Assert.Equal("MudPlay (1)", plan.ExeName);
+        Assert.Equal(new[] { "extra.dat" }, plan.Install);
+        Assert.Contains($"MudPlay (1) (with the new {UpdatePlan.ReleaseExeName})", plan.Describe());
+    }
+
+    [Fact]
+    public void Build_RefusesWhenTheRunningProgramIsntThere_OrAnotherFileWouldTakeItsName()
+    {
+        Files(NewRoot, UpdatePlan.ReleaseExeName, "extra.dat");
+        Assert.Null(UpdatePlan.Build(Install, "MudPlay", NewRoot, out string? missing));
+        Assert.Contains("isn't a file", missing);
+
+        Files(Install, "extra.dat");
+        Assert.Null(UpdatePlan.Build(Install, "extra.dat", NewRoot, out string? clash));
+        Assert.Contains("running program's name", clash);
     }
 
     [Theory]

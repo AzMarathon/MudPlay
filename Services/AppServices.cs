@@ -3821,7 +3821,9 @@ public sealed class AppServices
         // Apply path).
         Profile.ProfileLoaded += _ => ApplyToolbarFromActiveProfile();
         Profile.ProfileClosed += ResetToolbarToDefaults;
-        Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile();
+        // A save of the loaded profile is where a toolbar edit arrives; a load or a
+        // close never counts as one (ToolbarConfig.LastApplyWasUserEdit).
+        Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile(userEdit: true);
 
         // Same bridge for the customizable terminal right-click menu (Char-tier).
         Profile.ProfileLoaded += _ => ApplyContextMenuFromActiveProfile();
@@ -11051,10 +11053,10 @@ public sealed class AppServices
         Update.StartAutoChecks(() => Settings.Current.AutoCheckForUpdates);
     }
 
-    private void ApplyToolbarFromActiveProfile()
+    private void ApplyToolbarFromActiveProfile(bool userEdit = false)
     {
         Models.Profile.ToolbarSettings dto = ReadSection<Models.Profile.ToolbarSettings>(Profile.Current, "Toolbar");
-        Toolbar.ApplyFrom(dto);
+        Toolbar.ApplyFrom(dto, userEdit);
     }
 
     private void ResetToolbarToDefaults()
