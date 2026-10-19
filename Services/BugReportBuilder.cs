@@ -2638,7 +2638,7 @@ public static class BugReportBuilder
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
-        Kv(sb, "Doors held open (opened by us, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
+        Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy

@@ -1354,7 +1354,8 @@ public sealed class AppServices
     // Set in the constructor's wiring before the first profile loads.
     public Game.Map.BareKeyLockBook BareKeyLocks { get; private set; } = null!;
     public BareKeyLockStore BareKeyLockStore { get; private set; } = null!;
-    // The door sides the client opened that can't have locked again yet. Set beside it.
+    // The door sides the client has seen open that can't have locked again yet. Set
+    // beside it.
     public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;

@@ -393,7 +393,10 @@ public sealed class RoomTracker
     public event Action? RoomDisplayRead;
 
     // A room display read that left the tracker confirmed in the room it shows: (that
-    // room, the display). Not raised for a dropped peek, nor for
+    // room, the display). A display that lands one of several moves in flight leaves
+    // the tracker Pending and is not raised either: the room it shows is the one the
+    // first move reached, but a door read off it would be laid on whichever room the
+    // tracker settles on, so its doors wait for the next display read confirmed. Not raised for a dropped peek, nor for
     // the display of a room a cast-on-walk step only passed through, both of them
     // another room's, nor for one that left the tracker unsure; raised ahead of
     // RoomDisplayRead.

@@ -257,12 +257,12 @@ public sealed class MovementFilter : IRoomFilter
         || (IsHazardEntryBlocked(in exit) && !SharesHazardStoodIn(in exit))
         || IsAlignmentGateBlocked(in exit);
 
-    // Whether the client opened the door from a room into another and it can't have
-    // locked again yet (DoorsHeldOpen.IsHeldOpen). Unset → never.
+    // Whether the client has seen the door from a room into another open and it can't
+    // have locked again yet (DoorsHeldOpen.IsHeldOpen). Unset → never.
     public Func<RoomKey, RoomKey, bool>? HeldOpenProbe { get; set; }
 
-    // A door held open is passable whatever its lock asks, but only its lock: a level
-    // window, a toll, a hazard beyond or any other gate on the exit still stands.
+    // A door held open is passable whatever its lock asks, but only its lock: a hazard
+    // room beyond it still stands, the one gate a door's exit can have besides.
     public bool IsExitHeldOpen(RoomKey from, in RoomExit exit)
     {
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;

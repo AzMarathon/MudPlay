@@ -59,7 +59,7 @@ public interface IRoomFilter
     // leaves from, which is why this takes the room.
     bool IsExitRefused(RoomKey from, in RoomExit exit) => false;
 
-    // A door out of `from` the client opened itself and that hasn't had time to lock
+    // A door out of `from` the client has seen open and that hasn't had time to lock
     // again (DoorsHeldOpen): passable whatever its own lock would ask, as long as
     // nothing else about the exit blocks it. Takes the room for the reason
     // IsExitRefused does. Default never.
