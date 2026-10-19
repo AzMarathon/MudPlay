@@ -235,7 +235,12 @@ public sealed class ProgramLogFileTests
     // Loggers racing the switch: an entry logged as Auto-collect flips must go to
     // its own session, never start that session's file over again (a second
     // header for it) after the next session has begun. Bounded by counts, not
-    // time.
+    // time: the switch and the loggers keep pace in windows of `window` entries.
+    // Left to run free, loggers whose code the rest of the suite had already
+    // made hot could finish before the switch had flipped twice, and the test
+    // failed for want of a race; kept in step, every flip lands while they are
+    // logging however the threads are scheduled, and no session holds so many
+    // entries that the queue's cap could push every other session out.
     [Fact]
     public async Task LoggersRacingTheSwitch_NeverStartASessionsFileTwice()
     {
@@ -243,29 +248,47 @@ public sealed class ProgramLogFileTests
         LogDiagnosticState diagnostics = new() { AutoCollectLogs = true };
         Disks disks = new();
         using ProgramLogFile file = Make(log, disks, diagnostics: diagnostics);
-        const int loggers = 3, perLogger = 4000, maxToggles = 3000;
-        int running = loggers;
+        const int loggers = 3, flips = 3000, window = 8;
+        int logged = 0, flipped = 0, done = 0;
         using Barrier start = new(loggers + 1);
 
         Thread[] threads = Enumerable.Range(0, loggers).Select(n => new Thread(() =>
         {
             start.SignalAndWait();
-            for (int i = 0; i < perLogger; i++) log.Info("Walker", $"logger {n} step {i}");
-            Interlocked.Decrement(ref running);
+            for (int i = 0; Volatile.Read(ref done) == 0; i++)
+            {
+                // At most a window past the latest flip.
+                SpinWait ahead = default;
+                while (Volatile.Read(ref done) == 0 && Volatile.Read(ref logged) >= (Volatile.Read(ref flipped) + 1) * window)
+                    ahead.SpinOnce(sleep1Threshold: -1);
+                log.Info("Walker", $"logger {n} step {i}");
+                Interlocked.Increment(ref logged);
+            }
         })).ToArray();
         foreach (Thread thread in threads) thread.Start();
         start.SignalAndWait();
-        for (int t = 0; t < maxToggles && Volatile.Read(ref running) > 0; t++)
+        try
         {
-            diagnostics.AutoCollectLogs = !diagnostics.AutoCollectLogs;
-            Thread.Yield();
+            for (int t = 0; t < flips; t++)
+            {
+                // Half a window before the loggers would have to stop for it:
+                // they are still logging as the switch flips.
+                SpinWait behind = default;
+                while (Volatile.Read(ref logged) < (t + 1) * window - window / 2) behind.SpinOnce(sleep1Threshold: -1);
+                diagnostics.AutoCollectLogs = !diagnostics.AutoCollectLogs;
+                Volatile.Write(ref flipped, t + 1);
+            }
         }
-        foreach (Thread thread in threads) thread.Join();
+        finally
+        {
+            Volatile.Write(ref done, 1);
+            foreach (Thread thread in threads) thread.Join();
+        }
         diagnostics.AutoCollectLogs = true;
         await file.WhenWrittenAsync().WaitAsync(Patience);
 
         TestDisk[] opened = disks.Opened.ToArray();
-        Assert.True(opened.Length > 2, "the switch never flipped while the loggers ran");
+        Assert.True(opened.Length > 2, $"only {opened.Length} files were opened over {flips} flips");
         Assert.All(opened, disk =>
             Assert.True(Regex.Matches(disk.Text, "^# MudPlay debug log", RegexOptions.Multiline).Count <= 1,
                 "a file was given two headers"));

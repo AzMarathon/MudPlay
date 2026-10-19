@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.5
+
+- Program-log switch race test no longer fails when its loggers finish before the switch flips
+
 ## 3.185.4
 
 - A door the client sees open stays open to routes for the 5 minutes it can't lock again (less the last minute), whoever opened it, so the way back needs no key; each new sighting starts the 5 minutes again
