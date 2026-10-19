@@ -224,25 +224,81 @@ public sealed class SettingsValueHardeningTests : IDisposable
     }
 
     // Reading the same damaged file again makes no new copy, and a file damaged
-    // over and over keeps only the newest few.
+    // over and over keeps only the newest few: five states inside one second, each
+    // read twice, leave the last three, in the order they were made.
     [Fact]
-    public void Backups_AreOnePerState_AndOnlyTheNewestFewAreKept()
+    public void Backups_AreOnePerState_AndTheNewestFewAreKept_EvenWithinOneSecond()
     {
-        string path = WriteProfile("""{ "Name": "Hero", "Favorites": 1 }""");
-        TestProfiles.Service().Load(_bbs, "Hero");
-        TestProfiles.Service().Load(_bbs, "Hero");
+        string path = WriteProfile("""{ "Name": "Hero" }""");
         string folder = Path.GetDirectoryName(path)!;
-        Assert.Single(Directory.GetFiles(folder, "profile.json.unreadable-*.bak"));
 
-        for (int i = 2; i <= SettingsValueGuard.BackupsKept + 2; i++)
+        for (int state = 1; state <= 5; state++)
         {
-            File.WriteAllText(path, $$"""{ "Name": "Hero", "Favorites": {{i}} }""");
+            File.WriteAllText(path, $$"""{ "Name": "Hero", "Favorites": {{state}} }""");
+            TestProfiles.Service().Load(_bbs, "Hero");
             TestProfiles.Service().Load(_bbs, "Hero");
         }
 
-        string[] kept = Directory.GetFiles(folder, "profile.json.unreadable-*.bak");
+        string[] kept = Directory.GetFiles(folder, "profile.json.unreadable-*.bak").Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(SettingsValueGuard.BackupsKept, kept.Length);
-        Assert.Contains(kept, k => File.ReadAllText(k).Contains($"\"Favorites\": {SettingsValueGuard.BackupsKept + 2}", StringComparison.Ordinal));
+        Assert.Equal(new[] { 3, 4, 5 }, kept.Select(k => File.ReadAllText(k)).Select(t => t.Contains("\"Favorites\": 3", StringComparison.Ordinal) ? 3
+            : t.Contains("\"Favorites\": 4", StringComparison.Ordinal) ? 4 : t.Contains("\"Favorites\": 5", StringComparison.Ordinal) ? 5 : 0));
+    }
+
+    // A copy of the character is the character, not its rescued damaged files.
+    [Fact]
+    public void CopyProfile_LeavesTheBackupsBehind()
+    {
+        WriteProfile("""{ "Name": "Hero", "Favorites": 1 }""");
+        ProfileService profiles = TestProfiles.Service();
+        profiles.Load(_bbs, "Hero");
+
+        profiles.CopyProfile(_bbs, "Hero", "Hero2");
+
+        Assert.Single(Directory.GetFiles(AppPaths.ProfileFolder(_bbs, "Hero"), "*.unreadable-*.bak"));
+        Assert.Empty(Directory.GetFiles(AppPaths.ProfileFolder(_bbs, "Hero2"), "*.bak"));
+    }
+
+    // A context menu's entries hold entries: the walk goes all the way down, so a bad
+    // value two levels in is found in a file that otherwise reads as it stands.
+    [Fact]
+    public void ProfileLoad_ABadValueDeepInARecursiveSection_IsFound()
+    {
+        string path = WriteProfile("""
+            { "Name": "Hero", "Settings": { "ContextMenu": { "Layout": [
+                { "Kind": "Entry", "Id": "a" },
+                { "Kind": "Folder", "Label": "More", "Children": [ { "Kind": 99, "Id": "b" } ] } ] } } }
+            """);
+
+        CharacterProfile hero = TestProfiles.Service().Load(_bbs, "Hero");
+
+        JsonElement child = hero.Settings!["ContextMenu"].GetProperty("Layout")[1].GetProperty("Children")[0];
+        Assert.False(child.TryGetProperty("Kind", out _));
+        Assert.Equal("b", child.GetProperty("Id").GetString());
+        Assert.Contains(WarnsAbout(path), w => w.Contains("Settings.ContextMenu.Layout[1].Children[0].Kind", StringComparison.Ordinal));
+    }
+
+    // Structs are walked too: a player's customisation is one, and its remote
+    // controls are flags. An undefined bit goes back to the default; an enum
+    // number in a list is left out of it.
+    [Fact]
+    public void ProfileLoad_UndefinedEnumsInStructsAndLists_AreCaught()
+    {
+        string path = WriteProfile("""
+            { "Name": "Hero",
+              "PlayerCustomizations": { "Bob": { "RemoteControls": 1048576, "Notes": "keep" } },
+              "CombatProfiles": { "SharedGroups": [ 99 ] } }
+            """);
+
+        CharacterProfile hero = TestProfiles.Service().Load(_bbs, "Hero");
+
+        Models.GameData.PlayerCustomization bob = hero.PlayerCustomizations!["Bob"];
+        Assert.Equal(Models.GameData.PlayerRemoteControls.None, bob.RemoteControls);
+        Assert.Equal("keep", bob.Notes);
+        Assert.Empty(hero.CombatProfiles!.SharedGroups!);
+        List<string> warns = WarnsAbout(path);
+        Assert.Contains(warns, w => w.Contains("PlayerCustomizations[Bob].RemoteControls", StringComparison.Ordinal));
+        Assert.Contains(warns, w => w.Contains("CombatProfiles.SharedGroups[0]", StringComparison.Ordinal));
     }
 
     // A section past saving: left as written for its own reader, said once, and the

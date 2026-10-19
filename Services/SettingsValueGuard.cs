@@ -37,7 +37,7 @@ namespace MudPlay.Services;
 // The values used are what the client reads, and what the file holds if it is
 // saved; reading never writes it. A value left out is gone from the file at its
 // next save, so the file as it was is first copied beside it
-// (<file>.unreadable-<time>.bak, the newest few kept). Each value moved or left out
+// (<file>.unreadable-<UTC time>-NN.bak, the newest BackupsKept kept). Each value moved or left out
 // is raised on Clamped (AppServices writes it to the program log at Warn), naming
 // the field, the tier, the value found and the value used. A file that isn't JSON at
 // all still fails to load, as it always did.
@@ -117,7 +117,7 @@ public static class SettingsValueGuard
             result = (T?)DeserializeLeavingOutBadFields(node, typeof(T), "", RootFallback, clamps);
         }
 
-        string? backup = clamps.Any(c => c.LeftOut) ? KeepBackup(path) : null;
+        string? backup = clamps.Any(c => c.LeftOut) ? KeepBackup(path, json) : null;
         List<string> lines = new(clamps.Count);
         foreach (SettingsClamp c in clamps)
         {
@@ -140,7 +140,7 @@ public static class SettingsValueGuard
 
     // ----- The object a file read as it stands --------------------------------
 
-    private enum Check { Number, NumberList, NumberMap, Enum, Child, ChildList, ChildMap, Sections }
+    private enum Check { Number, NumberList, NumberMap, Enum, EnumList, EnumKeys, Child, ChildList, ChildMap, Sections }
 
     private sealed record Step(PropertyInfo Property, string Name, Check Check, Type Type,
         SettingRangeAttribute? Range, NumberKind? Kind, object? Default);
@@ -156,8 +156,9 @@ public static class SettingsValueGuard
     {
         if (Plans.TryGetValue(type, out Step[]? plan)) return plan;
         _planning ??= new HashSet<Type>();
-        // A type met again while its own plan is being made (a tree of itself) is
-        // taken as having nothing to check; its outer plan still covers it.
+        // A type met again while its own plan is being made (a tree of itself) has
+        // no plan yet; MakePlan steps into it anyway (IsPlanning), and the walk
+        // reads the finished plan when it gets there.
         if (!_planning.Add(type)) return Array.Empty<Step>();
         try
         {
@@ -170,10 +171,16 @@ public static class SettingsValueGuard
         return Plans.GetOrAdd(type, plan);
     }
 
+    private static bool IsPlanning(Type type) => _planning?.Contains(type) == true;
+
+    // Worth stepping into: a type of ours with something to check, or one whose plan
+    // is still being made (a tree of itself: a context menu's entries hold entries).
+    private static bool HasWork(Type type) => IsPlanning(type) || PlanOf(type).Length > 0;
+
     private static Step[] MakePlan(Type type)
     {
-        if (!IsOwnClass(type)) return Array.Empty<Step>();
-        object? defaults = type.GetConstructor(Type.EmptyTypes) is not null ? Activator.CreateInstance(type) : null;
+        if (!IsOwnType(type)) return Array.Empty<Step>();
+        object? defaults = type.IsValueType || type.GetConstructor(Type.EmptyTypes) is not null ? Activator.CreateInstance(type) : null;
         List<Step> steps = new();
         foreach (PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -182,7 +189,7 @@ public static class SettingsValueGuard
             string name = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name;
             SettingRangeAttribute? range = p.GetCustomAttribute<SettingRangeAttribute>();
             Type t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
-            Type? element = ElementType(t), value = DictionaryValueType(t);
+            Type? element = ElementType(t), value = DictionaryValueType(t), key = DictionaryKeyType(t);
             if (HoldsSections(p))
                 steps.Add(new Step(p, name, Check.Sections, t, null, null, null));
             else if (NumberKind.Of(t) is { } kind)
@@ -195,21 +202,25 @@ public static class SettingsValueGuard
             }
             else if (element is not null)
             {
-                if (NumberKind.Of(element) is { } k)
+                Type e = Nullable.GetUnderlyingType(element) ?? element;
+                if (NumberKind.Of(e) is { } k)
                 {
-                    if (range is not null) steps.Add(new Step(p, name, Check.NumberList, element, range, k, null));
+                    if (range is not null) steps.Add(new Step(p, name, Check.NumberList, e, range, k, null));
                 }
-                else if (PlanOf(element).Length > 0) steps.Add(new Step(p, name, Check.ChildList, element, null, null, null));
+                else if (e.IsEnum) steps.Add(new Step(p, name, Check.EnumList, e, null, null, null));
+                else if (HasWork(e)) steps.Add(new Step(p, name, Check.ChildList, e, null, null, null));
             }
             else if (value is not null)
             {
-                if (NumberKind.Of(value) is { } k)
+                if (key is { IsEnum: true }) steps.Add(new Step(p, name, Check.EnumKeys, key, null, null, null));
+                Type v = Nullable.GetUnderlyingType(value) ?? value;
+                if (NumberKind.Of(v) is { } k)
                 {
-                    if (range is not null) steps.Add(new Step(p, name, Check.NumberMap, value, range, k, null));
+                    if (range is not null) steps.Add(new Step(p, name, Check.NumberMap, v, range, k, null));
                 }
-                else if (PlanOf(value).Length > 0) steps.Add(new Step(p, name, Check.ChildMap, value, null, null, null));
+                else if (HasWork(v)) steps.Add(new Step(p, name, Check.ChildMap, v, null, null, null));
             }
-            else if (PlanOf(t).Length > 0)
+            else if (HasWork(t))
                 steps.Add(new Step(p, name, Check.Child, t, null, null, null));
         }
         return steps.ToArray();
@@ -278,16 +289,18 @@ public static class SettingsValueGuard
                                     if (!apply) return true;
                                     found = true;
                                     map[key] = ToNumber(u, step.Type);
-                                    path.Add(key);
+                                    path.Add(new MapKey(key));
                                     clamps!.Add(Note(path, item, step, u));
                                     path.RemoveAt(path.Count - 1);
                                 }
                         break;
+                    // A struct is walked as a boxed copy and put back once fixed.
                     case Check.Child:
                         if (Walk(value, PlanOf(value.GetType()), path, clamps, apply))
                         {
                             if (!apply) return true;
                             found = true;
+                            if (value.GetType().IsValueType && step.Property.CanWrite) step.Property.SetValue(obj, value);
                         }
                         break;
                     case Check.ChildList:
@@ -299,20 +312,48 @@ public static class SettingsValueGuard
                                 bool inChild = Walk(child, PlanOf(child.GetType()), path, clamps, apply);
                                 path.RemoveAt(path.Count - 1);
                                 if (inChild && !apply) return true;
+                                if (inChild && child.GetType().IsValueType) children[i] = child;
                                 found |= inChild;
                             }
                         break;
                     case Check.ChildMap:
                         if (value is IDictionary childMap)
-                            foreach (DictionaryEntry entry in childMap)
+                            foreach (object key in childMap.Keys.Cast<object>().ToList())
                             {
-                                if (entry.Value is not { } child) continue;
-                                path.Add(entry.Key);
+                                if (childMap[key] is not { } child) continue;
+                                path.Add(new MapKey(key));
                                 bool inChild = Walk(child, PlanOf(child.GetType()), path, clamps, apply);
                                 path.RemoveAt(path.Count - 1);
                                 if (inChild && !apply) return true;
+                                if (inChild && child.GetType().IsValueType) childMap[key] = child;
                                 found |= inChild;
                             }
+                        break;
+                    case Check.EnumList:
+                        if (value is IList enums)
+                            for (int i = enums.Count - 1; i >= 0; i--)
+                                if (enums[i] is { } item && !IsValidEnum(step.Type, item))
+                                {
+                                    if (!apply) return true;
+                                    found = true;
+                                    enums.RemoveAt(i);
+                                    path.Add(i);
+                                    clamps!.Add(LeftOutEnum(path, item, step.Type));
+                                    path.RemoveAt(path.Count - 1);
+                                }
+                        break;
+                    case Check.EnumKeys:
+                        if (value is IDictionary keyed)
+                            foreach (object key in keyed.Keys.Cast<object>().ToList())
+                                if (!IsValidEnum(step.Type, key))
+                                {
+                                    if (!apply) return true;
+                                    found = true;
+                                    keyed.Remove(key);
+                                    path.Add(new MapKey(key));
+                                    clamps!.Add(LeftOutEnum(path, key, step.Type));
+                                    path.RemoveAt(path.Count - 1);
+                                }
                         break;
                     case Check.Sections:
                         if (apply && value is Dictionary<string, JsonElement> sections)
@@ -374,10 +415,22 @@ public static class SettingsValueGuard
             $"outside {Show(Math.Max(step.Kind!.Min, ToDecimal(step.Range!.Min)))} to {Show(Math.Min(step.Kind.Max, ToDecimal(step.Range.Max)))}",
             Show(used));
 
+    private static SettingsClamp LeftOutEnum(List<object> path, object value, Type enumType) =>
+        new(PathText(path), Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture),
+            $"not one of {enumType.Name}'s values", "nothing (left out)", LeftOut: true);
+
     private static object ToNumber(decimal value, Type type) => Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
 
-    private static string PathText(List<object> path) => string.Concat(path.Select((step, i) =>
-        step is string name ? (i == 0 ? name : "." + name) : $"[{Convert.ToString(step, CultureInfo.InvariantCulture)}]"));
+    // A dictionary key on the path, shown [key] like a list index, not .key like a
+    // property.
+    private readonly record struct MapKey(object Key);
+
+    private static string PathText(List<object> path) => string.Concat(path.Select((step, i) => step switch
+    {
+        string name => i == 0 ? name : "." + name,
+        MapKey key => $"[{Convert.ToString(key.Key, CultureInfo.InvariantCulture)}]",
+        _ => $"[{Convert.ToString(step, CultureInfo.InvariantCulture)}]",
+    }));
 
     private static bool IsValidEnum(Type enumType, object value)
     {
@@ -387,8 +440,11 @@ public static class SettingsValueGuard
         return (Convert.ToInt64(value, CultureInfo.InvariantCulture) & ~all) == 0;
     }
 
-    private static bool IsOwnClass(Type t) =>
-        t.IsClass && t != typeof(string) && t.Namespace?.StartsWith("MudPlay", StringComparison.Ordinal) == true;
+    // The client's own DTOs: classes, records and structs (a player's customisation,
+    // a key chord), not an enum, a string or a framework type.
+    private static bool IsOwnType(Type t) =>
+        (t.IsClass || (t.IsValueType && !t.IsPrimitive && !t.IsEnum))
+        && t.Namespace?.StartsWith("MudPlay", StringComparison.Ordinal) == true;
 
     // ----- The tree a file the serializer refused -----------------------------
 
@@ -447,15 +503,33 @@ public static class SettingsValueGuard
         if (ElementType(type) is { } element)
         {
             if (node is JsonArray array)
-                for (int i = 0; i < array.Count; i++)
-                    if (Fix(array[i], element, range, $"{path}[{i}]", fallback, clamps) is { } changed) array[i] = changed;
+            {
+                Type e = Nullable.GetUnderlyingType(element) ?? element;
+                for (int i = array.Count - 1; i >= 0; i--)
+                {
+                    if (e.IsEnum && !IsEnumNumberValid(array[i], e))
+                    {
+                        clamps.Add(new SettingsClamp($"{path}[{i}]", array[i]!.ToJsonString(), $"not one of {e.Name}'s values", "nothing (left out)", LeftOut: true));
+                        array.RemoveAt(i);
+                    }
+                    else if (Fix(array[i], element, range, $"{path}[{i}]", fallback, clamps) is { } changed) array[i] = changed;
+                }
+            }
             return null;
         }
         if (DictionaryValueType(type) is { } valueType)
         {
             if (node is JsonObject map)
                 foreach (string key in map.Select(p => p.Key).ToList())
-                    if (Fix(map[key], valueType, range, $"{path}[{key}]", fallback, clamps) is { } changed) map[key] = changed;
+                {
+                    if (DictionaryKeyType(type) is { IsEnum: true } keyType && long.TryParse(key, out long k)
+                        && !IsValidEnum(keyType, Enum.ToObject(keyType, k)))
+                    {
+                        clamps.Add(new SettingsClamp($"{path}[{key}]", key, $"not one of {keyType.Name}'s values", "nothing (left out)", LeftOut: true));
+                        map.Remove(key);
+                    }
+                    else if (Fix(map[key], valueType, range, $"{path}[{key}]", fallback, clamps) is { } changed) map[key] = changed;
+                }
             return null;
         }
         if (node is JsonObject obj && Shape(type) is { } shape)
@@ -476,11 +550,10 @@ public static class SettingsValueGuard
                     continue;
                 }
                 Type memberType = Nullable.GetUnderlyingType(member.Type) ?? member.Type;
-                if (memberType.IsEnum && obj[name] is JsonValue number && number.GetValueKind() == JsonValueKind.Number
-                    && !(number.TryGetValue(out long n) && IsValidEnum(memberType, Enum.ToObject(memberType, n))))
+                if (memberType.IsEnum && !IsEnumNumberValid(obj[name], memberType))
                 {
+                    clamps.Add(new SettingsClamp(at, obj[name]!.ToJsonString(), $"not one of {memberType.Name}'s values", fallback, LeftOut: true));
                     obj.Remove(name);
-                    clamps.Add(new SettingsClamp(at, number.ToJsonString(), $"not one of {memberType.Name}'s values", fallback, LeftOut: true));
                     continue;
                 }
                 if (Fix(obj[name], member.Type, member.Range, at, fallback, clamps) is { } changed) obj[name] = changed;
@@ -488,6 +561,11 @@ public static class SettingsValueGuard
         }
         return null;
     }
+
+    // False only for a number the enum hasn't got; a name is left to the serializer.
+    private static bool IsEnumNumberValid(JsonNode? node, Type enumType) =>
+        node is not JsonValue number || number.GetValueKind() != JsonValueKind.Number
+        || (number.TryGetValue(out long n) && IsValidEnum(enumType, Enum.ToObject(enumType, n)));
 
     private static JsonValue? FixNumber(JsonValue value, NumberKind kind, SettingRangeAttribute? range, string path, List<SettingsClamp> clamps)
     {
@@ -635,6 +713,9 @@ public static class SettingsValueGuard
         return null;
     }
 
+    private static Type? DictionaryKeyType(Type type) =>
+        DictionaryValueType(type) is not null ? Nullable.GetUnderlyingType(type.GetGenericArguments()[0]) ?? type.GetGenericArguments()[0] : null;
+
     private static Type? DictionaryValueType(Type type) =>
         type.IsGenericType && type.GetGenericTypeDefinition() is var g
             && (g == typeof(Dictionary<,>) || g == typeof(IDictionary<,>) || g == typeof(IReadOnlyDictionary<,>))
@@ -693,25 +774,28 @@ public static class SettingsValueGuard
 
     // ----- Backups ------------------------------------------------------------
 
-    // Copy path, as it stands, to <file>.unreadable-<time>.bak beside it, unless the
-    // newest copy already holds the same bytes, and keep only the newest
-    // BackupsKept. Returns the copy that holds them, or null when none could be made
-    // (said, and the load goes on: losing the copy must not cost the profile too).
-    private static string? KeepBackup(string path)
+    // Keep json, the file as it was read, as <file>.unreadable-<UTC time>-NN.bak
+    // beside it, unless the newest copy already holds the same text, and keep only
+    // the newest BackupsKept. The stamp is UTC to the millisecond and every name
+    // carries a two-digit count, so names sort in the order they were made: a
+    // clock change can't reorder them, nor can several made within one second.
+    // Returns the copy that holds the text, or null when none could be made (said,
+    // and the load goes on: losing the copy must not cost the profile too).
+    private static string? KeepBackup(string path, string json)
     {
         try
         {
             string folder = Path.GetDirectoryName(path)!;
             string prefix = Path.GetFileName(path) + ".unreadable-";
             List<string> kept = Directory.GetFiles(folder, prefix + "*.bak").Order(StringComparer.Ordinal).ToList();
-            byte[] now = File.ReadAllBytes(path);
-            if (kept.Count > 0 && File.ReadAllBytes(kept[^1]).AsSpan().SequenceEqual(now)) return kept[^1];
+            if (kept.Count > 0 && File.ReadAllText(kept[^1]) == json) return kept[^1];
 
-            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-            string backup = Path.Combine(folder, $"{prefix}{stamp}.bak");
-            for (int n = 2; File.Exists(backup); n++) backup = Path.Combine(folder, $"{prefix}{stamp}-{n}.bak");
-            File.WriteAllBytes(backup, now);
+            string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture) + "Z";
+            string backup = Path.Combine(folder, $"{prefix}{stamp}-00.bak");
+            for (int n = 1; File.Exists(backup); n++) backup = Path.Combine(folder, $"{prefix}{stamp}-{n:00}.bak");
+            File.WriteAllText(backup, json);
             kept.Add(backup);
+            kept.Sort(StringComparer.Ordinal);
             foreach (string old in kept.Take(Math.Max(0, kept.Count - BackupsKept))) File.Delete(old);
             return backup;
         }
