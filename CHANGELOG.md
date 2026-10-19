@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.6
+
+- Program-log switch race test no longer fails when its loggers finish before the switch flips
+
 ## 3.185.5
 
 - A setting written by name in a hand-edited profile (`"HpThresholdMode": "Absolute"`) now reads, where the automation used to run that whole section on defaults
