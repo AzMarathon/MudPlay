@@ -10,12 +10,12 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Actually RUNS the posix swap helper against a throwaway sandbox laid out like a
-// real update: an install folder holding MudPlay's files from an old manifest AND
-// the user's own files (the folder may be Downloads), a staged new build with its
-// manifest, and the two lists UpdatePlan writes from them. String assertions can't
-// catch what bites here: whether a user's file survives, whether the relaunch argv
-// survives shell quoting, whether a failure puts every file back. The script only
-// ever executes on a user's machine during a real update.
+// real update: an install folder holding MudPlay's files AND the user's own files
+// (the folder may be Downloads), a staged new build, and the list UpdatePlan writes
+// from it. String assertions can't catch what bites here: whether a user's file
+// survives, whether the relaunch argv survives shell quoting, whether a failure puts
+// every file back. The script only ever executes on a user's machine during a real
+// update.
 //
 // Linux/macOS only: that helper is bash. The Windows helper can't run here, so its
 // structure is pinned instead: per-file and list-driven, never a mirror, purge or
@@ -24,58 +24,52 @@ public sealed class SwapScriptExecutionTests
 {
     // ----- POSIX, executed ------------------------------------------------------
 
+    // The swap puts the new build's files in and deletes nothing: not the user's
+    // files, and not a file an older MudPlay left (that is RetiredFiles' job, in code).
     [Fact]
-    public void Posix_ReplacesOnlyListedFiles_AndLeavesTheUsersFilesByteForByte()
+    public void Posix_ReplacesTheBuildsFiles_DeletesNothing_LeavesTheUsersFilesByteForByte()
     {
         if (!Bash) return;
-        using var box = new Sandbox(oldManifest: ["MudPlay", "MudPlay.files", "legacy.dat", "kept.dat"]);
-        box.NewBuild(["MudPlay", "MudPlay.files", "kept.dat", "extra.dat"]);
+        using var box = new Sandbox(["MudPlay", "legacy.dat", "kept.dat"]);
+        box.NewBuild(["MudPlay", "kept.dat", "extra.dat"]);
         Dictionary<string, byte[]> users = box.SnapshotUserFiles();
+        string[] before = box.InstalledNames();
 
         box.Run(box.Plan(), profile: "Some BBS/Bob the Bard", reconnect: true);
 
         Assert.Equal(users, box.SnapshotUserFiles());
-        Assert.False(File.Exists(box.Installed("legacy.dat")), "a file the new manifest dropped is still there");
+        Assert.Empty(before.Except(box.InstalledNames()));
+        Assert.Equal("old legacy.dat", box.InstalledText("legacy.dat"));
         Assert.Contains("launched-new", box.InstalledText("MudPlay"));
         Assert.Equal("new kept.dat", box.InstalledText("kept.dat"));
         Assert.Equal("new extra.dat", box.InstalledText("extra.dat"));
-        Assert.Contains("extra.dat", box.InstalledText("MudPlay.files"));
         Assert.Equal(new[] { "--profile", "Some BBS/Bob the Bard", "--reconnect" }, box.Relaunched("new"));
         // The staged download and the backup inside it are gone, and nothing was put
         // beside the install folder.
         Assert.False(Directory.Exists(box.Stage), "the staging folder (and its backup) wasn't cleaned up");
         Assert.Equal(new[] { "install" }, box.EntriesBesideInstall());
         Assert.False(File.Exists(box.Installed("MudPlay-update-failed.log")));
-    }
-
-    // An install from before manifests: the new build's files go in, nothing goes out.
-    [Fact]
-    public void Posix_PreManifestInstall_AddsAndReplaces_RemovesNothing()
-    {
-        if (!Bash) return;
-        using var box = new Sandbox(oldManifest: null, oldFiles: ["MudPlay", "legacy.dat"]);
-        box.NewBuild(["MudPlay", "MudPlay.files"]);
-        Dictionary<string, byte[]> users = box.SnapshotUserFiles();
-
-        UpdatePlan plan = box.Plan();
-        Assert.Empty(plan.Remove);
-        box.Run(plan, profile: "", reconnect: false);
-
-        Assert.Equal(users, box.SnapshotUserFiles());
-        Assert.Equal("old legacy.dat", box.InstalledText("legacy.dat"));
-        Assert.Contains("launched-new", box.InstalledText("MudPlay"));
-        Assert.True(File.Exists(box.Installed("MudPlay.files")));
-        Assert.Empty(box.Relaunched("new"));
+        Assert.Empty(Directory.GetFiles(box.Install, "*.mudplay-update-*"));
     }
 
     [Fact]
     public void Posix_RelaunchesWithProfileOnlyWhenNotReconnecting()
     {
         if (!Bash) return;
-        using var box = new Sandbox(oldManifest: ["MudPlay", "MudPlay.files"]);
-        box.NewBuild(["MudPlay", "MudPlay.files"]);
+        using var box = new Sandbox(["MudPlay"]);
+        box.NewBuild(["MudPlay"]);
         box.Run(box.Plan(), profile: "Board/Char", reconnect: false);
         Assert.Equal(new[] { "--profile", "Board/Char" }, box.Relaunched("new"));
+    }
+
+    [Fact]
+    public void Posix_RelaunchesBareWhenNothingToRestore()
+    {
+        if (!Bash) return;
+        using var box = new Sandbox(["MudPlay"]);
+        box.NewBuild(["MudPlay"]);
+        box.Run(box.Plan(), profile: "", reconnect: false);
+        Assert.Empty(box.Relaunched("new"));
     }
 
     // A swap that fails part-way puts back every file it replaced, takes out every
@@ -85,19 +79,20 @@ public sealed class SwapScriptExecutionTests
     public void Posix_FailedSwap_RestoresTheOldFiles_AndLeavesTheUsersAlone()
     {
         if (!Bash) return;
-        using var box = new Sandbox(oldManifest: ["MudPlay", "MudPlay.files", "legacy.dat", "kept.dat"]);
-        // Listed last, and taken out of the build after the plan is made, so every
+        using var box = new Sandbox(["MudPlay", "legacy.dat", "kept.dat"]);
+        // Sorted last, and taken out of the build after the plan is made, so every
         // other file is already in place when copying this one fails.
-        box.NewBuild(["MudPlay", "MudPlay.files", "kept.dat", "extra.dat", "zzz-broken.dat"]);
+        box.NewBuild(["MudPlay", "kept.dat", "extra.dat", "zzz-broken.dat"]);
         Dictionary<string, byte[]> users = box.SnapshotUserFiles();
-        Dictionary<string, byte[]> mudplay = box.SnapshotInstalled(["MudPlay", "MudPlay.files", "legacy.dat", "kept.dat"]);
+        Dictionary<string, byte[]> mudplay = box.SnapshotInstalled(["MudPlay", "legacy.dat", "kept.dat"]);
         UpdatePlan plan = box.Plan();
+        Assert.Equal("zzz-broken.dat", plan.Install[^1]);
         File.Delete(Path.Combine(box.NewRoot, "zzz-broken.dat"));
 
         box.Run(plan, profile: "Board/Char", reconnect: true);
 
         Assert.Equal(users, box.SnapshotUserFiles());
-        Assert.Equal(mudplay, box.SnapshotInstalled(["MudPlay", "MudPlay.files", "legacy.dat", "kept.dat"]));
+        Assert.Equal(mudplay, box.SnapshotInstalled(["MudPlay", "legacy.dat", "kept.dat"]));
         Assert.False(File.Exists(box.Installed("extra.dat")), "a file the failed update added is still there");
         Assert.False(File.Exists(box.Installed("zzz-broken.dat")));
         Assert.Equal(new[] { "--profile", "Board/Char", "--reconnect" }, box.Relaunched("old"));
@@ -116,27 +111,33 @@ public sealed class SwapScriptExecutionTests
     public void Posix_NeverMovesOrDeletesTheInstallFolder()
     {
         string s = SwapScriptBuilder.BuildPosix();
-        Assert.Contains("INSTALL=\"$8\"; REMOVE=\"$9\"", s);
+        Assert.Contains("INSTALL=\"$8\"", s);
         Assert.Contains("BAK=\"$STAGE/backup\"", s);
+        Assert.DoesNotContain("$9", s);
         Assert.DoesNotContain("mv \"$DST\"", s);
         Assert.DoesNotContain("mv \"$NEW\" \"$DST\"", s);
         Assert.DoesNotContain(".bak", s);
         // The only recursive delete is the staging folder in temp.
         foreach (string line in s.Split('\n').Where(l => l.Contains("rm -rf")))
             Assert.Contains("rm -rf \"$STAGE\"", line);
-        // Every other rm names one file, never a folder.
+        // Every other rm is the helper's own temp copy, log or self, or (in rollback
+        // only) a file this update had just added.
         foreach (string line in s.Split('\n').Where(l => l.Contains("rm -f ")))
             Assert.Matches(@"rm -f (-- )?""\$(DST/\$(f|2)(\$SUF)?|LOG|0)""", line);
+        string[] removesListed = s.Split('\n').Where(l => l.Contains("rm -f -- \"$DST/$f\"")).ToArray();
+        Assert.Single(removesListed);
+        Assert.Contains("(new in this update)", removesListed[0]);
     }
+
 
     [Fact]
     public void Windows_IsPerFileAndListDriven_NeverAMirrorPurgeOrFolderDelete()
     {
         string s = SwapScriptBuilder.BuildWindows();
         Assert.Contains("set \"INSTALL=%~8\"", s);
-        Assert.Contains("set \"REMOVE=%~9\"", s);
+        Assert.DoesNotContain("%~9", s);
+        Assert.Contains("for /f \"usebackq delims=\" %%F in (\"%INSTALL%\") do call :backup \"%%F\"", s);
         Assert.Contains("for /f \"usebackq delims=\" %%F in (\"%INSTALL%\") do call :install \"%%F\"", s);
-        Assert.Contains("for /f \"usebackq delims=\" %%F in (\"%REMOVE%\") do call :remove \"%%F\"", s);
         // The backup lives in the staging folder in temp, never beside the install.
         Assert.Contains("set \"BAK=%STAGE%\\backup\"", s);
         Assert.DoesNotContain(".bak", s, StringComparison.OrdinalIgnoreCase);
@@ -147,19 +148,23 @@ public sealed class SwapScriptExecutionTests
         string[] lines = s.Split('\n');
         foreach (string line in lines.Where(l => l.Contains("rmdir", StringComparison.OrdinalIgnoreCase)))
             Assert.Contains("rmdir /s /q \"%STAGE%\"", line);
-        // del only ever names one of the helper's own files or one listed name.
+        // del only ever names one of the helper's own files: its temp copies, the
+        // renamed-aside exe, its log, ACL file and itself.
         string[] mayDelete =
         [
-            "\"%DST%\\%~1\"", "\"%DST%\\%~1%SUF%\"", "\"%OLD%\"", "\"%ACL%\"", "\"%LOG%\"", "\"%EXE%.new\"", "\"%~f0\"",
+            "\"%DST%\\%~1%SUF%\"", "\"%OLD%\"", "\"%ACL%\"", "\"%LOG%\"", "\"%EXE%.new\"", "\"%~f0\"",
         ];
+        const string undoAdded = "if not exist \"%DST%\\%~1\\\" del /f /q \"%DST%\\%~1\"";
         foreach (string line in lines.Where(l => l.Contains("del ", StringComparison.OrdinalIgnoreCase)
-                                                 && !l.TrimStart().StartsWith("rem ", StringComparison.OrdinalIgnoreCase)))
+                                                 && !l.TrimStart().StartsWith("rem ", StringComparison.OrdinalIgnoreCase)
+                                                 && !l.Contains(undoAdded)))
             Assert.True(mayDelete.Any(t => line.Contains("del /f /q " + t) || line.Contains("del " + t)),
                 $"unexpected delete: {line.Trim()}");
-        // Given a folder, del empties it: each listed name is checked for being one first.
-        Assert.True(Section(s, ":remove").IndexOf("if exist \"%DST%\\%~1\\\" goto :eof", StringComparison.Ordinal)
-                    < Section(s, ":remove").IndexOf("del /f /q", StringComparison.Ordinal));
-        Assert.Contains("if not exist \"%DST%\\%~1\\\" del /f /q \"%DST%\\%~1\"", Section(s, ":restore"));
+        // The one exception: a failed swap takes out a file it had just added (one it
+        // didn't back up), checking first that the name isn't a folder, which del
+        // would empty.
+        Assert.Equal(2, s.Split(undoAdded).Length);
+        Assert.Contains(undoAdded, Section(s, ":restore"));
         Assert.Contains("if exist \"%DST%\\%~1\\\" goto :eof", Section(s, ":backup"));
     }
 
@@ -233,7 +238,7 @@ public sealed class SwapScriptExecutionTests
         public string Stage => Path.Combine(_root, "stage");
         public string NewRoot => Path.Combine(Stage, "new");
 
-        public Sandbox(string[]? oldManifest, string[]? oldFiles = null)
+        public Sandbox(string[] oldFiles)
         {
             Directory.CreateDirectory(Install);
             var rng = new Random(1234);
@@ -245,18 +250,15 @@ public sealed class SwapScriptExecutionTests
                 rng.NextBytes(bytes);
                 File.WriteAllBytes(path, bytes);
             }
-            foreach (string f in oldFiles ?? oldManifest!.Where(f => f != InstallManifest.FileName))
+            foreach (string f in oldFiles)
                 WriteMudPlayFile(Install, f, "old");
-            if (oldManifest is not null)
-                InstallManifest.Write(Install, oldManifest.Where(f => f != InstallManifest.FileName));
         }
 
-        public void NewBuild(string[] manifest)
+        public void NewBuild(string[] files)
         {
             Directory.CreateDirectory(NewRoot);
-            foreach (string f in manifest.Where(f => f != InstallManifest.FileName))
+            foreach (string f in files)
                 WriteMudPlayFile(NewRoot, f, "new");
-            InstallManifest.Write(NewRoot, manifest.Where(f => f != InstallManifest.FileName));
         }
 
         public UpdatePlan Plan()
@@ -266,11 +268,11 @@ public sealed class SwapScriptExecutionTests
             return plan!;
         }
 
-        // Run the helper as UpdateInstaller does: the lists written into the work
+        // Run the helper as UpdateInstaller does: the list written into the work
         // folder, and a PID that has already exited so the wait falls straight through.
         public void Run(UpdatePlan plan, string profile, bool reconnect)
         {
-            (string installList, string removeList) = plan.WriteLists(Stage);
+            string installList = plan.WriteList(Stage);
             string script = Path.Combine(_root, "swap.sh");
             File.WriteAllText(script, SwapScriptBuilder.BuildPosix());
             using Process probe = Process.Start(new ProcessStartInfo("/bin/sh", "-c \"exit 0\"") { UseShellExecute = false })!;
@@ -279,7 +281,7 @@ public sealed class SwapScriptExecutionTests
             foreach (string a in new[]
                      {
                          "bash", script, probe.Id.ToString(), NewRoot, Install, Path.Combine(Install, "MudPlay"), Stage,
-                         profile, reconnect ? "1" : "", installList, removeList,
+                         profile, reconnect ? "1" : "", installList,
                      })
                 psi.ArgumentList.Add(a);
             using Process p = Process.Start(psi)!;
@@ -297,6 +299,11 @@ public sealed class SwapScriptExecutionTests
 
         public string Installed(string name) => Path.Combine(Install, name);
         public string InstalledText(string name) => File.ReadAllText(Installed(name));
+
+        // Every file and folder under the install, as paths relative to it.
+        public string[] InstalledNames() =>
+            Directory.GetFileSystemEntries(Install, "*", SearchOption.AllDirectories)
+                .Select(p => Path.GetRelativePath(Install, p)).Order(StringComparer.Ordinal).ToArray();
 
         public Dictionary<string, byte[]> SnapshotUserFiles() =>
             UserFiles.ToDictionary(u => u, u => File.ReadAllBytes(Path.Combine(Install, u)));

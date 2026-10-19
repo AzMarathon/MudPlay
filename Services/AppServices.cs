@@ -2972,6 +2972,12 @@ public sealed class AppServices
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
+        // Files earlier versions left beside the program, removed now that the log
+        // can say so. Only for a real install: a dev or test run's executable sits in
+        // a build folder, or is the dotnet host itself.
+        if (Services.Update.UpdatePlatform.IsSelfContainedInstall())
+            foreach (string line in Services.Update.RetiredFiles.Clean())
+                Log.Info("Update", line);
         // Background memory hygiene. CombatTracker is bound later in construction;
         // the combat-active probe is lazy and the first periodic tick is minutes
         // out, so it's always assigned before the Func is ever invoked.

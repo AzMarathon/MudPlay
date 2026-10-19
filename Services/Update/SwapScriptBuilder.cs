@@ -7,23 +7,24 @@ namespace MudPlay.Services.Update;
 // cleans up. On success it removes the staged download, the backup, AND itself — no
 // update leftovers survive in temp.
 //
-// The helper works file by file from two lists UpdatePlan wrote: the files to put
-// in place (the new build's manifest) and the files to remove (named by the old
-// manifest, dropped by the new one). It never moves, mirrors, purges or deletes the
-// install folder itself, nor any file in it that isn't on a list: the folder may be
-// Downloads or the Desktop. Each file it replaces or removes is first copied into
-// the backup folder inside the staging folder in temp — never beside the install —
-// and put back from there if a later step fails.
+// The helper works file by file from the list UpdatePlan wrote: the files of the
+// new build, each put in place beside the executable. It deletes nothing in the
+// install folder but its own temporary copies, the renamed-aside Windows executable,
+// and, when a swap fails, a file it had just added; it never moves, mirrors, purges
+// or deletes the folder itself: the folder may be Downloads or the Desktop. Files an
+// older release left behind are the new build's to remove (RetiredFiles). Each file
+// it replaces is first copied into the backup folder inside the staging folder in
+// temp — never beside the install — and put back from there if a later step fails.
 //
 // Pure string generation.
 // Every path is passed as a positional argument (never interpolated into the body)
 // so a path with spaces can't break the script. The list entries themselves are
-// held by InstallManifest to plain names with no shell syntax in them.
+// held by UpdatePlan to plain names with no shell syntax in them.
 public static class SwapScriptBuilder
 {
     // bash for Linux/macOS. Args at run time:
     // <pid> <newRoot> <installDir> <exe> <stagingDir> <profileToken> <reconnect>
-    // <installList> <removeList>.
+    // <installList>.
     // The profile and reconnect args may be empty — an update from a client with no
     // named profile loaded, or one that wasn't connected, relaunches with no argv.
     //
@@ -35,7 +36,7 @@ public static class SwapScriptBuilder
         #!/usr/bin/env bash
         set -u
         PID="$1"; NEW="$2"; DST="$3"; EXE="$4"; STAGE="$5"; PROFILE="$6"; RECONNECT="$7"
-        INSTALL="$8"; REMOVE="$9"
+        INSTALL="$8"
         BAK="$STAGE/backup"
         SAVED="$STAGE/backed-up.list"
         TOUCHED="$STAGE/touched.list"
@@ -110,18 +111,16 @@ public static class SwapScriptBuilder
         { mkdir -p "$BAK" && : >"$SAVED" && : >"$TOUCHED"; } 2>>"$LOG" \
           || abort "making the backup folder '$BAK' failed"
 
-        # 1. Back up every file of ours this update replaces or removes. Nothing in
-        #    the install folder changes until all of them are safe.
-        for list in "$INSTALL" "$REMOVE"; do
-          while IFS= read -r f || [ -n "$f" ]; do
-            f="${f%$'\r'}"; [ -n "$f" ] || continue
-            [ -d "$DST/$f" ] && continue
-            if [ -e "$DST/$f" ] || [ -L "$DST/$f" ]; then
-              cp -pP -- "$DST/$f" "$BAK/$f" 2>>"$LOG" || abort "backing up '$f' failed"
-              printf '%s\n' "$f" >>"$SAVED" || abort "recording the backup of '$f' failed"
-            fi
-          done <"$list"
-        done
+        # 1. Back up every file of ours this update replaces. Nothing in the install
+        #    folder changes until all of them are safe.
+        while IFS= read -r f || [ -n "$f" ]; do
+          f="${f%$'\r'}"; [ -n "$f" ] || continue
+          [ -d "$DST/$f" ] && continue
+          if [ -e "$DST/$f" ] || [ -L "$DST/$f" ]; then
+            cp -pP -- "$DST/$f" "$BAK/$f" 2>>"$LOG" || abort "backing up '$f' failed"
+            printf '%s\n' "$f" >>"$SAVED" || abort "recording the backup of '$f' failed"
+          fi
+        done <"$INSTALL"
 
         # 2. Put every file of the new build in place.
         while IFS= read -r f || [ -n "$f" ]; do
@@ -131,17 +130,6 @@ public static class SwapScriptBuilder
           put "$NEW/$f" "$f" || rollback "putting '$f' in place failed"
           log "$what '$f'"
         done <"$INSTALL"
-
-        # 3. Remove the files of ours the new build no longer has. One that can't go
-        #    is left: a stale file of ours is harmless, and not worth undoing the update.
-        while IFS= read -r f || [ -n "$f" ]; do
-          f="${f%$'\r'}"; [ -n "$f" ] || continue
-          [ -d "$DST/$f" ] && continue
-          [ -e "$DST/$f" ] || [ -L "$DST/$f" ] || continue
-          printf '%s\n' "$f" >>"$TOUCHED" || rollback "recording '$f' failed"
-          if rm -f -- "$DST/$f" 2>>"$LOG"; then log "removed '$f' (no longer part of MudPlay)"
-          else log "couldn't remove '$f' - left in place"; fi
-        done <"$REMOVE"
 
         chmod +x "$EXE" 2>/dev/null || true
         log "swapped - starting the new build"
@@ -159,7 +147,7 @@ public static class SwapScriptBuilder
 
     // cmd for Windows. Args at run time:
     // <pid> <newRoot> <installDir> <exe> <stagingDir> <profileToken> <reconnect>
-    // <installList> <removeList>.
+    // <installList>.
     //
     // The executable is swapped by rename, never overwritten. Windows won't let a
     // running .exe be written, but it will let one be renamed — so another client
@@ -168,7 +156,7 @@ public static class SwapScriptBuilder
     // in place stalled on the lock and could hand a launch a half-written file,
     // which dies before the crash reporter is up. The renamed-aside copy is the
     // executable's backup; it is deleted here when nothing holds it, else by the
-    // next startup (UpdatePlatform.DeleteReplacedExecutables).
+    // next startup (RetiredFiles).
     //
     // A renamed-in executable is a new file: it takes the folder's permissions and
     // loses any set on the old one by hand, which left one user's taskbar shortcut
@@ -191,7 +179,6 @@ public static class SwapScriptBuilder
         set "PROFILE=%~6"
         set "RECONNECT=%~7"
         set "INSTALL=%~8"
-        set "REMOVE=%~9"
         set "BAK=%STAGE%\backup"
         set "SAVED=%STAGE%\backed-up.list"
         set "TOUCHED=%STAGE%\touched.list"
@@ -232,19 +219,14 @@ public static class SwapScriptBuilder
         type nul >"%SAVED%"
         type nul >"%TOUCHED%"
 
-        rem 1. Back up every file of ours this update replaces or removes. Nothing in
-        rem    the install folder changes until all of them are safe.
+        rem 1. Back up every file of ours this update replaces. Nothing in the
+        rem    install folder changes until all of them are safe.
         for /f "usebackq delims=" %%F in ("%INSTALL%") do call :backup "%%F"
-        for /f "usebackq delims=" %%F in ("%REMOVE%") do call :backup "%%F"
         if defined WHY goto abort
 
         rem 2. Put every file of the new build in place, the executable last.
         for /f "usebackq delims=" %%F in ("%INSTALL%") do call :install "%%F"
         if defined WHY goto rollback
-
-        rem 3. Remove the files of ours the new build no longer has. One that can't
-        rem    go is left: a stale file of ours is harmless.
-        for /f "usebackq delims=" %%F in ("%REMOVE%") do call :remove "%%F"
 
         rem icacls records the file by name, so the restore below finds the new
         rem executable under the same name in the same folder.
@@ -344,21 +326,8 @@ public static class SwapScriptBuilder
         >>"%LOG%" echo [%time%] %WHAT% %~1
         goto :eof
 
-        :remove
-        if /i "%~1"=="%EXENAME%" goto :eof
-        if exist "%DST%\%~1\" goto :eof
-        if not exist "%DST%\%~1" goto :eof
-        >>"%TOUCHED%" echo %~1
-        del /f /q "%DST%\%~1" >>"%LOG%" 2>&1
-        if exist "%DST%\%~1" (
-          >>"%LOG%" echo [%time%] couldn't remove %~1 - left in place
-        ) else (
-          >>"%LOG%" echo [%time%] removed %~1 - no longer part of MudPlay
-        )
-        goto :eof
-
-        rem A backed-up file is put back; one that wasn't there before the update is
-        rem taken out again.
+        rem A backed-up file is put back; one this update added (it wasn't there
+        rem before) is taken out again.
         :restore
         findstr /x /l /i /c:"%~1" "%SAVED%" >nul 2>&1
         if errorlevel 1 (

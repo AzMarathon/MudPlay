@@ -3199,6 +3199,11 @@ How to keep it current:
 - Checks: anchored to the default-set max, capped at the real and live max; absolute mode; stable across a pre-rest swap.
 - Why: reports paradigm-20260902-052036, -20260903-110346, -20260909-095419.
 
+### RetiredFilesTests.cs
+- Covers: Services/Update/RetiredFiles
+- Checks: the startup clean-up deletes only `<exe>.old-<digits>` files beside the executable and logs each; it leaves the exe, `MudPlay.exe.new`, `MudPlay.exe.old-backup`, `MudPlay.exe.old-`, `MudPlay.exe.old-12a`, another exe's `.old-` copy, `notes.old-1`, the user's files and a folder carrying the pattern. The pattern is tied to the running executable's own name.
+- Why: this is the only code that removes files from the folder MudPlay runs from, which may be Downloads (user report, 2026-10-19).
+
 ### RollingLogFileTests.cs
 - Covers: Services/RollingLogFile
 - Checks: last-N cap, snapshot immediate, reopen continues, trims on open, SetMaxLines, Truncate, append after close ignored; a background write that throws a non-IO error is logged and Close still returns and writes; a write that never finishes is cut off by the bounded wait (Truncate / SetMaxLines return with a "may be unwritten" warning) and the file catches up once it does; reopening the same file after a timed-out Close keeps the unwritten tail rather than re-reading a file the stuck write emptied; repeated non-IO failures log one Error until a write succeeds, then one recovery line, and re-arm.
@@ -3873,8 +3878,8 @@ How to keep it current:
 - Why: report `paradigm-20260729-211336` (the walker dragged the summon along).
 
 ### SwapScriptExecutionTests.cs
-- Covers: Services/Update/SwapScriptBuilder (the POSIX script actually executed in a temp sandbox, driven by UpdatePlan's real lists; the Windows script's structure)
-- Checks: with the user's own files beside MudPlay's (`photo.jpg`, `other.exe`, `notes/`), a swap leaves every user file byte for byte, replaces and adds the new manifest's files, removes only the old manifest's dropped ones, cleans up the staging folder and its backup and puts nothing beside the install. A pre-manifest install removes nothing. A swap that fails part-way restores every replaced file, takes out every added one, leaves the user's files alone, relaunches the old build and leaves a failure log beside the executable. The relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. Neither script moves, mirrors, purges or deletes the install folder (no `robocopy`, `/MIR`, `/PURGE`, `.bak`, folder `mv`/`rmdir`); the Windows one is per-file from the two lists, checks a name isn't a folder before `del`, renames the exe aside after the other files, carries its ACL across, and deletes itself.
+- Covers: Services/Update/SwapScriptBuilder (the POSIX script actually executed in a temp sandbox, driven by UpdatePlan's real list; the Windows script's structure)
+- Checks: with the user's own files beside MudPlay's (`photo.jpg`, `other.exe`, `notes/`), a swap leaves every user file byte for byte, replaces and adds the new build's files, deletes nothing (an old MudPlay file the new build lacks stays), cleans up the staging folder and its backup and puts nothing beside the install. A swap that fails part-way restores every replaced file, takes out every added one, leaves the user's files alone, relaunches the old build and leaves a failure log beside the executable. The relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. Neither script moves, mirrors, purges or deletes the install folder (no `robocopy`, `/MIR`, `/PURGE`, `.bak`, folder `mv`/`rmdir`), and each deletes only its own temp copies, log and self, the renamed-aside exe, and, in rollback, a file it had just added; the Windows one is per-file from the list, checks a name isn't a folder before `del`, renames the exe aside after the other files, carries its ACL across, and deletes itself.
 - Why: the folder-mirroring updater deleted a player's whole Downloads folder (user report, 2026-10-19); a broken swap also leaves the user without a profile, or without a working client.
 
 ### SysRoomStatusParserTests.cs
@@ -4227,13 +4232,13 @@ How to keep it current:
 - Why: an older settings file must not silently switch checking back on.
 
 ### UpdatePlanTests.cs
-- Covers: Services/Update/InstallManifest, Services/Update/UpdatePlan
-- Checks: a manifest line that is absolute, climbs with `..`, names a subfolder, carries shell or space characters or isn't a plain name is refused with its line number; comments and case-duplicates are dropped. A plan installs the new list and removes only the old list's dropped files that still exist, never a file the new list names in another case; a pre-manifest install removes nothing; a build with no manifest gets one from its own files; a damaged old or new manifest, a listed file the build lacks, a build without the running exe, a folder where a file goes, or an unlisted build with subfolders is refused.
-- Why: the updater may only touch files a manifest proves are MudPlay's (user report, 2026-10-19: an update wiped a Downloads folder).
+- Covers: Services/Update/UpdatePlan
+- Checks: an archive file name that is absolute, climbs with `..`, names a subfolder, carries shell or space characters or isn't a plain name is refused (PathGuard), and release names are taken. A plan installs exactly the download's files and names what it replaces; a download with a subfolder, an odd name, a link, no copy of the running exe, or a file where the install has a folder is refused with the install untouched.
+- Why: the updater may only put the release's own files beside the program (user report, 2026-10-19: an update wiped a Downloads folder).
 
 ### UpdateServiceTests.cs
 - Covers: Services/Update (ReleaseParser, UpdatePlatform, ChangelogExtractor)
-- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - Cleaning up only the swap's own `<exe>.old-<digits>` copies, never a user's `.old-` file; changelog notes between versions. (The swap scripts are in SwapScriptExecutionTests.)
+- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - Changelog notes between versions. (The swap is in SwapScriptExecutionTests and UpdatePlanTests, the startup clean-up in RetiredFilesTests.)
 - Why: a broken self-update leaves the user with no working install.
 
 ### UseEndsSneakTests.cs

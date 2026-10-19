@@ -39,13 +39,6 @@ public sealed class UpdateInstaller
             return UpdateApplyResult.Fail("couldn't locate the install directory");
         string? exe = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exe)) return UpdateApplyResult.Fail("couldn't locate the running executable");
-        // Before the download: a damaged file list beside the running build would
-        // make every removal a guess, so nothing is fetched to install over it.
-        if (UpdatePlan.WhyNotFromHere(installDir) is { } damaged)
-        {
-            _log?.Warn("Update", $"update refused: {damaged}");
-            return UpdateApplyResult.Fail("update refused: " + damaged);
-        }
 
         string work = Path.Combine(Path.GetTempPath(), "mudplay-update-" + Guid.NewGuid().ToString("N"));
         try
@@ -83,18 +76,16 @@ public sealed class UpdateInstaller
             string exeName = Path.GetFileName(exe);
             string newRoot = ResolveNewRoot(staging, exeName);
 
-            // Exactly which files are replaced, added and removed, decided here so the
-            // helper only works through two lists and touches nothing else in the
-            // install folder (it may be the user's Downloads or Desktop).
-            if (InstallManifest.Read(newRoot) is { Present: false })
-                _log?.Info("Update", $"the downloaded build carries no {InstallManifest.FileName} — listing its own files instead");
+            // Exactly which files go in, decided here so the helper only works through
+            // one list and touches nothing else in the install folder (it may be the
+            // user's Downloads or Desktop).
             if (UpdatePlan.Build(installDir, exeName, newRoot, out string? refusal) is not { } plan)
             {
                 _log?.Warn("Update", $"update refused: {refusal}");
                 TryDelete(work);
                 return UpdateApplyResult.Fail("update refused: " + refusal);
             }
-            (string installList, string removeList) = plan.WriteLists(work);
+            string installList = plan.WriteList(work);
             _log?.Info("Update", $"update plan for {installDir}: {plan.Describe()}");
 
             // Write the swap helper OUTSIDE the work dir (it deletes work at the end,
@@ -114,7 +105,7 @@ public sealed class UpdateInstaller
 
             SpawnSwap(scriptPath, windows,
                 Environment.ProcessId.ToString(), newRoot, installDir, exe, work,
-                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "", installList, removeList);
+                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "", installList);
             _log?.Info("Update", "swap helper launched — exiting to let it replace the install"
                                  + $" (relaunch: profile={relaunch.ProfileToken ?? "none"},"
                                  + $" reconnect={relaunch.Reconnect})");

@@ -1,15 +1,14 @@
 using System;
 using System.IO;
-using System.Linq;
 using MudPlay.Services.Update;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// Which files an update may touch in the folder MudPlay runs from, decided from the
-// old and new manifests before the app exits. The folder may be Downloads or the
-// Desktop: a manifest line that could name anything outside MudPlay's own files
-// must stop the update with nothing changed.
+// Which files an update puts into the folder MudPlay runs from, decided from the
+// verified download before the app exits. The folder may be Downloads or the
+// Desktop: a download holding anything but plain files that land directly beside
+// the program must stop the update with nothing changed.
 public sealed class UpdatePlanTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "mudplay-plan-" + Guid.NewGuid().ToString("N"));
@@ -27,8 +26,6 @@ public sealed class UpdatePlanTests : IDisposable
         try { Directory.Delete(_root, recursive: true); } catch { /* best-effort temp cleanup */ }
     }
 
-    // ----- InstallManifest ------------------------------------------------------
-
     [Theory]
     [InlineData("/etc/passwd", "absolute")]
     [InlineData("\\Windows\\System32", "absolute")]
@@ -44,155 +41,62 @@ public sealed class UpdatePlanTests : IDisposable
     [InlineData("100%.dat", "characters")]
     [InlineData("CON", "plain")]
     [InlineData("trailing.", "plain")]
-    public void Parse_RefusesAnyLineThatIsntAPlainFileBesideTheProgram(string line, string why)
-    {
-        Assert.Null(InstallManifest.Parse($"MudPlay\n{line}\n", Install, out string? error));
-        Assert.Contains("line 2", error);
-        Assert.Contains(why, error);
-    }
+    [InlineData("", "empty")]
+    public void WhyNotEntry_RefusesAnythingButAPlainFileBesideTheProgram(string name, string why)
+        => Assert.Contains(why, UpdatePlan.WhyNotEntry(name));
+
+    [Theory]
+    [InlineData("MudPlay")]
+    [InlineData("MudPlay.exe")]
+    [InlineData("lib_x-1.2+3.so")]
+    public void WhyNotEntry_TakesAReleaseFileName(string name) => Assert.Null(UpdatePlan.WhyNotEntry(name));
 
     [Fact]
-    public void Parse_SkipsCommentsAndBlanks_DropsCaseDuplicates_KeepsOrder()
-    {
-        var entries = InstallManifest.Parse("# header\r\n\r\nMudPlay.exe\r\nMudPlay.files\r\nmudplay.EXE\r\nlib_x-1.2+3.so\r\n",
-            Install, out string? error);
-        Assert.Null(error);
-        Assert.Equal(new[] { "MudPlay.exe", "MudPlay.files", "lib_x-1.2+3.so" }, entries);
-    }
-
-    [Fact]
-    public void Parse_RefusesAnEmptyList()
-    {
-        Assert.Null(InstallManifest.Parse("# nothing\n", Install, out string? error));
-        Assert.Contains("lists no files", error);
-    }
-
-    [Fact]
-    public void Write_ListsItsFilesAndItself_AndReadsBack()
-    {
-        InstallManifest.Write(Install, ["MudPlay"]);
-        ManifestRead m = InstallManifest.Read(Install);
-        Assert.True(m.Present);
-        Assert.Equal(new[] { "MudPlay", InstallManifest.FileName }, m.Entries);
-        Assert.False(InstallManifest.Read(NewRoot).Present);
-    }
-
-    // ----- UpdatePlan -----------------------------------------------------------
-
-    [Fact]
-    public void Build_InstallsTheNewList_RemovesOnlyWhatTheOldListDropped()
-    {
-        Files(Install, "MudPlay", "legacy.dat", "kept.dat", "photo.jpg", "other.exe");
-        Directory.CreateDirectory(Path.Combine(Install, "notes"));
-        InstallManifest.Write(Install, ["MudPlay", "legacy.dat", "kept.dat", "gone-already.dat"]);
-        Files(NewRoot, "MudPlay", "kept.dat", "extra.dat");
-        InstallManifest.Write(NewRoot, ["MudPlay", "kept.dat", "extra.dat"]);
-
-        UpdatePlan plan = Build();
-
-        Assert.Equal(new[] { "MudPlay", "kept.dat", "extra.dat", InstallManifest.FileName }, plan.Install);
-        // gone-already.dat isn't there to remove; the user's files are on no list.
-        Assert.Equal(new[] { "legacy.dat" }, plan.Remove);
-        Assert.True(plan.HadOldManifest);
-        Assert.Equal(new[] { "MudPlay", "kept.dat", InstallManifest.FileName }, plan.Replaced);
-        Assert.Contains("removing legacy.dat", plan.Describe());
-        Assert.Contains("adding extra.dat", plan.Describe());
-
-        (string installList, string removeList) = plan.WriteLists(_root);
-        Assert.Equal(plan.Install, File.ReadAllLines(installList));
-        Assert.Equal(plan.Remove, File.ReadAllLines(removeList));
-    }
-
-    // Before manifests, nothing in the folder can be known to be MudPlay's.
-    [Fact]
-    public void Build_PreManifestInstall_RemovesNothing()
+    public void Build_InstallsExactlyTheDownloadsFiles_AndNamesWhatItReplaces()
     {
         Files(Install, "MudPlay", "legacy.dat", "photo.jpg");
-        Files(NewRoot, "MudPlay");
-        InstallManifest.Write(NewRoot, ["MudPlay"]);
+        Files(NewRoot, "MudPlay", "extra.dat");
 
         UpdatePlan plan = Build();
 
-        Assert.Empty(plan.Remove);
-        Assert.False(plan.HadOldManifest);
-        Assert.Contains("no file list beside the old build", plan.Describe());
-    }
-
-    // A file the old list names in a different case is the same file on Windows and
-    // macOS: kept, never removed.
-    [Fact]
-    public void Build_NeverRemovesAFileTheNewListNamesInAnotherCase()
-    {
-        Files(Install, "MudPlay", "Data.pak");
-        InstallManifest.Write(Install, ["MudPlay", "Data.pak"]);
-        Files(NewRoot, "MudPlay", "data.pak");
-        InstallManifest.Write(NewRoot, ["MudPlay", "data.pak"]);
-        Assert.Empty(Build().Remove);
-    }
-
-    [Fact]
-    public void Build_NewBuildWithoutAManifest_GetsOneFromItsOwnFiles()
-    {
-        Files(Install, "MudPlay");
-        Files(NewRoot, "MudPlay");
-
-        UpdatePlan plan = Build();
-
-        Assert.Equal(new[] { "MudPlay", InstallManifest.FileName }, plan.Install);
-        Assert.Equal(new[] { "MudPlay", InstallManifest.FileName }, InstallManifest.Read(NewRoot).Entries);
-    }
-
-    [Fact]
-    public void Build_RefusesADamagedOldManifest_BeforeAndAfterTheDownload()
-    {
-        Files(Install, "MudPlay");
-        File.WriteAllText(Path.Combine(Install, InstallManifest.FileName), "MudPlay\n../../Documents/taxes.pdf\n");
-        Files(NewRoot, "MudPlay");
-        InstallManifest.Write(NewRoot, ["MudPlay"]);
-
-        Assert.Contains("damaged", UpdatePlan.WhyNotFromHere(Install));
-        Assert.Null(UpdatePlan.Build(Install, "MudPlay", NewRoot, out string? refusal));
-        Assert.Contains("'..'", refusal);
-        Assert.Contains("DAMAGED", UpdatePlan.DescribeInstall(Install));
-    }
-
-    [Fact]
-    public void Build_RefusesADamagedNewManifest()
-    {
-        Files(Install, "MudPlay");
-        Files(NewRoot, "MudPlay");
-        File.WriteAllText(Path.Combine(NewRoot, InstallManifest.FileName), "MudPlay\n/home/me/photo.jpg\n");
-        Assert.Null(UpdatePlan.Build(Install, "MudPlay", NewRoot, out string? refusal));
-        Assert.Contains("absolute", refusal);
+        Assert.Equal(new[] { "MudPlay", "extra.dat" }, plan.Install);
+        Assert.Equal(new[] { "MudPlay" }, plan.Replaced);
+        Assert.Equal("replacing MudPlay; adding extra.dat; removing nothing", plan.Describe());
+        Assert.Equal(plan.Install, File.ReadAllLines(plan.WriteList(_root)));
     }
 
     [Theory]
-    [InlineData("missing")]   // the list names a file the build lacks
-    [InlineData("noexe")]     // the build has no copy of the running executable
-    [InlineData("folder")]    // a folder sits where one of the files goes
-    [InlineData("subfolder")] // a build without a list that has folders
-    public void Build_RefusesABuildItCantInstallExactly(string fault)
+    [InlineData("subfolder")] // the download holds a folder
+    [InlineData("oddname")]   // a file named with characters no release file has
+    [InlineData("noexe")]     // the download has no copy of the running executable
+    [InlineData("folder")]    // a folder in the install sits where one of the files goes
+    [InlineData("link")]      // a link rather than a file
+    public void Build_RefusesADownloadItCantInstallExactly(string fault)
     {
         Files(Install, "MudPlay");
         Files(NewRoot, "MudPlay", "extra.dat");
         switch (fault)
         {
-            case "missing":
-                InstallManifest.Write(NewRoot, ["MudPlay", "extra.dat", "absent.dat"]);
-                break;
-            case "noexe":
-                InstallManifest.Write(NewRoot, ["extra.dat"]);
-                break;
-            case "folder":
-                InstallManifest.Write(NewRoot, ["MudPlay", "extra.dat"]);
-                Directory.CreateDirectory(Path.Combine(Install, "extra.dat"));
-                break;
             case "subfolder":
                 Directory.CreateDirectory(Path.Combine(NewRoot, "runtimes"));
+                break;
+            case "oddname":
+                Files(NewRoot, "my photo.jpg");
+                break;
+            case "noexe":
+                File.Delete(Path.Combine(NewRoot, "MudPlay"));
+                break;
+            case "folder":
+                Directory.CreateDirectory(Path.Combine(Install, "extra.dat"));
+                break;
+            case "link":
+                File.CreateSymbolicLink(Path.Combine(NewRoot, "linked.dat"), Path.Combine(Install, "MudPlay"));
                 break;
         }
         Assert.Null(UpdatePlan.Build(Install, "MudPlay", NewRoot, out string? refusal));
         Assert.False(string.IsNullOrEmpty(refusal));
+        // Refusing touches nothing in the install.
+        Assert.Equal("MudPlay", File.ReadAllText(Path.Combine(Install, "MudPlay")));
     }
 
     private UpdatePlan Build()

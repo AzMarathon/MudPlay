@@ -3,9 +3,9 @@
 ## 3.185.9
 
 - Data-loss fix: the in-app update no longer deletes the other files in the folder MudPlay runs from (it wiped a Downloads folder); it replaces only MudPlay's own files
-- Releases carry a file list (`MudPlay.files`); an update replaces or adds the files it names and removes only ones the previous release listed and dropped
+- An update puts in only the downloaded release's own files and deletes nothing else; a download holding anything odd stops the update untouched
 - A failed update puts back every file it changed from a backup in the temp folder, not beside the install
-- A damaged file list stops the update with nothing changed
+- Leftovers of older versions are removed at startup by exact name only, each one logged
 
 ## 3.185.8
 

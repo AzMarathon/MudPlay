@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace MudPlay.Services.Update;
@@ -65,7 +64,7 @@ public static class UpdatePlatform
             && assetName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
     }
 
-    // The directory the running executable lives in — the folder a self-update swaps
+    // The directory the running executable lives in — the folder a self-update puts
     // MudPlay's own files into (UpdatePlan). Null when the process path is unavailable.
     public static string? InstallDirectory()
     {
@@ -92,36 +91,6 @@ public static class UpdatePlatform
         {
             return null;
         }
-    }
-
-    // The Windows swap renames the replaced executable aside ("MudPlay.exe.old-<n>")
-    // because a client may still be running it. Delete the ones nothing runs any
-    // more; one still in use stays for a later startup. Returns how many went.
-    public static int DeleteReplacedExecutables(string? exePath = null)
-    {
-        exePath ??= Environment.ProcessPath;
-        if (string.IsNullOrEmpty(exePath)) return 0;
-        string? dir = System.IO.Path.GetDirectoryName(exePath);
-        if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return 0;
-        string[] olds;
-        // Runs before the app's crash net, so a folder we can't list must not stop startup.
-        try { olds = System.IO.Directory.GetFiles(dir, System.IO.Path.GetFileName(exePath) + ".old-*"); }
-        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { return 0; }
-        int deleted = 0;
-        // Only the swap's own "<exe>.old-<digits>" names: a copy the user kept as,
-        // say, "MudPlay.exe.old-mine" in the same folder is theirs.
-        string prefix = System.IO.Path.GetFileName(exePath) + ".old-";
-        foreach (string old in olds.Where(o =>
-                     System.IO.Path.GetFileName(o) is { } n && n.Length > prefix.Length
-                     && n[prefix.Length..].All(char.IsAsciiDigit)))
-        {
-            try { System.IO.File.Delete(old); deleted++; }
-            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
-            {
-                // Another client is still running that copy; the next startup retries.
-            }
-        }
-        return deleted;
     }
 
     // Whether this is a replaceable self-contained install rather than a dev run.

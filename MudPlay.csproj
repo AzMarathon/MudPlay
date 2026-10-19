@@ -130,26 +130,6 @@
     </ItemGroup>
   </Target>
 
-  <!-- MudPlay.files: every file the publish folder holds, plus the list itself, one
-       name per line. It ships beside the executable so the in-app updater replaces
-       and removes only MudPlay's own files (Services/Update/InstallManifest.cs); the
-       folder MudPlay runs from may be the user's Downloads or Desktop. Release builds
-       are single-file, so the list is flat: a publish that produces subfolders fails
-       here rather than ship a list the updater would refuse. -->
-  <Target Name="WriteInstallManifest" AfterTargets="Publish">
-    <ItemGroup>
-      <_InstallManifestFile Include="$(PublishDir)*" Exclude="$(PublishDir)MudPlay.files" />
-      <_InstallManifestName Include="@(_InstallManifestFile->'%(Filename)%(Extension)')" />
-      <_InstallManifestName Include="MudPlay.files" />
-      <_InstallManifestSubfolder Include="$([System.IO.Directory]::GetDirectories('$(PublishDir)'))" />
-    </ItemGroup>
-    <Error Condition="'@(_InstallManifestSubfolder)' != ''"
-           Text="The publish folder has subfolders (@(_InstallManifestSubfolder)); MudPlay.files lists files beside the program only." />
-    <WriteLinesToFile File="$(PublishDir)MudPlay.files"
-                      Lines="# MudPlay release manifest: every file this release installs beside the program, one per line.;@(_InstallManifestName)"
-                      Overwrite="true" />
-  </Target>
-
   <ItemGroup>
     <!-- MudPlay.Tests lives at the repo root as a sibling project. Without
          these exclusions the SDK's default Compile glob would pull every

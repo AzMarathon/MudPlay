@@ -5,9 +5,10 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pure updater logic: release-JSON parsing, checksum-file parsing, version
-// comparison, platform asset-matching, and the startup clean-up of renamed-aside
-// executables. The network fetch isn't unit-tested (it needs a live release); the
-// file swap is, in UpdateSwapTests.
+// comparison, platform asset-matching, and changelog notes. The network fetch
+// isn't unit-tested (it needs a live release); the file swap is, in
+// SwapScriptExecutionTests and UpdatePlanTests, and the startup clean-up in
+// RetiredFilesTests.
 public sealed class UpdateServiceTests
 {
     // ----- ReleaseParser.ParseRelease -----------------------------------------
@@ -151,26 +152,6 @@ public sealed class UpdateServiceTests
             return;
         }
         Assert.Equal($"-{rid}{UpdatePlatform.ArchiveExtension(rid)}", UpdatePlatform.AssetSuffix());
-    }
-
-    [Fact]
-    public void DeleteReplacedExecutables_RemovesOnlyTheRenamedAsideCopies()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), "mudplay-oldexe-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(dir);
-        try
-        {
-            string exe = Path.Combine(dir, "MudPlay.exe");
-            // A copy the user kept under an .old- name of their own is theirs, not the swap's.
-            foreach (string f in new[] { "MudPlay.exe", "MudPlay.exe.old-123", "MudPlay.exe.old-456", "MudPlay.exe.new",
-                         "MudPlay.exe.old-mine", "MudPlay.exe.old-", "notes.txt" })
-                File.WriteAllText(Path.Combine(dir, f), "x");
-
-            Assert.Equal(2, UpdatePlatform.DeleteReplacedExecutables(exe));
-            Assert.Equal(new[] { "MudPlay.exe", "MudPlay.exe.new", "MudPlay.exe.old-", "MudPlay.exe.old-mine", "notes.txt" },
-                Directory.GetFiles(dir).Select(Path.GetFileName).OrderBy(n => n, StringComparer.Ordinal));
-        }
-        finally { Directory.Delete(dir, recursive: true); }
     }
 
     // ----- ChangelogExtractor --------------------------------------------------
