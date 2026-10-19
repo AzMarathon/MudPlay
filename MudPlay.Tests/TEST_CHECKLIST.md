@@ -846,8 +846,8 @@ How to keep it current:
 
 ### CrashReporterTests.cs
 - Covers: Services/CrashReporter.Build.
-- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks.
-- Why: crash reports must stay readable.
+- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks; the registered program log's last line reaches its file before the report is built.
+- Why: crash reports must stay readable, and the log they name must hold the lines before the crash.
 
 ### CureSpellIndexTests.cs
 - Covers: Game/GameData/CureSpellIndex.CuredFlags.
@@ -2925,9 +2925,10 @@ How to keep it current:
 
 ### ProgramLogFileTests.cs
 - Covers: Services/ProgramLogFile, Services/LogEntryQueue
-- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path, and noted again only after a write succeeded; exit waits for a slow disk but gives up on a stuck one at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; the real file holds the header and entries.
+- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path with its header if the failure lost it, and noted again only after a write succeeded; a failure doesn't carry into the next session's file; exit waits for a slow disk, cuts a retry wait short to write the tail, and gives up on a stuck disk at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; entries queued across a switch land in their own session's file; the real file holds the header and entries.
 - Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line.
 - Named seam: ProgramLogFile's `open` constructor parameter (default opens the file for appending): stands in a disk that stalls or throws.
+- Named seam: ProgramLogFile's `retryDelay` constructor parameter (default 5 s): keeps the failure tests short, and makes a wait longer than the exit's bound.
 - Named seam: ProgramLogFile.WhenWrittenAsync: the writer is a background queue; the barrier is the only way to know a line reached the file.
 
 ### PromptParserTests.cs
@@ -3081,6 +3082,8 @@ How to keep it current:
 - Checks: two-file rolling time and size bounds; writes off the logging thread; paused under Auto-collect; prune across processes; a stalled disk drops the oldest and says so; failure notes; disk error ends the file.
 - Why: the always-on last-minutes log for hang reports.
 - Named seam: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
+- Named seam: RecentLogFile's `open` constructor parameter (default creates the file empty): stands in a disk that stalls, throws, or records the writing thread.
+- Named seam: RecentLogFile's `retryDelay` constructor parameter (default 5 s): keeps the unexpected-failure test short.
 
 ### RecoveryLookSweepTests.cs
 - Covers: Game/Map/RecoveryLookSweep

@@ -7,7 +7,8 @@ namespace MudPlay.Tests;
 // the crash reporter. The Desktop-write path and the CLR channel hooks are
 // side-effecting and smoke-tested via dotnet run; these exercise the
 // document formatting, which is where the fiddly logic (inner-exception walk,
-// null-fault fallback) lives.
+// null-fault fallback) lives, and that the program log it names has had its last
+// lines written first.
 public sealed class CrashReporterTests
 {
     [Fact]
@@ -70,6 +71,31 @@ public sealed class CrashReporterTests
 
         Assert.Contains("# MudPlay crash report", md);
         Assert.Contains("no exception object", md);
+    }
+
+    [Fact]
+    public void Build_LetsTheProgramLogLandBeforeNamingIt()
+    {
+        LogService log = new();
+        ProgramLogFileTests.TestDisk disk = new() { StallFirstWrite = true };
+        using ProgramLogFile file = new(log, new LogDiagnosticState { AutoCollectLogs = true }, _ => disk);
+        CrashReporter.RegisterProgramLog(file);
+        try
+        {
+            Assert.True(disk.Stuck.Wait(TimeSpan.FromSeconds(10)));
+            log.Error("Combat", "the line before the crash");
+            // The disk answers a moment into the report, well inside its wait.
+            using Timer answer = new(_ => disk.Released.Set(), null, 300, Timeout.Infinite);
+
+            CrashReporter.Build(new InvalidOperationException("boom"), "UI run loop");
+
+            Assert.Contains("[Error] Combat: the line before the crash", disk.Text);
+        }
+        finally
+        {
+            CrashReporter.RegisterProgramLog(null);
+            disk.Released.Set();
+        }
     }
 
     [Fact]

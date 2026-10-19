@@ -2939,6 +2939,7 @@ public sealed class AppServices
         // ProcessExit, not the window's Closing: it also runs on an
         // Environment.Exit (the data-folder move's restart).
         AppDomain.CurrentDomain.ProcessExit += (_, _) => ProgramLog.Dispose();
+        CrashReporter.RegisterProgramLog(ProgramLog);
         // The always-written last minutes of the log, for a hang or a forced kill
         // (RecentLogFile). Older clients' pairs go first, so with this one's the
         // folder holds ProcessesKept of them.

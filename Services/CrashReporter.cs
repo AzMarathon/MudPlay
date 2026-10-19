@@ -41,6 +41,11 @@ public static class CrashReporter
     private static Func<string, string>? _textFilter;
     public static void RegisterTextFilter(Func<string, string> filter) => _textFilter = filter;
 
+    // The program log file the report names (AppServices registers it); null
+    // takes it away again.
+    private static ProgramLogFile? _programLog;
+    public static void RegisterProgramLog(ProgramLogFile? log) => _programLog = log;
+
     // Wire the two out-of-band failure channels. UI-thread crashes escape the
     // Avalonia run loop instead and are caught by Guard.
     public static void Install()
@@ -107,7 +112,6 @@ public static class CrashReporter
     public static void Report(Exception? ex, string source)
     {
         if (Interlocked.Increment(ref _written) > MaxReports) return;
-        LetProgramLogLand();
         try
         {
             string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -130,7 +134,7 @@ public static class CrashReporter
     // ProgramLogFile.CrashDrainBound allows.
     private static void LetProgramLogLand()
     {
-        try { AppServices.CurrentOrNull?.ProgramLog.WaitWritten(ProgramLogFile.CrashDrainBound); }
+        try { _programLog?.WaitWritten(ProgramLogFile.CrashDrainBound); }
         catch
         {
             // The crash handler must never throw: the report goes without the
@@ -140,6 +144,7 @@ public static class CrashReporter
 
     internal static string Build(Exception? ex, string source)
     {
+        LetProgramLogLand();
         StringBuilder sb = new(capacity: 16 * 1024);
         sb.Append("# MudPlay crash report\n\n");
         sb.Append("_Captured ").Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")).Append("_\n\n");

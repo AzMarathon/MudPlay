@@ -11,7 +11,8 @@ namespace MudPlay.Tests;
 // waits for the disk, entries land in order, a stuck disk drops the oldest and
 // the file says so, a failed write is noted once and retried, exit and a crash
 // wait a bounded time for the queue, and the switch opens and closes files at
-// runtime. Driven through LogService; the disk is the open seam.
+// runtime, each entry in its own session's file. Driven through LogService; the
+// disk is the open seam.
 public sealed class ProgramLogFileTests
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
@@ -121,6 +122,8 @@ public sealed class ProgramLogFileTests
         log.Info("Walker", "third");
         await file.WhenWrittenAsync().WaitAsync(Patience);
         string resumed = disks.Opened.Last().Text;
+        // The very first flush failed with the header in it: the reopen writes it again.
+        Assert.StartsWith("# MudPlay debug log — topic=program", resumed);
         Assert.Contains("# writing failed (IOException: disk full) and starts again here: up to", resumed);
         Assert.Contains("Walker: third", resumed);
         Assert.Contains(log.Snapshot(), e => e.Source == ProgramLogFile.LogSource && e.Severity == LogSeverity.Info);
@@ -138,6 +141,98 @@ public sealed class ProgramLogFileTests
     }
 
     [Fact]
+    public async Task AFailureInOneFile_IsNotCarriedIntoTheNextOne()
+    {
+        LogService log = new();
+        LogDiagnosticState diagnostics = new() { AutoCollectLogs = true };
+        int failing = 1;
+        Disks disks = new() { Make = () => new TestDisk { FailFlush = () => Volatile.Read(ref failing) == 1 } };
+        using ProgramLogFile file = Make(log, disks, diagnostics: diagnostics, retryDelay: TimeSpan.FromMilliseconds(20));
+        int Warnings() => log.Snapshot().Count(e => e.Source == ProgramLogFile.LogSource && e.Severity == LogSeverity.Warn);
+
+        log.Info("Walker", "first");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+        Assert.Equal(1, Warnings());
+
+        // Off and on while still failing: the new file's failure is noted too.
+        diagnostics.AutoCollectLogs = false;
+        diagnostics.AutoCollectLogs = true;
+        log.Info("Walker", "second");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+        Assert.Equal(2, Warnings());
+
+        // Off, the disk answers, on: the new file starts clean, with no word of
+        // the old one's failure.
+        diagnostics.AutoCollectLogs = false;
+        Volatile.Write(ref failing, 0);
+        diagnostics.AutoCollectLogs = true;
+        log.Info("Walker", "clean");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+        string fresh = disks.Opened.Last().Text;
+        Assert.StartsWith("# MudPlay debug log — topic=program", fresh);
+        Assert.Contains("Walker: clean", fresh);
+        Assert.DoesNotContain("writing failed", fresh);
+    }
+
+    [Fact]
+    public async Task ExitDuringARetryWait_StillWritesTheTailWithinTheBound()
+    {
+        LogService log = new();
+        int failing = 1;
+        Disks disks = new() { Make = () => new TestDisk { FailFlush = () => Volatile.Read(ref failing) == 1 } };
+        // A retry wait far longer than the exit's bound.
+        ProgramLogFile file = Make(log, disks, retryDelay: TimeSpan.FromSeconds(30));
+
+        log.Info("Walker", "first");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+        Assert.Contains(log.Snapshot(), e => e.Source == ProgramLogFile.LogSource);
+
+        Volatile.Write(ref failing, 0);
+        log.Info("Walker", "the tail");
+        Stopwatch clock = Stopwatch.StartNew();
+        file.Dispose();
+        clock.Stop();
+
+        Assert.True(clock.Elapsed < ProgramLogFile.ExitDrainBound, $"exit took {clock.Elapsed}");
+        Assert.Contains("Walker: the tail", disks.AllText);
+    }
+
+    [Fact]
+    public async Task EntriesQueuedAcrossASwitch_EachLandInTheirOwnSessionsFile()
+    {
+        LogService log = new();
+        LogDiagnosticState diagnostics = new() { AutoCollectLogs = true };
+        TestDisk first = new() { StallFirstWrite = true };
+        int opened = 0;
+        Disks disks = new() { Make = () => Interlocked.Increment(ref opened) == 1 ? first : new TestDisk() };
+        using ProgramLogFile file = Make(log, disks, diagnostics: diagnostics);
+        try
+        {
+            // The first file is stuck: everything below waits in the queue.
+            Assert.True(first.Stuck.Wait(Patience));
+            log.Info("Walker", "in the first file");
+            diagnostics.AutoCollectLogs = false;
+            log.Info("Walker", "while off");
+            diagnostics.AutoCollectLogs = true;
+            log.Info("Walker", "in the second file");
+
+            first.Released.Set();
+            await file.WhenWrittenAsync().WaitAsync(Patience);
+
+            Assert.Equal(2, disks.Opened.Count);
+            TestDisk second = disks.Opened.Last();
+            Assert.Contains("Walker: in the first file", first.Text);
+            Assert.DoesNotContain("in the second file", first.Text);
+            Assert.StartsWith("# MudPlay debug log — topic=program", second.Text);
+            Assert.Contains("Walker: in the second file", second.Text);
+            Assert.DoesNotContain("in the first file", second.Text);
+            Assert.DoesNotContain("while off", disks.AllText);
+            Assert.True(first.Disposed);
+        }
+        finally { first.Released.Set(); }
+    }
+
+    [Fact]
     public void Exit_WaitsForASlowDisk_ButNoLongerThanTheBoundForAStuckOne()
     {
         // Slow: answers after a moment, inside the bound, and everything lands.
@@ -150,7 +245,7 @@ public sealed class ProgramLogFileTests
         slowFile.Dispose();
         Assert.Contains("Walker: step 49", slow.Text);
 
-        // Stuck for good: exit goes on once the bound is up, and says so in the log.
+        // Stuck for good: exit goes on once the bound is up.
         LogService stuckLog = new();
         TestDisk stuck = new() { StallFirstWrite = true };
         ProgramLogFile stuckFile = Make(stuckLog, new Disks { Make = () => stuck });
@@ -163,7 +258,6 @@ public sealed class ProgramLogFileTests
             clock.Stop();
             Assert.InRange(clock.Elapsed, ProgramLogFile.ExitDrainBound - TimeSpan.FromMilliseconds(100),
                 ProgramLogFile.ExitDrainBound + TimeSpan.FromSeconds(2));
-            Assert.Contains(stuckLog.Snapshot(), e => e.Source == ProgramLogFile.LogSource && e.Message.Contains("still being written"));
         }
         finally { stuck.Released.Set(); }
     }
@@ -260,7 +354,8 @@ public sealed class ProgramLogFileTests
 
     // A file that keeps what is written to it. StallFirstWrite holds the first
     // string written until Released; FailFlush makes a flush throw a disk error.
-    private sealed class TestDisk : TextWriter
+    // Also the disk under CrashReporterTests' program log.
+    internal sealed class TestDisk : TextWriter
     {
         private readonly StringBuilder _text = new();
         private int _writes;

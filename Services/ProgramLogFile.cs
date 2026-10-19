@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace MudPlay.Services;
 
 // Tees the in-memory program log (LogService) to an on-disk file so a hard
@@ -27,8 +25,8 @@ namespace MudPlay.Services;
 //
 // A write that fails closes the file; the failure is noted once in the program
 // log (kept out of this file, which is what failed), and the same file is reopened
-// and written again after a retry delay. A later failure is noted again only once
-// a write has succeeded in between.
+// with the next entry logged after a retry delay. A later failure is noted again
+// only once a write has succeeded in between, or a new file has been started.
 //
 // What is queued is written before the file closes: on Auto-collect going off
 // (the switch never waits for it), at process exit (Dispose, bounded by
@@ -59,16 +57,20 @@ public sealed class ProgramLogFile : IDisposable
     private readonly CancellationTokenSource _stopping = new();
 
     // One stretch of Auto-collect being on, and the file it is written to.
-    private sealed record Session(int Number, string Path);
+    private sealed record Session(int Number, string Path, DateTimeOffset Started);
 
-    private readonly record struct Item(LogEntry Entry, Session Session);
+    // An entry, or (Entry null) the start of a session, so its file opens when
+    // the switch goes on rather than with its first entry.
+    private readonly record struct Item(LogEntry? Entry, Session Session);
 
-    // Serializes the switch's own bookkeeping; never held by the threads that log
-    // or by the pump.
+    // Held for the switch and for each hand-off, never for any disk work: an
+    // entry is queued under the session that was on when it was logged, so the
+    // queue holds the sessions in order and an entry always lands in its own
+    // session's file.
     private readonly object _switchGate = new();
     private int _sessions;
 
-    // Set by the switch, read by the threads that log and by the pump.
+    // Set by the switch; read lock-free by CurrentPath.
     private volatile bool _wanted;
     private volatile Session? _latest;
 
@@ -80,6 +82,8 @@ public sealed class ProgramLogFile : IDisposable
     // Touched only by the pump.
     private TextWriter? _writer;
     private Session? _writerSession;
+    private bool _headerOnDisk;
+    private bool _writingEntry;
     private int _unflushed;
     private int _dropped;
     private int _maybeLost;
@@ -132,18 +136,25 @@ public sealed class ProgramLogFile : IDisposable
         {
             bool want = _diagnostics.AutoCollectLogs;
             if (want == _wanted) return;
-            if (want) _latest = new Session(++_sessions, AppPaths.NewDebugLogFile(Topic));
             _wanted = want;
+            if (!want) return;
+            Session session = new(++_sessions, AppPaths.NewDebugLogFile(Topic), DateTimeOffset.Now);
+            _latest = session;
+            _queue.Post(new Item(null, session));
         }
+        // Switched off: wake the pump so it closes the file now.
         _queue.Wake();
     }
 
     // On the producer's thread (the UI thread, the Telnet read loop, a timer):
-    // nothing here but the hand-off, which never waits.
+    // nothing here but the hand-off, which never waits on the disk.
     private void OnEntryAdded(LogEntry entry)
     {
-        if (t_noting || !_wanted || _latest is not { } session) return;
-        _queue.Post(new Item(entry, session));
+        if (t_noting) return;
+        lock (_switchGate)
+        {
+            if (_wanted && _latest is { } session) _queue.Post(new Item(entry, session));
+        }
     }
 
     // Completes once everything logged before the call has been written and
@@ -162,19 +173,10 @@ public sealed class ProgramLogFile : IDisposable
             try
             {
                 while (_queue.TryRead(out Item item)) Write(item);
-                // An entry may have been written into the session that just
-                // ended: the switch is followed only once the batch is in.
-                Session? want = _wanted ? _latest : null;
-                if (want is null)
-                {
-                    Flush();
-                    Close();
-                }
-                else
-                {
-                    if (_writer is null || !ReferenceEquals(_writerSession, want)) OpenSession(want);
-                    Flush();
-                }
+                Flush();
+                // Switched off: everything logged before it is written above. One
+                // that slipped in after the last read reopens its own file next.
+                if (!_wanted) Close();
             }
             catch (Exception ex)
             {
@@ -188,13 +190,14 @@ public sealed class ProgramLogFile : IDisposable
                 continue;
             }
 
-            _maybeLost += _unflushed;
+            _maybeLost += _unflushed + (_writingEntry ? 1 : 0);
             _unflushed = 0;
+            _writingEntry = false;
             _failedWith = $"{failure.GetType().Name}: {failure.Message}";
             _resumeLinePending = true;
             Close();
             NoteOnce($"the program log file could not be written ({_failedWith}); "
-                + $"it is opened again every {_retryDelay.TotalSeconds:0.#} s, and this is the only notice until a write succeeds");
+                + $"it is opened again with the next entry logged after {_retryDelay.TotalSeconds:0.#} s, and this is the only notice until a write succeeds");
             // After the notice: whoever waited on this batch finds it in the log.
             _queue.EndBatch();
             try { await Task.Delay(_retryDelay, _stopping.Token).ConfigureAwait(false); }
@@ -205,39 +208,51 @@ public sealed class ProgramLogFile : IDisposable
 
     private void Write(Item item)
     {
-        // Counted before anything can fail: an entry taken off the queue is lost
-        // with its batch if the batch never reaches the disk.
-        _unflushed++;
-        // A straggler from a session already replaced (logged as the switch
-        // flipped) goes into the newer file.
-        Session target = _writerSession is { } current && current.Number > item.Session.Number ? current : item.Session;
-        if (_writer is null || !ReferenceEquals(target, _writerSession)) OpenSession(target);
+        // Until it is in the writer, a failure loses this entry too.
+        _writingEntry = item.Entry is not null;
+        if (_writer is null || !ReferenceEquals(item.Session, _writerSession)) OpenSession(item.Session);
+        if (item.Entry is not { } entry) return;
         _dropped += _queue.TakeDropped();
         if (_dropped > 0)
         {
             WriteLine($"# {(_dropped == 1 ? "1 entry" : $"{_dropped} entries")} dropped while the disk was busy");
             _dropped = 0;
         }
-        LogEntry entry = item.Entry;
         WriteLine($"{entry.Timestamp:HH:mm:ss.fff} [{entry.Severity}] {entry.Source}: {entry.Message}");
+        _unflushed++;
+        _writingEntry = false;
     }
 
-    // Close whatever is open and open the session's file. A file reopened after a
-    // failure says so before anything else goes in.
+    // Close whatever is open and open the session's file. A new file gets its
+    // header (again, if a failed flush lost it); a file reopened after a failure
+    // says so before anything else goes in.
     private void OpenSession(Session session)
     {
         bool reopening = ReferenceEquals(session, _writerSession);
         // Flushed here, where a failure is seen, rather than in Close, which has
         // to swallow one.
         _writer?.Flush();
+        _unflushed = 0;
         Close();
-        _writer = _openFile(session.Path);
-        _writerSession = session;
-        _made = session;
         if (!reopening)
         {
+            // A new file: an earlier session's failure is not this one's, and a
+            // failure here gets a notice of its own. The session is taken on
+            // before the open, so an open that fails is retried as a reopen and
+            // stays latched.
+            _writerSession = session;
+            _headerOnDisk = false;
+            _failedWith = null;
+            _resumeLinePending = false;
+            _maybeLost = 0;
+            _failureNoted = false;
+        }
+        _writer = _openFile(session.Path);
+        _made = session;
+        if (!_headerOnDisk)
+        {
             WriteLine($"# MudPlay debug log — topic={Topic}");
-            WriteLine($"# started {DateTimeOffset.Now:O}");
+            WriteLine($"# started {session.Started:O}");
         }
         if (_resumeLinePending && _failedWith is { } failure)
         {
@@ -257,6 +272,7 @@ public sealed class ProgramLogFile : IDisposable
         if (_writer is null) return;
         _writer.Flush();
         _unflushed = 0;
+        _headerOnDisk = true;
         if (_failedWith is null) return;
         _failedWith = null;
         _maybeLost = 0;
@@ -294,7 +310,8 @@ public sealed class ProgramLogFile : IDisposable
 
     // Stop taking entries and give what is queued at most ExitDrainBound to reach
     // the file. Run at process exit; a disk that is stuck can't hold the exit
-    // longer than that.
+    // longer than that. Running out of time is not reported: the process is
+    // ending, and nothing it logs now would reach anyone.
     public void Dispose()
     {
         _log.EntryAdded -= OnEntryAdded;
@@ -302,8 +319,7 @@ public sealed class ProgramLogFile : IDisposable
         // A pump waiting to retry stops waiting: what is queued gets its one
         // last try now.
         _stopping.Cancel();
-        if (!_queue.WaitWritten(ExitDrainBound))
-            Note(LogSeverity.Warn, $"the program log file was still being written {ExitDrainBound.TotalSeconds:0.#} s into the exit; its last entries may be missing");
+        _queue.WaitWritten(ExitDrainBound);
         _queue.Complete();
     }
 }
