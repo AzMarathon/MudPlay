@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.1**
+> **Version 3.185.2**
 > - Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
 > - One unreadable value in a profile no longer drops the client onto the default profile; only that setting takes its default
 > - A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
