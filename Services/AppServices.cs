@@ -6823,9 +6823,7 @@ public sealed class AppServices
             writeCombat: combat =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Combat"] = SettingsSection.ToElement(combat);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Combat", combat, "a gear swap")) Profile.Save();
             },
             isTwoHanded: IsConfiguredWeaponTwoHanded,
             resolveItemSlot: ResolveEquipItemSlot,
@@ -6937,9 +6935,7 @@ public sealed class AppServices
             writeCombat: combat =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Combat"] = SettingsSection.ToElement(combat);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Combat", combat, "a combat-profile switch")) Profile.Save();
             },
             readHealth: () => ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health"),
             writeHealth: health =>
@@ -6953,9 +6949,7 @@ public sealed class AppServices
             writeSpells: spells =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Spells"] = SettingsSection.ToElement(spells);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Spells", spells, "a combat-profile switch")) Profile.Save();
             },
             // Ensure the blob exists so a profile's weapon writes land on a live
             // reference Save persists — the Equipment Manager seeds an empty one the
@@ -6972,9 +6966,7 @@ public sealed class AppServices
             writeParty: party =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Party"] = SettingsSection.ToElement(party);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Party", party, "a combat-profile switch")) Profile.Save();
             });
         CombatProfiles.EnsureSeeded();
         Profile.ProfileLoaded += _ => CombatProfiles.OnProfileLoaded();

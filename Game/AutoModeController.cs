@@ -342,8 +342,7 @@ public sealed class AutoModeController
 
     private void WriteGeneral(CharacterProfile profile, GeneralSettings general)
     {
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = SettingsSection.ToElement(general);
+        SettingsSection.Write(profile, TabKey, general, "an auto-mode switch");
         _profile.Save();
     }
 }

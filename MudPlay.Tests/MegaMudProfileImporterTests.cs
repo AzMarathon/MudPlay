@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -119,6 +120,18 @@ public sealed class MegaMudProfileImporterTests
         plan.ApplyTo(made, "Paradigm", withLogin, new PasswordProtector(keyFile), edits);
         try { File.Delete(keyFile); } catch (IOException) { /* best-effort */ }
         return (plan, made);
+    }
+
+    // The import used to store its sections with enums by name, which every engine
+    // read as a whole section of defaults; it stores numbers, as the files hold them.
+    [Fact]
+    public void Import_StoresSectionEnumsAsNumbers()
+    {
+        (_, CharacterProfile made) = Import();
+
+        Assert.Equal(JsonValueKind.Number, made.Settings!["Health"].GetProperty(nameof(HealthSettings.HpThresholdMode)).ValueKind);
+        Assert.Equal(JsonValueKind.Number, made.Settings["Cash"].GetProperty(nameof(CashSettings.CopperPolicy)).ValueKind);
+        Assert.Equal(JsonValueKind.Number, made.Settings["General"].GetProperty(nameof(GeneralSettings.DefaultTask)).ValueKind);
     }
 
     // As the engines and the Settings window read it.

@@ -379,8 +379,7 @@ public sealed class AutoModeRemoteHandler : IDisposable
 
     private void WriteGeneral(CharacterProfile profile, GeneralSettings general)
     {
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = SettingsSection.ToElement(general);
+        SettingsSection.Write(profile, TabKey, general, "a remote auto-mode command");
         _profile.Save();
     }
 }

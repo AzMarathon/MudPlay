@@ -460,7 +460,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         if (trainer.AutoTrain != AmAutoTrain)
         {
             trainer.AutoTrain = AmAutoTrain;
-            profile.Settings["AutoTrainer"] = SettingsSection.ToElement(trainer);
+            SettingsSection.Write(profile, "AutoTrainer", trainer, "the General tab's auto-train box");
         }
 
         _profile.Save(backup: BackupOnSave);

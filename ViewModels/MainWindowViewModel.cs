@@ -6828,8 +6828,7 @@ public partial class MainWindowViewModel : ObservableObject
             if (!trainer.AutoTrain)
             {
                 trainer.AutoTrain = true;
-                profile.Settings["AutoTrainer"] =
-                    SettingsSection.ToElement(trainer);
+                SettingsSection.Write(profile, "AutoTrainer", trainer, "re-enabling auto-train on reconnect");
             }
         }
 
@@ -7235,8 +7234,7 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto.AutoMode);
-        profile.Settings["General"] =
-            SettingsSection.ToElement(dto);
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle")) return;
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("AutoMode", $"User turned {flag} {(value ? "on" : "off")}.");
     }
@@ -7253,8 +7251,7 @@ public partial class MainWindowViewModel : ObservableObject
         profile.Settings ??= new();
         Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
         mutator(dto);
-        profile.Settings["General"] =
-            SettingsSection.ToElement(dto);
+        if (!SettingsSection.Write(profile, "General", dto, $"the {flag} toggle")) return;
         AppServices.Current.Profile.Save();
         AppServices.Current.Log.Info("General", $"User turned {flag} {(value ? "on" : "off")}.");
     }

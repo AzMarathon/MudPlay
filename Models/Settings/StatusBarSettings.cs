@@ -37,7 +37,8 @@ public sealed class StatusBarSettings
 
     // A method, not a property: it serializes this object, and a property would be
     // serialized along with it.
-    public bool IsDefault() => JsonSerializer.Serialize(this) == JsonSerializer.Serialize(new StatusBarSettings());
+    public bool IsDefault() =>
+        SettingsSection.ToElement(this).GetRawText() == SettingsSection.ToElement(new StatusBarSettings()).GetRawText();
 }
 
 // One row of the status bar.

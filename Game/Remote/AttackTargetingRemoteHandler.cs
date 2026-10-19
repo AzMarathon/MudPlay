@@ -219,8 +219,7 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
 
     private void WriteCombat(CharacterProfile profile, CombatSettings dto)
     {
-        profile.Settings ??= new();
-        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
+        SettingsSection.Write(profile, TabKey, dto, "a remote attack-targeting command");
         _profile.Save();
     }
 }

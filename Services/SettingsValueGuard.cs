@@ -403,23 +403,25 @@ public static class SettingsValueGuard
     // file's sections are held as the file is read: read as it stands and looked
     // over, and fixed as a tree only when the serializer refuses it. For a section no
     // file read has checked (written in memory since, or under a key Sections doesn't
-    // list) and for the tiers merged. where names the tier for the log, fallback what
-    // a field left out reads as. Each value moved or left out is raised on Clamped;
-    // false, raised too, when the section can't be read even so, and its reader then
-    // takes all of its defaults.
-    public static bool TryReadSection(JsonElement section, Type type, string key, string where, string fallback, out object? value) =>
-        TryReadSection(type, key, where, fallback, () => section.Deserialize(type, JsonStore.Options), () => ToNode(section), out value);
+    // list) and for the tiers merged. where names whose section it is for the log; a
+    // field left out reads as the DTO's default. Each value moved or left out is
+    // raised on Clamped; false, raised too, when the section can't be read even so,
+    // and its reader then takes all of its defaults.
+    public static bool TryReadSection(JsonElement section, Type type, string key, string where, out object? value) =>
+        TryReadSection(type, key, where, () => section.Deserialize(type, JsonStore.Options), () => ToNode(section), out value);
 
     // As TryReadSection, for a section held as a tree (the tiers merged); the tree may
     // be changed.
-    public static bool TryReadSection(JsonNode section, Type type, string key, string where, string fallback, out object? value) =>
-        TryReadSection(type, key, where, fallback, () => section.Deserialize(type, JsonStore.Options), () => section, out value);
+    public static bool TryReadSection(JsonNode section, Type type, string key, string where, out object? value) =>
+        TryReadSection(type, key, where, () => section.Deserialize(type, JsonStore.Options), () => section, out value);
 
-    // What a field left out of one tier's section reads as, and of the tiers merged.
-    public const string FieldDefault = "the default";
-    public const string TierBelowOrDefault = SectionFallback;
+    // Raise line on Clamped for source, as a read of source would: said once while
+    // source keeps saying it.
+    public static void Say(string source, string line) => Report(source, new List<string> { line });
 
-    private static bool TryReadSection(Type type, string key, string where, string fallback,
+    private const string FieldDefault = "the default";
+
+    private static bool TryReadSection(Type type, string key, string where,
         Func<object?> plain, Func<JsonNode?> tree, out object? value)
     {
         List<SettingsClamp> clamps = new();
@@ -437,8 +439,8 @@ public static class SettingsValueGuard
             try
             {
                 JsonNode? node = tree();
-                Fix(node, type, null, key, fallback, clamps);
-                value = DeserializeLeavingOutBadFields(node, type, key, fallback, clamps);
+                Fix(node, type, null, key, FieldDefault, clamps);
+                value = DeserializeLeavingOutBadFields(node, type, key, FieldDefault, clamps);
             }
             catch (JsonException ex)
             {
