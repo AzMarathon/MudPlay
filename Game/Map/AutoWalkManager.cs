@@ -1692,9 +1692,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // 8/461's south gate must not be sent to fight the obsidian statue for
             // a key they don't need. The planning pass has already released its
             // gate suspension by this point, so the filter reads true here.
+            // A door the client has seen open that can't have locked again needs no key.
             if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0
                 && _doorKeySummonable is { } summonable && summonable(exit.KeyItemId)
                 && Filter?.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.LockedDoor) == true
+                && Filter?.IsExitHeldOpen(cur, in exit) != true
                 && !required.Contains(exit.KeyItemId))
                 required.Add(exit.KeyItemId);
             // The hazard sits on the room being entered, so resolve the hop's

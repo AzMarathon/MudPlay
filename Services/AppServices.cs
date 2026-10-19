@@ -1354,7 +1354,9 @@ public sealed class AppServices
     // Set in the constructor's wiring before the first profile loads.
     public Game.Map.BareKeyLockBook BareKeyLocks { get; private set; } = null!;
     public BareKeyLockStore BareKeyLockStore { get; private set; } = null!;
-
+    // The door sides the client has seen open that can't have locked again yet. Set
+    // beside it.
+    public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
 
@@ -6652,6 +6654,17 @@ public sealed class AppServices
             pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
+
+        // The doors the client has seen open and that can't have locked again yet: a
+        // route back through one needs no key (user, 2026-10-18). Forgotten on a relog,
+        // a change of character or realm, and a change of game data.
+        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow, Log);
+        Door.OpenedByUs += DoorsHeldOpen.NoteOpened;
+        Door.SeenOpen += DoorsHeldOpen.NoteSeenOpen;
+        Movement.HeldOpenProbe = DoorsHeldOpen.IsHeldOpen;
+        Movement.HeldOpenVersionProvider = () => DoorsHeldOpen.Version;
+        DoorsHeldOpen.ForgetOn(InGameCapture, Profile, RoomGraph);
+        RoomTracker.RoomShown += DoorsHeldOpen.NoteRoomShown;
         Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());

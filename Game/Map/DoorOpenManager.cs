@@ -215,8 +215,8 @@ public sealed class DoorOpenManager : IDisposable
         _pickOkSub      = _router.Subscribe(KnownPatterns.DoorPickSuccess,      OnPickSuccess);
         _pickFailSub    = _router.Subscribe(KnownPatterns.DoorPickFailure,      OnPickFailure);
         _notLockedSub   = _router.Subscribe(KnownPatterns.DoorPickNotLocked,    OnPickNotLocked);
-        _openedSub      = _router.Subscribe(KnownPatterns.DoorOpenedNow,        OnOpened);
-        _alreadyOpenSub = _router.Subscribe(KnownPatterns.DoorAlreadyOpen,      OnOpened);
+        _openedSub      = _router.Subscribe(KnownPatterns.DoorOpenedNow,        OnOpenedNow);
+        _alreadyOpenSub = _router.Subscribe(KnownPatterns.DoorAlreadyOpen,      OnAlreadyOpen);
         _lockedSub      = _router.Subscribe(KnownPatterns.DoorIsLocked,         OnIsLocked);
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
         _keyUnknownSub  = _router.Subscribe(KnownPatterns.DoorKeyUnknown,       OnKeyUnknown);
@@ -741,6 +741,7 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is null) return;
         _log?.Info("Door", $"bash {_current.DirectionShort} succeeded.");
         LearnBareLock(bashable: true, "the bash opened it");
+        RaiseOpenedByUs(byBash: true);
         SucceedCurrent();
     }
 
@@ -873,6 +874,36 @@ public sealed class DoorOpenManager : IDisposable
             if (_state == DoorState.WaitingUseKey) _keyChargeSpent = true;
             SendOpen();
         }
+    }
+
+    // Our own `open` opened it, after our key or pick or for a door only shut.
+    private void OnOpenedNow(MatchResult m)
+    {
+        if (_state is DoorState.WaitingOpen or DoorState.WaitingOpenFirst) RaiseOpenedByUs(byBash: false);
+        OnOpened(m);
+    }
+
+    // "already open": someone else opened it, and we see it open.
+    private void OnAlreadyOpen(MatchResult m)
+    {
+        if (_current is { } cur && _state is not (DoorState.Idle or DoorState.SelectingVerb)
+            && _doorRoom is { } room && _confirmedRoom?.Invoke() == room)
+            SeenOpen?.Invoke(room, cur.Direction);
+        OnOpened(m);
+    }
+
+    // Told the side and how, when the request's own `open` or bash opened the door,
+    // with the tracker still confirmed in the room that holds it (DoorsHeldOpen).
+    public event Action<RoomKey, Direction, bool>? OpenedByUs;
+
+    // Told the side when the request found its door already open, in the same room.
+    public event Action<RoomKey, Direction>? SeenOpen;
+
+    private void RaiseOpenedByUs(bool byBash)
+    {
+        if (_current is not { } cur || _doorRoom is not { } room) return;
+        if (_confirmedRoom?.Invoke() != room) return;
+        OpenedByUs?.Invoke(room, cur.Direction, byBash);
     }
 
     private void OnOpened(MatchResult _)

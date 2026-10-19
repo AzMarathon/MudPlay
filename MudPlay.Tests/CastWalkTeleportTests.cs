@@ -307,6 +307,29 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(0, h.Redisplays);
     }
 
+    // The display of the room passed through says nothing of the landing it booked:
+    // the room shown is the landing's own display, not the transit room's doors laid
+    // on the landing (a held door there would be let go off another room's display).
+    [Fact]
+    public void Tracker_DisplayOfTheRoomPassedThrough_IsNotShownAsTheLandings()
+    {
+        Harness h = NewHarness();
+        List<(RoomKey Room, IReadOnlySet<Direction>? Closed)> shown = new();
+        h.Tracker.RoomShown += (room, display) => shown.Add((room, display.ClosedDoorDirections));
+        h.Tracker.SetLocated(Antechamber);
+
+        h.Tracker.NoteMoveSent(Direction.E);
+        h.Tracker.NoteRoomObserved(PassThroughRoom() with { ClosedDoorDirections = new HashSet<Direction> { Direction.W } });
+        Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Empty(shown);
+
+        h.Tracker.NoteRoomObserved(LandingRoom());
+
+        (RoomKey room, IReadOnlySet<Direction>? closed) = Assert.Single(shown);
+        Assert.Equal(WithIdol, room);
+        Assert.Null(closed);
+    }
+
     // Typed by hand, the step is read the same way.
     [Fact]
     public void Tracker_StepTypedByHand_TwoDisplays_NothingIsAsked()
