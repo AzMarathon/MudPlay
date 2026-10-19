@@ -23,6 +23,7 @@ public sealed class ProfileService
         {
             _current = value;
             SnapshotAccountSecrets();
+            if (value is not null) SettingsSection.SetHome(value, _currentBbsName);
         }
     }
     private CharacterProfile? _current;
@@ -83,7 +84,16 @@ public sealed class ProfileService
     // until it's named + homed. Only a name AND a BBS make a real character.
     // Consumed by SettingsResolver and AppServices.ResolveActiveBbs to decide the
     // active BBS.
-    public string? CurrentBbsName { get; private set; }
+    public string? CurrentBbsName
+    {
+        get => _currentBbsName;
+        private set
+        {
+            _currentBbsName = value;
+            if (_current is not null) SettingsSection.SetHome(_current, value);
+        }
+    }
+    private string? _currentBbsName;
 
     // A save was asked for while the unnamed draft was the loaded profile: it holds
     // something that is kept only if it is given a name. The draft is never written
@@ -322,6 +332,7 @@ public sealed class ProfileService
             ?? throw new FileNotFoundException(
                 $"Character profile '{profileName}' on '{bbsName}' not found.", path);
         NormalizeForLoad(loaded);
+        SettingsSection.SetHome(loaded, bbsName);
         // Upgrade older profiles before ProfileLoaded fires so per-character
         // services (KeybindingStore, toolbar) rebind from the migrated shape.
         bool migrated = ProfileMigrations.Apply(loaded, Log);
@@ -535,27 +546,15 @@ public sealed class ProfileService
         CharacterProfile profile = ReadDefaultProfileFile();
         GeneralSettings general = ReadGeneralSection(profile);
         general.ShowStartupMudAnimation = value;
-        WriteGeneralSection(profile, general);
+        if (!WriteGeneralSection(profile, general)) return;
         Directory.CreateDirectory(Path.GetDirectoryName(_defaultProfileFile)!);
         JsonStore.Save(_defaultProfileFile, profile);
     }
 
-    private static GeneralSettings ReadGeneralSection(CharacterProfile profile)
-    {
-        if (profile.Settings is { } settings
-            && settings.TryGetValue("General", out JsonElement json))
-        {
-            try { return JsonSerializer.Deserialize<GeneralSettings>(json) ?? new(); }
-            catch { return new(); }
-        }
-        return new();
-    }
+    private static GeneralSettings ReadGeneralSection(CharacterProfile profile) => SettingsSection.Read<GeneralSettings>(profile, "General");
 
-    private static void WriteGeneralSection(CharacterProfile profile, GeneralSettings general)
-    {
-        profile.Settings ??= new();
-        profile.Settings["General"] = JsonSerializer.SerializeToElement(general);
-    }
+    private static bool WriteGeneralSection(CharacterProfile profile, GeneralSettings general) =>
+        SettingsSection.Write(profile, "General", general, "the startup-animation switch");
 
     // Move the loaded named profile's folder from its current BBS (and name) to
     // newBbs (and optionally newName), updating CurrentBbsName /
@@ -824,8 +823,8 @@ public sealed class ProfileService
         }
     }
 
-    // Read-modify-write one section of the loaded profile's Settings: deserialize
-    // Settings[key] as T (a fresh default T when absent or unparseable), hand it to
+    // Read-modify-write one section of the loaded profile's Settings: read
+    // Settings[key] as T (SettingsSection: defaults for what it lacks), hand it to
     // the mutator, then serialize it back and persist. The single safe path when a
     // section is written from more than one view (e.g. Settings → Talk and the
     // Conversation window both touch "Talk") — each mutates only its own fields, so
@@ -836,16 +835,9 @@ public sealed class ProfileService
         ArgumentNullException.ThrowIfNull(mutate);
         if (Current is not { } profile) return;
 
-        T dto = new();
-        if (profile.Settings is { } settings && settings.TryGetValue(key, out JsonElement json))
-        {
-            try { dto = JsonSerializer.Deserialize<T>(json) ?? new T(); }
-            catch { dto = new T(); }
-        }
+        T dto = SettingsSection.Read<T>(profile, key);
         mutate(dto);
-        profile.Settings ??= new();
-        profile.Settings[key] = JsonSerializer.SerializeToElement(dto);
-        Save();
+        if (SettingsSection.Write(profile, key, dto, $"a change to one {key} setting")) Save();
     }
 
     // Clear Current and fire ProfileClosed.

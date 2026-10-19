@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -442,7 +441,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
 
         // Buff Watchdog layout is a top-level per-character field; write it straight
         // onto the profile (not the DTO). The open Buff Watchdog reflows off the
@@ -461,7 +460,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         if (trainer.AutoTrain != AmAutoTrain)
         {
             trainer.AutoTrain = AmAutoTrain;
-            profile.Settings["AutoTrainer"] = JsonSerializer.SerializeToElement(trainer);
+            SettingsSection.Write(profile, "AutoTrainer", trainer, "the General tab's auto-train box");
         }
 
         _profile.Save(backup: BackupOnSave);
@@ -680,36 +679,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             AutoLairNames.Add(autoLairSelection);
     }
 
-    private GeneralSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new GeneralSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new GeneralSettings();
-
-        return JsonSerializer.Deserialize<GeneralSettings>(json.GetRawText())
-               ?? new GeneralSettings();
-    }
+    private GeneralSettings ReadOrDefault() => SettingsSection.Read<GeneralSettings>(_profile.Current, TabKey);
 
     // The Auto-Trainer tab owns the "AutoTrainer" entry; this tab only mirrors
     // its AutoTrain bit, so it reads that entry defensively (unset / malformed
     // → defaults) rather than assuming the tab has ever been saved.
-    private AutoTrainerSettings ReadAutoTrainerOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new AutoTrainerSettings();
-        if (!profile.Settings.TryGetValue("AutoTrainer", out JsonElement json)) return new AutoTrainerSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<AutoTrainerSettings>(json.GetRawText())
-                   ?? new AutoTrainerSettings();
-        }
-        catch
-        {
-            // Malformed AutoTrainer JSON → treat as unset; the Auto-Trainer tab
-            // rewrites it cleanly on its next Save.
-            return new AutoTrainerSettings();
-        }
-    }
+    private AutoTrainerSettings ReadAutoTrainerOrDefault() => SettingsSection.Read<AutoTrainerSettings>(_profile.Current, "AutoTrainer");
 
     private AutoActionDefaults SnapshotAuto() => new()
     {

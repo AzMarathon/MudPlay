@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Map;
@@ -138,7 +137,7 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
         AutoLairSettings dto = BuildDto();
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
 
         ApplyToServices(dto);
@@ -196,20 +195,7 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
         ApplyToServices(dto);
     }
 
-    private AutoLairSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new AutoLairSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new AutoLairSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<AutoLairSettings>(json) ?? new AutoLairSettings();
-        }
-        catch
-        {
-            return new AutoLairSettings();
-        }
-    }
+    private AutoLairSettings ReadOrDefault() => SettingsSection.Read<AutoLairSettings>(_profile.Current, TabKey);
 
     // Push the DTO into the live AutoLairManager — both the scalar knobs
     // (heuristic / engage timeout) AND the travel-cost model

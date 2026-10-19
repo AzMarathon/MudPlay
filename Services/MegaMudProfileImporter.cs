@@ -515,14 +515,12 @@ public static class MegaMudProfileImporter
     // ----- Plumbing ---------------------------------------------------------
 
     private static T Section<T>(CharacterProfile profile, string key) where T : new() =>
-        profile.Settings is { } settings && settings.TryGetValue(key, out JsonElement el)
-            ? JsonSerializer.Deserialize<T>(el, JsonStore.Options) ?? new T()
-            : new T();
+        SettingsSection.Read<T>(profile, key);
 
     private static void Put<T>(CharacterProfile profile, string key, T value)
     {
         profile.Settings ??= new Dictionary<string, JsonElement>();
-        profile.Settings[key] = JsonSerializer.SerializeToElement(value, JsonStore.Options);
+        profile.Settings[key] = SettingsSection.ToElement(value);
     }
 
     // One walk over the file: reads values, sets them, and writes the review lines.

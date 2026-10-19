@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -891,21 +890,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         CapRoundTotalsAtMonsterHp = dto.CapRoundTotalsAtMonsterHp;
     }
 
-    private CombatSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new CombatSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new CombatSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<CombatSettings>(json) ?? new CombatSettings();
-        }
-        catch
-        {
-            return new CombatSettings();
-        }
-    }
+    private CombatSettings ReadOrDefault() => SettingsSection.Read<CombatSettings>(_profile.Current, TabKey);
 
     // ----- IsDirty plumbing -----------------------------------------
 

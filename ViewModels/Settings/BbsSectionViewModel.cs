@@ -503,21 +503,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // Runs once at ctor time; Discard re-runs it to roll back unsaved edits.
     private void LoadConfirmFromGlobalSettings()
     {
-        ConfirmSettings dto = new();
-        Dictionary<string, System.Text.Json.JsonElement>? bucket =
-            _globalSettings.Current.Settings;
-        if (bucket is not null
-            && bucket.TryGetValue("Confirm", out System.Text.Json.JsonElement json))
-        {
-            try
-            {
-                dto = System.Text.Json.JsonSerializer.Deserialize<ConfirmSettings>(json) ?? new();
-            }
-            catch
-            {
-                dto = new ConfirmSettings();
-            }
-        }
+        ConfirmSettings dto = SettingsSection.Read<ConfirmSettings>(_globalSettings.Current, "Confirm");
         bool prev = _suppressDirty;
         _suppressDirty = true;
         ConfirmExit         = dto.ConfirmExit;
@@ -540,7 +526,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         };
         _globalSettings.Current.Settings ??= new Dictionary<string, System.Text.Json.JsonElement>();
         _globalSettings.Current.Settings["Confirm"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
+            SettingsSection.ToElement(dto);
         // The status-bar layout is the same Global tier and rides the same save.
         StatusBarEditor.ToSettings().WriteTo(_globalSettings.Current);
         _globalSettings.Save();

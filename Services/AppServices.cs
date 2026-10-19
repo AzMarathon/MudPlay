@@ -6823,9 +6823,7 @@ public sealed class AppServices
             writeCombat: combat =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Combat"] = System.Text.Json.JsonSerializer.SerializeToElement(combat);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Combat", combat, "a gear swap")) Profile.Save();
             },
             isTwoHanded: IsConfiguredWeaponTwoHanded,
             resolveItemSlot: ResolveEquipItemSlot,
@@ -6937,25 +6935,21 @@ public sealed class AppServices
             writeCombat: combat =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Combat"] = System.Text.Json.JsonSerializer.SerializeToElement(combat);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Combat", combat, "a combat-profile switch")) Profile.Save();
             },
             readHealth: () => ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health"),
             writeHealth: health =>
             {
                 if (Profile.Current is not { } p) return;
                 p.Settings ??= new();
-                p.Settings["Health"] = System.Text.Json.JsonSerializer.SerializeToElement(health);
+                p.Settings["Health"] = SettingsSection.ToElement(health);
                 Profile.Save();
             },
             readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),
             writeSpells: spells =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Spells"] = System.Text.Json.JsonSerializer.SerializeToElement(spells);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Spells", spells, "a combat-profile switch")) Profile.Save();
             },
             // Ensure the blob exists so a profile's weapon writes land on a live
             // reference Save persists — the Equipment Manager seeds an empty one the
@@ -6972,9 +6966,7 @@ public sealed class AppServices
             writeParty: party =>
             {
                 if (Profile.Current is not { } p) return;
-                p.Settings ??= new();
-                p.Settings["Party"] = System.Text.Json.JsonSerializer.SerializeToElement(party);
-                Profile.Save();
+                if (SettingsSection.Write(p, "Party", party, "a combat-profile switch")) Profile.Save();
             });
         CombatProfiles.EnsureSeeded();
         Profile.ProfileLoaded += _ => CombatProfiles.OnProfileLoaded();
@@ -11580,26 +11572,10 @@ public sealed class AppServices
         ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health").MaThresholdMode
             == Models.Profile.ThresholdMode.Absolute;
 
-    // Generic per-section settings reader. Returns a fresh default-
-    // constructed DTO when the profile is null, has no Settings dict,
-    // is missing the named entry, or the JSON is malformed — the
-    // callers all want a non-null DTO they can apply unconditionally.
+    // The character tier's section: the callers all want a non-null DTO they can
+    // apply unconditionally.
     private static T ReadSection<T>(Models.Profile.CharacterProfile? profile, string key)
-        where T : new()
-    {
-        if (profile?.Settings is null) return new T();
-        if (!profile.Settings.TryGetValue(key, out System.Text.Json.JsonElement json)) return new T();
-        try
-        {
-            // Straight from the element: copying it out as text first cost a string
-            // the size of the section on every read, and engines read on every line.
-            return System.Text.Json.JsonSerializer.Deserialize<T>(json) ?? new T();
-        }
-        catch
-        {
-            return new T();
-        }
-    }
+        where T : new() => SettingsSection.Read<T>(profile, key);
 
     // True when the named weapon resolves to a two-handed item in the active
     // game-data set (Items.WeaponType 2H). Fed to
@@ -16354,23 +16330,8 @@ public sealed class AppServices
         Confirm.ApplyFrom(dto);
     }
 
-    // Read a typed DTO out of the Global-tier Settings
-    // dictionary, returning a default-constructed instance when the
-    // bucket is missing or unparseable.
-    private T ReadGlobalSection<T>(string key) where T : new()
-    {
-        Dictionary<string, System.Text.Json.JsonElement>? bucket = Settings.Current.Settings;
-        if (bucket is null) return new T();
-        if (!bucket.TryGetValue(key, out System.Text.Json.JsonElement json)) return new T();
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<T>(json) ?? new T();
-        }
-        catch
-        {
-            return new T();
-        }
-    }
+    // The Global tier's section.
+    private T ReadGlobalSection<T>(string key) where T : new() => SettingsSection.Read<T>(Settings.Current, key);
 
     // Resolve which BBS the runtime should treat as active. Pin on
     // the loaded character profile wins; otherwise fall back to the

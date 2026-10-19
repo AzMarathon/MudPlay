@@ -241,7 +241,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         ClearDirty();
     }
@@ -428,20 +428,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     partial void OnHideLearnedSpellsChanged(bool value) => ApplySpellFilter();
     partial void OnAutoObtainShopSpellsChanged(bool value) => MarkDirty();
 
-    private AutoTrainerSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new AutoTrainerSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new AutoTrainerSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<AutoTrainerSettings>(json) ?? new AutoTrainerSettings();
-        }
-        catch
-        {
-            return new AutoTrainerSettings();
-        }
-    }
+    private AutoTrainerSettings ReadOrDefault() => SettingsSection.Read<AutoTrainerSettings>(_profile.Current, TabKey);
 
     partial void OnAnnounceLevelUpsChanged(bool value) => MarkDirty();
     partial void OnSelectedFundingModeChanged(string value)

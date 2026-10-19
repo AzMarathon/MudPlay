@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.GameData;
@@ -209,7 +208,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
 
         // Re-evaluate auto-deposit trigger immediately so a tighter threshold
@@ -286,22 +285,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         DropCoinForSellItemsUpTo   = dto.DropCoinForSellItemsUpTo;
     }
 
-    private CashSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new CashSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new CashSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<CashSettings>(json) ?? new CashSettings();
-        }
-        catch
-        {
-            // Malformed delta — fall back to defaults rather than throwing.
-            return new CashSettings();
-        }
-    }
+    private CashSettings ReadOrDefault() => SettingsSection.Read<CashSettings>(_profile.Current, TabKey);
 
     // ----- IsDirty plumbing -----------------------------------------
 

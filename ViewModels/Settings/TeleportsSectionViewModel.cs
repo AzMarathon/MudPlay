@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -112,20 +111,8 @@ public sealed partial class TeleportsSectionViewModel : SettingsSectionViewModel
         UpdateSummary();
     }
 
-    public static TeleportSettings ReadOrDefault(CharacterProfile? profile)
-    {
-        if (profile?.Settings is null || !profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new TeleportSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<TeleportSettings>(json) ?? new TeleportSettings();
-        }
-        catch (JsonException)
-        {
-            // A hand-edited entry that doesn't parse reads as the default: nothing allowed.
-            return new TeleportSettings();
-        }
-    }
+    public static TeleportSettings ReadOrDefault(CharacterProfile? profile) =>
+        SettingsSection.Read<TeleportSettings>(profile, TabKey);
 
     public override void Apply()
     {
@@ -139,7 +126,7 @@ public sealed partial class TeleportsSectionViewModel : SettingsSectionViewModel
                 .ToList(),
         };
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         ClearDirty();
     }

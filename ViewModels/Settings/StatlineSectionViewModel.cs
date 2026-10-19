@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -117,7 +116,7 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
         StatlineSettings dto = new() { Command = toStore };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         _profile.NotifyMutated();
 
@@ -199,13 +198,7 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
         _appliedCommand = Command;
     }
 
-    private StatlineSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new();
-        return JsonSerializer.Deserialize<StatlineSettings>(json.GetRawText()) ?? new();
-    }
+    private StatlineSettings ReadOrDefault() => SettingsSection.Read<StatlineSettings>(_profile.Current, TabKey);
 
     private void Dirty()
     {

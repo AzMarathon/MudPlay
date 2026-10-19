@@ -68,9 +68,11 @@ public static class SettingsValueGuard
         ["Party"] = typeof(PartySettings),
         [PeriodicDamageRoomSpellSettings.TabKey] = typeof(PeriodicDamageRoomSpellSettings),
         ["Pvp"] = typeof(PvpSettings),
+        [RoundTotalsWindowSettings.SectionKey] = typeof(RoundTotalsWindowSettings),
         ["Sounds"] = typeof(SoundSettings),
         ["Spells"] = typeof(SpellsSettings),
         ["Statline"] = typeof(StatlineSettings),
+        [StatusBarSettings.SectionKey] = typeof(StatusBarSettings),
         ["Talk"] = typeof(TalkSettings),
         ["Teleports"] = typeof(TeleportSettings),
         ["Toolbar"] = typeof(ToolbarSettings),
@@ -393,6 +395,65 @@ public static class SettingsValueGuard
         if (!FixSection(node, type, at, clamps)) return false;
         sections[key] = JsonSerializer.SerializeToElement(node, JsonStore.Options);
         return true;
+    }
+
+    // ----- One section, read on its own -----------------------------------------
+
+    // A section read by itself (SettingsSection), as type, held to its fields as a
+    // file's sections are held as the file is read: read as it stands and looked
+    // over, and fixed as a tree only when the serializer refuses it. For a section no
+    // file read has checked (written in memory since, or under a key Sections doesn't
+    // list) and for the tiers merged. where names whose section it is for the log; a
+    // field left out reads as the DTO's default. Each value moved or left out is
+    // raised on Clamped; false, raised too, when the section can't be read even so,
+    // and its reader then takes all of its defaults.
+    public static bool TryReadSection(JsonElement section, Type type, string key, string where, out object? value) =>
+        TryReadSection(type, key, where, () => section.Deserialize(type, JsonStore.Options), () => ToNode(section), out value);
+
+    // As TryReadSection, for a section held as a tree (the tiers merged); the tree may
+    // be changed.
+    public static bool TryReadSection(JsonNode section, Type type, string key, string where, out object? value) =>
+        TryReadSection(type, key, where, () => section.Deserialize(type, JsonStore.Options), () => section, out value);
+
+    // Raise line on Clamped every time it is said: one line per thing that happened
+    // (a skipped write is a user's action that didn't take).
+    public static void Say(string line) => Clamped?.Invoke(line);
+
+    private const string FieldDefault = "the default";
+
+    private static bool TryReadSection(Type type, string key, string where,
+        Func<object?> plain, Func<JsonNode?> tree, out object? value)
+    {
+        List<SettingsClamp> clamps = new();
+        List<string> lines = new();
+        bool read = true;
+        value = null;
+        try
+        {
+            value = plain();
+            if (value is not null) Walk(value, PlanOf(type), new List<object> { key }, clamps, apply: true);
+        }
+        catch (JsonException)
+        {
+            clamps.Clear();
+            try
+            {
+                JsonNode? node = tree();
+                Fix(node, type, null, key, FieldDefault, clamps);
+                value = DeserializeLeavingOutBadFields(node, type, key, FieldDefault, clamps);
+            }
+            catch (JsonException ex)
+            {
+                read = false;
+                value = null;
+                clamps.Clear();
+                lines.Add($"{where} section {key} couldn't be read ({Reason(ex)}); using all of its defaults.");
+            }
+        }
+        foreach (SettingsClamp c in clamps)
+            lines.Add($"{where} setting {c.Field} was {c.Found}, {c.Why}; using {c.Used}.");
+        Report($"{where} section {key}", lines);
+        return read;
     }
 
     private static bool OutOfRange(object value, Step step, out decimal used)

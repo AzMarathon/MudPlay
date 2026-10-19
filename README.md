@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.5**
+> **Version 3.185.6**
 > - Program-log switch race test no longer fails when its loggers finish before the switch flips
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
