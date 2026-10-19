@@ -41,6 +41,11 @@ public static class CrashReporter
     private static Func<string, string>? _textFilter;
     public static void RegisterTextFilter(Func<string, string> filter) => _textFilter = filter;
 
+    // The program log file the report names (AppServices registers it); null
+    // takes it away again.
+    private static ProgramLogFile? _programLog;
+    public static void RegisterProgramLog(ProgramLogFile? log) => _programLog = log;
+
     // Wire the two out-of-band failure channels. UI-thread crashes escape the
     // Avalonia run loop instead and are caught by Guard.
     public static void Install()
@@ -120,6 +125,19 @@ public static class CrashReporter
         }
     }
 
+    // The program log is written by a background task: the report names the file
+    // to send (LogToSend), so the lines leading up to the crash go in first, for
+    // as long as ProgramLogFile.CrashDrainBound allows.
+    private static void LetProgramLogLand()
+    {
+        try { _programLog?.WaitWritten(ProgramLogFile.CrashDrainBound); }
+        catch
+        {
+            // The crash handler must never throw: the report goes without the
+            // last lines rather than not at all.
+        }
+    }
+
     // Where a crash or hang report lands: the Desktop, or, for a headless or
     // service account that reports none, the app's own folder, so the report
     // still lands somewhere.
@@ -145,6 +163,7 @@ public static class CrashReporter
 
     internal static string Build(Exception? ex, string source)
     {
+        LetProgramLogLand();
         StringBuilder sb = new(capacity: 16 * 1024);
         sb.Append("# MudPlay crash report\n\n");
         sb.Append("_Captured ").Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")).Append("_\n\n");

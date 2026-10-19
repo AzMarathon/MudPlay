@@ -1,5 +1,4 @@
 using System.Text;
-using System.Threading.Channels;
 
 namespace MudPlay.Services;
 
@@ -14,17 +13,16 @@ namespace MudPlay.Services;
 // Each file opens with the same header (build, system, start time), so either
 // one stands on its own. The pair can never pass 2 × SegmentMaxBytes.
 //
-// Entries are handed to a queue and written by a background task, flushed once
-// per batch: the thread that logged (usually the UI thread) never touches the
-// file, and a UI thread that has hung doesn't stop what it already logged from
-// reaching the disk. A killed process loses at most the batch in flight.
+// Entries are handed to a queue (LogEntryQueue) and written by a background task,
+// flushed once per batch: the thread that logged (usually the UI thread) never
+// touches the file, and a UI thread that has hung doesn't stop what it already
+// logged from reaching the disk. A killed process loses at most the batch in flight.
 //
-// The queue holds QueueDepth entries. While a write is stuck (a disk that has
-// stalled, a network folder gone quiet) the oldest waiting entries make room for
-// the newest, and the file says how many went when writing resumes. A failure
-// nothing here expects is noted once in the program log, the file is closed, and
-// the writing is tried again after a retry delay: the pump itself never ends before
-// the client does.
+// The queue holds QueueDepth entries. While a write is stuck the oldest waiting
+// entries make room for the newest, and the file says how many went when writing
+// resumes. A failure nothing here expects is noted once in the program log, the
+// file is closed, and the writing is tried again after a retry delay: the pump
+// itself never ends before the client does.
 //
 // Not written while Auto-collect logs is on: the full program log is then on
 // disk from whenever it was switched on, and is the record.
@@ -60,7 +58,7 @@ public sealed class RecentLogFile : IAsyncDisposable
     public const string LogSource = "RecentLog";
 
     private readonly Func<string, TextWriter> _open;
-    private readonly Channel<Item> _queue;
+    private readonly LogEntryQueue<LogEntry> _queue = new(QueueDepth);
     private readonly CancellationTokenSource _stopping = new();
     private readonly Task _pump;
 
@@ -75,10 +73,6 @@ public sealed class RecentLogFile : IAsyncDisposable
     private volatile bool _paused;
     private volatile int _filesWritten;
 
-    // Entries the full queue let go of since the last one written. Counted on the
-    // threads that log, taken by the pump.
-    private int _dropped;
-
     // True on a thread while it is putting this class's own notice in the program
     // log: that entry must not come back here to be written to the file whose
     // failure it reports.
@@ -87,8 +81,6 @@ public sealed class RecentLogFile : IAsyncDisposable
     // How long the pump waits after a failure it didn't expect before it writes
     // again.
     private readonly TimeSpan _retryDelay;
-
-    private readonly record struct Item(LogEntry? Entry, TaskCompletionSource? Barrier);
 
     // pathA / pathB: the two files. header: the lines each file opens with.
     // open: how a file is opened for writing from empty.
@@ -110,12 +102,6 @@ public sealed class RecentLogFile : IAsyncDisposable
         _header = header ?? throw new ArgumentNullException(nameof(header));
         _open = open ?? OpenTruncated;
         _paused = diagnostics.AutoCollectLogs;
-        // DropOldest: a write to a full queue always succeeds at once, so the
-        // thread that logs never waits for the disk, and what is kept is the end
-        // of the log, which is the part a hang report needs.
-        _queue = Channel.CreateBounded<Item>(
-            new BoundedChannelOptions(QueueDepth) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest },
-            OnDroppedFromQueue);
         _pump = Task.Run(PumpAsync);
         _log.EntryAdded += OnEntryAdded;
         _diagnostics.Changed += OnDiagnosticsChanged;
@@ -145,7 +131,7 @@ public sealed class RecentLogFile : IAsyncDisposable
         _paused = _diagnostics.AutoCollectLogs;
         // Wake the pump so it closes the file now, not at the next entry (there
         // won't be one while paused).
-        _queue.Writer.TryWrite(default);
+        _queue.Wake();
     }
 
     private void OnEntryAdded(LogEntry entry)
@@ -158,40 +144,21 @@ public sealed class RecentLogFile : IAsyncDisposable
     internal void Enqueue(LogEntry entry)
     {
         if (_paused) return;
-        _queue.Writer.TryWrite(new Item(entry, null));
-    }
-
-    // The queue was full and let its oldest item go, on the thread that logged.
-    private void OnDroppedFromQueue(Item item)
-    {
-        if (item.Entry is not null) Interlocked.Increment(ref _dropped);
-        // Nothing waits for ever on a barrier the queue no longer holds.
-        item.Barrier?.TrySetResult();
+        _queue.Post(entry);
     }
 
     // Completes once everything queued before the call has been written and
     // flushed (or let go of: see QueueDepth).
-    internal Task WhenWrittenAsync()
-    {
-        TaskCompletionSource barrier = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_queue.Writer.TryWrite(new Item(null, barrier))) barrier.TrySetResult();
-        return barrier.Task;
-    }
+    internal Task WhenWrittenAsync() => _queue.WhenWrittenAsync();
 
     private async Task PumpAsync()
     {
-        ChannelReader<Item> reader = _queue.Reader;
-        while (await reader.WaitToReadAsync().ConfigureAwait(false))
+        while (await _queue.WaitToReadAsync().ConfigureAwait(false))
         {
-            List<TaskCompletionSource>? barriers = null;
             Exception? unexpected = null;
             try
             {
-                while (reader.TryRead(out Item item))
-                {
-                    if (item.Barrier is { } barrier) (barriers ??= new()).Add(barrier);
-                    else if (item.Entry is { } entry) Write(entry);
-                }
+                while (_queue.TryRead(out LogEntry entry)) Write(entry);
                 if (_paused) Close();
                 else Flush();
             }
@@ -202,8 +169,7 @@ public sealed class RecentLogFile : IAsyncDisposable
                 // good, silently, with the queue still filling behind it.
                 unexpected = ex;
             }
-            if (barriers is not null)
-                foreach (TaskCompletionSource barrier in barriers) barrier.TrySetResult();
+            _queue.EndBatch();
             if (unexpected is null) continue;
 
             Close();
@@ -234,7 +200,7 @@ public sealed class RecentLogFile : IAsyncDisposable
         if (_broken || _paused) return;
         try
         {
-            if (Interlocked.Exchange(ref _dropped, 0) is > 0 and int dropped)
+            if (_queue.TakeDropped() is > 0 and int dropped)
                 WriteLine($"# {(dropped == 1 ? "1 entry" : $"{dropped} entries")} dropped while the disk was busy", entry.Timestamp);
             if (_reopenedAfter is { } failure)
             {
@@ -314,7 +280,7 @@ public sealed class RecentLogFile : IAsyncDisposable
     {
         _log.EntryAdded -= OnEntryAdded;
         _diagnostics.Changed -= OnDiagnosticsChanged;
-        if (!_queue.Writer.TryComplete()) return;   // disposed already
+        if (!_queue.Complete()) return;   // disposed already
         // A pump waiting to retry stops waiting: what is queued gets its one
         // last try now.
         _stopping.Cancel();

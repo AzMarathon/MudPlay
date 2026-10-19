@@ -1,5 +1,11 @@
 # Version history
 
+## 3.185.1
+
+- With Auto-collect logs on, a slow or locked disk no longer freezes the client on a log line: the program log file is written in the background
+- A stuck disk drops the oldest waiting lines and the file says how many; a failed write is noted once and retried
+- Lines still waiting reach the file before the client exits or a crash report names it
+
 ## 3.185.0
 
 - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line

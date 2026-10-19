@@ -1,13 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.0**
-> - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line
-> - The Hang file adds how long the freeze lasted if the client comes back; the Program Log warns of it too
-> - The Hang file notes memory use when the freeze began, as it went on, and in the minutes before
-> - Loading or switching a game-data set counts as a freeze only past 30 seconds
-> - Bug reports list the freezes seen this session
-> - Help: new *If the client freezes* section
+> **Version 3.185.1**
+> - With Auto-collect logs on, a slow or locked disk no longer freezes the client on a log line: the program log file is written in the background
+> - A stuck disk drops the oldest waiting lines and the file says how many; a failed write is noted once and retried
+> - Lines still waiting reach the file before the client exits or a crash report names it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
