@@ -21,8 +21,8 @@ public sealed class SessionLogService : IDisposable
     private readonly LogService _log;
     private readonly Func<TalkSettings> _readSettings;
 
-    private readonly RollingLogFile _talk = new();
-    private readonly RollingLogFile _txns = new();
+    private readonly RollingLogFile _talk;
+    private readonly RollingLogFile _txns;
 
     private bool _logConversations = true;
     private bool _logTransactions = true;
@@ -58,6 +58,8 @@ public sealed class SessionLogService : IDisposable
         _transactions = transactions;
         _log = log;
         _readSettings = readSettings;
+        _talk = new RollingLogFile(log);
+        _txns = new RollingLogFile(log);
 
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.BbsPinApplied += OnProfileChanged;
