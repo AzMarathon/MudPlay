@@ -47,4 +47,14 @@ public sealed partial class PartyState : ObservableObject
         }
         return false;
     }
+
+    // Whether a player is the leader we follow: we are in a party, not leading it,
+    // and that player leads it. Matched on given name, as HasMember is.
+    public bool IsLeaderWeFollow(string name)
+    {
+        if (!IsInParty || SelfIsLeader || LeaderName is not { Length: > 0 } leader) return false;
+        (string given, _) = PlayerObservation.SplitName(name);
+        (string leaderGiven, _) = PlayerObservation.SplitName(leader);
+        return !string.IsNullOrEmpty(given) && leaderGiven.Equals(given, StringComparison.OrdinalIgnoreCase);
+    }
 }

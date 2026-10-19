@@ -34,8 +34,8 @@ public sealed class MessageRouter
     public event Action<Terminal.LineExtractor.EmittedLine>? LineDispatched;
 
     // Fires once every line of one server read has been dispatched (EndRead, fed from
-    // LineExtractor.ReadEnded). ChatRouter holds a green social line to see what the
-    // same read prints after it, and lets it go here.
+    // LineExtractor.ReadEnded): the moment a line held to see what its read prints
+    // after it has to be settled.
     public event Action? ReadEnded;
 
     public void EndRead() => ReadEnded?.Invoke();

@@ -344,7 +344,7 @@ public sealed partial class RoomDisplayParser : IDisposable
     [GeneratedRegex(
         @"^\s*Obvious\s+exits?\s*:\s*(?<list>.+?)\s*\.?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ObviousExitsPattern();
+    internal static partial Regex ObviousExitsPattern();
 
     // Door/gate barrier prefix on an exit token — "<open|closed> <door|gate> ".
     // Entry is already lowercased, so no IgnoreCase needed.

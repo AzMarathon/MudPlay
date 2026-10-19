@@ -226,13 +226,13 @@ public sealed class ChatRouter : IDisposable
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
-        ActionEmoteClassifier.Kind social = SocialKind(line);
+        ActionEmoteClassifier.Kind social = SocialKind(line, out string? actor);
         if (social == ActionEmoteClassifier.Kind.None) SettleHeldSocials(line);
         TrackAmbiguousReply(line.Text);
         TryCaptureShownTelepath(line.Text);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
-        if (social != ActionEmoteClassifier.Kind.None) HoldSocial(line, social);
+        if (social != ActionEmoteClassifier.Kind.None) HoldSocial(line, social, actor);
     }
 
     // A BBS action / emote — a full-green line whose head is an emote shape (own
@@ -241,11 +241,12 @@ public sealed class ChatRouter : IDisposable
     // gate drops the label-only greens (Wealth: / Encumbrance: / stat rows) and the
     // non-green "You are carrying …"; the head + known-player gates drop the one
     // fully-green non-action line, "Obvious exits:". See ActionEmoteClassifier.
-    private ActionEmoteClassifier.Kind SocialKind(Terminal.LineExtractor.EmittedLine line)
+    private ActionEmoteClassifier.Kind SocialKind(Terminal.LineExtractor.EmittedLine line, out string? actor)
     {
+        actor = null;
         if (string.IsNullOrEmpty(line.Text) || !ActionEmoteClassifier.IsAllGreen(line))
             return ActionEmoteClassifier.Kind.None;
-        return ActionEmoteClassifier.Classify(line.Text, IsKnownPlayer ?? (_ => false), out _);
+        return ActionEmoteClassifier.Classify(line.Text, IsKnownPlayer ?? (_ => false), out actor);
     }
 
     // ----- Exit text of a move ---------
@@ -255,57 +256,115 @@ public sealed class ChatRouter : IDisposable
     // told from it by what the same server read prints next (GAME_MECHANICS
     // "Exit messages and socials on the wire"): the user's own social is followed
     // by the prompt, the exit's own line by the room display of the room moved into.
-    // So a social line is held until the next line of its read, or the read's end,
-    // settles it. The engine moves a party leader's followers in the same pass as
-    // the leader, so a follower's read carries the leader's departure line, then its
-    // own exit line and room display: a held line of another player's ahead of our
-    // own exit line goes with it. A line of anyone else's whose read prints no own
-    // exit line is always a social.
-    private readonly List<ChatLogEntry> _heldSocials = new();
+    // So a social line is held until the lines after it in its read, or the read's
+    // end, settle it. The display counts only whole: its bright-cyan title and then
+    // its "Obvious exits:" line, or the one line printed when the room can't be
+    // seen. A title-coloured line alone (a resisted spell's) is no display.
+    //
+    // A follower is moved in the same sweep as its leader, so its read can carry
+    // the leader's departure line, then its own exit line and room display: a held
+    // line of the leader's ahead of our own exit line goes with it. Anyone else's
+    // line is a social.
+    //
+    // A display split across two reads leaves its exit line to the conversation, as
+    // before; a held line is never kept past its read.
+    private readonly List<HeldSocial> _heldSocials = new();
     private bool _ownSocialHeld;
+    private bool _heldTitleSeen;
+
+    private readonly record struct HeldSocial(
+        Terminal.LineExtractor.EmittedLine Line, ActionEmoteClassifier.Kind Kind, string? Actor);
 
     // Bug-report surface: lines kept out of the conversation as the exit text of a move.
     public int MoveLinesKeptOut { get; private set; }
 
-    private void HoldSocial(Terminal.LineExtractor.EmittedLine line, ActionEmoteClassifier.Kind kind)
+    // A line kept out of the conversation as the exit text of a move: a game line
+    // after all, raised once its read has settled it.
+    public event Action<Terminal.LineExtractor.EmittedLine>? MoveLineKeptOut;
+
+    // Whether a line is held as a social awaiting the rest of its read: it is
+    // neither chat nor a game line yet. It is settled as one or the other within its
+    // read: EntryClassified, or MoveLineKeptOut.
+    public bool IsHolding(Terminal.LineExtractor.EmittedLine line) =>
+        _heldSocials.Exists(h => h.Line.Timestamp == line.Timestamp
+                                 && string.Equals(h.Line.Text, line.Text, StringComparison.Ordinal));
+
+    // Whether a player is the party leader we follow. Set by AppServices
+    // (PartyState.IsLeaderWeFollow); null → no other player's line is ever kept out.
+    public Func<string, bool>? IsLeaderWeFollow { get; set; }
+
+    private void HoldSocial(Terminal.LineExtractor.EmittedLine line, ActionEmoteClassifier.Kind kind, string? actor)
     {
-        // The full green sentence is self-contained (the actor is in the text), so
-        // no speaker split — the row renders the whole line green under the say chip.
-        _heldSocials.Add(new ChatLogEntry(line.Timestamp, ChatChannel.Social, null, line.Text, line.Text));
+        _heldSocials.Add(new HeldSocial(line, kind, actor));
         if (kind == ActionEmoteClassifier.Kind.Own) _ownSocialHeld = true;
     }
 
     private void SettleHeldSocials(Terminal.LineExtractor.EmittedLine next)
     {
         if (_heldSocials.Count == 0) return;
-        if (!_ownSocialHeld || next.IsPromptLine || !OpensRoomDisplay(next))
+        if (!_ownSocialHeld || next.IsPromptLine)
         {
             ReleaseHeldSocials();
             return;
         }
-        MoveLinesKeptOut += _heldSocials.Count;
-        foreach (ChatLogEntry kept in _heldSocials)
-            _log?.Debug("ChatRouter",
-                $"kept out of the conversation, the exit text of a move (the room display followed it): {kept.Message}");
-        _heldSocials.Clear();
-        _ownSocialHeld = false;
+        if (!_heldTitleSeen)
+        {
+            if (IsRoomUnseenLine(next)) { KeepOutMoveLines(); return; }
+            if (Map.RoomDisplayParser.IsLineDominantlyBrightCyan(next)) { _heldTitleSeen = true; return; }
+            ReleaseHeldSocials();
+            return;
+        }
+        // The display's own rows run on to its exits line.
+        if (Map.RoomDisplayParser.ObviousExitsPattern().IsMatch(next.Text)) KeepOutMoveLines();
+    }
+
+    // Our own held lines, and the leader's, were a move's; another player's held
+    // line was a social and goes to the conversation.
+    private void KeepOutMoveLines()
+    {
+        HeldSocial[] held = _heldSocials.ToArray();
+        ClearHeld();
+        foreach (HeldSocial h in held)
+        {
+            if (h.Kind == ActionEmoteClassifier.Kind.Own
+                || (h.Actor is { } actor && IsLeaderWeFollow?.Invoke(actor) == true))
+            {
+                MoveLinesKeptOut++;
+                _log?.Debug("ChatRouter",
+                    $"kept out of the conversation, the exit text of a move (its room display followed): {h.Line.Text}");
+                MoveLineKeptOut?.Invoke(h.Line);
+            }
+            else
+            {
+                EntryClassified?.Invoke(ToSocialEntry(h.Line));
+            }
+        }
     }
 
     private void ReleaseHeldSocials()
     {
         if (_heldSocials.Count == 0) return;
-        ChatLogEntry[] released = _heldSocials.ToArray();
-        _heldSocials.Clear();
-        _ownSocialHeld = false;
-        foreach (ChatLogEntry entry in released) EntryClassified?.Invoke(entry);
+        HeldSocial[] released = _heldSocials.ToArray();
+        ClearHeld();
+        foreach (HeldSocial h in released) EntryClassified?.Invoke(ToSocialEntry(h.Line));
     }
 
-    // What a room display opens with: the room's title, or, when the room can't be
-    // seen, the one line printed instead of the whole display (a dark room's, or a
-    // blind player's).
-    private bool OpensRoomDisplay(Terminal.LineExtractor.EmittedLine line)
+    private void ClearHeld()
     {
-        if (Map.RoomDisplayParser.IsLineDominantlyBrightCyan(line)) return true;
+        _heldSocials.Clear();
+        _ownSocialHeld = false;
+        _heldTitleSeen = false;
+    }
+
+    // The full green sentence is self-contained (the actor is in the text), so no
+    // speaker split — the row renders the whole line green under the say chip.
+    private static ChatLogEntry ToSocialEntry(Terminal.LineExtractor.EmittedLine line) =>
+        new(line.Timestamp, ChatChannel.Social, null, line.Text, line.Text);
+
+    // The one line printed instead of a whole room display when the room can't be
+    // seen: a dark room's, or a blind player's.
+    private bool IsRoomUnseenLine(Terminal.LineExtractor.EmittedLine line)
+    {
         foreach (string id in RoomUnseenPatternIds)
             if (_router.TryGetPattern(id, out IMessagePattern pattern) && pattern.TryMatch(line, out _))
                 return true;
