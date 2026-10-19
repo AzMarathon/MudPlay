@@ -16,7 +16,41 @@ public sealed class ProfileService
     // always have a target — either the auto-loaded last-used profile, or the
     // default profile (see LoadDefaultProfile). Goes null only after an
     // explicit Close.
-    public CharacterProfile? Current { get; private set; }
+    public CharacterProfile? Current
+    {
+        get => _current;
+        private set
+        {
+            _current = value;
+            SnapshotAccountSecrets();
+        }
+    }
+    private CharacterProfile? _current;
+
+    // The loaded character's saved login names and passwords and its suicide
+    // password, still encrypted, labelled for the bug report's scrub. A copy taken
+    // on the thread that changes them (a load, a save, a mutation notice), so a
+    // hang report's scrub, built off the UI thread, never walks the profile's own
+    // dictionary while it is written.
+    public IReadOnlyList<(string Label, string Blob)> AccountSecrets => _accountSecrets;
+    private volatile (string Label, string Blob)[] _accountSecrets = [];
+
+    private void SnapshotAccountSecrets()
+    {
+        List<(string, string)> secrets = new();
+        if (_current is { } profile)
+        {
+            if (profile.BbsCredentials is { } logins)
+                foreach (BbsCredentials login in logins.Values)
+                {
+                    if (!string.IsNullOrEmpty(login.EncryptedUsername)) secrets.Add((BugReportScrub.LoginNameLabel, login.EncryptedUsername));
+                    if (!string.IsNullOrEmpty(login.EncryptedPassword)) secrets.Add((BugReportScrub.LoginPasswordLabel, login.EncryptedPassword));
+                }
+            if (!string.IsNullOrEmpty(profile.EncryptedSuicidePassword))
+                secrets.Add((BugReportScrub.SuicidePasswordLabel, profile.EncryptedSuicidePassword));
+        }
+        _accountSecrets = secrets.ToArray();
+    }
 
     // Decide whether a stored CharacterProfile.Name (the in-game character name — see
     // CurrentProfileName below for why that's distinct from the profile FILE label)
@@ -119,6 +153,7 @@ public sealed class ProfileService
     // Fire ProfileMutated for the current profile, if any.
     public void NotifyMutated()
     {
+        SnapshotAccountSecrets();
         if (Current is not null) ProfileMutated?.Invoke(Current);
     }
 
@@ -702,6 +737,8 @@ public sealed class ProfileService
     {
         if (Current is null) return;
         using PerformanceMonitor.Scope? timing = Performance?.Measure("profile save");
+        // A login or suicide password is saved straight after it is set.
+        SnapshotAccountSecrets();
 
         // The unnamed draft is never written. It used to be saved over the Global
         // default-profile file, the template every new character starts from, so

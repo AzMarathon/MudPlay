@@ -44,6 +44,9 @@ public partial class App : Application
                 DataContext = mainViewModel,
             };
             desktop.MainWindow = mainWindow;
+            // The start keeps the UI thread for seconds on a cold game-data load,
+            // before the window can answer: a freeze counts only from here.
+            mainWindow.Opened += (_, _) => AppServices.Current.Performance.ArmHangReports();
 
             // Every other window's title ends with the main window's own tail
             // ("<profile> — <bbs>:<realm>"), kept current as the profile or BBS changes.

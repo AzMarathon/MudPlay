@@ -846,8 +846,8 @@ How to keep it current:
 
 ### CrashReporterTests.cs
 - Covers: Services/CrashReporter.Build.
-- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks.
-- Why: crash reports must stay readable.
+- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks; the registered program log's last line reaches its file before the report is built.
+- Why: crash reports must stay readable, and the log they name must hold the lines before the crash.
 
 ### CureSpellIndexTests.cs
 - Covers: Game/GameData/CureSpellIndex.CuredFlags.
@@ -1527,6 +1527,13 @@ How to keep it current:
 - Covers: Game/Map/GuardDoorCommandResolver
 - Checks: ask commands that open a door on the guard's own room, with ability gates; other rooms/no opener/no name empty; Read answers each room as Resolve.
 - Why: the grove shadow guard door (Phoenix quest).
+
+### HangReportTests.cs
+- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking), Services/HangReport, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
+- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies.
+- Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18).
+- Named seam: PerformanceMonitor.ProbeHost and the internal constructor that takes it: the client's probe is a thread of its own pinging the Avalonia dispatcher and writing to the Desktop; the test gives it ManualTimers, a ManualClock, a ping queue it answers by hand, a folder of its own, its WriteAside / RunAside run at once or on a queue it holds (in the client, a writer thread and a thread per log line), and its ReadMemory / ReadPrivateBytes give figures the test moves (in the client, the GC's counters, Environment.WorkingSet and Process.PrivateMemorySize64).
+- Named seam: PerformanceMonitor.NoteWindowOpened / NoteWindowClosed / NoteWindowFocused, internal: the client calls them from Avalonia's window class handlers, which need real windows.
 
 ### HangupDeathArrivalRoomsTests.cs
 - Covers: Game/Recovery/HangupDeathArrivalRooms, GameDataCache.ActiveSetIsVanillaStock, RoomGraphManager.CouldBeTakenFor
@@ -2842,7 +2849,7 @@ How to keep it current:
 - Covers: Services/PerformanceMonitor
 - Checks: timings only while collecting; the per-minute summary (count, p50, p95, max) resets; stall lines and their summary; measured scopes are summarised.
 - Why: the performance log's content.
-- Named seam: PerformanceMonitor.CollectTo and its internal constructor: the real output is a file written from a watcher thread off the dispatcher.
+- Named seam: PerformanceMonitor.CollectTo and its internal constructor (no probe): the real output is a file, its stall lines written on the UI thread and its summaries on a thread the probe hands them to.
 
 ### PeriodicDamageRoomSpellsTests.cs
 - Covers: Services/RoomSpellDamageIndex, ViewModels/Settings/PeriodicDamageRoomSpellsSectionViewModel
@@ -2928,6 +2935,14 @@ How to keep it current:
 - Covers: Game/ProfileStateVerifier
 - Checks: a copied profile is verified by `stat` then `i`, or by the login refresh, throttled; nothing sent while busy or when not marked.
 - Why: copied profiles start unverified.
+
+### ProgramLogFileTests.cs
+- Covers: Services/ProgramLogFile, Services/LogEntryQueue
+- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path with its header if the failure lost it, and noted again only after a write succeeded; a failure doesn't carry into the next session's file; exit waits for a slow disk, cuts a retry wait short to write the tail, and gives up on a stuck disk at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; entries queued across a switch land in their own session's file; three loggers racing a toggled switch (bounded by counts) never start a session's file twice; the real file holds the header and entries.
+- Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line.
+- Named seam: ProgramLogFile's `open` constructor parameter (default opens the file for appending): stands in a disk that stalls or throws.
+- Named seam: ProgramLogFile's `retryDelay` constructor parameter (default 5 s): keeps the failure tests short, and makes a wait longer than the exit's bound.
+- Named seam: ProgramLogFile.WhenWrittenAsync: the writer is a background queue; the barrier is the only way to know a line reached the file.
 
 ### PromptParserTests.cs
 - Covers: Game/PromptParser
@@ -3076,10 +3091,12 @@ How to keep it current:
 - Why: report paradigm-20261004-024314.
 
 ### RecentLogFileTests.cs
-- Covers: Services/RecentLogFile
+- Covers: Services/RecentLogFile, Services/LogEntryQueue
 - Checks: two-file rolling time and size bounds; writes off the logging thread; paused under Auto-collect; prune across processes; a stalled disk drops the oldest and says so; failure notes; disk error ends the file.
 - Why: the always-on last-minutes log for hang reports.
 - Named seam: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
+- Named seam: RecentLogFile's `open` constructor parameter (default creates the file empty): stands in a disk that stalls, throws, or records the writing thread.
+- Named seam: RecentLogFile's `retryDelay` constructor parameter (default 5 s): keeps the unexpected-failure test short.
 
 ### RecoveryLookSweepTests.cs
 - Covers: Game/Map/RecoveryLookSweep

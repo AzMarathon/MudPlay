@@ -68,39 +68,74 @@ public static class BugReportBuilder
     public static BugReportScrub.Scrubber BuildScrubber(AppServices svc, bool compiled = true)
     {
         ArgumentNullException.ThrowIfNull(svc);
-        List<BugReportScrub.Secret> secrets = new();
-        int unreadable = 0;
+        List<(string Label, string? Blob)> saved = new();
         // Not guarded: a profile that can't be read means nothing can be masked,
         // and the caller must then not write a report at all.
         Models.Profile.CharacterProfile? profile = svc.Profile.Current;
         if (profile is not null)
         {
-            string? Open(string? blob)
-            {
-                if (string.IsNullOrEmpty(blob)) return null;
-                string? value = Guard<string?>(() => svc.Passwords.Unprotect(blob), null);
-                // Saved, but its key no longer opens it: it can't be compared
-                // with anything, so it can't be masked. The report says so.
-                if (string.IsNullOrEmpty(value)) unreadable++;
-                return value;
-            }
             if (profile.BbsCredentials is { } logins)
             {
                 foreach (Models.Profile.BbsCredentials login in logins.Values)
                 {
-                    secrets.Add(new(BugReportScrub.LoginNameLabel, Open(login.EncryptedUsername)));
-                    secrets.Add(new(BugReportScrub.LoginPasswordLabel, Open(login.EncryptedPassword)));
+                    saved.Add((BugReportScrub.LoginNameLabel, login.EncryptedUsername));
+                    saved.Add((BugReportScrub.LoginPasswordLabel, login.EncryptedPassword));
                 }
             }
-            secrets.Add(new(BugReportScrub.SuicidePasswordLabel, Open(profile.EncryptedSuicidePassword)));
+            saved.Add((BugReportScrub.SuicidePasswordLabel, profile.EncryptedSuicidePassword));
+        }
+        return BuildScrubber(svc, saved, compiled);
+    }
+
+    // As BuildScrubber, safe off the UI thread (a hang report's): from the copy
+    // of the saved details the profile service keeps, not the profile itself,
+    // which the UI thread may be writing. Throws, failing closed, as BuildScrubber does.
+    public static BugReportScrub.Scrubber BuildScrubberOffUiThread(AppServices svc)
+    {
+        ArgumentNullException.ThrowIfNull(svc);
+        return BuildScrubberOffUiThread(svc.Profile, svc.Passwords, svc.CorpseHandoff.SessionPasswords,
+            Guard<string?>(() => svc.PlayerStats.Name, null));
+    }
+
+    // The same from its parts: the profile service whose copy is read, the key
+    // that opens it, the corpse passwords seen, and the character's name in the game.
+    public static BugReportScrub.Scrubber BuildScrubberOffUiThread(ProfileService profile, PasswordProtector passwords,
+        IEnumerable<string> corpsePasswords, string? publicName)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return BuildScrubber(passwords, profile.AccountSecrets.Select(s => (s.Label, (string?)s.Blob)),
+            corpsePasswords, publicName, compiled: false);
+    }
+
+    private static BugReportScrub.Scrubber BuildScrubber(AppServices svc,
+        IEnumerable<(string Label, string? Blob)> saved, bool compiled) =>
+        BuildScrubber(svc.Passwords, saved, svc.CorpseHandoff.SessionPasswords,
+            Guard<string?>(() => svc.PlayerStats.Name, null), compiled);
+
+    private static BugReportScrub.Scrubber BuildScrubber(PasswordProtector passwords,
+        IEnumerable<(string Label, string? Blob)> saved, IEnumerable<string> corpsePasswords, string? publicName,
+        bool compiled)
+    {
+        ArgumentNullException.ThrowIfNull(passwords);
+        ArgumentNullException.ThrowIfNull(corpsePasswords);
+        List<BugReportScrub.Secret> secrets = new();
+        int unreadable = 0;
+        foreach ((string label, string? blob) in saved)
+        {
+            if (string.IsNullOrEmpty(blob)) { secrets.Add(new(label, null)); continue; }
+            string? value = Guard<string?>(() => passwords.Unprotect(blob), null);
+            // Saved, but its key no longer opens it: it can't be compared
+            // with anything, so it can't be masked. The report says so.
+            if (string.IsNullOrEmpty(value)) unreadable++;
+            secrets.Add(new(label, value));
         }
         // Other players' corpse passwords typed this session: held in memory only, so
         // they can be found wherever the terminal or a log caught them.
-        foreach (string password in svc.CorpseHandoff.SessionPasswords)
+        foreach (string password in corpsePasswords)
             secrets.Add(new(BugReportScrub.CorpsePasswordLabel, password));
         // Only the name the game itself shows is exempt: a profile can be called
         // anything, the login name included.
-        return BugReportScrub.Build(secrets, [Guard<string?>(() => svc.PlayerStats.Name, null)], unreadable, compiled);
+        return BugReportScrub.Build(secrets, [publicName], unreadable, compiled);
     }
 
     // A report that could not be made safe to post. Thrown instead of writing one.
@@ -3261,7 +3296,7 @@ public static class BugReportBuilder
 
     // ----- Helpers -------------------------------------------------------
 
-    private static string RealmLabel(RealmType realm) => realm switch
+    internal static string RealmLabel(RealmType realm) => realm switch
     {
         RealmType.ParaMud => "paradigm",
         _ => "stock",

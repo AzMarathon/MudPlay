@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.40**
+> **Version 3.185.2**
 > - A door the game data gives only a key for is bashed where your realm has answered it as a door; elsewhere a bash is only tried when nobody in the room could be hit by it and the realm has no PvP; a list of Stock's doors ships with the client and each realm learns the rest, two agreeing answers to overturn the list
 > - Game Data → Doors tab: see where each such door's kind comes from, set or reset it, or forget what the realm learned
 > - A keyed door is picked first when you have Picklocks, then bashed where it can be, then keyed
