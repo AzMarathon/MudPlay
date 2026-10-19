@@ -123,8 +123,7 @@ public sealed class MemoryUsageLog : IAsyncDisposable
             catch
             {
                 // Disk full / handle lost / permission flap. Stop sampling and stay
-                // silent — same rationale as ProgramLogFile: losing the trail is
-                // acceptable, wedging on it is not.
+                // silent: losing the trail is acceptable, wedging on it is not.
                 _broken = true;
                 _writer.Dispose();
                 _writer = null;

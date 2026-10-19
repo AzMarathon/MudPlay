@@ -1,5 +1,11 @@
 # Version history
 
+## 3.184.40
+
+- With Auto-collect logs on, a slow or locked disk no longer freezes the client on a log line: the program log file is written in the background
+- A stuck disk drops the oldest waiting lines and the file says how many; a failed write is noted once and retried
+- Lines still waiting reach the file before the client exits or a crash report names it
+
 ## 3.184.39
 
 - A failed or stuck chat / transaction log write can no longer freeze the client on a profile swap, Clear chatlog or a line-count change; it is logged instead

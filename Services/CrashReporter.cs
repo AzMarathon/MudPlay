@@ -107,6 +107,7 @@ public static class CrashReporter
     public static void Report(Exception? ex, string source)
     {
         if (Interlocked.Increment(ref _written) > MaxReports) return;
+        LetProgramLogLand();
         try
         {
             string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -121,6 +122,19 @@ public static class CrashReporter
             // The crash handler must never throw. If we can't even write the
             // report there is nothing further we can safely do — the process is
             // already going down.
+        }
+    }
+
+    // The program log is written by a background task: the report names the file
+    // to send, so the lines leading up to the crash go in first, for as long as
+    // ProgramLogFile.CrashDrainBound allows.
+    private static void LetProgramLogLand()
+    {
+        try { AppServices.CurrentOrNull?.ProgramLog.WaitWritten(ProgramLogFile.CrashDrainBound); }
+        catch
+        {
+            // The crash handler must never throw: the report goes without the
+            // last lines rather than not at all.
         }
     }
 

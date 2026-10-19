@@ -2923,6 +2923,13 @@ How to keep it current:
 - Checks: a copied profile is verified by `stat` then `i`, or by the login refresh, throttled; nothing sent while busy or when not marked.
 - Why: copied profiles start unverified.
 
+### ProgramLogFileTests.cs
+- Covers: Services/ProgramLogFile, Services/LogEntryQueue
+- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path, and noted again only after a write succeeded; exit waits for a slow disk but gives up on a stuck one at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; the real file holds the header and entries.
+- Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line.
+- Named seam: ProgramLogFile's `open` constructor parameter (default opens the file for appending): stands in a disk that stalls or throws.
+- Named seam: ProgramLogFile.WhenWrittenAsync: the writer is a background queue; the barrier is the only way to know a line reached the file.
+
 ### PromptParserTests.cs
 - Covers: Game/PromptParser
 - Checks: HP, MA and KAI parse; position; max high-water mark; stat-screen max is authoritative (no phantom MaxMa for no-mana classes); equipment delta; reset on profile swap; a gossip-quoted prompt is ignored.
@@ -3070,7 +3077,7 @@ How to keep it current:
 - Why: report paradigm-20261004-024314.
 
 ### RecentLogFileTests.cs
-- Covers: Services/RecentLogFile
+- Covers: Services/RecentLogFile, Services/LogEntryQueue
 - Checks: two-file rolling time and size bounds; writes off the logging thread; paused under Auto-collect; prune across processes; a stalled disk drops the oldest and says so; failure notes; disk error ends the file.
 - Why: the always-on last-minutes log for hang reports.
 - Named seam: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
