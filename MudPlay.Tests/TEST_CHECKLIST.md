@@ -1252,6 +1252,11 @@ How to keep it current:
 - Checks: which exit hints contribute carried-item requirements (item/ticket/teleport, multi-action held items); locked doors never do; Collect dedups.
 - Why: the planner and the blocked-route message must agree.
 
+### ExitTextConversationTests.cs
+- Covers: Game/ChatRouter's hold of a green social line until its server read settles it (HoldSocial, SettleHeldSocials, OpensRoomDisplay, the MoveLinesKeptOut count), with LineExtractor.ReadEnded and MessageRouter.EndRead, on a seeded router fed by a `ServerFeed`.
+- Checks: the reported exits' own lines (`1/2335` N, `1/2149` `borrow skiff` in green and in Stock's bright yellow, `1/1764` NW, `1/1765` SE, the pit both lit and dark), each written as Stock writes it ahead of the room display, never reach the conversation but still reach the line consumers; a follower's read (the leader's departure, then its own exit line) keeps both out; own socials followed by their prompt, by a typed-ahead echo, or by another room event still reach it; another player's social does even with a room display after it; gossip and say of the same words stay chat, after a held social.
+- Why: exit flavour text filled the Conversation window (user report 2026-10-19). The exit texts are Stock's map and message tables' own (GAME_MECHANICS "Exit messages and socials on the wire").
+
 ### ExperienceQueryHandlerTests.cs
 - Covers: Game/Remote/ExperienceQueryHandler (@exp/@level)
 - Checks: before a stat parse; to-next/unknown; rate/ETA/ready lines; rate abbreviation tiers; permission gate.
@@ -3496,7 +3501,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes (Line, Rows, Prompt, Coloured, Raw)
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 

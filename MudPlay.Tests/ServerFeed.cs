@@ -8,7 +8,8 @@ namespace MudPlay.Tests;
 // Server text into the client the way it arrives: bytes through a TerminalEmulator,
 // rows out of the LineExtractor on it. A component under test attaches to Lines, as
 // MainWindowViewModel attaches the live extractor; given a router, every row is also
-// dispatched through it, chat rows included, the way MainWindowViewModel wires them.
+// dispatched through it, chat rows included, and told the end of each read, the way
+// MainWindowViewModel wires them. Each call below is one server read.
 internal sealed class ServerFeed
 {
     // When the row being fed was sent; null stamps it with the clock.
@@ -23,6 +24,7 @@ internal sealed class ServerFeed
         if (router is null) return;
         Lines.LineEmitted += router.Dispatch;
         Lines.ChatLineEmitted += router.Dispatch;
+        Lines.ReadEnded += router.EndRead;
     }
 
     public TerminalEmulator Emulator { get; }

@@ -1178,6 +1178,7 @@ public partial class MainWindowViewModel : ObservableObject
         // lanes, and itself confines chat lines to the conversation.* patterns.
         Lines.LineEmitted     += line => AppServices.Current.Router.Dispatch(line);
         Lines.ChatLineEmitted += line => AppServices.Current.Router.Dispatch(line);
+        Lines.ReadEnded       += () => AppServices.Current.Router.EndRead();
         Lines.SlowLine        += LogSlowLine;
 
         // Reactive hazard-buff re-raise: a lapse-damage prompt (the desert's

@@ -45,6 +45,13 @@ public sealed partial class LineExtractor
     // (the MessageRouter feed that drives ChatRouter); everything else stays off it.
     public event Action<EmittedLine>? ChatLineEmitted;
 
+    // Fired once the emulator has taken in a whole server read, after every line it
+    // completed has been emitted. Lines of one read were sent together, so a reader
+    // that has to know what came straight after a line, and must not wait for the
+    // next read to find out, settles it here. A resize raises it too, which only
+    // settles such a line a little early.
+    public event Action? ReadEnded;
+
     // Holds the fragments the terminal wrapped at the right margin, awaiting the
     // row that ends the line. That row is stitched onto them so downstream
     // consumers (chat / trigger / combat pattern matchers) see the whole logical
@@ -68,6 +75,7 @@ public sealed partial class LineExtractor
         // visible buffer (a partial-screen of chat the user read but never
         // scrolled past).
         emulator.LineCompleted += OnLineCompleted;
+        emulator.ScreenUpdated += () => ReadEnded?.Invoke();
     }
 
     private void OnLineCompleted(ScrollbackBuffer.Row row)

@@ -130,7 +130,7 @@ public sealed class ChatRouter : IDisposable
             string? speaker  = SafeGroup(result, 0);
             string? directed = SafeGroup(result, 1);
             string  message  = SafeGroup(result, 2) ?? string.Empty;
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Local,
                 NullIfEmpty(speaker),
@@ -146,7 +146,7 @@ public sealed class ChatRouter : IDisposable
             string? target = SafeGroup(result, 0);
             string message = TryDequeueFresh(_pendingDirectedMessages, "directed say");
             _lastEnqueuedDirected = null;
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Local,
                 null,                       // us — renders as "You"
@@ -165,10 +165,11 @@ public sealed class ChatRouter : IDisposable
             PendingTelepath? sent = TakeTelepathConfirmed(recipient);
             _lastEnqueuedTelepath = null;
 
+            ReleaseHeldSocials();   // ahead of the flag, which speaks for this entry alone
             OutgoingTelepathWasUsers = sent is { UsersOwn: true };
             try
             {
-                EntryClassified?.Invoke(new ChatLogEntry(
+                Raise(new ChatLogEntry(
                     result.Line.Timestamp,
                     ChatChannel.TelepathOutgoing,
                     NullIfEmpty(recipient),
@@ -186,7 +187,7 @@ public sealed class ChatRouter : IDisposable
         // with where it came from in HeardFrom; empty for the other forms).
         _subs.Add(router.Subscribe(KnownPatterns.ConversationYell, result =>
         {
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Yell,
                 NullIfEmpty(SafeGroup(result, 0)),
@@ -208,7 +209,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.ConversationServerPvp, result =>
         {
             if (_isParadigmRealm is not null && !_isParadigmRealm()) return;
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.Server,
                 null,
@@ -220,35 +221,108 @@ public sealed class ChatRouter : IDisposable
         // telepath whose send was not seen going out still has its text when the
         // server's confirmation arrives.
         _router.LineDispatched += OnLineDispatched;
+        _router.ReadEnded += ReleaseHeldSocials;
     }
 
     private void OnLineDispatched(Terminal.LineExtractor.EmittedLine line)
     {
+        ActionEmoteClassifier.Kind social = SocialKind(line);
+        if (social == ActionEmoteClassifier.Kind.None) SettleHeldSocials(line);
         TrackAmbiguousReply(line.Text);
         TryCaptureShownTelepath(line.Text);
         TryCaptureDirectedSay(line.Text);
         TryCustomDisconnectLine(line);
-        TryActionEmote(line);
+        if (social != ActionEmoteClassifier.Kind.None) HoldSocial(line, social);
     }
 
-    // Capture a BBS action / emote — a full-green line whose head is an emote shape
-    // (own "You …", or "<room player> …") — into the conversation as a Social entry.
+    // A BBS action / emote — a full-green line whose head is an emote shape (own
+    // "You …", or "<room player> …") — goes to the conversation as a Social entry.
     // Colour is read off the line's attributes (still present here). The all-green
     // gate drops the label-only greens (Wealth: / Encumbrance: / stat rows) and the
     // non-green "You are carrying …"; the head + known-player gates drop the one
     // fully-green non-action line, "Obvious exits:". See ActionEmoteClassifier.
-    private void TryActionEmote(Terminal.LineExtractor.EmittedLine line)
+    private ActionEmoteClassifier.Kind SocialKind(Terminal.LineExtractor.EmittedLine line)
     {
-        if (string.IsNullOrEmpty(line.Text)) return;
-        if (!ActionEmoteClassifier.IsAllGreen(line)) return;
-        if (ActionEmoteClassifier.Classify(line.Text, IsKnownPlayer ?? (_ => false), out _)
-            == ActionEmoteClassifier.Kind.None)
-            return;
+        if (string.IsNullOrEmpty(line.Text) || !ActionEmoteClassifier.IsAllGreen(line))
+            return ActionEmoteClassifier.Kind.None;
+        return ActionEmoteClassifier.Classify(line.Text, IsKnownPlayer ?? (_ => false), out _);
+    }
 
+    // ----- Exit text of a move ---------
+    // An exit with a message of its own prints it, in the same green and the same
+    // "You <verb> …" / "<Name> <verb> …" shape as a social, in place of the plain
+    // move lines: `You hop in one of the skiffs, and row to Newhaven.` A social is
+    // told from it by what the same server read prints next (GAME_MECHANICS
+    // "Exit messages and socials on the wire"): the user's own social is followed
+    // by the prompt, the exit's own line by the room display of the room moved into.
+    // So a social line is held until the next line of its read, or the read's end,
+    // settles it. The engine moves a party leader's followers in the same pass as
+    // the leader, so a follower's read carries the leader's departure line, then its
+    // own exit line and room display: a held line of another player's ahead of our
+    // own exit line goes with it. A line of anyone else's whose read prints no own
+    // exit line is always a social.
+    private readonly List<ChatLogEntry> _heldSocials = new();
+    private bool _ownSocialHeld;
+
+    // Bug-report surface: lines kept out of the conversation as the exit text of a move.
+    public int MoveLinesKeptOut { get; private set; }
+
+    private void HoldSocial(Terminal.LineExtractor.EmittedLine line, ActionEmoteClassifier.Kind kind)
+    {
         // The full green sentence is self-contained (the actor is in the text), so
         // no speaker split — the row renders the whole line green under the say chip.
-        EntryClassified?.Invoke(new ChatLogEntry(
-            line.Timestamp, ChatChannel.Social, null, line.Text, line.Text));
+        _heldSocials.Add(new ChatLogEntry(line.Timestamp, ChatChannel.Social, null, line.Text, line.Text));
+        if (kind == ActionEmoteClassifier.Kind.Own) _ownSocialHeld = true;
+    }
+
+    private void SettleHeldSocials(Terminal.LineExtractor.EmittedLine next)
+    {
+        if (_heldSocials.Count == 0) return;
+        if (!_ownSocialHeld || next.IsPromptLine || !OpensRoomDisplay(next))
+        {
+            ReleaseHeldSocials();
+            return;
+        }
+        MoveLinesKeptOut += _heldSocials.Count;
+        foreach (ChatLogEntry kept in _heldSocials)
+            _log?.Debug("ChatRouter",
+                $"kept out of the conversation, the exit text of a move (the room display followed it): {kept.Message}");
+        _heldSocials.Clear();
+        _ownSocialHeld = false;
+    }
+
+    private void ReleaseHeldSocials()
+    {
+        if (_heldSocials.Count == 0) return;
+        ChatLogEntry[] released = _heldSocials.ToArray();
+        _heldSocials.Clear();
+        _ownSocialHeld = false;
+        foreach (ChatLogEntry entry in released) EntryClassified?.Invoke(entry);
+    }
+
+    // What a room display opens with: the room's title, or, when the room can't be
+    // seen, the one line printed instead of the whole display (a dark room's, or a
+    // blind player's).
+    private bool OpensRoomDisplay(Terminal.LineExtractor.EmittedLine line)
+    {
+        if (Map.RoomDisplayParser.IsLineDominantlyBrightCyan(line)) return true;
+        foreach (string id in RoomUnseenPatternIds)
+            if (_router.TryGetPattern(id, out IMessagePattern pattern) && pattern.TryMatch(line, out _))
+                return true;
+        return false;
+    }
+
+    private static readonly string[] RoomUnseenPatternIds =
+    {
+        KnownPatterns.RoomPitchBlack, KnownPatterns.RoomVeryDark, KnownPatterns.BlindMoveStarved,
+    };
+
+    // Every entry but a held social goes out through here, so a social held ahead of
+    // it keeps its place in the conversation.
+    private void Raise(ChatLogEntry entry)
+    {
+        ReleaseHeldSocials();
+        EntryClassified?.Invoke(entry);
     }
 
     // Match the active BBS's custom disconnect line against a freshly-emitted
@@ -269,7 +343,7 @@ public sealed class ChatRouter : IDisposable
         string captured = g.Success ? g.Value.Trim() : string.Empty;
         if (captured.Length == 0) return;
 
-        EntryClassified?.Invoke(new ChatLogEntry(
+        Raise(new ChatLogEntry(
             line.Timestamp,
             ChatChannel.RealmEvent,
             captured,
@@ -660,7 +734,7 @@ public sealed class ChatRouter : IDisposable
             string? speaker = SafeGroup(result, groupPlayer);
             string message  = groupMessage >= 0 ? SafeGroup(result, groupMessage) ?? string.Empty : string.Empty;
 
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 channel,
                 NullIfEmpty(speaker),
@@ -674,7 +748,7 @@ public sealed class ChatRouter : IDisposable
         _subs.Add(router.Subscribe(patternId, result =>
         {
             string? player = SafeGroup(result, 0);
-            EntryClassified?.Invoke(new ChatLogEntry(
+            Raise(new ChatLogEntry(
                 result.Line.Timestamp,
                 ChatChannel.RealmEvent,
                 NullIfEmpty(player),
@@ -693,6 +767,7 @@ public sealed class ChatRouter : IDisposable
         if (_disposed) return;
         _disposed = true;
         _router.LineDispatched -= OnLineDispatched;
+        _router.ReadEnded -= ReleaseHeldSocials;
         foreach (IDisposable sub in _subs) sub.Dispose();
         _subs.Clear();
     }

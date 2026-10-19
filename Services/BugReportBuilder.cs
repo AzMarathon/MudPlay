@@ -819,6 +819,10 @@ public static class BugReportBuilder
         // as not sent: "the player I asked wasn't counted" or "it counted the wrong one".
         Kv(sb, "Sent telepaths awaiting confirmation / dropped as not sent",
             $"{svc.Chat.PendingTelepathCount} / {svc.Chat.DroppedUnsentTelepaths}");
+        // A green line that reads as a social but was a move's exit text: "the
+        // conversation filled up with my moves", or a real social that went missing.
+        Kv(sb, "Green lines kept out of the conversation as a move's exit text",
+            svc.Chat.MoveLinesKeptOut.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
         // Party auto-train. "The party never went to train" / "we left someone
         // behind" hinges on each side's own report, what the leader heard, and why

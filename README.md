@@ -1,13 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.10**
-> - Data-loss fix: the in-app update no longer deletes the other files in the folder MudPlay runs from (it wiped a Downloads folder); it replaces only MudPlay's own files
-> - An update puts in only the downloaded release's own files and deletes nothing else; a download holding anything odd stops the update untouched
-> - A failed update puts back every file it changed from a backup in the temp folder, not beside the install
-> - A renamed copy (e.g. `MudPlay (1).exe`) now updates under its own name
-> - Leftovers of older versions are removed at startup by exact name only, each one logged
-> - Removing toolbar buttons narrows the window to fit the toolbar, but never so far that the terminal screen is cut off
+> **Version 3.185.11**
+> - An exit's own move text (the skiffs, the refuse pit) stays in the terminal instead of filling the Conversation window as an action
+> - Following a leader through such an exit keeps the leader's leaving line out too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

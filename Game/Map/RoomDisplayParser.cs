@@ -232,7 +232,7 @@ public sealed partial class RoomDisplayParser : IDisposable
         return null;
     }
 
-    private static bool IsLineDominantlyBrightCyan(LineExtractor.EmittedLine line)
+    internal static bool IsLineDominantlyBrightCyan(LineExtractor.EmittedLine line)
     {
         if (line.Attributes is null || line.Attributes.Length == 0) return false;
         int total = 0;
