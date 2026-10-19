@@ -13,8 +13,8 @@ namespace MudPlay.Game.Map;
 //   1) The openers to try, in order, come from DoorPolicy.OpeningOrder: a keyless
 //      door's preferred verb (bash, or pick with OtherSettings.PicklocksOverBash)
 //      then the other; a keyed door's pick first when the character has Picklocks,
-//      then the key if carried, then a bash, then the key not carried. A verb the
-//      character can't open it with is left out; nothing left fails at once.
+//      then a bash where one is allowed, then the key. A verb the character can't
+//      open it with is left out; nothing left fails at once.
 //   2) A plan that starts with a pick sends `open <dir>` first: a door only closed
 //      opens, and a locked one goes on to the pick.
 //   3) On BASH failure ("fails" line): no cap — the bash was chosen for a door this
@@ -99,8 +99,10 @@ public sealed class DoorOpenManager : IDisposable
     // (DoorOpenManager.IsUnpickable).
     private readonly HashSet<(RoomKey Room, Direction Dir)> _unpickable = new();
     // The same doors by the room each leads into, for the route filter, which sees an
-    // exit by where it goes.
+    // exit by where it goes. The route planner reads it from its worker thread, so
+    // every read and write holds _unpickableGate.
     private readonly HashSet<(RoomKey From, RoomKey To)> _unpickableInto = new();
+    private readonly object _unpickableGate = new();
 
     // The in-flight request's key fitted the lock and so spent a charge (the game
     // charges a use on "unlocked" and on "was not locked" alike): a last-charge line
@@ -108,21 +110,29 @@ public sealed class DoorOpenManager : IDisposable
     private bool _keyChargeSpent;
     // Told when the game shows the key gone: (key name, every copy). Unset → nobody.
     private Action<string, bool>? _keyLost;
-    // What is known of bare `(Key: N)` locks, and whether a word would name someone
-    // in the room the bash attack could swing at. Unset → a bare lock is never bashed
-    // unless the walker says it is known to bash.
+    // What is known of bare `(Key: N)` locks, whether a word would name someone in
+    // the room the bash attack could swing at, and whether the realm has PvP on.
+    // Unset → a bare lock is never bashed unless the walker says it is known to bash.
     private BareKeyLockBook? _bareLocks;
     private Func<string, bool>? _wordNamesSomeoneHere;
+    private Func<bool>? _pvpOn;
     // The in-flight request's door as a bare key lock: null when it is no bare lock,
     // or the room it is in isn't confirmed.
     private BareLockBash? _bareKind;
+    // The in-flight request is at a bare key lock, whether or not its room is
+    // confirmed: its bash is capped at the pick tries.
+    private bool _bareLock;
     // Whether this request may bash: the walker's word, or for a bare lock what is
     // known of it and, not known, whether a try is safe here.
     private bool _canBash;
-    // The bash under way is a try at a bare lock not known to be a door. Until the
-    // game answers it as a door it is never re-sent on a silent watchdog: silence
-    // could be the bash attack's fight.
+    // The bash under way is at a bare lock the game hasn't answered as a door on this
+    // realm. Until it does, the bash is never re-sent on a silent watchdog (silence
+    // could be the bash attack's fight), and the room is checked again before each
+    // send.
     private bool _bashIsTrial;
+    // The game's answer to this request already went into the realm's record: one
+    // request is one occasion, however many bashes it takes.
+    private bool _learnedThisRequest;
     // Whether a stat screen has been read, the same test the movement filter's door
     // providers use. Unread, a door with no viable verb is not the door winning.
     private readonly Func<bool> _statsRead;
@@ -243,11 +253,9 @@ public sealed class DoorOpenManager : IDisposable
     // Queue a door-open request. The walker normalises direction to short
     // form ("n" / "ne" / "u") before calling. The callback fires exactly
     // once on terminal state. keyItemId is 0 for plain doors; non-zero
-    // indexes the door's key in ItemNameStore. When the door is keyed and
-    // has a stat alternative, the manager tries bash/pick first to save
-    // the key's limited charges; only falls back to the single-shot
-    // use <keyName> <dir> + open <dir> when bash/pick are unviable or
-    // exhaust.
+    // indexes the door's key in ItemNameStore. The openers are tried in
+    // DoorPolicy.OpeningOrder's order (the decision matrix above); a key is
+    // used single-shot, `use <keyName> <dir>` then `open <dir>`.
     public void Enqueue(
         Direction direction,
         int statRequirement,
@@ -302,7 +310,9 @@ public sealed class DoorOpenManager : IDisposable
         _plan.Clear();
         _keyChargeSpent = false;
         _bareKind = null;
+        _bareLock = false;
         _bashIsTrial = false;
+        _learnedThisRequest = false;
         _log?.Info("Door", "Door flow stopped — queue drained.");
     }
 
@@ -317,68 +327,115 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
         _keyChargeSpent = false;
+        _learnedThisRequest = false;
         DecideBareLockBash();
         StartChosenVerb();
     }
 
     // The door's side was found to have no lock to pick this session.
-    public bool IsUnpickable(RoomKey from, RoomKey to) => _unpickableInto.Contains((from, to));
+    public bool IsUnpickable(RoomKey from, RoomKey to)
+    {
+        lock (_unpickableGate) return _unpickableInto.Contains((from, to));
+    }
 
     // A new session: what a board answered last time is no longer assumed.
     public void ForgetSession()
     {
         _unpickable.Clear();
-        _unpickableInto.Clear();
+        lock (_unpickableGate) _unpickableInto.Clear();
     }
 
     // A bare `(Key: N)` lock is bashed where it is known to be a door or gate, never
-    // where it is known to be a key exit, and otherwise tried only when nothing in
-    // the room answers to the direction word: at a key exit the bash is the bash
-    // attack, on whoever the word names (GAME_MECHANICS "Locked doors — picking,
-    // opening and bashing"). Report paradigm-20261018-192819; user, 2026-10-18.
+    // where it is known to be a key exit. Anywhere the game hasn't yet answered a bash
+    // as a door on this realm (a side the seed alone calls a door, or one not known),
+    // the bash is a try: at a key exit it is the bash attack, on whoever the word
+    // names (GAME_MECHANICS "Locked doors — picking, opening and bashing"), so it goes
+    // out only when nothing in the room answers to the direction word and the realm
+    // has no PvP, where a player can walk in between the look and the bash. Report
+    // paradigm-20261018-192819; user, 2026-10-18.
     private void DecideBareLockBash()
     {
         _bashIsTrial = false;
         _bareKind = null;
+        _bareLock = false;
         if (_current is not { } cur) return;
         _canBash = cur.CanBash;
-        if (_doorRoom is not { } room || _bareLocks?.KindAt(room, cur.Direction) is not { } kind) return;
-        _bareKind = kind;
-        string side = BareKeyLockBook.FormatSide(room, cur.Direction);
-        string word = cur.DirectionShort;
-        switch (kind)
+        if (_bareLocks is null) return;
+        string side;
+        bool answeredAsDoor;
+        if (_doorRoom is { } room)
         {
-            case BareLockBash.Bashable:
-                _canBash = true;
-                BareLockDecision = $"{side}: known to bash (a door or gate)";
-                break;
-            case BareLockBash.NotBashable:
+            if (_bareLocks.KindAt(room, cur.Direction) is not { } kind) return;
+            _bareKind = kind;
+            _bareLock = true;
+            side = BareKeyLockBook.FormatSide(room, cur.Direction);
+            if (kind == BareLockBash.NotBashable)
+            {
                 _canBash = false;
                 BareLockDecision = $"{side}: known not to bash (a key exit); key or pick";
-                break;
-            default:
-                bool named = _wordNamesSomeoneHere?.Invoke(word) ?? true;
-                _canBash = !named;
-                _bashIsTrial = !named;
-                BareLockDecision = named
-                    ? $"{side}: not known whether it bashes; not tried, since 'bash {word}' could be taken for someone here"
-                    : $"{side}: not known whether it bashes; a bash is tried (nobody here answers to '{word}')";
-                break;
+                _log?.Info("Door", $"bare key lock {BareLockDecision}.");
+                return;
+            }
+            answeredAsDoor = _bareLocks.AnsweredAsDoorHere(room, cur.Direction);
+        }
+        // The room isn't confirmed, so the book can't be asked: a request shaped like
+        // a bare lock's (a key, the one-pick lock, a bash the walker read off its side)
+        // is still never bashed on trust.
+        else if (cur.KeyItemId > 0 && cur.StatRequirement == DoorPolicy.BareKeyLockPickRequirement && cur.CanBash)
+        {
+            _bareLock = true;
+            side = $"(Key: {cur.KeyItemId}) {cur.DirectionShort}, room not confirmed";
+            answeredAsDoor = false;
+        }
+        else return;
+
+        if (answeredAsDoor)
+        {
+            _canBash = true;
+            BareLockDecision = $"{side}: known to bash (answered as a door on this realm)";
+        }
+        else
+        {
+            string? unsafeWhy = TrialBashUnsafe(cur);
+            _canBash = unsafeWhy is null;
+            _bashIsTrial = unsafeWhy is null;
+            string known = _bareKind == BareLockBash.Bashable
+                ? "the seed calls it a door, not yet answered as one here"
+                : "not known whether it bashes";
+            BareLockDecision = unsafeWhy is null
+                ? $"{side}: {known}; a bash is tried (nobody here answers to '{cur.DirectionShort}')"
+                : $"{side}: {known}; not tried, {unsafeWhy}";
         }
         _log?.Info("Door", $"bare key lock {BareLockDecision}.");
     }
 
-    // The game answered a bash at a bare lock: as a door (a bash or a miss), or as no
-    // door at all (the bash attack's refusals and "no effect").
+    // Why a bash at a bare lock not answered as a door can't be tried now, or null
+    // when it can.
+    private string? TrialBashUnsafe(DoorRequest cur)
+    {
+        if (_pvpOn?.Invoke() == true) return "since the realm has PvP on and a player could walk in before it lands";
+        if (_wordNamesSomeoneHere?.Invoke(cur.DirectionShort) ?? true)
+            return $"since 'bash {cur.DirectionShort}' could be taken for someone here";
+        return null;
+    }
+
+    // The game answered a bash at a bare lock: as a door (a bash or a miss), or as a
+    // key exit ("no effect"). The request goes by it either way; the realm's record
+    // takes it only while the tracker is still confirmed in the door's room, and once
+    // per request.
     private void LearnBareLock(bool bashable, string because)
     {
-        if (_current is not { } cur || _bareKind is null || _doorRoom is not { } room) return;
-        _bashIsTrial = false;
-        _bareKind = bashable ? BareLockBash.Bashable : BareLockBash.NotBashable;
-        if (!bashable) _canBash = false;
-        if (_bareLocks?.Learn(room, cur.Direction, bashable) != true) return;
-        _log?.Info("Door", $"learned that {BareKeyLockBook.FormatSide(room, cur.Direction)} "
-            + (bashable ? "is a door that bashes" : "is a key exit that doesn't bash") + $" ({because}).");
+        if (_current is not { } cur || !_bareLock) return;
+        if (bashable) _bashIsTrial = false;
+        else _canBash = false;
+        if (_bareKind is null || _doorRoom is not { } room) return;
+        if (_learnedThisRequest || _confirmedRoom?.Invoke() != room) return;
+        _learnedThisRequest = true;
+        bool changed = _bareLocks?.Learn(room, cur.Direction, bashable) == true;
+        _bareKind = _bareLocks?.Lookup(room, cur.Direction) ?? _bareKind;
+        _log?.Info("Door", $"{BareKeyLockBook.FormatSide(room, cur.Direction)} answered as "
+            + (bashable ? "a door" : "a key exit") + $" ({because}): now {_bareLocks?.Describe(room, cur.Direction)}"
+            + (changed ? "" : ", unchanged"));
     }
 
     private void StartChosenVerb()
@@ -390,10 +447,13 @@ public sealed class DoorOpenManager : IDisposable
         int picks = _doorRoom is { } room && _unpickable.Contains((room, cur.Direction)) ? 0 : _stats.Picklocks;
         foreach (DoorOpener step in DoorPolicy.OpeningOrder(
                      cur.StatRequirement, _canBash, _stats.Strength, picks,
-                     keyed, keyed && _holdsKeyItem(cur.KeyItemId), _picklocksOverBashProvider(),
+                     keyed, _picklocksOverBashProvider(),
                      _maxBashStrengthProvider()))
             _plan.Enqueue(step);
-        _keyFirst = _plan.TryPeek(out DoorOpener first) && first == DoorOpener.Key;
+        // A key first that the character carries, and the game says isn't there, is a
+        // walk to tell the user about; one not carried is the door left closed.
+        _keyFirst = _plan.TryPeek(out DoorOpener first) && first == DoorOpener.Key
+            && keyed && _holdsKeyItem(cur.KeyItemId);
         if (_plan.Count == 0)
         {
             // Before a stat screen is read the numbers are 0, so any numbered door has
@@ -519,6 +579,17 @@ public sealed class DoorOpenManager : IDisposable
             return;
         }
 
+        // The room may have changed since the bash was chosen: whoever walked in could
+        // be the bash attack's target.
+        if (_verb == "bash" && _bashIsTrial && TrialBashUnsafe(cur) is { } unsafeWhy)
+        {
+            _canBash = false;
+            _bashIsTrial = false;
+            BareLockDecision = $"{BareLockDecision}; then dropped, {unsafeWhy}";
+            NextStep($"bash {cur.DirectionShort} not sent, {unsafeWhy}");
+            return;
+        }
+
         _verbAttempts++;
         _wire.Send($"{_verb} {cur.DirectionShort}");
         if (_verb == "bash")
@@ -553,10 +624,12 @@ public sealed class DoorOpenManager : IDisposable
     // wordNamesSomeoneHere: whether a word could be taken by the bash attack for
     // someone in the room (BashTargetWord), true too while the room's roster isn't
     // known. Bound after construction: the room's roster is built later.
-    public void SetBareLockBook(BareKeyLockBook book, Func<string, bool> wordNamesSomeoneHere)
+    // pvpOn: whether the active realm has PvP on.
+    public void SetBareLockBook(BareKeyLockBook book, Func<string, bool> wordNamesSomeoneHere, Func<bool>? pvpOn = null)
     {
         _bareLocks = book;
         _wordNamesSomeoneHere = wordNamesSomeoneHere;
+        _pvpOn = pvpOn;
     }
 
     // The rest hold changed: a bash or pick that was waiting on it goes out once
@@ -677,7 +750,7 @@ public sealed class DoorOpenManager : IDisposable
         LearnBareLock(bashable: true, "the bash missed, as at a door");
         // A bare key lock's bash is capped at the pick tries: it bashes at Strength
         // only, and a side that won't give is gone round instead (user, 2026-10-18).
-        if (_bareKind is not null && _verbAttempts >= _maxPickProvider())
+        if (_bareLock && _verbAttempts >= _maxPickProvider())
         {
             NextStep($"bash missed {_verbAttempts} times at a bare key lock");
             return;
@@ -690,14 +763,13 @@ public sealed class DoorOpenManager : IDisposable
 
     // The server refused the bash outright (no weapon in hand / no bash ability).
     // Re-bashing can only get the same answer — and with no pattern for it the
-    // watchdog used to re-bash forever — so try pick, then the key.
+    // watchdog used to re-bash forever — so the plan goes on. The answer is about the
+    // character, not the exit, so a bare lock learns nothing from it.
     private void OnBashRefused(MatchResult m)
     {
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
-        // At a door the bash never asks for a weapon or the skill: these come only
-        // from the bash attack, so a bare lock that draws them is a key exit.
-        LearnBareLock(bashable: false, $"'{m.Text.Trim()}'");
+        _bashIsTrial = false;
         NextStep($"can't bash ('{m.Text.Trim()}')");
     }
 
@@ -726,7 +798,8 @@ public sealed class DoorOpenManager : IDisposable
         }
         // A bare lock's bash that had no effect, in the room confirmed to hold it: the
         // bash attack found nobody, so the side is a key exit, opened by key or pick.
-        if (_state == DoorState.WaitingBash && _bareKind is not null)
+        if (_state == DoorState.WaitingBash && _bareKind is not null && _doorRoom is { } bareRoom
+            && _confirmedRoom?.Invoke() == bareRoom)
         {
             LearnBareLock(bashable: false, "'Your command had no effect.'");
             NextStep($"'{awaited}' had no effect: a key exit, not a door to bash");
@@ -740,7 +813,8 @@ public sealed class DoorOpenManager : IDisposable
             && _confirmedRoom?.Invoke() == room)
         {
             _unpickable.Add((room, cur.Direction));
-            if (_bareLocks?.ExitAt(room, cur.Direction) is { } exit) _unpickableInto.Add((room, exit.Target));
+            if (_bareLocks?.ExitAt(room, cur.Direction) is { } exit)
+                lock (_unpickableGate) _unpickableInto.Add((room, exit.Target));
             _log?.Info("Door", $"no lock to pick at {BareKeyLockBook.FormatSide(room, cur.Direction)} — left out of picks this session.");
             NextStep($"'{awaited}' had no effect");
             return;
@@ -1026,7 +1100,9 @@ public sealed class DoorOpenManager : IDisposable
         _openFirstPending = false;
         _keyChargeSpent = false;
         _bareKind = null;
+        _bareLock = false;
         _bashIsTrial = false;
+        _learnedThisRequest = false;
     }
 
     // ----- helpers ----------------------------------------------------

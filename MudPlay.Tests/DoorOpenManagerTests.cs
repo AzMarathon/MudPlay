@@ -574,10 +574,11 @@ public sealed class DoorOpenManagerTests
     // ----- keyed-door FSM (commit 3) --------------------------------
 
     [Fact]
-    public void KeyedDoor_WithPicklocks_PicksFirst_ThenTheKey_BeforeABash()
+    public void KeyedDoor_WithPicklocks_PicksFirst_ThenBashes_BeforeTheKey()
     {
-        // Client policy (user, 2026-10-18): with Picklocks, a keyed door is picked
-        // first, then its key, then bashed. The bash setting doesn't change it.
+        // Client policy (user's rulings, 2026-10-18): with Picklocks, a keyed door is
+        // picked first, then bashed where a bash is allowed, and its key is the last
+        // resort. The bash setting doesn't change it.
         using Harness h = new() { MaxPick = 1 };
         h.Stats.Strength = 100;
         DoorOpenResult? result = null;
@@ -587,11 +588,24 @@ public sealed class DoorOpenManagerTests
         h.Line("The door is locked.");
         Assert.Equal("pick w", h.LastSent);
         h.Line("Your skill fails you this time.");
-        Assert.Equal("use black star key w", h.LastSent);
-        h.Line("The black star key doesn't seem to fit that lock.");
         Assert.Equal("bash w", h.LastSent);
+        Assert.DoesNotContain(h.AllSent, c => c.StartsWith("use ", StringComparison.Ordinal));
         h.Line("You bashed the door open.");
         Assert.IsType<DoorOpenResult.Opened>(result);
+    }
+
+    // A keyed door that can't be bashed: the picks, then the key.
+    [Fact]
+    public void KeyedDoor_WithPicklocks_NoBash_PicksThenTheKey()
+    {
+        using Harness h = new() { MaxPick = 1 };
+        h.Stats.Strength = 100;
+        h.Mgr.Enqueue(Direction.W, 50, canBash: false, keyItemId: 172, "walker", _ => { });
+
+        h.Line("The door is locked.");
+        Assert.Equal("pick w", h.LastSent);
+        h.Line("Your skill fails you this time.");
+        Assert.Equal("use black star key w", h.LastSent);
     }
 
     [Fact]

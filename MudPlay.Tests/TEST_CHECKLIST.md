@@ -846,8 +846,8 @@ How to keep it current:
 
 ### CrashReporterTests.cs
 - Covers: Services/CrashReporter.Build.
-- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks.
-- Why: crash reports must stay readable.
+- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks; the registered program log's last line reaches its file before the report is built.
+- Why: crash reports must stay readable, and the log they name must hold the lines before the crash.
 
 ### CureSpellIndexTests.cs
 - Covers: Game/GameData/CureSpellIndex.CuredFlags.
@@ -1041,7 +1041,7 @@ How to keep it current:
 
 ### DoorOpenManagerTests.cs
 - Covers: Game/Map/DoorOpenManager
-- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; the opening order (a keyless door's preferred verb then the other; a keyed door picked first with Picklocks, then keyed, then bashed) with the `open` sent ahead of a first pick; "no effect"/left-room ends as NotHere; queue order.
+- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; the opening order (a keyless door's preferred verb then the other; a keyed door picked first with Picklocks, then bashed where it can be, then keyed) with the `open` sent ahead of a first pick; "no effect"/left-room ends as NotHere; queue order.
 - Why: reports stock-20260730-182812, paradigm-20260924-053941, paradigm-20261018-192819; doors that hung the walker.
 
 ### DoorPolicyTests.cs
@@ -1533,6 +1533,13 @@ How to keep it current:
 - Checks: ask commands that open a door on the guard's own room, with ability gates; other rooms/no opener/no name empty; Read answers each room as Resolve.
 - Why: the grove shadow guard door (Phoenix quest).
 
+### HangReportTests.cs
+- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking), Services/HangReport, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
+- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies.
+- Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18).
+- Named seam: PerformanceMonitor.ProbeHost and the internal constructor that takes it: the client's probe is a thread of its own pinging the Avalonia dispatcher and writing to the Desktop; the test gives it ManualTimers, a ManualClock, a ping queue it answers by hand, a folder of its own, its WriteAside / RunAside run at once or on a queue it holds (in the client, a writer thread and a thread per log line), and its ReadMemory / ReadPrivateBytes give figures the test moves (in the client, the GC's counters, Environment.WorkingSet and Process.PrivateMemorySize64).
+- Named seam: PerformanceMonitor.NoteWindowOpened / NoteWindowClosed / NoteWindowFocused, internal: the client calls them from Avalonia's window class handlers, which need real windows.
+
 ### HangupDeathArrivalRoomsTests.cs
 - Covers: Game/Recovery/HangupDeathArrivalRooms, GameDataCache.ActiveSetIsVanillaStock, RoomGraphManager.CouldBeTakenFor
 - Checks: where a room's dead arrive (Stock list, Paradigm Albion, learned rooms) and whether the first room back says a death, per list trust; look-alike arrival rooms.
@@ -1815,9 +1822,10 @@ How to keep it current:
 - Why: two clients crashing on the same boss-timers.json
 
 ### KeyDoorRulesTests.cs
-- Covers: Game/Map/DoorOpenManager, DoorPolicy (Openers, PlannedOpeners, OpeningOrder), BareKeyLockBook, BashTargetWord, RoomGraphManager.ApplyBareLockKinds, MovementRefusalDetector.ShutDoorBonked, Services/BareKeyLockStore (the shipped seed, extracted by AppPaths.ExtractEmbeddedSeeds, and a realm's file), Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, with AutoWalkManager, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
-- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: at 1/1790 with Strength 111, no Picklocks and no key the walker bashes west; with the used-up key still listed, `You do not have green metal key.` takes it off the ring and the handler goes on to the bash. Stock's `You don't have green metal key w.` is read; a "have" line naming another item, a longer key name, or quoted in chat isn't. A key's last-charge line takes the copy used off the ring, only after a key of ours fitted. The shipped seed knows Stock's 21 bare sides (10 bashable); a seeded key exit is never bashed and is keyed; Thrag's door from inside is bashed. An unknown bare lock is bashed when nobody in the room answers to the direction word and learned a door on a bash or a miss, learned a key exit on `Your command had no effect.` or `You need a weapon to bash with!` (then keyed), and not bashed when the roster names someone the word matches. The realm's record is per realm and kept on disk. A refused move into a bare lock is learned by its wording, only with our move in flight. Keyed doors: with Picklocks an `open`, then picks, then the key; a door only shut opens with no pick; no Picklocks, the key first. A pick answered "no effect" is left out for the session and the route keeps off the door. The route filter: a door or unknown lock passable by bash, a key exit shut without key or a fair pick, the key opening everything; with no stat screen a key exit stays shut.
-- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, target-match, key, refusal and relock rules read from Stock's engine; the user's rulings of 2026-10-18 on bashing unknown doors, the seed, and pick-before-key) and "Item charges (`Uses` / `UseCount`)".
+- Covers: Game/Map/DoorOpenManager, DoorPolicy (Openers, PlannedOpeners, OpeningOrder), BareKeyLockBook, BashTargetWord.NamesSomeoneIn over a real Game/Combat/RoomEntityClassifier, RoomGraphManager.ApplyBareLockKinds, MovementRefusalDetector.ShutDoorBonked with RoomTracker.CardinalInFlight, Services/BareKeyLockStore (the shipped seed, extracted by AppPaths.ExtractEmbeddedSeeds, and a realm's file shared by two clients), Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, ViewModels/GameData/Tables/DoorsSectionViewModel and DoorsRowInfo, with AutoWalkManager and LoopRunner, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
+- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: at 1/1790 with Strength 111, no Picklocks and no key the walker bashes west, and the answer makes it a door on the realm; with no Picklocks a bash goes ahead of a carried key; `You do not have <key>.` takes a held key off the ring and the walk fails naming it. Stock's `You don't have green metal key w.` is read; a "have" line naming another item, a longer key name, or quoted in chat isn't. A key's last-charge line takes the copy used off the ring, only after a key of ours fitted. The shipped seed knows Stock's 21 bare sides (10 bashable); a seeded key exit is never bashed and is keyed; Thrag's door from inside is bashed. A side the seed calls a door is still a try until the realm answers it as one. A try is bashed only with a whole roster that the direction word names nobody in, on a realm with PvP off, and checked again before it goes out (someone who came in during the picks stops it); it is capped at the pick tries, and so is a bare-shaped request whose room isn't confirmed. A bash or a miss counts once per request as a door, `Your command had no effect.` as a key exit, a weapon or skill refusal for nothing, and an answer once the tracker is unsure not at all; one answer never overturns the seed, a second does. A loop at a bare lock it can't try, with no key or Picklocks, goes round it instead of retrying. A refused move into a bare lock is learned by its wording only for our one move in flight (not a drag, not two typed ahead). The realm's record is per realm, kept with its last-answered time; a user's kind beats the seed and answers and is kept; reset to the seed and forget-all reach the file; two clients' changes are both kept. The Doors tab lists every bare lock with its kind and source, its edits reach the book and the map, and "Forget learned…" asks first. Keyed doors: with Picklocks an `open`, then picks, then the key when no bash; a door only shut opens with no pick; no Picklocks and no bash, the key. A pick answered "no effect" is left out for the session and the route keeps off the door. The route filter: a door or unknown lock passable by bash, a key exit shut without key or a fair pick, the key opening everything; with no stat screen a key exit stays shut.
+- Named seam: `DoorsSectionViewModel.Apply` (the dialog's edit made to a side) is public so the edit can be driven without opening the dialog window.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, target-match, key and relock rules read from Stock's engine; the user's rulings of 2026-10-18 on bashing unknown doors, the seed, the Doors tab and the opener order; the no-trial-on-PvP and two-answer Client policies) and "Refused ("bonked") moves", and "Item charges (`Uses` / `UseCount`)".
 
 ### KeybindEditDialogViewModelTests.cs
 - Covers: ViewModels/Keybind/KeybindEditDialogViewModel
@@ -2846,7 +2854,7 @@ How to keep it current:
 - Covers: Services/PerformanceMonitor
 - Checks: timings only while collecting; the per-minute summary (count, p50, p95, max) resets; stall lines and their summary; measured scopes are summarised.
 - Why: the performance log's content.
-- Named seam: PerformanceMonitor.CollectTo and its internal constructor: the real output is a file written from a watcher thread off the dispatcher.
+- Named seam: PerformanceMonitor.CollectTo and its internal constructor (no probe): the real output is a file, its stall lines written on the UI thread and its summaries on a thread the probe hands them to.
 
 ### PeriodicDamageRoomSpellsTests.cs
 - Covers: Services/RoomSpellDamageIndex, ViewModels/Settings/PeriodicDamageRoomSpellsSectionViewModel
@@ -2932,6 +2940,14 @@ How to keep it current:
 - Covers: Game/ProfileStateVerifier
 - Checks: a copied profile is verified by `stat` then `i`, or by the login refresh, throttled; nothing sent while busy or when not marked.
 - Why: copied profiles start unverified.
+
+### ProgramLogFileTests.cs
+- Covers: Services/ProgramLogFile, Services/LogEntryQueue
+- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path with its header if the failure lost it, and noted again only after a write succeeded; a failure doesn't carry into the next session's file; exit waits for a slow disk, cuts a retry wait short to write the tail, and gives up on a stuck disk at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; entries queued across a switch land in their own session's file; three loggers racing a toggled switch (bounded by counts) never start a session's file twice; the real file holds the header and entries.
+- Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line.
+- Named seam: ProgramLogFile's `open` constructor parameter (default opens the file for appending): stands in a disk that stalls or throws.
+- Named seam: ProgramLogFile's `retryDelay` constructor parameter (default 5 s): keeps the failure tests short, and makes a wait longer than the exit's bound.
+- Named seam: ProgramLogFile.WhenWrittenAsync: the writer is a background queue; the barrier is the only way to know a line reached the file.
 
 ### PromptParserTests.cs
 - Covers: Game/PromptParser
@@ -3080,10 +3096,12 @@ How to keep it current:
 - Why: report paradigm-20261004-024314.
 
 ### RecentLogFileTests.cs
-- Covers: Services/RecentLogFile
+- Covers: Services/RecentLogFile, Services/LogEntryQueue
 - Checks: two-file rolling time and size bounds; writes off the logging thread; paused under Auto-collect; prune across processes; a stalled disk drops the oldest and says so; failure notes; disk error ends the file.
 - Why: the always-on last-minutes log for hang reports.
 - Named seam: RecentLogFile.WhenWrittenAsync: the writer is an async channel; the barrier is the only way to know a line reached the file.
+- Named seam: RecentLogFile's `open` constructor parameter (default creates the file empty): stands in a disk that stalls, throws, or records the writing thread.
+- Named seam: RecentLogFile's `retryDelay` constructor parameter (default 5 s): keeps the unexpected-failure test short.
 
 ### RecoveryLookSweepTests.cs
 - Covers: Game/Map/RecoveryLookSweep

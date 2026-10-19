@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData.Edit"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="300"
+        x:Class="MudPlay.Views.GameData.Edit.DoorEditDialog"
+        x:DataType="vm:DoorEditDialogViewModel"
+        Title="{Binding Title}"
+        Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.MutedHint">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <StackPanel Spacing="8">
+            <TextBlock Text="{Binding SideText}"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       TextWrapping="Wrap"/>
+            <TextBlock Classes="MutedHint" Text="{Binding SeedText}"/>
+            <TextBlock Classes="MutedHint" Text="{Binding RecordText}"/>
+
+            <StackPanel Spacing="4" Margin="0,6,0,0">
+                <RadioButton GroupName="DoorKind" IsChecked="{Binding IsDoor, Mode=TwoWay}"
+                             Content="Door or gate — bashes"
+                             ToolTip.Tip="The client may bash it, at Strength in 100 a try."/>
+                <RadioButton GroupName="DoorKind" IsChecked="{Binding IsKeyExit, Mode=TwoWay}"
+                             Content="Key exit — never bashed"
+                             ToolTip.Tip="Only its key or a pick opens it; bash there would be an attack."/>
+                <RadioButton GroupName="DoorKind" IsChecked="{Binding IsUnknown, Mode=TwoWay}"
+                             Content="Not known"
+                             ToolTip.Tip="A bash is tried only when nobody in the room answers to the direction word and the realm has no PvP."/>
+            </StackPanel>
+            <TextBlock Classes="MutedHint"
+                       Text="Your setting beats the seed and every answer the game gives, until you reset the side."/>
+
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
+                <Button Grid.Column="0" Content="Reset to seed" Command="{Binding ResetToSeedCommand}"
+                        ToolTip.Tip="Forget this side's answers and your setting: the seed alone says again."/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Save" Command="{Binding SaveCommand}" IsDefault="True" MinWidth="80"/>
+                    <Button Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Border>
+</Window>

@@ -7,6 +7,18 @@ namespace MudPlay.Game.Map;
 // target match). So `bash w` there swings at a "large dire wolf".
 public static class BashTargetWord
 {
+    // Whether `bash <word>` could swing at someone in the room the classifier has
+    // read: anyone its roster lists whose name answers to the word. A roster not
+    // known to be whole could hide someone, so it answers yes.
+    public static bool NamesSomeoneIn(Combat.RoomEntityClassifier room, string word)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+        if (!room.RosterIsWhole || room.Current is not { } here) return true;
+        foreach (Combat.RoomEntity e in here.Entities)
+            if (Names(word, e.RawName) || Names(word, e.ResolvedName)) return true;
+        return false;
+    }
+
     public static bool Names(string word, string shownName)
     {
         if (string.IsNullOrWhiteSpace(word) || string.IsNullOrWhiteSpace(shownName)) return false;

@@ -934,7 +934,12 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         return v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : 0;
     }
 
-    private void OnStatsChanged(object? sender, PropertyChangedEventArgs e) => Refresh();
+    private void OnStatsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Character Info refresh on a stat change");
+        Refresh();
+    }
+
     // An `i` dump (or incremental coin/item line) landed — refold gear into
     // derived combat and re-pull wealth + the full carry list.
     // Coalesced — see _inventoryRefreshDebounce. A gear swap's per-confirmation change

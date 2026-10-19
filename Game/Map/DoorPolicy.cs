@@ -74,15 +74,14 @@ public static class DoorPolicy
     // What the door handler tries, in order. The one place the order is set.
     //   - A keyless door: the preferred verb (bash, or pick with Picklocks-over-bash
     //     on), then the other one.
-    //   - A keyed door — Client policy (user, 2026-10-18): "the client should try
-    //     picking first, if the user has picklocks, otherwise no." With Picklocks a
-    //     pick goes first, whatever the odds and whether or not the key is carried
-    //     (up to the pick-try cap); then the key, when carried; then a bash; then the
-    //     key not carried, as the last resort (a floor grab, then `use`).
+    //   - A keyed door — Client policy (user's rulings, 2026-10-18): a pick first when
+    //     the character has Picklocks, whatever the odds and whether or not the key is
+    //     carried (up to the pick-try cap); then a bash, where one is allowed; then the
+    //     key, as the last resort (a floor grab when it isn't carried, then `use`).
     // A verb this character can't open the door with is left out.
     public static IReadOnlyList<DoorOpener> OpeningOrder(
         int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
-        bool keyed, bool keyHeld, bool preferPickOverBash,
+        bool keyed, bool preferPickOverBash,
         int maxBashableStrength = UnbashableStrengthThreshold)
     {
         bool bashOk = canBash
@@ -98,9 +97,8 @@ public static class DoorPolicy
             return order;
         }
         if (pickOk) order.Add(DoorOpener.Pick);
-        if (keyHeld) order.Add(DoorOpener.Key);
         if (bashOk) order.Add(DoorOpener.Bash);
-        if (!keyHeld) order.Add(DoorOpener.Key);
+        order.Add(DoorOpener.Key);
         return order;
     }
 
