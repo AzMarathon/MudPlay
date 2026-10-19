@@ -870,6 +870,31 @@ public sealed class KeyDoorRulesTests : IDisposable
         Assert.Equal(BareLockBash.Bashable, two.Book.Lookup(Passageway, Direction.W));
     }
 
+    // A change made while another client holds the record's lock isn't written
+    // without it, and isn't lost: it lands with the next write, laid over what the
+    // other client wrote meanwhile.
+    [Fact]
+    public void ChangeMadeWhileTheLockIsHeld_LandsOnTheNextWrite()
+    {
+        string realm = RealmFolder("A");
+        Rig one = NewRig(realmFolder: realm);
+        Rig two = NewRig(realmFolder: realm);
+        string file = AppPaths.RealmBareKeyLocksFile(realm);
+
+        using (SharedFileWrite.Hold(file, out _))
+        {
+            one.Book.SetByUser(Vault, Direction.E, BareLockBash.Bashable);
+            Assert.False(File.Exists(file));
+        }
+        two.Book.SetByUser(Vault, Direction.W, BareLockBash.NotBashable);
+        one.Book.SetByUser(Passageway, Direction.W, BareLockBash.NotBashable);
+
+        Rig later = NewRig(realmFolder: realm);
+        Assert.Equal(BareLockBash.Bashable, later.Book.Lookup(Vault, Direction.E));
+        Assert.Equal(BareLockBash.NotBashable, later.Book.Lookup(Vault, Direction.W));
+        Assert.Equal(BareLockBash.NotBashable, later.Book.Lookup(Passageway, Direction.W));
+    }
+
     // ----- the Doors tab -------------------------------------------------
 
     // Every bare key lock on the map, with what it is taken for and where that comes
