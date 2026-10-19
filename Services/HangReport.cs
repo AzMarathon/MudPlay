@@ -54,7 +54,31 @@ public static class HangReport
         IReadOnlyList<string> OpenWindows,
         (string What, DateTimeOffset At)? LastWindowEvent,
         (string Name, DateTimeOffset At)? LastFocused,
-        string? LongOperation = null);
+        string? LongOperation = null,
+        MemoryTrail? Memory = null);
+
+    // The process's memory at one moment. PrivateBytes is the last one read (it
+    // is dear to read on Windows, so read less often), or null.
+    public readonly record struct Memory(long Heap, long Allocated, long WorkingSet, long? PrivateBytes,
+        long GcHeapSize, long GcCommitted, int Gen0, int Gen1, int Gen2)
+    {
+        // Never GC.GetTotalMemory(true): that forces a collection. Touches no window.
+        public static Memory Read(long? privateBytes)
+        {
+            GCMemoryInfo info = GC.GetGCMemoryInfo();
+            return new Memory(GC.GetTotalMemory(false), GC.GetTotalAllocatedBytes(), Environment.WorkingSet, privateBytes,
+                info.HeapSizeBytes, info.TotalCommittedBytes, GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2));
+        }
+    }
+
+    // Memory when the hang began and when the report was written, and a few
+    // samples from the minutes before it.
+    public sealed record MemoryTrail(DateTimeOffset StartAt, Memory Start, DateTimeOffset NowAt, Memory Now,
+        IReadOnlyList<(DateTimeOffset At, Memory Memory)> Before)
+    {
+        public double AllocatedMbPerSecond =>
+            (Now.Allocated - Start.Allocated) / Mib / Math.Max(0.001, (NowAt - StartAt).TotalSeconds);
+    }
 
     // What was read from the Sources, not yet masked; Build masks it with
     // Scrubber. Missing says why the sections are absent, when they are.
@@ -75,7 +99,8 @@ public static class HangReport
     // since one of them (the log file's name) waits on the program log's file
     // writer, which a stalled disk can hold. The log line saying a report is
     // being written is the reader's last act, for the same reason.
-    public static Gathered Gather(Sources? sources, string fileName, TimeSpan unresponsive, TimeSpan timeout)
+    public static Gathered Gather(Sources? sources, string fileName, TimeSpan unresponsive, TimeSpan timeout,
+        string? memoryHeadline = null)
     {
         if (sources is null) return Gathered.Nothing("the client had not finished starting");
         Gathered? result = null;
@@ -92,7 +117,8 @@ public static class HangReport
             }
             read.Set();
             sources.Log.Warn("Performance",
-                $"The UI thread has not answered for {Seconds(unresponsive)}: writing {fileName} to the Desktop");
+                $"The UI thread has not answered for {Seconds(unresponsive)}: writing {fileName} to the Desktop"
+                + (memoryHeadline is null ? string.Empty : "; " + memoryHeadline));
         })
         { IsBackground = true, Name = "Hang report reader" };
         reader.Start();
@@ -159,6 +185,7 @@ public static class HangReport
         sb.Append('\n');
 
         AppendStack(sb, snapshot);
+        AppendMemory(sb, snapshot);
         AppendRecent(sb, snapshot);
         AppendWindows(sb, snapshot);
 
@@ -236,19 +263,79 @@ public static class HangReport
     }
 
     // A line for the Afterwards section while the hang goes on.
-    public static string StillLine(DateTimeOffset at, TimeSpan waited, Frame? innermost) =>
+    public static string StillLine(DateTimeOffset at, TimeSpan waited, Frame? innermost, Memory start, Memory now) =>
         $"- {Time(at)}: still not answering after {Seconds(waited)}; innermost scope "
         + (innermost is { } f
             ? $"`{f.Name}` at `{SourcePath(f.File)}:{f.Line}`, in `{f.Member}`, open {Seconds(f.OpenFor)}"
             : "none")
-        + ".\n";
+        + $"; {MemoryLine(start, now)}.\n";
 
     public static string InterruptedLine(DateTimeOffset at, TimeSpan stopped) =>
         $"- {Time(at)}: the freeze watch was itself stopped for {Seconds(stopped)} (the machine slept, or the "
         + "process was paused). The figures above end there; a freeze that went on after it is counted anew.\n";
 
-    public static string RecoveredLine(DateTimeOffset at, TimeSpan lasted) =>
-        $"- {Time(at)}: the UI thread answered again. The hang lasted {Seconds(lasted)}.\n";
+    public static string RecoveredLine(DateTimeOffset at, TimeSpan lasted, Memory start, Memory now) =>
+        $"- {Time(at)}: the UI thread answered again. The hang lasted {Seconds(lasted)} ({MemoryLine(start, now)}).\n";
+
+    // What memory did since the hang began, in a few words.
+    public static string MemoryLine(Memory start, Memory now) =>
+        $"{SignedSize(now.Allocated - start.Allocated)} allocated, heap {Size(now.Heap)}, working set {Size(now.WorkingSet)}";
+
+    // The program log's line: the headline numbers.
+    public static string MemoryHeadline(MemoryTrail trail) =>
+        $"working set {Size(trail.Now.WorkingSet)} ({SignedSize(trail.Now.WorkingSet - trail.Start.WorkingSet)} since it stopped), "
+        + $"heap {Size(trail.Now.Heap)}, {Rate(trail.AllocatedMbPerSecond)} allocated";
+
+    private static void AppendMemory(StringBuilder sb, Snapshot snapshot)
+    {
+        if (snapshot.Memory is not { } m) return;
+        sb.Append("## Memory\n\n")
+          .Append("When the hang began (").Append(Time(m.StartAt)).Append(") and when this was written (")
+          .Append(Time(m.NowAt)).Append("). A client that runs away grows here: its working set climbs into the ")
+          .Append("gigabytes, with one core busy, while a sound one sits at a few hundred MB. Working set is what sits in ")
+          .Append("RAM, private bytes all the client has asked for: memory taken but not yet written shows only in the second.\n\n");
+        Kv(sb, "Working set", Change(m.Start.WorkingSet, m.Now.WorkingSet));
+        Kv(sb, "Private bytes", m.Start.PrivateBytes is { } p0 && m.Now.PrivateBytes is { } p1 ? Change(p0, p1)
+            : m.Now.PrivateBytes is { } only ? Size(only) : "(not read)");
+        Kv(sb, "Managed heap", Change(m.Start.Heap, m.Now.Heap));
+        Kv(sb, "GC heap size / committed", $"{Size(m.Now.GcHeapSize)} / {Size(m.Now.GcCommitted)}");
+        Kv(sb, "Allocated since the hang began", $"{Size(m.Now.Allocated - m.Start.Allocated)}, "
+            + $"{Rate(m.AllocatedMbPerSecond)} over {Seconds(m.NowAt - m.StartAt)}");
+        Kv(sb, "Collections gen0 / gen1 / gen2", $"{m.Start.Gen0} / {m.Start.Gen1} / {m.Start.Gen2} then, "
+            + $"{m.Now.Gen0} / {m.Now.Gen1} / {m.Now.Gen2} now");
+        if (m.Before.Count > 0)
+        {
+            sb.Append("\nBefore the hang (oldest first; the rate is since the row above, or since the first row):\n\n```\n");
+            for (int i = 0; i < m.Before.Count; i++)
+            {
+                (DateTimeOffset at, Memory mem) = m.Before[i];
+                (DateTimeOffset prevAt, Memory prev) = i == 0 ? m.Before[0] : m.Before[i - 1];
+                double seconds = (at - prevAt).TotalSeconds;
+                sb.Append(Time(at)).Append("  working set ").Append(Size(mem.WorkingSet).PadLeft(8))
+                  .Append("  heap ").Append(Size(mem.Heap).PadLeft(8));
+                if (seconds > 0)
+                    sb.Append("  ").Append(Rate((mem.Allocated - prev.Allocated) / Mib / seconds)).Append(" allocated");
+                sb.Append('\n');
+            }
+            sb.Append("```\n");
+        }
+        sb.Append('\n');
+    }
+
+    private const double Mib = 1024.0 * 1024.0;
+
+    private static string Size(long bytes) =>
+        Math.Abs(bytes) >= 1024 * Mib
+            ? (bytes / (1024 * Mib)).ToString("0.0", CultureInfo.InvariantCulture) + " GB"
+            : (bytes / Mib).ToString("0", CultureInfo.InvariantCulture) + " MB";
+
+    public static string SizeOf(long bytes) => Size(bytes);
+
+    private static string SignedSize(long bytes) => (bytes >= 0 ? "+" : "-") + Size(Math.Abs(bytes));
+
+    private static string Change(long then, long now) => $"{Size(then)} then, {Size(now)} now ({SignedSize(now - then)})";
+
+    private static string Rate(double mbPerSecond) => mbPerSecond.ToString("0.0", CultureInfo.InvariantCulture) + " MB/s";
 
     private static void AppendBlock(StringBuilder sb, IReadOnlyList<string> lines, string empty)
     {

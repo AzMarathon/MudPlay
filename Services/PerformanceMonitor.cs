@@ -125,6 +125,23 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // before any has.
     private long _lastLongEnd;
 
+    // Memory, sampled on the probe's tick once a second (about 20 us: the GC's own
+    // counters and the working set), into a fixed ring the probe alone touches.
+    // Private bytes cost more to read, so they are read every PrivateBytesEvery,
+    // and every PrivateBytesInHang while a hang is open.
+    private const int MemoryRingSize = 180;
+    private static readonly TimeSpan MemoryEvery = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PrivateBytesEvery = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PrivateBytesInHang = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan[] MemoryBeforeAt =
+        [TimeSpan.FromSeconds(150), TimeSpan.FromSeconds(120), TimeSpan.FromSeconds(90), TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(30)];
+    private readonly (long At, HangReport.Memory Memory)[] _memory = new (long, HangReport.Memory)[MemoryRingSize];
+    private int _memoryHead, _memoryCount;
+    private long _privateBytesAt;
+    private long? _privateBytes;
+    // The bug report's line, one entry per freeze. The write lane's alone.
+    private readonly List<string> _freezeEntries = new();
+
     private volatile HangReport.Sources? _hangSources;
     // For a bug report: the freezes seen this session. The count is the probe's;
     // the note is written on the write lane.
@@ -184,12 +201,16 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         Func<DateTimeOffset> Now,
         Func<string> ReportFolder,
         Action<Action> WriteAside,
-        Action<Action> RunAside)
+        Action<Action> RunAside,
+        Func<long?, HangReport.Memory> ReadMemory,
+        Func<long?> ReadPrivateBytes)
     {
         public static ProbeHost Client()
         {
             ProbeThread thread = new();
             WriteLane lane = new();
+            // Kept for the life of the process: read again on each Refresh.
+            Process self = Process.GetCurrentProcess();
             return new ProbeHost(
                 a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
                 thread.Schedule,
@@ -197,11 +218,29 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 () => DateTimeOffset.Now,
                 CrashReporter.ReportFolder,
                 lane.Add,
-                RunOnOwnThread);
+                RunOnOwnThread,
+                HangReport.Memory.Read,
+                () => PrivateBytesOf(self));
         }
 
         private static void RunOnOwnThread(Action work) =>
             new Thread(() => work()) { IsBackground = true, Name = "UI probe aside" }.Start();
+
+        // About 130 us on Linux; on Windows Process.Refresh can take milliseconds,
+        // which is why it is read every PrivateBytesEvery, not every tick.
+        private static long? PrivateBytesOf(Process self)
+        {
+            try
+            {
+                self.Refresh();
+                return self.PrivateMemorySize64;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException
+                                       or System.ComponentModel.Win32Exception)
+            {
+                return null;   // no process figures on this platform: the report says "(not read)"
+            }
+        }
     }
 
     // Collects into sink instead of a file.
@@ -516,6 +555,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             }
         }
         _lastTickAt = now;
+        SampleMemory(probe, now);
 
         long posted = Interlocked.Read(ref _pingPostedAt);
         if (posted == 0)
@@ -599,10 +639,13 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // A hang being reported: when it is counted from, and, filled in on the
     // write lane, the file it went to or why none was written. The probe never
     // reads Path or NoFile; it only hands the lane work.
-    private sealed class Hang(long countedFrom, int number, string? noFile = null)
+    private sealed class Hang(long countedFrom, int number, HangReport.Memory start, string? noFile = null)
     {
         public long CountedFrom { get; } = countedFrom;
         public int Number { get; } = number;
+        public HangReport.Memory StartMemory { get; } = start;
+        // The probe's: the highest working set sampled while it lasts.
+        public long PeakWorkingSet { get; set; } = start.WorkingSet;
         public string? Path { get; set; }
         public string? NoFile { get; set; } = noFile;
         public int NextMilestone { get; set; }
@@ -616,28 +659,32 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             : _lastReportAt != 0 && Elapsed(_lastReportAt, now) < ReportGap
                 ? $"one was written less than {ReportGap.TotalMinutes:0} minutes before"
                 : null;
-        Hang hang = new(from, number, why);
+        HangReport.Memory start = MemoryAt(from)?.Memory ?? LatestMemory(probe);
+        Hang hang = new(from, number, start, why);
+        hang.PeakWorkingSet = Math.Max(start.WorkingSet, LatestMemory(probe).WorkingSet);
+        long peak = hang.PeakWorkingSet;
         if (why is not null)
         {
-            probe.WriteAside(() => NoteFreeze(hang, $"at {at:HH:mm:ss}, still going"));
+            probe.WriteAside(() => NoteFreeze(hang, $"at {at:HH:mm:ss}, still going", peak));
             return hang;
         }
 
         _reportsWritten++;
         _lastReportAt = now;
-        HangReport.Snapshot snapshot = TakeSnapshot(from, now, at);
+        HangReport.Snapshot snapshot = TakeSnapshot(probe, from, now, at, start);
         HangReport.Sources? sources = _hangSources;
-        probe.WriteAside(() => WriteReport(probe, hang, snapshot, sources));
+        probe.WriteAside(() => WriteReport(probe, hang, snapshot, sources, peak));
         return hang;
     }
 
     // On the write lane. A Desktop that is missing or can't be written is given
     // up quietly, as CrashReporter does: the bug report's freeze line and the
     // recovery log line say why.
-    private void WriteReport(ProbeHost probe, Hang hang, HangReport.Snapshot snapshot, HangReport.Sources? sources)
+    private void WriteReport(ProbeHost probe, Hang hang, HangReport.Snapshot snapshot, HangReport.Sources? sources, long peak)
     {
         string name = $"{HangReport.FilePrefix}{snapshot.At:yyyyMMdd-HHmmss}.md";
-        HangReport.Gathered gathered = HangReport.Gather(sources, name, snapshot.Unresponsive, GatherTimeout);
+        HangReport.Gathered gathered = HangReport.Gather(sources, name, snapshot.Unresponsive, GatherTimeout,
+            snapshot.Memory is { } memory ? HangReport.MemoryHeadline(memory) : null);
         try
         {
             string path = Path.Combine(probe.ReportFolder(), name);
@@ -648,14 +695,20 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         {
             hang.NoFile = $"the Desktop could not be written ({ex.GetType().Name})";
         }
-        NoteFreeze(hang, $"at {snapshot.At:HH:mm:ss}, still going");
+        NoteFreeze(hang, $"at {snapshot.At:HH:mm:ss}, still going", peak);
     }
 
-    // On the write lane.
-    private void NoteFreeze(Hang hang, string how)
+    // On the write lane: this freeze's entry in the bug report's line, the last
+    // few freezes shown.
+    private void NoteFreeze(Hang hang, string how, long peakWorkingSet)
     {
-        _freezesNote = $"{hang.Number}; the last {how}"
-            + (hang.Path is { } path ? $", written to {Path.GetFileName(path)}" : $", no Hang file: {hang.NoFile}");
+        string entry = $"#{hang.Number} {how}, peak working set {HangReport.SizeOf(peakWorkingSet)}"
+            + (hang.Path is { } path ? $", {Path.GetFileName(path)}" : $", no Hang file: {hang.NoFile}");
+        while (_freezeEntries.Count < hang.Number) _freezeEntries.Add(string.Empty);
+        _freezeEntries[hang.Number - 1] = entry;
+        const int shown = 5;
+        _freezesNote = $"{_freezeEntries.Count}: " + string.Join("; ", _freezeEntries.TakeLast(shown))
+            + (_freezeEntries.Count > shown ? $" (and {_freezeEntries.Count - shown} earlier)" : string.Empty);
     }
 
     private void StillHung(ProbeHost probe, Hang hang, long now)
@@ -668,7 +721,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         HangReport.Frame? innermost;
         lock (_scopesLock)
             innermost = _depth > 0 ? ToFrame(in _stack[Math.Min(_depth, MaxDepth) - 1], now, at) : null;
-        string line = HangReport.StillLine(at, waited, innermost);
+        string line = HangReport.StillLine(at, waited, innermost, hang.StartMemory, LatestMemory(probe));
         probe.WriteAside(() => Append(hang, line));
     }
 
@@ -676,10 +729,12 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     {
         TimeSpan lasted = answeredAt > hang.CountedFrom ? Elapsed(hang.CountedFrom, answeredAt) : HangAfter;
         DateTimeOffset at = probe.Now();
+        HangReport.Memory now = LatestMemory(probe);
+        long peak = hang.PeakWorkingSet;
         probe.WriteAside(() =>
         {
-            Append(hang, HangReport.RecoveredLine(at, lasted));
-            NoteFreeze(hang, $"ended {at:HH:mm:ss} after {HangReport.Seconds(lasted)}");
+            Append(hang, HangReport.RecoveredLine(at, lasted, hang.StartMemory, now));
+            NoteFreeze(hang, $"ended {at:HH:mm:ss} after {HangReport.Seconds(lasted)}", peak);
             LogAside(probe, LogSeverity.Warn, $"The UI thread answered again after {HangReport.Seconds(lasted)} unresponsive"
                 + (hang.Path is { } path ? $"; see {Path.GetFileName(path)}" : $" (no Hang file: {hang.NoFile})"));
         });
@@ -692,10 +747,11 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private void Interrupted(ProbeHost probe, Hang hang, TimeSpan stopped)
     {
         DateTimeOffset at = probe.Now();
+        long peak = hang.PeakWorkingSet;
         probe.WriteAside(() =>
         {
             Append(hang, HangReport.InterruptedLine(at, stopped));
-            NoteFreeze(hang, $"cut short at {at:HH:mm:ss} by a {HangReport.Seconds(stopped)} sleep or pause");
+            NoteFreeze(hang, $"cut short at {at:HH:mm:ss} by a {HangReport.Seconds(stopped)} sleep or pause", peak);
             LogAside(probe, LogSeverity.Info, $"The freeze watch was itself stopped for {HangReport.Seconds(stopped)} "
                 + "(the machine slept, or the process was paused): the freeze it was timing ends there");
         });
@@ -712,8 +768,19 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         }
     }
 
-    private HangReport.Snapshot TakeSnapshot(long from, long now, DateTimeOffset wall)
+    private HangReport.Snapshot TakeSnapshot(ProbeHost probe, long from, long now, DateTimeOffset wall, HangReport.Memory start)
     {
+        // Read fresh, private bytes with it: once, for the report.
+        HangReport.Memory current = probe.ReadMemory(probe.ReadPrivateBytes());
+        List<(DateTimeOffset, HangReport.Memory)> before = new();
+        foreach (TimeSpan back in MemoryBeforeAt)
+        {
+            long at = from - (long)(back.TotalSeconds * Stopwatch.Frequency);
+            if (MemoryAt(at) is { } sample && sample.At < from && (before.Count == 0 || Wall(sample.At, now, wall) > before[^1].Item1))
+                before.Add((Wall(sample.At, now, wall), sample.Memory));
+        }
+        HangReport.MemoryTrail memory = new(Wall(MemoryAt(from)?.At ?? now, now, wall), start, wall, current, before);
+
         List<HangReport.Frame> frames = new();
         List<HangReport.Activity> recent = new();
         int depth;
@@ -750,7 +817,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             if (_lastFocused is { } f) lastFocused = (f.Name, Wall(f.At, now, wall));
         }
         return new HangReport.Snapshot(wall, Elapsed(from, now), frames, depth, recent, open, lastEvent, lastFocused,
-            longOperation);
+            longOperation, memory);
     }
 
     private HangReport.Frame ToFrame(in Frame f, long now, DateTimeOffset wall) =>
@@ -762,6 +829,42 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         TimeSpan.FromSeconds((double)(to - from) / Stopwatch.Frequency);
 
     private static double Ms(long from, long to) => (double)(to - from) * 1000 / Stopwatch.Frequency;
+
+    // On the probe's tick: once a second, the memory figures into the ring.
+    private void SampleMemory(ProbeHost probe, long now)
+    {
+        if (_memoryCount > 0 && Elapsed(_memory[(_memoryHead - 1 + MemoryRingSize) % MemoryRingSize].At, now)
+                < MemoryEvery - TimeSpan.FromMilliseconds(1))
+            return;
+        if (_privateBytesAt == 0
+            || Elapsed(_privateBytesAt, now) >= (_hang is null ? PrivateBytesEvery : PrivateBytesInHang) - TimeSpan.FromMilliseconds(1))
+        {
+            _privateBytes = probe.ReadPrivateBytes();
+            _privateBytesAt = now;
+        }
+        HangReport.Memory memory = probe.ReadMemory(_privateBytes);
+        _memory[_memoryHead] = (now, memory);
+        _memoryHead = (_memoryHead + 1) % MemoryRingSize;
+        if (_memoryCount < MemoryRingSize) _memoryCount++;
+        if (_hang is { } hang) hang.PeakWorkingSet = Math.Max(hang.PeakWorkingSet, memory.WorkingSet);
+    }
+
+    private HangReport.Memory LatestMemory(ProbeHost probe) =>
+        _memoryCount > 0 ? _memory[(_memoryHead - 1 + MemoryRingSize) % MemoryRingSize].Memory : probe.ReadMemory(_privateBytes);
+
+    // The last sample taken at or before at, else the oldest kept; null with none.
+    private (long At, HangReport.Memory Memory)? MemoryAt(long at)
+    {
+        if (_memoryCount == 0) return null;
+        (long At, HangReport.Memory Memory)? found = null;
+        for (int i = 0; i < _memoryCount; i++)
+        {
+            (long At, HangReport.Memory Memory) sample = _memory[(_memoryHead - _memoryCount + i + MemoryRingSize) % MemoryRingSize];
+            if (sample.At > at) return found ?? sample;
+            found = sample;
+        }
+        return found;
+    }
 
     // Work handed off the probe's thread that may block, one of a kind at a time:
     // while one is still out, the next is counted and dropped, so a disk or a log

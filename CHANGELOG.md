@@ -4,6 +4,7 @@
 
 - A freeze of 5 seconds or more writes `Hang-<time>.md` to the Desktop, naming the code the client was running, with file and line
 - The Hang file adds how long the freeze lasted if the client comes back; the Program Log warns of it too
+- The Hang file notes memory use when the freeze began, as it went on, and in the minutes before
 - Loading or switching a game-data set counts as a freeze only past 30 seconds
 - Bug reports list the freezes seen this session
 - Help: new *If the client freezes* section

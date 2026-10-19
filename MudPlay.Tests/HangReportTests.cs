@@ -24,6 +24,20 @@ public sealed class HangReportTests
         public LogService Log { get; } = new();
         public SentCommandTrail Sent { get; } = new();
 
+        // The process's memory as the probe reads it, in MB, moved by the test; and
+        // the threads that read it.
+        public long HeapMb = 200, AllocatedMb = 1000, WorkingSetMb = 300, PrivateMb = 350;
+        public Action? EachSecond { get; set; }
+        public List<Thread> MemoryReaders { get; } = new();
+        private const long Mb = 1024 * 1024;
+
+        private HangReport.Memory ReadMemory(long? privateBytes)
+        {
+            lock (MemoryReaders) MemoryReaders.Add(Thread.CurrentThread);
+            return new HangReport.Memory(HeapMb * Mb, AllocatedMb * Mb, WorkingSetMb * Mb, privateBytes,
+                HeapMb * Mb, (HeapMb + 50) * Mb, 3, 2, 1);
+        }
+
         // writeAside / runAside: where the report's file work and the probe's log
         // lines go; by default each runs at once.
         public Rig(Func<bool>? onUiThread = null, Func<BugReportScrub.Scrubber>? scrubber = null, bool arm = true,
@@ -33,7 +47,7 @@ public sealed class HangReportTests
             Directory.CreateDirectory(Folder);
             Monitor = new PerformanceMonitor(onUiThread ?? (() => true),
                 new PerformanceMonitor.ProbeHost(Posted.Add, Timers.Schedule, Clock.Timestamp, () => Clock.Now, () => Folder,
-                    writeAside ?? (work => work()), runAside ?? (work => work())));
+                    writeAside ?? (work => work()), runAside ?? (work => work()), ReadMemory, () => PrivateMb * Mb));
             Monitor.HangSources = new HangReport.Sources(Log, Sent,
                 scrubber ?? (() => BugReportScrub.Build(
                     [new(BugReportScrub.LoginPasswordLabel, LoginPassword), new(BugReportScrub.CorpsePasswordLabel, CorpsePassword)],
@@ -49,6 +63,7 @@ public sealed class HangReportTests
             for (int i = 0; i < seconds; i++)
             {
                 Clock.Advance(TimeSpan.FromSeconds(1));
+                EachSecond?.Invoke();
                 Timers.Advance(TimeSpan.FromSeconds(1));
             }
         }
@@ -144,8 +159,8 @@ public sealed class HangReportTests
         rig.Answer();                       // at 8 s; the ping went out at 1 s
         rig.Timers.Advance(TimeSpan.FromSeconds(1));
 
-        Assert.Contains("the UI thread answered again. The hang lasted 7.0 s.", rig.Report);
-        Assert.StartsWith("1; the last ended 12:00:08 after 7.0 s, written to Hang-20261001-120006", rig.Monitor.FreezesThisSession);
+        Assert.Contains("the UI thread answered again. The hang lasted 7.0 s (", rig.Report);
+        Assert.Equal("1: #1 ended 12:00:08 after 7.0 s, peak working set 300 MB, Hang-20261001-120006.md", rig.Monitor.FreezesThisSession);
         Assert.Contains(rig.Log.Snapshot(), e => e.Severity == LogSeverity.Warn
             && e.Message.StartsWith("The UI thread answered again after 7.0 s unresponsive; see Hang-", StringComparison.Ordinal));
     }
@@ -307,7 +322,7 @@ public sealed class HangReportTests
         rig.Answer();                       // at 27 s
         rig.Pass(1);
 
-        Assert.Contains("the UI thread answered again. The hang lasted 17.0 s.", rig.Report);
+        Assert.Contains("the UI thread answered again. The hang lasted 17.0 s (", rig.Report);
     }
 
     [Fact]
@@ -365,6 +380,42 @@ public sealed class HangReportTests
             if (Directory.Exists(AppPaths.BbsFolder(bbs))) Directory.Delete(AppPaths.BbsFolder(bbs), recursive: true);
             if (File.Exists(keyFile)) File.Delete(keyFile);
         }
+    }
+
+    [Fact]
+    public void The_report_has_memory_then_and_now_with_the_rate_and_the_minutes_before()
+    {
+        using Rig rig = new();
+        rig.EachSecond = () => rig.AllocatedMb += 20;      // a steady 20 MB/s before the hang
+        rig.PassAnswering(100);
+        rig.EachSecond = () => { rig.AllocatedMb += 100; rig.HeapMb += 50; rig.WorkingSetMb += 60; };
+        rig.Pass(6);                                      // the ping went out at 101 s
+
+        string report = rig.Report;
+        Assert.Contains("- **Working set**: 360 MB then, 660 MB now (+300 MB)", report);
+        Assert.Contains("- **Managed heap**: 250 MB then, 500 MB now (+250 MB)", report);
+        Assert.Contains("- **Private bytes**: 350 MB then, 350 MB now (+0 MB)", report);
+        Assert.Contains("- **Allocated since the hang began**: 500 MB, 100.0 MB/s over 5.0 s", report);
+        Assert.Contains("  20.0 MB/s allocated", report);           // a row from before
+        Assert.Matches(@"Before the hang[^`]*```\n(\d\d:\d\d:\d\d\.\d{3}  working set +\d+ MB  heap +\d+ MB.*\n){4}", report);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Message.EndsWith(
+            "; working set 660 MB (+300 MB since it stopped), heap 500 MB, 100.0 MB/s allocated", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Growth_through_a_hang_shows_in_its_milestones_and_its_recovery()
+    {
+        using Rig rig = new();
+        rig.EachSecond = () => { rig.AllocatedMb += 100; rig.HeapMb += 50; rig.WorkingSetMb += 60; };
+        rig.Pass(16);                       // the ping went out at 1 s: start heap 250, allocated 1100, working set 360
+        Assert.Contains("still not answering after 15.0 s; innermost scope none; +1.5 GB allocated, heap 1000 MB, working set 1.2 GB.",
+            rig.Report);
+        rig.Pass(4);
+        rig.Answer();                       // at 20 s
+        rig.Pass(1);
+
+        Assert.Contains("The hang lasted 19.0 s (+2.0 GB allocated, heap 1.2 GB, working set 1.5 GB).", rig.Report);
+        Assert.StartsWith("1: #1 ended 12:00:21 after 19.0 s, peak working set 1.5 GB", rig.Monitor.FreezesThisSession);
     }
 
     [Fact]
@@ -503,8 +554,11 @@ public sealed class HangReportTests
             rig.Pass(6);
             string report = rig.Report;
             Assert.Contains("1. `parse Rooms` at `MudPlay.Tests/HangReportTests.cs:", report);
-            // Written with the ping still waiting: nothing was asked of the UI thread.
+            // Written with the ping still waiting: nothing was asked of the UI thread,
+            // and its memory was read on the probe's.
             Assert.Single(rig.Posted);
+            Assert.Contains("## Memory", report);
+            lock (rig.MemoryReaders) Assert.DoesNotContain(ui, rig.MemoryReaders);
         }
         finally
         {
