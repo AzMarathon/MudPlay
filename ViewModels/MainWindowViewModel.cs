@@ -1478,6 +1478,7 @@ public partial class MainWindowViewModel : ObservableObject
         // dispatch (chat + system-log subscriptions wired in its ctor) and
         // borrows the same wire sender so a fired trigger's Response goes
         // through the canonical SendUserInput path.
+        // Must attach after the router's LineEmitted hook above: ChatRouter has to hold or classify each line before the triggers read it (ChatRouter.IsHolding).
         AppServices.Current.Triggers.AttachLineExtractor(Lines);
         AppServices.Current.Triggers.SetSender(AppServices.Current.EngineGate.Named(userCommandSend, "Trigger"));
 
