@@ -2972,6 +2972,12 @@ public sealed class AppServices
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
+        // Files earlier versions left beside the program, removed now that the log
+        // can say so. Only for a real install: a dev or test run's executable sits in
+        // a build folder, or is the dotnet host itself.
+        if (Services.Update.UpdatePlatform.IsSelfContainedInstall())
+            foreach (string line in Services.Update.RetiredFiles.Clean())
+                Log.Info("Update", line);
         // Background memory hygiene. CombatTracker is bound later in construction;
         // the combat-active probe is lazy and the first periodic tick is minutes
         // out, so it's always assigned before the Func is ever invoked.
@@ -3815,7 +3821,9 @@ public sealed class AppServices
         // Apply path).
         Profile.ProfileLoaded += _ => ApplyToolbarFromActiveProfile();
         Profile.ProfileClosed += ResetToolbarToDefaults;
-        Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile();
+        // A save of the loaded profile is where a toolbar edit arrives; a load or a
+        // close never counts as one (ToolbarConfig.LastChangeWasUserEdit).
+        Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile(userEdit: true);
 
         // Same bridge for the customizable terminal right-click menu (Char-tier).
         Profile.ProfileLoaded += _ => ApplyContextMenuFromActiveProfile();
@@ -11045,10 +11053,10 @@ public sealed class AppServices
         Update.StartAutoChecks(() => Settings.Current.AutoCheckForUpdates);
     }
 
-    private void ApplyToolbarFromActiveProfile()
+    private void ApplyToolbarFromActiveProfile(bool userEdit = false)
     {
         Models.Profile.ToolbarSettings dto = ReadSection<Models.Profile.ToolbarSettings>(Profile.Current, "Toolbar");
-        Toolbar.ApplyFrom(dto);
+        Toolbar.ApplyFrom(dto, userEdit);
     }
 
     private void ResetToolbarToDefaults()

@@ -52,7 +52,6 @@ internal static class Program
         if (args.Contains(InstalledFontCatalog.ProbeArgument))
             Environment.Exit(InstalledFontCatalog.RunProbe());
 
-        Services.Update.UpdatePlatform.DeleteReplacedExecutables();
         CrashReporter.Guard(() =>
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args));
     }

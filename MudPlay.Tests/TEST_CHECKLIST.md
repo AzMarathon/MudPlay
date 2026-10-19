@@ -3199,6 +3199,12 @@ How to keep it current:
 - Checks: anchored to the default-set max, capped at the real and live max; absolute mode; stable across a pre-rest swap.
 - Why: reports paradigm-20260902-052036, -20260903-110346, -20260909-095419.
 
+### RetiredFilesTests.cs
+- Covers: Services/Update/RetiredFiles
+- Checks: on Windows the startup clean-up deletes only `<exe>.old-<digits>` files beside the executable and logs each; it leaves the exe, `MudPlay.exe.new`, `MudPlay.exe.old-backup`, `MudPlay.exe.old-`, `MudPlay.exe.old-12a`, another exe's `.old-` copy, `notes.old-1`, the user's files, a swap's temporary copy and a folder carrying the pattern. Elsewhere it deletes no `.old-` file. With the executable missing it deletes nothing (the renamed-aside copy may be the only program left). The pre-update clean-up deletes only `<exe>.mudplay-update-<digits>`. The patterns are tied to the running executable's own name.
+- Why: this is the only code that removes files from the folder MudPlay runs from, which may be Downloads (user report, 2026-10-19; review of #1108).
+- Named seam: RetiredFiles.Clean's optional `windows` parameter (defaults to the running platform): the Windows-only `.old-` rule has to be checked on the Linux test host.
+
 ### RollingLogFileTests.cs
 - Covers: Services/RollingLogFile
 - Checks: last-N cap, snapshot immediate, reopen continues, trims on open, SetMaxLines, Truncate, append after close ignored; a background write that throws a non-IO error is logged and Close still returns and writes; a write that never finishes is cut off by the bounded wait (Truncate / SetMaxLines return with a "may be unwritten" warning) and the file catches up once it does; reopening the same file after a timed-out Close keeps the unwritten tail rather than re-reading a file the stuck write emptied; repeated non-IO failures log one Error until a write succeeds, then one recovery line, and re-arm.
@@ -3873,9 +3879,9 @@ How to keep it current:
 - Why: report `paradigm-20260729-211336` (the walker dragged the summon along).
 
 ### SwapScriptExecutionTests.cs
-- Covers: Services/Update/SwapScriptBuilder (the POSIX script, actually executed)
-- Checks: the relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. A failed swap restores the install and leaves a failure log next to the executable.
-- Why: a broken swap leaves the user without a profile, or without a working client.
+- Covers: Services/Update/SwapScriptBuilder (the POSIX script actually executed in a temp sandbox, driven by UpdatePlan's real list and started through UpdateInstaller.SwapStartInfo; the Windows script's structure), UpdateInstaller.SwapStartInfo
+- Checks: with the user's own files beside MudPlay's (`photo.jpg`, `other.exe`, `notes/`), a swap leaves every user file byte for byte, replaces and adds the new build's files, deletes nothing (an old MudPlay file the new build lacks stays), cleans up the staging folder and its backup and puts nothing beside the install. A renamed program (`MudPlay (1)`) is updated under its own name. A swap that fails part-way restores every replaced file, takes out every added one (logging only what it took out), leaves the user's files alone, relaunches the old build and leaves a failure log beside the executable; a link to a folder that turns up under a file's name is refused and never taken out; a failure-log name that is a link is never written through. With any value missing, or a staging folder that isn't an update's, the helper exits 2 having changed nothing: it only notes why in the failure log beside the program and starts the old build again, both only when the program is a regular file directly in the install folder (a DST naming a foreign folder, or an EXE outside DST, runs and writes nothing); with no PID it starts nothing and its note says so; its note never goes through a link or over a folder of that name. The Windows one does the same after waiting for the old client, and starts only an `.exe`. In the Windows script no name or path variable (`%EXENAME%`, `%WHY%`, `%DST%`…) is unquoted on an echo line or inside a ( ) block, where `MudPlay (1).exe` would close the block. The relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. SwapStartInfo puts every value in the environment and puts nothing the user named on cmd's command line (`/d /v:off /s /c ""<script file name>""`). Neither script moves, mirrors, purges or deletes the install folder (no `robocopy`, `/MIR`, `/PURGE`, `.bak`, folder `mv`/`rmdir`), and each deletes only its own temp copies, log and self, the renamed-aside exe, and, in rollback, a file it had just added; in the Windows one every `del` checks on its line that its name isn't a folder, the exe's temporary copy is refused when something is in its way and removed only when the run made it, an unreadable backup record takes nothing out, a failed move back is logged with the copy's name, the exe is renamed aside after the other files, its ACL is carried across (a drive root named `D:\.`), and the script deletes itself.
+- Why: the folder-mirroring updater deleted a player's whole Downloads folder (user report, 2026-10-19; review of #1108); a broken swap also leaves the user without a profile, or without a working client.
 
 ### SysRoomStatusParserTests.cs
 - Covers: Game/Map/SysRoomStatusParser
@@ -4080,6 +4086,11 @@ How to keep it current:
 - Checks: a click runs the first option or the saved pick; Choose sets and saves without running; an unknown saved pick falls back to the first; the tooltip names the pick.
 - Why: a ▾ mis-pick must not fire a sweep like Drop everything.
 
+### ToolbarWidthFitTests.cs
+- Covers: Views/ToolbarWidthFit (the main window's width decision for its horizontal toolbars, and which layout pass is the user's edit; MainWindow's LayoutUpdated plumbing is smoke-tested by launching), Services/ToolbarConfig.LayoutChanges / LastChangeWasUserEdit
+- Checks: a grow fits the toolbar up to the screen's width; a shrink narrows the window to the widest toolbar, however wide the window was, but stops at the width the terminal's grid needs and at the window's minimum; a maximized, full-screen or minimized window is never resized; a toolbar that isn't the user's edit never resizes. Only the first strip pass after a layout change the user made counts as an edit: not a later pass (a badge changing width), a save that left the layout alone, a profile load, or a close that followed the edit before its pass.
+- Why: user report and ruling, 2026-10-19 (adding to the toolbar widened the window, removing never shrank it back; a shrink must not cut off the terminal); review of #1108 (a narrower toolbar on another character snapped the window down).
+
 ### TrackerWireRig.cs
 - Test infrastructure.
 - Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
@@ -4226,9 +4237,14 @@ How to keep it current:
 - Checks: the twice-daily re-check slots; the legacy settings key `CheckForUpdatesOnStartup` still loads and saves; the title-bar crawl's frames.
 - Why: an older settings file must not silently switch checking back on.
 
+### UpdatePlanTests.cs
+- Covers: Services/Update/UpdatePlan
+- Checks: an archive file name that is absolute, climbs with `..`, names a subfolder, carries shell or space characters or isn't a plain name is refused (PathGuard), and release names are taken. A plan hands over the release's executable on its own, under the running executable's name (a renamed `MudPlay (1)` included), lists the download's other files and names what it replaces; a download with a subfolder, an odd name, a link, no release executable, a file where the install has a folder or one with the running program's name, or a running program that isn't there, is refused with the install untouched.
+- Why: the updater may only put the release's own files beside the program (user report, 2026-10-19: an update wiped a Downloads folder).
+
 ### UpdateServiceTests.cs
-- Covers: Services/Update (ReleaseParser, UpdatePlatform, SwapScriptBuilder, ChangelogExtractor)
-- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - The posix/Windows swap scripts: exe swapped by rename, ACL carried across, failure log, rollback. - Cleaning up old exes; changelog notes between versions.
+- Covers: Services/Update (ReleaseParser, UpdatePlatform, ChangelogExtractor)
+- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - Changelog notes between versions. (The swap is in SwapScriptExecutionTests and UpdatePlanTests, the startup clean-up in RetiredFilesTests.)
 - Why: a broken self-update leaves the user with no working install.
 
 ### UseEndsSneakTests.cs

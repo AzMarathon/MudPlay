@@ -590,6 +590,10 @@ public sealed class TerminalControl : Control
         _fitScaleY = fitY;
     }
 
+    // The grid's width at its native cell size, before any window zoom: the least
+    // width that shows every column.
+    public double NaturalGridWidth => _cellW * (Emulator?.Screen.Cols ?? 80);
+
     // Tell layout the control wants the native grid times the window zoom. At
     // zoom 1 that's the natural grid size; when fitting, it's the enlarged size
     // that fills the viewport (Render scales the native drawing up to match).
