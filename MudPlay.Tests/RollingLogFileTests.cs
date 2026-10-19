@@ -1,4 +1,6 @@
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using MudPlay.Services;
 using Xunit;
 
@@ -8,11 +10,37 @@ namespace MudPlay.Tests;
 // transactions.log: the on-disk line count never exceeds the cap, content
 // persists across a reopen (a restart), and Truncate wipes the file. Appends
 // persist asynchronously (off the caller's thread), so a test that reads the file
-// right after appending calls Flush first to force the pending write.
+// right after appending calls Flush first to force the pending write. The failure
+// tests swap in a writer that throws or hangs: Close / Truncate / SetMaxLines run
+// on the UI thread and must never wait on a broken writer for good.
 public sealed class RollingLogFileTests
 {
     private static string TempPath() =>
         Path.Combine(Path.GetTempPath(), $"mudplay-rolllog-{Guid.NewGuid():N}.log");
+
+    // Runs the call off the test thread so a hang fails the test instead of the run.
+    private static async Task<bool> ReturnsPromptly(Action call)
+    {
+        Task run = Task.Run(call);
+        return await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(5))) == run;
+    }
+
+    // The released background write lands on its own thread; poll for it rather than
+    // lean on a Flush whose short test bound could run out on a slow machine.
+    private static async Task<bool> FileBecomes(string path, params string[] expected)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(path) && File.ReadAllLines(path).SequenceEqual(expected)) return true;
+            }
+            catch (IOException) { } // caught mid-write; look again
+            await Task.Delay(2);
+        }
+        return false;
+    }
 
     [Fact]
     public void Append_KeepsOnlyLastNLines()
@@ -20,7 +48,7 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 3);
             for (int i = 1; i <= 10; i++) log.Append($"line {i}");
             log.Flush();
@@ -38,7 +66,7 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 5);
             log.Append("a");
             log.Append("b");
@@ -54,7 +82,7 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile first = new();
+            RollingLogFile first = new(new LogService());
             first.Open(path, maxLines: 5);
             first.Append("a");
             first.Append("b");
@@ -62,7 +90,7 @@ public sealed class RollingLogFileTests
 
             // Simulate a restart: a fresh instance over the same file continues
             // where the old one left off rather than starting empty.
-            RollingLogFile second = new();
+            RollingLogFile second = new(new LogService());
             second.Open(path, maxLines: 5);
             second.Append("c");
             second.Flush();
@@ -80,7 +108,7 @@ public sealed class RollingLogFileTests
         {
             File.WriteAllLines(path, new[] { "1", "2", "3", "4", "5" });
 
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 2);
             log.Append("6");
             log.Flush();
@@ -96,7 +124,7 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 5);
             foreach (string s in new[] { "a", "b", "c", "d" }) log.Append(s);
 
@@ -113,7 +141,7 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 5);
             log.Append("a");
             log.Append("b");
@@ -131,13 +159,184 @@ public sealed class RollingLogFileTests
         string path = TempPath();
         try
         {
-            RollingLogFile log = new();
+            RollingLogFile log = new(new LogService());
             log.Open(path, maxLines: 5);
             log.Append("a");
             log.Close();
             log.Append("b"); // no open file → dropped
 
             Assert.Equal(new[] { "a" }, File.ReadAllLines(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task BackgroundWriteThrowing_IsLogged_AndCloseStillReturns()
+    {
+        string path = TempPath();
+        LogService logs = new();
+        using ManualResetEventSlim failing = new();
+        int calls = 0;
+        // The first (background) write fails with a non-IO error; later writes succeed.
+        void Write(string p, string[] lines)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                failing.Set();
+                throw new InvalidOperationException("writer broke");
+            }
+            File.WriteAllLines(p, lines);
+        }
+        try
+        {
+            // A wait long enough that only a freed writer lets Close return in time.
+            RollingLogFile log = new(logs, Write, TimeSpan.FromSeconds(30));
+            log.Open(path, maxLines: 5);
+            log.Append("a");
+            // Close after the failing write began, so its own write request isn't the
+            // one that fails.
+            Assert.True(failing.Wait(TimeSpan.FromSeconds(5)), "background write never started");
+
+            Assert.True(await ReturnsPromptly(log.Close), "Close blocked after the writer threw");
+
+            LogEntry error = Assert.Single(logs.SnapshotProblems());
+            Assert.Equal(LogSeverity.Error, error.Severity);
+            Assert.Contains("writer broke", error.Message);
+            Assert.Contains("may be unwritten", error.Message);
+            // Close's own write still lands the line the failed background write dropped.
+            Assert.Equal(new[] { "a" }, File.ReadAllLines(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task BackgroundWriteThatNeverFinishes_IsCutOffByTheBoundedWait()
+    {
+        string path = TempPath();
+        LogService logs = new();
+        using ManualResetEventSlim entered = new();
+        using ManualResetEventSlim release = new();
+        int calls = 0;
+        // The first (background) write hangs until the test lets it go.
+        void Write(string p, string[] lines)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                entered.Set();
+                release.Wait();
+            }
+            File.WriteAllLines(p, lines);
+        }
+        try
+        {
+            RollingLogFile log = new(logs, Write, TimeSpan.FromMilliseconds(5));
+            log.Open(path, maxLines: 5);
+            log.Append("a");
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)), "background write never started");
+
+            Assert.True(await ReturnsPromptly(log.Truncate), "Truncate blocked on a stuck write");
+            log.Append("b");
+            log.Append("c");
+            Assert.True(await ReturnsPromptly(() => log.SetMaxLines(1)), "SetMaxLines blocked on a stuck write");
+
+            LogEntry[] problems = logs.SnapshotProblems();
+            Assert.Equal(2, problems.Length);
+            Assert.All(problems, e =>
+            {
+                Assert.Equal(LogSeverity.Warn, e.Severity);
+                Assert.Contains("may be unwritten", e.Message);
+            });
+
+            // Once the disk answers, the queued request brings the file up to the current tail.
+            release.Set();
+            Assert.True(await FileBecomes(path, "c"), "file never caught up after the write was released");
+        }
+        finally
+        {
+            release.Set();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ReopenOfTheSameFileAfterATimedOutClose_KeepsTheUnwrittenTail()
+    {
+        // A reload of the same character during a disk stall: Close times out, then
+        // Open reads a file the stuck write has already emptied.
+        string path = TempPath();
+        LogService logs = new();
+        using ManualResetEventSlim entered = new();
+        using ManualResetEventSlim release = new();
+        int calls = 0;
+        // The first write empties the file, as File.WriteAllLines does when it opens
+        // it, then hangs until the test lets it go.
+        void Write(string p, string[] lines)
+        {
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                File.WriteAllText(p, string.Empty);
+                entered.Set();
+                release.Wait();
+            }
+            File.WriteAllLines(p, lines);
+        }
+        try
+        {
+            File.WriteAllLines(path, new[] { "old" });
+            RollingLogFile log = new(logs, Write, TimeSpan.FromMilliseconds(5));
+            log.Open(path, maxLines: 5);
+            log.Append("a");
+            Assert.True(entered.Wait(TimeSpan.FromSeconds(5)), "background write never started");
+            log.Append("b");
+            Assert.True(await ReturnsPromptly(log.Close), "Close blocked on a stuck write");
+
+            log.Open(path, maxLines: 5);
+            Assert.Equal(new[] { "old", "a", "b" }, log.Snapshot());
+            log.Append("c");
+
+            release.Set();
+            Assert.True(await FileBecomes(path, "old", "a", "b", "c"), "reopened file lost its history");
+        }
+        finally
+        {
+            release.Set();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void RepeatedWriteFailures_LogOnce_UntilAWriteSucceeds()
+    {
+        string path = TempPath();
+        LogService logs = new();
+        int failing = 1;
+        void Write(string p, string[] lines)
+        {
+            if (Volatile.Read(ref failing) == 1) throw new InvalidOperationException("disk gone");
+            File.WriteAllLines(p, lines);
+        }
+        try
+        {
+            RollingLogFile log = new(logs, Write, TimeSpan.FromSeconds(30));
+            log.Open(path, maxLines: 5);
+            // Each Flush waits for a write attempt of its own, so this is at least two failures.
+            log.Append("a");
+            log.Flush();
+            log.Append("b");
+            log.Flush();
+            Assert.Single(logs.SnapshotProblems(), e => e.Severity == LogSeverity.Error);
+
+            Volatile.Write(ref failing, 0);
+            log.Append("c");
+            log.Flush();
+            Assert.Contains(logs.Snapshot(), e => e.Severity == LogSeverity.Info && e.Message.Contains("works again"));
+            Assert.Equal(new[] { "a", "b", "c" }, File.ReadAllLines(path));
+
+            // A success re-arms the report: the next failure is logged again.
+            Volatile.Write(ref failing, 1);
+            log.Append("d");
+            log.Flush();
+            Assert.Equal(2, logs.SnapshotProblems().Count(e => e.Severity == LogSeverity.Error));
         }
         finally { File.Delete(path); }
     }

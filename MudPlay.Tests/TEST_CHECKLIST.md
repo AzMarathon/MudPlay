@@ -3167,8 +3167,9 @@ How to keep it current:
 
 ### RollingLogFileTests.cs
 - Covers: Services/RollingLogFile
-- Checks: last-N cap, snapshot immediate, reopen continues, trims on open, SetMaxLines, Truncate, append after close ignored.
-- Why: talk.log and transactions.log persistence.
+- Checks: last-N cap, snapshot immediate, reopen continues, trims on open, SetMaxLines, Truncate, append after close ignored; a background write that throws a non-IO error is logged and Close still returns and writes; a write that never finishes is cut off by the bounded wait (Truncate / SetMaxLines return with a "may be unwritten" warning) and the file catches up once it does; reopening the same file after a timed-out Close keeps the unwritten tail rather than re-reading a file the stuck write emptied; repeated non-IO failures log one Error until a write succeeds, then one recovery line, and re-arm.
+- Why: talk.log and transactions.log persistence; a broken or stuck writer froze the UI thread on profile swap, Clear chatlog and the line-count picker.
+- Named seam: RollingLogFile's internal constructor taking the file writer and the Flush wait: a failing or stuck disk can't be produced on demand, so the test passes a writer that throws or hangs and a short wait; the public constructor uses File.WriteAllLines and the 3 s default.
 
 ### RoomAwareMonsterResolverTests.cs
 - Covers: Game/Combat/RoomAwareMonsterResolver

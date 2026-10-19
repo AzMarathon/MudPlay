@@ -1,15 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.38**
-> - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
-> - `@auto-get` starting with `on` / `off` is always the Auto-Get Items toggle; words after it are ignored
-> - Game Data item and batch editors save only the boxes changed: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
-> - Moving an item's Use tier and pressing OK saves the shown values at the new tier
-> - Auto-Light picks lights up off the floor by its own settings, whatever the light's Auto-collect says
-> - The item record opened from the Roomba Master List now saves
-> - An open item editor no longer overwrites a change made by another client or `@auto-get` meanwhile
-> - A game-data override save that fails to reach the disk no longer shows as saved
+> **Version 3.184.39**
+> - A failed or stuck chat / transaction log write can no longer freeze the client on a profile swap, Clear chatlog or a line-count change; it is logged instead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

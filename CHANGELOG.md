@@ -1,5 +1,9 @@
 # Version history
 
+## 3.184.39
+
+- A failed or stuck chat / transaction log write can no longer freeze the client on a profile swap, Clear chatlog or a line-count change; it is logged instead
+
 ## 3.184.38
 
 - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
