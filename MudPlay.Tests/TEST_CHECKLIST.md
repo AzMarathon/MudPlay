@@ -362,8 +362,8 @@ How to keep it current:
 
 ### BlockedExitDescriberTests.cs
 - Covers: Game/Map/BlockedExitDescriber, RoomExit.TryParseWire
-- Checks: blocked-exit text names the direction, the barrier room, the key name or id, and the picklocks/strength needed.
-- Why: a blocked walk must not be confused with the door's far side.
+- Checks: blocked-exit text names the direction, the barrier room, the key name or id (with "or a pick" on a bare `(Key: N)` lock), and the picklocks/strength needed.
+- Why: a blocked walk must not be confused with the door's far side; report `paradigm-20261018-192819` (a bare key lock can be picked).
 
 ### BoatPassageResolverTests.cs
 - Covers: Game/Map/BoatPassageResolver
@@ -1041,8 +1041,8 @@ How to keep it current:
 
 ### DoorOpenManagerTests.cs
 - Covers: Game/Map/DoorOpenManager
-- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; keyed-door fallbacks; "no effect"/left-room ends as NotHere; queue order.
-- Why: reports stock-20260730-182812, paradigm-20260924-053941; doors that hung the walker.
+- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; keyed-door fallbacks (a keyed door with no viable verb goes to its key, the bare lock handed over as `[1 picklocks]`); "no effect"/left-room ends as NotHere; queue order.
+- Why: reports stock-20260730-182812, paradigm-20260924-053941, paradigm-20261018-192819; doors that hung the walker.
 
 ### DoorPolicyTests.cs
 - Covers: Game/Map/DoorPolicy
@@ -1701,8 +1701,8 @@ How to keep it current:
 
 ### ItemChargeTrackerTests.cs
 - Covers: Game/Inventory/ItemChargeTracker
-- Checks: Paradigm charge counts read from `look` and saved; recharge after cleanup; auto-look; counting down from use lines; refusals; stacks; dropping the last copy.
-- Why: paradigm-20260926-220239, -20261002-140153, -20260928-053429
+- Checks: Paradigm charge counts read from `look` and saved; recharge after cleanup; auto-look; counting down from use lines; refusals; stacks; dropping the last copy; a look answered `You do not see <item> here!` forgets the count and takes the item off the pack (InventoryManager.NoteNotHeld, fed through a `ServerFeed`).
+- Why: paradigm-20260926-220239, -20261002-140153, -20260928-053429, -20261018-192819
 
 ### ItemDamageModelTests.cs
 - Covers: Game/Inventory/ItemDamageModel, ItemFinderEntry.BuildCatalog
@@ -1808,6 +1808,11 @@ How to keep it current:
 - Covers: Services/JsonStore
 - Checks: round-trip; no temp files left behind; concurrent saves to the same file don't fail.
 - Why: two clients crashing on the same boss-timers.json
+
+### KeyDoorRulesTests.cs
+- Covers: Game/Map/DoorOpenManager, Game/Map/DoorPolicy.Openers, RoomExit.IsBareKeyLock, Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, with AutoWalkManager, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
+- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: the walker's `use green metal key w` answered `You do not have green metal key.` fails the door at once (the watchdog never runs), takes the key off the ring, and the next plan refuses the door, naming the key. Stock's `You don't have green metal key w.` is read too; a "have" line naming another item isn't. A key's last-charge line (`The key breaks and crumbles apart.`, or the engine's line naming the key) takes the copy used off the ring, and only after a key of ours fitted. What opens each door kind: a bare `(Key: N)` lock is picked at any Picklocks or keyed, never bashed even at Strength 111; a `[or any picklocks]` key lock is picked before the key; Thrag's `(Door [11 picklocks/strength])` from inside is bashed without a key; the route filter shuts a bare or any-picklocks key lock without the key or Picklocks, opens both to Picklocks, calls a bare lock at Picklocks 10 poor odds, and keeps a bare lock shut with no stat screen read.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, key and relock rules read from Stock's engine) and "Item charges (`Uses` / `UseCount`)"; the client kept a used-up key and waited out its watchdog.
 
 ### KeybindEditDialogViewModelTests.cs
 - Covers: ViewModels/Keybind/KeybindEditDialogViewModel
@@ -3297,7 +3302,7 @@ How to keep it current:
 
 ### RoomTooltipBuilderTests.cs
 - Covers: Game/Map/RoomTooltipBuilder
-- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids, level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
+- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids and the bare `(Key: N)` lock's "or a pick", level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
 - Why: Reports `paradigm-20260911-010954`, `paradigm-20261007-194642`; user, 2026-09-30 (pick chance). The map tooltip and the Room Info panel both build from this.
 
 ### RoomTrackerTests.cs

@@ -2533,8 +2533,10 @@ public static class BugReportBuilder
             ? $"Strength {svc.PlayerStats.Strength}, Picklocks {svc.PlayerStats.Picklocks} (last stat screen); "
               + $"bash ceiling {svc.MaxStrength.MaxAchievableStrength}; "
               + $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
-              + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
-            : "no stat screen read yet: every door is planned through and left to the door handler");
+              + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps; a bare (Key: N) lock is the key or a pick "
+              + $"(as {Game.Map.DoorPolicy.BareKeyLockPickRequirement} picklocks), never a bash"
+            : "no stat screen read yet: every door is planned through and left to the door handler, "
+              + "but a bare (Key: N) lock without its key");
         Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
             ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
         Kv(sb, "Doors given up on (walk)", walker.AbandonedDoors.Count == 0
@@ -2591,6 +2593,7 @@ public static class BugReportBuilder
             + (door.CurrentDirection is { } dd ? $", dir={dd}" : string.Empty)
             + (door.CurrentDoorRoom is { } dr ? $", door in {dr}" : string.Empty)
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
+        Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"

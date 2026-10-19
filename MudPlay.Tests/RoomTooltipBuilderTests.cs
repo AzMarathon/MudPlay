@@ -1528,10 +1528,13 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     }
 
     [Fact]
-    public void FormatExitHint_KeyLocked_NoPicklockAlt_JustKey()
+    // A bare key lock is picked like a [1 picklocks] one (DoorPolicy.Openers), so the
+    // hint offers the pick beside the key.
+    public void FormatExitHint_KeyLocked_NoPicklockAlt_OffersAPick()
     {
         Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172)", out RoomExit exit));
-        Assert.Equal("Key: #172", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+        Assert.Equal("Key: #172, or a pick", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+        Assert.Equal("Key: #172, or a pick, pick ~40%", RoomTooltipBuilder.FormatExitHint(exit, data: null, picklocks: 40));
     }
 
     // 8/462's north gate records "Key: 1" — a game-data typo, since item ids start
@@ -1560,14 +1563,14 @@ public sealed class RoomTooltipBuilderTests : IDisposable
             RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
     }
 
-    // A typo'd key with NO stat alternative stays impassable, so the raw id is kept
-    // — it is the only signal that the door's data is broken.
+    // A typo'd key with NO stat alternative keeps the raw id — it is the only signal
+    // that the door's data is broken.
     [Fact]
     public void FormatExitHint_KeyLocked_UnresolvableKeyNoStatAlt_KeepsRawId()
     {
         using var set = new TempGameDataSet("""[ { "Number": 806, "Name": "gate key" } ]""");
         Assert.True(RoomExit.TryParseWire("8/461 (Key: 1)", out RoomExit exit));
-        Assert.Equal("Key: #1", RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
+        Assert.Equal("Key: #1, or a pick", RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
     }
 
     // A throwaway single-table set, so the key-resolution tests can distinguish

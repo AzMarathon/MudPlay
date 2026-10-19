@@ -1,15 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.38**
-> - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character
-> - `@auto-get` starting with `on` / `off` is always the Auto-Get Items toggle; words after it are ignored
-> - Game Data item and batch editors save only the boxes changed: an untick over a Global or realm tick is off, and an item set back to its installed defaults returns to them
-> - Moving an item's Use tier and pressing OK saves the shown values at the new tier
-> - Auto-Light picks lights up off the floor by its own settings, whatever the light's Auto-collect says
-> - The item record opened from the Roomba Master List now saves
-> - An open item editor no longer overwrites a change made by another client or `@auto-get` meanwhile
-> - A game-data override save that fails to reach the disk no longer shows as saved
+> **Version 3.184.39**
+> - A door the game data gives only a key for can be picked with any Picklocks; it's never bashed
+> - A key door marked any picklocks is picked before its key is used
+> - Paradigm's `You do not have <key>.` ends a door at once instead of after a wait
+> - A key the game says you don't have, or that crumbles on its last use, leaves the key ring at once
+> - A charge look answered `You do not see <item> here!` takes the item off what is held
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

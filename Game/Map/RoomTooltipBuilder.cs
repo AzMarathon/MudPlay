@@ -674,7 +674,9 @@ public static class RoomTooltipBuilder
                 // A key-locked door that can also be picked / bashed carries the
                 // skill alternative ("or 50 picklocks/strength") — surface it so
                 // the user knows they needn't have the key.
-                if (exit.Hint == RoomExitHint.KeyLocked
+                if (exit.Hint == RoomExitHint.KeyLocked && exit.IsBareKeyLock)
+                    baseText += $", or a pick{PickChance(exit, picklocks)}";
+                else if (exit.Hint == RoomExitHint.KeyLocked
                     && FormatDoorRequirement(exit) is { Length: > 0 } alt)
                     baseText += $", or {alt}{PickChance(exit, picklocks)}";
                 return baseText;
@@ -775,8 +777,9 @@ public static class RoomTooltipBuilder
     private static string PickChance(RoomExit exit, int picklocks)
     {
         if (picklocks <= 0) return string.Empty;
-        int chance = DoorPolicy.PickChancePercent(exit.StatRequirement, picklocks);
-        return exit.StatRequirement > 0 ? $", pick ~{chance}%" : $", pick ≥{chance}%";
+        (int req, _) = DoorPolicy.Openers(in exit);
+        int chance = DoorPolicy.PickChancePercent(req, picklocks);
+        return req > 0 ? $", pick ~{chance}%" : $", pick ≥{chance}%";
     }
 
     // Like FormatDoorRequirement but never blank: a zero requirement renders "any"

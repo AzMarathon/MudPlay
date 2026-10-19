@@ -33,6 +33,20 @@ public static class DoorPolicy
     // the walk goes round only if the picks run out.
     public const int PoorPickDetourSteps = 10;
 
+    // The pick requirement of a bare `(Key: N)` lock. The data's `[N picklocks]` is a
+    // lock modifier of −(N − 1), and a bare cell is a modifier of 0: `[1 picklocks]`,
+    // a pick rolled under the character's Picklocks.
+    public const int BareKeyLockPickRequirement = 1;
+
+    // What opens this door or keyed door besides its key: the pick / bash requirement
+    // and whether a bash is open. A bare `(Key: N)` lock is picked like a
+    // `[1 picklocks]` one on both exit kinds the cell may be, and never bashed: a door
+    // or gate bashes at the character's Strength, but a key exit can't be bashed at
+    // all, and there `bash <dir>` is taken as an attack on whatever the direction
+    // word names (GAME_MECHANICS "Locked doors — picking, opening and bashing").
+    public static (int StatRequirement, bool CanBash) Openers(in RoomExit exit) =>
+        exit.IsBareKeyLock ? (BareKeyLockPickRequirement, false) : (exit.StatRequirement, exit.CanBash);
+
     // Chance in 100 that one `pick` opens a lock (GAME_MECHANICS "Locked doors —
     // picking, opening and bashing": read from the Stock engine, and the same on
     // Paradigm as far as the user knows): one roll under Picklocks less the lock's
@@ -58,11 +72,13 @@ public static class DoorPolicy
 
     // Why a route keeps off this door, for the log and the bug report: "bash needs
     // 301 Strength, you have 120; pick chance 3% (Picklocks 303)".
+    // A bare `(Key: N)` lock says why it isn't bashed instead (Openers).
     public static string DescribeOdds(
         int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
-        int maxBashableStrength)
+        int maxBashableStrength, bool bareKeyLock = false)
     {
-        string bash = !canBash ? "can't be bashed"
+        string bash = bareKeyLock ? "not bashed (the data can't tell a door from a key exit here)"
+            : !canBash ? "can't be bashed"
             : statRequirement > maxBashableStrength
                 ? $"bash needs {statRequirement} Strength, more than any character can reach"
             : $"bash needs {statRequirement} Strength, you have {playerStrength}";
@@ -111,7 +127,8 @@ public static class DoorPolicy
         bool bashOk = canBash
                    && statRequirement <= maxBashableStrength
                    && (statRequirement <= 0 || playerStrength >= statRequirement);
-        bool pickOk = statRequirement <= 0 || playerPicklocks >= statRequirement;
+        // No Picklocks never opens a lock, "any" lock or not (PickChancePercent).
+        bool pickOk = playerPicklocks > 0 && (statRequirement <= 0 || playerPicklocks >= statRequirement);
 
         if (preferPickOverBash)
         {

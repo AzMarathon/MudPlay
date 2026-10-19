@@ -144,6 +144,15 @@ public readonly partial record struct RoomExit(
     // exit that an action cell happens to name keeps its own rule.
     public bool AcceptsActions => Hint is RoomExitHint.MultiActionHidden or RoomExitHint.Door or RoomExitHint.KeyLocked;
 
+    // A key lock whose cell names no picklocks / strength alternative: `(Key: 475)`.
+    // The game data writes it for a lock modifier of 0 on a door or gate and on a
+    // key exit alike, two exit kinds the cell can't tell apart (GAME_MECHANICS
+    // "Locked doors — picking, opening and bashing"). DoorPolicy.Openers says
+    // what that leaves open.
+    public bool IsBareKeyLock =>
+        Hint == RoomExitHint.KeyLocked && KeyItemId > 0 && StatRequirement <= 0
+        && RawHint?.Contains("picklocks", StringComparison.OrdinalIgnoreCase) != true;
+
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
 

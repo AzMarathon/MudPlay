@@ -1319,6 +1319,57 @@ public sealed partial class InventoryManager : IDisposable
             + (stays ? "no longer lit, kept in the pack, spent." : "no longer lit, and gone from what is held."));
     }
 
+    // The game said a named item isn't held: a `use` answered `You do not have <item>.`
+    // or a look found it nowhere. Every copy comes off the pack and the key ring, so
+    // the route planner and the door handler stop counting on it before the next full
+    // read (report paradigm-20261018-192819: a key whose last charge had gone stayed
+    // listed, and its door stayed planned through).
+    public void NoteNotHeld(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        int held = UnwornCopies(name);
+        if (held == 0) return;
+        RemoveHeld(name, held);
+        AdjustItemWeight(name, -held);
+        _log?.Info(LogCategory, $"The game says no {name} is held — {held} cop{(held == 1 ? "y" : "ies")} taken off what is held.");
+    }
+
+    // The game showed a named item gone: every copy (NoteNotHeld), or the one copy
+    // whose last charge was just spent.
+    public void NoteItemGone(string name, bool everyCopy)
+    {
+        if (everyCopy) NoteNotHeld(name);
+        else NoteUsedUp(name);
+    }
+
+    // A named item's last charge went and it left the pack (Stock's
+    // `_deduct_item_charge`, the same on Paradigm): one copy comes off, unless the
+    // item is kept when spent.
+    private void NoteUsedUp(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || UnwornCopies(name) == 0) return;
+        if (_staysWhenSpent?.Invoke(name) == true)
+        {
+            _log?.Info(LogCategory, $"The {name} spent its last charge — kept when spent, so still held.");
+            return;
+        }
+        RemoveHeld(name, 1);
+        AdjustItemWeight(name, -1);
+        _log?.Info(LogCategory, $"The {name} spent its last charge — one copy taken off what is held.");
+    }
+
+    // Copies of a named item in the pack and on the key ring.
+    private int UnwornCopies(string name)
+    {
+        lock (_lock)
+        {
+            int p = FindCarriedIndex(_carried, name);
+            int k = FindCarriedIndex(_keys, name);
+            return (p < 0 ? 0 : CountedCommand.SplitLeadingCount(_carried[p]).Count)
+                 + (k < 0 ? 0 : CountedCommand.SplitLeadingCount(_keys[k]).Count);
+        }
+    }
+
     private bool IsKey(string name)
     {
         if (_isKey?.Invoke(name) == true) return true;

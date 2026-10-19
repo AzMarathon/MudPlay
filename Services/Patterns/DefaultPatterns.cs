@@ -1101,12 +1101,20 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.DoorKeyUnlockSuccess,
             @"\bsuccessfully unlocked the (?:door|gate)\b",
             options: RegexOptions.IgnoreCase);
-        // "You have no <item>" / "You don't have a key for that"
-        // — generic missing-key reply. Coarse to cover both phrasings;
-        // the manager only consults it during WaitingUseKey.
+        // A `use <key> <dir>` that found no key: Stock's `You don't have %s.` and
+        // Paradigm's `You do not have green metal key.` (report
+        // paradigm-20261018-192819), plus older coarse forms; or the wrong key,
+        // `The %s doesn't seem to fit that lock.`. The manager only consults it
+        // during WaitingUseKey, and takes a "have" form only when it names the key.
         yield return new RegexPattern(KnownPatterns.DoorKeyUnknown,
-            @"\b(?:you have no |you don'?t have|nothing happens)\b|doesn't seem to fit that lock",
+            @"\b(?:you have no |you don'?t have|you do not have |nothing happens)\b|doesn't seem to fit that lock",
             options: RegexOptions.IgnoreCase);
+        // A key's last charge spent: the key's own message, which is
+        // `The key breaks and crumbles apart.` for most keys, or the engine's
+        // fallback naming the item (GAME_MECHANICS "Item charges (`Uses` /
+        // `UseCount`)"). Either way the key has left the pack.
+        yield return new RegexPattern(KnownPatterns.DoorKeyUsedUp,
+            @"^(?:The key breaks and crumbles apart\.|It's uses gone, .+ disappears from your inventory!)$");
 
         // Winch pull results (CONFIRMED Paradigm wording). Success = the winch winds
         // up ("...and it begins to turn!"); the gate it controls opens a beat later.

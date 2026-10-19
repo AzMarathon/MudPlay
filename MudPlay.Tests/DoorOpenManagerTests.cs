@@ -152,6 +152,7 @@ public sealed class DoorOpenManagerTests
     public void UseKey_WrongKey_FailsAtOnce()
     {
         using Harness h = new();
+        h.Stats.Picklocks = 0;
         DoorOpenResult? result = null;
         h.Mgr.Enqueue(Direction.W, 0, canBash: false, keyItemId: 172, "walker", r => result = r);
         Assert.Equal("use black star key w", h.LastSent);
@@ -418,8 +419,9 @@ public sealed class DoorOpenManagerTests
     public void KeyMissing_FailsWithoutCallingTheDoorUnopenable()
     {
         using Harness h = new();
+        h.Stats.Picklocks = 0;
         DoorOpenResult? result = null;
-        h.Mgr.Enqueue(Direction.N, 0, canBash: true, keyItemId: 172, "walker", r => result = r);
+        h.Mgr.Enqueue(Direction.N, DoorPolicy.BareKeyLockPickRequirement, canBash: false, keyItemId: 172, "walker", r => result = r);
         Assert.Equal("use black star key n", h.LastSent);
 
         h.Line("You don't have black star key.");

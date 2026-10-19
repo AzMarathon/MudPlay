@@ -44,11 +44,13 @@ public static class BlockedExitDescriber
     }
 
     // The "needs …" tail for a door: the key and/or the picklocks-or-strength
-    // alternative, whichever the exit carries. A key-only door names just the key;
-    // a stat-only door names just the skill; a door with both offers the choice.
+    // alternative, whichever the exit carries. A stat-only door names just the
+    // skill; a door with both offers the choice.
     private static string DoorNeeds(in RoomExit exit, Func<int, string?> itemName)
     {
         string? key = exit.KeyItemId > 0 ? ItemText(exit.KeyItemId, itemName) : null;
+        // A bare `(Key: N)` lock is picked with any Picklocks (DoorPolicy.Openers).
+        if (exit.IsBareKeyLock) return $" — needs {key}, or a pick";
         string? stat = exit.StatRequirement > 0
             ? (exit.CanBash
                 ? $"{exit.StatRequirement} picklocks/strength"

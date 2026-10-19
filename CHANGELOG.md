@@ -1,5 +1,14 @@
 # Version history
 
+## 3.184.39
+
+- A door the game data gives only a key for can be picked with any Picklocks; it's never bashed
+- A key door marked any picklocks is picked before its key is used
+- Paradigm's `You do not have <key>.` ends a door at once instead of after a wait
+- A key the game says you don't have, or that crumbles on its last use, leaves the key ring at once
+- A charge look answered `You do not see <item> here!` takes the item off what is held
+- bug reports addressed: paradigm-20261018-192819
+
 ## 3.184.38
 
 - `@auto-get <item>` reports one item's Auto-collect and Max to get; `on` / `off` and `max <n>` / `max none` set them for this character

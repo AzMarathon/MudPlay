@@ -23,6 +23,10 @@ namespace MudPlay.Game.Map;
 //      rest to rest-max whenever HP falls to the rest trigger (bashing drains HP —
 //      see GAME_MECHANICS). On PICK failure: retry up to OtherSettings.MaxPickAttempts,
 //      then fall back to the other verb if viable, else fail.
+//      A keyed door goes to its key once no verb is left, and straight away when
+//      none is viable. The walker hands a bare `(Key: N)` lock over as a pick-only
+//      `[1 picklocks]` one (DoorPolicy.Openers), so it too is picked first when
+//      the character has Picklocks.
 //   5) Bash success → Opened directly (bash both unlocks AND swings the
 //      door). Pick success → open <dir> → on "is now open" → Opened.
 //   6) The door turns out not to be where the character stands — the verb drew
@@ -68,6 +72,7 @@ public sealed class DoorOpenManager : IDisposable
     private readonly IDisposable _lockedSub;
     private readonly IDisposable _keyOkSub;
     private readonly IDisposable _keyUnknownSub;
+    private readonly IDisposable _keyUsedUpSub;
     private readonly IDisposable _noEffectSub;
     private readonly IDisposable _notADoorSub;
     private readonly WireSender _wire = new();
@@ -88,6 +93,12 @@ public sealed class DoorOpenManager : IDisposable
     // other it couldn't force, which a key tried first (a walk that went to fetch
     // one) is not.
     private bool _keyIsLastResort;
+    // The in-flight request's key fitted the lock and so spent a charge (the game
+    // charges a use on "unlocked" and on "was not locked" alike): a last-charge line
+    // now is about that key.
+    private bool _keyChargeSpent;
+    // Told when the game shows the key gone: (key name, every copy). Unset → nobody.
+    private Action<string, bool>? _keyLost;
     // Whether a stat screen has been read, the same test the movement filter's door
     // providers use. Unread, a door with no viable verb is not the door winning.
     private readonly Func<bool> _statsRead;
@@ -116,6 +127,9 @@ public sealed class DoorOpenManager : IDisposable
     // The room the in-flight request's door is in, for the bug report. Null when
     // idle or when the request started with the tracker unsure of the room.
     public RoomKey? CurrentDoorRoom => _doorRoom;
+
+    // The last key the game showed gone, and the line that did, for the bug report.
+    public string? LastKeyLoss { get; private set; }
 
     // Outstanding queue depth (excludes the in-flight request).
     public int QueueDepth => _queue.Count;
@@ -168,6 +182,7 @@ public sealed class DoorOpenManager : IDisposable
         _lockedSub      = _router.Subscribe(KnownPatterns.DoorIsLocked,         OnIsLocked);
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
         _keyUnknownSub  = _router.Subscribe(KnownPatterns.DoorKeyUnknown,       OnKeyUnknown);
+        _keyUsedUpSub   = _router.Subscribe(KnownPatterns.DoorKeyUsedUp,        OnKeyUsedUp);
         _noEffectSub    = _router.Subscribe(KnownPatterns.CommandNoEffect,      OnNoEffect);
         _notADoorSub    = _router.Subscribe(KnownPatterns.NotADoorOrGate,       OnNotADoor);
     }
@@ -192,6 +207,7 @@ public sealed class DoorOpenManager : IDisposable
         _lockedSub.Dispose();
         _keyOkSub.Dispose();
         _keyUnknownSub.Dispose();
+        _keyUsedUpSub.Dispose();
         _noEffectSub.Dispose();
         _notADoorSub.Dispose();
     }
@@ -257,6 +273,7 @@ public sealed class DoorOpenManager : IDisposable
         _verbAttempts = 0;
         _triedFallbackVerb = false;
         _keyIsLastResort = false;
+        _keyChargeSpent = false;
         _log?.Info("Door", "Door flow stopped — queue drained.");
     }
 
@@ -272,24 +289,13 @@ public sealed class DoorOpenManager : IDisposable
         _verbAttempts = 0;
         _triedFallbackVerb = false;
         _keyIsLastResort = false;
+        _keyChargeSpent = false;
         StartChosenVerb();
     }
 
     private void StartChosenVerb()
     {
         if (_current is not { } cur) return;
-
-        // Keyed doors with NO stat alternative go straight to the key
-        // path. StatRequirement == 0 on a keyed door means "no
-        // picklocks/strength alt" — distinct from a plain door where
-        // 0 means "open by anyone". The walker can't tell these apart
-        // from RoomExit alone; the keyed-door branch is the
-        // discriminator here.
-        if (cur.KeyItemId > 0 && cur.StatRequirement <= 0)
-        {
-            StartUseKey();
-            return;
-        }
 
         string? verb = DoorPolicy.ChooseVerb(
             cur.StatRequirement,
@@ -412,6 +418,11 @@ public sealed class DoorOpenManager : IDisposable
 
     // Bound after construction: the tracker is built later than this manager.
     public void SetConfirmedRoomProbe(Func<RoomKey?> confirmedRoom) => _confirmedRoom = confirmedRoom;
+
+    // Told when the game shows a key the request used to be gone: (key name, every
+    // copy). `You do not have <key>.` means no copy is left; a last-charge line, that
+    // the copy just used is gone. Bound after construction: the inventory is built later.
+    public void SetKeyLossSink(Action<string, bool> keyLost) => _keyLost = keyLost;
 
     // The rest hold changed: a bash or pick that was waiting on it goes out once
     // it's over.
@@ -607,6 +618,7 @@ public sealed class DoorOpenManager : IDisposable
         {
             _log?.Info("Door",
                 $"door {_current.DirectionShort} wasn't locked — sending open (was {_state}).");
+            if (_state == DoorState.WaitingUseKey) _keyChargeSpent = true;
             SendOpen();
         }
     }
@@ -640,19 +652,66 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingUseKey) return;
         if (_current is null) return;
         _log?.Info("Door", $"key unlock {_current.DirectionShort} succeeded — sending open.");
+        _keyChargeSpent = true;
         SendOpen();
     }
 
-    private void OnKeyUnknown(MatchResult _)
+    // The key didn't open the lock: missing (`You do not have <key>.` on Paradigm,
+    // `You don't have <key> <dir>.` on Stock) or the wrong one (`… doesn't seem to fit
+    // that lock.`) — terminal, since a key is single-shot and the use is not retried.
+    // A "have" line answers any `use`, so it is the door's only when it names this
+    // key. A missing key is dropped from what is held, or the planner would route
+    // through its door again on a key the game says isn't there (report
+    // paradigm-20261018-192819: unread, the line left the request to its 8 s
+    // watchdog, and the pack list kept a key whose last charge had gone). The key is
+    // named: this reason is what the walk fails with, and it is all the user is told
+    // about why a walk that went to fetch a key stopped at the door.
+    private void OnKeyUnknown(MatchResult m)
     {
         if (_state != DoorState.WaitingUseKey) return;
-        if (_current is null) return;
-        // "You have no <key>" / "You don't have" — terminal failure.
-        // Keys are single-shot; no retry on the use verb. The key is named: this
-        // reason is what the walk fails with, and it is all the user is told about
-        // why a walk that went to fetch a key stopped at the door.
-        string key = _itemNameLookup(_current.KeyItemId) is { Length: > 0 } name ? name : $"item #{_current.KeyItemId}";
+        if (_current is not { } cur) return;
+        string? keyName = _itemNameLookup(cur.KeyItemId);
+        string text = m.Text.Trim();
+        bool notHeld = IsHaveLine(text);
+        if (notHeld && (keyName is not { Length: > 0 } || !text.Contains(keyName, StringComparison.OrdinalIgnoreCase)))
+        {
+            _log?.Debug("Door", $"'{text}' names another item than the {keyName ?? $"item #{cur.KeyItemId}"} — still waiting.");
+            return;
+        }
+        string key = keyName is { Length: > 0 } ? keyName : $"item #{cur.KeyItemId}";
+        if (notHeld) NoteKeyLost(cur.KeyItemId, key, everyCopy: true, text);
         FailCurrent($"use-key failed (the {key} is missing or wrong)", unopenable: _keyIsLastResort);
+
+        static bool IsHaveLine(string line) =>
+            line.StartsWith("You do not have ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("You don't have ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("You dont have ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("You have no ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The key this request used spent its last charge and left the pack (GAME_MECHANICS
+    // "Item charges (`Uses` / `UseCount`)"). The line comes straight after the
+    // unlock, while the request waits on its `open`.
+    private void OnKeyUsedUp(MatchResult m)
+    {
+        if (_current is not { } cur || !_keyChargeSpent || cur.KeyItemId <= 0) return;
+        string key = _itemNameLookup(cur.KeyItemId) is { Length: > 0 } name ? name : $"item #{cur.KeyItemId}";
+        string text = m.Text.Trim();
+        // The engine's own fallback names the item: one naming another isn't ours.
+        if (text.StartsWith("It's uses gone", StringComparison.Ordinal)
+            && !text.Contains(key, StringComparison.OrdinalIgnoreCase)) return;
+        _keyChargeSpent = false;
+        NoteKeyLost(cur.KeyItemId, key, everyCopy: false, text);
+    }
+
+    private void NoteKeyLost(int keyItemId, string key, bool everyCopy, string line)
+    {
+        LastKeyLoss = $"{key} (#{keyItemId}){(everyCopy ? ", none held" : ", a copy used up")}: \"{line}\"";
+        _log?.Info("Door", everyCopy
+            ? $"the game says the {key} isn't held — dropping it from what is held."
+            : $"the {key} spent its last charge — dropping the copy used from what is held.");
+        // A key the item table doesn't name can't be found in what is held either.
+        if (_itemNameLookup(keyItemId) is { Length: > 0 } name) _keyLost?.Invoke(name, everyCopy);
     }
 
     private void OnIsLocked(MatchResult _)
@@ -701,7 +760,7 @@ public sealed class DoorOpenManager : IDisposable
             ? cur.CanBash
               && cur.StatRequirement <= _maxBashStrengthProvider()
               && (cur.StatRequirement <= 0 || _stats.Strength >= cur.StatRequirement)
-            : (cur.StatRequirement <= 0 || _stats.Picklocks >= cur.StatRequirement);
+            : _stats.Picklocks > 0 && (cur.StatRequirement <= 0 || _stats.Picklocks >= cur.StatRequirement);
         if (!otherViable || other is null)
         {
             // No alt verb viable. Keyed doors fall through to the key.
@@ -789,6 +848,7 @@ public sealed class DoorOpenManager : IDisposable
         _verbAttempts = 0;
         _triedFallbackVerb = false;
         _keyIsLastResort = false;
+        _keyChargeSpent = false;
     }
 
     // ----- helpers ----------------------------------------------------

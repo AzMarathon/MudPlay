@@ -6605,6 +6605,12 @@ public sealed class AppServices
         // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
         Inventory.Changed += () => ItemCharges.EnsureChargesKnown();
 
+        // An item the game shows gone comes off what is held at once, ahead of the next
+        // `i`: a key the door handler found missing or used up, an item a charge look
+        // found nowhere. Routing and the door handler read the held list.
+        ItemCharges.NotHeld += Inventory.NoteNotHeld;
+        Door.SetKeyLossSink(Inventory.NoteItemGone);
+
         // @uses [item] — remaining charges of a carried limited-use item; bare lists all.
         ItemUsesQuery = new Game.Remote.ItemUsesQueryHandler(RemoteCommands, CarriedCharges);
 

@@ -389,6 +389,33 @@ public sealed class ItemChargeTrackerTests : IDisposable
         Assert.Null(_tracker.RemainingFor(10));
     }
 
+    // Report paradigm-20261018-192819: the look after a key's last use was answered
+    // `You do not see green metal key here!`. The item is gone, so its count is
+    // forgotten and the pack is told, which takes it off what is held.
+    [Fact]
+    public void LookFindingTheItemNowhere_ForgetsIt_AndTellsThePack()
+    {
+        ServerFeed server = new();
+        _tracker.AttachLineExtractor(server.Lines);
+        InventoryManager pack = new();
+        pack.AttachLineExtractor(server.Lines);
+        _tracker.NotHeld += pack.NoteNotHeld;
+        server.Line("You are carrying gnarled wand, rope and grapple");
+        server.Line("You have no keys.");
+        server.Line("Wealth: 0 copper farthings");
+        server.Line("Encumbrance: 10/500 - None [2%]");
+        _carried.Add("gnarled wand");
+        Look("look gnarled");
+        server.Line("Uses remaining: 1");
+        Assert.Equal(1, _tracker.RemainingFor(10));
+
+        Look("look gnarled wand");
+        server.Line("You do not see gnarled wand here!");
+
+        Assert.Null(_tracker.RemainingFor(10));
+        Assert.Equal(new[] { "rope and grapple" }, pack.Snapshot.CarriedItems);
+    }
+
     [Fact]
     public void ResetSession_KeepsPersistedCounts()
     {
