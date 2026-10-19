@@ -6,19 +6,20 @@ namespace MudPlay.Services;
 // Keeps Game.Map.BareKeyLockBook's two lists on disk: the shipped seed
 // (AppPaths.DefaultBareKeyLocksSeedFile), read once, and the realm's own record
 // (AppPaths.RealmBareKeyLocksFile), loaded when the realm changes and written on
-// each side learned. Every character on the realm shares the record, so it is
-// re-read before a write when another client changed it, the way the realm's stash
-// tally is (StashBalanceStore).
+// each change. Every character on the realm shares the record: when another client
+// wrote it since, the change is made to what it wrote, and the book is given the
+// result, so neither client's answers, edits or resets are lost to the other's
+// older copy (the way the realm's stash tally is shared, StashBalanceStore).
 public sealed class BareKeyLockStore
 {
-    public const string LogCategory = "BareKeyLocks";
+    private const string LogCategory = "BareKeyLocks";
 
     private readonly BareKeyLockBook _book;
     private readonly LogService? _log;
     private DateTime _seenWrite = DateTime.MinValue;
     private bool _loading;
 
-    // Folder of the realm whose record is loaded. null keeps learning in memory only.
+    // Folder of the realm whose record is loaded. null keeps the record in memory only.
     public string? ActiveRealmFolder { get; private set; }
 
     public BareKeyLockStore(BareKeyLockBook book, LogService? log = null)
@@ -26,7 +27,7 @@ public sealed class BareKeyLockStore
         ArgumentNullException.ThrowIfNull(book);
         _book = book;
         _log = log;
-        _book.Learned += (_, _, _) => Persist();
+        _book.Recorded += Persist;
     }
 
     public void LoadSeed(string path)
@@ -48,60 +49,70 @@ public sealed class BareKeyLockStore
     {
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
         _seenWrite = DateTime.MinValue;
-        Load();
-    }
-
-    private void Load()
-    {
         _loading = true;
         try
         {
-            if (ActiveRealmFolder is null)
+            _book.LoadLearned(ActiveRealmFolder is null ? null : Read(AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder)));
+            if (ActiveRealmFolder is not null)
             {
-                _book.LoadLearned(null);
-                return;
+                _seenWrite = WriteTime(AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder));
+                _log?.Info(LogCategory, $"realm record: {_book.LearnedCount} side(s)");
             }
-            string path = AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder);
-            Dictionary<string, bool>? onFile = null;
-            try { onFile = JsonStore.Load<Dictionary<string, bool>>(path); }
-            catch (Exception ex) { _log?.Warn(LogCategory, $"the realm's bare key locks can't be read: {ex.Message}"); }
-            _book.LoadLearned(Parse(onFile));
-            _seenWrite = WriteTime(path);
-            _log?.Info(LogCategory, $"realm record: {_book.LearnedCount} side(s) learned, {_book.LearnedBashable} bashable");
         }
         finally { _loading = false; }
     }
 
-    private void Persist()
+    private void Persist(BareKeyLockBook.Change change)
     {
         if (_loading || ActiveRealmFolder is null) return;
         string path = AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder);
         try
         {
-            // Another client on the realm wrote since: its sides are kept, and ours
-            // (the book's record) go on top.
-            Dictionary<string, bool> merged = WriteTime(path) != _seenWrite
-                ? JsonStore.Load<Dictionary<string, bool>>(path) ?? new()
-                : new();
-            foreach ((RoomKey room, Direction dir, bool bashable) in _book.LearnedEntries)
-                merged[BareKeyLockBook.FormatSide(room, dir)] = bashable;
-            JsonStore.Save(path, merged);
+            bool theirs = WriteTime(path) != _seenWrite;
+            Dictionary<(RoomKey Room, Direction Dir), BareKeyLockBook.Tally> record = new();
+            if (theirs)
+            {
+                foreach ((RoomKey room, Direction dir, BareKeyLockBook.Tally t) in Read(path)) record[(room, dir)] = t;
+                BareKeyLockBook.Apply(record, change);
+            }
+            else
+                foreach ((RoomKey room, Direction dir, BareKeyLockBook.Tally t) in _book.LearnedEntries) record[(room, dir)] = t;
+            JsonStore.Save(path, record.ToDictionary(
+                kv => BareKeyLockBook.FormatSide(kv.Key.Room, kv.Key.Dir),
+                kv => new TallyRecord
+                {
+                    Door = kv.Value.Door,
+                    KeyExit = kv.Value.KeyExit,
+                    LastAnswered = kv.Value.LastAnswered,
+                    SetByUser = kv.Value.UserKind,
+                }));
             _seenWrite = WriteTime(path);
+            if (!theirs) return;
+            _log?.Info(LogCategory, "the realm's record was written by another client since; its sides are taken in");
+            _loading = true;
+            try { _book.LoadLearned(record.Select(kv => (kv.Key.Room, kv.Key.Dir, kv.Value))); }
+            finally { _loading = false; }
         }
         catch (Exception ex)
         {
             // A failed write must not break the door handler: the record stands in
-            // memory and the next side learned writes again.
+            // memory and the next change writes again.
             _log?.Warn(LogCategory, $"failed to save the realm's bare key locks: {ex.Message}");
         }
     }
 
-    private static IEnumerable<(RoomKey, Direction, bool)> Parse(Dictionary<string, bool>? onFile)
+    private IEnumerable<(RoomKey, Direction, BareKeyLockBook.Tally)> Read(string path)
     {
-        if (onFile is null) yield break;
-        foreach ((string side, bool bashable) in onFile)
+        Dictionary<string, TallyRecord>? onFile = null;
+        try { onFile = JsonStore.Load<Dictionary<string, TallyRecord>>(path); }
+        catch (Exception ex) { _log?.Warn(LogCategory, $"the realm's bare key locks can't be read: {ex.Message}"); }
+        List<(RoomKey, Direction, BareKeyLockBook.Tally)> entries = new();
+        if (onFile is null) return entries;
+        foreach ((string side, TallyRecord t) in onFile)
             if (BareKeyLockBook.TryParseSide(side, out RoomKey room, out Direction dir))
-                yield return (room, dir, bashable);
+                entries.Add((room, dir, new BareKeyLockBook.Tally(
+                    Math.Max(0, t.Door), Math.Max(0, t.KeyExit), t.LastAnswered, t.SetByUser)));
+        return entries;
     }
 
     private static DateTime WriteTime(string path) =>
@@ -118,5 +129,13 @@ public sealed class BareKeyLockStore
         public string? Side { get; set; }
         public bool Bashable { get; set; }
         public int ExitType { get; set; }
+    }
+
+    private sealed class TallyRecord
+    {
+        public int Door { get; set; }
+        public int KeyExit { get; set; }
+        public DateTimeOffset? LastAnswered { get; set; }
+        public BareLockBash? SetByUser { get; set; }
     }
 }

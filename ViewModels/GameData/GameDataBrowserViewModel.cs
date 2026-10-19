@@ -64,6 +64,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
     private readonly RoomGraphManager? _roomGraph;
     private readonly PlayerStats? _playerStats;
     private readonly ItemSourceIndex? _itemSources;
+    private readonly Game.Map.BareKeyLockBook? _bareKeyLocks;
+    private readonly BareKeyLockStore? _bareKeyLockStore;
 
     // Derived from the active set's TBInfo for the Quest Flags table; browser-scoped and
     // self-caching per set (only GameDataCache needed, so no injection).
@@ -87,7 +89,9 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         RoomGraphManager? roomGraph = null,
         PlayerStats? playerStats = null,
         ItemSourceIndex? itemSources = null,
-        string? initialSectionId = null)
+        string? initialSectionId = null,
+        Game.Map.BareKeyLockBook? bareKeyLocks = null,
+        BareKeyLockStore? bareKeyLockStore = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         _gameData = gameData;
@@ -107,6 +111,8 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         _roomGraph = roomGraph;
         _playerStats = playerStats;
         _itemSources = itemSources;
+        _bareKeyLocks = bareKeyLocks;
+        _bareKeyLockStore = bareKeyLockStore;
         _questFlags = new QuestFlagIndex(gameData);
         _gameData.ActiveSetChanged += OnActiveSetChanged;
 
@@ -220,6 +226,14 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
 
         if (_flavorPrefixes is not null)
             Sections.Add(new FlavorPrefixesSectionViewModel(_flavorPrefixes));
+
+        if (_bareKeyLocks is not null && _roomGraph is not null)
+            Sections.Add(new DoorsSectionViewModel(
+                _bareKeyLocks, _roomGraph,
+                itemName: id => AppServices.CurrentOrNull?.ItemNames.GetName(id),
+                realmFolder: () => _bareKeyLockStore?.ActiveRealmFolder,
+                _dialogs,
+                confirm: (title, body) => AppServices.Current.Confirm.ConfirmAsync(title, body, "Forget")));
 
         // ----- MDB-derived (bottom group) ---------------------------------
 

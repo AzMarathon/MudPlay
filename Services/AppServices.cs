@@ -6625,7 +6625,9 @@ public sealed class AppServices
         RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup);
         BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup);
         Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
-        Door.SetBareLockBook(BareKeyLocks, DirectionWordNamesSomeoneHere);
+        Door.SetBareLockBook(BareKeyLocks,
+            word => Game.Map.BashTargetWord.NamesSomeoneIn(RoomClassifier, word),
+            pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
         Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
@@ -14968,19 +14970,6 @@ public sealed class AppServices
         return recovered
             ? PlayerState.Hp >= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestMaxHp, max)
             : PlayerState.Hp <= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestIfBelowHp, max);
-    }
-
-    // Whether `bash <word>` could be taken for an attack on someone in the room, were
-    // the exit no door: anyone the room's roster lists whose name answers to the word
-    // (BashTargetWord). A roster not known to be whole could hide someone, so it
-    // answers yes.
-    private bool DirectionWordNamesSomeoneHere(string word)
-    {
-        if (!RoomClassifier.RosterIsWhole || RoomClassifier.Current is not { } here) return true;
-        foreach (Game.Combat.RoomEntity e in here.Entities)
-            if (Game.Map.BashTargetWord.Names(word, e.RawName) || Game.Map.BashTargetWord.Names(word, e.ResolvedName))
-                return true;
-        return false;
     }
 
     // Live key-possession check for DoorOpenManager's opportunistic floor grab:

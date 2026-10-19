@@ -5411,7 +5411,9 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.RoomGraph,
             AppServices.Current.PlayerStats,
             AppServices.Current.ItemSources,
-            initialSectionId);
+            initialSectionId,
+            AppServices.Current.BareKeyLocks,
+            AppServices.Current.BareKeyLockStore);
 
     // Items listed at the top of the Game Data menu, one per imported set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command

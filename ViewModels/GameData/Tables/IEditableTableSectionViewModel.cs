@@ -37,7 +37,8 @@ public interface IEditableTableSectionViewModel
 
     // Optional secondary action, rendered as a button at the far right of the toolbar row
     // (opposite the Add / Remove group). Its label comes from ExportLabel. null when the
-    // section offers no such action — the Incomplete Messages tab uses it for "Upload edits".
+    // section offers no such action — the Incomplete Messages tab uses it for "Upload edits", the Doors tab
+    // for "Forget learned…".
     ICommand? ExportCommand => null;
     string? ExportLabel => null;
 

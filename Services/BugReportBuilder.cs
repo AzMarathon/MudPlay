@@ -2538,11 +2538,13 @@ public static class BugReportBuilder
               + "except a bare (Key: N) lock known to be a key exit, which is shut without its key");
         Game.Map.BareKeyLockBook bare = svc.BareKeyLocks;
         Kv(sb, "Bare (Key: N) locks known", $"seed {bare.SeedCount} side(s), {bare.SeedBashable} bashable; "
-            + $"this realm learned {bare.LearnedCount}, {bare.LearnedBashable} bashable"
+            + $"this realm's record {bare.LearnedCount} side(s)"
             + (bare.LearnedCount == 0 ? string.Empty
-                : $" ({string.Join(", ", bare.LearnedEntries.Select(e => $"{Game.Map.BareKeyLockBook.FormatSide(e.Room, e.Dir)} {(e.Bashable ? "bashes" : "key exit")}"))})")
-            + "; a bare lock is picked like 1 picklocks, bashed where known to be a door, "
-            + "and an unknown one bashed when nobody in the room answers to the direction word");
+                : $" ({string.Join(" | ", bare.LearnedEntries.Select(e => $"{Game.Map.BareKeyLockBook.FormatSide(e.Room, e.Dir)}: {bare.Describe(e.Room, e.Dir)}"
+                    + (e.Tally.LastAnswered is { } at ? $", last answered {at:yyyy-MM-dd HH:mm:ss}" : "")))})")
+            + "; a bare lock is picked like 1 picklocks, bashed where known to be a door, and one not yet "
+            + "answered as a door on this realm bashed only when nobody in the room answers to the direction word "
+            + "and the realm has no PvP");
         Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
             ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
         Kv(sb, "Doors given up on (walk)", walker.AbandonedDoors.Count == 0
