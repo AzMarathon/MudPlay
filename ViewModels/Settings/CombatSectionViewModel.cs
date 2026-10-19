@@ -627,6 +627,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private void RefreshWeaponSuggestions()
     {
         if (_gameData is null) return;
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Combat weapon suggestions");
         ClassEquipProfile anyClass = ItemEquipFilter.ResolveClassProfile(_gameData, null);
         WeaponSuggestions  = EquipmentSlotMap.GetItemsForSlot(_gameData, EquipmentSlot.Weapon, 0, anyClass, null);
         OffHandSuggestions = EquipmentSlotMap.GetItemsForSlot(_gameData, EquipmentSlot.OffHand, 0, anyClass, null);

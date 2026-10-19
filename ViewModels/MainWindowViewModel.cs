@@ -4620,13 +4620,18 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (_partyWindow is { } existing) { RaiseOrClose(existing); return; }
 
+        using PerformanceMonitor.Scope open = AppServices.Current.Performance.Measure("open Party window");
         PartyWindow window = new()
         {
             DataContext = new PartyViewModel(
                 AppServices.Current.PartyState,
                 data => SendUserInputAs(SentCommandTrail.Origin.Window, data)),
         };
-        window.Closed += (_, _) => _partyWindow = null;
+        window.Closed += (_, _) =>
+        {
+            using PerformanceMonitor.Scope close = AppServices.Current.Performance.Measure("close Party window");
+            _partyWindow = null;
+        };
         _partyWindow = window;
         window.Show(main);
     }
@@ -5109,6 +5114,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         AppServices svc = AppServices.Current;
+        using PerformanceMonitor.Scope open = svc.Performance.Measure("open Workshop window");
         // Pull the loaded profile's stored stats into PlayerStats before the
         // Workshop reads them, so every tab opens populated from the profile.
         // Only when the live stats are blank (no `stat` parsed this session, or
@@ -5127,6 +5133,7 @@ public partial class MainWindowViewModel : ObservableObject
         // them on close to detach their long-lived service-event subscriptions.
         window.Closed += (_, _) =>
         {
+            using PerformanceMonitor.Scope close = svc.Performance.Measure("close Workshop window");
             workshopVm.Dispose();
             _workshop = null;
         };
@@ -5222,6 +5229,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         AppServices svc = AppServices.Current;
+        using PerformanceMonitor.Scope open = svc.Performance.Measure("open Settings window");
         SettingsWindow window = new()
         {
             DataContext = new SettingsWindowViewModel(
@@ -5233,6 +5241,7 @@ public partial class MainWindowViewModel : ObservableObject
         };
         window.Closed += (_, _) =>
         {
+            using PerformanceMonitor.Scope close = svc.Performance.Measure("close Settings window");
             if (window.DataContext is SettingsWindowViewModel vm) vm.Dispose();
             _settings = null;
         };

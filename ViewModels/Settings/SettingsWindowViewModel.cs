@@ -207,6 +207,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
 
     private void ApplyAll()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Settings save");
         (List<string> applied, _) = ApplyDirty(Sections, holdFlagged: false);
         LogApplied(applied);
         GuideActions.Report(GuideActions.SettingsApplied);
@@ -261,6 +262,19 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     {
         ApplySearch();
         if (!string.IsNullOrWhiteSpace(value)) GuideActions.Report(GuideActions.SettingsSearched);
+    }
+
+    // A section switch builds the section's view, inside the change notice the
+    // window's binding answers: measured whole, so a hang there names the page.
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SelectedSection) || AppServices.CurrentOrNull?.Performance is not { } performance)
+        {
+            base.OnPropertyChanged(e);
+            return;
+        }
+        using PerformanceMonitor.Scope scope = performance.Measure("Settings section", SelectedSection?.Id ?? "(none)");
+        base.OnPropertyChanged(e);
     }
 
     // A section picked by the user, not the one the window opened on, ticks the

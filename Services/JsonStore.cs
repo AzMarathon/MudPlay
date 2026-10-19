@@ -74,7 +74,7 @@ internal static class JsonStore
             // ReadWithRetry gives.
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
             {
-                Thread.Sleep(Math.Min(i, 10) * 3);
+                RetryWait(i);
             }
         }
     }
@@ -87,6 +87,7 @@ internal static class JsonStore
     // As Save, in another form than the shared one (see Load).
     public static void Save<T>(string path, T value, JsonSerializerOptions options) where T : class
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("json save", path);
         string? dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
@@ -131,9 +132,18 @@ internal static class JsonStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
             {
-                Thread.Sleep(Math.Min(i, 10) * 3);
+                RetryWait(i);
             }
         }
+    }
+
+    // The pause before another try at a file Windows holds for a moment. Up to
+    // ~435 ms over a full run of tries, on whichever thread asked: measured, so a
+    // UI-thread stall spent here is named.
+    private static void RetryWait(int attempt)
+    {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("json retry wait (file held)");
+        Thread.Sleep(Math.Min(attempt, 10) * 3);
     }
 
     // Rename src over dst, retrying briefly on the transient error a concurrent
@@ -155,7 +165,7 @@ internal static class JsonStore
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && i < attempts)
             {
-                Thread.Sleep(Math.Min(i, 10) * 3);
+                RetryWait(i);
             }
         }
     }

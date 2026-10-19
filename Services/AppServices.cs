@@ -2981,6 +2981,20 @@ public sealed class AppServices
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
         Profile.Performance = Performance;
+        // What a Hang-<ts>.md says of the session and copies of the logs, read off
+        // the probe's thread while the UI thread is frozen (HangReport.Gather),
+        // masked by the bug report's own scrub.
+        Performance.HangSources = new HangReport.Sources(Log, SentCommands,
+            () => BugReportBuilder.BuildScrubberOffUiThread(this),
+            () =>
+            [
+                ("Character", Profile.CurrentProfileName ?? "(none loaded)"),
+                ("BBS", Profile.CurrentBbsName ?? "(none)"),
+                ("Realm", BugReportBuilder.RealmLabel(GameData.ActiveRealm)),
+                ("Active game-data set", GameData.ActiveSet ?? "(none)"),
+                ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
+                ("Log to send with this", CrashReporter.LogToSend()),
+            ]);
         // Built ahead of every engine: each one's enable probe reads the master
         // switch, and a probe must never run before its target exists.
         AutoModeController = new Game.AutoModeController(Profile, Log);
@@ -6962,7 +6976,11 @@ public sealed class AppServices
         Alignment.Refreshed += Equipment.ReevaluateAllBlocks;
         Equipment.BlocksChanged += AlignmentCheck.RequestCheck;
         Equipment.SetsEdited += AlignmentCheck.RequestCheck;
-        Equipment.SetsEdited += CombatProfiles.SyncActiveWeaponsFromGear;
+        Equipment.SetsEdited += () =>
+        {
+            using PerformanceMonitor.Scope scope = Performance.Measure("sync combat weapons from gear");
+            CombatProfiles.SyncActiveWeaponsFromGear();
+        };
         Profile.ProfileLoaded += _ => AlignmentCheck.RequestCheck();
         // A dark cloud out of Good blocks Good-only gear at once and asks where we
         // landed; one from Neutral or worse changes nothing.

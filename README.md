@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.40**
+> **Version 3.185.1**
 > - With Auto-collect logs on, a slow or locked disk no longer freezes the client on a log line: the program log file is written in the background
 > - A stuck disk drops the oldest waiting lines and the file says how many; a failed write is noted once and retried
 > - Lines still waiting reach the file before the client exits or a crash report names it

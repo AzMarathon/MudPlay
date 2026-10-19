@@ -303,8 +303,13 @@ public sealed partial class GameDataCache
                 (not null, null)   => $"Unloaded game data set '{outgoing}' (no set active).",
                 (not null, not null) => $"Swapped game data set '{outgoing}' → '{setName}'.",
             });
-        ActiveSetChanged?.Invoke(setName);
-        LogTablesHeld();
+        // Every store and index rebuilds for the new set here, on this thread: a
+        // known long operation (PerformanceMonitor.MeasureLong).
+        using (Performance?.MeasureLong("game-data set switch", setName ?? "(none)"))
+        {
+            ActiveSetChanged?.Invoke(setName);
+            LogTablesHeld();
+        }
     }
 
     // What the set's subscribers left loaded once they had all rebuilt, table by
@@ -363,8 +368,11 @@ public sealed partial class GameDataCache
             }
         }
         Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{set}'.");
-        ActiveSetChanged?.Invoke(set);
-        LogTablesHeld();
+        using (Performance?.MeasureLong("game-data set reload", set))
+        {
+            ActiveSetChanged?.Invoke(set);
+            LogTablesHeld();
+        }
     }
 
     // Lazy-load (or return the cached) table tableName of the active set. Returns
@@ -449,8 +457,7 @@ public sealed partial class GameDataCache
         // the read it runs takes none and needs no other thread, so a UI thread
         // waiting on a worker's read waits for the file and nothing else.
         ReadOutcome outcome;
-        using (Performance?.Measure(mine ? $"parse {tableName}"
-                   : read.Prewarm ? $"await prewarm {tableName}" : $"await parse {tableName}"))
+        using (Performance?.Measure(mine ? "parse" : read.Prewarm ? "await prewarm" : "await parse", tableName))
             outcome = read.Outcome.Value;
         bool shared = !mine && outcome.Table is not null;
         // A read another caller started that failed is that caller's to answer for.
@@ -458,7 +465,7 @@ public sealed partial class GameDataCache
         // so each caller meets the failure (or a file that reads this time) first-hand.
         if (!mine && outcome.Table is null)
         {
-            using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
+            using PerformanceMonitor.Scope? parse = Performance?.Measure("parse", tableName);
             outcome = ReadTable(path, tableName);
         }
 

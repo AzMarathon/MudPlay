@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using MudPlay.Services;
 
 namespace MudPlay.Controls;
 
@@ -51,6 +52,9 @@ public static class WindowBehaviors
     private static void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is not Window window) return;
+        // On every press in every window: a raise the window manager answers
+        // slowly holds the UI thread here.
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("raise window on click");
 
         // The main window has no owner; leave its z-order to the WM. Forcing it
         // up would make it jump above its own owned tool windows and flicker, so

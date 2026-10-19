@@ -170,9 +170,17 @@ public sealed class ProgramLogFile : IDisposable
         while (await _queue.WaitToReadAsync().ConfigureAwait(false))
         {
             Exception? failure = null;
+            // Off the UI thread the scope only times the batch for the
+            // performance log (a slow disk shows there); opened at the first
+            // item, so a wake with nothing to write leaves no empty scope.
+            PerformanceMonitor.Scope? scope = null;
             try
             {
-                while (_queue.TryRead(out Item item)) Write(item);
+                while (_queue.TryRead(out Item item))
+                {
+                    scope ??= AppServices.CurrentOrNull?.Performance.Measure("program log file write");
+                    Write(item);
+                }
                 Flush();
                 // Switched off: everything logged before it is written above. One
                 // that slipped in after the last read reopens its own file next.
@@ -184,6 +192,7 @@ public sealed class ProgramLogFile : IDisposable
                 // it, or the queue would fill behind a task that has ended.
                 failure = ex;
             }
+            finally { scope?.Dispose(); }
             if (failure is null)
             {
                 _queue.EndBatch();

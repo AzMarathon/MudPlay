@@ -114,11 +114,7 @@ public static class CrashReporter
         if (Interlocked.Increment(ref _written) > MaxReports) return;
         try
         {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-            // Headless / service accounts can report no Desktop — fall back to
-            // the app's working directory so the report still lands somewhere.
-            if (string.IsNullOrEmpty(desktop)) desktop = AppContext.BaseDirectory;
-            string path = Path.Combine(desktop, $"Crash-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.md");
+            string path = Path.Combine(ReportFolder(), $"Crash-{DateTimeOffset.Now:yyyyMMdd-HHmmss}.md");
             File.WriteAllText(path, Build(ex, source));
         }
         catch
@@ -130,8 +126,8 @@ public static class CrashReporter
     }
 
     // The program log is written by a background task: the report names the file
-    // to send, so the lines leading up to the crash go in first, for as long as
-    // ProgramLogFile.CrashDrainBound allows.
+    // to send (LogToSend), so the lines leading up to the crash go in first, for
+    // as long as ProgramLogFile.CrashDrainBound allows.
     private static void LetProgramLogLand()
     {
         try { _programLog?.WaitWritten(ProgramLogFile.CrashDrainBound); }
@@ -140,6 +136,29 @@ public static class CrashReporter
             // The crash handler must never throw: the report goes without the
             // last lines rather than not at all.
         }
+    }
+
+    // Where a crash or hang report lands: the Desktop, or, for a headless or
+    // service account that reports none, the app's own folder, so the report
+    // still lands somewhere.
+    internal static string ReportFolder()
+    {
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        return string.IsNullOrEmpty(desktop) ? AppContext.BaseDirectory : desktop;
+    }
+
+    // The log file a report's reader should ask for alongside it.
+    internal static string LogToSend()
+    {
+        AppServices? svc = AppServices.CurrentOrNull;
+        if (svc is null) return "(the client had not finished starting)";
+        // With Auto-collect on, the last-minutes files stopped when it went
+        // on: the full program log is the record, not they.
+        if (svc.LogDiagnostics.AutoCollectLogs)
+            return "the full program log: " + (svc.ProgramLog.CurrentPath is { } full ? Path.GetFileName(full) : "(not open)");
+        return svc.RecentLog.CurrentFiles is { Count: > 0 } files
+            ? "the last-minutes log: " + string.Join(" and ", files.Select(Path.GetFileName))
+            : "(nothing was logged)";
     }
 
     internal static string Build(Exception? ex, string source)
@@ -159,18 +178,7 @@ public static class CrashReporter
         // The log files outlive the process: say where they are, in case this
         // document's own state dump below could not be made.
         Kv(sb, "Log folder", Safe(() => BugReportContext.HomeRelative(AppPaths.LogsDir)));
-        Kv(sb, "Log to send with this", Safe(() =>
-        {
-            AppServices? svc = AppServices.CurrentOrNull;
-            if (svc is null) return "(the client had not finished starting)";
-            // With Auto-collect on, the last-minutes files stopped when it went
-            // on: the full program log is the record, not they.
-            if (svc.LogDiagnostics.AutoCollectLogs)
-                return "the full program log: " + (svc.ProgramLog.CurrentPath is { } full ? Path.GetFileName(full) : "(not open)");
-            return svc.RecentLog.CurrentFiles is { Count: > 0 } files
-                ? "the last-minutes log: " + string.Join(" and ", files.Select(Path.GetFileName))
-                : "(nothing was logged)";
-        }));
+        Kv(sb, "Log to send with this", Safe(LogToSend));
         sb.Append('\n');
 
         sb.Append("## Exception\n\n");
