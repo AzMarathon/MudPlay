@@ -1,11 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.9**
+> **Version 3.185.10**
 > - Data-loss fix: the in-app update no longer deletes the other files in the folder MudPlay runs from (it wiped a Downloads folder); it replaces only MudPlay's own files
 > - An update puts in only the downloaded release's own files and deletes nothing else; a download holding anything odd stops the update untouched
 > - A failed update puts back every file it changed from a backup in the temp folder, not beside the install
 > - Leftovers of older versions are removed at startup by exact name only, each one logged
+> - Removing toolbar buttons gives back the window width that adding them took, unless you've resized the window since
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -133,9 +133,9 @@ public partial class MainWindow : Window
             }));
 
         // A shortcut added to a horizontal toolbar widens the window by what the strip
-        // outgrew, so the new button shows instead of being clipped past the right
-        // edge. Like the status bar, the first layout only records the width, so a
-        // saved window size is never overridden at launch.
+        // outgrew, and removing shortcuts gives that width back (ToolbarWidthFit).
+        // Like the status bar, the first layout only records the width, so a saved
+        // window size is never overridden at launch.
         WatchToolbarWidth(TopToolbarItems);
         WatchToolbarWidth(BottomToolbarItems);
 
@@ -398,6 +398,8 @@ public partial class MainWindow : Window
         });
     }
 
+    private readonly ToolbarWidthFit _toolbarWidthFit = new();
+
     private void WatchToolbarWidth(ItemsControl strip)
     {
         double last = 0;
@@ -408,15 +410,23 @@ public partial class MainWindow : Window
             double now = strip.DesiredSize.Width;
             double was = last;
             last = now;
-            if (was <= 0 || now <= was || WindowState != WindowState.Normal || !strip.IsEffectivelyVisible) return;
-            double overflow = now - (ClientSize.Width - ToolbarPadding);
-            if (overflow <= 0) return;
+            if (was <= 0 || now == was || WindowState != WindowState.Normal || !strip.IsEffectivelyVisible) return;
+            bool grew = now > was;
+            // A grow fits the strip that grew, so a toolbar the user has clipped by
+            // narrowing the window isn't forced back open; a shrink still has to fit
+            // the other toolbar.
+            double needed = (grew ? now : WidestToolbar()) + ToolbarPadding;
             double cap = Screens.ScreenFromWindow(this) is { } screen
                 ? screen.WorkingArea.Width / screen.Scaling
                 : double.MaxValue;
-            Width = Math.Min(cap, (double.IsNaN(Width) ? ClientSize.Width : Width) + overflow);
+            if (_toolbarWidthFit.Next(ClientSize.Width, needed, grew, MinWidth, cap) is { } width)
+                Width = width;
         };
     }
+
+    private double WidestToolbar() => Math.Max(
+        TopToolbarItems.IsEffectivelyVisible ? TopToolbarItems.DesiredSize.Width : 0,
+        BottomToolbarItems.IsEffectivelyVisible ? BottomToolbarItems.DesiredSize.Width : 0);
 
     // Border.Toolbar's horizontal padding, both sides (Themes/Controls.axaml).
     private const double ToolbarPadding = 16;

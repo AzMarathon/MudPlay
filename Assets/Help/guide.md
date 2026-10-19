@@ -150,7 +150,7 @@ The status bar along the bottom packs several live readouts. This is the default
 
 ## The toolbar and menus
 
-A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **The auto-engines** and **Manual one-shots and Reset States**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**. When a button you add makes a top or bottom toolbar wider than the window, the window widens to fit it (up to the screen's width).
+A customizable **toolbar** of icon buttons sits under the menu bar. The full bar is **File · View · Action · Game Data · Tools · Help · Bug Report** — **Action** is your in-play on/off surface for the auto-engines and the manual one-shots (see **The auto-engines** and **Manual one-shots and Reset States**), **Game Data** switches imported data sets, and **Bug Report** captures client state to a file on your Desktop. You choose which toolbar buttons appear — and rebind every shortcut — in **Settings → Toolbar + Shortcuts**. When a button you add makes a top or bottom toolbar wider than the window, the window widens to fit it (up to the screen's width). Removing buttons gives that width back, as far as the toolbars still need, never narrower than the window was before they widened it, and not at all if you've resized the window yourself since.
 
 ### Customizing the terminal right-click menu
 

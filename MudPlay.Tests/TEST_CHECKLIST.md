@@ -4085,6 +4085,11 @@ How to keep it current:
 - Checks: a click runs the first option or the saved pick; Choose sets and saves without running; an unknown saved pick falls back to the first; the tooltip names the pick.
 - Why: a ▾ mis-pick must not fire a sweep like Drop everything.
 
+### ToolbarWidthFitTests.cs
+- Covers: Views/ToolbarWidthFit (the main window's width decision for its horizontal toolbars; MainWindow's LayoutUpdated plumbing is smoke-tested by launching)
+- Checks: removing buttons gives back the width adding them took, down to what the toolbars still need and never below the width before the grow or the window's minimum; a window the toolbar didn't grow never shrinks; after the user resizes, their width is kept and only later growth is given back; growth stops at the screen and only that is given back.
+- Why: user report, 2026-10-19 (adding to the toolbar widened the window, removing never shrank it back).
+
 ### TrackerWireRig.cs
 - Test infrastructure.
 - Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
