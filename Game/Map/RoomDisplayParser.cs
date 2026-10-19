@@ -232,7 +232,7 @@ public sealed partial class RoomDisplayParser : IDisposable
         return null;
     }
 
-    private static bool IsLineDominantlyBrightCyan(LineExtractor.EmittedLine line)
+    internal static bool IsLineDominantlyBrightCyan(LineExtractor.EmittedLine line)
     {
         if (line.Attributes is null || line.Attributes.Length == 0) return false;
         int total = 0;
@@ -344,7 +344,7 @@ public sealed partial class RoomDisplayParser : IDisposable
     [GeneratedRegex(
         @"^\s*Obvious\s+exits?\s*:\s*(?<list>.+?)\s*\.?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ObviousExitsPattern();
+    internal static partial Regex ObviousExitsPattern();
 
     // Door/gate barrier prefix on an exit token — "<open|closed> <door|gate> ".
     // Entry is already lowercased, so no IgnoreCase needed.

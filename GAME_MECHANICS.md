@@ -648,6 +648,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - The Conversation window captures these as a **Social** channel entry, grouped under the room-local "say" filter (the say chip stays white, the message text renders green).
 - Detection is all-green colour plus head shape. Own lines are `You <lowercase verb>…`, excluding the known green status prefixes (`You are/have/notice/feel/…`). Others' lines are `<known room player>
   <lowercase verb>…` minus enter/exit/follow/logon/chat lines (see `ActionEmoteClassifier`).
+- An exit's own move text has the same colour and shape. `ChatRouter` tells it from a social by the room display that follows it in the same read (*Movement & navigation → Exit messages and socials on the wire*).
 
 ### Realm exit / logoff sequence
 *Status: CONFIRMED 2026-09-05 (user + report `stock-20260904-230111`); Paradigm sequence CONFIRMED 2026-10-08 (user) · Realm: differs*
@@ -4727,6 +4728,37 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - It isn't sent for a sneak that held, or for a follower's move (@0x419074–0x419087).
   - A monster spawning or walking in sends it too (`_generate_monster` @0x424e70, `_move_monster` @0x42591f).
 
+### Exit messages and socials on the wire
+*Status: [OBSERVED] 2026-10-19 (Stock 1.11p `wccmmud.dll`, `wccmp002.dat`, `wccmsg2`); the messages are the same on both realms [CONFIRMED] 2026-10-19 (user: "they're the same on stock and paradigm"); the print order is read from Stock only · Realm: both for the messages, Stock for the order*
+
+- **An exit can carry its own message, printed in place of the plain move lines.** It is a message-table record of three lines: line 1 to the mover, line 2 to the room left, line 3 to the room entered (`%s` is the mover's name). Which exit slot holds it, by exit type, is in the 1.11p exit decode (`tools/1.11p source/exit_fields.md`): type 5's movement message, a Text exit's pass message, an Item exit's pass message, and others. *[OBSERVED]*
+- **The imported game data doesn't carry these messages.** `Rooms.json` shows a type-5 exit as a plain `map/room` and a Text exit only as its command phrases (`1/2335 (Text: borrow skiff, go skiff, row skiff)`), in every imported set; the text is only in the engine's map and message tables. *[OBSERVED]*
+- **The 2026-10-19 report's rooms** *[OBSERVED] Stock `wccmp002.dat` + `wccmsg2`; the exits read the same in `data-Paradigm-1.9.1` `Rooms.json`*:
+
+  | Room, exit | Exit | Line 1 / line 2 / line 3 |
+  |---|---|---|
+  | `1/2335` Small Pier, N → `1/2149` | type 5, message 617 | `You hop in one of the skiffs, and row to Newhaven.` / `%s hops into one of the skiffs, and rows away.` / `%s rows up to the dock.` |
+  | `1/2149` Newhaven, Docks, S → `1/2335` | Text (phrases message 8564: `borrow skiff`, `go skiff`, `row skiff`), message 8563 | `You climb into one of the skiffs, and row to Silvermere.` / `%s climbs into one of the skiffs, and rows out into the river.` / `%s rows up to the docks.` |
+  | `1/1764` Huge Cave, NW → `1/1765` | type 5, message 8341 | `You step onto the crumbling edge of a pit, and fall inside!` / `%s steps onto the crumbling edge of a pit, and falls inside!` / `%s falls down into the pit from above!` |
+  | `1/1765` Huge Cave, Refuse Pit, SE → `1/1764` | type 5, message 8342 | `You scramble out of the shallow pit.` / `%s scrambles out of the shallow pit.` / `%s scrambles up out of the pit to safety.` |
+
+- **How Stock prints them** *([OBSERVED] 2026-10-19, Stock 1.11p `wccmmud.dll` `_move_user`)*. Every line opens with `ESC[79D ESC[K` (back to the first column and erase the row, which wipes a prompt already there), then its colour:
+  - **Type 5** (@0x417eb3–0x418113): line 1 to the mover in green, `ESC[0;32m` (0x47e0b1), then `\r`, and straight into `_display_room_desc` (@0x4180ad) with no prompt between. Lines 2 and 3 open bright yellow (`ESC[1;33m`, 0x47e06d), but the name is put in as `ESC[0;32m` + name (`%s%s` @0x417fa5), so a message that opens with `%s` (every one in the table above) shows all green.
+  - **Text exit** (@0x4181f0–0x418489): line 1 to the mover in bright yellow, `ESC[1;33m` (0x47e06d, @0x4183b6), then `_tell_user` and `_display_room_desc` (@0x4183fd), then the prompt. Lines 2 and 3 carry the name in bright yellow and the rest in green (`%s%s%s` @0x4182c7 and @0x418341: 0x47e082, the name, 0x47e09c).
+  - The room lines go out through `_tell_room` with its prompt flag set, so each player there gets the line and then their prompt drawn again (`_tell_room` @0x46b0bb).
+- **A room display opens with its title** *([OBSERVED] Stock `_display_room_desc` @0x436f5d)*: `ESC[79D ESC[K` (0x483e93), then, when the room can't be seen, `_can_see`'s one line instead of the whole display (*Dark rooms — no name, no exits, traversal inferred from no bonk*); otherwise the room name in `ESC[1;36m` (0x483eba) and `\r`.
+  - When a per-user flag is set (the byte table at 0x479100, a debug switch by its wording; what sets it is not decoded), `DBG: %s Map: %s` (@0x43702a) comes first, ahead of `_can_see`'s line or the title.
+- **The user's own social is followed by the prompt** *([OBSERVED] Stock `_handle_ljn_actions` @0x4606fb–0x460729)*: the line, `\r`, `_prf_prompt`, `_tell_user`. Its colour and shape are in *Wire, prompt & command output → BBS actions / emotes (the `action list` socials)*.
+- `[NEEDS CONFIRMATION]` **Paradigm's print order.** The messages are the same on both realms, but the order (the move's line straight before the room display with no prompt between, and the prompt after a social) is read only from Stock's DLL. Question for the user: does Paradigm print the move's line straight before the room display with no prompt between, as Stock does?
+- **A party leader's followers move in the same sweep** *([OBSERVED] Stock `_fast_update_character` and `_fast_update_characters` @0x421a8d)*. The sweep runs `_fast_update_character` for each user number in turn. A leader's update makes its move (`_move_user` mode 0, @0x42309c), prints its prompt, and then moves each of its followers whose user number is lower than its own (`_move_user` mode 3, @0x423108, in the loop @0x4230c5–0x42312e). A follower numbered above the leader moves later in the same sweep (how is not decoded). So a lower-numbered follower is sent at once the leader's line 2, the prompt drawn again, then its own line 1 and the room display.
+- **These lines used to be filed as socials.** The user's conversation logs (2026-08 to 2026-09) hold `You hop in one of the skiffs, and row to Newhaven.`, `Fujin hops into one of the skiffs, and rows away.`, `You climb the steps encircling the ancient silverwood tree.` and `Ray arrives from above, descending the wooden steps.` under Social.
+- **The Text exit's own line is bright yellow, so it never reads as a social** *([OBSERVED] Stock `_move_user` @0x4183b6; [CONFIRMED] 2026-10-19, user, from recollection: "only the green skiff line reached the conversation window")*. The report named `borrow skiff` at `1/2149`, but the line that reached the conversation was the green one from going north at `1/2335`; `You climb into one of the skiffs, and row to Silvermere.` never did. (An earlier note asked whether it was green on the user's board; settled 2026-10-19.)
+
+**Client use:**
+- `ChatRouter` (`HoldSocial`, `SettleHeldSocials`, `KeepOutMoveLines`): a green line that reads as a social is held until the lines after it in the same server read settle it, or the read ends (`LineExtractor.ReadEnded` → `MessageRouter.EndRead`). An own `You …` line is a move's when the read goes on with a whole room display: the bright-cyan title and then its `Obvious exits:` line, or the dark-room or `You are blind.` line. A title-coloured line alone isn't one (Stock prints `The %s resists your spell!` @0x441a21 in it). The own line then stays in the terminal only, with a held line of the leader we follow (`PartyState.IsLeaderWeFollow`); anyone else's held line goes to the conversation. Report of 2026-10-19 (no report file).
+- `TriggerEngine`: a held line fires no trigger until it is settled (`ChatRouter.IsHolding`). Released as a social it fires the chat triggers, as before; kept out it fires the **Game messages** triggers (`ChatRouter.MoveLineKeptOut`).
+- **Client policy:** the rule is applied on Paradigm too; if Paradigm's order differs, the line only reaches the conversation as before. A line of another player's in a read with no own exit line is still taken for a social, since nothing on the wire tells a stranger's line 2 or 3 from one. So is an own exit line that the room display doesn't follow directly (one a trap prints before its walk-in line, or one before a `DBG:` line), or whose display runs past the end of its read.
+
 ### Refused ("bonked") moves
 *Status: CONFIRMED*
 
@@ -5694,6 +5726,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A water crossing keyed `borrow skiff` is a *free* text-exit ferry, not an item gate.** At a shore room the exit is a Text exit whose command is `borrow skiff`; sending it prints `You climb into one of the skiffs, and row to <place>.` and lands the player in the far room (e.g. Silvermere at 1/2335).
 - **It costs nothing** — the capture crossed with `Gold: 0` — so it's a *borrow*, distinct from the buy-a-raft `(Item: N)` carry gates the route picker weighs elsewhere.
+- The exit's three lines for Newhaven, Docks `1/2149`, and the way back north from Small Pier `1/2335`, with their colours, are in *Exit messages and socials on the wire*.
 
 **Client use:**
 - The client crosses it like any other text exit (`RoomTracker` Confirmed → Pending on the sent command; the walker resolves the Text exit's deterministic target), so `borrow skiff` must be treated as a plain traversal command, never a purchase or a carried-item requirement.

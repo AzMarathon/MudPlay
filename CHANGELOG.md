@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.11
+
+- An exit's own move text (the skiffs, the refuse pit) stays in the terminal instead of filling the Conversation window as an action
+- Following a leader through such an exit keeps the leader's leaving line out too
+
 ## 3.185.10
 
 - Data-loss fix: the in-app update no longer deletes the other files in the folder MudPlay runs from (it wiped a Downloads folder); it replaces only MudPlay's own files

@@ -33,6 +33,13 @@ public sealed class MessageRouter
     // catch-all pattern.
     public event Action<Terminal.LineExtractor.EmittedLine>? LineDispatched;
 
+    // Fires once every line of one server read has been dispatched (EndRead, fed from
+    // LineExtractor.ReadEnded): the moment a line held to see what its read prints
+    // after it has to be settled.
+    public event Action? ReadEnded;
+
+    public void EndRead() => ReadEnded?.Invoke();
+
     // The command the server echoed on the prompt row directly before the line
     // now being dispatched, or null when that line didn't follow an echo. A
     // generic reply such as "Your command had no effect." names nothing, so the

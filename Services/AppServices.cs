@@ -3180,6 +3180,7 @@ public sealed class AppServices
         // social is a player in our room's entity list. Rejects room names, monsters
         // and ambient flavour that share the action-green colour.
         Chat.IsKnownPlayer = IsKnownRoomPlayer;
+        Chat.IsLeaderWeFollow = PartyState.IsLeaderWeFollow;
         // Engine only — other subsystems register additional
         // handlers without touching the engine.
         RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log)

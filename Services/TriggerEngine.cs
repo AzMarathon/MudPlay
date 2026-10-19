@@ -105,6 +105,7 @@ public sealed class TriggerEngine
         ArgumentNullException.ThrowIfNull(log);
         _chat = chat;
         chat.EntryClassified += OnChatClassified;
+        chat.MoveLineKeptOut += OnMoveLineKeptOut;
         log.EntryAdded       += OnLogEntry;
     }
 
@@ -181,8 +182,16 @@ public sealed class TriggerEngine
         // doesn't also fire as a game-message-scoped one.
         if (WasRecentlyClassified(line)) return;
 
+        // A green line ChatRouter holds until its read says whether it is a social or
+        // a move's exit text: it fires as chat when released, or as a game message
+        // when kept out (OnMoveLineKeptOut), never both.
+        if (_chat?.IsHolding(line) == true) return;
+
         DispatchScope(TriggerScope.GameMessages, line.Text);
     }
+
+    private void OnMoveLineKeptOut(LineExtractor.EmittedLine line) =>
+        DispatchScope(TriggerScope.GameMessages, line.Text);
 
     private void OnChatClassified(ChatLogEntry entry)
     {
