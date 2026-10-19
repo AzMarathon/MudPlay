@@ -331,16 +331,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         finally { _suppressToggleWriteback = false; }
     }
 
-    private AutoTrainerSettings ReadAutoTrainer()
-    {
-        if (_profile.Current?.Settings is { } s
-            && s.TryGetValue("AutoTrainer", out System.Text.Json.JsonElement json))
-        {
-            try { return System.Text.Json.JsonSerializer.Deserialize<AutoTrainerSettings>(json) ?? new(); }
-            catch { /* malformed → defaults */ }
-        }
-        return new AutoTrainerSettings();
-    }
+    private AutoTrainerSettings ReadAutoTrainer() => SettingsSection.Read<AutoTrainerSettings>(_profile.Current, "AutoTrainer");
 
     partial void OnAutoTrainOnChanged(bool value)
     {

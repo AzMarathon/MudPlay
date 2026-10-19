@@ -1,12 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.2**
-> - Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
-> - One unreadable value in a profile no longer drops the client onto the default profile; only that setting is left out
-> - A file with a value left out is first copied beside it (`<file>.unreadable-<time>.bak`), so a save can't lose the original
-> - A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
-> - A huge player-cleanup window no longer crashes startup
+> **Version 3.185.3**
+> - A setting written by name in a hand-edited profile (`"HpThresholdMode": "Absolute"`) now reads, where the automation used to run that whole section on defaults
+> - A MegaMUD-imported profile's Health, Combat, General, Party and Cash settings now reach the automation and the Settings tabs
+> - An @-command or toolbar toggle no longer resets the rest of a section it couldn't read
+> - A settings section that can't be read is used as its defaults with a Program Log warning, never silently
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
@@ -424,21 +423,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         IgnoreDiseased  = dto.IgnoreDiseased;
     }
 
-    private SpellsSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new SpellsSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new SpellsSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<SpellsSettings>(json) ?? new SpellsSettings();
-        }
-        catch
-        {
-            return new SpellsSettings();
-        }
-    }
+    private SpellsSettings ReadOrDefault() => SettingsSection.Read<SpellsSettings>(_profile.Current, TabKey);
 
     // ----- IsDirty plumbing -----------------------------------------
 

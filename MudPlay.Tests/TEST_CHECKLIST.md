@@ -2227,7 +2227,7 @@ How to keep it current:
 
 ### MegaMudProfileImporterTests.cs
 - Covers: Services/MegaMudProfileImporter, MegaMudIni, MegaMudImportPlan
-- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice.
+- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice. Sections are read back through SettingsSection, as the engines and the Settings tabs read them.
 - Why: MegaMUD character import.
 
 ### MeleeMatchupProfilesTests.cs
@@ -3524,6 +3524,11 @@ How to keep it current:
 - Checks: The search highlights matches without hiding sections, as one phrase (trimmed, case-insensitive), over the views' shown text including tooltips. A blank search never reads the views; shown text re-runs a search already typed; the search survives section changes; the count uses Help's wording.
 - Why: Settings search has to behave like the Help window's search.
 - Named seam: the internal SettingsWindowViewModel(profile, log, sections) constructor: the public one builds every section from AppServices.Current.
+
+### SettingsSectionReadTests.cs
+- Covers: Services/SettingsSection (Read / ToElement), SettingsValueGuard.TryReadSection, ProfileService.Load / Save, SettingsResolver.Resolve, CashSectionViewModel, AutoModeRemoteHandler (read-modify-write of General)
+- Checks: an enum written by name in a profile file (`"HpThresholdMode": "Absolute"`, `"CopperPolicy": "Collect"`) reads the same through the engines' reader, the Cash tab and the resolver, with no Warn; an @auto-combat on a General section holding enum names keeps its DisableHangups and default task; one field a section can't take costs that field, warned, and the rest of the section reads; a section that isn't an object reads as defaults with one Warn naming the tier and section; every section in SettingsValueGuard.Sections, written by ToElement, saved and reloaded, reads back whole, holds its enums as numbers on disk and still reads with the serializer's defaults (an older client); an IL scan finds no production JsonSerializer Deserialize / SerializeTo call on a section type, or a generic deserialize from a JsonElement, outside SettingsSection and SettingsValueGuard.
+- Why: about 35 readers deserialized sections with the serializer's defaults and swallowed every failure, so a hand-edited or MegaMUD-imported enum name silently ran HealthManager, CastingDirector, the DisableHangups gate and the rest on defaults, and read-modify-write sites saved those defaults over the section.
 
 ### SettingsValueHardeningTests.cs
 - Covers: Services/SettingsValueGuard (through JsonStore.Load), SettingRangeAttribute, SettingsService, BbsProfileStore, ProfileService.Load / Save, SettingsResolver, PlayerDatabase.PurgeStale, Terminal/TerminalScreen and ScrollbackBuffer bounds

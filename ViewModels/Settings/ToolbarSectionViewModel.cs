@@ -267,10 +267,10 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
             };
 
             profile.Settings ??= new();
-            profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+            profile.Settings[TabKey] = SettingsSection.ToElement(dto);
 
             ContextMenuSettings menuDto = new() { Layout = BuildContextMenuLayout() };
-            profile.Settings[ContextMenuKey] = JsonSerializer.SerializeToElement(menuDto);
+            profile.Settings[ContextMenuKey] = SettingsSection.ToElement(menuDto);
 
             _profile.Save();
             _profile.NotifyMutated();
@@ -417,32 +417,15 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     private ContextMenuSettings ReadContextMenuDtoOrDefault()
         => _profile.Current is { } profile ? ReadContextMenuDtoFrom(profile) : new ContextMenuSettings();
 
-    private static ContextMenuSettings ReadContextMenuDtoFrom(CharacterProfile profile)
-    {
-        if (profile.Settings is null) return new ContextMenuSettings();
-        if (!profile.Settings.TryGetValue(ContextMenuKey, out JsonElement json)) return new ContextMenuSettings();
-        try { return JsonSerializer.Deserialize<ContextMenuSettings>(json.GetRawText()) ?? new ContextMenuSettings(); }
-        catch { return new ContextMenuSettings(); }
-    }
+    private static ContextMenuSettings ReadContextMenuDtoFrom(CharacterProfile profile) =>
+        SettingsSection.Read<ContextMenuSettings>(profile, ContextMenuKey);
 
     private ToolbarSettings ReadDtoOrDefault()
         => _profile.Current is { } profile ? ReadDtoFrom(profile) : new ToolbarSettings();
 
     // Pull the Toolbar settings DTO out of any profile, defaulting on absence /
     // malformed JSON.
-    private static ToolbarSettings ReadDtoFrom(CharacterProfile profile)
-    {
-        if (profile.Settings is null) return new ToolbarSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json)) return new ToolbarSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<ToolbarSettings>(json.GetRawText()) ?? new ToolbarSettings();
-        }
-        catch
-        {
-            return new ToolbarSettings();
-        }
-    }
+    private static ToolbarSettings ReadDtoFrom(CharacterProfile profile) => SettingsSection.Read<ToolbarSettings>(profile, TabKey);
 
     // Rebuild the lower "Shortcuts" list: every catalogue action whose button
     // isn't currently placed on the toolbar, plus every keybind-only action that
@@ -598,23 +581,8 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
 
     // Read the Global-tier website list, falling back to the seeded defaults on
     // absence / malformed JSON so the editor always shows the reference links.
-    private HelpWebsitesSettings ReadHelpWebsitesOrDefault()
-    {
-        if (_globalSettings.Current.Settings is { } bucket
-            && bucket.TryGetValue("HelpWebsites", out JsonElement json))
-        {
-            try
-            {
-                return JsonSerializer.Deserialize<HelpWebsitesSettings>(json.GetRawText())
-                       ?? new HelpWebsitesSettings();
-            }
-            catch
-            {
-                return new HelpWebsitesSettings();
-            }
-        }
-        return new HelpWebsitesSettings();
-    }
+    private HelpWebsitesSettings ReadHelpWebsitesOrDefault() =>
+        SettingsSection.Read<HelpWebsitesSettings>(_globalSettings.Current, "HelpWebsites");
 
     // Persist the website list to the Global tier (dropping blank-URL rows) and
     // the active BBS's website via read-modify-write. Fires GlobalSettingsChanged
@@ -629,7 +597,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
                 .ToList(),
         };
         _globalSettings.Current.Settings ??= new Dictionary<string, JsonElement>();
-        _globalSettings.Current.Settings["HelpWebsites"] = JsonSerializer.SerializeToElement(dto);
+        _globalSettings.Current.Settings["HelpWebsites"] = SettingsSection.ToElement(dto);
         _globalSettings.Save();
 
         // Re-read the active BBS off disk so this write folds into whatever the

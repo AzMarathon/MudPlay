@@ -187,7 +187,7 @@ public static class ProfileMigrations
             spells.PriorityBuffing = kept[7];
             spells.PriorityDebuffing = kept[8];
             spells.PriorityPriorityBuffs = priorityBuffs;
-            settings["Spells"] = JsonSerializer.SerializeToElement(spells);
+            settings["Spells"] = SettingsSection.ToElement(spells);
         }
 
         // A combat profile's copy has always been saved with all nine ranks.
@@ -256,12 +256,7 @@ public static class ProfileMigrations
 
     // A stored settings section, or its defaults when the profile has none or it
     // doesn't parse.
-    private static T ReadStored<T>(CharacterProfile profile, string key) where T : new()
-    {
-        if (profile.Settings is not { } settings || !settings.TryGetValue(key, out JsonElement json)) return new T();
-        try { return JsonSerializer.Deserialize<T>(json.GetRawText()) ?? new T(); }
-        catch (JsonException) { return new T(); }   // an unreadable section migrates as defaults
-    }
+    private static T ReadStored<T>(CharacterProfile profile, string key) where T : new() => SettingsSection.Read<T>(profile, key);
 
     // Move MaRegenSpell (with ManaRegenRerollThreshold / Cap) + RoomLightSpell out of
     // the stored "Spells" section and into CharacterProfile.PartyBuffs as CastOnSelf
@@ -272,10 +267,9 @@ public static class ProfileMigrations
         if (profile.Settings is not { } settings) return;
         if (!settings.TryGetValue("Spells", out JsonElement json)) return;
 
-        SpellsSettings? spells;
-        try { spells = JsonSerializer.Deserialize<SpellsSettings>(json.GetRawText()); }
-        catch { spells = null; }
-        if (spells is null) return;
+        // A section that isn't an object at all is left as it is, not migrated over.
+        if (json.ValueKind != JsonValueKind.Object) return;
+        SpellsSettings spells = ReadStored<SpellsSettings>(profile, "Spells");
 
         List<BuffSlot> folded = new();
         if (!string.IsNullOrWhiteSpace(spells.MaRegenSpell))
@@ -307,7 +301,7 @@ public static class ProfileMigrations
         spells.MaRegenSpell = null;
         spells.RoomLightSpell = null;
         spells.ManaRegenRerollThreshold = null;
-        settings["Spells"] = JsonSerializer.SerializeToElement(spells);
+        settings["Spells"] = SettingsSection.ToElement(spells);
     }
 
     // Move BlessSlots (in slot order) + WhenHpFull / WhenMaFull out of the profile's
@@ -320,10 +314,9 @@ public static class ProfileMigrations
         if (profile.Settings is not { } settings) return;
         if (!settings.TryGetValue("Spells", out JsonElement json)) return;
 
-        SpellsSettings? spells;
-        try { spells = JsonSerializer.Deserialize<SpellsSettings>(json.GetRawText()); }
-        catch { spells = null; }
-        if (spells is null) return;
+        // A section that isn't an object at all is left as it is, not migrated over.
+        if (json.ValueKind != JsonValueKind.Object) return;
+        SpellsSettings spells = ReadStored<SpellsSettings>(profile, "Spells");
 
         List<BuffSlot> folded = new();
         foreach (KeyValuePair<int, string> kv in spells.BlessSlots.OrderBy(k => k.Key))
@@ -347,7 +340,7 @@ public static class ProfileMigrations
         spells.BlessSlotRecastMargins = new();
         spells.WhenHpFullSpell = null;
         spells.WhenMaFullSpell = null;
-        settings["Spells"] = JsonSerializer.SerializeToElement(spells);
+        settings["Spells"] = SettingsSection.ToElement(spells);
     }
 
     // Null out the Layout inside the profile's stored "Toolbar" settings section
@@ -359,12 +352,12 @@ public static class ProfileMigrations
         if (profile.Settings is not { } settings) return;
         if (!settings.TryGetValue("Toolbar", out JsonElement json)) return;
 
-        ToolbarSettings? dto;
-        try { dto = JsonSerializer.Deserialize<ToolbarSettings>(json.GetRawText()); }
-        catch { dto = null; }
-        if (dto?.Layout is null) return;
+        // A section that isn't an object at all is left as it is, not migrated over.
+        if (json.ValueKind != JsonValueKind.Object) return;
+        ToolbarSettings dto = ReadStored<ToolbarSettings>(profile, "Toolbar");
+        if (dto.Layout is null) return;
 
         dto.Layout = null;
-        settings["Toolbar"] = JsonSerializer.SerializeToElement(dto);
+        settings["Toolbar"] = SettingsSection.ToElement(dto);
     }
 }

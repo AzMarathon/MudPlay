@@ -185,15 +185,7 @@ public sealed class LevelUpAnnouncer : IDisposable
         return highest;
     }
 
-    private AutoTrainerSettings ReadSettings()
-    {
-        if (_profile.Current?.Settings is { } settings && settings.TryGetValue("AutoTrainer", out JsonElement json))
-        {
-            try { return JsonSerializer.Deserialize<AutoTrainerSettings>(json) ?? new AutoTrainerSettings(); }
-            catch { /* malformed settings → defaults (announce off) */ }
-        }
-        return new AutoTrainerSettings();
-    }
+    private AutoTrainerSettings ReadSettings() => SettingsSection.Read<AutoTrainerSettings>(_profile.Current, "AutoTrainer");
 
     private static int GetInt(GameRow? rowOpt, string prop)
     {

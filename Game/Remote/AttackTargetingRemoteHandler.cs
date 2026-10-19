@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -216,18 +215,12 @@ public sealed class AttackTargetingRemoteHandler : IDisposable
 
     // ----- Profile I/O ----------------------------------------------------
 
-    private CombatSettings ReadCombat()
-    {
-        if (_profile.Current is not { Settings: { } settings }) return new CombatSettings();
-        if (!settings.TryGetValue(TabKey, out JsonElement json)) return new CombatSettings();
-        try { return JsonSerializer.Deserialize<CombatSettings>(json.GetRawText()) ?? new CombatSettings(); }
-        catch { return new CombatSettings(); }
-    }
+    private CombatSettings ReadCombat() => SettingsSection.Read<CombatSettings>(_profile.Current, TabKey);
 
     private void WriteCombat(CharacterProfile profile, CombatSettings dto)
     {
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
     }
 }

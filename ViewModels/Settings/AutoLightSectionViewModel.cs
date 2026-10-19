@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Light;
@@ -166,7 +165,7 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         };
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
 
         ClearDirty();
@@ -214,22 +213,7 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(CarryReadout));
     }
 
-    private AutoLightSettings ReadOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new AutoLightSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new AutoLightSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<AutoLightSettings>(json) ?? new AutoLightSettings();
-        }
-        catch
-        {
-            // Malformed delta — fall back to defaults rather than throwing.
-            return new AutoLightSettings();
-        }
-    }
+    private AutoLightSettings ReadOrDefault() => SettingsSection.Read<AutoLightSettings>(_profile.Current, TabKey);
 
     private void ClearDirty()
     {

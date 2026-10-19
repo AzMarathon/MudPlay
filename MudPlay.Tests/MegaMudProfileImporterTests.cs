@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
@@ -122,8 +121,12 @@ public sealed class MegaMudProfileImporterTests
         return (plan, made);
     }
 
-    private static T Section<T>(CharacterProfile profile, string key) =>
-        JsonSerializer.Deserialize<T>(profile.Settings![key], JsonStore.Options)!;
+    // As the engines and the Settings window read it.
+    private static T Section<T>(CharacterProfile profile, string key) where T : new()
+    {
+        Assert.True(profile.Settings!.ContainsKey(key), key);
+        return SettingsSection.Read<T>(profile, key);
+    }
 
     [Fact]
     public void Ini_ReadsSectionsAndKeys_WithoutRegardToCase_AndKeepsTheValueWhole()

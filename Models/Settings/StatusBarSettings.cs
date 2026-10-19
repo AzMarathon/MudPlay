@@ -1,4 +1,5 @@
 using System.Text.Json;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Settings;
 
@@ -18,18 +19,8 @@ public sealed class StatusBarSettings
     // saved layout with no rows also falls back: the bar never disappears.
     public static StatusBarSettings Read(GlobalSettings global)
     {
-        if (global.Settings is { } bucket && bucket.TryGetValue(SectionKey, out JsonElement json))
-        {
-            try
-            {
-                if (JsonSerializer.Deserialize<StatusBarSettings>(json) is { Rows.Count: > 0 } saved) return saved;
-            }
-            catch (JsonException)
-            {
-                // A malformed entry shows the default bar rather than none.
-            }
-        }
-        return new StatusBarSettings();
+        StatusBarSettings saved = SettingsSection.Read<StatusBarSettings>(global, SectionKey);
+        return saved.Rows.Count > 0 ? saved : new StatusBarSettings();
     }
 
     // Store this layout, or drop the entry when it is the default.
@@ -41,7 +32,7 @@ public sealed class StatusBarSettings
             return;
         }
         global.Settings ??= new Dictionary<string, JsonElement>();
-        global.Settings[SectionKey] = JsonSerializer.SerializeToElement(this);
+        global.Settings[SectionKey] = SettingsSection.ToElement(this);
     }
 
     // A method, not a property: it serializes this object, and a property would be

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game.Sounds;
@@ -89,7 +88,7 @@ public sealed partial class SoundsSectionViewModel : SettingsSectionViewModel
             if (!row.IsDefault) dto.Cues[row.Cue.Id] = row.ToSettings();
 
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(dto);
+        profile.Settings[TabKey] = SettingsSection.ToElement(dto);
         _profile.Save();
         _applied();
         ClearDirty();
@@ -111,20 +110,7 @@ public sealed partial class SoundsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(HasProfile));
     }
 
-    private SoundSettings Read()
-    {
-        if (_profile.Current?.Settings is not { } all || !all.TryGetValue(TabKey, out JsonElement json))
-            return new SoundSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<SoundSettings>(json) ?? new SoundSettings();
-        }
-        catch (JsonException)
-        {
-            // A malformed entry falls back to the defaults rather than breaking the tab.
-            return new SoundSettings();
-        }
-    }
+    private SoundSettings Read() => SettingsSection.Read<SoundSettings>(_profile.Current, TabKey);
 
     private void ClearDirty()
     {

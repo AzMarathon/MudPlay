@@ -90,9 +90,7 @@ public sealed class SettingsResolver
         Overlay(merged, _activeBbs?.Settings,        tabName);
         Overlay(merged, _profile.Current?.Settings,  tabName);
 
-        return merged.Deserialize<T>(JsonStore.Options)
-            ?? throw new InvalidOperationException(
-                $"Resolve<{typeof(T).Name}>('{tabName}') produced a null deserialization result.");
+        return SettingsSection.Read<T>(merged, tabName);
     }
 
     // Write value into tier's file as the delta for tabName, then persist the
@@ -100,7 +98,7 @@ public sealed class SettingsResolver
     public void WriteAt<T>(SettingsTier tier, string tabName, T value) where T : class
     {
         if (value is null) throw new ArgumentNullException(nameof(value));
-        JsonElement asJson = JsonSerializer.SerializeToElement(value, JsonStore.Options);
+        JsonElement asJson = SettingsSection.ToElement(value);
 
         switch (tier)
         {

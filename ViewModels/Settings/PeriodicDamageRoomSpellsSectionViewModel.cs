@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -227,22 +226,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     private bool StoredOrDefault(PeriodicDamageRoomSpellRowViewModel row) =>
         _stored.TryGetValue(row.Number, out bool was) ? was : row.BarsByDefault;
 
-    public static PeriodicDamageRoomSpellSettings ReadOrDefault(CharacterProfile? profile)
-    {
-        if (profile?.Settings is null
-            || !profile.Settings.TryGetValue(PeriodicDamageRoomSpellSettings.TabKey, out JsonElement json))
-            return new PeriodicDamageRoomSpellSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<PeriodicDamageRoomSpellSettings>(json) ?? new PeriodicDamageRoomSpellSettings();
-        }
-        catch (JsonException)
-        {
-            // A hand-edited entry that doesn't parse reads as the default: every
-            // spell follows its class.
-            return new PeriodicDamageRoomSpellSettings();
-        }
-    }
+    public static PeriodicDamageRoomSpellSettings ReadOrDefault(CharacterProfile? profile) =>
+        SettingsSection.Read<PeriodicDamageRoomSpellSettings>(profile, PeriodicDamageRoomSpellSettings.TabKey);
 
     public override void Apply()
     {
@@ -262,7 +247,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
 
         bool wearChanged = WearCounterBeforeEntering != _storedWear;
         profile.Settings ??= new();
-        profile.Settings[PeriodicDamageRoomSpellSettings.TabKey] = JsonSerializer.SerializeToElement(
+        profile.Settings[PeriodicDamageRoomSpellSettings.TabKey] = SettingsSection.ToElement(
             new PeriodicDamageRoomSpellSettings
             {
                 BarsResting = next,

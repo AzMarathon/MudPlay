@@ -49,19 +49,8 @@ public sealed partial class RoundTotalsViewModel : ObservableObject, IDisposable
 
     private void LoadOptions()
     {
-        RoundTotalsWindowSettings saved = new();
-        if (_profile.Current?.Settings is { } all
-            && all.TryGetValue(RoundTotalsWindowSettings.SectionKey, out System.Text.Json.JsonElement json))
-        {
-            try
-            {
-                saved = System.Text.Json.JsonSerializer.Deserialize<RoundTotalsWindowSettings>(json) ?? saved;
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                // A malformed entry shows every row rather than none.
-            }
-        }
+        RoundTotalsWindowSettings saved =
+            SettingsSection.Read<RoundTotalsWindowSettings>(_profile.Current, RoundTotalsWindowSettings.SectionKey);
         _loading = true;
         ShowSelf = saved.ShowSelf;
         ShowParty = saved.ShowParty;

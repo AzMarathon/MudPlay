@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -414,20 +413,5 @@ public sealed class DefaultTaskRunner : IDisposable
         _holdTimer = null;
     }
 
-    private GeneralSettings ReadGeneralOrDefault()
-    {
-        CharacterProfile? profile = _profile.Current;
-        if (profile?.Settings is null) return new GeneralSettings();
-        if (!profile.Settings.TryGetValue(GeneralTabKey, out JsonElement json)) return new GeneralSettings();
-        try
-        {
-            return JsonSerializer.Deserialize<GeneralSettings>(json.GetRawText()) ?? new GeneralSettings();
-        }
-        catch
-        {
-            // Malformed General JSON → treat as unset (Do nothing). The Settings
-            // tab rewrites it cleanly on its next Save.
-            return new GeneralSettings();
-        }
-    }
+    private GeneralSettings ReadGeneralOrDefault() => SettingsSection.Read<GeneralSettings>(_profile.Current, GeneralTabKey);
 }

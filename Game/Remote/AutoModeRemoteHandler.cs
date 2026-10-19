@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using MudPlay.Game.Inventory;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
@@ -376,19 +375,12 @@ public sealed class AutoModeRemoteHandler : IDisposable
         return false;
     }
 
-    private static GeneralSettings ReadGeneral(CharacterProfile profile)
-    {
-        if (profile.Settings is null) return new GeneralSettings();
-        if (!profile.Settings.TryGetValue(TabKey, out JsonElement json))
-            return new GeneralSettings();
-        try { return JsonSerializer.Deserialize<GeneralSettings>(json.GetRawText()) ?? new GeneralSettings(); }
-        catch { return new GeneralSettings(); }
-    }
+    private static GeneralSettings ReadGeneral(CharacterProfile profile) => SettingsSection.Read<GeneralSettings>(profile, TabKey);
 
     private void WriteGeneral(CharacterProfile profile, GeneralSettings general)
     {
         profile.Settings ??= new();
-        profile.Settings[TabKey] = JsonSerializer.SerializeToElement(general);
+        profile.Settings[TabKey] = SettingsSection.ToElement(general);
         _profile.Save();
     }
 }
