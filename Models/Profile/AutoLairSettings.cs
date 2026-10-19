@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Auto-Lair" settings — the scheduler's tuning surface.
@@ -27,6 +29,7 @@ public sealed class AutoLairSettings
 
     // How long (in seconds) the scheduler stays in the Engaging phase after
     // entering a lair before re-evaluating. Default 30 s.
+    [SettingRange(1, 3600)]
     public int EngageTimeoutSeconds { get; set; } = 30;
 
     // ----- Travel cost model ----------------------------------------
@@ -42,6 +45,7 @@ public sealed class AutoLairSettings
     // Seconds per hop for the Flat cost mode. Default 1.5 s — a
     // single-character run-without-encumbrance observation. Tune with
     // the Program Log window's "Hop timing" toggle.
+    [SettingRange(0.1, 60)]
     public double FlatSecondsPerHop { get; set; } = 1.5;
 
     // Encumbrance bucket → seconds per hop, used when TravelCostMode is
@@ -73,10 +77,15 @@ public enum AutoLairTravelCostMode
 // user overwrite these with their own numbers.
 public sealed class EncumbranceHopTimes
 {
+    [SettingRange(0.1, 60)]
     public double None       { get; set; } = 0.7;
+    [SettingRange(0.1, 60)]
     public double Light      { get; set; } = 0.7;
+    [SettingRange(0.1, 60)]
     public double Medium     { get; set; } = 0.7;
+    [SettingRange(0.1, 60)]
     public double Heavy      { get; set; } = 1.7;
+    [SettingRange(0.1, 60)]
     public double Encumbered { get; set; } = 1.7;
 
     // Lookup helper for the encumbrance-gated travel-cost model.

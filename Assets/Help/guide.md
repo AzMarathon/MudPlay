@@ -7290,6 +7290,8 @@ Any other startup arguments are the standard ones Avalonia consumes; the app doe
 
 This section is a compact, technical lookup table for every setting documented above — useful if you're hand-editing a profile/settings JSON file, writing about MudPlay, or just want the exact property name behind a UI label. "Location" gives the C# file where the setting is defined.
 
+**Values out of range in a hand-edited file.** When MudPlay reads `global.json`, a `bbs.json` or a `profile.json`, every number is held to the range its setting allows — the "Allowed Values" below, which are never narrower than the limits the Settings window itself enforces. A value outside it (a 100000-column terminal, a cleanup window of millions of days) is used at the nearest limit, and a fraction where a whole number goes is rounded. A value its field can't hold at all (text where a number goes, a choice number that isn't one of the choices) is left out: a setting kept "for all characters", "only for this BBS" or "only for this character" then takes the value from the tier below, or the default, and anything else takes its default. Each one is written to the Program Log as a **Warn** naming the setting, the file, the value found and the value used, and the rest of the file loads as normal — one bad value no longer stops a profile from loading. Reading never rewrites the file; the values used are written to it if it is saved. Because a value left out is gone from the file at its next save, the file as it was is first copied beside it as `<file>.unreadable-<UTC date>-<UTC time>Z-<NN>.bak` (for example `profile.json.unreadable-20261018-213000123Z-00.bak`), and the Warn names the copy. Reading the same damaged file again makes no new copy; each time it is damaged differently a new one is made, and the three most recent are kept. Copying a character leaves these copies behind.
+
 ### General / Toolbar / Statline
 
 | Setting | Default | Allowed Values | Config Key | Location |
@@ -7531,7 +7533,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Give up a paused event after (minutes standing still) | `5` | 1–120 | `CharacterProfile.EventSuspendedIdleMinutes` | Models/Profile/CharacterProfile.cs |
 | Event (Name/Disabled/Sound/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 | Sounds enabled / Master volume | true / 80 | bool / 0–100 | `SoundSettings.Enabled` / `MasterVolume` | Models/Profile/SoundSettings.cs |
-| Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
+| Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / 1–1000000 (0 = the cue's default) | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
 
 ### Diagnostics / Log Pane / Equipment
 
@@ -7545,7 +7547,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Capture unrecognized messages | `true` | bool (Global) | `GlobalSettings.LogDiagnostics.CaptureUnrecognizedMessages` | Models/Settings/LogDiagnosticsSettings.cs |
 | Equipment sets (gear loadouts, edited in the Player Workshop's Equipment Manager) | empty list, seeded per trigger type | list of `EquipmentSet` | `EquipmentSettings.Sets` | Models/Profile/EquipmentSettings.cs |
 | Equipment: swap to Default on combat / before lairs | `false` / `false` | bool | `SwapToDefaultOnCombat` / `SwapToDefaultBeforeLairs` | Models/Profile/EquipmentSettings.cs |
-| Equipment: While Moving on manual moves / idle seconds | `false` / `10` | bool / seconds | `WhileMovingOnManualMoves` / `WhileMovingManualIdleSeconds` | Models/Profile/EquipmentSettings.cs |
+| Equipment: While Moving on manual moves / idle seconds | `false` / `10` | bool / 1–600 seconds | `WhileMovingOnManualMoves` / `WhileMovingManualIdleSeconds` | Models/Profile/EquipmentSettings.cs |
 | Equipment: keep Bossing set between bosses | `false` | bool | `KeepBossingBetweenBosses` | Models/Profile/EquipmentSettings.cs |
 | Roomba: search rooms for hidden items / searches per room (realm-wide) | `false` / `3` | bool / 1–20 | `RoombaSettings.SearchForHidden` / `SearchesPerRoom` | Models/Profile/RoombaSettings.cs |
 | Roomba: rooms this character actively manages | none | list of `map/room` | `CharacterProfile.GhManagedRooms` | Models/Profile/CharacterProfile.cs |

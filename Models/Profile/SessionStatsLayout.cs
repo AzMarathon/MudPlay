@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Persisted layout of the Session Stats window's panels — the user's chosen
@@ -24,6 +26,8 @@ public sealed class SessionStatsLayout
 
     // 1 or 2 columns (null = 1). In two columns the first SplitAt panels of Order
     // fill the left column and the rest the right; null = half, rounded up.
+    [SettingRange(1, 2)]
     public int? Columns { get; set; }
+    [SettingRange(0, 1000)]
     public int? SplitAt { get; set; }
 }

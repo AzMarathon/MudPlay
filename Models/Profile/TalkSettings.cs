@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // Per-character "Talk" settings — engine-level policy for
@@ -83,6 +85,7 @@ public sealed class TalkSettings
 
     // Rolling line cap shared by both logs — the file keeps only its last N
     // lines, matching the in-memory window's scrollback feel. Default 2000.
+    [SettingRange(100, 100_000)]
     public int LogMaxLines { get; set; } = 2000;
 
     // Conversation window font override. Empty string means "use the window's
@@ -92,6 +95,7 @@ public sealed class TalkSettings
 
     // Conversation window message font size. 0 means "use the window's built-in
     // default size" (the {default} option).
+    [SettingRange(0, 32)]
     public double ConvoFontSize { get; set; }
 
     // Per-channel Conversation colours, keyed by the seven filter-toggle group

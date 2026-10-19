@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Settings;
 
 // One nav line's appearance override. Delta-only, mirroring the Talk tab's channel
@@ -10,5 +12,6 @@ public sealed class NavLineStyle
     public string? Color { get; set; }
 
     // Override stroke thickness in DIPs; null = default.
+    [SettingRange(NavLineDefaults.MinThickness, NavLineDefaults.MaxThickness)]
     public double? Thickness { get; set; }
 }

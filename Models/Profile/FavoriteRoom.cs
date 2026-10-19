@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // JSON-friendly favourite-room bookmark. Carries the Game.Map.RoomKey as Map +
@@ -6,7 +8,9 @@ namespace MudPlay.Models.Profile;
 // room's graph display name.
 public sealed class FavoriteRoom
 {
+    [SettingRange(0, 9999)]
     public int Map { get; set; }
+    [SettingRange(0, 999_999)]
     public int Room { get; set; }
     public string? Label { get; set; }
 

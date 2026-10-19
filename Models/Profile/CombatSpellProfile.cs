@@ -1,4 +1,5 @@
 using System;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -38,6 +39,7 @@ public sealed class CombatSpellProfile
 
     // Slot-governing fields captured alongside the slots.
     public ThresholdMode SpellManaThresholdMode { get; set; } = ThresholdMode.Percentage;
+    [SettingRange(0, 100)]
     public int DrainHpTrigger { get; set; } = 50;
     public bool DrainsOverrideAoe { get; set; }
     public bool AreaDebuffFirstRoundOnly { get; set; }
@@ -46,14 +48,19 @@ public sealed class CombatSpellProfile
     // not just spells.
     public string NormalAttackCommand { get; set; } = "a";
     public string AlternateAttackCommand { get; set; } = "a";
+    [SettingRange(0, 20)]
     public int MinMonstersInRoom { get; set; }
+    [SettingRange(1, 20)]
     public int MaxMonstersInRoom { get; set; } = 20;
+    [SettingRange(1, 100)]
     public int RunDistance { get; set; } = 2;
 
     // Action order is per-profile: a magic profile leads with spells, a physical one with
     // the weapon. The three cycle fields only matter when ActionOrder is CustomRoundCycle.
     public CombatActionOrder ActionOrder { get; set; } = CombatActionOrder.SpellsFirst;
+    [SettingRange(0, 999)]
     public int CycleRoundsPhysical { get; set; } = 1;
+    [SettingRange(0, 999)]
     public int CycleRoundsSpell { get; set; } = 1;
     public bool CycleStartOnSpell { get; set; }
 
@@ -63,6 +70,7 @@ public sealed class CombatSpellProfile
     public bool SkipBackstabIfMultiAttack { get; set; } = true;
     public bool RunIfBackstabFails { get; set; }
     public bool HitAndRunTactics { get; set; }
+    [SettingRange(1, 20)]
     public int HitAndRunMaxRuns { get; set; } = 3;
     public bool ClearHostilesWhenSeenHidden { get; set; }
     public bool SeenHiddenClearWhileSolo { get; set; } = true;
@@ -289,15 +297,25 @@ public sealed class CombatSpellProfile
 public sealed class CombatProfileSpells
 {
     // The same defaults as SpellsSettings, which says what each slot is.
+    [SettingRange(1, 10)]
     public int PriorityEmergencyHeal { get; set; } = 1;
+    [SettingRange(1, 10)]
     public int PriorityMajorPartyHeal { get; set; } = 2;
+    [SettingRange(1, 10)]
     public int PriorityMinorPartyHeal { get; set; } = 3;
+    [SettingRange(1, 10)]
     public int PriorityMajorSelfHeal { get; set; } = 4;
+    [SettingRange(1, 10)]
     public int PriorityPriorityBuffs { get; set; } = 5;
+    [SettingRange(1, 10)]
     public int PriorityMinorSelfHeal { get; set; } = 6;
+    [SettingRange(1, 10)]
     public int PriorityDownedAllyHeal { get; set; } = 7;
+    [SettingRange(1, 10)]
     public int PriorityCuring { get; set; } = 8;
+    [SettingRange(1, 10)]
     public int PriorityBuffing { get; set; } = 9;
+    [SettingRange(1, 10)]
     public int PriorityDebuffing { get; set; } = 10;
 
     public string? MinorHealSpell { get; set; }

@@ -1,4 +1,5 @@
 using MudPlay.Models.GameData;
+using MudPlay.Services;
 
 namespace MudPlay.Models.Profile;
 
@@ -14,13 +15,16 @@ public sealed class PvpSettings
     // rooms.
     public RoomRef? FleeTo { get; set; }
 
+    [SettingRange(1, 99)]
     public int RoomsToFlee { get; set; } = 10;
 
     // "Flee then hang up": seconds between the flee starting and the hang-up.
+    [SettingRange(0, 600)]
     public int FleeHangupDelaySeconds { get; set; } = 30;
 
     // "Flee (come back later)": seconds to stay away once the flee has landed before
     // the interrupted walk or loop is picked up again.
+    [SettingRange(0, 3600)]
     public int ComeBackAfterSeconds { get; set; } = 60;
 
     // Tell the gang channel who it was and where. The three event switches pick
@@ -30,17 +34,20 @@ public sealed class PvpSettings
     public bool GangTellSeen { get; set; } = true;
     public bool GangTellAttacked { get; set; } = true;
     public bool GangTellWeAttack { get; set; } = true;
+    [SettingRange(0, 3600)]
     public int GangRepeatSeconds { get; set; } = 60;
 
     // Dial back in after a PvP hang-up, this many minutes later. ReconnectEntersRealm
     // off stops at the menu, as the login after any other hang-up does.
     public bool ReconnectAfterPvp { get; set; }
+    [SettingRange(1, 1440)]
     public int ReconnectAfterPvpMinutes { get; set; } = 30;
     public bool ReconnectEntersRealm { get; set; } = true;
 
     // After a party member drops out (a teleport split the party), our room attacks
     // are held, and a room attack of theirs isn't read as aimed at us, until they
     // are back in the party or this many seconds have passed.
+    [SettingRange(0, 3600)]
     public int PartySplitHoldSeconds { get; set; } = 120;
 
     // A Friend who attacks us is marked Enemy, the way a Neutral who does is. Off,
@@ -64,6 +71,7 @@ public sealed class PvpSettings
 
     // Warnings we switched off go back on this long after we are back at what the
     // fight interrupted, with no new fight in between.
+    [SettingRange(0, 3600)]
     public int WarningsBackAfterSeconds { get; set; } = 60;
 
     // Spells used on a player in a fight. With no combat spell among them, the
@@ -73,6 +81,7 @@ public sealed class PvpSettings
 
     // Chase and attack: how many rooms to follow without seeing them before the
     // chase is given up.
+    [SettingRange(1, 50)]
     public int ChaseRoomsUnseen { get; set; } = 8;
 
     // When the way they went wasn't seen, carry on the way they were heading, or
@@ -81,13 +90,16 @@ public sealed class PvpSettings
 
     // At a crossroads with a door that just opens, how many rooms to look in behind
     // it before coming back to try another way.
+    [SettingRange(1, 20)]
     public int ChaseDoorRooms { get; set; } = 3;
 
     // With no way to follow, how long to stand in case they come back into sight.
+    [SettingRange(0, 600)]
     public int ChaseWaitSeconds { get; set; } = 20;
 
     // Out of sight in a chase, `track` them: on arriving in each room, and on this
     // interval while standing with no way to follow.
     public bool TrackEnemies { get; set; }
+    [SettingRange(5, 3600)]
     public int TrackEnemiesEverySeconds { get; set; } = 60;
 }

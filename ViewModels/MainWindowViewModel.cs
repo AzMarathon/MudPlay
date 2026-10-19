@@ -1175,7 +1175,7 @@ public partial class MainWindowViewModel : ObservableObject
         int initialScrollback = AppServices.Current.Display.ScrollbackLines;
         if (initialScrollback > 0 && initialScrollback != Emulator.Screen.Scrollback.Capacity)
         {
-            Emulator.Screen.Scrollback.SetCapacity(initialScrollback);
+            SetScrollbackCapacity(initialScrollback);
         }
 
         // Apply the active BBS's terminal-grid size to the live emulator.
@@ -2211,7 +2211,7 @@ public partial class MainWindowViewModel : ObservableObject
         else if (e.PropertyName == nameof(Services.DisplayConfig.ScrollbackLines))
         {
             int newCapacity = AppServices.Current.Display.ScrollbackLines;
-            if (newCapacity > 0) Emulator.Screen.Scrollback.SetCapacity(newCapacity);
+            if (newCapacity > 0) SetScrollbackCapacity(newCapacity);
         }
         else if (e.PropertyName == nameof(Services.DisplayConfig.TerminalCols)
               || e.PropertyName == nameof(Services.DisplayConfig.TerminalRows))
@@ -2235,7 +2235,23 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
         Emulator.Resize(cols, rows);
+        if (Emulator.Screen.Cols != cols || Emulator.Screen.Rows != rows)
+        {
+            AppServices.Current.Log.Warn("Display",
+                $"terminal size {cols}×{rows} is past the largest the screen makes; using {Emulator.Screen.Cols}×{Emulator.Screen.Rows}");
+            (cols, rows) = (Emulator.Screen.Cols, Emulator.Screen.Rows);
+        }
         _ = _telnet?.SendWindowSizeAsync(cols, rows);
+    }
+
+    // The scrollback ring takes at most ScrollbackBuffer.MaxCapacity rows; a setting
+    // past it is said, not cut quietly.
+    private void SetScrollbackCapacity(int lines)
+    {
+        Emulator.Screen.Scrollback.SetCapacity(lines);
+        if (Emulator.Screen.Scrollback.Capacity != lines)
+            AppServices.Current.Log.Warn("Display",
+                $"scrollback of {lines} lines is past the most the buffer holds; using {Emulator.Screen.Scrollback.Capacity}");
     }
 
     private void OnRoomTrackerStateChanged(Game.Map.RoomTransition t)

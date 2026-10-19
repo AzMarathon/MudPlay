@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // The Party-tab subset a combat profile carries: party healing (the minor / major
@@ -11,8 +13,11 @@ public sealed class CombatProfileParty
     public string? MinorPartyHealAoeSpell { get; set; }
     public string? MajorPartyHealSpell { get; set; }
     public string? MajorPartyHealAoeSpell { get; set; }
+    [SettingRange(0, 100)]
     public int MinorHealMemberThresholdPercent { get; set; } = 70;
+    [SettingRange(0, 100)]
     public int MajorHealMemberThresholdPercent { get; set; } = 40;
+    [SettingRange(2, 6)]
     public int AoeMinMembers { get; set; } = 2;
 
     public bool BlessWhileResting { get; set; }

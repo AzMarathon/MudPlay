@@ -1,3 +1,5 @@
+using MudPlay.Services;
+
 namespace MudPlay.Models.Profile;
 
 // The character's UNIFIED buff plan — one dynamic list holding every automated
@@ -54,6 +56,7 @@ public sealed class BuffSlot
     // Recast lead in seconds: how far before this buff's tracked expiry the
     // CastingDirector recasts it. 0 = wait for actual expiry. Defaults to the
     // shared bless recast margin.
+    [SettingRange(-999, 999)]
     public int RecastMarginSec { get; set; } = SpellsSettings.DefaultBlessRecastMarginSec;
 
     // ----- Targeting -------------------------------------------------
@@ -95,6 +98,7 @@ public sealed class BuffSlot
     // thresholds as absolute values (HealthSettings.MaThresholdMode). It keeps mana
     // back for heals. A free item-cast buff ignores it. Was one value for every
     // buff (HealthSettings.BlessIfAboveMa) until profile schema 5.
+    [SettingRange(0, 100_000)]
     public int BlessIfAboveMa { get; set; } = DefaultBlessIfAboveMa;
 
     // What a new buff starts at for its mana floor. A buff that existed before the
@@ -137,11 +141,13 @@ public sealed class BuffSlot
     // Roll spells (flux / ntap / prfl and kin): how many times to re-cast chasing a
     // better mana-regen roll before accepting what landed. 0 = don't reroll (the
     // spell just recasts on expiry).
+    [SettingRange(0, 20)]
     public int RerollCount { get; set; }
 
     // Roll spells: reroll while the rolled mana-regen percent lands BELOW this value
     // (the min gate). null = rerolling off even if RerollCount > 0. Paradigm reads the
     // roll from `abil 145`; Stock reads it back off the natural mana tick.
+    [SettingRange(-999, 999)]
     public int? RerollThreshold { get; set; }
 
     // True once RerollThreshold is in the rolled-percent unit. Stock thresholds saved
@@ -152,6 +158,7 @@ public sealed class BuffSlot
     // Draw items (a deck of cards): the spell numbers of the outcomes the user does
     // NOT want. Drawing one of these re-uses the item on the next cycle until a wanted
     // one lands. Empty = every outcome is accepted.
+    [SettingRange(0, int.MaxValue)]
     public System.Collections.Generic.List<int> RejectedOutcomes { get; set; } = new();
 
     // Roll spells: reroll without a cap — keep re-casting until the roll clears the
