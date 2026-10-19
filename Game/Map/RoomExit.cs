@@ -158,6 +158,12 @@ public readonly partial record struct RoomExit(
     // parsed cell and on every other exit.
     public BareLockBash BareLockBash { get; init; }
 
+    // On a bare key lock, whether this realm's game has answered a bash there as a
+    // door, or the user set it one (BareKeyLockBook.AnsweredAsDoorHere). Stamped
+    // beside BareLockBash. Any other bash there is a try, and no try is made on a PvP
+    // realm, so a route there can count on a bash only at such a side.
+    public bool BareLockAnsweredAsDoor { get; init; }
+
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
 

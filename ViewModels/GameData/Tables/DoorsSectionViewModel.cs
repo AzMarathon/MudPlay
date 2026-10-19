@@ -48,7 +48,11 @@ public sealed class DoorsSectionViewModel : GameDataTableSectionViewModel, IEdit
         + "or put it back to the seed. "
         + (_realmFolder() is { } folder
             ? $"Edits are kept for this realm ({System.IO.Path.GetFileName(folder)})."
-            : "No realm is active: edits last until the client closes.");
+            : "No realm is active: edits last until the client closes.")
+        + (_note is { } note ? " " + note : "");
+
+    // A passing word for the banner: "nothing learned to forget".
+    private string? _note;
 
     public IAsyncRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
     public IAsyncRelayCommand ForgetLearnedCommand { get; }
@@ -82,6 +86,9 @@ public sealed class DoorsSectionViewModel : GameDataTableSectionViewModel, IEdit
         _graph.GraphReloaded += OnSourceChanged;
         Reload();
     }
+
+    // Another client on the realm may have changed the record since.
+    public override void OnActivated() => _book.SyncWithRecord();
 
     public override void Dispose()
     {
@@ -129,7 +136,7 @@ public sealed class DoorsSectionViewModel : GameDataTableSectionViewModel, IEdit
     private async Task OpenEditAsync(GameDataRow? row)
     {
         if (row is null || _dialogs is null || !_rowToSide.TryGetValue(row, out DoorsRowInfo? side)) return;
-        DoorEdit? edit = await _dialogs.OpenWindowAsync<DoorEditDialogViewModel, DoorEdit>(new DoorEditDialogViewModel(side));
+        DoorEdit? edit = await _dialogs.OpenWindowAsync<DoorEditDialogViewModel, DoorEdit>(new DoorEditDialogViewModel(side, _book));
         if (edit is not null) Apply(side, edit);
     }
 
@@ -144,7 +151,13 @@ public sealed class DoorsSectionViewModel : GameDataTableSectionViewModel, IEdit
 
     private async Task ForgetLearnedAsync()
     {
-        if (_book.LearnedCount == 0) return;
+        if (_book.LearnedCount == 0)
+        {
+            _note = "Nothing learned to forget for this realm.";
+            OnPropertyChanged(nameof(BannerText));
+            return;
+        }
+        _note = null;
         if (_confirm is not null && !await _confirm("Forget learned doors",
                 $"Forget all {_book.LearnedCount} side(s) this realm has recorded — the game's answers and your own edits? "
                 + "Every bare key lock goes back to what the seed says."))

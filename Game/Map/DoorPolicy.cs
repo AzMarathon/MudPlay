@@ -53,9 +53,13 @@ public static class DoorPolicy
 
     // What a route counts on to open it: as Openers, but a bare lock not known
     // either way counts on the bash the handler will try (user, 2026-10-18).
-    public static (int StatRequirement, bool CanBash) PlannedOpeners(in RoomExit exit) =>
+    // trialsAllowed: whether the handler may try a bash at a bare lock not answered as
+    // a door on this realm; it never does on a PvP realm, so there only such a side
+    // counts on a bash.
+    public static (int StatRequirement, bool CanBash) PlannedOpeners(in RoomExit exit, bool trialsAllowed = true) =>
         exit.IsBareKeyLock
-            ? (BareKeyLockPickRequirement, exit.BareLockBash != BareLockBash.NotBashable)
+            ? (BareKeyLockPickRequirement,
+               exit.BareLockBash != BareLockBash.NotBashable && (trialsAllowed || exit.BareLockAnsweredAsDoor))
             : (exit.StatRequirement, exit.CanBash);
 
     // Chance in 100 that one `pick` opens a lock (GAME_MECHANICS "Locked doors —
@@ -117,11 +121,13 @@ public static class DoorPolicy
     // A bare `(Key: N)` lock says what is known of its bash instead (BareLockBash).
     public static string DescribeOdds(
         int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
-        int maxBashableStrength, BareLockBash? bareLock = null)
+        int maxBashableStrength, BareLockBash? bareLock = null, bool bareLockBashTried = true)
     {
         string bash = bareLock switch
         {
             BareLockBash.NotBashable => "can't be bashed (a key exit)",
+            BareLockBash.Bashable or BareLockBash.Unknown when !bareLockBashTried =>
+                "no bash is tried on a PvP realm until it has answered as a door",
             BareLockBash.Unknown => $"a bash is tried at Strength {playerStrength} (not known whether it is a door)",
             BareLockBash.Bashable => $"bashes at Strength {playerStrength} in 100",
             _ => null,

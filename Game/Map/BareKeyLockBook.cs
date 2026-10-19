@@ -63,6 +63,16 @@ public sealed class BareKeyLockBook
     // Bumped on every change, so a route cache can tell its plans are stale.
     public int Version { get; private set; }
 
+    // Takes in what another client on the realm wrote to the shared record since, if
+    // anything (BareKeyLockStore.RefreshIfChanged). Unset → nothing to take in.
+    private Action? _recordSync;
+
+    public void SetRecordSync(Action sync) => _recordSync = sync;
+
+    // Called where a stale record would mislead: the start of each door request, and
+    // the Doors tab being shown.
+    public void SyncWithRecord() => _recordSync?.Invoke();
+
     public int SeedCount { get { lock (_gate) return _seed.Count; } }
     public int SeedBashable { get { lock (_gate) return _seed.Values.Count(v => v); } }
     public int LearnedCount { get { lock (_gate) return _learned.Count; } }

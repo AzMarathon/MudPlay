@@ -156,8 +156,8 @@ public sealed class KeyDoorRulesTests : IDisposable
         BareKeyLockStore store = new(book);
         store.LoadSeed(ShippedSeed());
         store.OnRealmChanged(realmFolder);
-        graph.SetBareLockKinds(book.Lookup);
-        book.Changed += () => graph.ApplyBareLockKinds(book.Lookup);
+        graph.SetBareLockKinds(book.Lookup, book.AnsweredAsDoorHere);
+        book.Changed += () => graph.ApplyBareLockKinds(book.Lookup, book.AnsweredAsDoorHere);
         graph.OnActiveSetChanged("alpha");
 
         MessageRouter router = new();
@@ -193,6 +193,7 @@ public sealed class KeyDoorRulesTests : IDisposable
             PicklocksProvider = () => stats.Picklocks,
             MaxBashableStrengthProvider = () => 200,
             BareLockBookVersionProvider = () => book.Version,
+            BareLockTrialsAllowedProbe = () => !rig!.Pvp,
             UnpickableDoorProbe = door.IsUnpickable,
         };
         MovementCoordinator coordinator = new();
@@ -585,6 +586,30 @@ public sealed class KeyDoorRulesTests : IDisposable
         Assert.Equal("bash w", rig.Sent[^1]);
     }
 
+    // On a PvP realm a route doesn't count on a bash the handler won't try: the side
+    // is planned as the key exit it may be, so the walk names the key to fetch. Once
+    // the side has answered as a door, it is planned through and bashed.
+    [Fact]
+    public void PvpRealm_PlansNoBash_WhereTheSideHasntAnsweredAsADoor()
+    {
+        Rig rig = NewRig();
+        rig.Pvp = true;
+        rig.ReadInventory("You have no keys.");
+        rig.Tracker.SetLocated(Passageway);
+        rig.RoomShows("Barter");
+
+        Assert.True(rig.Filter.IsExitBlocked(ExitOf(rig, Passageway, Direction.W)));
+        Assert.Equal(ExitBlockReason.LockedDoor, rig.Filter.DescribeExitBlock(ExitOf(rig, Passageway, Direction.W)));
+        Assert.False(rig.Walker.WalkTo(HugeCave));
+        Assert.Contains(rig.Events, e => e.Kind == WalkEventKind.Failed && e.Detail.Contains("green metal key"));
+        Assert.DoesNotContain(rig.Sent, c => c.StartsWith("bash", StringComparison.Ordinal));
+
+        rig.Book.NoteRefusedMove(Passageway, Direction.W, bashable: true);
+        Assert.False(rig.Filter.IsExitBlocked(ExitOf(rig, Passageway, Direction.W)));
+        Assert.True(rig.Walker.WalkTo(HugeCave));
+        Assert.Equal("bash w", rig.Sent[^1]);
+    }
+
     // With the room not confirmed the book can't be asked: a request shaped like a
     // bare lock's is tried as one, and its bash capped at the pick tries.
     [Fact]
@@ -819,6 +844,32 @@ public sealed class KeyDoorRulesTests : IDisposable
         Assert.Equal(BareLockBash.NotBashable, later.Book.Lookup(Vault, Direction.W));
     }
 
+    // Another client's change reaches this one without this one writing: at the start
+    // of its next door request, and when its Doors tab is shown.
+    [Fact]
+    public void AnotherClientsChanges_ReachThisOne_AtTheNextDoorOrTheTab()
+    {
+        string realm = RealmFolder("A");
+        Rig one = NewRig(realmFolder: realm);
+        Rig two = NewRig(realmFolder: realm);
+        two.ReadInventory("You have no keys.");
+        two.Tracker.SetLocated(Passageway);
+        two.RoomShows("Barter");
+
+        one.Book.SetByUser(Passageway, Direction.W, BareLockBash.NotBashable);
+        Assert.Equal(BareLockBash.Bashable, two.Book.Lookup(Passageway, Direction.W));
+
+        two.Door.Enqueue(Direction.W, DoorPolicy.BareKeyLockPickRequirement, canBash: true, keyItemId: 475, "walker", _ => { });
+        Assert.Equal(BareLockBash.NotBashable, two.Book.Lookup(Passageway, Direction.W));
+        Assert.DoesNotContain(two.Sent, c => c.StartsWith("bash", StringComparison.Ordinal));
+        two.Door.StopAll();
+
+        one.Book.ResetToSeed(Passageway, Direction.W);
+        using DoorsSectionViewModel tab = new(two.Book, two.Graph, _ => null, () => realm);
+        tab.OnActivated();
+        Assert.Equal(BareLockBash.Bashable, two.Book.Lookup(Passageway, Direction.W));
+    }
+
     // ----- the Doors tab -------------------------------------------------
 
     // Every bare key lock on the map, with what it is taken for and where that comes
@@ -845,6 +896,44 @@ public sealed class KeyDoorRulesTests : IDisposable
         Assert.Equal(BareLockBash.Bashable, rig.Book.Lookup(Passageway, Direction.W));
     }
 
+    // The edit dialog's choice is the kind saved, and a choice that leaves the side as
+    // it reads saves nothing (opening and saving pins no kind).
+    [Theory]
+    [InlineData("door", BareLockBash.Bashable)]
+    [InlineData("key exit", BareLockBash.NotBashable)]
+    public void DoorEditDialog_SavesTheKindChosen(string choice, BareLockBash saved)
+    {
+        Rig rig = NewRig();
+        DoorsRowInfo vault = DoorsRowInfo.AllOn(rig.Graph.Rooms, rig.Book, _ => null)
+            .Single(s => s.Room == Vault && s.Dir == Direction.E);
+        DoorEditDialogViewModel dialog = new(vault, rig.Book);
+        Assert.True(dialog.IsUnknown);
+        Assert.False(dialog.CanSave);
+        DoorEdit? closed = null;
+        dialog.CloseRequested += e => closed = e;
+
+        if (choice == "door") dialog.IsDoor = true;
+        else dialog.IsKeyExit = true;
+        dialog.IsUnknown = false;
+        dialog.SaveCommand.Execute(null);
+
+        Assert.Equal(new DoorEdit(saved, ResetToSeed: false), closed);
+    }
+
+    // While the dialog is open, the side changing shows.
+    [Fact]
+    public void DoorEditDialog_ShowsAChangeToTheSideWhileOpen()
+    {
+        Rig rig = NewRig();
+        DoorsRowInfo vault = DoorsRowInfo.AllOn(rig.Graph.Rooms, rig.Book, _ => null)
+            .Single(s => s.Room == Vault && s.Dir == Direction.E);
+        DoorEditDialogViewModel dialog = new(vault, rig.Book);
+
+        rig.Book.Learn(Vault, Direction.E, bashable: true);
+
+        Assert.Contains("changed since you opened it", dialog.StaleNote);
+    }
+
     // "Forget learned…" asks first, and keeps the record when the user says no.
     [Theory]
     [InlineData(true)]
@@ -861,6 +950,21 @@ public sealed class KeyDoorRulesTests : IDisposable
 
         Assert.NotNull(asked);
         Assert.Equal(agree ? 0 : 1, rig.Book.LearnedCount);
+    }
+
+    // With nothing learned, "Forget learned…" says so rather than do nothing.
+    [Fact]
+    public async Task DoorsTab_ForgetLearned_WithNothingLearned_SaysSo()
+    {
+        Rig rig = NewRig();
+        bool asked = false;
+        using DoorsSectionViewModel tab = new(rig.Book, rig.Graph, _ => null, () => null,
+            confirm: (_, _) => { asked = true; return Task.FromResult(true); });
+
+        await tab.ForgetLearnedCommand.ExecuteAsync(null);
+
+        Assert.False(asked);
+        Assert.Contains("Nothing learned to forget", tab.BannerText);
     }
 
     // ----- picking -----------------------------------------------------

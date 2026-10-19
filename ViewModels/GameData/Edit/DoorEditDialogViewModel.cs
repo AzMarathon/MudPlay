@@ -8,8 +8,10 @@ namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-side edit dialog for Game Data Browser → Doors: sets whether a bare `(Key: N)`
 // lock is a door or gate (bashes), a key exit (doesn't), or not known, or puts it back
-// to the seed. Save returns the kind chosen; Reset to seed returns the reset; Cancel
-// returns null.
+// to the seed. Save returns the kind chosen, and is offered only once the choice
+// differs from what the side reads as, so opening and saving pins nothing; Reset to
+// seed returns the reset; Cancel returns null. While it is open, a change to the side
+// (an answer learned, another client's edit) is shown in StaleNote.
 public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogViewModel<DoorEdit>
 {
     public event Action<DoorEdit?>? CloseRequested;
@@ -23,13 +25,38 @@ public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogV
     public string SeedText { get; }
     public string RecordText { get; }
 
-    [ObservableProperty] private bool _isDoor;
-    [ObservableProperty] private bool _isKeyExit;
-    [ObservableProperty] private bool _isUnknown;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSave))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private bool _isDoor;
 
-    public DoorEditDialogViewModel(DoorsRowInfo side)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSave))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private bool _isKeyExit;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSave))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    private bool _isUnknown;
+
+    // "This side changed since you opened it: now …", or empty.
+    [ObservableProperty] private string _staleNote = string.Empty;
+
+    private readonly DoorsRowInfo _side;
+    private readonly BareKeyLockBook? _book;
+
+    public BareLockBash Chosen =>
+        IsDoor ? BareLockBash.Bashable : IsKeyExit ? BareLockBash.NotBashable : BareLockBash.Unknown;
+
+    public bool CanSave => Chosen != _side.Kind;
+
+    // book: the live record, watched for changes to the side while the dialog is open.
+    public DoorEditDialogViewModel(DoorsRowInfo side, BareKeyLockBook? book = null)
     {
         ArgumentNullException.ThrowIfNull(side);
+        _side = side;
+        _book = book;
         Title = $"Door — {BareKeyLockBook.FormatSide(side.Room, side.Dir)}";
         SideText = $"Room {side.Room}{(string.IsNullOrWhiteSpace(side.RoomName) ? "" : $" ({side.RoomName})")}, "
             + $"{side.Dir.ToLongName()}; key: {side.KeyName}";
@@ -47,16 +74,36 @@ public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogV
         IsDoor = side.Kind == BareLockBash.Bashable;
         IsKeyExit = side.Kind == BareLockBash.NotBashable;
         IsUnknown = side.Kind == BareLockBash.Unknown;
+        if (_book is not null) _book.Changed += OnBookChanged;
+    }
+
+    private void OnBookChanged()
+    {
+        if (_book is null) return;
+        BareKeyLockBook.Tally? now = _book.RecordOf(_side.Room, _side.Dir);
+        string note = now == _side.Record && _book.Lookup(_side.Room, _side.Dir) == _side.Kind
+            ? string.Empty
+            : $"This side changed since you opened it: now {_book.Describe(_side.Room, _side.Dir)}.";
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) StaleNote = note;
+        else Avalonia.Threading.Dispatcher.UIThread.Post(() => StaleNote = note);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private void Save()
+    {
+        if (!CanSave) return;
+        Close(new DoorEdit(Chosen, ResetToSeed: false));
     }
 
     [RelayCommand]
-    private void Save() => CloseRequested?.Invoke(new DoorEdit(
-        IsDoor ? BareLockBash.Bashable : IsKeyExit ? BareLockBash.NotBashable : BareLockBash.Unknown,
-        ResetToSeed: false));
+    private void ResetToSeed() => Close(new DoorEdit(null, ResetToSeed: true));
 
     [RelayCommand]
-    private void ResetToSeed() => CloseRequested?.Invoke(new DoorEdit(null, ResetToSeed: true));
+    private void Cancel() => Close(null);
 
-    [RelayCommand]
-    private void Cancel() => CloseRequested?.Invoke(null);
+    private void Close(DoorEdit? edit)
+    {
+        if (_book is not null) _book.Changed -= OnBookChanged;
+        CloseRequested?.Invoke(edit);
+    }
 }

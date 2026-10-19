@@ -6,17 +6,27 @@ namespace MudPlay.Services;
 // Keeps Game.Map.BareKeyLockBook's two lists on disk: the shipped seed
 // (AppPaths.DefaultBareKeyLocksSeedFile), read once, and the realm's own record
 // (AppPaths.RealmBareKeyLocksFile), loaded when the realm changes and written on
-// each change. Every character on the realm shares the record: when another client
-// wrote it since, the change is made to what it wrote, and the book is given the
-// result, so neither client's answers, edits or resets are lost to the other's
-// older copy (the way the realm's stash tally is shared, StashBalanceStore).
+// each change. Every character on the realm shares the record:
+//   - a write holds a lock file beside it for its read-modify-write, and when another
+//     client wrote the record since (its time or size moved), the change is made to
+//     what it wrote and the book is given the result, so neither client's answers,
+//     edits or resets are lost to the other's older copy;
+//   - the book asks for the record again where a stale one would mislead (the start
+//     of each door request, the Doors tab shown), and takes it in when it moved.
+// No file watcher: the record changes seldom, and only those reads need it fresh.
 public sealed class BareKeyLockStore
 {
     private const string LogCategory = "BareKeyLocks";
 
     private readonly BareKeyLockBook _book;
     private readonly LogService? _log;
-    private DateTime _seenWrite = DateTime.MinValue;
+    // The record's write time and size as this client last read or wrote it.
+    private (DateTime Time, long Size) _seen = NoFile;
+    private static readonly (DateTime Time, long Size) NoFile = (DateTime.MinValue, -1);
+
+    // How long a write waits on another client's lock before going ahead without it.
+    private const int LockTries = 10;
+    private static readonly TimeSpan LockWait = TimeSpan.FromMilliseconds(20);
     private bool _loading;
 
     // Folder of the realm whose record is loaded. null keeps the record in memory only.
@@ -28,6 +38,23 @@ public sealed class BareKeyLockStore
         _book = book;
         _log = log;
         _book.Recorded += Persist;
+        _book.SetRecordSync(() => RefreshIfChanged());
+    }
+
+    // Takes in the realm's record when another client wrote it since this client last
+    // read or wrote it. True when it did.
+    public bool RefreshIfChanged()
+    {
+        if (ActiveRealmFolder is null) return false;
+        string path = AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder);
+        (DateTime Time, long Size) now = Stamp(path);
+        if (now == _seen) return false;
+        _loading = true;
+        try { _book.LoadLearned(Read(path)); }
+        finally { _loading = false; }
+        _seen = now;
+        _log?.Info(LogCategory, $"the realm's record changed on disk (another client): {_book.LearnedCount} side(s) taken in");
+        return true;
     }
 
     public void LoadSeed(string path)
@@ -48,14 +75,14 @@ public sealed class BareKeyLockStore
     public void OnRealmChanged(string? realmFolder)
     {
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
-        _seenWrite = DateTime.MinValue;
+        _seen = NoFile;
         _loading = true;
         try
         {
             _book.LoadLearned(ActiveRealmFolder is null ? null : Read(AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder)));
             if (ActiveRealmFolder is not null)
             {
-                _seenWrite = WriteTime(AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder));
+                _seen = Stamp(AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder));
                 _log?.Info(LogCategory, $"realm record: {_book.LearnedCount} side(s)");
             }
         }
@@ -68,7 +95,8 @@ public sealed class BareKeyLockStore
         string path = AppPaths.RealmBareKeyLocksFile(ActiveRealmFolder);
         try
         {
-            bool theirs = WriteTime(path) != _seenWrite;
+            using FileStream? held = HoldLock(path + ".lock");
+            bool theirs = Stamp(path) != _seen;
             Dictionary<(RoomKey Room, Direction Dir), BareKeyLockBook.Tally> record = new();
             if (theirs)
             {
@@ -86,7 +114,7 @@ public sealed class BareKeyLockStore
                     LastAnswered = kv.Value.LastAnswered,
                     SetByUser = kv.Value.UserKind,
                 }));
-            _seenWrite = WriteTime(path);
+            _seen = Stamp(path);
             if (!theirs) return;
             _log?.Info(LogCategory, "the realm's record was written by another client since; its sides are taken in");
             _loading = true;
@@ -115,8 +143,25 @@ public sealed class BareKeyLockStore
         return entries;
     }
 
-    private static DateTime WriteTime(string path) =>
-        File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+    private static (DateTime Time, long Size) Stamp(string path)
+    {
+        FileInfo file = new(path);
+        return file.Exists ? (file.LastWriteTimeUtc, file.Length) : NoFile;
+    }
+
+    // The lock another client's write holds while it reads, changes and writes the
+    // record. Null when it can't be had in time: the write goes ahead, as it did
+    // before there was a lock.
+    private FileStream? HoldLock(string lockPath)
+    {
+        for (int i = 0; i < LockTries; i++)
+        {
+            try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) { Thread.Sleep(LockWait); }
+        }
+        _log?.Warn(LogCategory, $"another client held '{Path.GetFileName(lockPath)}' too long; writing the record without it");
+        return null;
+    }
 
     private sealed class SeedFile
     {
