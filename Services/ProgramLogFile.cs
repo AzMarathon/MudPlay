@@ -53,7 +53,9 @@ public sealed class ProgramLogFile : IDisposable
     private readonly LogDiagnosticState _diagnostics;
     private readonly Func<string, TextWriter> _openFile;
     private readonly TimeSpan _retryDelay;
-    private readonly LogEntryQueue<Item> _queue = new(QueueDepth);
+    // A session start the full queue lets go of is no entry lost: the session's
+    // file then opens with its first entry.
+    private readonly LogEntryQueue<Item> _queue = new(QueueDepth, item => item.Entry is not null);
     private readonly CancellationTokenSource _stopping = new();
 
     // One stretch of Auto-collect being on, and the file it is written to.
@@ -150,7 +152,9 @@ public sealed class ProgramLogFile : IDisposable
     // nothing here but the hand-off, which never waits on the disk.
     private void OnEntryAdded(LogEntry entry)
     {
-        if (t_noting) return;
+        // Unlocked first, so the Auto-collect-off default never takes the lock;
+        // while collecting, the lock settles a switch racing this entry.
+        if (t_noting || !_wanted) return;
         lock (_switchGate)
         {
             if (_wanted && _latest is { } session) _queue.Post(new Item(entry, session));

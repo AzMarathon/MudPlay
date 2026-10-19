@@ -232,6 +232,49 @@ public sealed class ProgramLogFileTests
         finally { first.Released.Set(); }
     }
 
+    // Loggers racing the switch: an entry logged as Auto-collect flips must go to
+    // its own session, never start that session's file over again (a second
+    // header for it) after the next session has begun. Bounded by counts, not
+    // time.
+    [Fact]
+    public async Task LoggersRacingTheSwitch_NeverStartASessionsFileTwice()
+    {
+        LogService log = new();
+        LogDiagnosticState diagnostics = new() { AutoCollectLogs = true };
+        Disks disks = new();
+        using ProgramLogFile file = Make(log, disks, diagnostics: diagnostics);
+        const int loggers = 3, perLogger = 4000, maxToggles = 3000;
+        int running = loggers;
+        using Barrier start = new(loggers + 1);
+
+        Thread[] threads = Enumerable.Range(0, loggers).Select(n => new Thread(() =>
+        {
+            start.SignalAndWait();
+            for (int i = 0; i < perLogger; i++) log.Info("Walker", $"logger {n} step {i}");
+            Interlocked.Decrement(ref running);
+        })).ToArray();
+        foreach (Thread thread in threads) thread.Start();
+        start.SignalAndWait();
+        for (int t = 0; t < maxToggles && Volatile.Read(ref running) > 0; t++)
+        {
+            diagnostics.AutoCollectLogs = !diagnostics.AutoCollectLogs;
+            Thread.Yield();
+        }
+        foreach (Thread thread in threads) thread.Join();
+        diagnostics.AutoCollectLogs = true;
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+
+        TestDisk[] opened = disks.Opened.ToArray();
+        Assert.True(opened.Length > 2, "the switch never flipped while the loggers ran");
+        Assert.All(opened, disk =>
+            Assert.True(Regex.Matches(disk.Text, "^# MudPlay debug log", RegexOptions.Multiline).Count <= 1,
+                "a file was given two headers"));
+        string[] starts = opened.SelectMany(d => Regex.Matches(d.Text, @"^# started (\S+)", RegexOptions.Multiline))
+            .Select(m => m.Groups[1].Value).ToArray();
+        string[] repeated = starts.GroupBy(s => s).Where(g => g.Count() > 1).Select(g => g.Key).ToArray();
+        Assert.True(repeated.Length == 0, $"{repeated.Length} sessions' files were started again");
+    }
+
     [Fact]
     public void Exit_WaitsForASlowDisk_ButNoLongerThanTheBoundForAStuckOne()
     {

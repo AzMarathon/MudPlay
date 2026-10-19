@@ -24,11 +24,15 @@ internal sealed class LogEntryQueue<T>
     // Counted on the threads that log, taken by the writer.
     private int _dropped;
 
+    // Which items count as entries when let go of; null counts every item.
+    private readonly Func<T, bool>? _isEntry;
+
     // An empty slot (no value, no barrier) only wakes the writer.
     private readonly record struct Slot(T Value, bool HasValue, Action? Barrier);
 
-    public LogEntryQueue(int depth)
+    public LogEntryQueue(int depth, Func<T, bool>? isEntry = null)
     {
+        _isEntry = isEntry;
         _channel = Channel.CreateBounded<Slot>(
             new BoundedChannelOptions(depth) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest },
             OnDropped);
@@ -43,7 +47,7 @@ internal sealed class LogEntryQueue<T>
 
     private void OnDropped(Slot slot)
     {
-        if (slot.HasValue) Interlocked.Increment(ref _dropped);
+        if (slot.HasValue && (_isEntry?.Invoke(slot.Value) ?? true)) Interlocked.Increment(ref _dropped);
         slot.Barrier?.Invoke();
     }
 
