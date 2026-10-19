@@ -1,5 +1,18 @@
 # Version history
 
+## 3.185.3
+
+- A door the game data gives only a key for is bashed where your realm has answered it as a door; elsewhere a bash is only tried when nobody in the room could be hit by it and the realm has no PvP; a list of Stock's doors ships with the client and each realm learns the rest, two agreeing answers to overturn the list
+- Game Data → Doors tab: see where each such door's kind comes from, set or reset it, or forget what the realm learned
+- A keyed door is picked first when you have Picklocks, then bashed where it can be, then keyed
+- A door that's only shut is opened before any pick is tried
+- Paradigm's `You do not have <key>.` ends the key try at once
+- A key the game says you don't have, or that crumbles on its last use, leaves the key ring at once
+- On Paradigm, a charge look answered `You do not see <item> here!` takes the item off what is held
+- A pick that has no effect isn't tried at that door again this session, and routes go round it
+- A key door marked any picklocks shows it on the map
+- bug reports addressed: paradigm-20261018-192819
+
 ## 3.185.2
 
 - Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning

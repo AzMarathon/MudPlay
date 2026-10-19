@@ -62,6 +62,6 @@ public sealed class BlockedExitDescriberTests
             new RoomKey(1, 1), Direction.E, in exit, _ => null, _ => null);
 
         // No room name, no item name → key by id, room by its raw map/room.
-        Assert.Equal("a locked door east from 1/1 — needs item #777", reason);
+        Assert.Equal("a locked door east from 1/1 — needs item #777, or a pick (a bash is tried)", reason);
     }
 }

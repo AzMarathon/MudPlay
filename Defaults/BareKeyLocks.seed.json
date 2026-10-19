@@ -1,0 +1,110 @@
+{
+  "About": "Bare (Key: N) locks: Stock 1.11p map file wccmp002.dat exit types. 7 = door, 11 = gate (bashable); 2 = key exit (not bashable). Keyed by room and the direction out.",
+  "Sides": [
+    {
+      "Side": "1/1307 E",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/1309 N",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/1790 W",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "1/1794 E",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2122 E",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2123 W",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "1/2224 N",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2225 S",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2234 E",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2235 W",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2238 S",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2239 N",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "1/2294 E",
+      "Bashable": false,
+      "ExitType": 2
+    },
+    {
+      "Side": "15/863 S",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/904 SW",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/1054 N",
+      "Bashable": true,
+      "ExitType": 11
+    },
+    {
+      "Side": "15/1062 NE",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/1072 SW",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/1084 NE",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/1094 SW",
+      "Bashable": true,
+      "ExitType": 7
+    },
+    {
+      "Side": "15/1126 U",
+      "Bashable": true,
+      "ExitType": 7
+    }
+  ]
+}

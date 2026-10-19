@@ -209,6 +209,7 @@ public static class MenuActionCatalogue
         new("gamedata.unobtainable", "Unobtainable", Kind.GameDataSection, "Game Data", Parameter: "unobtainable"),
         new("gamedata.questflags", "Quest Flags", Kind.GameDataSection, "Game Data", Parameter: "questflags"),
         new("gamedata.flavorprefixes", "Flavor Prefixes", Kind.GameDataSection, "Game Data", Parameter: "flavor-prefixes"),
+        new("gamedata.doors", "Doors", Kind.GameDataSection, "Game Data", Parameter: "doors"),
     };
 
     // ----- Walk-destination fly-outs (the same GOTO submenus that used to be

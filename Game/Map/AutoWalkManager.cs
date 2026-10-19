@@ -2789,16 +2789,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
             _awaitingDoorOpen = true;
+            (int doorReq, bool doorBash) = DoorPolicy.Openers(in exit);
             _log?.Info("Walker",
                 $"step {_index + 1}/{_path!.Count}: opening door {step.Direction}"
-                + (exit.StatRequirement > 0
-                    ? $" (req {exit.StatRequirement}, canBash {exit.CanBash})"
-                    : "")
-                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId})" : "")
+                + (doorReq > 0 ? $" (req {doorReq}, canBash {doorBash})" : "")
+                + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId}{(exit.IsBareKeyLock ? ", no alternative in the data" : "")})" : "")
                 // A poor-odds lock is only on a plan that found no short way round it.
                 + (Filter?.IsPoorOddsDoor(in exit) == true && Filter.DescribeDoorRefusal(in exit) is { } odds
                     ? $": no way round within {DoorPolicy.PoorPickDetourSteps} extra steps; {odds}" : ""));
-            _doorEnqueuer(step.Direction, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "walker", OnDoorReply);
+            _doorEnqueuer(step.Direction, doorReq, doorBash, exit.KeyItemId, "walker", OnDoorReply);
             return;
         }
 

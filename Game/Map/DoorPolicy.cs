@@ -33,6 +33,35 @@ public static class DoorPolicy
     // the walk goes round only if the picks run out.
     public const int PoorPickDetourSteps = 10;
 
+    // The pick requirement of a bare `(Key: N)` lock. The data's `[N picklocks]` is a
+    // lock modifier of −(N − 1), and a bare cell is a modifier of 0: `[1 picklocks]`,
+    // a pick rolled under the character's Picklocks.
+    public const int BareKeyLockPickRequirement = 1;
+
+    // What the door handler is told opens this door or keyed door besides its key: the
+    // pick / bash requirement and whether a bash is open. A bare `(Key: N)` lock is
+    // picked like a `[1 picklocks]` one on both exit kinds the cell may be. It is
+    // bashed only where it is known to be a door or gate (BareKeyLockBook): a key
+    // exit can't be bashed at all, and there `bash <dir>` is taken as an attack on
+    // whatever the direction word names (GAME_MECHANICS "Locked doors — picking,
+    // opening and bashing"). One not known either way goes over as pick-only; the
+    // handler itself decides at the door whether a bash is safe to try.
+    public static (int StatRequirement, bool CanBash) Openers(in RoomExit exit) =>
+        exit.IsBareKeyLock
+            ? (BareKeyLockPickRequirement, exit.BareLockBash == BareLockBash.Bashable)
+            : (exit.StatRequirement, exit.CanBash);
+
+    // What a route counts on to open it: as Openers, but a bare lock not known
+    // either way counts on the bash the handler will try (user, 2026-10-18).
+    // trialsAllowed: whether the handler may try a bash at a bare lock not answered as
+    // a door on this realm; it never does on a PvP realm, so there only such a side
+    // counts on a bash.
+    public static (int StatRequirement, bool CanBash) PlannedOpeners(in RoomExit exit, bool trialsAllowed = true) =>
+        exit.IsBareKeyLock
+            ? (BareKeyLockPickRequirement,
+               exit.BareLockBash != BareLockBash.NotBashable && (trialsAllowed || exit.BareLockAnsweredAsDoor))
+            : (exit.StatRequirement, exit.CanBash);
+
     // Chance in 100 that one `pick` opens a lock (GAME_MECHANICS "Locked doors —
     // picking, opening and bashing": read from the Stock engine, and the same on
     // Paradigm as far as the user knows): one roll under Picklocks less the lock's
@@ -44,6 +73,37 @@ public static class DoorPolicy
         return statRequirement > 0
             ? Math.Clamp(playerPicklocks - statRequirement + 1, 0, 100)
             : Math.Min(playerPicklocks + 1, 100);
+    }
+
+    // What the door handler tries, in order. The one place the order is set.
+    //   - A keyless door: the preferred verb (bash, or pick with Picklocks-over-bash
+    //     on), then the other one.
+    //   - A keyed door — Client policy (user's rulings, 2026-10-18): a pick first when
+    //     the character has Picklocks, whatever the odds and whether or not the key is
+    //     carried (up to the pick-try cap); then a bash, where one is allowed; then the
+    //     key, as the last resort (a floor grab when it isn't carried, then `use`).
+    // A verb this character can't open the door with is left out.
+    public static IReadOnlyList<DoorOpener> OpeningOrder(
+        int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
+        bool keyed, bool preferPickOverBash,
+        int maxBashableStrength = UnbashableStrengthThreshold)
+    {
+        bool bashOk = canBash
+                   && statRequirement <= maxBashableStrength
+                   && (statRequirement <= 0 || playerStrength >= statRequirement);
+        bool pickOk = playerPicklocks > 0 && (statRequirement <= 0 || playerPicklocks >= statRequirement);
+        List<DoorOpener> order = new(3);
+        if (!keyed)
+        {
+            if (preferPickOverBash && pickOk) order.Add(DoorOpener.Pick);
+            if (bashOk) order.Add(DoorOpener.Bash);
+            if (!preferPickOverBash && pickOk) order.Add(DoorOpener.Pick);
+            return order;
+        }
+        if (pickOk) order.Add(DoorOpener.Pick);
+        if (bashOk) order.Add(DoorOpener.Bash);
+        order.Add(DoorOpener.Key);
+        return order;
     }
 
     // True when picking is this character's only way through the door and each try
@@ -58,14 +118,23 @@ public static class DoorPolicy
 
     // Why a route keeps off this door, for the log and the bug report: "bash needs
     // 301 Strength, you have 120; pick chance 3% (Picklocks 303)".
+    // A bare `(Key: N)` lock says what is known of its bash instead (BareLockBash).
     public static string DescribeOdds(
         int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
-        int maxBashableStrength)
+        int maxBashableStrength, BareLockBash? bareLock = null, bool bareLockBashTried = true)
     {
-        string bash = !canBash ? "can't be bashed"
+        string bash = bareLock switch
+        {
+            BareLockBash.NotBashable => "can't be bashed (a key exit)",
+            BareLockBash.Bashable or BareLockBash.Unknown when !bareLockBashTried =>
+                "no bash is tried on a PvP realm until it has answered as a door",
+            BareLockBash.Unknown => $"a bash is tried at Strength {playerStrength} (not known whether it is a door)",
+            BareLockBash.Bashable => $"bashes at Strength {playerStrength} in 100",
+            _ => null,
+        } ?? (!canBash ? "can't be bashed"
             : statRequirement > maxBashableStrength
                 ? $"bash needs {statRequirement} Strength, more than any character can reach"
-            : $"bash needs {statRequirement} Strength, you have {playerStrength}";
+            : $"bash needs {statRequirement} Strength, you have {playerStrength}");
         return $"{bash}; pick chance {PickChancePercent(statRequirement, playerPicklocks)}% (Picklocks {playerPicklocks})";
     }
 
@@ -111,7 +180,8 @@ public static class DoorPolicy
         bool bashOk = canBash
                    && statRequirement <= maxBashableStrength
                    && (statRequirement <= 0 || playerStrength >= statRequirement);
-        bool pickOk = statRequirement <= 0 || playerPicklocks >= statRequirement;
+        // No Picklocks never opens a lock, "any" lock or not (PickChancePercent).
+        bool pickOk = playerPicklocks > 0 && (statRequirement <= 0 || playerPicklocks >= statRequirement);
 
         if (preferPickOverBash)
         {

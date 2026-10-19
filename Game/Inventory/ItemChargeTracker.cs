@@ -79,6 +79,12 @@ public sealed class ItemChargeTracker : IDisposable
     // Fired after a charge count changes, so the Character Info panel refreshes.
     public event Action? Changed;
 
+    // Fired with the name of an item thought held that a look of ours found nowhere:
+    // `You do not see <item> here!`. The look that reads a held item's charges shows
+    // the item while it is carried, so this answer means it has gone (its last
+    // charge spent, say).
+    public event Action<string>? NotHeld;
+
     public ItemChargeTracker(
         GameDataCache gameData,
         ProfileService profile,
@@ -334,6 +340,19 @@ public sealed class ItemChargeTracker : IDisposable
         if (_disposed) return;
         SettleUse(text);
         if (_pendingItem is null) return;
+        // Report paradigm-20261018-192819: the look after a key's last use answered
+        // this, and the pack list kept the key until the next `i`.
+        if (string.Equals(text.Trim(), $"You do not see {_pendingItem} here!", StringComparison.OrdinalIgnoreCase))
+        {
+            string gone = _pendingItem;
+            int goneNumber = _pendingNumber;
+            _pendingItem = null;
+            _pendingGen++;
+            _log?.Info("Items", $"charges: looked for '{gone}' and the game sees none — not held any more");
+            if (goneNumber > 0) Forget(goneNumber, gone);
+            NotHeld?.Invoke(gone);
+            return;
+        }
         int uses = TokenCatalog.ParseUsesRemaining(text);
         if (uses < 0) return;
 

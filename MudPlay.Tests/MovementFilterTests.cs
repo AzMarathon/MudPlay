@@ -525,20 +525,22 @@ public sealed class MovementFilterTests
             StatRequirement: 0, KeyItemId: keyItemId);
 
     [Fact]
-    public void IsExitBlocked_KeyOnlyDoor_NoKey_BlocksAsLockedDoor()
+    public void IsExitBlocked_KeyOnlyDoor_NoKey_BlocksAsLockedDoor_WhenAKeyExit()
     {
         (_, MovementFilter filter) = NewPair();
-        // Str 127 / Picklocks 0, key not carried: a 0-requirement door reads as a
-        // plain "(Door)" anyone can bash, but this one is key-only — without the
-        // key it must block so the route picker surfaces the key requirement.
+        // Str 127 / Picklocks 0, key not carried. A bare (Key: N) lock known to be a
+        // key exit can't be bashed, so without the key it blocks and the route picker
+        // surfaces the key requirement. Not known either way, the bash the door
+        // handler will try opens it to the plan (user, 2026-10-18).
         filter.StrengthProvider = () => 127;
         filter.PicklocksProvider = () => 0;
         filter.InventoryReadyProbe = () => true;
         filter.ItemCarriedProbe = _ => false;
-        RoomExit door = KeyOnlyDoor(475);
+        RoomExit keyExit = KeyOnlyDoor(475) with { BareLockBash = BareLockBash.NotBashable };
 
-        Assert.True(filter.IsExitBlocked(door));
-        Assert.Equal(ExitBlockReason.LockedDoor, filter.DescribeExitBlock(door));
+        Assert.True(filter.IsExitBlocked(keyExit));
+        Assert.Equal(ExitBlockReason.LockedDoor, filter.DescribeExitBlock(keyExit));
+        Assert.False(filter.IsExitBlocked(KeyOnlyDoor(475)));
     }
 
     [Fact]

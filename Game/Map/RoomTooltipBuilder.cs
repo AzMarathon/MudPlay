@@ -660,8 +660,8 @@ public static class RoomTooltipBuilder
                 // called a typo — LookupName returns null just as readily for an
                 // absent or malformed Items.json, and silently restyling every keyed
                 // door in the set as a plain door would be a much worse lie. Also
-                // kept when the door has no stat alternative: that one really is
-                // impassable, and the raw id is the only clue why.
+                // kept when the door has no stat alternative: the raw id is the only
+                // clue that its data is broken.
                 if (exit.Hint == RoomExitHint.KeyLocked
                     && itemName is not { Length: > 0 }
                     && exit.StatRequirement > 0
@@ -672,11 +672,13 @@ public static class RoomTooltipBuilder
                     ? $"{label}: {itemName}"
                     : $"{label}: #{exit.KeyItemId}";
                 // A key-locked door that can also be picked / bashed carries the
-                // skill alternative ("or 50 picklocks/strength") — surface it so
-                // the user knows they needn't have the key.
-                if (exit.Hint == RoomExitHint.KeyLocked
-                    && FormatDoorRequirement(exit) is { Length: > 0 } alt)
-                    baseText += $", or {alt}{PickChance(exit, picklocks)}";
+                // skill alternative ("or 50 picklocks/strength", "or any picklocks")
+                // — surface it so the user knows they needn't have the key. A bare
+                // lock's alternative is what is known of it (BareLockAlternative).
+                if (exit.Hint == RoomExitHint.KeyLocked)
+                    baseText += (exit.IsBareKeyLock
+                        ? BareLockAlternative(exit.BareLockBash)
+                        : $", or {FormatDoorSkill(exit)}") + PickChance(exit, picklocks);
                 return baseText;
             }
 
@@ -754,19 +756,6 @@ public static class RoomTooltipBuilder
         }
     }
 
-    // A door's pick / bash skill requirement, from the parsed StatRequirement +
-    // CanBash flags. "50 picklocks/strength" when both verbs work (the MDB's own
-    // "picklocks/strength" phrasing — one figure serves as both the picklock
-    // skill and the bash strength), "50 picklocks" when the door is pick-only.
-    // Empty when no figure was parsed (older exports omit the number).
-    private static string FormatDoorRequirement(RoomExit exit)
-    {
-        if (exit.StatRequirement <= 0) return string.Empty;
-        return exit.CanBash
-            ? $"{exit.StatRequirement} picklocks/strength"
-            : $"{exit.StatRequirement} picklocks";
-    }
-
     // ", pick ~46%" — our chance to pick the lock (user, 2026-09-30): one 0–100 roll
     // under Picklocks less the lock's N − 1, so about Picklocks − N + 1 percent; an
     // "any" lock's modifier adds, so at least Picklocks + 1 (GAME_MECHANICS "Locked
@@ -775,14 +764,25 @@ public static class RoomTooltipBuilder
     private static string PickChance(RoomExit exit, int picklocks)
     {
         if (picklocks <= 0) return string.Empty;
-        int chance = DoorPolicy.PickChancePercent(exit.StatRequirement, picklocks);
-        return exit.StatRequirement > 0 ? $", pick ~{chance}%" : $", pick ≥{chance}%";
+        (int req, _) = DoorPolicy.Openers(in exit);
+        int chance = DoorPolicy.PickChancePercent(req, picklocks);
+        return req > 0 ? $", pick ~{chance}%" : $", pick ≥{chance}%";
     }
 
-    // Like FormatDoorRequirement but never blank: a zero requirement renders "any"
-    // (any bash / pick opens it) instead of an empty string. Used for a plain door,
-    // where "any" is meaningful; the key-locked alternative keeps the blank-on-zero
-    // FormatDoorRequirement (a key-only door has no stat alternative to append).
+    // A bare key lock's openers besides its key (DoorPolicy.PlannedOpeners): a pick,
+    // and a bash where it is known to be a door or is tried because nobody knows.
+    public static string BareLockAlternative(BareLockBash bash) => bash switch
+    {
+        BareLockBash.Bashable => ", or a bash or a pick",
+        BareLockBash.NotBashable => ", or a pick",
+        _ => ", or a pick (a bash is tried)",
+    };
+
+    // A door's pick / bash skill requirement, from the parsed StatRequirement +
+    // CanBash flags. "50 picklocks/strength" when both verbs work (the MDB's own
+    // "picklocks/strength" phrasing — one figure serves as both the picklock
+    // skill and the bash strength), "50 picklocks" when the door is pick-only. A
+    // zero requirement renders "any" (any bash / pick opens it).
     private static string FormatDoorSkill(RoomExit exit)
     {
         string qty = exit.StatRequirement > 0

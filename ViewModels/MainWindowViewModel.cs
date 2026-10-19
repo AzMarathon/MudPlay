@@ -1308,6 +1308,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Conditions.IsConfuseFumbleLine,
             AppServices.Current.Conditions.IsActiveHoldLine);
         _movementRefusalDetector.PaidCrossingRefused += AppServices.Current.OnPaidCrossingRefused;
+        _movementRefusalDetector.ShutDoorBonked += AppServices.Current.BareKeyLocks.NoteRefusedMove;
         // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
         // confirms a move's landing on that causal signal rather than guessing by
         // timing — the fix for phantom-advancing through identically-named grids.
@@ -5435,7 +5436,9 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.RoomGraph,
             AppServices.Current.PlayerStats,
             AppServices.Current.ItemSources,
-            initialSectionId);
+            initialSectionId,
+            AppServices.Current.BareKeyLocks,
+            AppServices.Current.BareKeyLockStore);
 
     // Items listed at the top of the Game Data menu, one per imported set. Each entry has a
     // checkbox-style header (checked = currently active set) and a command

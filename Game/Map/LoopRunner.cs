@@ -2180,13 +2180,12 @@ public sealed class LoopRunner : IRecoverableEngine
             if (_doorEnqueuer is not null)
             {
                 _awaitingDoorOpen = true;
+                (int doorReq, bool doorBash) = DoorPolicy.Openers(in exit);
                 _log?.Info("LoopRunner",
                     $"step {_index + 1}/{_expandedSteps.Count}: opening door {step.Direction}"
-                    + (exit.StatRequirement > 0
-                        ? $" (req {exit.StatRequirement}, canBash {exit.CanBash})"
-                        : "")
-                    + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId})" : ""));
-                _doorEnqueuer(step.Direction, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "loop", OnDoorReply);
+                    + (doorReq > 0 ? $" (req {doorReq}, canBash {doorBash})" : "")
+                    + (exit.KeyItemId > 0 ? $" (key {exit.KeyItemId}{(exit.IsBareKeyLock ? ", no alternative in the data" : "")})" : ""));
+                _doorEnqueuer(step.Direction, doorReq, doorBash, exit.KeyItemId, "loop", OnDoorReply);
                 return;
             }
             FailStep($"closed door {step.Direction} mid-circuit — no door-open flow bound");

@@ -2569,7 +2569,17 @@ public static class BugReportBuilder
               + $"bash ceiling {svc.MaxStrength.MaxAchievableStrength}; "
               + $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
               + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
-            : "no stat screen read yet: every door is planned through and left to the door handler");
+            : "no stat screen read yet: every door is planned through and left to the door handler, "
+              + "except a bare (Key: N) lock known to be a key exit, which is shut without its key");
+        Game.Map.BareKeyLockBook bare = svc.BareKeyLocks;
+        Kv(sb, "Bare (Key: N) locks known", $"seed {bare.SeedCount} side(s), {bare.SeedBashable} bashable; "
+            + $"this realm's record {bare.LearnedCount} side(s)"
+            + (bare.LearnedCount == 0 ? string.Empty
+                : $" ({string.Join(" | ", bare.LearnedEntries.Select(e => $"{Game.Map.BareKeyLockBook.FormatSide(e.Room, e.Dir)}: {bare.Describe(e.Room, e.Dir)}"
+                    + (e.Tally.LastAnswered is { } at ? $", last answered {at:yyyy-MM-dd HH:mm:ss}" : "")))})")
+            + "; a bare lock is picked like 1 picklocks, bashed where known to be a door, and one not yet "
+            + "answered as a door on this realm bashed only when nobody in the room answers to the direction word "
+            + "and the realm has no PvP");
         Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
             ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
         Kv(sb, "Doors given up on (walk)", walker.AbandonedDoors.Count == 0
@@ -2626,6 +2636,8 @@ public static class BugReportBuilder
             + (door.CurrentDirection is { } dd ? $", dir={dd}" : string.Empty)
             + (door.CurrentDoorRoom is { } dr ? $", door in {dr}" : string.Empty)
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
+        Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
+        Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"
