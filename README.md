@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.185.2**
 > - Out-of-range numbers in global.json, a bbs.json or a profile.json load at their setting's limits, with a Program Log warning
-> - One unreadable value in a profile no longer drops the client onto the default profile; only that setting takes its default
+> - One unreadable value in a profile no longer drops the client onto the default profile; only that setting is left out
+> - A file with a value left out is first copied beside it (`<file>.unreadable-<time>.bak`), so a save can't lose the original
 > - A huge terminal size or scrollback in a settings file no longer makes startup allocate tens of gigabytes
 > - A huge player-cleanup window no longer crashes startup
 >

@@ -135,7 +135,7 @@ public sealed class SettingsValueHardeningTests : IDisposable
 
     // A number its field can't hold, or text where a number goes, used to fail the
     // whole profile: the client came up on the default profile with the character's
-    // workspace missing. Now that field alone takes its default.
+    // workspace missing. Now that field alone takes the value from the tier below.
     [Fact]
     public void ProfileLoad_OneUnreadableField_KeepsTheRestOfTheCharacter()
     {
@@ -163,7 +163,7 @@ public sealed class SettingsValueHardeningTests : IDisposable
         List<string> warns = WarnsAbout(path);
         Assert.Contains(warns, w => w.Contains("CorpseHandoffs[0].Coins.Copper", StringComparison.Ordinal));
         Assert.Contains(warns, w => w.Contains("Settings.Health.RestMaxHp", StringComparison.Ordinal)
-                                  && w.Contains("its default", StringComparison.Ordinal));
+                                  && w.Contains("the value from the tier below, or the default", StringComparison.Ordinal));
     }
 
     // The value used is what the next save writes, beside everything else the
@@ -196,10 +196,126 @@ public sealed class SettingsValueHardeningTests : IDisposable
         ProfileService profiles = TestProfiles.Service();
 
         Assert.Throws<InvalidDataException>(() => profiles.Load(_bbs, "Hero"));
-        profiles.LoadDefaultProfile();
+        profiles.LoadDefaultProfile(_bbs);
         profiles.Save();
 
         Assert.Equal(before, File.ReadAllBytes(path));
+    }
+
+    // A value left out is gone from the file at its next save (a migration's, a
+    // rename's), so the file as it was is kept beside it first, and the Warn names it.
+    [Fact]
+    public void ProfileLoad_LeavingAValueOut_KeepsTheFileAsItWas_BeforeASaveCanLoseIt()
+    {
+        string path = WriteProfile("""
+            { "Name": "Hero", "Favorites": { "Label": "Home" }, "GotoHistory": ["1/2"] }
+            """);
+        byte[] original = File.ReadAllBytes(path);
+        ProfileService profiles = TestProfiles.Service();
+
+        profiles.Load(_bbs, "Hero");
+        profiles.Save();
+
+        string backup = Assert.Single(Directory.GetFiles(Path.GetDirectoryName(path)!, "profile.json.unreadable-*.bak"));
+        Assert.Equal(original, File.ReadAllBytes(backup));
+        Assert.Contains(WarnsAbout(path), w => w.Contains("Favorites", StringComparison.Ordinal)
+                                             && w.Contains(Path.GetFileName(backup), StringComparison.Ordinal));
+        Assert.Equal("1/2", Assert.Single(profiles.Current!.GotoHistory!));
+    }
+
+    // Reading the same damaged file again makes no new copy, and a file damaged
+    // over and over keeps only the newest few.
+    [Fact]
+    public void Backups_AreOnePerState_AndOnlyTheNewestFewAreKept()
+    {
+        string path = WriteProfile("""{ "Name": "Hero", "Favorites": 1 }""");
+        TestProfiles.Service().Load(_bbs, "Hero");
+        TestProfiles.Service().Load(_bbs, "Hero");
+        string folder = Path.GetDirectoryName(path)!;
+        Assert.Single(Directory.GetFiles(folder, "profile.json.unreadable-*.bak"));
+
+        for (int i = 2; i <= SettingsValueGuard.BackupsKept + 2; i++)
+        {
+            File.WriteAllText(path, $$"""{ "Name": "Hero", "Favorites": {{i}} }""");
+            TestProfiles.Service().Load(_bbs, "Hero");
+        }
+
+        string[] kept = Directory.GetFiles(folder, "profile.json.unreadable-*.bak");
+        Assert.Equal(SettingsValueGuard.BackupsKept, kept.Length);
+        Assert.Contains(kept, k => File.ReadAllText(k).Contains($"\"Favorites\": {SettingsValueGuard.BackupsKept + 2}", StringComparison.Ordinal));
+    }
+
+    // A section past saving: left as written for its own reader, said once, and the
+    // rest of the profile still loads.
+    [Fact]
+    public void ProfileLoad_ASectionBeyondRepair_IsLeftAsWritten_AndTheProfileLoads()
+    {
+        string bad = string.Join(", ", Enumerable.Range(0, 120).Select(i => $"\"x{i}\": 1"));
+        string path = WriteProfile($$"""
+            { "Name": "Hero", "GotoHistory": ["1/2"],
+              "Settings": { "Spells": { "BlessSlots": { {{bad}} } }, "Talk": { "LogMaxLines": 5 } } }
+            """);
+
+        CharacterProfile hero = TestProfiles.Service().Load(_bbs, "Hero");
+
+        Assert.Equal("1/2", Assert.Single(hero.GotoHistory!));
+        Assert.Contains("x119", hero.Settings!["Spells"].GetRawText(), StringComparison.Ordinal);
+        Assert.Equal(100, hero.Settings["Talk"].GetProperty("LogMaxLines").GetInt32());
+        Assert.Contains(WarnsAbout(path), w => w.Contains("Settings.Spells", StringComparison.Ordinal)
+                                             && w.Contains("the section as written", StringComparison.Ordinal));
+    }
+
+    // A key written twice is read as the serializer reads it, the last standing, and
+    // the file is still checked.
+    [Fact]
+    public void ProfileLoad_AKeyWrittenTwice_StillHasItsValuesChecked()
+    {
+        WriteProfile("""
+            { "Name": "Hero", "EventQueueLimit": 5, "EventQueueLimit": 100000, "Favorites": 1 }
+            """);
+
+        CharacterProfile hero = TestProfiles.Service().Load(_bbs, "Hero");
+
+        Assert.Equal(100, hero.EventQueueLimit);
+        Assert.Null(hero.Favorites);
+    }
+
+    // An enum number the enum doesn't have: a section's is left out, so the tier
+    // below shows through; a file's own goes back to its default.
+    [Fact]
+    public void EnumNumbersItDoesntHave_AreLeftOut_WithAWarn()
+    {
+        string path = WriteProfile("""
+            { "Name": "Hero", "NavLairMode": 99, "Settings": { "Health": { "HpThresholdMode": 7, "RunIfBelowHp": 33 } } }
+            """);
+
+        CharacterProfile hero = TestProfiles.Service().Load(_bbs, "Hero");
+
+        Assert.Equal(new CharacterProfile().NavLairMode, hero.NavLairMode);
+        Assert.False(hero.Settings!["Health"].TryGetProperty("HpThresholdMode", out _));
+        Assert.Equal(33, hero.Settings["Health"].GetProperty("RunIfBelowHp").GetInt32());
+        List<string> warns = WarnsAbout(path);
+        Assert.Contains(warns, w => w.Contains("NavLairMode", StringComparison.Ordinal));
+        Assert.Contains(warns, w => w.Contains("Settings.Health.HpThresholdMode", StringComparison.Ordinal));
+    }
+
+    // A read says only what the last read of the same file didn't: rereading is
+    // quiet, and a value fixed and then broken again is said again.
+    [Fact]
+    public void Warns_AreSaidOncePerFileState()
+    {
+        string path = WriteBbs($$"""{ "Name": "{{_bbs}}", "TerminalCols": 5000 }""");
+        BbsProfileStore store = new();
+
+        store.Get(_bbs);
+        store.Get(_bbs);
+        Assert.Single(WarnsAbout(path), w => w.Contains("TerminalCols", StringComparison.Ordinal));
+
+        File.WriteAllText(path, $$"""{ "Name": "{{_bbs}}", "TerminalCols": 80 }""");
+        store.Get(_bbs);
+        File.WriteAllText(path, $$"""{ "Name": "{{_bbs}}", "TerminalCols": 5000 }""");
+        store.Get(_bbs);
+        Assert.Equal(2, WarnsAbout(path).Count(w => w.Contains("TerminalCols", StringComparison.Ordinal)));
     }
 
     // Global tier: two billion days of player cleanup threw "AddDays out of range"

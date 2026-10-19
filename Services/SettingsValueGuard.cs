@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
@@ -9,33 +10,43 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
-// Keeps every number in a settings file inside what its field may hold, as the
-// file is read. global.json, a bbs.json and a profile.json are the files a user
-// edits by hand, imports or carries between machines, and a value nobody would
-// set (a 100000-column terminal, a cleanup window of two billion days) crashed
-// startup or had it allocate tens of gigabytes. JsonStore.Load hands each of the
-// three to Deserialize, which walks the file against its DTO's shape before
-// deserializing it:
+// Keeps every value in a settings file to what its field may hold, as the file is
+// read. global.json, a bbs.json and a profile.json are the files a user edits by
+// hand, imports or carries between machines, and a value nobody would set (a
+// 100000-column terminal, a cleanup window of two billion days) crashed startup or
+// had it allocate tens of gigabytes. JsonStore.Load hands each of the three to
+// Deserialize.
 //
-//   - a number outside its field's SettingRange is pulled to the nearer end;
+// A file the serializer reads as it stands (every file, normally) is read that way,
+// and the object it gives is then walked for a number outside its field's
+// SettingRange, pulled to the nearer end, and an enum number the enum doesn't have,
+// set to the field's default. Only a file the serializer refuses is read as a tree,
+// fixed and tried again:
+//
 //   - a number its field's type can't hold (1e300 in an int) is pulled into the
-//     type's range, where it would otherwise fail the whole file;
-//   - a fraction in a whole-number field is rounded, for the same reason;
-//   - anything else one field holds that its type can't take (text in a number,
-//     a list where an object goes) is dropped, so that field takes its default.
+//     type's range, and a fraction in a whole-number field is rounded;
+//   - anything else one field holds that its type can't take (text in a number, a
+//     list where an object goes) is left out, so that field takes the value from
+//     the tier below, or the default.
 //
 // One bad field used to fail the whole file: a profile that wouldn't parse came up
 // as the default profile, the character's whole workspace missing for the session.
-// Now only that field is lost. The values used are what the client reads, and what
-// the next save of that file writes; the file itself is not rewritten here. Each
-// value moved or dropped is raised once on Clamped (AppServices writes it to the
-// program log at Warn), naming the field, the tier, the value found and the value
-// used. A file that isn't JSON at all still fails to load, as it always did.
+// Now only that field is lost. The tab-keyed sections each tier's Settings
+// dictionary holds are checked against their own DTOs the same way.
+//
+// The values used are what the client reads, and what the file holds if it is
+// saved; reading never writes it. A value left out is gone from the file at its
+// next save, so the file as it was is first copied beside it
+// (<file>.unreadable-<time>.bak, the newest few kept). Each value moved or left out
+// is raised on Clamped (AppServices writes it to the program log at Warn), naming
+// the field, the tier, the value found and the value used. A file that isn't JSON at
+// all still fails to load, as it always did.
 public static class SettingsValueGuard
 {
-    // Raised with a line for the program log per value moved. A line already raised
-    // is not raised again while it is remembered: the same file is read again on
-    // every profile listing, heartbeat merge and reload.
+    // Raised with a line for the program log per value moved or left out. A read of
+    // a file says only what the last read of the same file didn't: the same file is
+    // read again on every profile listing, heartbeat merge and reload, and a value
+    // fixed and then broken again is said again.
     public static event Action<string>? Clamped;
 
     // The tab-keyed sections every tier's Settings dictionary holds, by key: what a
@@ -65,6 +76,9 @@ public static class SettingsValueGuard
         ["Toolbar"] = typeof(ToolbarSettings),
     };
 
+    // How many copies of a file's state before a value was left out are kept.
+    public const int BackupsKept = 3;
+
     // The tier a file deserialized as type is, or null when type is not one of the
     // settings files.
     public static string? TierOf(Type type) =>
@@ -73,65 +87,462 @@ public static class SettingsValueGuard
         : type == typeof(CharacterProfile) ? "Character"
         : null;
 
-    // Deserialize json, read from path, as T with its numbers kept in range and
-    // any field it can't take dropped.
+    // Deserialize json, read from path, as T with its values held to their fields.
     public static T? Deserialize<T>(string json, string path, string tier) where T : class
     {
         List<SettingsClamp> clamps = new();
         T? result;
+        bool read;
         try
         {
-            JsonNode? node = JsonNode.Parse(json, nodeOptions: null, NodeDocumentOptions);
-            Clamp(node, typeof(T), clamps);
-            result = (T?)DeserializeDroppingBadFields(node, typeof(T), "", clamps);
+            result = JsonSerializer.Deserialize<T>(json, JsonStore.Options);
+            read = true;
         }
-        catch (ArgumentException ex)
+        catch (JsonException)
         {
-            // A property named twice: the node tree refuses it where the serializer
-            // takes the last, so the file is read as it always was, unchecked.
-            Raise($"{tier} settings in {path} couldn't be checked for values out of range ({ex.Message}); read as written.");
-            return JsonSerializer.Deserialize<T>(json, JsonStore.Options);
+            result = null;
+            read = false;
         }
+
+        if (read)
+        {
+            if (result is not null) Walk(result, PlanOf(typeof(T)), new List<object>(), clamps, apply: true);
+        }
+        else
+        {
+            // Not JSON at all throws here, as it always did. Built a property at a time,
+            // so a key written twice is taken as the serializer takes it: the last.
+            JsonNode? node = ToNode(JsonDocument.Parse(json, DocumentOptions).RootElement);
+            Fix(node, typeof(T), null, "", RootFallback, clamps);
+            result = (T?)DeserializeLeavingOutBadFields(node, typeof(T), "", RootFallback, clamps);
+        }
+
+        string? backup = clamps.Any(c => c.LeftOut) ? KeepBackup(path) : null;
+        List<string> lines = new(clamps.Count);
         foreach (SettingsClamp c in clamps)
-            Raise($"{tier} setting {c.Field} in {path} was {c.Found}, {c.Why}; using {c.Used} (written back on the next save).");
+        {
+            string line = $"{tier} setting {c.Field} in {path} was {c.Found}, {c.Why}; using {c.Used} (written to the file if it is saved).";
+            if (c.LeftOut && backup is not null) line += $" The file as it was is kept as {Path.GetFileName(backup)}.";
+            lines.Add(line);
+        }
+        Report(path, lines);
         return result;
     }
 
-    // Pull every number in node, read as type, into range, in place. What was moved
-    // is added to clamps.
-    private static void Clamp(JsonNode? node, Type type, List<SettingsClamp> clamps) =>
-        Fix(node, type, range: null, path: "", clamps);
+    private const string RootFallback = "the default";
+    private const string SectionFallback = "the value from the tier below, or the default";
 
-    // The most fields one read drops before it gives up and lets the file fail as a
-    // whole: past that it isn't a field or two gone bad, it's another kind of file.
-    private const int MostFieldsDropped = 100;
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        AllowTrailingCommas = JsonStore.Options.AllowTrailingCommas,
+        CommentHandling = JsonStore.Options.ReadCommentHandling,
+    };
+
+    // ----- The object a file read as it stands --------------------------------
+
+    private enum Check { Number, NumberList, NumberMap, Enum, Child, ChildList, ChildMap, Sections }
+
+    private sealed record Step(PropertyInfo Property, string Name, Check Check, Type Type,
+        SettingRangeAttribute? Range, NumberKind? Kind, object? Default);
+
+    // What to look at in an object of each type, cached: a profile's record lists
+    // hold thousands of the same type. A type with nothing to check, all the way
+    // down, has an empty plan and is passed over.
+    private static readonly ConcurrentDictionary<Type, Step[]> Plans = new();
+
+    [ThreadStatic] private static HashSet<Type>? _planning;
+
+    private static Step[] PlanOf(Type type)
+    {
+        if (Plans.TryGetValue(type, out Step[]? plan)) return plan;
+        _planning ??= new HashSet<Type>();
+        // A type met again while its own plan is being made (a tree of itself) is
+        // taken as having nothing to check; its outer plan still covers it.
+        if (!_planning.Add(type)) return Array.Empty<Step>();
+        try
+        {
+            plan = MakePlan(type);
+        }
+        finally
+        {
+            _planning.Remove(type);
+        }
+        return Plans.GetOrAdd(type, plan);
+    }
+
+    private static Step[] MakePlan(Type type)
+    {
+        if (!IsOwnClass(type)) return Array.Empty<Step>();
+        object? defaults = type.GetConstructor(Type.EmptyTypes) is not null ? Activator.CreateInstance(type) : null;
+        List<Step> steps = new();
+        foreach (PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!p.CanRead || p.GetIndexParameters().Length > 0) continue;
+            if (p.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }) continue;
+            string name = p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name;
+            SettingRangeAttribute? range = p.GetCustomAttribute<SettingRangeAttribute>();
+            Type t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+            Type? element = ElementType(t), value = DictionaryValueType(t);
+            if (HoldsSections(p))
+                steps.Add(new Step(p, name, Check.Sections, t, null, null, null));
+            else if (NumberKind.Of(t) is { } kind)
+            {
+                if (range is not null && p.CanWrite) steps.Add(new Step(p, name, Check.Number, t, range, kind, null));
+            }
+            else if (t.IsEnum)
+            {
+                if (p.CanWrite) steps.Add(new Step(p, name, Check.Enum, t, null, null, DefaultOf(p, t, defaults)));
+            }
+            else if (element is not null)
+            {
+                if (NumberKind.Of(element) is { } k)
+                {
+                    if (range is not null) steps.Add(new Step(p, name, Check.NumberList, element, range, k, null));
+                }
+                else if (PlanOf(element).Length > 0) steps.Add(new Step(p, name, Check.ChildList, element, null, null, null));
+            }
+            else if (value is not null)
+            {
+                if (NumberKind.Of(value) is { } k)
+                {
+                    if (range is not null) steps.Add(new Step(p, name, Check.NumberMap, value, range, k, null));
+                }
+                else if (PlanOf(value).Length > 0) steps.Add(new Step(p, name, Check.ChildMap, value, null, null, null));
+            }
+            else if (PlanOf(t).Length > 0)
+                steps.Add(new Step(p, name, Check.Child, t, null, null, null));
+        }
+        return steps.ToArray();
+    }
+
+    // The value an enum field is put back to: the DTO's own default when that is one
+    // of the enum's values, else the enum's zero (or null, for a nullable field).
+    private static object? DefaultOf(PropertyInfo p, Type enumType, object? defaults)
+    {
+        object? own = defaults is not null ? p.GetValue(defaults) : null;
+        if (own is not null && IsValidEnum(enumType, own)) return own;
+        return Nullable.GetUnderlyingType(p.PropertyType) is not null ? null : Activator.CreateInstance(enumType);
+    }
+
+    // Look over obj by its plan; with apply, fix what is out of place, else stop at
+    // the first thing found. True when something was found.
+    private static bool Walk(object obj, Step[] plan, List<object> path, List<SettingsClamp>? clamps, bool apply)
+    {
+        bool found = false;
+        foreach (Step step in plan)
+        {
+            object? value = step.Property.GetValue(obj);
+            if (value is null) continue;
+            path.Add(step.Name);
+            try
+            {
+                switch (step.Check)
+                {
+                    case Check.Number:
+                        if (OutOfRange(value, step, out decimal used))
+                        {
+                            if (!apply) return true;
+                            found = true;
+                            step.Property.SetValue(obj, ToNumber(used, step.Type));
+                            clamps!.Add(Note(path, value, step, used));
+                        }
+                        break;
+                    case Check.Enum:
+                        if (!IsValidEnum(step.Type, value))
+                        {
+                            if (!apply) return true;
+                            found = true;
+                            step.Property.SetValue(obj, step.Default);
+                            clamps!.Add(new SettingsClamp(PathText(path), Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture),
+                                $"not one of {step.Type.Name}'s values", $"the default ({step.Default?.ToString() ?? "none"})", LeftOut: true));
+                        }
+                        break;
+                    case Check.NumberList:
+                        if (value is IList list)
+                            for (int i = 0; i < list.Count; i++)
+                                if (list[i] is { } item && OutOfRange(item, step, out decimal u))
+                                {
+                                    if (!apply) return true;
+                                    found = true;
+                                    list[i] = ToNumber(u, step.Type);
+                                    path.Add(i);
+                                    clamps!.Add(Note(path, item, step, u));
+                                    path.RemoveAt(path.Count - 1);
+                                }
+                        break;
+                    case Check.NumberMap:
+                        if (value is IDictionary map)
+                            foreach (object key in map.Keys.Cast<object>().ToList())
+                                if (map[key] is { } item && OutOfRange(item, step, out decimal u))
+                                {
+                                    if (!apply) return true;
+                                    found = true;
+                                    map[key] = ToNumber(u, step.Type);
+                                    path.Add(key);
+                                    clamps!.Add(Note(path, item, step, u));
+                                    path.RemoveAt(path.Count - 1);
+                                }
+                        break;
+                    case Check.Child:
+                        if (Walk(value, PlanOf(value.GetType()), path, clamps, apply))
+                        {
+                            if (!apply) return true;
+                            found = true;
+                        }
+                        break;
+                    case Check.ChildList:
+                        if (value is IList children)
+                            for (int i = 0; i < children.Count; i++)
+                            {
+                                if (children[i] is not { } child) continue;
+                                path.Add(i);
+                                bool inChild = Walk(child, PlanOf(child.GetType()), path, clamps, apply);
+                                path.RemoveAt(path.Count - 1);
+                                if (inChild && !apply) return true;
+                                found |= inChild;
+                            }
+                        break;
+                    case Check.ChildMap:
+                        if (value is IDictionary childMap)
+                            foreach (DictionaryEntry entry in childMap)
+                            {
+                                if (entry.Value is not { } child) continue;
+                                path.Add(entry.Key);
+                                bool inChild = Walk(child, PlanOf(child.GetType()), path, clamps, apply);
+                                path.RemoveAt(path.Count - 1);
+                                if (inChild && !apply) return true;
+                                found |= inChild;
+                            }
+                        break;
+                    case Check.Sections:
+                        if (apply && value is Dictionary<string, JsonElement> sections)
+                            foreach (string key in sections.Keys.ToList())
+                                if (Sections.TryGetValue(key, out Type? sectionType))
+                                    found |= CheckSection(sections, key, sectionType, $"{PathText(path)}.{key}", clamps!);
+                        break;
+                }
+            }
+            finally
+            {
+                path.RemoveAt(path.Count - 1);
+            }
+        }
+        return found;
+    }
+
+    // A section of a file that read as it stands: read as its DTO and looked over,
+    // and only one with something out of place is fixed as a tree. A section holds
+    // only the fields set at its tier, so it is fixed where it is written, never
+    // replaced by the whole DTO.
+    private static bool CheckSection(Dictionary<string, JsonElement> sections, string key, Type type, string at, List<SettingsClamp> clamps)
+    {
+        JsonElement element = sections[key];
+        if (element.ValueKind != JsonValueKind.Object) return false;
+        try
+        {
+            if (element.Deserialize(type, JsonStore.Options) is not { } section
+                || !Walk(section, PlanOf(type), new List<object>(), null, apply: false))
+                return false;
+        }
+        catch (JsonException)
+        {
+            // Fixed below.
+        }
+        JsonNode node = ToNode(element)!;
+        if (!FixSection(node, type, at, clamps)) return false;
+        sections[key] = JsonSerializer.SerializeToElement(node, JsonStore.Options);
+        return true;
+    }
+
+    private static bool OutOfRange(object value, Step step, out decimal used)
+    {
+        decimal lo = Math.Max(step.Kind!.Min, ToDecimal(step.Range!.Min));
+        decimal hi = Math.Min(step.Kind.Max, ToDecimal(step.Range.Max));
+        if (value is double or float && Math.Abs(Convert.ToDouble(value, CultureInfo.InvariantCulture)) >= (double)decimal.MaxValue)
+        {
+            // Past decimal's ±7.9e28 is past every field's range: only the sign matters.
+            used = Convert.ToDouble(value, CultureInfo.InvariantCulture) < 0 ? lo : hi;
+            return true;
+        }
+        decimal d = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+        used = Math.Clamp(d, lo, hi);
+        return used != d;
+    }
+
+    private static SettingsClamp Note(List<object> path, object found, Step step, decimal used) =>
+        new(PathText(path), Convert.ToString(found, CultureInfo.InvariantCulture) ?? "",
+            $"outside {Show(Math.Max(step.Kind!.Min, ToDecimal(step.Range!.Min)))} to {Show(Math.Min(step.Kind.Max, ToDecimal(step.Range.Max)))}",
+            Show(used));
+
+    private static object ToNumber(decimal value, Type type) => Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
+
+    private static string PathText(List<object> path) => string.Concat(path.Select((step, i) =>
+        step is string name ? (i == 0 ? name : "." + name) : $"[{Convert.ToString(step, CultureInfo.InvariantCulture)}]"));
+
+    private static bool IsValidEnum(Type enumType, object value)
+    {
+        if (!enumType.IsDefined(typeof(FlagsAttribute), false)) return Enum.IsDefined(enumType, value);
+        long all = 0;
+        foreach (object v in Enum.GetValues(enumType)) all |= Convert.ToInt64(v, CultureInfo.InvariantCulture);
+        return (Convert.ToInt64(value, CultureInfo.InvariantCulture) & ~all) == 0;
+    }
+
+    private static bool IsOwnClass(Type t) =>
+        t.IsClass && t != typeof(string) && t.Namespace?.StartsWith("MudPlay", StringComparison.Ordinal) == true;
+
+    // ----- The tree a file the serializer refused -----------------------------
+
+    // The most fields one read leaves out before it gives up: past that it isn't a
+    // field or two gone bad, it's another kind of file.
+    private const int MostFieldsLeftOut = 100;
 
     // Deserialize node as type; a field the serializer refuses is taken out (its
     // path is in the refusal) and the rest tried again.
-    private static object? DeserializeDroppingBadFields(JsonNode? node, Type type, string at, List<SettingsClamp> clamps)
+    private static object? DeserializeLeavingOutBadFields(JsonNode? node, Type type, string at, string fallback, List<SettingsClamp> clamps)
     {
-        for (int dropped = 0; ; dropped++)
+        for (int leftOut = 0; ; leftOut++)
         {
             try
             {
                 return node.Deserialize(type, JsonStore.Options);
             }
-            catch (JsonException ex) when (dropped < MostFieldsDropped && Detach(node, ex.Path) is { } removed)
+            catch (JsonException ex) when (leftOut < MostFieldsLeftOut && Detach(node, ex.Path) is { } removed)
             {
                 clamps.Add(new SettingsClamp(Join(at, removed.Path), Shown(removed.Node),
-                    $"which it can't hold ({Reason(ex)})", "its default"));
+                    $"which it can't hold ({Reason(ex)})", fallback, LeftOut: true));
             }
         }
     }
 
-    // A section is held as raw JSON and read by its own reader when it is wanted, so
-    // it is tried here as its DTO: a field it can't take is dropped now, instead of
-    // every read of the section falling back to defaults.
-    private static void CheckSection(JsonObject sections, string key, Type type, string at, List<SettingsClamp> clamps)
+    // Fix a section's tree. False, and nothing said of it but that, when it holds
+    // more it can't read than MostFieldsLeftOut: it is then left as written for its
+    // own reader, and the rest of the file still loads.
+    private static bool FixSection(JsonNode section, Type type, string at, List<SettingsClamp> clamps)
     {
-        if (sections[key] is not JsonObject section) return;
-        Fix(section, type, null, at, clamps);
-        DeserializeDroppingBadFields(section, type, at, clamps);
+        int before = clamps.Count;
+        try
+        {
+            Fix(section, type, null, at, SectionFallback, clamps);
+            DeserializeLeavingOutBadFields(section, type, at, SectionFallback, clamps);
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            clamps.RemoveRange(before, clamps.Count - before);
+            clamps.Add(new SettingsClamp(at, "a section", $"with more than {MostFieldsLeftOut} values it can't read ({Reason(ex)})",
+                "the section as written"));
+            return false;
+        }
+    }
+
+    // Returns the node to put in node's place when it had to change, else null.
+    private static JsonValue? Fix(JsonNode? node, Type type, SettingRangeAttribute? range, string path, string fallback, List<SettingsClamp> clamps)
+    {
+        if (node is null) return null;
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (NumberKind.Of(type) is { } kind)
+            return node is JsonValue value && value.GetValueKind() == JsonValueKind.Number
+                ? FixNumber(value, kind, range, path, clamps)
+                : null;
+        if (ElementType(type) is { } element)
+        {
+            if (node is JsonArray array)
+                for (int i = 0; i < array.Count; i++)
+                    if (Fix(array[i], element, range, $"{path}[{i}]", fallback, clamps) is { } changed) array[i] = changed;
+            return null;
+        }
+        if (DictionaryValueType(type) is { } valueType)
+        {
+            if (node is JsonObject map)
+                foreach (string key in map.Select(p => p.Key).ToList())
+                    if (Fix(map[key], valueType, range, $"{path}[{key}]", fallback, clamps) is { } changed) map[key] = changed;
+            return null;
+        }
+        if (node is JsonObject obj && Shape(type) is { } shape)
+        {
+            foreach (string name in obj.Select(p => p.Key).ToList())
+            {
+                if (!shape.TryGetValue(name, out Member member)) continue;
+                string at = path.Length == 0 ? name : $"{path}.{name}";
+                if (member.HoldsSections)
+                {
+                    if (obj[name] is JsonObject sections)
+                        foreach (string key in sections.Select(p => p.Key).ToList())
+                            if (Sections.TryGetValue(key, out Type? sectionType) && sections[key] is JsonObject section)
+                            {
+                                JsonNode original = section.DeepClone();
+                                if (!FixSection(section, sectionType, $"{at}.{key}", clamps)) sections[key] = original;
+                            }
+                    continue;
+                }
+                Type memberType = Nullable.GetUnderlyingType(member.Type) ?? member.Type;
+                if (memberType.IsEnum && obj[name] is JsonValue number && number.GetValueKind() == JsonValueKind.Number
+                    && !(number.TryGetValue(out long n) && IsValidEnum(memberType, Enum.ToObject(memberType, n))))
+                {
+                    obj.Remove(name);
+                    clamps.Add(new SettingsClamp(at, number.ToJsonString(), $"not one of {memberType.Name}'s values", fallback, LeftOut: true));
+                    continue;
+                }
+                if (Fix(obj[name], member.Type, member.Range, at, fallback, clamps) is { } changed) obj[name] = changed;
+            }
+        }
+        return null;
+    }
+
+    private static JsonValue? FixNumber(JsonValue value, NumberKind kind, SettingRangeAttribute? range, string path, List<SettingsClamp> clamps)
+    {
+        decimal lo = kind.Min, hi = kind.Max;
+        if (range is not null)
+        {
+            lo = Math.Max(lo, ToDecimal(range.Min));
+            hi = Math.Min(hi, ToDecimal(range.Max));
+        }
+        string raw = value.ToJsonString();
+        decimal used;
+        if (decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal found))
+        {
+            decimal whole = kind.Whole ? decimal.Round(found, MidpointRounding.AwayFromZero) : found;
+            used = Math.Clamp(whole, lo, hi);
+            if (used == whole && whole != found)
+            {
+                clamps.Add(new SettingsClamp(path, raw, "not a whole number", Show(used)));
+                return kind.Create(used);
+            }
+            if (used == found)
+            {
+                // In range, but a whole-number field written as 5.0 or 5e0 still
+                // fails the serializer: the same value, written as it reads it.
+                return kind.Whole && raw.Any(c => c is '.' or 'e' or 'E') ? kind.Create(used) : null;
+            }
+        }
+        else
+        {
+            // Past decimal's ±7.9e28 is past every field's range: only the sign matters.
+            used = raw.StartsWith('-') ? lo : hi;
+        }
+        clamps.Add(new SettingsClamp(path, raw, $"outside {Show(lo)} to {Show(hi)}", Show(used)));
+        return kind.Create(used);
+    }
+
+    // A tree a property at a time, so a key written twice is set twice and the last
+    // stands, as the serializer reads it (a parsed node tree refuses the file).
+    private static JsonNode? ToNode(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                JsonObject obj = new();
+                foreach (JsonProperty p in element.EnumerateObject()) obj[p.Name] = ToNode(p.Value);
+                return obj;
+            case JsonValueKind.Array:
+                JsonArray array = new();
+                foreach (JsonElement item in element.EnumerateArray()) array.Add(ToNode(item));
+                return array;
+            case JsonValueKind.Null:
+                return null;
+            default:
+                return JsonValue.Create(element);
+        }
     }
 
     private static string Reason(JsonException ex)
@@ -190,8 +601,7 @@ public static class SettingsValueGuard
             parent = steps[k] is int n
                 ? parent is JsonArray a && n < a.Count ? a[n] : null
                 : (parent as JsonObject)?[(string)steps[k]];
-        string shown = string.Concat(steps.Select((step, k) =>
-            step is int n ? $"[{n}]" : k == 0 ? (string)step : "." + step));
+        string shown = PathText(steps);
         switch (parent, steps[^1])
         {
             case (JsonObject obj, string name) when obj.ContainsKey(name):
@@ -205,90 +615,6 @@ public static class SettingsValueGuard
             default:
                 return null;
         }
-    }
-
-    private static readonly JsonDocumentOptions NodeDocumentOptions = new()
-    {
-        AllowTrailingCommas = JsonStore.Options.AllowTrailingCommas,
-        CommentHandling = JsonStore.Options.ReadCommentHandling,
-    };
-
-    // Returns the node to put in node's place when it had to change, else null.
-    private static JsonValue? Fix(JsonNode? node, Type type, SettingRangeAttribute? range, string path, List<SettingsClamp> clamps)
-    {
-        if (node is null) return null;
-        type = Nullable.GetUnderlyingType(type) ?? type;
-        if (NumberKind.Of(type) is { } kind)
-            return node is JsonValue value && value.GetValueKind() == JsonValueKind.Number
-                ? FixNumber(value, kind, range, path, clamps)
-                : null;
-        if (ElementType(type) is { } element)
-        {
-            if (node is JsonArray array)
-                for (int i = 0; i < array.Count; i++)
-                    if (Fix(array[i], element, range, $"{path}[{i}]", clamps) is { } changed) array[i] = changed;
-            return null;
-        }
-        if (DictionaryValueType(type) is { } valueType)
-        {
-            if (node is JsonObject map)
-                foreach (string key in map.Select(p => p.Key).ToList())
-                    if (Fix(map[key], valueType, range, $"{path}[{key}]", clamps) is { } changed) map[key] = changed;
-            return null;
-        }
-        if (node is JsonObject obj && Shape(type) is { } shape)
-        {
-            foreach (string name in obj.Select(p => p.Key).ToList())
-            {
-                if (!shape.TryGetValue(name, out Member member)) continue;
-                string at = path.Length == 0 ? name : $"{path}.{name}";
-                if (member.HoldsSections)
-                {
-                    if (obj[name] is JsonObject sections)
-                        foreach (string key in sections.Select(p => p.Key).ToList())
-                            if (Sections.TryGetValue(key, out Type? sectionType))
-                                CheckSection(sections, key, sectionType, $"{at}.{key}", clamps);
-                    continue;
-                }
-                if (Fix(obj[name], member.Type, member.Range, at, clamps) is { } changed) obj[name] = changed;
-            }
-        }
-        return null;
-    }
-
-    private static JsonValue? FixNumber(JsonValue value, NumberKind kind, SettingRangeAttribute? range, string path, List<SettingsClamp> clamps)
-    {
-        decimal lo = kind.Min, hi = kind.Max;
-        if (range is not null)
-        {
-            lo = Math.Max(lo, ToDecimal(range.Min));
-            hi = Math.Min(hi, ToDecimal(range.Max));
-        }
-        string raw = value.ToJsonString();
-        decimal used;
-        if (decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal found))
-        {
-            decimal whole = kind.Whole ? decimal.Round(found, MidpointRounding.AwayFromZero) : found;
-            used = Math.Clamp(whole, lo, hi);
-            if (used == whole && whole != found)
-            {
-                clamps.Add(new SettingsClamp(path, raw, "not a whole number", Show(used)));
-                return kind.Create(used);
-            }
-            if (used == found)
-            {
-                // In range, but a whole-number field written as 5.0 or 5e0 still
-                // fails the serializer: the same value, written as it reads it.
-                return kind.Whole && raw.Any(c => c is '.' or 'e' or 'E') ? kind.Create(used) : null;
-            }
-        }
-        else
-        {
-            // Past decimal's ±7.9e28 is past every field's range: only the sign matters.
-            used = raw.StartsWith('-') ? lo : hi;
-        }
-        clamps.Add(new SettingsClamp(path, raw, $"outside {Show(lo)} to {Show(hi)}", Show(used)));
-        return kind.Create(used);
     }
 
     // A bound as decimal, pinned to decimal's range (a range attribute may say
@@ -319,8 +645,7 @@ public static class SettingsValueGuard
 
     private readonly record struct Member(Type Type, SettingRangeAttribute? Range, bool HoldsSections);
 
-    // A type's properties as the serializer names them, cached: the walk meets the
-    // same record types once per element of every list a profile keeps.
+    // A type's properties as the serializer names them, for the tree walk.
     private static readonly ConcurrentDictionary<Type, Dictionary<string, Member>?> Shapes = new();
 
     private static Dictionary<string, Member>? Shape(Type type) => Shapes.GetOrAdd(type, static t =>
@@ -366,28 +691,67 @@ public static class SettingsValueGuard
         public static NumberKind? Of(Type type) => Kinds.GetValueOrDefault(type);
     }
 
+    // ----- Backups ------------------------------------------------------------
+
+    // Copy path, as it stands, to <file>.unreadable-<time>.bak beside it, unless the
+    // newest copy already holds the same bytes, and keep only the newest
+    // BackupsKept. Returns the copy that holds them, or null when none could be made
+    // (said, and the load goes on: losing the copy must not cost the profile too).
+    private static string? KeepBackup(string path)
+    {
+        try
+        {
+            string folder = Path.GetDirectoryName(path)!;
+            string prefix = Path.GetFileName(path) + ".unreadable-";
+            List<string> kept = Directory.GetFiles(folder, prefix + "*.bak").Order(StringComparer.Ordinal).ToList();
+            byte[] now = File.ReadAllBytes(path);
+            if (kept.Count > 0 && File.ReadAllBytes(kept[^1]).AsSpan().SequenceEqual(now)) return kept[^1];
+
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+            string backup = Path.Combine(folder, $"{prefix}{stamp}.bak");
+            for (int n = 2; File.Exists(backup); n++) backup = Path.Combine(folder, $"{prefix}{stamp}-{n}.bak");
+            File.WriteAllBytes(backup, now);
+            kept.Add(backup);
+            foreach (string old in kept.Take(Math.Max(0, kept.Count - BackupsKept))) File.Delete(old);
+            return backup;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Report(path + " (backup)", new List<string> { $"Couldn't keep a copy of {path} before values in it were left out: {ex.Message}" });
+            return null;
+        }
+    }
+
     // ----- Reporting ----------------------------------------------------------
 
-    private static readonly HashSet<string> Said = new(StringComparer.Ordinal);
-    private static readonly Queue<string> SaidInOrder = new();
-    private const int SaidAtMost = 500;
+    // The lines each file's last read raised. Bounded by forgetting all of them, at
+    // worst saying a file's lines once more.
+    private static readonly Dictionary<string, HashSet<string>> SaidFor = new(StringComparer.Ordinal);
+    private const int FilesRemembered = 1000;
 
-    private static void Raise(string line)
+    private static void Report(string path, List<string> lines)
     {
         Action<string>? handler = Clamped;
         // Nobody listening yet (a read before the log is up): not remembered, so the
         // next read of the file says it.
         if (handler is null) return;
-        lock (Said)
+        List<string> fresh;
+        lock (SaidFor)
         {
-            if (!Said.Add(line)) return;
-            SaidInOrder.Enqueue(line);
-            if (SaidInOrder.Count > SaidAtMost) Said.Remove(SaidInOrder.Dequeue());
+            SaidFor.TryGetValue(path, out HashSet<string>? before);
+            fresh = before is null ? lines : lines.Where(l => !before.Contains(l)).ToList();
+            if (lines.Count == 0) SaidFor.Remove(path);
+            else
+            {
+                if (SaidFor.Count >= FilesRemembered) SaidFor.Clear();
+                SaidFor[path] = new HashSet<string>(lines, StringComparer.Ordinal);
+            }
         }
-        handler(line);
+        foreach (string line in fresh) handler(line);
     }
 }
 
-// One value SettingsValueGuard moved or dropped: where it sits in the file, what
-// the file held, why it couldn't stand, and what the client uses instead.
-public readonly record struct SettingsClamp(string Field, string Found, string Why, string Used);
+// One value SettingsValueGuard moved or left out: where it sits in the file, what
+// the file held, why it couldn't stand, what the client uses instead, and whether
+// it was left out (lost from the file at its next save) rather than moved.
+public readonly record struct SettingsClamp(string Field, string Found, string Why, string Used, bool LeftOut = false);
