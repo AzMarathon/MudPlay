@@ -5,6 +5,7 @@
 - Data-loss fix: the in-app update no longer deletes the other files in the folder MudPlay runs from (it wiped a Downloads folder); it replaces only MudPlay's own files
 - An update puts in only the downloaded release's own files and deletes nothing else; a download holding anything odd stops the update untouched
 - A failed update puts back every file it changed from a backup in the temp folder, not beside the install
+- A renamed copy (e.g. `MudPlay (1).exe`) now updates under its own name
 - Leftovers of older versions are removed at startup by exact name only, each one logged
 - Removing toolbar buttons narrows the window to fit the toolbar, but never so far that the terminal screen is cut off
 

@@ -13,6 +13,18 @@ namespace MudPlay.Views;
 // maximized or full-screen window is the screen's size and is left alone.
 public static class ToolbarWidthFit
 {
+    // Whether a toolbar strip's layout pass is the first since a layout change that
+    // was the user's edit. seen is the strip's own count of layout changes it has
+    // passed, brought up to changes here, so each change is acted on once, by the
+    // pass that measured it, and every later pass (a badge changing width) is not
+    // an edit. changes and lastWasEdit are ToolbarConfig's.
+    public static bool IsFirstPassAfterEdit(ref int seen, int changes, bool lastWasEdit)
+    {
+        bool fresh = changes != seen;
+        seen = changes;
+        return fresh && lastWasEdit;
+    }
+
     // The width to give the window, or null to leave it as it is. userEdit says the
     // toolbar changed because the user edited its buttons. width is the window's
     // width now. needed is what the toolbars need: for a grow, the strip that grew;

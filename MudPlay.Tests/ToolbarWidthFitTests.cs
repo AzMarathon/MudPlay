@@ -30,28 +30,31 @@ public sealed class ToolbarWidthFitTests
         Assert.Null(Fit(660, 900, grew: true, userEdit: false));
     }
 
-    // Only a layout the user changed counts as their edit: a save that leaves the
-    // layout as it was, a profile load and a profile close don't.
+    // Each strip's layout pass asks whether it is the first since the user's edit.
+    // Only a layout the user changed counts, and only on the one pass that measured
+    // it: a later pass (a badge changing width), a save that leaves the layout as
+    // it was, a profile load and a profile close don't.
     [Fact]
-    public void ToolbarConfig_MarksOnlyAChangedLayoutFromAnEditAsTheUsers()
+    public void OnlyTheFirstPassAfterTheUsersOwnLayoutChange_IsAnEdit()
     {
         var config = new ToolbarConfig();
         var one = new ToolbarSettings { Layout = [new ToolbarItem { ActionId = "a" }] };
         var two = new ToolbarSettings { Layout = [new ToolbarItem { ActionId = "a" }, new ToolbarItem { ActionId = "b" }] };
-        bool seen = false;
-        config.Layout.CollectionChanged += (_, _) => seen = config.LastApplyWasUserEdit;
+        int seen = config.LayoutChanges;
+        bool Pass() => ToolbarWidthFit.IsFirstPassAfterEdit(ref seen, config.LayoutChanges, config.LastChangeWasUserEdit);
 
-        config.ApplyFrom(one);
-        Assert.False(config.LastApplyWasUserEdit);
+        config.ApplyFrom(one);                       // a profile loads
+        Assert.False(Pass());
+        config.ApplyFrom(two, userEdit: true);       // the user adds a button
+        Assert.True(Pass());
+        Assert.False(Pass());                        // a later pass: a badge changed width
+        config.ApplyFrom(two, userEdit: true);       // a save that left the layout alone
+        Assert.False(Pass());
+        config.ApplyFrom(one);                       // another character loads
+        Assert.False(Pass());
         config.ApplyFrom(two, userEdit: true);
-        Assert.True(config.LastApplyWasUserEdit);
-        Assert.True(seen, "the layout's own change handlers must see the edit");
-        config.ApplyFrom(two, userEdit: true);
-        Assert.False(config.LastApplyWasUserEdit);
-        config.ApplyFrom(one);
-        Assert.False(config.LastApplyWasUserEdit);
-        config.ApplyFrom(new ToolbarSettings());
-        Assert.False(config.LastApplyWasUserEdit);
+        config.ApplyFrom(new ToolbarSettings());     // closed before the edit's pass ran
+        Assert.False(Pass());
     }
 
     [Fact]

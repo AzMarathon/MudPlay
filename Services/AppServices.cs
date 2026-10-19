@@ -3822,7 +3822,7 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => ApplyToolbarFromActiveProfile();
         Profile.ProfileClosed += ResetToolbarToDefaults;
         // A save of the loaded profile is where a toolbar edit arrives; a load or a
-        // close never counts as one (ToolbarConfig.LastApplyWasUserEdit).
+        // close never counts as one (ToolbarConfig.LastChangeWasUserEdit).
         Profile.ProfileMutated += _ => ApplyToolbarFromActiveProfile(userEdit: true);
 
         // Same bridge for the customizable terminal right-click menu (Char-tier).

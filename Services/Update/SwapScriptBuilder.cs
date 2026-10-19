@@ -23,8 +23,13 @@ namespace MudPlay.Services.Update;
 // SwapStartInfo), never its command line: cmd re-parses a command line, so a
 // folder named "R&D" there would end the command at the "&" and run the rest. The
 // list entries are held by UpdatePlan to plain names with no shell syntax in them.
-// Either helper refuses to start, touching nothing, when a value it needs is
-// missing or the staging folder isn't an update's own.
+// Either helper refuses to start when a value it needs is missing or the staging
+// folder isn't an update's own: it touches nothing but a note in the failure log,
+// and starts the old build again so the user still has a client.
+//
+// In the cmd helper a name or path that comes from the user's folder (the
+// program's name may be "MudPlay (1).exe") is always quoted: unquoted on an echo or
+// inside a ( ) block, its ")" or "&" would end the block or the command.
 public static class SwapScriptBuilder
 {
     // bash for Linux/macOS. Values from the environment: MUDPLAY_SWAP_PID, _NEW
@@ -46,12 +51,47 @@ public static class SwapScriptBuilder
         PROFILE="${MUDPLAY_SWAP_PROFILE:-}"; RECONNECT="${MUDPLAY_SWAP_RECONNECT:-}"
         INSTALL="${MUDPLAY_SWAP_INSTALL:-}"
 
-        # Refuse, touching nothing, unless every value is there and the staging
-        # folder is an update's own: it is deleted at the end.
+        # Carry the session across the restart: the same character reopens, and a
+        # client that was mid-session dials straight back in. Built as an array so a
+        # profile name with spaces survives; the ${ARGS[@]+...} form is what keeps an
+        # empty array from tripping `set -u`.
+        ARGS=()
+        [ -n "$PROFILE" ] && ARGS+=(--profile "$PROFILE")
+        [ -n "$RECONNECT" ] && ARGS+=(--reconnect)
+
+        # A value missing, or a staging folder that isn't an update's: nothing is
+        # touched. The old build is started again so the user isn't left without a
+        # client, and a note goes in the failure log beside it when the install
+        # folder is known (never through a link or over a folder of that name).
+        # Wait (bounded ~60s) for the app to exit, so no file is overwritten while
+        # open and no relaunch overlaps the client that is closing.
+        wait_old() {
+          [ -n "$PID" ] || return 0
+          for _ in $(seq 1 200); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.3
+          done
+          sleep 0.5
+        }
+
+        refuse() {
+          wait_old
+          local note="$DST/MudPlay-update-failed.log"
+          if [ -n "$DST" ] && [ -d "$DST" ] && [ ! -L "$note" ] && [ ! -d "$note" ]; then
+            printf '[%s] MudPlay update refused before starting: %s - nothing was changed\n' \
+              "$(date '+%F %T')" "$1" >"$note" 2>/dev/null || true
+          fi
+          if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+            "$EXE" ${ARGS[@]+"${ARGS[@]}"} </dev/null >/dev/null 2>&1 &
+          fi
+          exit 2
+        }
         if [ -z "$PID" ] || [ -z "$NEW" ] || [ -z "$NEWEXE" ] || [ -z "$DST" ] || [ -z "$EXE" ] \
-           || [ -z "$STAGE" ] || [ -z "$INSTALL" ]; then exit 2; fi
-        case "$STAGE" in *mudplay-update-*) ;; *) exit 2 ;; esac
-        if [ ! -d "$DST" ] || [ ! -d "$STAGE" ] || [ ! -f "$INSTALL" ] || [ ! -f "$NEWEXE" ]; then exit 2; fi
+           || [ -z "$STAGE" ] || [ -z "$INSTALL" ]; then refuse "a value is missing"; fi
+        case "$STAGE" in *mudplay-update-*) ;; *) refuse "the staging folder isn't an update's" ;; esac
+        if [ ! -d "$DST" ] || [ ! -d "$STAGE" ] || [ ! -f "$INSTALL" ] || [ ! -f "$NEWEXE" ]; then
+          refuse "a folder or file it needs isn't there"
+        fi
 
         EXENAME="${EXE##*/}"
         BAK="$STAGE/backup"
@@ -61,14 +101,6 @@ public static class SwapScriptBuilder
         LOG="${0%.*}.log"
         FAILLOG="${DST}/MudPlay-update-failed.log"
         log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
-
-        # Carry the session across the restart: the same character reopens, and a
-        # client that was mid-session dials straight back in. Built as an array so a
-        # profile name with spaces survives; the ${ARGS[@]+...} form is what keeps an
-        # empty array from tripping `set -u`.
-        ARGS=()
-        [ -n "$PROFILE" ] && ARGS+=(--profile "$PROFILE")
-        [ -n "$RECONNECT" ] && ARGS+=(--reconnect)
 
         # A failed swap leaves this step log beside the executable for the user to
         # attach to a bug report; the relaunched client points them at it. Never
@@ -127,12 +159,7 @@ public static class SwapScriptBuilder
 
         log "MudPlay update: new build '$NEW' -> install '$DST' (exe '$EXE')"
 
-        # Wait (bounded ~60s) for the app to exit so we never overwrite open files.
-        for _ in $(seq 1 200); do
-          kill -0 "$PID" 2>/dev/null || break
-          sleep 0.3
-        done
-        sleep 0.5
+        wait_old
         log "old client exited"
 
         { mkdir -p "$BAK" && : >"$SAVED" && : >"$TOUCHED"; } 2>>"$LOG" \
@@ -218,20 +245,30 @@ public static class SwapScriptBuilder
         set "RECONNECT=%MUDPLAY_SWAP_RECONNECT%"
         set "INSTALL=%MUDPLAY_SWAP_INSTALL%"
 
+        rem Carry the session across the restart — same character, and a reconnect
+        rem when the client was mid-session. Built outside any parenthesised block so
+        rem the second line reads what the first one set without delayed expansion.
+        set "ARGS="
+        if not "%PROFILE%"=="" set ARGS=--profile "%PROFILE%"
+        if not "%RECONNECT%"=="" set ARGS=%ARGS% --reconnect
+
         rem Refuse, touching nothing, unless every value is there and the staging
         rem folder is an update's own: it is deleted at the end.
-        if not defined PID exit /b 2
-        if not defined NEW exit /b 2
-        if not defined NEWEXE exit /b 2
-        if not defined DST exit /b 2
-        if not defined EXE exit /b 2
-        if not defined STAGE exit /b 2
-        if not defined INSTALL exit /b 2
-        if "%STAGE:mudplay-update-=%"=="%STAGE%" exit /b 2
-        if not exist "%DST%\" exit /b 2
-        if not exist "%STAGE%\" exit /b 2
-        if not exist "%INSTALL%" exit /b 2
-        if not exist "%NEWEXE%" exit /b 2
+        set "REFUSED="
+        if not defined PID set "REFUSED=no PID"
+        if not defined NEW set "REFUSED=no new build"
+        if not defined NEWEXE set "REFUSED=no new program"
+        if not defined DST set "REFUSED=no install folder"
+        if not defined EXE set "REFUSED=no program to replace"
+        if not defined STAGE set "REFUSED=no staging folder"
+        if not defined INSTALL set "REFUSED=no file list"
+        if defined REFUSED goto refused
+        if "%STAGE:mudplay-update-=%"=="%STAGE%" set "REFUSED=the staging folder isn't an update's"
+        if not exist "%DST%\" set "REFUSED=the install folder isn't there"
+        if not exist "%STAGE%\" set "REFUSED=the staging folder isn't there"
+        if not exist "%INSTALL%" set "REFUSED=the file list isn't there"
+        if not exist "%NEWEXE%" set "REFUSED=the new program isn't there"
+        if defined REFUSED goto refused
 
         for %%I in ("%EXE%") do set "EXENAME=%%~nxI"
         set "BAK=%STAGE%\backup"
@@ -249,25 +286,12 @@ public static class SwapScriptBuilder
         set "RESTOREFAILED="
         set "MADENEW="
 
-        rem Carry the session across the restart — same character, and a reconnect
-        rem when the client was mid-session. Built outside any parenthesised block so
-        rem the second line reads what the first one set without delayed expansion.
-        set "ARGS="
-        if not "%PROFILE%"=="" set ARGS=--profile "%PROFILE%"
-        if not "%RECONNECT%"=="" set ARGS=%ARGS% --reconnect
-
         >"%LOG%" echo MudPlay update %date% %time%
         >>"%LOG%" echo new build: "%NEW%"
         >>"%LOG%" echo install:   "%DST%"
         >>"%LOG%" echo exe:       "%EXE%"
 
-        :waitloop
-        tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul
-        if not errorlevel 1 (
-          timeout /t 1 /nobreak >nul
-          goto waitloop
-        )
-        timeout /t 1 /nobreak >nul
+        call :waitold
         >>"%LOG%" echo [%time%] old client exited
 
         if not exist "%BAK%\" mkdir "%BAK%" >>"%LOG%" 2>&1
@@ -310,7 +334,7 @@ public static class SwapScriptBuilder
         move /y "%EXE%%SUF%" "%EXE%" >>"%LOG%" 2>&1
         if errorlevel 1 (
           move /y "%OLD%" "%EXE%" >>"%LOG%" 2>&1
-          if errorlevel 1 >>"%LOG%" echo [%time%] FAILED to put the old %EXENAME% back: it is kept as "%OLD%" - rename it to %EXENAME% to run MudPlay
+          if errorlevel 1 call :oldkept
           set "WHY=renaming the new %EXENAME% into place failed"
           goto rollback
         )
@@ -328,7 +352,7 @@ public static class SwapScriptBuilder
         (goto) 2>nul & del "%~f0"
 
         :rollback
-        >>"%LOG%" echo [%time%] FAILED: %WHY% - restoring the backup
+        >>"%LOG%" echo [%time%] FAILED: "%WHY%" - restoring the backup
         rem The new executable's temporary copy is ours to remove only once this run
         rem made it, and only while the executable itself is there: with both renames
         rem failed it is a working copy of the new build.
@@ -339,7 +363,7 @@ public static class SwapScriptBuilder
         goto relaunchold
 
         :abort
-        >>"%LOG%" echo [%time%] FAILED: %WHY% - install untouched
+        >>"%LOG%" echo [%time%] FAILED: "%WHY%" - install untouched
         if exist "%STAGE%\" rmdir /s /q "%STAGE%"
 
         :relaunchold
@@ -434,6 +458,43 @@ public static class SwapScriptBuilder
         :takeout
         if not exist "%DST%\%~1\" del /f /q "%DST%\%~1" >>"%LOG%" 2>&1
         if not exist "%DST%\%~1" >>"%LOG%" echo [%time%] took out %~1 - new in this update
+        goto :eof
+
+        rem Logged from here, outside the block that calls it: a name like
+        rem "MudPlay (1).exe" would close that block at its ")".
+        :oldkept
+        >>"%LOG%" echo [%time%] FAILED to put the old program back: it is kept as "%OLD%" - rename it to "%EXENAME%" to run MudPlay
+        goto :eof
+
+        rem A value missing, or a staging folder that isn't an update's: nothing is
+        rem touched. The old build is started again so the user isn't left without a
+        rem client, and a note goes in the failure log beside it when the install
+        rem folder is known (never through a link or over a folder of that name).
+        :refused
+        call :waitold
+        if defined DST if exist "%DST%\" call :refusednote
+        if defined EXE if exist "%EXE%" if not exist "%EXE%\" start "" "%EXE%" %ARGS%
+        exit /b 2
+
+        rem Wait for the app to exit, so no file is overwritten while open and no
+        rem relaunch overlaps the client that is closing.
+        :waitold
+        if not defined PID goto :eof
+        :waitoldloop
+        tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul
+        if not errorlevel 1 (
+          timeout /t 1 /nobreak >nul
+          goto waitoldloop
+        )
+        timeout /t 1 /nobreak >nul
+        goto :eof
+
+        :refusednote
+        set "FAILATTR="
+        for %%A in ("%DST%\MudPlay-update-failed.log") do set "FAILATTR=%%~aA"
+        if defined FAILATTR if not "%FAILATTR:l=%"=="%FAILATTR%" goto :eof
+        if defined FAILATTR if not "%FAILATTR:d=%"=="%FAILATTR%" goto :eof
+        >"%DST%\MudPlay-update-failed.log" echo MudPlay update refused before starting: "%REFUSED%" - nothing was changed
         goto :eof
         """.ReplaceLineEndings("\r\n");
 }

@@ -134,16 +134,10 @@ public partial class MainWindow : Window
 
         // A shortcut the user adds to a horizontal toolbar widens the window by what
         // the strip outgrew, and one they remove narrows it again, never cutting off
-        // the terminal (ToolbarWidthFit). Only their own toolbar edit counts: the
-        // layout change it makes is marked until the layout pass it causes is over,
-        // so a profile load, a profile close, startup (whose first layout only
-        // records the width) or a button's badge changing width never resizes the
-        // window or overrides its saved size.
-        AppServices.Current.Toolbar.Layout.CollectionChanged += (_, _) =>
-        {
-            _toolbarEdited = AppServices.Current.Toolbar.LastApplyWasUserEdit;
-            Dispatcher.UIThread.Post(() => _toolbarEdited = false, DispatcherPriority.Background);
-        };
+        // the terminal (ToolbarWidthFit). Only their own toolbar edit counts, so a
+        // profile load, a profile close, startup (whose first layout only records the
+        // width) or a button's badge changing width never resizes the window or
+        // overrides its saved size.
         WatchToolbarWidth(TopToolbarItems);
         WatchToolbarWidth(BottomToolbarItems);
 
@@ -409,6 +403,8 @@ public partial class MainWindow : Window
     private void WatchToolbarWidth(ItemsControl strip)
     {
         double last = 0;
+        ToolbarConfig toolbar = AppServices.Current.Toolbar;
+        int seenChanges = toolbar.LayoutChanges;
         strip.LayoutUpdated += (_, _) =>
         {
             // Measured in an Auto column, the strip's desired width is its full natural
@@ -416,6 +412,10 @@ public partial class MainWindow : Window
             double now = strip.DesiredSize.Width;
             double was = last;
             last = now;
+            // Read on every pass, before anything returns early: the first pass after
+            // a layout change is the one that measured it, and it alone may act on it.
+            bool edit = ToolbarWidthFit.IsFirstPassAfterEdit(ref seenChanges, toolbar.LayoutChanges,
+                toolbar.LastChangeWasUserEdit);
             if (was <= 0 || now == was || !strip.IsEffectivelyVisible) return;
             bool grew = now > was;
             // A grow fits the strip that grew, so a toolbar the user has clipped by
@@ -425,14 +425,11 @@ public partial class MainWindow : Window
             double cap = Screens.ScreenFromWindow(this) is { } screen
                 ? screen.WorkingArea.Width / screen.Scaling
                 : double.MaxValue;
-            if (ToolbarWidthFit.Next(_toolbarEdited, WindowState, ClientSize.Width, needed, grew,
+            if (ToolbarWidthFit.Next(edit, WindowState, ClientSize.Width, needed, grew,
                     TerminalNeeds(), MinWidth, cap) is { } width)
                 Width = width;
         };
     }
-
-    // True from the user's toolbar edit until the layout pass it causes is over.
-    private bool _toolbarEdited;
 
     // The window width that shows the terminal's whole grid at its natural size: the
     // grid plus everything beside the terminal's scroll area (margins, chrome, a

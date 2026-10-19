@@ -41,13 +41,16 @@ public sealed partial class ToolbarConfig : ObservableObject
     // True when the vertical-right toolbar border should render.
     public bool ShowRight  => Visible && Position == ToolbarPosition.Right;
 
-    // True while the layout last applied came from the user editing it and differs
-    // from the one before: buttons added, removed or reordered through Settings →
-    // Toolbar + Shortcuts, saved to the profile. False for a profile load, a profile
-    // close, startup, or a save that left the layout as it was. Set before Layout
-    // changes, so its CollectionChanged handlers read the new value. The main window
-    // resizes for the toolbar only on an edit (ToolbarWidthFit).
-    public bool LastApplyWasUserEdit { get; private set; }
+    // How many times the layout has changed, and whether the latest change was the
+    // user's own edit: buttons added, removed or reordered through Settings →
+    // Toolbar + Shortcuts, saved to the profile. A profile load, a profile close or
+    // startup is not an edit, and an apply that leaves the layout as it was changes
+    // neither. Both are set before Layout changes. The main window resizes for the
+    // toolbar only when the layout pass after a change it hasn't seen yet follows
+    // an edit (ToolbarWidthFit), so nothing depends on how the dispatcher orders that
+    // pass against other work.
+    public int LayoutChanges { get; private set; }
+    public bool LastChangeWasUserEdit { get; private set; }
 
     // Replace the live layout + visibility / position with values from dto.
     // userEdit says the dto is the user's own toolbar edit rather than a profile
@@ -56,7 +59,11 @@ public sealed partial class ToolbarConfig : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(dto);
         IReadOnlyList<ToolbarItem> items = dto.Layout is { Count: > 0 } ? dto.Layout : ToolbarDefaults.Build();
-        LastApplyWasUserEdit = userEdit && !items.Select(Key).SequenceEqual(Layout.Select(Key));
+        if (!items.Select(Key).SequenceEqual(Layout.Select(Key)))
+        {
+            LayoutChanges++;
+            LastChangeWasUserEdit = userEdit;
+        }
         ReplaceAll(items);
         Visible  = dto.Visible;
         Position = dto.Position;

@@ -174,7 +174,9 @@ public sealed partial class SwapScriptExecutionTests
     }
 
     // Started with a value missing, or a staging folder that isn't an update's own,
-    // the helper does nothing at all: no file touched, nothing relaunched, no log.
+    // the helper changes nothing: it only starts the old build again (when it knows
+    // the program) and notes why in the failure log beside it (when it knows the
+    // install folder), so the user isn't left without a client.
     [Theory]
     [InlineData("dst")]
     [InlineData("exe")]
@@ -206,13 +208,20 @@ public sealed partial class SwapScriptExecutionTests
 
         Assert.Equal(2, box.RunRaw(request));
 
-        Assert.Equal(before, box.InstalledNames());
+        bool noted = fault != "dst";
+        string failLog = box.Installed("MudPlay-update-failed.log");
+        Assert.Equal((noted ? before.Append("MudPlay-update-failed.log") : before).Order(StringComparer.Ordinal),
+            box.InstalledNames());
+        if (noted) Assert.Contains("MudPlay update refused before starting", File.ReadAllText(failLog));
         Assert.Equal(users, box.SnapshotUserFiles());
         Assert.Contains("launched-old", box.InstalledText("MudPlay"));
         Assert.True(Directory.Exists(box.Stage));
         Assert.Equal("mine", File.ReadAllText(Path.Combine(foreign, "keep.txt")));
         Assert.False(File.Exists(Path.Combine(box.Root, "swap.log")));
-        Assert.False(File.Exists(Path.Combine(box.Root, "launched-old")));
+        if (fault == "exe")
+            Assert.False(File.Exists(Path.Combine(box.Root, "launched-old")), "relaunched with no program named");
+        else
+            Assert.Empty(box.Relaunched("old"));
     }
 
     // ----- How the helper is started ------------------------------------------
@@ -259,7 +268,7 @@ public sealed partial class SwapScriptExecutionTests
     {
         string s = SwapScriptBuilder.BuildPosix();
         Assert.Contains("DST=\"${MUDPLAY_SWAP_DST:-}\"", s);
-        Assert.Contains("case \"$STAGE\" in *mudplay-update-*) ;; *) exit 2 ;; esac", s);
+        Assert.Contains("case \"$STAGE\" in *mudplay-update-*) ;; *) refuse \"the staging folder isn't an update's\" ;; esac", s);
         Assert.DoesNotContain("$1\"; NEW", s);
         Assert.DoesNotContain("mv \"$DST\"", s);
         Assert.DoesNotContain("mv \"$NEW\" \"$DST\"", s);
@@ -318,17 +327,64 @@ public sealed partial class SwapScriptExecutionTests
         Assert.Contains("(>>\"%TOUCHED%\" echo %~1) || set \"WHY=", Section(s, ":install"));
     }
 
+    // A name or path from the user's folder ("MudPlay (1).exe", "R&D") unquoted on an
+    // echo, or anywhere inside a ( ) block, would close the block at its ")" or end
+    // the command at its "&": cmd then fails to parse the swap's final steps.
+    [Fact]
+    public void Windows_QuotesEveryNameAndPath_OnEchoLinesAndInsideBlocks()
+    {
+        string[] lines = SwapScriptBuilder.BuildWindows().ReplaceLineEndings("\n").Split('\n');
+        string[] vars =
+        [
+            "EXENAME", "WHY", "EXE", "DST", "NEW", "NEWEXE", "STAGE", "OLD", "BAK", "LOG", "FAILLOG",
+            "INSTALL", "SAVED", "TOUCHED", "ACL", "ACLDIR", "PROFILE", "REFUSED",
+        ];
+        int depth = 0;
+        foreach (string raw in lines)
+        {
+            string line = raw.Trim();
+            if (line.StartsWith("rem ", StringComparison.OrdinalIgnoreCase)) continue;
+            bool closes = line.StartsWith(')');
+            bool inBlock = depth > 0 || line.EndsWith('(');
+            if (inBlock || line.Contains("echo ", StringComparison.OrdinalIgnoreCase))
+            {
+                string bare = Quoted().Replace(line, "");
+                foreach (string v in vars)
+                    Assert.False(bare.Contains($"%{v}%", StringComparison.Ordinal) || bare.Contains($"%{v}:", StringComparison.Ordinal),
+                        $"%{v}% unquoted in: {line}");
+            }
+            if (closes) depth--;
+            if (line.EndsWith('(')) depth++;
+        }
+        Assert.Equal(0, depth);
+    }
+
+    [GeneratedRegex("\"[^\"]*\"")]
+    private static partial Regex Quoted();
+
     [Fact]
     public void Windows_RefusesToStart_WhenAValueIsMissingOrTheStageIsntAnUpdates()
     {
         string s = SwapScriptBuilder.BuildWindows();
         foreach (string v in new[] { "PID", "NEW", "NEWEXE", "DST", "EXE", "STAGE", "INSTALL" })
-            Assert.Contains($"if not defined {v} exit /b 2", s);
-        Assert.Contains("if \"%STAGE:mudplay-update-=%\"==\"%STAGE%\" exit /b 2", s);
-        // Nothing is logged, waited for or touched before the checks.
-        int lastCheck = s.LastIndexOf("exit /b 2", StringComparison.Ordinal);
-        Assert.True(lastCheck < s.IndexOf(">\"%LOG%\"", StringComparison.Ordinal));
-        Assert.True(lastCheck < s.IndexOf(":waitloop", StringComparison.Ordinal));
+            Assert.Contains($"if not defined {v} set \"REFUSED=", s);
+        Assert.Contains("if \"%STAGE:mudplay-update-=%\"==\"%STAGE%\" set \"REFUSED=", s);
+        // Nothing is logged or touched before the checks.
+        int lastCheck = s.LastIndexOf("if defined REFUSED goto refused", StringComparison.Ordinal);
+        Assert.True(lastCheck > 0 && lastCheck < s.IndexOf(">\"%LOG%\"", StringComparison.Ordinal));
+        Assert.True(lastCheck < s.IndexOf("call :waitold", StringComparison.Ordinal));
+        // A refusal waits for the old client to close, notes why beside the program
+        // (never through a link or over a folder), starts the old build again, and
+        // touches nothing else.
+        string refused = Section(s, ":refused");
+        Assert.Contains("call :waitold", refused);
+        Assert.Contains("if defined DST if exist \"%DST%\\\" call :refusednote", refused);
+        Assert.Contains("if defined EXE if exist \"%EXE%\" if not exist \"%EXE%\\\" start \"\" \"%EXE%\" %ARGS%", refused);
+        Assert.Contains("exit /b 2", refused);
+        string note = Section(s, ":refusednote");
+        Assert.Contains("if defined FAILATTR if not \"%FAILATTR:l=%\"==\"%FAILATTR%\" goto :eof", note);
+        Assert.Contains(">\"%DST%\\MudPlay-update-failed.log\" echo", note);
+        Assert.DoesNotContain("del ", refused + note);
     }
 
     [Fact]
@@ -345,7 +401,9 @@ public sealed partial class SwapScriptExecutionTests
         // A failed move back is said in the failure log, with the copy's name.
         int back = s.IndexOf("move /y \"%OLD%\" \"%EXE%\"", StringComparison.Ordinal);
         Assert.True(back > into);
-        Assert.Contains("FAILED to put the old %EXENAME% back: it is kept as \"%OLD%\"", s);
+        Assert.Contains("if errorlevel 1 call :oldkept", s);
+        Assert.Contains("FAILED to put the old program back: it is kept as \"%OLD%\" - rename it to \"%EXENAME%\"",
+            Section(s, ":oldkept"));
         // Rollback removes the temporary copy only when this run made it, and only
         // while the executable itself is there.
         Assert.Contains("if defined MADENEW if exist \"%EXE%\" if not exist \"%EXE%%SUF%\\\" del /f /q \"%EXE%%SUF%\"", s);
