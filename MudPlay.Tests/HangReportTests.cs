@@ -269,6 +269,105 @@ public sealed class HangReportTests
     }
 
     [Fact]
+    public void A_set_switch_past_the_threshold_is_not_a_hang_once_it_ends()
+    {
+        using Rig rig = new();
+        using (rig.Monitor.MeasureLong("game-data set switch", "data-Paradigm")) rig.Pass(8);
+        rig.Pass(1);                        // the work queued behind the switch, the ping still waiting
+        Assert.Empty(rig.Reports);
+        rig.Pass(3);
+        rig.Answer();
+        rig.PassAnswering(5);
+        Assert.Empty(rig.Reports);
+    }
+
+    [Fact]
+    public void A_freeze_after_a_long_operation_is_reported_from_its_end()
+    {
+        using Rig rig = new();
+        using (rig.Monitor.MeasureLong("game-data set switch", "data-Paradigm")) rig.Pass(8);
+        rig.Pass(4);
+        Assert.Empty(rig.Reports);
+        rig.Pass(1);
+
+        Assert.Contains("- **UI thread unresponsive**: 5.0 s when this was written (since 12:00:08.000)", rig.Report);
+    }
+
+    [Fact]
+    public void A_freeze_under_way_at_the_arm_leaves_the_start_out_of_its_figures()
+    {
+        using Rig rig = new(arm: false);
+        rig.Pass(10);                       // the start keeps the UI thread from 1 s on
+        rig.Monitor.ArmHangReports();
+        rig.Pass(5);
+        Assert.Contains("- **UI thread unresponsive**: 5.0 s when this was written (since 12:00:10.000)", rig.Report);
+        rig.Pass(10);
+        Assert.Contains("still not answering after 15.0 s", rig.Report);
+        rig.Pass(2);
+        rig.Answer();                       // at 27 s
+        rig.Pass(1);
+
+        Assert.Contains("the UI thread answered again. The hang lasted 17.0 s.", rig.Report);
+    }
+
+    [Fact]
+    public void The_off_thread_scrub_masks_the_saved_account_details_and_keeps_its_copy_in_step()
+    {
+        ScratchRoot.Require();
+        string bbs = "hang-scrub-test-" + Path.GetRandomFileName();
+        string keyFile = Path.Combine(AppPaths.DataRoot, $"hang-scrub-{Guid.NewGuid():N}.credkey");
+        PasswordProtector protector = new(keyFile);
+        ProfileService profiles = TestProfiles.Service();
+        try
+        {
+            profiles.CreateProfile(bbs, "Scrubbed", p =>
+            {
+                p.BbsCredentials = new(StringComparer.OrdinalIgnoreCase)
+                {
+                    [bbs] = new Models.Profile.BbsCredentials
+                    {
+                        EncryptedUsername = protector.Protect("Qloginname"),
+                        EncryptedPassword = protector.Protect("Qloginpass1"),
+                    },
+                };
+                p.EncryptedSuicidePassword = protector.Protect("Qsuicide1");
+            });
+            profiles.Load(bbs, "Scrubbed");
+            // As AppServices wires it: from the profile service's copy, off the UI thread.
+            BugReportScrub.Scrubber Scrubber() => BugReportBuilder.BuildScrubberOffUiThread(profiles, protector, [], null);
+            string Scrub(string text) => Scrubber().Apply(text);
+
+            Assert.Equal("[redacted] [redacted] [redacted]", Scrub("Qloginname Qloginpass1 Qsuicide1"));
+
+            profiles.Current!.BbsCredentials![bbs].EncryptedPassword = protector.Protect("Qnewpass22");
+            profiles.Save();
+            Assert.Equal("Qloginpass1 [redacted]", Scrub("Qloginpass1 Qnewpass22"));
+
+            profiles.Current.EncryptedSuicidePassword = protector.Protect("Qsuicide2");
+            profiles.NotifyMutated();
+            Assert.Equal("Qsuicide1 [redacted]", Scrub("Qsuicide1 Qsuicide2"));
+
+            // And a whole Hang report through it, a password in the log tail.
+            using (Rig rig = new(scrubber: Scrubber))
+            {
+                rig.Log.Info("Telnet", "login answered with Qnewpass22");
+                rig.Pass(6);
+                Assert.DoesNotContain("Qnewpass22", rig.Report);
+                Assert.Contains("Telnet: login answered with [redacted]", rig.Report);
+            }
+
+            profiles.Close();
+            Assert.Empty(profiles.AccountSecrets);
+            Assert.Equal("Qsuicide2", Scrub("Qsuicide2"));
+        }
+        finally
+        {
+            if (Directory.Exists(AppPaths.BbsFolder(bbs))) Directory.Delete(AppPaths.BbsFolder(bbs), recursive: true);
+            if (File.Exists(keyFile)) File.Delete(keyFile);
+        }
+    }
+
+    [Fact]
     public void A_stall_while_collecting_is_written_with_what_the_ui_thread_was_doing()
     {
         using Rig rig = new();
@@ -311,6 +410,7 @@ public sealed class HangReportTests
         rig.Pass(7);
         rig.Answer();
         rig.PassAnswering(1);               // recovery: its log line is out, the log not answering
+        Assert.Contains("the UI thread answered again. The hang lasted", rig.Report);   // the file's own lane still has it
         rig.Pass(10);                       // a second freeze, inside the gap
         rig.Answer();
         rig.PassAnswering(1);

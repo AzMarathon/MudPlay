@@ -121,6 +121,9 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // Nothing before this (a timestamp) counts toward a hang: the client's own
     // start, before its window is up, may keep the UI thread for seconds.
     private long _armedAt;
+    // When the last known long operation closed on the UI thread (a timestamp), 0
+    // before any has.
+    private long _lastLongEnd;
 
     private volatile HangReport.Sources? _hangSources;
     // For a bug report: the freezes seen this session. The count is the probe's;
@@ -370,6 +373,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 if (f.ExpectedLong)
                 {
                     _longRuns[f.Name] = (ms, Math.Max(_longRuns.GetValueOrDefault(f.Name).Max, ms));
+                    Interlocked.Exchange(ref _lastLongEnd, end);
                 }
                 f = default;
             }
@@ -534,14 +538,19 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             if (_collecting && waited.TotalMilliseconds >= StallMs && InnermostScope() is { } doing)
                 lock (_pingLock) _seenDuringPing.Add(doing);
             long armed = Interlocked.Read(ref _armedAt);
+            // A hang is counted from the latest of: the ping going out, the arm, and
+            // the end of the last known long operation. A ping that went out before
+            // the arm (the start still running when the window opened) then still
+            // catches a freeze that began there, without putting the start in its
+            // figures; and the work queued behind a long set switch (its handlers,
+            // layout, drawing) gets the usual HangAfter from the switch's end, not
+            // from a ping that waited through the whole switch.
+            long from = Math.Max(posted, Math.Max(armed, Interlocked.Read(ref _lastLongEnd)));
             if (_hang is { } hang) StillHung(probe, hang, now);
-            // A ping that went out before the arm (the start still running when the
-            // window opened) counts from the arm, so a freeze that began then is
-            // still caught.
-            else if (armed != 0 && Elapsed(Math.Max(posted, armed), now) is var counted && counted >= HangAfter
+            else if (armed != 0 && Elapsed(from, now) is var counted && counted >= HangAfter
                      && !Debugger.IsAttached
                      && (counted >= LongHangAfter || OpenLongOperation() is null))
-                _hang = Hung(probe, posted, now);
+                _hang = Hung(probe, from, now);
         }
 
         if (_collecting)
@@ -587,19 +596,19 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         if (ms >= StallMs) RecordStall(ms, causes.Count == 0 ? "unattributed" : string.Join(", ", causes));
     }
 
-    // A hang being reported: the ping it is counted from, and, filled in on the
+    // A hang being reported: when it is counted from, and, filled in on the
     // write lane, the file it went to or why none was written. The probe never
     // reads Path or NoFile; it only hands the lane work.
-    private sealed class Hang(long postedAt, int number, string? noFile = null)
+    private sealed class Hang(long countedFrom, int number, string? noFile = null)
     {
-        public long PostedAt { get; } = postedAt;
+        public long CountedFrom { get; } = countedFrom;
         public int Number { get; } = number;
         public string? Path { get; set; }
         public string? NoFile { get; set; } = noFile;
         public int NextMilestone { get; set; }
     }
 
-    private Hang Hung(ProbeHost probe, long posted, long now)
+    private Hang Hung(ProbeHost probe, long from, long now)
     {
         int number = ++_freezesSeen;
         DateTimeOffset at = probe.Now();
@@ -607,7 +616,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             : _lastReportAt != 0 && Elapsed(_lastReportAt, now) < ReportGap
                 ? $"one was written less than {ReportGap.TotalMinutes:0} minutes before"
                 : null;
-        Hang hang = new(posted, number, why);
+        Hang hang = new(from, number, why);
         if (why is not null)
         {
             probe.WriteAside(() => NoteFreeze(hang, $"at {at:HH:mm:ss}, still going"));
@@ -616,7 +625,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
         _reportsWritten++;
         _lastReportAt = now;
-        HangReport.Snapshot snapshot = TakeSnapshot(posted, now, at);
+        HangReport.Snapshot snapshot = TakeSnapshot(from, now, at);
         HangReport.Sources? sources = _hangSources;
         probe.WriteAside(() => WriteReport(probe, hang, snapshot, sources));
         return hang;
@@ -652,7 +661,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private void StillHung(ProbeHost probe, Hang hang, long now)
     {
         if (hang.NextMilestone >= StillHungAt.Length) return;
-        TimeSpan waited = Elapsed(hang.PostedAt, now);
+        TimeSpan waited = Elapsed(hang.CountedFrom, now);
         if (waited < StillHungAt[hang.NextMilestone]) return;
         while (hang.NextMilestone < StillHungAt.Length && waited >= StillHungAt[hang.NextMilestone]) hang.NextMilestone++;
         DateTimeOffset at = probe.Now();
@@ -665,7 +674,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     private void Recovered(ProbeHost probe, Hang hang, long answeredAt)
     {
-        TimeSpan lasted = answeredAt > hang.PostedAt ? Elapsed(hang.PostedAt, answeredAt) : HangAfter;
+        TimeSpan lasted = answeredAt > hang.CountedFrom ? Elapsed(hang.CountedFrom, answeredAt) : HangAfter;
         DateTimeOffset at = probe.Now();
         probe.WriteAside(() =>
         {
@@ -703,7 +712,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         }
     }
 
-    private HangReport.Snapshot TakeSnapshot(long posted, long now, DateTimeOffset wall)
+    private HangReport.Snapshot TakeSnapshot(long from, long now, DateTimeOffset wall)
     {
         List<HangReport.Frame> frames = new();
         List<HangReport.Activity> recent = new();
@@ -740,7 +749,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             if (_lastWindowEvent is { } e) lastEvent = (e.What, Wall(e.At, now, wall));
             if (_lastFocused is { } f) lastFocused = (f.Name, Wall(f.At, now, wall));
         }
-        return new HangReport.Snapshot(wall, Elapsed(posted, now), frames, depth, recent, open, lastEvent, lastFocused,
+        return new HangReport.Snapshot(wall, Elapsed(from, now), frames, depth, recent, open, lastEvent, lastFocused,
             longOperation);
     }
 
