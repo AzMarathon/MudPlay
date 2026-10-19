@@ -1,12 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.184.39**
-> - A door the game data gives only a key for can be picked with any Picklocks; it's never bashed
-> - A key door marked any picklocks is picked before its key is used
-> - Paradigm's `You do not have <key>.` ends a door at once instead of after a wait
+> **Version 3.184.40**
+> - A door the game data gives only a key for is bashed where it's known to be a door, or where nobody in the room could be hit by the bash; a list of Stock's doors ships with the client and each realm learns the rest
+> - A keyed door is picked first when you have Picklocks, then keyed, then bashed; with no Picklocks the key goes first
+> - A door that's only shut is opened before any pick is tried
+> - Paradigm's `You do not have <key>.` ends the key try at once
 > - A key the game says you don't have, or that crumbles on its last use, leaves the key ring at once
-> - A charge look answered `You do not see <item> here!` takes the item off what is held
+> - On Paradigm, a charge look answered `You do not see <item> here!` takes the item off what is held
+> - A pick that has no effect isn't tried at that door again this session, and routes go round it
+> - A key door marked any picklocks shows it on the map
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
