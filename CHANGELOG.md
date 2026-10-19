@@ -6,7 +6,7 @@
 - An update puts in only the downloaded release's own files and deletes nothing else; a download holding anything odd stops the update untouched
 - A failed update puts back every file it changed from a backup in the temp folder, not beside the install
 - Leftovers of older versions are removed at startup by exact name only, each one logged
-- Removing toolbar buttons gives back the window width that adding them took, unless you've resized the window since
+- Removing toolbar buttons narrows the window to fit the toolbar, but never so far that the terminal screen is cut off
 
 ## 3.185.8
 

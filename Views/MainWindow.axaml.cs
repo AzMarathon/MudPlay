@@ -133,7 +133,8 @@ public partial class MainWindow : Window
             }));
 
         // A shortcut added to a horizontal toolbar widens the window by what the strip
-        // outgrew, and removing shortcuts gives that width back (ToolbarWidthFit).
+        // outgrew, and a narrower toolbar narrows it again, never cutting off the
+        // terminal (ToolbarWidthFit).
         // Like the status bar, the first layout only records the width, so a saved
         // window size is never overridden at launch.
         WatchToolbarWidth(TopToolbarItems);
@@ -398,8 +399,6 @@ public partial class MainWindow : Window
         });
     }
 
-    private readonly ToolbarWidthFit _toolbarWidthFit = new();
-
     private void WatchToolbarWidth(ItemsControl strip)
     {
         double last = 0;
@@ -410,7 +409,7 @@ public partial class MainWindow : Window
             double now = strip.DesiredSize.Width;
             double was = last;
             last = now;
-            if (was <= 0 || now == was || WindowState != WindowState.Normal || !strip.IsEffectivelyVisible) return;
+            if (was <= 0 || now == was || !strip.IsEffectivelyVisible) return;
             bool grew = now > was;
             // A grow fits the strip that grew, so a toolbar the user has clipped by
             // narrowing the window isn't forced back open; a shrink still has to fit
@@ -419,10 +418,17 @@ public partial class MainWindow : Window
             double cap = Screens.ScreenFromWindow(this) is { } screen
                 ? screen.WorkingArea.Width / screen.Scaling
                 : double.MaxValue;
-            if (_toolbarWidthFit.Next(ClientSize.Width, needed, grew, MinWidth, cap) is { } width)
+            if (ToolbarWidthFit.Next(WindowState, ClientSize.Width, needed, grew, TerminalNeeds(), MinWidth, cap)
+                is { } width)
                 Width = width;
         };
     }
+
+    // The window width that shows the terminal's whole grid at its natural size: the
+    // grid plus everything beside the terminal's scroll area (margins, chrome, a
+    // scrollbar), as laid out now.
+    private double TerminalNeeds() =>
+        Math.Ceiling(Terminal.NaturalGridWidth + Math.Max(0, ClientSize.Width - TerminalScroll.Bounds.Width));
 
     private double WidestToolbar() => Math.Max(
         TopToolbarItems.IsEffectivelyVisible ? TopToolbarItems.DesiredSize.Width : 0,

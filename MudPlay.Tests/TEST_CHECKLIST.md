@@ -4087,8 +4087,8 @@ How to keep it current:
 
 ### ToolbarWidthFitTests.cs
 - Covers: Views/ToolbarWidthFit (the main window's width decision for its horizontal toolbars; MainWindow's LayoutUpdated plumbing is smoke-tested by launching)
-- Checks: removing buttons gives back the width adding them took, down to what the toolbars still need and never below the width before the grow or the window's minimum; a window the toolbar didn't grow never shrinks; after the user resizes, their width is kept and only later growth is given back; growth stops at the screen and only that is given back.
-- Why: user report, 2026-10-19 (adding to the toolbar widened the window, removing never shrank it back).
+- Checks: a grow fits the toolbar up to the screen's width; a shrink narrows the window to the widest toolbar, however wide the window was, but stops at the width the terminal's grid needs and at the window's minimum; a maximized, full-screen or minimized window is never resized.
+- Why: user report and ruling, 2026-10-19 (adding to the toolbar widened the window, removing never shrank it back; a shrink must not cut off the terminal).
 
 ### TrackerWireRig.cs
 - Test infrastructure.

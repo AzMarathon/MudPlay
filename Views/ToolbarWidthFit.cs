@@ -1,51 +1,31 @@
 using System;
+using Avalonia.Controls;
 
 namespace MudPlay.Views;
 
-// The main window's width as its horizontal toolbars ask for it. A shortcut added
-// to a toolbar widens the window by what the strip outgrew, so the new button shows
-// instead of being clipped past the right edge. Removing shortcuts gives that width
-// back, but only what the client itself added: never below the width the window
-// had before a toolbar grew it, never so narrow a toolbar is clipped again, and not
-// at all once the user has resized the window since, because that size is theirs.
-public sealed class ToolbarWidthFit
+// The main window's width as its horizontal toolbars ask for it (user, 2026-10-19).
+// A shortcut added to a toolbar widens the window by what the strip outgrew, so the
+// new button shows instead of being clipped past the right edge. A toolbar that
+// gets narrower narrows the window to what the widest toolbar now needs — but never
+// so far that the terminal's grid is cut off, nor below the window's minimum. A
+// maximized or full-screen window is the screen's size and is left alone.
+public static class ToolbarWidthFit
 {
-    // Layout rounds widths through the screen's scaling, so a width read back after
-    // being set can differ from it by a fraction of a pixel.
-    private const double Tolerance = 1.0;
-
-    // Width this fit added to the window and hasn't given back yet.
-    private double _added;
-    // The width it last gave the window; NaN until it has given one.
-    private double _given = double.NaN;
-
     // The width to give the window, or null to leave it as it is. width is the
     // window's width now. needed is what the toolbars need: for a grow, the strip
-    // that grew; for a shrink, the widest strip still showing. minWidth and maxWidth
-    // bound the result (the window's minimum, the screen's working width).
-    public double? Next(double width, double needed, bool grew, double minWidth, double maxWidth)
+    // that grew; for a shrink, the widest strip still showing. terminalNeeds is the
+    // window width that shows the terminal's whole grid. maxWidth is the screen's
+    // working width.
+    public static double? Next(WindowState state, double width, double needed, bool grew,
+        double terminalNeeds, double minWidth, double maxWidth)
     {
-        if (!double.IsNaN(_given) && Math.Abs(width - _given) > Tolerance)
-        {
-            _added = 0;
-            _given = double.NaN;
-        }
-
-        double target;
+        if (state != WindowState.Normal) return null;
         if (grew)
         {
-            target = Math.Min(maxWidth, needed);
-            if (target <= width) return null;
-            _added += target - width;
+            double wider = Math.Min(maxWidth, needed);
+            return wider > width ? wider : null;
         }
-        else
-        {
-            if (_added <= 0) return null;
-            target = Math.Max(Math.Max(width - _added, needed), minWidth);
-            if (target >= width) return null;
-            _added -= width - target;
-        }
-        _given = target;
-        return target;
+        double narrower = Math.Max(Math.Max(needed, terminalNeeds), minWidth);
+        return narrower < width ? narrower : null;
     }
 }
