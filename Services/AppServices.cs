@@ -6650,12 +6650,12 @@ public sealed class AppServices
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
 
-        // The doors the client opened and that can't have locked again yet: a route
-        // back through one needs no key (user, 2026-10-18). Forgotten on a relog, a
-        // change of character or realm, and a change of game data.
-        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow,
-            paradigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud, Log);
+        // The doors the client has seen open and that can't have locked again yet: a
+        // route back through one needs no key (user, 2026-10-18). Forgotten on a relog,
+        // a change of character or realm, and a change of game data.
+        DoorsHeldOpen = new Game.Map.DoorsHeldOpen(BareKeyLocks.ExitAt, () => DateTimeOffset.UtcNow, Log);
         Door.OpenedByUs += DoorsHeldOpen.NoteOpened;
+        Door.SeenOpen += DoorsHeldOpen.NoteSeenOpen;
         Movement.HeldOpenProbe = DoorsHeldOpen.IsHeldOpen;
         Movement.HeldOpenVersionProvider = () => DoorsHeldOpen.Version;
         DoorsHeldOpen.ForgetOn(InGameCapture, Profile, RoomGraph);

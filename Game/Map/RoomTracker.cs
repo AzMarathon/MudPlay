@@ -392,14 +392,16 @@ public sealed class RoomTracker
     // for this, or the tracker reads that display with the new move already counted.
     public event Action? RoomDisplayRead;
 
-    // A room display read that left the tracker confirmed in a room: (that room, the
-    // doors the display shows closed). Not raised for a dropped peek, whose display is
+    // A room display read that left the tracker confirmed in the room it shows: (that
+    // room, the display). Not raised for a dropped peek, nor for
+    // the display of a room a cast-on-walk step only passed through, both of them
     // another room's, nor for one that left the tracker unsure; raised ahead of
     // RoomDisplayRead.
-    public event Action<RoomKey, IReadOnlySet<Direction>?>? RoomShown;
+    public event Action<RoomKey, RoomObservation>? RoomShown;
 
-    // The display in hand was dropped as a peek.
-    private bool _displayDropped;
+    // The display in hand is not of the room the tracker stands in: a peek dropped, or
+    // the room passed through that a landing was booked off.
+    private bool _displayNotOfRoomHere;
 
     // A sent or dragged move landed in the room it predicted, shown by that room's
     // own display. Proof the character can move, which a consumer holding a stale
@@ -1485,16 +1487,23 @@ public sealed class RoomTracker
     // this against the expected outcome of any pending move.
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
-        _displayDropped = false;
+        _displayNotOfRoomHere = false;
         try
         {
             ReadRoomDisplay(observation, whenUtc ?? _now());
         }
         finally
         {
-            if (!_displayDropped && State is { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here })
-                RoomShown?.Invoke(here.Key, observation.ClosedDoorDirections);
-            RoomDisplayRead?.Invoke();
+            // RoomDisplayRead is owed whatever a RoomShown listener does.
+            try
+            {
+                if (!_displayNotOfRoomHere && State is { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here })
+                    RoomShown?.Invoke(here.Key, observation);
+            }
+            finally
+            {
+                RoomDisplayRead?.Invoke();
+            }
         }
     }
 
@@ -1517,7 +1526,7 @@ public sealed class RoomTracker
                 if (!ObservationLooksLikePendingMoveOutcome(observation, when))
                 {
                     _suppressObservationUntil = null;
-                    _displayDropped = true;
+                    _displayNotOfRoomHere = true;
                     _log?.Log(LogSeverity.Info, "RoomTracker",
                         $"Dropped peek observation: '{observation.Name}'.");
                     return;
@@ -1611,6 +1620,7 @@ public sealed class RoomTracker
         if (_bookedOffAnotherRoomsDisplay)
         {
             _bookedOffAnotherRoomsDisplay = false;
+            _displayNotOfRoomHere = true;
             State.OpenDoorDirections = null;
             State.ClosedDoorDirections = null;
             _lastObservation = null;

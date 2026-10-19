@@ -108,10 +108,6 @@ public sealed class DoorOpenManager : IDisposable
     // charges a use on "unlocked" and on "was not locked" alike): a last-charge line
     // now is about that key.
     private bool _keyChargeSpent;
-    // The request's own pick or key unlocked the door, so the `open` that follows is
-    // a door we unlocked. An `open` that found it merely shut, or "was not locked",
-    // is a door someone else unlocked at a time not known (DoorsHeldOpen).
-    private bool _unlockedByUs;
     // Told when the game shows the key gone: (key name, every copy). Unset → nobody.
     private Action<string, bool>? _keyLost;
     // What is known of bare `(Key: N)` locks, whether a word would name someone in
@@ -220,7 +216,7 @@ public sealed class DoorOpenManager : IDisposable
         _pickFailSub    = _router.Subscribe(KnownPatterns.DoorPickFailure,      OnPickFailure);
         _notLockedSub   = _router.Subscribe(KnownPatterns.DoorPickNotLocked,    OnPickNotLocked);
         _openedSub      = _router.Subscribe(KnownPatterns.DoorOpenedNow,        OnOpenedNow);
-        _alreadyOpenSub = _router.Subscribe(KnownPatterns.DoorAlreadyOpen,      OnOpened);
+        _alreadyOpenSub = _router.Subscribe(KnownPatterns.DoorAlreadyOpen,      OnAlreadyOpen);
         _lockedSub      = _router.Subscribe(KnownPatterns.DoorIsLocked,         OnIsLocked);
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
         _keyUnknownSub  = _router.Subscribe(KnownPatterns.DoorKeyUnknown,       OnKeyUnknown);
@@ -313,7 +309,6 @@ public sealed class DoorOpenManager : IDisposable
         _verbAttempts = 0;
         _plan.Clear();
         _keyChargeSpent = false;
-        _unlockedByUs = false;
         _bareKind = null;
         _bareLock = false;
         _bashIsTrial = false;
@@ -332,7 +327,6 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
         _keyChargeSpent = false;
-        _unlockedByUs = false;
         _learnedThisRequest = false;
         DecideBareLockBash();
         StartChosenVerb();
@@ -844,7 +838,6 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingPick) return;
         if (_current is null) return;
         _log?.Info("Door", $"pick {_current.DirectionShort} succeeded — sending open.");
-        _unlockedByUs = true;
         SendOpen();
     }
 
@@ -881,19 +874,28 @@ public sealed class DoorOpenManager : IDisposable
         }
     }
 
-    // Our own `open` opened a door our own pick or key unlocked. Not "already open",
-    // nor an `open` that found it merely shut: someone else unlocked those, at a time
-    // we don't know.
+    // Our own `open` opened it, after our key or pick or for a door only shut.
     private void OnOpenedNow(MatchResult m)
     {
-        if (_state == DoorState.WaitingOpen && _unlockedByUs) RaiseOpenedByUs(byBash: false);
+        if (_state is DoorState.WaitingOpen or DoorState.WaitingOpenFirst) RaiseOpenedByUs(byBash: false);
         OnOpened(m);
     }
 
-    // Told the side and how, when the request's own key, pick or bash unlocked the
-    // door and it is open, with the tracker still confirmed in the room that holds it
-    // (DoorsHeldOpen).
+    // "already open": someone else opened it, and we see it open.
+    private void OnAlreadyOpen(MatchResult m)
+    {
+        if (_current is { } cur && _state is not (DoorState.Idle or DoorState.SelectingVerb)
+            && _doorRoom is { } room && _confirmedRoom?.Invoke() == room)
+            SeenOpen?.Invoke(room, cur.Direction);
+        OnOpened(m);
+    }
+
+    // Told the side and how, when the request's own `open` or bash opened the door,
+    // with the tracker still confirmed in the room that holds it (DoorsHeldOpen).
     public event Action<RoomKey, Direction, bool>? OpenedByUs;
+
+    // Told the side when the request found its door already open, in the same room.
+    public event Action<RoomKey, Direction>? SeenOpen;
 
     private void RaiseOpenedByUs(bool byBash)
     {
@@ -933,7 +935,6 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is null) return;
         _log?.Info("Door", $"key unlock {_current.DirectionShort} succeeded — sending open.");
         _keyChargeSpent = true;
-        _unlockedByUs = true;
         SendOpen();
     }
 
@@ -1109,7 +1110,6 @@ public sealed class DoorOpenManager : IDisposable
         _keyFirst = false;
         _openFirstPending = false;
         _keyChargeSpent = false;
-        _unlockedByUs = false;
         _bareKind = null;
         _bareLock = false;
         _bashIsTrial = false;

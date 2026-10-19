@@ -2,32 +2,30 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
 
-// The door sides the client unlocked itself and that can't have locked again yet, so
-// a route back through one needs no key (user, 2026-10-18). On Stock an opened,
-// unlocked, picked or bashed side is queued to lock again, and the queue's timer
-// pops its head, so a side locks again no sooner than one unit after it was queued:
-// 300 fast ticks. A relock timer above 1 is not that many units, so only the one is
-// counted on. A door or gate whose modifier is above 0 never locks again
-// (GAME_MECHANICS "Locked doors — picking, opening and bashing", *Stock: when an
-// opened or unlocked door locks again*).
+// The door sides the client has witnessed open, held open for routing until they
+// could have locked again, so a route back through one needs no key. The rule is the
+// user's (2026-10-18): a door counts as open from the moment we witness it open, for
+// as long as it stays open. Whoever opened it, it is held from each sighting: our own
+// key, pick, bash or `open`, a door found "already open", a room display showing
+// `open door <dir>`. Each new sighting starts the window again.
 //
-// Client policy: Paradigm's unit is taken as 120 s, from its trap re-arm of about 2
-// minutes on the same queue (report paradigm-20261002-191037); under-holding is the
-// safe side. A hold is not counted in its last 60 s either, since a route planned
+// On Stock an opened, unlocked, picked or bashed side is queued to lock again, and the
+// queue's timer pops its head, so a side locks again no sooner than one unit after it
+// was queued: 300 fast ticks. A relock timer above 1 is not that many units, so only
+// the one is counted on. A door or gate whose modifier is above 0 never locks again
+// (GAME_MECHANICS "Locked doors — picking, opening and bashing", *Stock: when an
+// opened or unlocked door locks again*). Paradigm is assumed to use Stock's timer
+// (user, 2026-10-18). A hold isn't counted in its last 60 s, since a route planned
 // then reaches the door after it could have locked.
 //
-// Only a side our own key, pick or bash unlocked is held: one that opened to a plain
-// `open`, or that "was not locked", was unlocked by someone else at a time not
-// known, and their relock may come at any moment.
+// When our own `open` or bash opened it, the other side of the door is held too where
+// the game opened that as well: an `open` at a key exit opens whatever lies across
+// it, an `open` at a door or gate only a door or gate, and a bash only a door or gate.
+// A side whose kind the data can't say is held only when every rule would agree.
 //
-// The other side of the door is held when the game unlocked it too: an `open` at a
-// key exit opens whatever lies across it, an `open` at a door or gate only a door or
-// gate, and a bash only a door or gate. A side whose kind the data can't say is held
-// only when every rule would agree.
-//
-// A side is let go when its window runs out, when the room shows it shut, when the
-// game says it shut or locked, or when a move into it is refused; and all of them on
-// a relog, a change of realm or character, or of game data.
+// A side is let go as soon as we witness it not open: its window runs out, the room
+// shows it closed, the game says it shut or locked, or a move into it is refused; and
+// all of them on a relog, a change of realm or character, or of game data.
 //
 // The route planner reads it from its worker thread, so every read and write of the
 // sides holds _gate.
@@ -35,11 +33,10 @@ public sealed class DoorsHeldOpen
 {
     private const string LogCategory = "Door";
 
-    // The least time a side opened stays unlocked: one unit of the relock queue.
-    // Stock: 300 fast ticks of one second (GAME_MECHANICS "The engine clock — one fast
-    // tick drives every timer"). Paradigm: the Client policy above.
-    private static readonly TimeSpan StockRelockFloor = TimeSpan.FromSeconds(300);
-    private static readonly TimeSpan ParadigmRelockFloor = TimeSpan.FromSeconds(120);
+    // The least time a side opened stays unlocked: one unit of the relock queue, 300
+    // fast ticks of one second (GAME_MECHANICS "The engine clock — one fast tick drives
+    // every timer").
+    private static readonly TimeSpan RelockFloor = TimeSpan.FromSeconds(300);
 
     // The end of a hold a route doesn't count on.
     private static readonly TimeSpan PlanMargin = TimeSpan.FromSeconds(60);
@@ -51,20 +48,15 @@ public sealed class DoorsHeldOpen
     private readonly Dictionary<(RoomKey Room, Direction Dir), DateTimeOffset?> _open = new();
     private readonly Func<RoomKey, Direction, RoomExit?> _exitAt;
     private readonly Func<DateTimeOffset> _now;
-    private readonly Func<bool> _paradigm;
     private readonly LogService? _log;
     private int _version;
 
-    // paradigm: whether the active realm is Paradigm.
-    public DoorsHeldOpen(Func<RoomKey, Direction, RoomExit?> exitAt, Func<DateTimeOffset> now, Func<bool> paradigm,
-        LogService? log = null)
+    public DoorsHeldOpen(Func<RoomKey, Direction, RoomExit?> exitAt, Func<DateTimeOffset> now, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(exitAt);
         ArgumentNullException.ThrowIfNull(now);
-        ArgumentNullException.ThrowIfNull(paradigm);
         _exitAt = exitAt;
         _now = now;
-        _paradigm = paradigm;
         _log = log;
     }
 
@@ -84,12 +76,24 @@ public sealed class DoorsHeldOpen
         graph.GraphReloaded += () => Clear("game data reloaded");
     }
 
-    // Our own key, pick or bash unlocked the side, and it is open.
+    // A held side is let go when the game says a door of the room we stand in shut or
+    // locked, and when our own move into it is refused as at a shut door.
+    public void ReleaseOn(MovementRefusalDetector refusals)
+    {
+        ArgumentNullException.ThrowIfNull(refusals);
+        refusals.DoorShutHere += NoteShut;
+        refusals.ShutDoorBonked += (room, dir, _) => NoteShut(room, dir);
+    }
+
+    // Our own `open` or bash opened the side.
     public void NoteOpened(RoomKey room, Direction dir, bool byBash)
     {
         if (_exitAt(room, dir) is not { } exit || !IsDoor(exit)) return;
         SideKind kind = KindOf(exit);
-        Hold(room, dir, exit, kind);
+        // A keyless door we just bashed open we can bash again: its hold changes no
+        // plan. Every other hold may, a far side's above all (one this character
+        // can't open itself).
+        Hold(room, dir, exit, kind, quiet: byBash && exit.Hint == RoomExitHint.Door);
 
         RoomKey far = exit.Target;
         Direction back = dir.Opposite();
@@ -98,7 +102,16 @@ public sealed class DoorsHeldOpen
         bool mirrored = byBash || kind == SideKind.DoorOrGate
             ? farKind == SideKind.DoorOrGate
             : kind == SideKind.KeyExit || farKind == SideKind.DoorOrGate;
-        if (mirrored) Hold(far, back, farExit, farKind);
+        if (mirrored) Hold(far, back, farExit, farKind, quiet: false);
+    }
+
+    // We saw the side open: found "already open", or a room display showing it open.
+    // A plain door shown open on the way is common and changes a plan only where the
+    // character can't open it, so only a keyed side's first hold is logged at Info.
+    public void NoteSeenOpen(RoomKey room, Direction dir)
+    {
+        if (_exitAt(room, dir) is not { } exit || !IsDoor(exit)) return;
+        Hold(room, dir, exit, KindOf(exit), quiet: exit.Hint != RoomExitHint.KeyLocked);
     }
 
     // The side was seen shut, the game said it shut or locked, or a move into it was
@@ -116,11 +129,11 @@ public sealed class DoorsHeldOpen
     }
 
     // A room display the tracker settled on (RoomTracker.RoomShown): a held side it
-    // shows closed has locked or been shut.
-    public void NoteRoomShown(RoomKey room, IReadOnlySet<Direction>? closedDoors)
+    // shows closed has locked or been shut, and a door it shows open is seen open.
+    public void NoteRoomShown(RoomKey room, RoomObservation shown)
     {
-        if (closedDoors is null) return;
-        foreach (Direction dir in closedDoors) NoteShut(room, dir);
+        foreach (Direction dir in shown.ClosedDoorDirections ?? new HashSet<Direction>()) NoteShut(room, dir);
+        foreach (Direction dir in shown.OpenDoorDirections ?? new HashSet<Direction>()) NoteSeenOpen(room, dir);
     }
 
     public void Clear(string why)
@@ -154,20 +167,19 @@ public sealed class DoorsHeldOpen
     public bool IsHeldOpen(RoomKey from, RoomKey to)
     {
         DateTimeOffset now = _now();
-        bool held = false;
+        List<Direction> sides = new();
         List<(RoomKey Room, Direction Dir)>? ranOut;
         lock (_gate)
         {
             ranOut = Prune(now);
             foreach (((RoomKey room, Direction dir), _) in _open)
-                if (room == from && _exitAt(room, dir)?.Target == to && IsCounted(room, dir, now))
-                {
-                    held = true;
-                    break;
-                }
+                if (room == from && IsCounted(room, dir, now)) sides.Add(dir);
         }
         LogRanOut(ranOut);
-        return held;
+        // The room map is read outside the lock: it is the graph's to guard.
+        foreach (Direction dir in sides)
+            if (_exitAt(from, dir)?.Target == to) return true;
+        return false;
     }
 
     // For the bug report: each side held, and until when.
@@ -208,21 +220,23 @@ public sealed class DoorsHeldOpen
             _log?.Info(LogCategory, $"{room} {dir}: its window ran out — it could have locked again, no longer held open.");
     }
 
-    private void Hold(RoomKey room, Direction dir, RoomExit exit, SideKind kind)
+    private void Hold(RoomKey room, Direction dir, RoomExit exit, SideKind kind, bool quiet)
     {
-        TimeSpan floor = _paradigm() ? ParadigmRelockFloor : StockRelockFloor;
-        DateTimeOffset? until = kind == SideKind.DoorOrGate && NeverLocksAgain(exit) ? null : _now() + floor;
+        DateTimeOffset? until = kind == SideKind.DoorOrGate && NeverLocksAgain(exit) ? null : _now() + RelockFloor;
+        bool fresh;
         lock (_gate)
         {
+            fresh = !_open.ContainsKey((room, dir));
             _open[(room, dir)] = until;
             _version++;
         }
-        string line = $"{room} {dir} unlocked by us — held open "
-            + (until is null ? "for good (it never locks again)" : $"for {floor.TotalSeconds:0}s, counted on for {(floor - PlanMargin).TotalSeconds:0}s");
-        // A keyless door is opened at the step whatever is held; only a locked side's
-        // hold changes a plan.
-        if (exit.Hint == RoomExitHint.KeyLocked) _log?.Info(LogCategory, line);
-        else _log?.Debug(LogCategory, line);
+        string line = $"{room} {dir} seen open — held open "
+            + (until is null ? "for good (it never locks again)"
+                : $"for {RelockFloor.TotalSeconds:0}s, counted on for {(RelockFloor - PlanMargin).TotalSeconds:0}s")
+            + (fresh ? "" : " (window started again)");
+        // A sighting of a side already held only moves its window on.
+        if (quiet || !fresh) _log?.Debug(LogCategory, line);
+        else _log?.Info(LogCategory, line);
     }
 
     private static bool IsDoor(RoomExit exit) => exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
