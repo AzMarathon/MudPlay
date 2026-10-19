@@ -338,6 +338,17 @@ public sealed class RoomTracker
         return TryResolvePendingExit(source, head, out RoomExit exit) ? (source.Key, exit) : null;
     }
 
+    // The one cardinal move of our own in flight, and the room it leaves: what a
+    // refusal of that move is about. Null as ExitInFlight is, and for a drag behind
+    // a leader, which isn't our move.
+    public (RoomKey From, Direction Dir)? CardinalInFlight()
+    {
+        if (State.Confidence != RoomConfidence.Pending || State.CurrentRoom is not { } source) return null;
+        if (_pending.Count != 1 || !_pending.TryPeek(out PendingMove head)) return null;
+        if (head.IsFollowDrag || head.Cardinal is not { } dir) return null;
+        return (source.Key, dir);
+    }
+
     // Fired from NoteUnwitnessedDeath: a death found out on the way back into the
     // game, long after it happened. Its own event because most of what
     // PlayerDeathObserved sets off is about the moment of dying (the room just

@@ -1350,6 +1350,10 @@ public sealed class AppServices
     public Game.Cash.StashLedger StashBalances { get; } = new();
     // Persists StashBalances in the active realm's folder, shared by its characters.
     public StashBalanceStore StashStore { get; private set; } = null!;
+    // Which bare `(Key: N)` locks bash (the seed and the realm's record), and its files.
+    // Set in the constructor's wiring before the first profile loads.
+    public Game.Map.BareKeyLockBook BareKeyLocks { get; private set; } = null!;
+    public BareKeyLockStore BareKeyLockStore { get; private set; } = null!;
 
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
@@ -6610,6 +6614,23 @@ public sealed class AppServices
         // found nowhere. Routing and the door handler read the held list.
         ItemCharges.NotHeld += Inventory.NoteNotHeld;
         Door.SetKeyLossSink(Inventory.NoteItemGone);
+
+        // Which bare `(Key: N)` locks bash: the shipped seed, then what the game has
+        // answered on this realm. The map is stamped with it for the route planner,
+        // and the door handler reads it at the door (report paradigm-20261018-192819).
+        BareKeyLocks = new Game.Map.BareKeyLockBook((room, dir) =>
+            RoomGraph.GetRoom(room) is { } r && r.Exits.TryGetValue(dir, out Game.Map.RoomExit exit) ? exit : null, Log);
+        BareKeyLockStore = new BareKeyLockStore(BareKeyLocks, Log);
+        BareKeyLockStore.LoadSeed(AppPaths.DefaultBareKeyLocksSeedFile);
+        RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup);
+        BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup);
+        Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
+        Door.SetBareLockBook(BareKeyLocks, DirectionWordNamesSomeoneHere);
+        Movement.UnpickableDoorProbe = Door.IsUnpickable;
+        Profile.ProfileLoaded += _ => Door.ForgetSession();
+        Profile.ProfileLoaded += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
+        Profile.BbsPinApplied += _ => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
+        Profile.ProfileClosed += () => BareKeyLockStore.OnRealmChanged(ActiveRealmFolder());
 
         // @uses [item] — remaining charges of a carried limited-use item; bare lists all.
         ItemUsesQuery = new Game.Remote.ItemUsesQueryHandler(RemoteCommands, CarriedCharges);
@@ -14947,6 +14968,19 @@ public sealed class AppServices
         return recovered
             ? PlayerState.Hp >= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestMaxHp, max)
             : PlayerState.Hp <= Game.Health.PoolThreshold.Resolve(hs.HpThresholdMode, hs.RestIfBelowHp, max);
+    }
+
+    // Whether `bash <word>` could be taken for an attack on someone in the room, were
+    // the exit no door: anyone the room's roster lists whose name answers to the word
+    // (BashTargetWord). A roster not known to be whole could hide someone, so it
+    // answers yes.
+    private bool DirectionWordNamesSomeoneHere(string word)
+    {
+        if (!RoomClassifier.RosterIsWhole || RoomClassifier.Current is not { } here) return true;
+        foreach (Game.Combat.RoomEntity e in here.Entities)
+            if (Game.Map.BashTargetWord.Names(word, e.RawName) || Game.Map.BashTargetWord.Names(word, e.ResolvedName))
+                return true;
+        return false;
     }
 
     // Live key-possession check for DoorOpenManager's opportunistic floor grab:

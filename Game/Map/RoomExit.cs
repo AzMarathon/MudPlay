@@ -153,6 +153,11 @@ public readonly partial record struct RoomExit(
         Hint == RoomExitHint.KeyLocked && KeyItemId > 0 && StatRequirement <= 0
         && RawHint?.Contains("picklocks", StringComparison.OrdinalIgnoreCase) != true;
 
+    // On a bare key lock, whether it is known to bash (BareKeyLockBook). Stamped on
+    // by the room map, which knows the side the exit leaves from; Unknown on a
+    // parsed cell and on every other exit.
+    public BareLockBash BareLockBash { get; init; }
+
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
 

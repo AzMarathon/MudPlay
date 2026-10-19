@@ -1533,8 +1533,22 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     public void FormatExitHint_KeyLocked_NoPicklockAlt_OffersAPick()
     {
         Assert.True(RoomExit.TryParseWire("1/1224 (Key: 172)", out RoomExit exit));
-        Assert.Equal("Key: #172, or a pick", RoomTooltipBuilder.FormatExitHint(exit, data: null));
-        Assert.Equal("Key: #172, or a pick, pick ~40%", RoomTooltipBuilder.FormatExitHint(exit, data: null, picklocks: 40));
+        Assert.Equal("Key: #172, or a pick (a bash is tried)", RoomTooltipBuilder.FormatExitHint(exit, data: null));
+        Assert.Equal("Key: #172, or a pick (a bash is tried), pick ~40%", RoomTooltipBuilder.FormatExitHint(exit, data: null, picklocks: 40));
+    }
+
+    // A key lock with an "any picklocks" figure shows it, and what a bare lock is
+    // known to be is said for it.
+    [Fact]
+    public void FormatExitHint_KeyLocked_AnyPicklocks_AndKnownBareLocks()
+    {
+        Assert.True(RoomExit.TryParseWire("1/1789 (Key: 475 [or any picklocks])", out RoomExit any));
+        Assert.Equal("Key: #475, or any picklocks", RoomTooltipBuilder.FormatExitHint(any, data: null));
+        Assert.True(RoomExit.TryParseWire("1/1790 (Key: 475)", out RoomExit bare));
+        Assert.Equal("Key: #475, or a bash or a pick",
+            RoomTooltipBuilder.FormatExitHint(bare with { BareLockBash = BareLockBash.Bashable }, data: null));
+        Assert.Equal("Key: #475, or a pick",
+            RoomTooltipBuilder.FormatExitHint(bare with { BareLockBash = BareLockBash.NotBashable }, data: null));
     }
 
     // 8/462's north gate records "Key: 1" — a game-data typo, since item ids start
@@ -1570,7 +1584,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
     {
         using var set = new TempGameDataSet("""[ { "Number": 806, "Name": "gate key" } ]""");
         Assert.True(RoomExit.TryParseWire("8/461 (Key: 1)", out RoomExit exit));
-        Assert.Equal("Key: #1, or a pick", RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
+        Assert.Equal("Key: #1, or a pick (a bash is tried)", RoomTooltipBuilder.FormatExitHint(exit, set.Cache));
     }
 
     // A throwaway single-table set, so the key-resolution tests can distinguish

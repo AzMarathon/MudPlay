@@ -1329,8 +1329,11 @@ public sealed partial class InventoryManager : IDisposable
         if (string.IsNullOrWhiteSpace(name)) return;
         int held = UnwornCopies(name);
         if (held == 0) return;
-        RemoveHeld(name, held);
-        AdjustItemWeight(name, -held);
+        AsOneChange(() =>
+        {
+            RemoveHeld(name, held);
+            AdjustItemWeight(name, -held);
+        });
         _log?.Info(LogCategory, $"The game says no {name} is held — {held} cop{(held == 1 ? "y" : "ies")} taken off what is held.");
     }
 
@@ -1353,8 +1356,11 @@ public sealed partial class InventoryManager : IDisposable
             _log?.Info(LogCategory, $"The {name} spent its last charge — kept when spent, so still held.");
             return;
         }
-        RemoveHeld(name, 1);
-        AdjustItemWeight(name, -1);
+        AsOneChange(() =>
+        {
+            RemoveHeld(name, 1);
+            AdjustItemWeight(name, -1);
+        });
         _log?.Info(LogCategory, $"The {name} spent its last charge — one copy taken off what is held.");
     }
 

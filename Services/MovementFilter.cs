@@ -340,18 +340,24 @@ public sealed class MovementFilter : IRoomFilter
     // A locked door is impassable only when we can neither key, pick, nor bash
     // it. The key is the extra opener the stat matrix doesn't model; everything
     // else defers to CanOpenByStat (shared with the plain-door gate).
-    // A bare `(Key: N)` lock is opened by the key or a pick only (DoorPolicy.Openers):
-    // without the key and without Picklocks it is shut, and so surfaces as a DoorKey
+    // A bare `(Key: N)` lock is planned by DoorPolicy.PlannedOpeners: the key, a pick,
+    // and a bash unless it is known to be a key exit. One known to be a key exit,
+    // without the key and without a fair pick, is shut, and so surfaces as a DoorKey
     // gate (report paradigm-20260812-111920: no route-picker offer for such a door
-    // whose key we lacked). Reading its missing alternative as a 0 requirement would
-    // have IsAchievable take it for a plain "(Door)" anyone can bash. Its only
-    // opener besides the key is Picklocks, which most characters lack, so with no
-    // stat screen read it stays shut rather than being left to the door handler as
-    // other doors are.
+    // whose key we lacked). Its only opener besides the key is then Picklocks, which
+    // most characters lack, so with no stat screen read it stays shut rather than
+    // being left to the door handler as other doors are.
     private bool IsLockedDoorImpassable(in RoomExit exit, Func<int, bool> carries)
     {
         if (exit.KeyItemId > 0 && carries(exit.KeyItemId)) return false;   // have the key
-        if (exit.IsBareKeyLock && PicklocksProvider?.Invoke() is null) return true;
+        if (exit is { IsBareKeyLock: true, BareLockBash: BareLockBash.NotBashable })
+        {
+            // Its key is then what the route picker offers to fetch, as for a door
+            // its pick can't open: a pick at poor odds counts as none, the way such a
+            // lock was the key or nothing before the pick was known to work there.
+            if (PicklocksProvider?.Invoke() is not { } picks) return true;
+            return DoorPolicy.PickChancePercent(DoorPolicy.BareKeyLockPickRequirement, picks) < DoorPolicy.PoorPickChancePercent;
+        }
         return !CanOpenByStat(in exit);
     }
 
@@ -377,7 +383,7 @@ public sealed class MovementFilter : IRoomFilter
         if (StrengthProvider?.Invoke() is not { } strength) return true;
         if (PicklocksProvider?.Invoke() is not { } picks) return true;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.Openers(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
         return DoorPolicy.IsAchievable(req, canBash, strength, picks, maxBash);
     }
 
@@ -397,12 +403,35 @@ public sealed class MovementFilter : IRoomFilter
         if (StrengthProvider?.Invoke() is not { } strength) return false;
         if (PicklocksProvider?.Invoke() is not { } picks) return false;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.Openers(in exit);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
         return DoorPolicy.IsPoorOddsPick(req, canBash, strength, picks, maxBash);
     }
 
+    // Whether the door from a room into another has no lock to pick, as the door
+    // handler found this session (DoorOpenManager.IsUnpickable). Unset → never.
+    public Func<RoomKey, RoomKey, bool>? UnpickableDoorProbe { get; set; }
+
+    // A door whose pick had no effect is refused when the pick was all this character
+    // had for it: no key carried and no bash. Planned through anyway, the walk came
+    // back to it on every re-plan.
+    public bool IsExitRefused(RoomKey from, in RoomExit exit)
+    {
+        if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
+        if (UnpickableDoorProbe?.Invoke(from, exit.Target) != true) return false;
+        if (exit.KeyItemId > 0 && InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
+        if (StrengthProvider?.Invoke() is not { } strength) return false;
+        int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        return !DoorPolicy.IsAchievable(req, canBash, strength, playerPicklocks: 0, maxBash);
+    }
+
+    // The version of what is known of bare key locks (BareKeyLockBook.Version): a
+    // side learned since changes what a door plan may count on.
+    public Func<int>? BareLockBookVersionProvider { get; set; }
+
     public int DoorRuleStamp => HashCode.Combine(
-        StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke());
+        StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke(),
+        BareLockBookVersionProvider?.Invoke());
 
     public string? DescribeDoorRefusal(in RoomExit exit)
     {
@@ -410,10 +439,11 @@ public sealed class MovementFilter : IRoomFilter
         bool shut = exit.Hint == RoomExitHint.Door ? IsImpassableDoorBlocked(in exit) : IsItemGateBlocked(in exit);
         if (!shut && !IsPoorOddsDoor(in exit)) return null;
         if (StrengthProvider?.Invoke() is not { } strength || PicklocksProvider?.Invoke() is not { } picks)
-            return exit.IsBareKeyLock ? $"needs its key (item {exit.KeyItemId}), not carried, or a pick (no stat screen read)" : null;
+            return exit.IsBareKeyLock ? $"needs its key (item {exit.KeyItemId}), not carried, or a pick: it is a key exit (no stat screen read)" : null;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        (int req, bool canBash) = DoorPolicy.Openers(in exit);
-        string odds = DoorPolicy.DescribeOdds(req, canBash, strength, picks, maxBash, exit.IsBareKeyLock);
+        (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit);
+        string odds = DoorPolicy.DescribeOdds(req, canBash, strength, picks, maxBash,
+            exit.IsBareKeyLock ? exit.BareLockBash : null);
         return exit.KeyItemId > 0 ? $"its key (item {exit.KeyItemId}) isn't carried; {odds}" : odds;
     }
 

@@ -1107,7 +1107,7 @@ public static class DefaultPatterns
         // `The %s doesn't seem to fit that lock.`. The manager only consults it
         // during WaitingUseKey, and takes a "have" form only when it names the key.
         yield return new RegexPattern(KnownPatterns.DoorKeyUnknown,
-            @"\b(?:you have no |you don'?t have|you do not have |nothing happens)\b|doesn't seem to fit that lock",
+            @"^(?:You have no |You don'?t have |You do not have |Nothing happens)|^The .+ doesn't seem to fit that lock\.?$",
             options: RegexOptions.IgnoreCase);
         // A key's last charge spent: the key's own message, which is
         // `The key breaks and crumbles apart.` for most keys, or the engine's

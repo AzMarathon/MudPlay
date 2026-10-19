@@ -387,6 +387,10 @@ public sealed class RouteChoicePlannerTests
                 graph = new(cache);
             }
             graph.OnActiveSetChanged("alpha");
+            // The fixtures' bare (Key: N) locks are key exits, as the seed would have
+            // them: no bash, so their key is what opens them to a character without
+            // Picklocks.
+            graph.ApplyBareLockKinds((_, _) => BareLockBash.NotBashable);
             BfsMapper bfs = new(graph);
 
             ProfileService profile = TestProfiles.Service();

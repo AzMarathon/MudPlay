@@ -153,6 +153,40 @@ public sealed class RoomGraphManager
         return replaced;
     }
 
+    // What is known of each bare key lock's bash, stamped on as each graph is built,
+    // before its listeners plan on it. Unset → every bare lock reads Unknown.
+    private Func<RoomKey, Direction, BareLockBash>? _bareLockKinds;
+
+    public void SetBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf) => _bareLockKinds = kindOf;
+
+    // Stamp every bare key lock on the map with what is known of whether it bashes
+    // (BareKeyLockBook), for the route planner, which sees an exit without the room
+    // it leaves. The room is replaced the way a learned name replaces it. Returns
+    // how many sides changed.
+    public int ApplyBareLockKinds(Func<RoomKey, Direction, BareLockBash> kindOf)
+    {
+        ArgumentNullException.ThrowIfNull(kindOf);
+        int changed = 0;
+        foreach (Room room in _rooms.Values.ToList())
+        {
+            RoomExitSet? exits = null;
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                if (!exit.IsBareKeyLock) continue;
+                BareLockBash kind = kindOf(room.Key, dir);
+                if (kind == exit.BareLockBash) continue;
+                exits = (exits ?? ExitsOf(room)).With(dir, exit with { BareLockBash = kind });
+                changed++;
+            }
+            if (exits is null) continue;
+            DropFromIndexes(room);
+            Room stamped = room with { Exits = exits };
+            _rooms[room.Key] = stamped;
+            AddToIndexes(stamped);
+        }
+        return changed;
+    }
+
     // What ApplyStoredNames did: how many rooms now bear a name from the client's
     // store, how many stored names were left off because the tracker has learned
     // another for the room since, and the rooms it was handed a name for that the
@@ -904,6 +938,7 @@ public sealed class RoomGraphManager
     private void Reloaded(GameDataCache.Load load)
     {
         LoadedFor = load;
+        if (_bareLockKinds is { } kinds) ApplyBareLockKinds(kinds);
         ForgetDerived();
         GraphReloaded?.Invoke();
     }

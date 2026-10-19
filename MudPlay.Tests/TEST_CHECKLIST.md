@@ -1041,7 +1041,7 @@ How to keep it current:
 
 ### DoorOpenManagerTests.cs
 - Covers: Game/Map/DoorOpenManager
-- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; keyed-door fallbacks (a keyed door with no viable verb goes to its key, the bare lock handed over as `[1 picklocks]`); "no effect"/left-room ends as NotHere; queue order.
+- Checks: the bash/pick/use-key/open FSM on real reply lines; watchdog re-sends; rest gating; unopenable vs ordinary failure; the opening order (a keyless door's preferred verb then the other; a keyed door picked first with Picklocks, then keyed, then bashed) with the `open` sent ahead of a first pick; "no effect"/left-room ends as NotHere; queue order.
 - Why: reports stock-20260730-182812, paradigm-20260924-053941, paradigm-20261018-192819; doors that hung the walker.
 
 ### DoorPolicyTests.cs
@@ -1810,9 +1810,9 @@ How to keep it current:
 - Why: two clients crashing on the same boss-timers.json
 
 ### KeyDoorRulesTests.cs
-- Covers: Game/Map/DoorOpenManager, Game/Map/DoorPolicy.Openers, RoomExit.IsBareKeyLock, Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, with AutoWalkManager, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
-- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: the walker's `use green metal key w` answered `You do not have green metal key.` fails the door at once (the watchdog never runs), takes the key off the ring, and the next plan refuses the door, naming the key. Stock's `You don't have green metal key w.` is read too; a "have" line naming another item isn't. A key's last-charge line (`The key breaks and crumbles apart.`, or the engine's line naming the key) takes the copy used off the ring, and only after a key of ours fitted. What opens each door kind: a bare `(Key: N)` lock is picked at any Picklocks or keyed, never bashed even at Strength 111; a `[or any picklocks]` key lock is picked before the key; Thrag's `(Door [11 picklocks/strength])` from inside is bashed without a key; the route filter shuts a bare or any-picklocks key lock without the key or Picklocks, opens both to Picklocks, calls a bare lock at Picklocks 10 poor odds, and keeps a bare lock shut with no stat screen read.
-- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, key and relock rules read from Stock's engine) and "Item charges (`Uses` / `UseCount`)"; the client kept a used-up key and waited out its watchdog.
+- Covers: Game/Map/DoorOpenManager, DoorPolicy (Openers, PlannedOpeners, OpeningOrder), BareKeyLockBook, BashTargetWord, RoomGraphManager.ApplyBareLockKinds, MovementRefusalDetector.ShutDoorBonked, Services/BareKeyLockStore (the shipped seed, extracted by AppPaths.ExtractEmbeddedSeeds, and a realm's file), Services/MovementFilter, Game/Inventory/InventoryManager.NoteItemGone, with AutoWalkManager, all on one router fed by a `ServerFeed`; the door's watchdog on `ManualTimers`.
+- Checks: report `paradigm-20261018-192819`'s way out of Thrag's cave: at 1/1790 with Strength 111, no Picklocks and no key the walker bashes west; with the used-up key still listed, `You do not have green metal key.` takes it off the ring and the handler goes on to the bash. Stock's `You don't have green metal key w.` is read; a "have" line naming another item, a longer key name, or quoted in chat isn't. A key's last-charge line takes the copy used off the ring, only after a key of ours fitted. The shipped seed knows Stock's 21 bare sides (10 bashable); a seeded key exit is never bashed and is keyed; Thrag's door from inside is bashed. An unknown bare lock is bashed when nobody in the room answers to the direction word and learned a door on a bash or a miss, learned a key exit on `Your command had no effect.` or `You need a weapon to bash with!` (then keyed), and not bashed when the roster names someone the word matches. The realm's record is per realm and kept on disk. A refused move into a bare lock is learned by its wording, only with our move in flight. Keyed doors: with Picklocks an `open`, then picks, then the key; a door only shut opens with no pick; no Picklocks, the key first. A pick answered "no effect" is left out for the session and the route keeps off the door. The route filter: a door or unknown lock passable by bash, a key exit shut without key or a fair pick, the key opening everything; with no stat screen a key exit stays shut.
+- Why: GAME_MECHANICS "Locked doors — picking, opening and bashing" (the bash, pick, target-match, key, refusal and relock rules read from Stock's engine; the user's rulings of 2026-10-18 on bashing unknown doors, the seed, and pick-before-key) and "Item charges (`Uses` / `UseCount`)".
 
 ### KeybindEditDialogViewModelTests.cs
 - Covers: ViewModels/Keybind/KeybindEditDialogViewModel
@@ -2459,7 +2459,7 @@ How to keep it current:
 
 ### MovementFilterTests.cs
 - Covers: Services/MovementFilter (+ BfsMapper integration)
-- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
+- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
 - Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354.
 
 ### MovementRefusalDetectorTests.cs
@@ -3302,7 +3302,7 @@ How to keep it current:
 
 ### RoomTooltipBuilderTests.cs
 - Covers: Game/Map/RoomTooltipBuilder
-- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids and the bare `(Key: N)` lock's "or a pick", level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
+- Checks: Lair tag parsing and max-regen text by realm; the map tooltip's lines (shop, room spell with teleport class, lair/placed/assigned monsters minus unobtainable ones, floor items, light, exits); exit hints (items, traps with disarm odds, doors with pick chance, keys including unresolvable ids, an "any picklocks" figure and the bare `(Key: N)` lock's alternative by what is known of it, level and race gates, multi-action unlocks with TBInfo and NPC-ask fallbacks); room commands (teleports, prices, summons, casts, effects, deduplication); light summaries; the exit-row label.
 - Why: Reports `paradigm-20260911-010954`, `paradigm-20261007-194642`; user, 2026-09-30 (pick chance). The map tooltip and the Room Info panel both build from this.
 
 ### RoomTrackerTests.cs
@@ -3358,7 +3358,7 @@ How to keep it current:
 
 ### RouteChoicePlannerTests.cs
 - Covers: Services/RouteChoicePlanner, with Game/Map/BfsMapper, Services/MovementFilter, PathItemShopRouter, LoopExpander, AutoWalkManager (lake crossings)
-- Checks: - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route. Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
+- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route. Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
 - Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10.
 
 ### RouteDetailsColoringTests.cs

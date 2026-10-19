@@ -461,6 +461,16 @@ public static class AppPaths
     public static string BundledBossDefsSeedFile =>
         Path.Combine(BundledSeedsDir, "BossDefs.seed.json");
 
+    // Read-only seed of which bare `(Key: N)` locks bash (Game.Map.BareKeyLockBook):
+    // Stock 1.11p's map file read once, a door or gate bashable, a key exit not.
+    // Both realms start from it. Byte-synced from BundledBareKeyLocksSeedFile.
+    public static string DefaultBareKeyLocksSeedFile =>
+        Path.Combine(DataRoot, "Global", "BareKeyLocks.seed.json");
+
+    // Read-only bundled copy shipped next to the executable — the bootstrap source.
+    public static string BundledBareKeyLocksSeedFile =>
+        Path.Combine(BundledSeedsDir, "BareKeyLocks.seed.json");
+
     // Bootstrap the Global/ seed files from the seeds embedded in the assembly.
     // Called once during app startup. First MaterializeBundledSeeds extracts the
     // embedded copies into BundledSeedsDir (always overwriting, so they track the
@@ -482,6 +492,7 @@ public static class AppPaths
         SyncReadOnlySeed(BundledMonsterMessagesSeedFile, DefaultMonsterMessagesSeedFile);
         SyncReadOnlySeed(BundledQuestDefsSeedFile,       DefaultQuestDefsSeedFile);
         SyncReadOnlySeed(BundledBossDefsSeedFile,        DefaultBossDefsSeedFile);
+        SyncReadOnlySeed(BundledBareKeyLocksSeedFile,    DefaultBareKeyLocksSeedFile);
         // Triggers are FULLY user-defined — the seed IS the user's universal list,
         // so it stays copy-if-missing; byte-syncing it would wipe hand-authored
         // triggers on every update.
@@ -765,6 +776,12 @@ public static class AppPaths
     // the board printed, so the names are the realm's, never written into the set.
     public static string RealmLearnedRoomNamesFile(string realmFolder) =>
         Path.Combine(realmFolder, "learned-room-names.json");
+
+    // What the game has answered a bash at a bare `(Key: N)` lock on this realm
+    // (Game.Map.BareKeyLockBook): a door that bashes or a key exit that doesn't, by
+    // the side of the door. What the board did, so the realm's.
+    public static string RealmBareKeyLocksFile(string realmFolder) =>
+        Path.Combine(realmFolder, "bare-key-locks.json");
 
     // Where a realm's quest-guide edits used to be kept, before the guides went
     // back to the game-data set (QuestsFile). A set takes each realm's in once.

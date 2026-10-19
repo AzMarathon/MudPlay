@@ -9,29 +9,29 @@ namespace MudPlay.Game.Map;
 // gets a single terminal DoorOpenResult via callback when the request
 // settles.
 //
-// Decision matrix per request (see DoorPolicy):
-//   1) Honour OtherSettings.PicklocksOverBash — if set, try pick <dir>
-//      first when picking is viable.
-//   2) Otherwise prefer bash <dir> when the door is bashable (canBash
-//      from the modifier, strength req feasible vs the active set's
-//      MaxStrengthIndex.MaxAchievableStrength, live PlayerStats.Strength
-//      meets the threshold).
-//   3) If only one verb is viable, use it. If neither is, fail
-//      immediately with DoorOpenResult.Failed("no viable verb").
-//   4) On BASH failure ("fails" line): no cap — DoorPolicy only chose bash for a
-//      door this character can break, so keep swinging until it opens, pausing to
-//      rest to rest-max whenever HP falls to the rest trigger (bashing drains HP —
-//      see GAME_MECHANICS). On PICK failure: retry up to OtherSettings.MaxPickAttempts,
-//      then fall back to the other verb if viable, else fail.
-//      A keyed door goes to its key once no verb is left, and straight away when
-//      none is viable. The walker hands a bare `(Key: N)` lock over as a pick-only
-//      `[1 picklocks]` one (DoorPolicy.Openers), so it too is picked first when
-//      the character has Picklocks.
+// Decision matrix per request:
+//   1) The openers to try, in order, come from DoorPolicy.OpeningOrder: a keyless
+//      door's preferred verb (bash, or pick with OtherSettings.PicklocksOverBash)
+//      then the other; a keyed door's pick first when the character has Picklocks,
+//      then the key if carried, then a bash, then the key not carried. A verb the
+//      character can't open it with is left out; nothing left fails at once.
+//   2) A plan that starts with a pick sends `open <dir>` first: a door only closed
+//      opens, and a locked one goes on to the pick.
+//   3) On BASH failure ("fails" line): no cap — the bash was chosen for a door this
+//      character can break, so keep swinging until it opens, pausing to rest to
+//      rest-max whenever HP falls to the rest trigger (bashing drains HP — see
+//      GAME_MECHANICS). A bare key lock's bash is the exception, capped at
+//      OtherSettings.MaxPickAttempts. On PICK failure: retry up to MaxPickAttempts.
+//      Either way the next opener of the plan follows.
+//   4) A bare `(Key: N)` lock is bashed only where it is known to be a door, or not
+//      known and nothing in the room answers to the direction word; the game's
+//      answer to the bash is learned (BareKeyLockBook).
 //   5) Bash success → Opened directly (bash both unlocks AND swings the
 //      door). Pick success → open <dir> → on "is now open" → Opened.
 //   6) The door turns out not to be where the character stands — the verb drew
 //      "Your command had no effect.", or the tracker confirmed another room —
-//      → NotHere: no further verb is sent and the caller re-plans.
+//      → NotHere: no further verb is sent and the caller re-plans. A pick or a bare
+//      lock's bash answered that way in the confirmed room goes on with the plan.
 //
 // Single-pattern matchers: the regex doesn't capture direction so other
 // in-flight commands (manual user typing) could in theory match the wrong
@@ -87,18 +87,42 @@ public sealed class DoorOpenManager : IDisposable
     private DoorState _state = DoorState.Idle;
     private string? _verb;                                // "bash" / "pick"
     private int _verbAttempts;
-    private bool _triedFallbackVerb;
-    // The key is being tried as the last resort, after bash and pick ran out. When
-    // it then turns out not to be held, the door has beaten the character like any
-    // other it couldn't force, which a key tried first (a walk that went to fetch
-    // one) is not.
-    private bool _keyIsLastResort;
+    // The openers still to try for the in-flight request, in DoorPolicy.OpeningOrder's
+    // order, and whether its key came first in it.
+    private readonly Queue<DoorOpener> _plan = new();
+    private bool _keyFirst;
+    // The plan starts with a pick, and `open <dir>` goes out once ahead of it.
+    private bool _openFirstPending;
+    // Sides whose pick drew "Your command had no effect." this session, in the room
+    // the request was confirmed in: no lock to pick there. Left out of every later
+    // plan, and the route filter keeps off them when the pick was all a door had
+    // (DoorOpenManager.IsUnpickable).
+    private readonly HashSet<(RoomKey Room, Direction Dir)> _unpickable = new();
+    // The same doors by the room each leads into, for the route filter, which sees an
+    // exit by where it goes.
+    private readonly HashSet<(RoomKey From, RoomKey To)> _unpickableInto = new();
+
     // The in-flight request's key fitted the lock and so spent a charge (the game
     // charges a use on "unlocked" and on "was not locked" alike): a last-charge line
     // now is about that key.
     private bool _keyChargeSpent;
     // Told when the game shows the key gone: (key name, every copy). Unset → nobody.
     private Action<string, bool>? _keyLost;
+    // What is known of bare `(Key: N)` locks, and whether a word would name someone
+    // in the room the bash attack could swing at. Unset → a bare lock is never bashed
+    // unless the walker says it is known to bash.
+    private BareKeyLockBook? _bareLocks;
+    private Func<string, bool>? _wordNamesSomeoneHere;
+    // The in-flight request's door as a bare key lock: null when it is no bare lock,
+    // or the room it is in isn't confirmed.
+    private BareLockBash? _bareKind;
+    // Whether this request may bash: the walker's word, or for a bare lock what is
+    // known of it and, not known, whether a try is safe here.
+    private bool _canBash;
+    // The bash under way is a try at a bare lock not known to be a door. Until the
+    // game answers it as a door it is never re-sent on a silent watchdog: silence
+    // could be the bash attack's fight.
+    private bool _bashIsTrial;
     // Whether a stat screen has been read, the same test the movement filter's door
     // providers use. Unread, a door with no viable verb is not the door winning.
     private readonly Func<bool> _statsRead;
@@ -130,6 +154,10 @@ public sealed class DoorOpenManager : IDisposable
 
     // The last key the game showed gone, and the line that did, for the bug report.
     public string? LastKeyLoss { get; private set; }
+
+    // What was decided about bashing the last bare key lock asked for, for the bug
+    // report and the log: "1/1790 W: known to bash", "… not known; a bash is tried".
+    public string? BareLockDecision { get; private set; }
 
     // Outstanding queue depth (excludes the in-flight request).
     public int QueueDepth => _queue.Count;
@@ -271,9 +299,10 @@ public sealed class DoorOpenManager : IDisposable
         _doorRoom = null;
         _verb = null;
         _verbAttempts = 0;
-        _triedFallbackVerb = false;
-        _keyIsLastResort = false;
+        _plan.Clear();
         _keyChargeSpent = false;
+        _bareKind = null;
+        _bashIsTrial = false;
         _log?.Info("Door", "Door flow stopped — queue drained.");
     }
 
@@ -287,40 +316,127 @@ public sealed class DoorOpenManager : IDisposable
         _doorRoom = _confirmedRoom?.Invoke();
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
-        _triedFallbackVerb = false;
-        _keyIsLastResort = false;
         _keyChargeSpent = false;
+        DecideBareLockBash();
         StartChosenVerb();
+    }
+
+    // The door's side was found to have no lock to pick this session.
+    public bool IsUnpickable(RoomKey from, RoomKey to) => _unpickableInto.Contains((from, to));
+
+    // A new session: what a board answered last time is no longer assumed.
+    public void ForgetSession()
+    {
+        _unpickable.Clear();
+        _unpickableInto.Clear();
+    }
+
+    // A bare `(Key: N)` lock is bashed where it is known to be a door or gate, never
+    // where it is known to be a key exit, and otherwise tried only when nothing in
+    // the room answers to the direction word: at a key exit the bash is the bash
+    // attack, on whoever the word names (GAME_MECHANICS "Locked doors — picking,
+    // opening and bashing"). Report paradigm-20261018-192819; user, 2026-10-18.
+    private void DecideBareLockBash()
+    {
+        _bashIsTrial = false;
+        _bareKind = null;
+        if (_current is not { } cur) return;
+        _canBash = cur.CanBash;
+        if (_doorRoom is not { } room || _bareLocks?.KindAt(room, cur.Direction) is not { } kind) return;
+        _bareKind = kind;
+        string side = BareKeyLockBook.FormatSide(room, cur.Direction);
+        string word = cur.DirectionShort;
+        switch (kind)
+        {
+            case BareLockBash.Bashable:
+                _canBash = true;
+                BareLockDecision = $"{side}: known to bash (a door or gate)";
+                break;
+            case BareLockBash.NotBashable:
+                _canBash = false;
+                BareLockDecision = $"{side}: known not to bash (a key exit); key or pick";
+                break;
+            default:
+                bool named = _wordNamesSomeoneHere?.Invoke(word) ?? true;
+                _canBash = !named;
+                _bashIsTrial = !named;
+                BareLockDecision = named
+                    ? $"{side}: not known whether it bashes; not tried, since 'bash {word}' could be taken for someone here"
+                    : $"{side}: not known whether it bashes; a bash is tried (nobody here answers to '{word}')";
+                break;
+        }
+        _log?.Info("Door", $"bare key lock {BareLockDecision}.");
+    }
+
+    // The game answered a bash at a bare lock: as a door (a bash or a miss), or as no
+    // door at all (the bash attack's refusals and "no effect").
+    private void LearnBareLock(bool bashable, string because)
+    {
+        if (_current is not { } cur || _bareKind is null || _doorRoom is not { } room) return;
+        _bashIsTrial = false;
+        _bareKind = bashable ? BareLockBash.Bashable : BareLockBash.NotBashable;
+        if (!bashable) _canBash = false;
+        if (_bareLocks?.Learn(room, cur.Direction, bashable) != true) return;
+        _log?.Info("Door", $"learned that {BareKeyLockBook.FormatSide(room, cur.Direction)} "
+            + (bashable ? "is a door that bashes" : "is a key exit that doesn't bash") + $" ({because}).");
     }
 
     private void StartChosenVerb()
     {
         if (_current is not { } cur) return;
 
-        string? verb = DoorPolicy.ChooseVerb(
-            cur.StatRequirement,
-            cur.CanBash,
-            _stats.Strength,
-            _stats.Picklocks,
-            _picklocksOverBashProvider(),
-            _maxBashStrengthProvider());
-        if (verb is null)
+        _plan.Clear();
+        bool keyed = cur.KeyItemId > 0;
+        int picks = _doorRoom is { } room && _unpickable.Contains((room, cur.Direction)) ? 0 : _stats.Picklocks;
+        foreach (DoorOpener step in DoorPolicy.OpeningOrder(
+                     cur.StatRequirement, _canBash, _stats.Strength, picks,
+                     keyed, keyed && _holdsKeyItem(cur.KeyItemId), _picklocksOverBashProvider(),
+                     _maxBashStrengthProvider()))
+            _plan.Enqueue(step);
+        _keyFirst = _plan.TryPeek(out DoorOpener first) && first == DoorOpener.Key;
+        if (_plan.Count == 0)
         {
-            // No bash/pick viable. Try the key path if available;
-            // otherwise we're stuck.
-            if (cur.KeyItemId > 0)
-            {
-                StartUseKey();
-                return;
-            }
             // Before a stat screen is read the numbers are 0, so any numbered door has
             // no viable verb: that says nothing about the door, and it must not be
             // given up on for good.
-            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {cur.CanBash})",
+            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {_canBash})",
                 unopenable: _statsRead());
             return;
         }
-        StartVerb(verb);
+        _log?.Info("Door", $"door {cur.DirectionShort}: trying {string.Join(", then ", _plan).ToLowerInvariant()}.");
+        // A pick at a door only closed, not locked, can't succeed (Stock `_cmd_picklock`
+        // picks only a locked door or gate), so a plan that starts with picking opens
+        // first: a door that isn't locked just opens (user, 2026-10-18).
+        _openFirstPending = first == DoorOpener.Pick;
+        NextStep();
+    }
+
+    // Start the next opener of the plan; the plan run out ends the request.
+    // unopenable: whether the last failure was the door winning, rather than the
+    // game's replies lost or a key tried first turning out missing.
+    private void NextStep(string? reason = null, bool unopenable = true)
+    {
+        if (_current is not { } cur) return;
+        if (!_plan.TryDequeue(out DoorOpener step))
+        {
+            FailCurrent(reason is null ? "nothing left to try" : $"{reason}; nothing left to try", unopenable);
+            return;
+        }
+        if (reason is not null) _log?.Info("Door", $"{reason}; trying {step.ToString().ToLowerInvariant()} on door {cur.DirectionShort}.");
+        switch (step)
+        {
+            case DoorOpener.Key: StartUseKey(); break;
+            case DoorOpener.Pick: StartVerb("pick"); break;
+            default: StartVerb("bash"); break;
+        }
+    }
+
+    // The open tried ahead of the first pick was answered "locked", or not at all:
+    // the pick goes out.
+    private void PickAfterOpenFirst()
+    {
+        _state = DoorState.WaitingPick;
+        SendVerb();
     }
 
     private void StartUseKey()
@@ -393,6 +509,16 @@ public sealed class DoorOpenManager : IDisposable
             return;
         }
 
+        if (_verb == "pick" && _openFirstPending)
+        {
+            _openFirstPending = false;
+            _state = DoorState.WaitingOpenFirst;
+            _wire.Send($"open {cur.DirectionShort}");
+            _log?.Info("Door", $"open {cur.DirectionShort} (ahead of the pick: a door not locked needs none).");
+            ArmWatchdog();
+            return;
+        }
+
         _verbAttempts++;
         _wire.Send($"{_verb} {cur.DirectionShort}");
         if (_verb == "bash")
@@ -423,6 +549,15 @@ public sealed class DoorOpenManager : IDisposable
     // copy). `You do not have <key>.` means no copy is left; a last-charge line, that
     // the copy just used is gone. Bound after construction: the inventory is built later.
     public void SetKeyLossSink(Action<string, bool> keyLost) => _keyLost = keyLost;
+
+    // wordNamesSomeoneHere: whether a word could be taken by the bash attack for
+    // someone in the room (BashTargetWord), true too while the room's roster isn't
+    // known. Bound after construction: the room's roster is built later.
+    public void SetBareLockBook(BareKeyLockBook book, Func<string, bool> wordNamesSomeoneHere)
+    {
+        _bareLocks = book;
+        _wordNamesSomeoneHere = wordNamesSomeoneHere;
+    }
 
     // The rest hold changed: a bash or pick that was waiting on it goes out once
     // it's over.
@@ -481,6 +616,11 @@ public sealed class DoorOpenManager : IDisposable
         switch (_state)
         {
             case DoorState.WaitingBash:
+                if (_bashIsTrial)
+                {
+                    NextStep("a bash tried at a bare key lock drew no door's answer");
+                    return;
+                }
                 // Uncapped — a lost bash response is just re-sent (SendVerb pauses
                 // for rest first when HP is low). No fall-back to pick.
                 _log?.Info("Door",
@@ -506,7 +646,10 @@ public sealed class DoorOpenManager : IDisposable
                 _pickTimeouts++;
                 if (_verbAttempts < cap) { SendVerb(); return; }   // re-arms
                 // Every pick unanswered is a lost reply, not the lock winning.
-                TryFallbackOrFail("pick timed out with no response", lostReplies: _pickTimeouts == _verbAttempts);
+                NextStep("pick timed out with no response", unopenable: _pickTimeouts != _verbAttempts);
+                return;
+            case DoorState.WaitingOpenFirst:
+                PickAfterOpenFirst();
                 return;
             case DoorState.WaitingOpen:
             case DoorState.WaitingUseKey:
@@ -522,6 +665,7 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
         _log?.Info("Door", $"bash {_current.DirectionShort} succeeded.");
+        LearnBareLock(bashable: true, "the bash opened it");
         SucceedCurrent();
     }
 
@@ -529,6 +673,14 @@ public sealed class DoorOpenManager : IDisposable
     {
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
+        LearnBareLock(bashable: true, "the bash missed, as at a door");
+        // A bare key lock's bash is capped at the pick tries: it bashes at Strength
+        // only, and a side that won't give is gone round instead (user, 2026-10-18).
+        if (_bareKind is not null && _verbAttempts >= _maxPickProvider())
+        {
+            NextStep($"bash missed {_verbAttempts} times at a bare key lock");
+            return;
+        }
         // A bashable door is bashed until it opens — no cap, no fall-back to pick.
         // SendVerb pauses for rest first when HP is low, so the retries pace
         // themselves around the rest cycle rather than a fixed attempt count.
@@ -542,7 +694,10 @@ public sealed class DoorOpenManager : IDisposable
     {
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
-        TryFallbackOrFail($"can't bash ('{m.Text.Trim()}')");
+        // At a door the bash never asks for a weapon or the skill: these come only
+        // from the bash attack, so a bare lock that draws them is a key exit.
+        LearnBareLock(bashable: false, $"'{m.Text.Trim()}'");
+        NextStep($"can't bash ('{m.Text.Trim()}')");
     }
 
     // The game saying the exit that way is no door in the room the character is
@@ -568,6 +723,27 @@ public sealed class DoorOpenManager : IDisposable
                 $"'no effect' answers '{_router.CommandEchoedBeforeLine}', not {awaited} — still waiting.");
             return;
         }
+        // A bare lock's bash that had no effect, in the room confirmed to hold it: the
+        // bash attack found nobody, so the side is a key exit, opened by key or pick.
+        if (_state == DoorState.WaitingBash && _bareKind is not null)
+        {
+            LearnBareLock(bashable: false, "'Your command had no effect.'");
+            NextStep($"'{awaited}' had no effect: a key exit, not a door to bash");
+            return;
+        }
+        // A pick that had no effect in the room confirmed to hold the door: there's no
+        // lock to pick that way. Abandoned as NotHere, the walker planned through the
+        // same door again until its re-plans ran out; the pick is now left out of this
+        // door for the session and the rest of the plan tried.
+        if (_state == DoorState.WaitingPick && _doorRoom is { } room
+            && _confirmedRoom?.Invoke() == room)
+        {
+            _unpickable.Add((room, cur.Direction));
+            if (_bareLocks?.ExitAt(room, cur.Direction) is { } exit) _unpickableInto.Add((room, exit.Target));
+            _log?.Info("Door", $"no lock to pick at {BareKeyLockBook.FormatSide(room, cur.Direction)} — left out of picks this session.");
+            NextStep($"'{awaited}' had no effect");
+            return;
+        }
         AbandonCurrent($"'{awaited}' had no effect, so that exit is not a door here");
     }
 
@@ -576,7 +752,7 @@ public sealed class DoorOpenManager : IDisposable
     // typed for some other way while the request waits is told apart by its echo.
     private void OnNotADoor(MatchResult _)
     {
-        if (_current is not { } cur || _state != DoorState.WaitingOpen) return;
+        if (_current is not { } cur || _state is not (DoorState.WaitingOpen or DoorState.WaitingOpenFirst)) return;
         string awaited = $"open {cur.DirectionShort}";
         if (_router.ReplyIsForCommandNotNaming(awaited)) return;
         AbandonCurrent($"'{awaited}' was answered \"That is not a door or a gate!\"");
@@ -600,7 +776,7 @@ public sealed class DoorOpenManager : IDisposable
             SendVerb();
             return;
         }
-        TryFallbackOrFail("pick exhausted");
+        NextStep("pick exhausted");
     }
 
     private void OnPickNotLocked(MatchResult _)
@@ -639,6 +815,7 @@ public sealed class DoorOpenManager : IDisposable
                    or DoorState.WaitingRestHold
                    or DoorState.WaitingPick
                    or DoorState.WaitingOpen
+                   or DoorState.WaitingOpenFirst
                    or DoorState.WaitingUseKey)
         {
             _log?.Info("Door",
@@ -673,20 +850,35 @@ public sealed class DoorOpenManager : IDisposable
         string? keyName = _itemNameLookup(cur.KeyItemId);
         string text = m.Text.Trim();
         bool notHeld = IsHaveLine(text);
-        if (notHeld && (keyName is not { Length: > 0 } || !text.Contains(keyName, StringComparison.OrdinalIgnoreCase)))
+        if (notHeld && (keyName is not { Length: > 0 } || !NamesTheKey(text, keyName)))
         {
             _log?.Debug("Door", $"'{text}' names another item than the {keyName ?? $"item #{cur.KeyItemId}"} — still waiting.");
             return;
         }
         string key = keyName is { Length: > 0 } ? keyName : $"item #{cur.KeyItemId}";
         if (notHeld) NoteKeyLost(cur.KeyItemId, key, everyCopy: true, text);
-        FailCurrent($"use-key failed (the {key} is missing or wrong)", unopenable: _keyIsLastResort);
+        // A key tried first and missing isn't the door winning: a walk that went to
+        // fetch it stops there, naming the key.
+        NextStep($"use-key failed (the {key} is missing or wrong)", unopenable: !_keyFirst);
 
         static bool IsHaveLine(string line) =>
             line.StartsWith("You do not have ", StringComparison.OrdinalIgnoreCase)
             || line.StartsWith("You don't have ", StringComparison.OrdinalIgnoreCase)
             || line.StartsWith("You dont have ", StringComparison.OrdinalIgnoreCase)
             || line.StartsWith("You have no ", StringComparison.OrdinalIgnoreCase);
+
+        // The words after "have" / "have no" are the key's whole name, with Stock's
+        // typed direction after it, so the "iron key" of a missing "large iron key"
+        // isn't taken for it.
+        static bool NamesTheKey(string line, string key)
+        {
+            int at = line.IndexOf(" have ", StringComparison.OrdinalIgnoreCase);
+            string rest = line[(at + " have ".Length)..].TrimEnd('.', '!', ' ');
+            if (rest.StartsWith("no ", StringComparison.OrdinalIgnoreCase)) rest = rest[3..];
+            if (rest.Equals(key, StringComparison.OrdinalIgnoreCase)) return true;
+            return rest.StartsWith(key + " ", StringComparison.OrdinalIgnoreCase)
+                && DirectionExtensions.TryFromToken(rest[(key.Length + 1)..], out _);
+        }
     }
 
     // The key this request used spent its last charge and left the pack (GAME_MECHANICS
@@ -699,7 +891,7 @@ public sealed class DoorOpenManager : IDisposable
         string text = m.Text.Trim();
         // The engine's own fallback names the item: one naming another isn't ours.
         if (text.StartsWith("It's uses gone", StringComparison.Ordinal)
-            && !text.Contains(key, StringComparison.OrdinalIgnoreCase)) return;
+            && !text.Equals($"It's uses gone, {key} disappears from your inventory!", StringComparison.OrdinalIgnoreCase)) return;
         _keyChargeSpent = false;
         NoteKeyLost(cur.KeyItemId, key, everyCopy: false, text);
     }
@@ -718,6 +910,13 @@ public sealed class DoorOpenManager : IDisposable
     {
         if (_current is null) return;
 
+        // The open tried before any pick: it is locked, so the plan goes on.
+        if (_state == DoorState.WaitingOpenFirst)
+        {
+            PickAfterOpenFirst();
+            return;
+        }
+
         // Plain door open path hit a locked door. If a key is
         // available, swing into the key sequence; otherwise fail.
         if (_state == DoorState.WaitingOpen)
@@ -734,50 +933,6 @@ public sealed class DoorOpenManager : IDisposable
     }
 
     // ----- terminal transitions ---------------------------------------
-
-    private void TryFallbackOrFail(string reason, bool lostReplies = false)
-    {
-        if (_current is not { } cur) return;
-        if (_triedFallbackVerb)
-        {
-            // Bash + pick both exhausted. Keyed doors get one more
-            // chance via the use-key path before we surrender.
-            if (cur.KeyItemId > 0)
-            {
-                _log?.Info("Door",
-                    $"{reason}; falling back to key for door {cur.DirectionShort}.");
-                _keyIsLastResort = true;
-                StartUseKey();
-                return;
-            }
-            FailCurrent($"{reason}; fallback verb also exhausted", unopenable: !lostReplies);
-            return;
-        }
-        _triedFallbackVerb = true;
-        string? other = _verb == "bash" ? "pick" : "bash";
-        // Validate the fallback is viable per the same policy gate.
-        bool otherViable = other == "bash"
-            ? cur.CanBash
-              && cur.StatRequirement <= _maxBashStrengthProvider()
-              && (cur.StatRequirement <= 0 || _stats.Strength >= cur.StatRequirement)
-            : _stats.Picklocks > 0 && (cur.StatRequirement <= 0 || _stats.Picklocks >= cur.StatRequirement);
-        if (!otherViable || other is null)
-        {
-            // No alt verb viable. Keyed doors fall through to the key.
-            if (cur.KeyItemId > 0)
-            {
-                _log?.Info("Door",
-                    $"{reason}; alt verb unviable, falling back to key for door {cur.DirectionShort}.");
-                _keyIsLastResort = true;
-                StartUseKey();
-                return;
-            }
-            FailCurrent($"{reason}; no viable fallback verb", unopenable: !lostReplies);
-            return;
-        }
-        _log?.Info("Door", $"falling back from {_verb} to {other}.");
-        StartVerb(other);
-    }
 
     private void SucceedCurrent()
     {
@@ -846,9 +1001,12 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.Idle;
         _verb = null;
         _verbAttempts = 0;
-        _triedFallbackVerb = false;
-        _keyIsLastResort = false;
+        _plan.Clear();
+        _keyFirst = false;
+        _openFirstPending = false;
         _keyChargeSpent = false;
+        _bareKind = null;
+        _bashIsTrial = false;
     }
 
     // ----- helpers ----------------------------------------------------
@@ -889,6 +1047,8 @@ public sealed class DoorOpenManager : IDisposable
         WaitingOpen,
         // Sent use <keyName> <dir>; awaiting unlock-success / key-missing.
         WaitingUseKey,
+        // Sent open <dir> ahead of picking; awaiting opened (done) or locked (pick).
+        WaitingOpenFirst,
     }
 
     private sealed record DoorRequest(

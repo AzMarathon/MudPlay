@@ -49,12 +49,16 @@ public static class BlockedExitDescriber
     private static string DoorNeeds(in RoomExit exit, Func<int, string?> itemName)
     {
         string? key = exit.KeyItemId > 0 ? ItemText(exit.KeyItemId, itemName) : null;
-        // A bare `(Key: N)` lock is picked with any Picklocks (DoorPolicy.Openers).
-        if (exit.IsBareKeyLock) return $" — needs {key}, or a pick";
-        string? stat = exit.StatRequirement > 0
-            ? (exit.CanBash
-                ? $"{exit.StatRequirement} picklocks/strength"
-                : $"{exit.StatRequirement} picklocks")
+        // A bare `(Key: N)` lock is picked with any Picklocks, and bashed unless it is
+        // known to be a key exit (DoorPolicy.PlannedOpeners).
+        if (exit.IsBareKeyLock)
+            return $" — needs {key}{RoomTooltipBuilder.BareLockAlternative(exit.BareLockBash)}";
+        // An "any picklocks" lock has no figure: any Picklocks opens it.
+        string qty = exit.StatRequirement > 0
+            ? exit.StatRequirement.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : "any";
+        string? stat = exit.StatRequirement > 0 || exit.RawHint?.Contains("picklocks", StringComparison.OrdinalIgnoreCase) == true
+            ? (exit.CanBash ? $"{qty} picklocks/strength" : $"{qty} picklocks")
             : null;
         if (key is not null && stat is not null) return $" — needs {key}, or {stat}";
         if (key is not null) return $" — needs {key}";
