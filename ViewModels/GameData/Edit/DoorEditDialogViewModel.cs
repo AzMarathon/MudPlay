@@ -40,8 +40,12 @@ public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogV
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private bool _isUnknown;
 
-    // "This side changed since you opened it: now …", or empty.
-    [ObservableProperty] private string _staleNote = string.Empty;
+    // "This side changed since you opened it: now …", or empty. Read live off the
+    // book; its change is told on the UI thread.
+    public string StaleNote =>
+        _book is null || (_book.RecordOf(_side.Room, _side.Dir) == _side.Record && _book.Lookup(_side.Room, _side.Dir) == _side.Kind)
+            ? string.Empty
+            : $"This side changed since you opened it: now {_book.Describe(_side.Room, _side.Dir)}.";
 
     private readonly DoorsRowInfo _side;
     private readonly BareKeyLockBook? _book;
@@ -79,13 +83,8 @@ public sealed partial class DoorEditDialogViewModel : ObservableObject, IDialogV
 
     private void OnBookChanged()
     {
-        if (_book is null) return;
-        BareKeyLockBook.Tally? now = _book.RecordOf(_side.Room, _side.Dir);
-        string note = now == _side.Record && _book.Lookup(_side.Room, _side.Dir) == _side.Kind
-            ? string.Empty
-            : $"This side changed since you opened it: now {_book.Describe(_side.Room, _side.Dir)}.";
-        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) StaleNote = note;
-        else Avalonia.Threading.Dispatcher.UIThread.Post(() => StaleNote = note);
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) OnPropertyChanged(nameof(StaleNote));
+        else Avalonia.Threading.Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(StaleNote)));
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
