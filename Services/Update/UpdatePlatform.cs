@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace MudPlay.Services.Update;
@@ -64,8 +65,8 @@ public static class UpdatePlatform
             && assetName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
     }
 
-    // The directory the running executable lives in — the install root a self-update
-    // replaces. Null when the process path is unavailable.
+    // The directory the running executable lives in — the folder a self-update swaps
+    // MudPlay's own files into (UpdatePlan). Null when the process path is unavailable.
     public static string? InstallDirectory()
     {
         string? exe = Environment.ProcessPath;
@@ -107,7 +108,12 @@ public static class UpdatePlatform
         try { olds = System.IO.Directory.GetFiles(dir, System.IO.Path.GetFileName(exePath) + ".old-*"); }
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException) { return 0; }
         int deleted = 0;
-        foreach (string old in olds)
+        // Only the swap's own "<exe>.old-<digits>" names: a copy the user kept as,
+        // say, "MudPlay.exe.old-mine" in the same folder is theirs.
+        string prefix = System.IO.Path.GetFileName(exePath) + ".old-";
+        foreach (string old in olds.Where(o =>
+                     System.IO.Path.GetFileName(o) is { } n && n.Length > prefix.Length
+                     && n[prefix.Length..].All(char.IsAsciiDigit)))
         {
             try { System.IO.File.Delete(old); deleted++; }
             catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)

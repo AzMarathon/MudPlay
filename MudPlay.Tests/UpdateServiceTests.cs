@@ -5,9 +5,9 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // Pure updater logic: release-JSON parsing, checksum-file parsing, version
-// comparison, platform asset-matching, and the swap-script structure. The
-// network fetch + file swap themselves aren't unit-tested (they need a live
-// release + a real install), but everything they feed on is pinned here.
+// comparison, platform asset-matching, and the startup clean-up of renamed-aside
+// executables. The network fetch isn't unit-tested (it needs a live release); the
+// file swap is, in UpdateSwapTests.
 public sealed class UpdateServiceTests
 {
     // ----- ReleaseParser.ParseRelease -----------------------------------------
@@ -153,107 +153,6 @@ public sealed class UpdateServiceTests
         Assert.Equal($"-{rid}{UpdatePlatform.ArchiveExtension(rid)}", UpdatePlatform.AssetSuffix());
     }
 
-    // ----- SwapScriptBuilder ---------------------------------------------------
-
-    [Fact]
-    public void BuildPosix_UsesPositionalArgs_BacksUpAndRelaunches()
-    {
-        string s = SwapScriptBuilder.BuildPosix();
-        Assert.Contains("#!/usr/bin/env bash", s);
-        // Every path arrives as a positional arg (never interpolated) so spaces are safe.
-        Assert.Contains("PID=\"$1\"", s);
-        Assert.Contains("NEW=\"$2\"", s);
-        Assert.Contains("DST=\"$3\"", s);
-        Assert.Contains("EXE=\"$4\"", s);
-        Assert.Contains("STAGE=\"$5\"", s);
-        Assert.Contains("PROFILE=\"$6\"", s);
-        Assert.Contains("RECONNECT=\"$7\"", s);
-        // Waits for the app to exit, keeps a backup, and relaunches the exe.
-        Assert.Contains("kill -0", s);
-        Assert.Contains("mv \"$DST\" \"$BAK\"", s);
-        Assert.Contains("mv \"$NEW\" \"$DST\"", s);
-        Assert.Contains("\"$EXE\"", s);
-        // On success it cleans up the staged download, the backup, and itself.
-        Assert.Contains("rm -rf \"$STAGE\"", s);
-        Assert.Contains("rm -rf \"$BAK\"", s);
-        Assert.Contains("rm -f \"$0\"", s);
-    }
-
-    [Fact]
-    public void BuildWindows_UsesPositionalArgs_MirrorsAndRelaunches()
-    {
-        string s = SwapScriptBuilder.BuildWindows();
-        Assert.Contains("%~1", s);
-        Assert.Contains("%~5", s);
-        Assert.Contains("%~6", s);
-        Assert.Contains("%~7", s);
-        // Session carried across the restart the same way the posix helper does it.
-        Assert.Contains("set ARGS=--profile \"%PROFILE%\"", s);
-        Assert.Contains("--reconnect", s);
-        // Waits on the PID, mirrors install ↔ backup, treats robocopy >=8 as failure.
-        Assert.Contains("tasklist", s);
-        Assert.Contains("robocopy", s);
-        Assert.Contains("if %RC% geq 8", s);
-        Assert.Contains("start \"\" \"%EXE%\"", s);
-        // On success it cleans up staging + backup and deletes itself.
-        Assert.Contains("rmdir /s /q \"%STAGE%\"", s);
-        Assert.Contains("del \"%~f0\"", s);
-    }
-
-    // A client still closing, or opened mid-update, holds MudPlay.exe; Windows can't
-    // overwrite it but can rename it. The mirror leaves the exe out, and the new one
-    // goes in by two renames, so no launch ever finds a half-written executable.
-    [Fact]
-    public void BuildWindows_SwapsTheExecutableByRename()
-    {
-        string s = SwapScriptBuilder.BuildWindows();
-        Assert.Contains("set \"EXENAME=%~nx4\"", s);
-        Assert.Contains("set \"KEEP=/XF \"%EXENAME%\" \"%EXENAME%.old-*\"", s);
-        Assert.Contains("robocopy \"%NEW%\" \"%DST%\" /MIR %KEEP%", s);
-        Assert.DoesNotContain("robocopy \"%NEW%\" \"%DST%\" /MIR /NFL", s);
-        Assert.Contains("copy /y \"%NEW%\\%EXENAME%\" \"%EXE%.new\"", s);
-        Assert.Contains("move /y \"%EXE%\" \"%OLD%\"", s);
-        Assert.Contains("move /y \"%EXE%.new\" \"%EXE%\"", s);
-        // Retries are bounded, and a failed swap rolls back and relaunches the old build.
-        Assert.Contains("/R:5 /W:1", s);
-        Assert.Contains(":rollback", s);
-        Assert.Contains("goto rollback", s);
-    }
-
-    // The renamed-in executable is a new file, so it would take the folder's
-    // permissions and drop any set on the old one by hand. They are saved off the old
-    // file and restored onto the new one before it is started.
-    [Fact]
-    public void BuildWindows_CarriesTheExecutablesPermissionsAcross()
-    {
-        string s = SwapScriptBuilder.BuildWindows();
-        int save = s.IndexOf("icacls \"%EXE%\" /save \"%ACL%\"", StringComparison.Ordinal);
-        int renameAside = s.IndexOf("move /y \"%EXE%\" \"%OLD%\"", StringComparison.Ordinal);
-        int renameIn = s.IndexOf("move /y \"%EXE%.new\" \"%EXE%\"", StringComparison.Ordinal);
-        int restore = s.IndexOf("icacls \"%DST%\" /restore \"%ACL%\"", StringComparison.Ordinal);
-        int start = s.IndexOf("start \"\" \"%EXE%\"", StringComparison.Ordinal);
-        Assert.True(save >= 0 && save < renameAside);
-        Assert.True(restore > renameIn && restore < start);
-        // The saved permissions never outlive the swap, failed or not.
-        Assert.Equal(2, s.Split("del /f /q \"%ACL%\"").Length - 1);
-    }
-
-    // A failed swap leaves its step log beside the executable for the user to attach
-    // to a bug report; a successful one deletes it.
-    [Fact]
-    public void BuildWindows_LeavesAFailureLogBesideTheExe()
-    {
-        string s = SwapScriptBuilder.BuildWindows();
-        Assert.Contains("set \"LOG=%~dpn0.log\"", s);
-        Assert.Contains("set \"FAILLOG=%DST%\\MudPlay-update-failed.log\"", s);
-        Assert.Contains("/LOG+:\"%LOG%\"", s);
-        Assert.Contains("FAILED: %WHY%", s);
-        Assert.Contains("copy /y \"%LOG%\" \"%FAILLOG%\"", s);
-        Assert.Contains("del /f /q \"%LOG%\"", s);
-        // The mirror never purges an earlier failure log.
-        Assert.Contains("\"MudPlay-update-failed.log\"", s);
-    }
-
     [Fact]
     public void DeleteReplacedExecutables_RemovesOnlyTheRenamedAsideCopies()
     {
@@ -262,11 +161,13 @@ public sealed class UpdateServiceTests
         try
         {
             string exe = Path.Combine(dir, "MudPlay.exe");
-            foreach (string f in new[] { "MudPlay.exe", "MudPlay.exe.old-123", "MudPlay.exe.old-456", "MudPlay.exe.new", "notes.txt" })
+            // A copy the user kept under an .old- name of their own is theirs, not the swap's.
+            foreach (string f in new[] { "MudPlay.exe", "MudPlay.exe.old-123", "MudPlay.exe.old-456", "MudPlay.exe.new",
+                         "MudPlay.exe.old-mine", "MudPlay.exe.old-", "notes.txt" })
                 File.WriteAllText(Path.Combine(dir, f), "x");
 
             Assert.Equal(2, UpdatePlatform.DeleteReplacedExecutables(exe));
-            Assert.Equal(new[] { "MudPlay.exe", "MudPlay.exe.new", "notes.txt" },
+            Assert.Equal(new[] { "MudPlay.exe", "MudPlay.exe.new", "MudPlay.exe.old-", "MudPlay.exe.old-mine", "notes.txt" },
                 Directory.GetFiles(dir).Select(Path.GetFileName).OrderBy(n => n, StringComparer.Ordinal));
         }
         finally { Directory.Delete(dir, recursive: true); }

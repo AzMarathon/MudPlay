@@ -3873,9 +3873,9 @@ How to keep it current:
 - Why: report `paradigm-20260729-211336` (the walker dragged the summon along).
 
 ### SwapScriptExecutionTests.cs
-- Covers: Services/Update/SwapScriptBuilder (the POSIX script, actually executed)
-- Checks: the relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. A failed swap restores the install and leaves a failure log next to the executable.
-- Why: a broken swap leaves the user without a profile, or without a working client.
+- Covers: Services/Update/SwapScriptBuilder (the POSIX script actually executed in a temp sandbox, driven by UpdatePlan's real lists; the Windows script's structure)
+- Checks: with the user's own files beside MudPlay's (`photo.jpg`, `other.exe`, `notes/`), a swap leaves every user file byte for byte, replaces and adds the new manifest's files, removes only the old manifest's dropped ones, cleans up the staging folder and its backup and puts nothing beside the install. A pre-manifest install removes nothing. A swap that fails part-way restores every replaced file, takes out every added one, leaves the user's files alone, relaunches the old build and leaves a failure log beside the executable. The relaunch arguments (`--profile`, `--reconnect`) survive shell quoting. Neither script moves, mirrors, purges or deletes the install folder (no `robocopy`, `/MIR`, `/PURGE`, `.bak`, folder `mv`/`rmdir`); the Windows one is per-file from the two lists, checks a name isn't a folder before `del`, renames the exe aside after the other files, carries its ACL across, and deletes itself.
+- Why: the folder-mirroring updater deleted a player's whole Downloads folder (user report, 2026-10-19); a broken swap also leaves the user without a profile, or without a working client.
 
 ### SysRoomStatusParserTests.cs
 - Covers: Game/Map/SysRoomStatusParser
@@ -4226,9 +4226,14 @@ How to keep it current:
 - Checks: the twice-daily re-check slots; the legacy settings key `CheckForUpdatesOnStartup` still loads and saves; the title-bar crawl's frames.
 - Why: an older settings file must not silently switch checking back on.
 
+### UpdatePlanTests.cs
+- Covers: Services/Update/InstallManifest, Services/Update/UpdatePlan
+- Checks: a manifest line that is absolute, climbs with `..`, names a subfolder, carries shell or space characters or isn't a plain name is refused with its line number; comments and case-duplicates are dropped. A plan installs the new list and removes only the old list's dropped files that still exist, never a file the new list names in another case; a pre-manifest install removes nothing; a build with no manifest gets one from its own files; a damaged old or new manifest, a listed file the build lacks, a build without the running exe, a folder where a file goes, or an unlisted build with subfolders is refused.
+- Why: the updater may only touch files a manifest proves are MudPlay's (user report, 2026-10-19: an update wiped a Downloads folder).
+
 ### UpdateServiceTests.cs
-- Covers: Services/Update (ReleaseParser, UpdatePlatform, SwapScriptBuilder, ChangelogExtractor)
-- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - The posix/Windows swap scripts: exe swapped by rename, ACL carried across, failure log, rollback. - Cleaning up old exes; changelog notes between versions.
+- Covers: Services/Update (ReleaseParser, UpdatePlatform, ChangelogExtractor)
+- Checks: - Reading the release JSON, the SHA256 file, and comparing versions. - Matching the download to this platform. - Cleaning up only the swap's own `<exe>.old-<digits>` copies, never a user's `.old-` file; changelog notes between versions. (The swap scripts are in SwapScriptExecutionTests.)
 - Why: a broken self-update leaves the user with no working install.
 
 ### UseEndsSneakTests.cs

@@ -13,9 +13,10 @@ namespace MudPlay.Services.Update;
 
 // The dangerous half: downloads the release archive, verifies its SHA-256 against
 // the release's SHA256SUMS.txt (we're about to RUN this, so an unverified download
-// is refused), extracts it, then spawns a detached swap helper and asks the app to
-// exit. Nothing in the live install is touched until the app has exited and the
-// helper runs — so any failure here leaves the current install intact.
+// is refused), extracts it, works out which files the swap touches (UpdatePlan),
+// then spawns a detached swap helper and asks the app to exit. Nothing in the live
+// install is touched until the app has exited and the helper runs — so any failure
+// here leaves the current install intact.
 public sealed class UpdateInstaller
 {
     private const string ChecksumAssetName = "SHA256SUMS.txt";
@@ -38,6 +39,13 @@ public sealed class UpdateInstaller
             return UpdateApplyResult.Fail("couldn't locate the install directory");
         string? exe = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exe)) return UpdateApplyResult.Fail("couldn't locate the running executable");
+        // Before the download: a damaged file list beside the running build would
+        // make every removal a guess, so nothing is fetched to install over it.
+        if (UpdatePlan.WhyNotFromHere(installDir) is { } damaged)
+        {
+            _log?.Warn("Update", $"update refused: {damaged}");
+            return UpdateApplyResult.Fail("update refused: " + damaged);
+        }
 
         string work = Path.Combine(Path.GetTempPath(), "mudplay-update-" + Guid.NewGuid().ToString("N"));
         try
@@ -75,6 +83,20 @@ public sealed class UpdateInstaller
             string exeName = Path.GetFileName(exe);
             string newRoot = ResolveNewRoot(staging, exeName);
 
+            // Exactly which files are replaced, added and removed, decided here so the
+            // helper only works through two lists and touches nothing else in the
+            // install folder (it may be the user's Downloads or Desktop).
+            if (InstallManifest.Read(newRoot) is { Present: false })
+                _log?.Info("Update", $"the downloaded build carries no {InstallManifest.FileName} — listing its own files instead");
+            if (UpdatePlan.Build(installDir, exeName, newRoot, out string? refusal) is not { } plan)
+            {
+                _log?.Warn("Update", $"update refused: {refusal}");
+                TryDelete(work);
+                return UpdateApplyResult.Fail("update refused: " + refusal);
+            }
+            (string installList, string removeList) = plan.WriteLists(work);
+            _log?.Info("Update", $"update plan for {installDir}: {plan.Describe()}");
+
             // Write the swap helper OUTSIDE the work dir (it deletes work at the end,
             // so `rm -rf work` mustn't remove the helper before it's done). The helper
             // deletes itself as its final step, so no update leftovers survive in temp.
@@ -92,7 +114,7 @@ public sealed class UpdateInstaller
 
             SpawnSwap(scriptPath, windows,
                 Environment.ProcessId.ToString(), newRoot, installDir, exe, work,
-                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "");
+                relaunch.ProfileToken ?? "", relaunch.Reconnect ? "1" : "", installList, removeList);
             _log?.Info("Update", "swap helper launched — exiting to let it replace the install"
                                  + $" (relaunch: profile={relaunch.ProfileToken ?? "none"},"
                                  + $" reconnect={relaunch.Reconnect})");

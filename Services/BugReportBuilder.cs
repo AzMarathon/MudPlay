@@ -508,6 +508,9 @@ public static class BugReportBuilder
         // What a colour in a screenshot or a "the red text" in a report really is.
         Kv(sb, "Terminal colours", svc.DescribeTerminalColors());
         Kv(sb, "Last update check", DescribeUpdate(svc));
+        // Which files in the program's folder an update may touch: the file list the
+        // last install left there, none (an older install), or a damaged one.
+        Kv(sb, "Update install folder", Update.UpdatePlan.DescribeInstall(Update.UpdatePlatform.InstallDirectory()));
         Kv(sb, "Next update check", svc.Update.NextAutoCheck is { } due
             ? due.ToString("yyyy-MM-dd HH:mm") : "(not scheduled)");
         // Quest-flag completion sync — the opt-in toggle + the last run's result, so a
