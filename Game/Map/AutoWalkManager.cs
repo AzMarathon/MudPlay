@@ -1419,7 +1419,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         SysopGotoRoutePlan? sysGotoPlan = null;
         // Planned on the calling thread, which is the UI thread for most walks: a
         // freeze report names this scope when the route or its steps take long.
-        PerformanceMonitor.Scope? planScope = _performance?.Measure("walk route and step build", destination.ToString());
+        PerformanceMonitor.Scope? planScope = _performance?.Measure("walk route and step build");
         try
         {
             // preferTeleportFree: try the pure-walking route FIRST and only fall back to a

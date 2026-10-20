@@ -6113,6 +6113,8 @@ public sealed class AppServices
         // so the walker gate must hold for it too, matching CombatManager's attack
         // takeover. Share CombatManager's per-instance set so the two can't disagree.
         CombatTracker.SetUserEngagedInstanceGate(raw => Combat.IsUserEngagedInstance(raw));
+        // A monster the engine gave up attacking (it never answered) holds no walk.
+        CombatTracker.SetGivenUpTargetGate(raw => Combat.IsGivenUpTarget(raw));
 
         // Keep the walker gate's room-population read in sync with
         // CombatManager's own Min/Max monster skip, so a too-crowded room

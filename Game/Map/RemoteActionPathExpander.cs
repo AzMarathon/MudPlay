@@ -284,29 +284,39 @@ public static class RemoteActionPathExpander
         // Every room walked so far is a candidate, and each candidate's legs are two
         // searches of the whole map: on a route a few hundred rooms long that held
         // the UI thread for half a minute and more (reports Hang-20261020-103254,
-        // Hang-20261020-104120). A candidate's way back from the last action room
-        // is at least its hop floor from there, and that leg alone can rule it out,
-        // so the candidates are weighed nearest that room first and the rest left
-        // once none can beat the best found: the anchor is the one the full scan
-        // picked, ties to the earliest room as before.
+        // Hang-20261020-104120). Two searches from the action rooms give each
+        // candidate a floor under both legs (BfsMapper.HopFloorsTo / HopFloorsFrom):
+        // a room with no way to the first action room or none back from the last is
+        // never searched from, and the rest are weighed lowest floor first and left
+        // once none can beat the best found. The anchor is the one weighing every
+        // room would pick; ties go to the earliest room.
         RoomKey[] anchors = new RoomKey[hostIndex + 1];
         for (int i = 0; i < hostIndex; i++) anchors[i] = approach[i];
         anchors[hostIndex] = host;
-        IReadOnlyDictionary<RoomKey, int> floors = bfs.HopFloorsFrom(last.Value, anchors, filter);
+        IReadOnlyDictionary<RoomKey, int> floorsTo = bfs.HopFloorsTo(first.Value, anchors, filter);
+        IReadOnlyDictionary<RoomKey, int> floorsFrom = bfs.HopFloorsFrom(last.Value, anchors, filter);
         List<(int Floor, int Index)> candidates = new(anchors.Length);
         for (int i = 0; i < anchors.Length; i++)
-            if (floors.TryGetValue(anchors[i], out int floor)) candidates.Add((floor, i));
+            if (floorsTo.TryGetValue(anchors[i], out int to) && floorsFrom.TryGetValue(anchors[i], out int from))
+                candidates.Add((to + from, i));
         candidates.Sort();
 
         int bestIndex = -1;
         int bestVariable = int.MaxValue;
+        int searches = 0;
+        Dictionary<RoomKey, int?> toFirstKnown = new();
         foreach ((int floor, int i) in candidates)
         {
             if (floor > bestVariable || (floor == bestVariable && i > bestIndex)) break;
             RoomKey anchor = anchors[i];
-            int? toFirst = Dist(bfs, filter, anchor, first.Value);
+            if (!toFirstKnown.TryGetValue(anchor, out int? toFirst))
+            {
+                toFirstKnown[anchor] = toFirst = Dist(bfs, filter, anchor, first.Value);
+                searches++;
+            }
             if (toFirst is null) continue;
             int? fromLast = Dist(bfs, filter, last.Value, anchor);
+            searches++;
             if (fromLast is null) continue;
             int variable = toFirst.Value + fromLast.Value;
             if (variable < bestVariable || (variable == bestVariable && i < bestIndex))
@@ -315,9 +325,14 @@ public static class RemoteActionPathExpander
                 bestIndex = i;
             }
         }
+        log?.Debug("Walker",
+            $"remote-action exit at {host}: weighed {candidates.Count} of {anchors.Length} room(s) walked as the place to "
+            + $"leave the route for {first.Value}, {searches} route search(es)"
+            + (bestIndex < 0 ? ", no round trip" : $", leaving at {anchors[bestIndex]}"));
 
         if (bestIndex < 0)
-            return BuildOneWayDetour(graph, bfs, filter, approach, host, maData, first.Value, last.Value, log, depth, visited, unroutable);
+            return BuildOneWayDetour(graph, bfs, filter, approach, host, maData, first.Value, last.Value, floorsTo, toFirstKnown,
+                log, depth, visited, unroutable);
 
         RoomKey bestAnchor = bestIndex < hostIndex ? approach[bestIndex] : host;
         List<WalkStep>? steps = BuildDetourFromAnchor(graph, bfs, filter, bestAnchor, maData, log, depth, visited, unroutable);
@@ -327,7 +342,8 @@ public static class RemoteActionPathExpander
     // The one-way form of the detour: leave the approach at the room that makes the
     // walk shortest (steps already walked to it plus the leg to the first action
     // room) and finish at host. Null when the last action room can't reach host or
-    // no approach room can reach the first.
+    // no approach room can reach the first. floorsTo and toFirstKnown are the round
+    // trip's floors to the first action room and the searches it already ran.
     private static (int InsertAt, List<WalkStep> Steps, bool EndsAtHost)? BuildOneWayDetour(
         RoomGraphManager graph,
         BfsMapper bfs,
@@ -337,6 +353,8 @@ public static class RemoteActionPathExpander
         MultiActionExitData maData,
         RoomKey first,
         RoomKey last,
+        IReadOnlyDictionary<RoomKey, int> floorsTo,
+        Dictionary<RoomKey, int?> toFirstKnown,
         LogService? log,
         int depth,
         HashSet<(RoomKey, Direction)> visited,
@@ -346,12 +364,15 @@ public static class RemoteActionPathExpander
 
         int leaveAt = -1;
         int bestCost = int.MaxValue;
-        // A room further along costs at least its own index, so once that reaches
-        // the best found no later room can beat it, and its search is never run.
+        // A room costs at least its own index plus its floor to the first action
+        // room, so a room that can't beat the best found is never searched from,
+        // and once the index alone reaches it no later room can.
         for (int i = 0; i < approach.Count && i < bestCost; i++)
         {
-            if (Dist(bfs, filter, approach[i], first) is not { } toFirst) continue;
-            if (i + toFirst < bestCost) { bestCost = i + toFirst; leaveAt = i; }
+            if (!floorsTo.TryGetValue(approach[i], out int floor) || i + floor >= bestCost) continue;
+            if (!toFirstKnown.TryGetValue(approach[i], out int? toFirst))
+                toFirstKnown[approach[i]] = toFirst = Dist(bfs, filter, approach[i], first);
+            if (toFirst is { } hops && i + hops < bestCost) { bestCost = i + hops; leaveAt = i; }
         }
         if (leaveAt < 0) return null;
 

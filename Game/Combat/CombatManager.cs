@@ -1396,7 +1396,10 @@ public sealed partial class CombatManager : IDisposable
         // casts have been seen landing this session. A cap that never trips shows as
         // a tally that never moved (report paradigm-20261006-051627).
         string SpellCastTally,
-        int ConfirmedAttackCasts);
+        int ConfirmedAttackCasts,
+        // Monsters in the room the game hasn't answered our attacks on, with how many
+        // in a row ("Archmage Lance ×3"); at MaxUnansweredAttacks one is given up on.
+        IReadOnlyList<string> UnansweredAttacks);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -1411,7 +1414,9 @@ public sealed partial class CombatManager : IDisposable
             : _arrivalSettleCarriedRelease is { } ended
                 ? $"{ended} hold ended; engaging when the arrival settle elapses"
             : null,
-        _spellChooser.DescribeCasts(), ConfirmedAttackCastCount);
+        _spellChooser.DescribeCasts(), ConfirmedAttackCastCount,
+        _unansweredAttacks.Select(kv => $"{kv.Key} ×{kv.Value}"
+            + (kv.Value >= MaxUnansweredAttacks ? " (given up)" : "")).ToArray());
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -1963,12 +1968,15 @@ public sealed partial class CombatManager : IDisposable
         // freshly-arrived same-named mob. Full-roster observations only — an arrival
         // line never removes a monster, so pruning on it could wrongly drop a
         // still-present engaged neutral mid-burst.
-        if (_userEngagedInstances.Count > 0 && obs.Source != RoomObservationSource.Arrival)
+        if ((_userEngagedInstances.Count > 0 || _unansweredAttacks.Count > 0)
+            && obs.Source != RoomObservationSource.Arrival)
         {
             HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
             foreach (RoomEntity e in obs.Entities)
                 if (e.Kind == EntityKind.Monster) present.Add(e.RawName);
             _userEngagedInstances.RemoveWhere(r => !present.Contains(r));
+            foreach (string gone in _unansweredAttacks.Keys.Where(r => !present.Contains(r)).ToArray())
+                _unansweredAttacks.Remove(gone);
         }
 
         // An authoritative non-arrival observation (the room re-display, a room
@@ -2057,6 +2065,7 @@ public sealed partial class CombatManager : IDisposable
                 MonsterOverlay overlay = ResolveOverlay(n);
                 if (!MonsterEngagement.IsEngageable(overlay, _userEngagedInstances.Contains(e.RawName)))
                     continue;
+                if (IsGivenUpTarget(e.RawName)) continue;
                 // Engageability is MonsterEngagement's call alone. The
                 // overlay seed marks the real friendlies explicitly; if
                 // a monster is Enemy / unmarked, it's a target.
@@ -2082,6 +2091,7 @@ public sealed partial class CombatManager : IDisposable
                 // (UnengageableReason, per-monster overrides, DontBackstab,
                 // weapon-swap) fail open, so it's attacked with the normal
                 // weapon by RawName at Normal priority.
+                if (IsGivenUpTarget(e.RawName)) continue;
                 engageable.Add(new EngageableCandidate(
                     RawName:         e.RawName,
                     ResolvedName:    e.ResolvedName,
@@ -5419,6 +5429,24 @@ public sealed partial class CombatManager : IDisposable
 
     public bool IsUserEngagedInstance(string rawName) => _userEngagedInstances.Contains(rawName);
 
+    // Attacks sent on each monster in the room that the game never answered with
+    // *Combat Engaged* inside the confirm window, in a row, by RawName. The engage
+    // check drops the target and re-reads the room, the re-read shows the monster
+    // again and it is attacked again: on a monster no attack lands on that went on
+    // for as long as it stood there, the Combat gate holding every walk (report
+    // Hang-20261020-103254: "Archmage Lance", bashed every 5-10 s for over two
+    // minutes). After MaxUnansweredAttacks it is left alone while it stays in this
+    // room; a confirmed engage on it clears its count, and leaving the room (or it
+    // leaving) drops it. Client policy: why no attack lands is not read here.
+    private readonly Dictionary<string, int> _unansweredAttacks = new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxUnansweredAttacks = 3;
+
+    // A monster given up on after MaxUnansweredAttacks unanswered attacks. One that
+    // attacks us is fought back all the same (self-defence marks it engaged).
+    public bool IsGivenUpTarget(string rawName) =>
+        !_userEngagedInstances.Contains(rawName)
+        && _unansweredAttacks.TryGetValue(rawName, out int times) && times >= MaxUnansweredAttacks;
+
     // Cleared at the top of each combat tick (the round boundary) so the engine resumes
     // its auto attack next round. Called from the Spells partial's OnCombatTick.
     private void ClearUserAttackOverrideForNewRound()
@@ -6028,6 +6056,9 @@ public sealed partial class CombatManager : IDisposable
             _engageConfirmed = true;
             _engagedSinceLastAttack = true;
             _awaitingEngageSince = null;
+            // Only a run of attacks nothing answered gives a monster up: one the game
+            // engages starts the count again.
+            if (_currentTarget is { } answered) _unansweredAttacks.Remove(answered);
         }
     }
 
@@ -6429,9 +6460,19 @@ public sealed partial class CombatManager : IDisposable
         // stale room view. Disarm regardless so we don't loop on the same
         // unanswered attack.
         _awaitingEngageSince = null;
+        string? unanswered = _currentTarget ?? _castingSpellTarget;
         _log?.Combat(LogCategory,
             $"attack unconfirmed after {EngageConfirmWindow.TotalSeconds:0}s " +
-            $"(target={_currentTarget ?? _castingSpellTarget ?? "?"}) — CR re-display");
+            $"(target={unanswered ?? "?"}) — CR re-display");
+        if (unanswered is not null)
+        {
+            int times = _unansweredAttacks[unanswered] = _unansweredAttacks.GetValueOrDefault(unanswered) + 1;
+            if (times == MaxUnansweredAttacks)
+                _log?.Warn(LogCategory,
+                    $"'{unanswered}' never answered {times} attacks in a row (no *Combat Engaged*) — not attacking it "
+                    + "again while it stays in this room. If it isn't meant to be fought, mark it Friend or Neutral in "
+                    + "Game Data → Monsters.");
+        }
         _currentTarget = null;
         _castingSpellTarget = null;
 

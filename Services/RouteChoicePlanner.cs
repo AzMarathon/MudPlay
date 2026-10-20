@@ -94,8 +94,9 @@ public sealed record RouteChoice(
     string? BlockedReason = null,
     // For a TrapAvoid choice: how many traps each route crosses. The free
     // (fewest-traps) route may still cross an unavoidable trap, so the picker states
-    // the real counts rather than claiming "trap-free" when it isn't. Zero for every
-    // other kind.
+    // the real counts rather than claiming "trap-free" when it isn't. On a Teleport
+    // choice that carries a TrapAvoidPath, GatedTrapCount is the teleport route's.
+    // Zero for every other kind.
     int FreeTrapCount = 0,
     int GatedTrapCount = 0,
     // For an AvoidOverride choice: how many rooms the user marked "avoid" the gated
@@ -142,6 +143,12 @@ public sealed record RouteChoice(
     // transports charge (an NPC ask-transport), so the card can state the cost
     // before the user commits. Zero when the teleports are free.
     long TeleportFareCopper = 0,
+    // For a Teleport choice: the fewest-traps route the trap-avoid fork would have
+    // offered over the teleport route, as a card of its own, and the traps it still
+    // crosses. Null when that fork has nothing to offer or its route is one of the
+    // two cards already shown (WithTrapAvoidCard).
+    IReadOnlyList<RoomKey>? TrapAvoidPath = null,
+    int TrapAvoidTrapCount = 0,
     // For a route whose lever detour crosses the gates (EvaluateLeverDetour): the
     // walk already expanded, lever trips included. GatedPath is then the rooms that
     // walk passes, in order, with revisits, so re-expanding it would detour twice;
@@ -530,6 +537,34 @@ public static class RouteChoicePlanner
             RouteChoiceKind.TrapAvoid,
             FreeTrapCount: fewestTraps,
             GatedTrapCount: shortestTraps);
+    }
+
+    // The walk-vs-teleport fork comes first and used to hide the trap-avoid fork: a
+    // teleport route that crosses traps was offered as walk it or teleport, with no
+    // way to take the trap-dodging route (user, 2026-10-20: "it should offer the
+    // missing trap avoidance route as well"). This puts the trap-avoid fork's route
+    // on the teleport choice as a third card, whenever that fork would have offered
+    // one and its route is neither the walk nor the teleport route already shown.
+    public static RouteChoice WithTrapAvoidCard(
+        RouteChoice teleport,
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(teleport);
+        if (teleport.Kind != RouteChoiceKind.Teleport) return teleport;
+        if (EvaluateTrapAvoid(bfs, filter, graph, source, destination, baseRoute) is not { } traps) return teleport;
+        if (traps.FreePath.SequenceEqual(teleport.FreePath) || traps.FreePath.SequenceEqual(teleport.GatedPath))
+            return teleport;
+        return teleport with
+        {
+            TrapAvoidPath = traps.FreePath,
+            TrapAvoidTrapCount = traps.FreeTrapCount,
+            GatedTrapCount = traps.GatedTrapCount,
+        };
     }
 
     // Compares the route honouring the user's "avoid this room" list against the

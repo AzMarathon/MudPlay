@@ -1,9 +1,11 @@
 # Version history
 
-## 3.185.16
+## 3.185.18
 
-- Picking a long route past a lever-opened exit no longer freezes the client (it searched the map from every room walked)
-- Freeze reports now name the route pick, the walk's route build, the map preview and a dialog's close
+- Picking a long route no longer freezes the client before the walk starts
+- Walk-or-teleport route cards also offer the fewest-traps route when the teleport crosses a trap
+- A monster that never answers an attack is left alone after three tries, and stops holding the walk
+- Freeze reports name the route pick, the walk's step build, the map preview and a dialog's close
 - bug reports addressed: Hang-20261020-103254, Hang-20261020-104120
 
 ## 3.185.14

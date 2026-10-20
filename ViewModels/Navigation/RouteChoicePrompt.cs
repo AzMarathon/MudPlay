@@ -402,9 +402,20 @@ public static class RouteChoicePrompt
         RouteChoice? teleport = RouteChoicePlanner.EvaluateTeleport(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (teleport is not null)
+        {
+            // The trap-avoid fork below would have offered its own route: it rides
+            // along as a third card.
+            teleport = RouteChoicePlanner.WithTrapAvoidCard(
+                teleport, services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
             return new(RoutePlanKind.Teleport, teleport,
                 $"route pick {src} -> {destination}: teleport fork — walk {teleport.FreeStepCount} "
-                + $"vs teleport {teleport.GatedStepCount} hop(s) via {teleport.TeleportLanding}; showing picker");
+                + $"vs teleport {teleport.GatedStepCount} hop(s) via {teleport.TeleportLanding}"
+                + (teleport.TrapAvoidPath is { } trapRoute
+                    ? $" (crosses {teleport.GatedTrapCount} trap(s); fewest-traps card: {trapRoute.Count - 1} hop(s), "
+                      + $"{teleport.TrapAvoidTrapCount} trap(s))"
+                    : "")
+                + "; showing picker");
+        }
 
         // Trap-avoid fork: the shortest route crosses a trap and a trap-free route to
         // the same room exists — surface the clean detour vs. trusting the step-time
@@ -565,6 +576,12 @@ public static class RouteChoicePrompt
             choice.GatedPath, services.AutoLair.TravelCostModel,
             services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled,
             lairWillBeFought: services.LairWillBeFought);
+        TimeSpan trapAvoidEta = choice.TrapAvoidPath is { } trapAvoidRoute
+            ? RouteEtaEstimator.Estimate(
+                trapAvoidRoute, services.AutoLair.TravelCostModel,
+                services.RoomGraph.GetRoom, includeLairDwell: services.IsAutoCombatEnabled,
+                lairWillBeFought: services.LairWillBeFought)
+            : default;
 
         // A route that crosses a SURVIVABLE hazard the player can't currently pass —
         // whether the hazard is the only gate (sole hazard) or the route ALSO has a
@@ -717,7 +734,7 @@ public static class RouteChoicePrompt
             vm.Populate(
                 choice, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote,
-                teleportsOn);
+                teleportsOn, trapAvoidEta);
         }
         else
         {
@@ -727,7 +744,7 @@ public static class RouteChoicePrompt
                 choice, destLabel, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
                 economyNote, sourceLabel: DestinationLabel(services, source),
-                teleportsOn: teleportsOn);
+                teleportsOn: teleportsOn, trapAvoidEta: trapAvoidEta);
             dialogTask = OpenCard(services, vm);
         }
 
@@ -749,6 +766,7 @@ public static class RouteChoicePrompt
                 // The token route's only drawable segment is the post-landing walk (the
                 // token hop isn't a graph edge).
                 RouteChoiceResult.Token => choice.GatedPath,
+                RouteChoiceResult.TrapAvoid => choice.TrapAvoidPath,
                 _ => null,
             });
             // A pre-selected route (trap-avoid defaults to the trap-free line) draws
@@ -768,9 +786,11 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.Free => choice.FreePath,
                 RouteChoiceResult.AvoidOverrideAlt when choice.AvoidAlternativePath is { } ap => ap,
                 RouteChoiceResult.Shortcut when choice.ShortcutPath is { } sp => sp,
+                RouteChoiceResult.TrapAvoid when choice.TrapAvoidPath is { } tp => tp,
                 _ => choice.GatedPath,
             },
             r is RouteChoiceResult.Free or RouteChoiceResult.AvoidOverrideAlt or RouteChoiceResult.Shortcut
+                or RouteChoiceResult.TrapAvoid
                 ? null
                 : choice.GatedWalk);
 
@@ -840,6 +860,11 @@ public static class RouteChoicePrompt
                     // "Teleport" — the user explicitly chose the shortcut, so drop the
                     // prefer-walk bias and let the walker plan the teleport hop.
                     CommitWalk(services, destination, gated: false, preferTeleportFree: false);
+                    break;
+                case RouteChoiceResult.TrapAvoid when choice.TrapAvoidPath is { } trapRoute:
+                    // "Fewest traps" — the trap-avoid fork's own pick: plan the
+                    // fewest-traps route, with the teleports it takes.
+                    CommitWalk(services, destination, gated: false, avoidTraps: true, pickedRoute: trapRoute);
                     break;
                 // null → cancelled: walk nothing.
             }
@@ -1094,7 +1119,7 @@ public static class RouteChoicePrompt
     {
         // On the UI thread, from the pick to the walker's first step: a freeze report
         // names this scope (and the walker's own inside it) when that holds it.
-        using PerformanceMonitor.Scope commit = services.Performance.Measure("route pick: walk commit", destination.ToString());
+        using PerformanceMonitor.Scope commit = services.Performance.Measure("route pick: walk commit");
         IReadOnlyList<string> landings = TeleportsOn(services, pickedRoute, throughGates: gated, closedGates);
         string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
         // Walking into a hazard room uncountered is agreed to on a card, for the
@@ -1176,6 +1201,7 @@ public static class RouteChoicePrompt
             RouteChoiceResult.Free => choice.FreePath,
             RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
             RouteChoiceResult.Shortcut => choice.ShortcutPath,
+            RouteChoiceResult.TrapAvoid => choice.TrapAvoidPath,
             RouteChoiceResult.Gated when gatedStopsShort => null,
             _ => choice.GatedPath,
         };
@@ -1205,8 +1231,7 @@ public static class RouteChoicePrompt
     private static void PreviewOnMap(
         AppServices services, Action<IReadOnlyList<RoomKey>?> previewSink, IReadOnlyList<RoomKey>? route)
     {
-        using PerformanceMonitor.Scope preview = services.Performance.Measure(
-            "route pick: map preview", route is null ? "cleared" : $"{route.Count} room(s)");
+        using PerformanceMonitor.Scope preview = services.Performance.Measure("route pick: map preview");
         previewSink(route);
     }
 
