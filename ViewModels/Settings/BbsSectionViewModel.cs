@@ -33,7 +33,6 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private string? _pendingPassword;          // null = unchanged; "" = clear; else write
     private bool _suppressDirty = true;
     private bool _dirty;
-    private Control? _view;
 
     // Per-BBS staging for the credential block, the counterpart to _loaded. The
     // BBS-profile fields survive a click to another board because PushToCache
@@ -88,7 +87,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         "Confirm", "Confirm exit", "Confirm hangup", "Confirm save", "Confirm delete",
     };
 
-    public override Control View => _view ??= new BbsSectionView { DataContext = this };
+    protected override Control BuildView() => new BbsSectionView { DataContext = this };
 
     // Names of every saved BBS profile (left rail of the tab).
     public ObservableCollection<string> AvailableBbsNames { get; } = new();

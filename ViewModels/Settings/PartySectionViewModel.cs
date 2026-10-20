@@ -19,7 +19,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -37,7 +36,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     // rebuilds (class swap / reroll).
     public IReadOnlyList<Game.Spells.SpellPick> SpellSuggestions => _spellbook.AvailablePicks;
 
-    public override Control View => _view ??= new PartySectionView { DataContext = this };
+    protected override Control BuildView() => new PartySectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

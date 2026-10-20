@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.13
+
+- Reopening Settings soon after closing it no longer freezes the client for good (the closed window's radio choices fought the new one's); freeze reports now name the tab, save or profile change at fault
+- bug reports addressed: paradigm-20261019-095332
+
 ## 3.185.12
 
 - Conversation window header shrinks to one row: channel filters become coloured pills labelled like the rows' tags

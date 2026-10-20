@@ -3071,7 +3071,7 @@ public sealed class AppServices
         Settings.GlobalSettingsChanged += _ => ApplyLocalApiFromGlobalSettings();
         // Window snapping reads its master on/off live from the Global setting.
         WindowSnap = new WindowSnapManager(() => Settings.Current.SnapWindows);
-        WindowLayouts = new WindowLayoutStore(Profile, WindowSnap);
+        WindowLayouts = new WindowLayoutStore(Profile, WindowSnap, Performance);
         SplitterLayouts = new SplitterLayoutStore(Profile);
         SessionStatsLayout = new SessionStatsLayoutStore(Profile);
         Wire = new WireBuffer();

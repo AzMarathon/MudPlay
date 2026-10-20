@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.12**
-> - Conversation window header shrinks to one row: channel filters become coloured pills labelled like the rows' tags
-> - Search stretches across the rest of the row; Auto-scroll and Clear All move into a ⋯ menu at its end
+> **Version 3.185.13**
+> - Reopening Settings soon after closing it no longer freezes the client for good (the closed window's radio choices fought the new one's); freeze reports now name the tab, save or profile change at fault
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -164,6 +164,9 @@ public sealed class ProfileService
     public void NotifyMutated()
     {
         SnapshotAccountSecrets();
+        // Every live engine and open window re-reads the profile here: timed, so a
+        // freeze in one of them is named.
+        using PerformanceMonitor.Scope? timing = Performance?.Measure("profile handlers", "changed");
         if (Current is not null) ProfileMutated?.Invoke(Current);
     }
 
@@ -179,6 +182,7 @@ public sealed class ProfileService
     // Fire BbsPinApplied for the current profile, if any.
     public void NotifyBbsPinApplied()
     {
+        using PerformanceMonitor.Scope? timing = Performance?.Measure("profile handlers", "BBS or realm re-pinned");
         if (Current is not null) BbsPinApplied?.Invoke(Current);
     }
 
@@ -360,7 +364,8 @@ public sealed class ProfileService
         Log?.Info(LogCategory, outgoing is null
             ? $"Loaded profile '{profileName}' on '{bbsName}'."
             : $"Swapped profile '{outgoing}' → '{profileName}' on '{bbsName}'.");
-        ProfileLoaded?.Invoke(loaded);
+        using (Performance?.Measure("profile handlers", "loaded"))
+            ProfileLoaded?.Invoke(loaded);
         if (migrated)
         {
             // Persist the upgrade now that Current + paths are set — Save runs
@@ -483,7 +488,8 @@ public sealed class ProfileService
             : outgoing is null
                 ? "Loaded the default profile (no character loaded)."
                 : $"Closed profile '{outgoing}'; loaded the default profile.");
-        ProfileLoaded?.Invoke(profile);
+        using (Performance?.Measure("profile handlers", "loaded"))
+            ProfileLoaded?.Invoke(profile);
         // After the load's own handlers: a store that saves as it takes the new
         // profile in is not the user changing anything.
         _draftSaveWanted = somethingToKeep;

@@ -26,7 +26,6 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     private const string TabKey = "Talk";
 
     private readonly ProfileService _profile;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -37,7 +36,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new TalkSectionView { DataContext = this };
+    protected override Control BuildView() => new TalkSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

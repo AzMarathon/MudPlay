@@ -20,7 +20,6 @@ public sealed partial class TeleportsSectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly Func<IReadOnlyList<TeleportChoice>> _choices;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -31,7 +30,7 @@ public sealed partial class TeleportsSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — the list is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new TeleportsSectionView { DataContext = this };
+    protected override Control BuildView() => new TeleportsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
     {

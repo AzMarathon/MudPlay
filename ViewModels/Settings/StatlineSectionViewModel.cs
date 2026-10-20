@@ -26,7 +26,6 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
     private string _appliedCommand = StatlineSyntax.Default;
     private bool _suppressDirty = true;
     private bool _dirty;
-    private Control? _view;
 
     public override string Id => "statline";
     public override string Title => "Statline";
@@ -37,7 +36,7 @@ public sealed partial class StatlineSectionViewModel : SettingsSectionViewModel
         "Statline", "Prompt", "HP", "MA", "Set statline", "Wildcards",
     };
 
-    public override Control View => _view ??= new StatlineSectionView { DataContext = this };
+    protected override Control BuildView() => new StatlineSectionView { DataContext = this };
 
     // True when any character profile is loaded.
     public bool HasProfile => _profile.Current is not null;

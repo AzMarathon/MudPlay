@@ -28,7 +28,7 @@ public sealed class SettingsExitSaveTests
         public override string Title { get; }
         public override bool IsDirty => _dirty;
         public override string? SaveWarning => _warning;
-        public override Control View => throw new NotSupportedException();
+        protected override Control BuildView() => throw new NotSupportedException();
 
         public override void Apply()
         {

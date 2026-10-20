@@ -829,12 +829,14 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         _ = dialogs.OpenWindowAsync<ItemFinderEstimatesViewModel, bool>(Estimates);
     }
 
-    // The estimates window belongs to this finder; it goes when the Workshop does.
+    // The estimates window belongs to this finder; it goes when the Workshop does,
+    // and so do the view's level-filter radios (RadioGroupScope).
     public override void Dispose()
     {
         Estimates.Changed -= RecomputeTrialDamage;
         _inventory.Changed -= OnInventoryChanged;
         Estimates.CloseCommand.Execute(null);
+        if (_view is not null) Controls.RadioGroupScope.Release(_view);
     }
 
     // One trial row per real equip slot — the two virtual Alt slots (combat-swap

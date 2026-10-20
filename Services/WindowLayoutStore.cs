@@ -88,11 +88,13 @@ public sealed class WindowLayoutStore
     // AttachWindow; notified before a programmatic reposition so it doesn't read a
     // layout restore as a user drag. Null when none was supplied.
     private readonly WindowSnapManager? _snap;
+    private readonly PerformanceMonitor? _performance;
 
-    public WindowLayoutStore(ProfileService profile, WindowSnapManager? snap = null)
+    public WindowLayoutStore(ProfileService profile, WindowSnapManager? snap = null, PerformanceMonitor? performance = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _snap = snap;
+        _performance = performance;
         profile.ProfileLoaded += p =>
         {
             ApplyFromProfile(p.WindowBounds);
@@ -143,11 +145,14 @@ public sealed class WindowLayoutStore
         try
         {
             foreach (string id in toClose)
-                if (_open.TryGetValue(id, out Window? w)) w.Close();
+                if (_open.TryGetValue(id, out Window? w))
+                    using (_performance?.Measure("profile's windows: close", id))
+                        w.Close();
         }
         finally { _suspendCapture = false; }
         foreach (string id in toOpen)
-            _openers[id]();
+            using (_performance?.Measure("profile's windows: open", id))
+                _openers[id]();
     }
 
     // Which windows to open and which to close so the open set matches the profile's

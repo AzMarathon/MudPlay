@@ -27,7 +27,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     private readonly ProfileService _profile;
     private readonly Game.Spells.SpellbookState _spellbook;
     private readonly CombatProfileStagingSession _session;
-    private Control? _view;
     private bool _suppressDirty;
 
     public override string Id => "spells";
@@ -61,7 +60,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     // Refreshes when the spellbook rebuilds (class swap / reroll).
     public IReadOnlyList<Game.Spells.SpellPick> SpellSuggestions => _spellbook.AvailablePicks;
 
-    public override Control View => _view ??= new SpellsSectionView { DataContext = this };
+    protected override Control BuildView() => new SpellsSectionView { DataContext = this };
 
     // The tab's own text: bless timing and self buffs live in the Buff Watchdog now,
     // so a search for them lands on the note that says so.

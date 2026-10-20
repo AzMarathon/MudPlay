@@ -19,7 +19,6 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     private const string TabKey = "Cash";
 
     private readonly ProfileService _profile;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -30,7 +29,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new CashSectionView { DataContext = this };
+    protected override Control BuildView() => new CashSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

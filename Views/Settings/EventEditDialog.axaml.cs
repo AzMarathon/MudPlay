@@ -6,7 +6,11 @@ namespace MudPlay.Views.Settings;
 
 public sealed partial class EventEditDialog : Window
 {
-    public EventEditDialog() => InitializeComponent();
+    public EventEditDialog()
+    {
+        InitializeComponent();
+        Controls.RadioGroupScope.ToThisView(this);
+    }
 
     // The file picker needs the window, so it lives here rather than on the view model.
     private async void OnBrowseSound(object? sender, RoutedEventArgs e)

@@ -26,7 +26,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     private readonly SettingsService _globalSettings;
     private bool _suppressDirty = true;
     private bool _dirty;
-    private Control? _view;
 
     public override string Id => "general";
     public override string Title => "General";
@@ -56,7 +55,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         "Re-enable Auto-Hide", "Re-enable Auto-Search", "Re-enable Auto-Train",
     };
 
-    public override Control View => _view ??= new GeneralSectionView { DataContext = this };
+    protected override Control BuildView() => new GeneralSectionView { DataContext = this };
 
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;

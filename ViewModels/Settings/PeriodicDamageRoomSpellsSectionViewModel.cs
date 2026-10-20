@@ -31,7 +31,6 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     // Run when a save changed the wear setting: the engine acts on it where the
     // character stands, not at its next step.
     private readonly Action? _wearSettingSaved;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -50,7 +49,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     public override string Title => "Periodic Damage Room Spells";
     public override bool IsDirty => _dirty;
 
-    public override Control View => _view ??= new PeriodicDamageRoomSpellsSectionView { DataContext = this };
+    protected override Control BuildView() => new PeriodicDamageRoomSpellsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
     {

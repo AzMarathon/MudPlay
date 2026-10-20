@@ -235,7 +235,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
                 held.Add(s.Title);
                 continue;
             }
-            s.Apply();
+            // A section's Apply sets off the live engines' and open windows' reloads:
+            // timed apart, so a slow save or a freeze in one names the section.
+            using (AppServices.CurrentOrNull?.Performance.Measure("Settings section apply", s.Id))
+                s.Apply();
             applied.Add(s.Title);
         }
         return (applied, held);
@@ -287,8 +290,10 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         else if (newValue?.Id == "combat") GuideActions.Report(GuideActions.CombatSectionShown);
     }
 
+    // Reading a section's shown text builds its view the first time.
     private void ApplySearch()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Settings search");
         foreach (SettingsSectionViewModel s in Sections)
             s.ApplySearch(SearchText, _shownText);
         OnPropertyChanged(nameof(SearchStatusText));

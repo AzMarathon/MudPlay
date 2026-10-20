@@ -46,7 +46,6 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // Skipped names the current list doesn't show (another data set's spells, or a
     // class the character was before a reroll): carried through a Save untouched.
     private List<string> _unlistedSkippedSpells = new();
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -54,7 +53,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     public override string Title => "Auto-Trainer";
     public override bool IsDirty => _dirty;
 
-    public override Control View => _view ??= new AutoTrainerSectionView { DataContext = this };
+    protected override Control BuildView() => new AutoTrainerSectionView { DataContext = this };
 
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;

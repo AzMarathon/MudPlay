@@ -25,7 +25,6 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     private readonly Game.Spells.SpellbookState _spellbook;
     private readonly Game.PlayerState? _state;
     private readonly GameDataCache? _gameData;
-    private Control? _view;
     private bool _suppressDirty;
 
     public override string Id => "combat";
@@ -47,7 +46,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // rebuilds (class swap / reroll).
     public IReadOnlyList<Game.Spells.SpellPick> SpellSuggestions => _spellbook.AvailablePicks;
 
-    public override Control View => _view ??= new CombatSectionView { DataContext = this };
+    protected override Control BuildView() => new CombatSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

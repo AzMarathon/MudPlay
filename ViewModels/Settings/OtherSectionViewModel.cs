@@ -19,7 +19,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
 
     private readonly ProfileService _profile;
     private readonly SettingsService _globalSettings;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -30,7 +29,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new OtherSectionView { DataContext = this };
+    protected override Control BuildView() => new OtherSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
     {

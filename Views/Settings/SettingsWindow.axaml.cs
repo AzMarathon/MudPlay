@@ -33,7 +33,21 @@ public partial class SettingsWindow : Window
         {
             if (DataContext is not SettingsWindowViewModel vm) return;
             foreach (SettingsSectionViewModel s in vm.Sections)
-                Dispatcher.UIThread.Post(() => { if (IsVisible) _ = s.View; }, DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!IsVisible) return;
+                    using (MudPlay.Services.AppServices.CurrentOrNull?.Performance.Measure("Settings section view build", s.Id))
+                        _ = s.View;
+                }, DispatcherPriority.Background);
+        };
+
+        // The section views this window built keep their scoped radio groups in
+        // Avalonia's shared registry until they are let go (RadioGroupScope).
+        Closed += (_, _) =>
+        {
+            if (DataContext is not SettingsWindowViewModel vm) return;
+            foreach (SettingsSectionViewModel s in vm.Sections)
+                if (s.BuiltView is { } view) Controls.RadioGroupScope.Release(view);
         };
 
         // Title-bar X / Alt-F4 on this window: treat as Cancel (discard pending

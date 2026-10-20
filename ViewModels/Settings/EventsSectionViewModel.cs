@@ -38,7 +38,6 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
     private readonly EventScheduler? _scheduler;
     private readonly LogService? _log;
     private readonly DispatcherTimer _countdownTicker;
-    private Control? _view;
 
     public override string Id => "events";
     public override string Title => "Events";
@@ -124,7 +123,7 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
         }
     }
 
-    public override Control View => _view ??= new EventsSectionView { DataContext = this };
+    protected override Control BuildView() => new EventsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
