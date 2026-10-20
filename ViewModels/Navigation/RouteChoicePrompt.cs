@@ -736,7 +736,7 @@ public static class RouteChoicePrompt
         // a cancel leaves no stale preview behind.
         if (previewSink is not null)
         {
-            vm.PreviewRequested += r => previewSink(r switch
+            vm.PreviewRequested += r => PreviewOnMap(services, previewSink, r switch
             {
                 RouteChoiceResult.Free => choice.FreePath,
                 // The direct / send-it / search choices all trace the same physical
@@ -781,7 +781,7 @@ public static class RouteChoicePrompt
         }
         finally
         {
-            previewSink?.Invoke(null);
+            if (previewSink is not null) PreviewOnMap(services, previewSink, null);
         }
         // A change of game data closes the cards without a pick, and says so here: the
         // stop's own notice names only what was running. A pick that got in ahead of
@@ -1092,6 +1092,9 @@ public static class RouteChoicePrompt
         // What the walk is to fetch on its way, and the trades its card named.
         JourneyFetch? fetch = null)
     {
+        // On the UI thread, from the pick to the walker's first step: a freeze report
+        // names this scope (and the walker's own inside it) when that holds it.
+        using PerformanceMonitor.Scope commit = services.Performance.Measure("route pick: walk commit", destination.ToString());
         IReadOnlyList<string> landings = TeleportsOn(services, pickedRoute, throughGates: gated, closedGates);
         string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
         // Walking into a hazard room uncountered is agreed to on a card, for the
@@ -1195,6 +1198,16 @@ public static class RouteChoicePrompt
         var ordered = new List<int> { itemId };
         ordered.AddRange(subs.Where(id => id != itemId).OrderBy(id => id));
         return ordered;
+    }
+
+    // The selected card's route drawn on the map (null clears it). Measured: the
+    // map redraws on the UI thread, and a freeze report should say so if that holds it.
+    private static void PreviewOnMap(
+        AppServices services, Action<IReadOnlyList<RoomKey>?> previewSink, IReadOnlyList<RoomKey>? route)
+    {
+        using PerformanceMonitor.Scope preview = services.Performance.Measure(
+            "route pick: map preview", route is null ? "cleared" : $"{route.Count} room(s)");
+        previewSink(route);
     }
 
     private static string DestinationLabel(AppServices services, RoomKey destination) =>

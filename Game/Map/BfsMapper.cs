@@ -546,6 +546,52 @@ public sealed class BfsMapper
         return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets), allowGateway: false);
     }
 
+    // For each of targets, a hop count no FindPath route from source to it can beat:
+    // one search over every exit any of FindPath's searches may take (gateways,
+    // poor-odds doors, the way into a closed room a crossing takes), so a route
+    // FindPath finds is never shorter. A target missing from the result has no
+    // FindPath route from source at all. Stops once every target is reached. It
+    // lets a caller weighing many FindPath answers skip the ones that can't win,
+    // which matters on the UI thread: each answer is a search of the whole map.
+    public IReadOnlyDictionary<RoomKey, int> HopFloorsFrom(
+        RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        Dictionary<RoomKey, int> dist = new();
+        if (_graph.GetRoom(source) is null) return dist;
+        HashSet<RoomKey> outstanding = new(targets);
+        dist[source] = 0;
+        outstanding.Remove(source);
+        Queue<RoomKey> queue = new();
+        queue.Enqueue(source);
+        while (queue.Count > 0 && outstanding.Count > 0)
+        {
+            RoomKey here = queue.Dequeue();
+            if (_graph.GetRoom(here) is not { } room) continue;
+            int hops = dist[here] + 1;
+            foreach (RoomExit exit in room.Exits.Values)
+            {
+                RoomKey next = exit.Target;
+                if (dist.ContainsKey(next) || _graph.GetRoom(next) is null) continue;
+                if (exit.CastTeleportRandom) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (filter is not null)
+                {
+                    if (filter.IsExitRefused(here, in exit) || filter.IsAvoided(next)) continue;
+                    if (filter.IsExitBlocked(in exit) && !filter.IsExitHeldOpen(here, in exit)
+                        && !(filter.IsClosedToRoutes(next)
+                             && (filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) == ExitBlockReason.None))
+                        continue;
+                }
+                dist[next] = hops;
+                outstanding.Remove(next);
+                queue.Enqueue(next);
+            }
+        }
+        return dist;
+    }
+
     // FindPath's hop counts for many rooms at once, its way round a poor-odds door
     // included (RoundPoorOddsDoors): where the plain search used one, the search is
     // run again with those doors shut, and a room takes the second count when it is

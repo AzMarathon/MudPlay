@@ -281,17 +281,39 @@ public static class RemoteActionPathExpander
             return plain is null ? null : (hostIndex, plain, false);
         }
 
+        // Every room walked so far is a candidate, and each candidate's legs are two
+        // searches of the whole map: on a route a few hundred rooms long that held
+        // the UI thread for half a minute and more (reports Hang-20261020-103254,
+        // Hang-20261020-104120). A candidate's way back from the last action room
+        // is at least its hop floor from there, and that leg alone can rule it out,
+        // so the candidates are weighed nearest that room first and the rest left
+        // once none can beat the best found: the anchor is the one the full scan
+        // picked, ties to the earliest room as before.
+        RoomKey[] anchors = new RoomKey[hostIndex + 1];
+        for (int i = 0; i < hostIndex; i++) anchors[i] = approach[i];
+        anchors[hostIndex] = host;
+        IReadOnlyDictionary<RoomKey, int> floors = bfs.HopFloorsFrom(last.Value, anchors, filter);
+        List<(int Floor, int Index)> candidates = new(anchors.Length);
+        for (int i = 0; i < anchors.Length; i++)
+            if (floors.TryGetValue(anchors[i], out int floor)) candidates.Add((floor, i));
+        candidates.Sort();
+
         int bestIndex = -1;
         int bestVariable = int.MaxValue;
-        for (int i = 0; i <= hostIndex; i++)
+        foreach ((int floor, int i) in candidates)
         {
-            RoomKey anchor = i < hostIndex ? approach[i] : host;
+            if (floor > bestVariable || (floor == bestVariable && i > bestIndex)) break;
+            RoomKey anchor = anchors[i];
             int? toFirst = Dist(bfs, filter, anchor, first.Value);
             if (toFirst is null) continue;
             int? fromLast = Dist(bfs, filter, last.Value, anchor);
             if (fromLast is null) continue;
             int variable = toFirst.Value + fromLast.Value;
-            if (variable < bestVariable) { bestVariable = variable; bestIndex = i; }
+            if (variable < bestVariable || (variable == bestVariable && i < bestIndex))
+            {
+                bestVariable = variable;
+                bestIndex = i;
+            }
         }
 
         if (bestIndex < 0)
@@ -324,7 +346,9 @@ public static class RemoteActionPathExpander
 
         int leaveAt = -1;
         int bestCost = int.MaxValue;
-        for (int i = 0; i < approach.Count; i++)
+        // A room further along costs at least its own index, so once that reaches
+        // the best found no later room can beat it, and its search is never run.
+        for (int i = 0; i < approach.Count && i < bestCost; i++)
         {
             if (Dist(bfs, filter, approach[i], first) is not { } toFirst) continue;
             if (i + toFirst < bestCost) { bestCost = i + toFirst; leaveAt = i; }

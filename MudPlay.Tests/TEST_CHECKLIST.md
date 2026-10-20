@@ -3157,8 +3157,8 @@ How to keep it current:
 
 ### RemoteActionPathExpanderTests.cs
 - Covers: Game/Map/RemoteActionPathExpander
-- Checks: move steps; doors at runtime; cross-room lever detours (anchored at the nearest approach, redundant levers, nested, cyclic, depth cap, one-way lever rooms); ReachesDestination.
-- Why: report paradigm-20261003-132757 and lever routes.
+- Checks: move steps; doors at runtime; cross-room lever detours (anchored at the nearest approach, redundant levers, nested, cyclic, depth cap, one-way lever rooms); a lever on a 300-room approach is pulled from the right room without a map search from every room walked (counted through the filter); ReachesDestination.
+- Why: report paradigm-20261003-132757 and lever routes; reports Hang-20261020-103254 and Hang-20261020-104120 (the walk build froze the UI thread after a long route was picked).
 
 ### RemoteCommandCatalogTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog, PlayerEditDialogViewModel tips

@@ -69,6 +69,7 @@ public sealed class DialogService
         {
             // The VM's request to close also tears down the Window; the Window's
             // own Closed handler will TrySetResult(default) if we haven't beat it.
+            using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("close dialog", window.GetType().Name);
             tcs.TrySetResult(result);
             window.Close();
         }

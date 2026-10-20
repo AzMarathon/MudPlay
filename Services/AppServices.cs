@@ -8002,7 +8002,7 @@ public sealed class AppServices
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
             MovementCoordinator, filter: Movement, log: Log,
-            promptScanner: PromptScanner, recovery: Recovery);
+            promptScanner: PromptScanner, recovery: Recovery, performance: Performance);
         // Random-teleport maze solver. The walker calls into it (via
         // SetMazeSolver) whenever a destination inside a maze pocket has no
         // sourceable route; the solver drives look-peeks + reshuffles until a
