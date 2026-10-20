@@ -3092,8 +3092,8 @@ How to keep it current:
 - Why: v9 tick migration.
 
 ### RadioGroupScopeTests.cs
-- Covers: Controls/RadioGroupScope, and every view under Views/ (not a Window) whose XAML names a radio group
-- Checks: two copies of a view built outside any window, their named radios bound to one bool and its inverse, both build (unscoped, Avalonia's shared group registry spins forever) and checking a box in the second leaves the first copy's model alone; within one copy the radios still exclude each other; every such view scopes its groups in its constructor.
+- Covers: Controls/RadioGroupScope (ToThisView, Release), and every view or window under Views/ whose XAML names a radio group
+- Checks: two copies of a view built while not attached to a window, their named radios bound to one bool and its inverse, both build (unscoped, Avalonia's shared group registry spins forever) and checking a box in the second leaves the first copy's model alone; within one copy the radios still exclude each other; a released copy is out of its group, so a box checked under its old name leaves its choice alone; every view or window naming a group outside a template calls ToThisView right after InitializeComponent, and the named groups inside templates are exactly the reviewed ones. The controls are made on one dedicated thread (Avalonia keeps every binding on the first thread that ran one), apart from the test's so a spin is timed out.
 - Why: report paradigm-20261019-095332: a Settings reopen while the closed window's section views were still uncollected froze the client.
 
 ### RankingStampTests.cs

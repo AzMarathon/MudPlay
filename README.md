@@ -2,8 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.185.13**
-> - Reopening Settings soon after closing it no longer freezes the client for good (radio choices of the closed window's tabs fought the new one's)
-> - Freeze reports now name a Settings tab being built or saved, a profile change's handlers and the windows a profile reopens
+> - Reopening Settings soon after closing it no longer freezes the client for good (the closed window's radio choices fought the new one's); freeze reports now name the tab, save or profile change at fault
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

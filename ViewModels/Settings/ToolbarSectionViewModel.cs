@@ -31,7 +31,6 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
     private readonly BbsProfileStore _bbsStore;
     private bool _suppressDirty = true;
     private bool _dirty;
-    private Control? _view;
 
     public override string Id => "toolbar";
     public override string Title => "Toolbar + Shortcuts";
@@ -45,7 +44,7 @@ public sealed partial class ToolbarSectionViewModel : SettingsSectionViewModel
                 "Help menu websites", "Website", "BBS website", "Help links",
             });
 
-    public override Control View => _view ??= new ToolbarSectionView { DataContext = this };
+    protected override Control BuildView() => new ToolbarSectionView { DataContext = this };
 
     // True when any character profile is loaded.
     public bool HasProfile => _profile.Current is not null;

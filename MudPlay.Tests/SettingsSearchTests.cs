@@ -18,7 +18,7 @@ public sealed class SettingsSearchTests
         public override string Id => Title;
         public override string Title { get; } = title;
         public override IEnumerable<string> SearchableLabels => labels.Prepend(Title);
-        public override Control View => throw new NotSupportedException();
+        protected override Control BuildView() => throw new NotSupportedException();
     }
 
     private static SettingsWindowViewModel Window(params SettingsSectionViewModel[] sections) =>

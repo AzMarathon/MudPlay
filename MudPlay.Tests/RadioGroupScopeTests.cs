@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Xml.Linq;
 using Avalonia.Controls;
 using Avalonia.Data;
 using MudPlay.Controls;
@@ -14,10 +15,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Two copies of a view built outside any window, as each Settings window builds its
-// sections for the search while the last window's copies are still uncollected
-// (report paradigm-20261019-095332). Avalonia files their named radio groups in one
-// app-wide registry; scoped, each copy keeps its own.
+// Two copies of a view built while not attached to a window, as each Settings window
+// builds its sections for the search while the last window's copies are still
+// uncollected (report paradigm-20261019-095332). Avalonia files their named radio
+// groups in one app-wide registry; scoped, each copy keeps its own, and released,
+// a closed window's copy leaves nothing there.
 public sealed class RadioGroupScopeTests
 {
     // The shape the Settings tabs bind a two-way choice to: one bool and its inverse,
@@ -62,13 +64,15 @@ public sealed class RadioGroupScopeTests
         return (view, stacked, each);
     }
 
-    // Avalonia takes the first thread that makes one of its objects for its UI
-    // thread, so the controls here are all made on one thread of their own, as the
-    // client makes them on its UI thread. Apart from the test's thread, so a view
-    // that spins fails its test instead of stalling the run.
+    // Avalonia binds its UI thread to the first thread that runs a binding, and every
+    // later binding must run there, so all the controls here are made on one thread,
+    // as the client makes them on its UI thread. It is not the test's own thread so
+    // that a view that spins can be timed out: its test fails, and the tests after it
+    // fail at once, naming it, instead of each waiting on the stuck thread.
     private static class UiThread
     {
         private static readonly BlockingCollection<Action> Work = new();
+        private static string? _stuckIn;
 
         static UiThread()
         {
@@ -80,8 +84,9 @@ public sealed class RadioGroupScopeTests
             thread.Start();
         }
 
-        public static bool Run(Action action, out Exception? failed)
+        public static void Run(Action action, [CallerMemberName] string test = "")
         {
+            Assert.True(_stuckIn is null, $"the UI thread is still stuck in {_stuckIn}");
             using ManualResetEventSlim done = new();
             Exception? caught = null;
             Work.Add(() =>
@@ -90,9 +95,12 @@ public sealed class RadioGroupScopeTests
                 catch (Exception ex) { caught = ex; }
                 finally { done.Set(); }
             });
-            bool finished = done.Wait(TimeSpan.FromSeconds(10));
-            failed = caught;
-            return finished;
+            if (!done.Wait(TimeSpan.FromSeconds(10)))
+            {
+                _stuckIn = test;
+                Assert.Fail($"{test} never finished on the UI thread");
+            }
+            Assert.Null(caught);
         }
     }
 
@@ -102,16 +110,14 @@ public sealed class RadioGroupScopeTests
     public void SecondCopy_BuildsAndLeavesTheFirstCopysChoiceAlone()
     {
         Choice first = new(), second = new();
-        bool finished = UiThread.Run(() =>
+        UiThread.Run(() =>
         {
             var a = View(first);
             var b = View(second);
             b.Each.IsChecked = true;
             GC.KeepAlive(a.View);
-        }, out Exception? failed);
+        });
 
-        Assert.True(finished, "building the second copy of the view never finished");
-        Assert.Null(failed);
         Assert.True(second.Each);
         Assert.True(first.Stacked);
     }
@@ -123,44 +129,88 @@ public sealed class RadioGroupScopeTests
         Choice model = new();
         bool? stackedChecked = null;
         string? stackedGroup = null, eachGroup = null;
-        bool finished = UiThread.Run(() =>
+        UiThread.Run(() =>
         {
             var view = View(model);
             view.Each.IsChecked = true;
             stackedChecked = view.Stacked.IsChecked;
             stackedGroup = view.Stacked.GroupName;
             eachGroup = view.Each.GroupName;
-        }, out Exception? failed);
+        });
 
-        Assert.True(finished, "building the view never finished");
-        Assert.Null(failed);
         Assert.False(stackedChecked);
         Assert.True(model.Each);
         Assert.NotEqual("RoundTotalsMonsters", eachGroup);
         Assert.Equal(stackedGroup, eachGroup);
     }
 
-    // Every view that names a radio group and can be built outside a window (any
-    // view but a Window, whose own registry holds its buttons) scopes them.
+    // A released copy is out of the registry: a box checked under the name its group
+    // had no longer unchecks the released copy's choice.
     [Fact]
-    public void EveryViewWithANamedRadioGroup_ScopesIt()
+    public void ReleasedCopy_IsNoLongerInItsGroup()
+    {
+        Choice model = new();
+        string? scopedName = null, releasedName = "unset";
+        bool? stillChecked = null;
+        UiThread.Run(() =>
+        {
+            var view = View(model);
+            scopedName = view.Stacked.GroupName;
+            RadioGroupScope.Release(view.View);
+            releasedName = view.Stacked.GroupName;
+
+            RadioButton stranger = new() { GroupName = scopedName };
+            stranger.IsChecked = true;
+            stillChecked = view.Stacked.IsChecked;
+        });
+
+        Assert.NotNull(scopedName);
+        Assert.Null(releasedName);
+        Assert.True(stillChecked);
+        Assert.True(model.Stacked);
+    }
+
+    // Radios a template makes are built only once their view is in a window, after
+    // the constructor has run, so ToThisView can't rename them. These are reviewed:
+    // neither is a pair bound to one bool and its inverse.
+    private static readonly string[] TemplatedGroups =
+    {
+        "MonsterIntelWindow.axaml: MiRoundsAttack",
+        "Settings/GeneralSectionView.axaml: TerminalColorScheme",
+    };
+
+    // Every view or window that names a radio group outside a template scopes it,
+    // right after InitializeComponent, and a named group inside a template is one
+    // of the reviewed ones.
+    [Fact]
+    public void EveryNamedRadioGroup_IsScopedOrAReviewedTemplate()
     {
         string views = Path.Combine(RepoRoot(), "Views");
-        Regex named = new(@"<RadioButton\b[^>]*\bGroupName=""", RegexOptions.Singleline);
-        List<string> checkedViews = new(), unscoped = new();
+        Regex scoped = new(@"InitializeComponent\(\);\s*(MudPlay\.)?Controls\.RadioGroupScope\.ToThisView\(this\);");
+        List<string> scopedViews = new(), unscoped = new(), templated = new();
         foreach (string xaml in Directory.GetFiles(views, "*.axaml", SearchOption.AllDirectories))
         {
-            string text = File.ReadAllText(xaml);
-            if (!named.IsMatch(text) || Regex.IsMatch(text, @"^\s*<Window\b", RegexOptions.Multiline)) continue;
-            string name = Path.GetRelativePath(views, xaml);
-            checkedViews.Add(name);
+            string name = Path.GetRelativePath(views, xaml).Replace('\\', '/');
+            bool needsScope = false;
+            foreach (XElement radio in XDocument.Load(xaml).Descendants().Where(e => e.Name.LocalName == "RadioButton"))
+            {
+                if (radio.Attribute("GroupName")?.Value is not { Length: > 0 } group) continue;
+                if (radio.Ancestors().Any(a => a.Name.LocalName.EndsWith("Template", StringComparison.Ordinal)))
+                    templated.Add($"{name}: {group}");
+                else
+                    needsScope = true;
+            }
+            if (!needsScope) continue;
+            scopedViews.Add(name);
             string codeBehind = xaml + ".cs";
-            if (!File.Exists(codeBehind) || !File.ReadAllText(codeBehind).Contains("RadioGroupScope.ToThisView(this)"))
+            if (!File.Exists(codeBehind) || !scoped.IsMatch(File.ReadAllText(codeBehind)))
                 unscoped.Add(name);
         }
 
         Assert.Empty(unscoped);
-        Assert.Contains(Path.Combine("Settings", "CombatSectionView.axaml"), checkedViews);
+        Assert.Equal(TemplatedGroups, templated.Distinct().Order(StringComparer.Ordinal));
+        Assert.Contains("Settings/CombatSectionView.axaml", scopedViews);
+        Assert.Contains("Settings/EventEditDialog.axaml", scopedViews);
     }
 
     private static string RepoRoot([CallerFilePath] string here = "") =>

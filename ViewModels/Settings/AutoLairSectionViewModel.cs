@@ -22,7 +22,6 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
     private const string TabKey = "AutoLair";
 
     private readonly ProfileService _profile;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -32,7 +31,7 @@ public sealed partial class AutoLairSectionViewModel : SettingsSectionViewModel
 
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new AutoLairSectionView { DataContext = this };
+    protected override Control BuildView() => new AutoLairSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels
     {

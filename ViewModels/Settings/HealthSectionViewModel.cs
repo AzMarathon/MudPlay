@@ -19,7 +19,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
 {
     private readonly ProfileService _profile;
     private readonly CombatProfileStagingSession _session;
-    private Control? _view;
     private bool _suppressDirty;
 
     public override string Id => "health";
@@ -45,7 +44,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new HealthSectionView { DataContext = this };
+    protected override Control BuildView() => new HealthSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

@@ -56,7 +56,13 @@ public abstract partial class SettingsSectionViewModel : ObservableObject, IDisp
     // The editor UserControl rendered in the shell's content pane. Lazy —
     // constructed on first access, so opening the window doesn't wait on every
     // section; the window builds the rest while idle, for the search to read.
-    public abstract Control View { get; }
+    public Control View => BuiltView ??= BuildView();
+
+    // The View if it has been built, else null: what the window lets go of when it
+    // closes, without building a view only to discard it.
+    public Control? BuiltView { get; private set; }
+
+    protected abstract Control BuildView();
 
     // Persist this section's pending edits. Default no-op for placeholders.
     public virtual void Apply() { }

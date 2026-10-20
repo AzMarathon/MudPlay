@@ -18,14 +18,13 @@ public sealed partial class SoundsSectionViewModel : SettingsSectionViewModel
     private readonly ProfileService _profile;
     private readonly Action<string, int> _play;
     private readonly Action _applied;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
     public override string Id => "sounds";
     public override string Title => "Sounds";
     public override bool IsDirty => _dirty;
-    public override Control View => _view ??= new SoundsSectionView { DataContext = this };
+    protected override Control BuildView() => new SoundsSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels =>
         new[] { "Sounds", "Sound", "Volume", "Audio", "Mute", "Alert", "Notification" }

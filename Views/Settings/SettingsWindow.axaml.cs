@@ -41,6 +41,15 @@ public partial class SettingsWindow : Window
                 }, DispatcherPriority.Background);
         };
 
+        // The section views this window built keep their scoped radio groups in
+        // Avalonia's shared registry until they are let go (RadioGroupScope).
+        Closed += (_, _) =>
+        {
+            if (DataContext is not SettingsWindowViewModel vm) return;
+            foreach (SettingsSectionViewModel s in vm.Sections)
+                if (s.BuiltView is { } view) Controls.RadioGroupScope.Release(view);
+        };
+
         // Title-bar X / Alt-F4 on this window: treat as Cancel (discard pending
         // edits) so the window can't sneak past the user's explicit commit
         // decision. Routed through DiscardChanges rather than DiscardAndClose to

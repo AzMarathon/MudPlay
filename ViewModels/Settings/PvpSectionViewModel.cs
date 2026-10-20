@@ -24,7 +24,6 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     private readonly FavoritesStore? _favorites;
     private readonly Func<bool> _pvpEnabledHere;
     private readonly Dictionary<string, RoomRef> _roomByLabel = new(StringComparer.Ordinal);
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -37,7 +36,7 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     // The tab applies only on a realm marked for PvP; say so when this one isn't.
     public bool PvpOffForRealm => HasProfile && !_pvpEnabledHere();
 
-    public override Control View => _view ??= new PvpSectionView { DataContext = this };
+    protected override Control BuildView() => new PvpSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {

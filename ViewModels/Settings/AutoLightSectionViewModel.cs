@@ -36,7 +36,6 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     private readonly LightItemIndex? _lights;
     private readonly GameDataCache? _data;
     private readonly ShopStockIndex? _shops;
-    private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
 
@@ -47,7 +46,7 @@ public sealed partial class AutoLightSectionViewModel : SettingsSectionViewModel
     // True when a profile is loaded — editor is hidden otherwise.
     public bool HasProfile => _profile.Current is not null;
 
-    public override Control View => _view ??= new AutoLightSectionView { DataContext = this };
+    protected override Control BuildView() => new AutoLightSectionView { DataContext = this };
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
