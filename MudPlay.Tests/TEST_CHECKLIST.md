@@ -3091,6 +3091,11 @@ How to keep it current:
 - Checks: ticks follow their steps after kill lines were inserted; unchanged and user-written lists untouched; runs once; waits for game data.
 - Why: v9 tick migration.
 
+### RadioGroupScopeTests.cs
+- Covers: Controls/RadioGroupScope, and every view under Views/ (not a Window) whose XAML names a radio group
+- Checks: two copies of a view built outside any window, their named radios bound to one bool and its inverse, both build (unscoped, Avalonia's shared group registry spins forever) and checking a box in the second leaves the first copy's model alone; within one copy the radios still exclude each other; every such view scopes its groups in its constructor.
+- Why: report paradigm-20261019-095332: a Settings reopen while the closed window's section views were still uncollected froze the client.
+
 ### RankingStampTests.cs
 - Covers: Game/Simulation/RankingWorld, RankingWorldWatch, Services/RankingStampReader, MonsterOverlaySeedStore.StampOf, RankingCharacter, RankingCheck, RankingReach
 - Checks: world differences; tables stamped as read with mid-load rereads making the world unfit; seed and game-edit stamps; character change groups; reach hash.

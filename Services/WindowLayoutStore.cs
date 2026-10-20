@@ -140,14 +140,18 @@ public sealed class WindowLayoutStore
         // The loaded profile's layout is already in place; a window closing because it
         // didn't have it open mustn't write the previous profile's position into it.
         _suspendCapture = true;
+        PerformanceMonitor? performance = AppServices.CurrentOrNull?.Performance;
         try
         {
             foreach (string id in toClose)
-                if (_open.TryGetValue(id, out Window? w)) w.Close();
+                if (_open.TryGetValue(id, out Window? w))
+                    using (performance?.Measure("profile's windows: close", id))
+                        w.Close();
         }
         finally { _suspendCapture = false; }
         foreach (string id in toOpen)
-            _openers[id]();
+            using (performance?.Measure("profile's windows: open", id))
+                _openers[id]();
     }
 
     // Which windows to open and which to close so the open set matches the profile's

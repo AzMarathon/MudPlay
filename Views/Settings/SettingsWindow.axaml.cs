@@ -33,7 +33,12 @@ public partial class SettingsWindow : Window
         {
             if (DataContext is not SettingsWindowViewModel vm) return;
             foreach (SettingsSectionViewModel s in vm.Sections)
-                Dispatcher.UIThread.Post(() => { if (IsVisible) _ = s.View; }, DispatcherPriority.Background);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!IsVisible) return;
+                    using (MudPlay.Services.AppServices.CurrentOrNull?.Performance.Measure("Settings section view build", s.Id))
+                        _ = s.View;
+                }, DispatcherPriority.Background);
         };
 
         // Title-bar X / Alt-F4 on this window: treat as Cancel (discard pending

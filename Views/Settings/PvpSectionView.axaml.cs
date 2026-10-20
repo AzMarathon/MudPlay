@@ -8,6 +8,7 @@ public partial class PvpSectionView : UserControl
     public PvpSectionView()
     {
         InitializeComponent();
+        Controls.RadioGroupScope.ToThisView(this);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);

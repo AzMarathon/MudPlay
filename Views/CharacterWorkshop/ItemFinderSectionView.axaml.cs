@@ -44,6 +44,7 @@ public partial class ItemFinderSectionView : UserControl
     public ItemFinderSectionView()
     {
         InitializeComponent();
+        MudPlay.Controls.RadioGroupScope.ToThisView(this);
         DataContextChanged += OnDataContextChanged;
         // Right-click doesn't select a DataGrid row on its own, so the context menu's
         // "Trial-Equip this Item" (bound to SelectedItem) would target the wrong row.
