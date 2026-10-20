@@ -4343,6 +4343,9 @@ public sealed class AppServices
         // doesn't pay the BFS cost on the UI thread when they first
         // open the Navigation window.
         RoomGraph.GraphReloaded += Bfs.PrewarmAsync;
+        // The set active at start-up loaded its graph before this subscription, so
+        // its reload went unheard: warm that one now.
+        if (RoomGraph.RoomCount > 0) Bfs.PrewarmAsync();
 
         // Per-character avoided + stash rooms.
         // Constructor subscribes ProfileLoaded / ProfileClosed and
@@ -6113,8 +6116,6 @@ public sealed class AppServices
         // so the walker gate must hold for it too, matching CombatManager's attack
         // takeover. Share CombatManager's per-instance set so the two can't disagree.
         CombatTracker.SetUserEngagedInstanceGate(raw => Combat.IsUserEngagedInstance(raw));
-        // A monster the engine gave up attacking (it never answered) holds no walk.
-        CombatTracker.SetGivenUpTargetGate(raw => Combat.IsGivenUpTarget(raw));
 
         // Keep the walker gate's room-population read in sync with
         // CombatManager's own Min/Max monster skip, so a too-crowded room

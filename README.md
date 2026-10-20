@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.18**
+> **Version 3.185.17**
 > - Picking a long route no longer freezes the client before the walk starts
 > - Walk-or-teleport route cards also offer the fewest-traps route when the teleport crosses a trap
-> - A monster that never answers an attack is left alone after three tries, and stops holding the walk
 > - Freeze reports name the route pick, the walk's step build, the map preview and a dialog's close
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

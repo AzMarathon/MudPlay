@@ -709,9 +709,9 @@ How to keep it current:
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - A monster no attack is answered on is given up after three in a row (logged, in the bug-report snapshot, no longer holding a CombatStateTracker built and wired as AppServices wires it), its count cleared by an answered attack or the room no longer showing it; a Friend stays unattacked through the same repeated room reads.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
-- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, Hang-20261020-103254); stops a stalled, doubled or endless attack.
+- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
@@ -755,8 +755,8 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog.
-- Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049).
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty.
+- Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
 - Covers: Game/Remote/ComebackRequester (with FollowMoveObserver, MovementRefusalDetector, PartyManager, TooHeavyWaitSignal).
@@ -3405,7 +3405,7 @@ How to keep it current:
 
 ### RouteChoiceDialogViewModelTests.cs
 - Covers: ViewModels/Navigation/RouteChoiceDialogViewModel, RouteChoicePrompt (RouteSubstitutes, RouteACardWalks)
-- Checks: - The requirement line's source tail (ask > buy > dropped-by, only for kinds a walk auto-sources) and the select-to-preview / Go / Cancel flow. - Card wording and visibility per fork: send-it, sole hazard (survivable or grave, obtainable or not), teleport (with its fewest-traps third card, previewed and committed), trap-avoid, avoid-override, boss room, blocked, shortcut, and lake crossings. Also ETAs, the calculating-then-Populate state, and teleport notes per card.
+- Checks: - The requirement line's source tail (ask > buy > dropped-by, only for kinds a walk auto-sources) and the select-to-preview / Go / Cancel flow. - Card wording and visibility per fork: send-it, sole hazard (survivable or grave, obtainable or not), teleport (with its fewest-traps third card, previewed, committed and stating a paid transport's fare), trap-avoid, avoid-override, boss room, blocked, shortcut, and lake crossings. Also ETAs, the calculating-then-Populate state, and teleport notes per card.
 - Why: Reports `paradigm-20261007-192215`, `paradigm-20261007-215302`, `paradigm-20260914-201123`, `paradigm-20261008-173911` / `-174023`.
 
 ### RouteChoicePlannerTests.cs

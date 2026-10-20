@@ -555,6 +555,7 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(vm.ShowTrapAvoidCard);
         Assert.Equal("Avoid traps — 3 steps, trap-free — takes the teleport to Silver River (12/34)", vm.TrapAvoidSummary);
         Assert.Contains("crosses 2 traps", vm.TrapAvoidDetail);
+        Assert.DoesNotContain("Costs", vm.TrapAvoidDetail);   // no paid transport on it
         Assert.Null(vm.SelectedRoute);              // nothing picked for the user
 
         vm.SelectTrapAvoidCommand.Execute(null);
@@ -563,6 +564,19 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.Equal(RouteChoiceResult.TrapAvoid, closed);
         Assert.Equal(new RouteChoiceResult?[] { RouteChoiceResult.TrapAvoid }, previews);
+    }
+
+    // A fewest-traps route through a paid NPC transport states its fare, as the
+    // teleport card states its own.
+    [Fact]
+    public void TeleportChoice_TrapAvoidRouteThroughAPaidTransport_StatesItsFare()
+    {
+        IReadOnlyList<RoomKey> trapFree = new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) };
+        RouteChoice choice = TeleportChoice() with { TrapAvoidPath = trapFree, TrapAvoidFareCopper = 500, GatedTrapCount = 1 };
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Silver River (12/34)", id => null);
+
+        Assert.EndsWith($" Costs {MudPlay.Game.Cash.CurrencyFormat.Full(500)} per person.", vm.TrapAvoidDetail);
     }
 
     [Fact]

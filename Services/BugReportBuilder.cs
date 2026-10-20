@@ -1056,11 +1056,6 @@ public static class BugReportBuilder
         Kv(sb, "User-engaged (manual + self-defense)", combat.UserEngagedInstances.Count > 0
             ? string.Join(", ", combat.UserEngagedInstances)
             : "(none)");
-        // Attacks the game never answered, per monster in the room: a monster bashed
-        // over and over with nothing coming back shows here, given up on at three.
-        Kv(sb, "Unanswered attacks", combat.UnansweredAttacks.Count > 0
-            ? string.Join(", ", combat.UnansweredAttacks)
-            : "(none)");
         // Attack Order mode + whether we're currently holding our pick for a party
         // announce — the key tells for an "attack-last / not-last not respected" report.
         Kv(sb, "Attack Order", combat.AttackTiming);

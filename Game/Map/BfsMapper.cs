@@ -560,11 +560,11 @@ public sealed class BfsMapper
         RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(targets);
-        return HopFloors(source, targets, filter, (here, visit) =>
+        return HopFloors(source, targets, (here, seen, visit) =>
         {
             if (_graph.GetRoom(here) is not { } room) return;
             foreach (RoomExit exit in room.Exits.Values)
-                if (FloorMayCross(here, in exit, filter)) visit(exit.Target);
+                if (!seen(exit.Target) && FloorMayCross(here, in exit, filter)) visit(exit.Target);
         });
     }
 
@@ -575,19 +575,22 @@ public sealed class BfsMapper
     {
         ArgumentNullException.ThrowIfNull(sources);
         IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]> into = ExitsInto();
-        return HopFloors(destination, sources, filter, (here, visit) =>
+        return HopFloors(destination, sources, (here, seen, visit) =>
         {
             if (!into.TryGetValue(here, out (RoomKey From, Direction Dir)[]? ways)) return;
             foreach ((RoomKey from, Direction dir) in ways)
-                if (_graph.GetRoom(from) is { } room && room.Exits.TryGetValue(dir, out RoomExit exit)
+                if (!seen(from) && _graph.GetRoom(from) is { } room && room.Exits.TryGetValue(dir, out RoomExit exit)
                     && FloorMayCross(from, in exit, filter))
                     visit(from);
         });
     }
 
+    // neighbours(here, seen, visit) visits each room one step on from here that the
+    // search hasn't reached yet, asking seen before the filter: the filter is the
+    // costly part of a step.
     private Dictionary<RoomKey, int> HopFloors(
-        RoomKey start, IReadOnlyCollection<RoomKey> wanted, IRoomFilter? filter,
-        Action<RoomKey, Action<RoomKey>> neighbours)
+        RoomKey start, IReadOnlyCollection<RoomKey> wanted,
+        Action<RoomKey, Func<RoomKey, bool>, Action<RoomKey>> neighbours)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(start) is null) return dist;
@@ -600,7 +603,7 @@ public sealed class BfsMapper
         {
             RoomKey here = queue.Dequeue();
             int hops = dist[here] + 1;
-            neighbours(here, next =>
+            neighbours(here, dist.ContainsKey, next =>
             {
                 if (!dist.TryAdd(next, hops)) return;
                 outstanding.Remove(next);

@@ -462,7 +462,10 @@ public sealed partial class RouteChoiceDialogViewModel
                     : summary;
                 TrapAvoidDetail = $"The teleport route crosses {TrapWord(choice.GatedTrapCount)} the walker would try "
                     + "to disarm as it steps, and a disarm can fail. This way dodges "
-                    + (trapRouteTraps == 0 ? "them all." : $"all but {TrapWord(trapRouteTraps)} it can't avoid.");
+                    + (trapRouteTraps == 0 ? "them all." : $"all but {TrapWord(trapRouteTraps)} it can't avoid.")
+                    + (choice.TrapAvoidFareCopper > 0
+                        ? $" Costs {CurrencyFormat.Full(choice.TrapAvoidFareCopper)} per person."
+                        : string.Empty);
             }
             FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no teleport";
             GatedSummary = $"Teleport — {StepsEta(choice.GatedStepCount, gatedEta)} — much shorter";

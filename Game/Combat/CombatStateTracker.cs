@@ -97,9 +97,6 @@ public sealed class CombatStateTracker : IDisposable
     // so the walker gate (HasEngageableHostiles) also holds while the user's manually-
     // engaged neutral is still alive, matching CombatManager's attack takeover.
     private Func<string, bool>? _isUserEngagedInstance;
-    // RawName → has CombatManager given up on it (attacks it never answered)? Such a
-    // monster holds no walk: nothing will be sent at it.
-    private Func<string, bool>? _isGivenUpTarget;
     private bool _seeHiddenClearLatch;
     private Func<bool>? _clearWhenSneakFails;
     // Our sneak failed entering the room we're in (StealthManager.SneakEntry false);
@@ -370,14 +367,6 @@ public sealed class CombatStateTracker : IDisposable
         _isUserEngagedInstance = isUserEngagedInstance;
     }
 
-    // Wire CombatManager's "given up on" set (CombatManager.IsGivenUpTarget) so the
-    // gate lets go of a monster the engine has stopped attacking. Until set, none is.
-    public void SetGivenUpTargetGate(Func<string, bool> isGivenUpTarget)
-    {
-        ArgumentNullException.ThrowIfNull(isGivenUpTarget);
-        _isGivenUpTarget = isGivenUpTarget;
-    }
-
     // Wire the CombatSettings.MinMonstersInRoom / MaxMonstersInRoom reader so
     // this tracker's gate agrees with CombatManager's own min/max skip
     // (OnEntitiesObserved's "min/max gate skip" branch) on whether a room is
@@ -592,12 +581,12 @@ public sealed class CombatStateTracker : IDisposable
         // The combat state still clears optimistically either way.
         bool dark = _isInDarkRoom?.Invoke() == true;
         // "Room empty" is the usual reading of the silence, but the room last shown
-        // may still hold the monster the gate went up for: then no attack on it is
-        // being answered, and the log says so rather than calling the room empty.
+        // may still hold the monster the gate went up for (report
+        // Hang-20261020-103254): the log names it rather than calling the room empty.
         string? stillShown = null;
         foreach (RoomEntity e in _classifier.Current?.Entities ?? Array.Empty<RoomEntity>())
             if (e.Kind == EntityKind.Monster && IsEngageable(e)) { stillShown = e.ResolvedName; break; }
-        string seen = stillShown is null ? "room empty" : $"the room still shows '{stillShown}' but nothing answers our attacks";
+        string seen = stillShown is null ? "room empty" : $"the room still shows '{stillShown}'";
         string held = _gateAsserted
             ? $"combat gate held {(_now() - _gateAssertedAt).TotalSeconds:F1}s"
             : "InCombat stuck (auto-attack off)";
@@ -890,7 +879,6 @@ public sealed class CombatStateTracker : IDisposable
         // holds the walker gate the same way an enemy does — even before its overlay says
         // so, and regardless of the resolver being wired.
         bool userEngaged = _isUserEngagedInstance?.Invoke(e.RawName) == true;
-        if (!userEngaged && _isGivenUpTarget?.Invoke(e.RawName) == true) return false;
         if (_resolveOverlay is null) return true;        // legacy ctor — engage everything
         MonsterOverlay overlay;
         try { overlay = _resolveOverlay(n) ?? new MonsterOverlay(); }
@@ -932,11 +920,9 @@ public sealed class CombatStateTracker : IDisposable
             killOnSight = overlay?.KillOnSight == true;
         }
 
-        bool givenUp = _isGivenUpTarget?.Invoke(e.RawName) == true;
         _log.Combat(LogCategory,
             $"detected '{e.ResolvedName}' ({record}) · relationship {relationship}"
             + (killOnSight ? " · kill-on-sight" : "")
-            + (givenUp ? " · given up (attacks never answered)" : "")
             + $" → {(engageable ? "engage" : "skip")}");
     }
 

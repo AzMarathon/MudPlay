@@ -149,6 +149,10 @@ public sealed record RouteChoice(
     // two cards already shown (WithTrapAvoidCard).
     IReadOnlyList<RoomKey>? TrapAvoidPath = null,
     int TrapAvoidTrapCount = 0,
+    // The per-person copper fare the fewest-traps route's paid transports charge: a
+    // TrapAvoid choice's FreePath, or a Teleport choice's TrapAvoidPath. Zero when
+    // it pays none.
+    long TrapAvoidFareCopper = 0,
     // For a route whose lever detour crosses the gates (EvaluateLeverDetour): the
     // walk already expanded, lever trips included. GatedPath is then the rooms that
     // walk passes, in order, with revisits, so re-expanding it would detour twice;
@@ -536,7 +540,8 @@ public static class RouteChoicePlanner
             BuildKeyPath(graph, source, shortest),
             RouteChoiceKind.TrapAvoid,
             FreeTrapCount: fewestTraps,
-            GatedTrapCount: shortestTraps);
+            GatedTrapCount: shortestTraps,
+            TrapAvoidFareCopper: RouteFareCopper(graph, source, fewest));
     }
 
     // The walk-vs-teleport fork comes first and used to hide the trap-avoid fork: a
@@ -563,6 +568,7 @@ public static class RouteChoicePlanner
         {
             TrapAvoidPath = traps.FreePath,
             TrapAvoidTrapCount = traps.FreeTrapCount,
+            TrapAvoidFareCopper = traps.TrapAvoidFareCopper,
             GatedTrapCount = traps.GatedTrapCount,
         };
     }
