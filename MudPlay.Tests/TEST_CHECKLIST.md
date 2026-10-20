@@ -810,9 +810,9 @@ How to keep it current:
 - Why: clickable links; emotes overdrawing rows.
 
 ### ConversationViewModelTests.cs
-- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel; ChatHistoryStore.
-- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter.
-- Why: the Conversation box jumped on every line.
+- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationChannelTags; ChatHistoryStore.
+- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`; a telepath row adds its arrow).
+- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide.
 
 ### CorpseHandoffTests.cs
 - Covers: Game/Recovery/CorpseHandoffManager, CorpseRecoveryLines, CorpseHandoffPlan; BugReportScrub; SentCommandTrail; CommandHistory; DoHandler.

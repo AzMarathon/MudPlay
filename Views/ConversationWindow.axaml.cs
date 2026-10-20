@@ -110,9 +110,17 @@ public partial class ConversationWindow : Window
         }
     }
 
+    // The ⋯ menu's Clear All opens the confirm on the same button. Posted so the menu
+    // has finished closing before the confirm opens over it.
+    private void OnClearAllRequested(object? sender, RoutedEventArgs e)
+    {
+        if (this.FindControl<Button>("MoreButton") is not { } more) return;
+        Dispatcher.UIThread.Post(() => FlyoutBase.ShowAttachedFlyout(more));
+    }
+
     private void OnClearAllConfirmed(object? sender, RoutedEventArgs e)
     {
-        this.FindControl<Button>("ClearAllButton")?.Flyout?.Hide();
+        if (this.FindControl<Button>("MoreButton") is { } more) FlyoutBase.GetAttachedFlyout(more)?.Hide();
         if (DataContext is ConversationViewModel vm) vm.ClearAllCommand.Execute(null);
     }
 

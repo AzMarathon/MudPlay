@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels"
         xmlns:views="using:MudPlay.Views"
+        xmlns:ctl="using:MudPlay.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="780" d:DesignHeight="520"
@@ -31,76 +32,143 @@
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
+
+        <!-- Channel filter pill: the channel's tag in its colour. On, it's outlined and
+             tinted with that colour; off, it fades to a hollow outline. The tint is the
+             channel brush at low opacity rather than a solid fill, so the label stays
+             readable whatever colour a channel is given on the Talk tab. -->
+        <Style Selector="ToggleButton.ChannelPill">
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="Padding" Value="7,1"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="{StaticResource CornerLg}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <Border Name="PART_Tint"
+                                Background="{TemplateBinding BorderBrush}"
+                                CornerRadius="{TemplateBinding CornerRadius}"/>
+                        <Border BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              Foreground="{TemplateBinding Foreground}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ToggleButton.ChannelPill /template/ Border#PART_Tint">
+            <Setter Property="Opacity" Value="0.25"/>
+        </Style>
+        <Style Selector="ToggleButton.ChannelPill:pointerover /template/ Border#PART_Tint">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+        <Style Selector="ToggleButton.ChannelPill:unchecked">
+            <Setter Property="Opacity" Value="0.5"/>
+        </Style>
+        <Style Selector="ToggleButton.ChannelPill:unchecked:pointerover">
+            <Setter Property="Opacity" Value="0.7"/>
+        </Style>
+        <Style Selector="ToggleButton.ChannelPill:unchecked /template/ Border#PART_Tint">
+            <Setter Property="IsVisible" Value="False"/>
+        </Style>
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
 
         <!-- ============ Filter toolbar ============ -->
+        <!-- One row: the channel pills, then search filling what's left, then the ⋯
+             menu. When the window is too narrow, the pills wrap onto a second line and
+             search + ⋯ keep their place at the end of the row. -->
         <Border DockPanel.Dock="Top"
                 Background="{StaticResource ChromeBgElevBrush}"
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,0,0,1"
-                Padding="10,6">
-            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Top">
+                Padding="8,4">
+            <ctl:WrapThenFillPanel Spacing="8">
 
-                <WrapPanel Grid.Column="0" Orientation="Horizontal" ItemSpacing="6" LineSpacing="4"
+                <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4"
                            VerticalAlignment="Center">
-                    <CheckBox IsChecked="{Binding ShowGossip}"            Content="Gossip"
-                              Foreground="{Binding GossipBrush}"    FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowLocal}"             Content="Say"
-                              Foreground="{Binding LocalBrush}"     FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowTelepath}" Content="Telepath"
-                              Foreground="{Binding TelepathBrush}" FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowGangpath}"          Content="Gang"
-                              Foreground="{Binding GangpathBrush}"  FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowBroadcast}"         Content="Broadcast"
-                              Foreground="{Binding BroadcastBrush}" FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowYell}"              Content="Yell"
-                              Foreground="{Binding YellBrush}"      FontSize="11"/>
-                    <CheckBox IsChecked="{Binding ShowRealmEvent}"        Content="Server"
-                              Foreground="{Binding RealmBrush}"     FontSize="11"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowGossip}"
+                                  Content="{Binding GossipTag}"
+                                  BorderBrush="{Binding GossipBrush}" Foreground="{Binding GossipBrush}"
+                                  ToolTip.Tip="Gossip: click to show or hide gossip and auctions"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowLocal}"
+                                  Content="{Binding LocalTag}"
+                                  BorderBrush="{Binding LocalBrush}" Foreground="{Binding LocalBrush}"
+                                  ToolTip.Tip="Say: click to show or hide says and actions"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowTelepath}"
+                                  Content="{Binding TelepathTag}"
+                                  BorderBrush="{Binding TelepathBrush}" Foreground="{Binding TelepathBrush}"
+                                  ToolTip.Tip="Telepath: click to show or hide telepaths, received and sent"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowGangpath}"
+                                  Content="{Binding GangpathTag}"
+                                  BorderBrush="{Binding GangpathBrush}" Foreground="{Binding GangpathBrush}"
+                                  ToolTip.Tip="Gang: click to show or hide gangpaths"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowBroadcast}"
+                                  Content="{Binding BroadcastTag}"
+                                  BorderBrush="{Binding BroadcastBrush}" Foreground="{Binding BroadcastBrush}"
+                                  ToolTip.Tip="Broadcast: click to show or hide broadcasts"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowYell}"
+                                  Content="{Binding YellTag}"
+                                  BorderBrush="{Binding YellBrush}" Foreground="{Binding YellBrush}"
+                                  ToolTip.Tip="Yell: click to show or hide yells"/>
+                    <ToggleButton Classes="ChannelPill" IsChecked="{Binding ShowRealmEvent}"
+                                  Content="{Binding RealmTag}"
+                                  BorderBrush="{Binding RealmBrush}" Foreground="{Binding RealmBrush}"
+                                  ToolTip.Tip="Server: click to show or hide realm notices and PvP messages"/>
                 </WrapPanel>
 
-                <!-- Search over auto-scroll in one fixed-width column: stacking
-                     them keeps the box at its natural height (no vertical
-                     stretch to match the wrapped checkbox rows) and reserves
-                     only one column of width, so the filter checkboxes can wrap
-                     freely as the window narrows without shoving these around. -->
-                <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4"
-                            VerticalAlignment="Top">
-                    <TextBox Classes="clearable" MinWidth="200"
-                             VerticalAlignment="Top"
-                             PlaceholderText="Search speaker / message…"
+                <!-- MinWidth is search's 120 plus the ⋯ button: the panel holds this much
+                     back from the pills, so the menu is never pushed off the window. -->
+                <Grid ColumnDefinitions="*,Auto" MinWidth="152" VerticalAlignment="Center">
+                    <TextBox Grid.Column="0" Classes="clearable"
+                             MinWidth="120" MinHeight="24" Height="24"
+                             Padding="6,2" FontSize="12"
+                             VerticalContentAlignment="Center"
+                             PlaceholderText="Search…"
+                             ToolTip.Tip="Show only lines whose speaker or message holds this text"
                              Text="{Binding SearchText, Mode=TwoWay}"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
-                        <!-- Wipes the history for good (the saved talk log too), and it
-                             sits beside a checkbox that gets clicked a lot, so the wipe
-                             itself is a second click inside the flyout. -->
-                        <Button x:Name="ClearAllButton"
-                                Content="Clear All"
-                                FontSize="11" Padding="8,1"
-                                VerticalAlignment="Center"
-                                ToolTip.Tip="Wipe the whole conversation log, including the saved copy">
-                            <Button.Flyout>
-                                <Flyout Placement="BottomEdgeAlignedRight">
-                                    <StackPanel Spacing="8" MaxWidth="260">
-                                        <TextBlock TextWrapping="Wrap"
-                                                   Text="Wipe the whole conversation log? This also empties the saved copy and can't be undone."/>
-                                        <Button HorizontalAlignment="Right"
-                                                Content="Clear All"
-                                                Click="OnClearAllConfirmed"/>
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-                        <CheckBox IsChecked="{Binding AutoScroll}"
-                                  Content="Auto-scroll"
-                                  VerticalAlignment="Center"
-                                  Foreground="{StaticResource ChromeFgSecBrush}"
-                                  FontSize="11"/>
-                    </StackPanel>
-                </StackPanel>
-            </Grid>
+                    <Button Grid.Column="1" x:Name="MoreButton"
+                            Margin="6,0,0,0" Width="26" Height="24" Padding="0"
+                            Background="Transparent" BorderThickness="0"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            ToolTip.Tip="Auto-scroll and Clear All">
+                        <Path Data="{StaticResource IconMore}"
+                              Fill="{StaticResource ChromeFgSecBrush}"
+                              Width="14" Height="4" Stretch="Uniform"/>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuItem Header="Auto-scroll" ToggleType="CheckBox"
+                                          IsChecked="{Binding AutoScroll, Mode=TwoWay}"/>
+                                <Separator/>
+                                <MenuItem Header="Clear All…" Click="OnClearAllRequested"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                        <!-- Clear All wipes the history for good (the saved talk log
+                             too), so its menu entry only opens this confirm: the wipe
+                             itself is a second, deliberate click. -->
+                        <FlyoutBase.AttachedFlyout>
+                            <Flyout Placement="BottomEdgeAlignedRight">
+                                <StackPanel Spacing="8" MaxWidth="260">
+                                    <TextBlock TextWrapping="Wrap"
+                                               Text="Wipe the whole conversation log? This also empties the saved copy and can't be undone."/>
+                                    <Button HorizontalAlignment="Right"
+                                            Content="Clear All"
+                                            Click="OnClearAllConfirmed"/>
+                                </StackPanel>
+                            </Flyout>
+                        </FlyoutBase.AttachedFlyout>
+                    </Button>
+                </Grid>
+            </ctl:WrapThenFillPanel>
         </Border>
 
         <!-- ============ Input row ============ -->

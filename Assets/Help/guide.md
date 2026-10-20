@@ -4324,11 +4324,15 @@ Since the obvious-exits line is also fully green, MudPlay only captures true act
 
 ## Filtering and searching
 
-The toolbar across the top controls what you see:
+The single row across the top controls what you see:
 
-- **Channel checkboxes** — **Gossip, Say, Telepath, Gang, Broadcast, Yell, Server** — tick or untick to show or hide each channel. Each box is painted in its channel's color, so the row doubles as a color key. Your choices are remembered per character. (Telepaths in and out share the one Telepath box; realm notices and PvP messages share the Server box.)
-- **Search** box — narrows the log to lines whose speaker or text matches what you type (this one isn't remembered between sessions).
-- **Auto-scroll** — when ticked, the log follows the newest line while you're at the bottom. Scroll or drag up to read back and new lines leave your place alone; scroll back to the bottom (or re-tick the box) and it follows again. Untick it to never follow. Your choice is remembered per character, like the channel boxes.
+- **Channel pills** — **GOS, SAY, TELE, GANG, BCAST, YELL, SERVER**, labelled with the same tags the log's lines carry — click one to show or hide that channel. A pill that's on is outlined and tinted in its channel's color; one that's off fades out, so the row doubles as a color key and shows at a glance what's hidden. Hover a pill for the channel's full name. Your choices are remembered per character. (Telepaths in and out share the one **TELE** pill; realm notices and PvP messages share **SERVER**; actions ride **SAY**.)
+- **Search** box — fills the rest of the row and narrows the log to lines whose speaker or text matches what you type (this one isn't remembered between sessions).
+- **⋯** menu, at the end of the row:
+  - **Auto-scroll** — when ticked, the log follows the newest line while you're at the bottom. Scroll or drag up to read back and new lines leave your place alone; scroll back to the bottom (or re-tick it) and it follows again. Untick it to never follow. Your choice is remembered per character, like the channel pills.
+  - **Clear All…** — wipes the history; see *Logging and history*.
+
+When the window is too narrow for the whole row, the pills wrap onto a second line; the search box and the **⋯** menu always stay at the end of the first.
 
 ## Talking
 
@@ -4340,7 +4344,7 @@ Type into the input box at the bottom and press **Enter** (or click **Send**) to
 
 ## Logging and history
 
-The window keeps its history even after you close it, and replays your last session's chat when you reconnect: **Settings → Talk → Log conversations** (on by default) saves it to `<character>.<bbs>.talk.log` in the `Logs` folder, which you can open from **Tools → Open Logs folder…**. Untick it and nothing is saved, so the next session starts empty. **Clear All**, beside Auto-scroll, wipes the whole history and the saved copy after one confirming click; **Tools → Clear chatlog** on the main window does the same without asking. The chat font and channel colors are set on the Talk tab and apply live the moment you hit Apply — an already-open window re-fonts and recolors on the spot.
+The window keeps its history even after you close it, and replays your last session's chat when you reconnect: **Settings → Talk → Log conversations** (on by default) saves it to `<character>.<bbs>.talk.log` in the `Logs` folder, which you can open from **Tools → Open Logs folder…**. Untick it and nothing is saved, so the next session starts empty. **Clear All…** in the **⋯** menu wipes the whole history and the saved copy after one confirming click; **Tools → Clear chatlog** on the main window does the same without asking. The chat font and channel colors are set on the Talk tab and apply live the moment you hit Apply — an already-open window re-fonts and recolors on the spot.
 
 ---
 
@@ -6421,7 +6425,7 @@ Applied emotes live in the **Emotes** folder inside that BBS's folder (`BBS/<bbs
 ### Channel colors (per-channel Accent / Text)
 
 **Default:** theme defaults (no override)
-**What it does:** Lets you pick a custom color for each chat channel's tag/speaker name (Accent) and separately its message body (Text).
+**What it does:** Lets you pick a custom color for each chat channel's tag/speaker name and its filter pill (Accent) and separately its message body (Text).
 **Important notes:** Applies **live** — hit Apply and an already-open Conversation window recolors on the spot, no reopen needed.
 
 ---

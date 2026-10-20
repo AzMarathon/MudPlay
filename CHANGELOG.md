@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.12
+
+- Conversation window header shrinks to one row: channel filters become coloured pills labelled like the rows' tags
+- Search stretches across the rest of the row; Auto-scroll and Clear All move into a ⋯ menu at its end
+
 ## 3.185.11
 
 - An exit's own move text (the skiffs, the refuse pit) stays in the terminal instead of filling the Conversation window as an action
