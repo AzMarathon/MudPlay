@@ -4343,6 +4343,9 @@ public sealed class AppServices
         // doesn't pay the BFS cost on the UI thread when they first
         // open the Navigation window.
         RoomGraph.GraphReloaded += Bfs.PrewarmAsync;
+        // The set active at start-up loaded its graph before this subscription, so
+        // its reload went unheard: warm that one now.
+        if (RoomGraph.RoomCount > 0) Bfs.PrewarmAsync();
 
         // Per-character avoided + stash rooms.
         // Constructor subscribes ProfileLoaded / ProfileClosed and
@@ -8002,7 +8005,7 @@ public sealed class AppServices
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
             MovementCoordinator, filter: Movement, log: Log,
-            promptScanner: PromptScanner, recovery: Recovery);
+            promptScanner: PromptScanner, recovery: Recovery, performance: Performance);
         // Random-teleport maze solver. The walker calls into it (via
         // SetMazeSolver) whenever a destination inside a maze pocket has no
         // sourceable route; the solver drives look-peeks + reshuffles until a

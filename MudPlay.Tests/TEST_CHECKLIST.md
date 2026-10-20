@@ -755,8 +755,8 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog.
-- Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049).
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty.
+- Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
 - Covers: Game/Remote/ComebackRequester (with FollowMoveObserver, MovementRefusalDetector, PartyManager, TooHeavyWaitSignal).
@@ -3157,8 +3157,8 @@ How to keep it current:
 
 ### RemoteActionPathExpanderTests.cs
 - Covers: Game/Map/RemoteActionPathExpander
-- Checks: move steps; doors at runtime; cross-room lever detours (anchored at the nearest approach, redundant levers, nested, cyclic, depth cap, one-way lever rooms); ReachesDestination.
-- Why: report paradigm-20261003-132757 and lever routes.
+- Checks: move steps; doors at runtime; cross-room lever detours (anchored at the nearest approach, redundant levers, nested, cyclic, depth cap, one-way lever rooms); a lever on a 300-room approach is pulled from the right room without a map search from every room walked, and a lever room no route enters is found out the same way (counted through the filter); the room picked is the one weighing every room would pick: the earlier of two equally near, and past a room that looks nearest but has no route to the lever; ReachesDestination.
+- Why: report paradigm-20261003-132757 and lever routes; reports Hang-20261020-103254 and Hang-20261020-104120 (the walk build froze the UI thread after a long route was picked).
 
 ### RemoteCommandCatalogTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog, PlayerEditDialogViewModel tips
@@ -3405,13 +3405,13 @@ How to keep it current:
 
 ### RouteChoiceDialogViewModelTests.cs
 - Covers: ViewModels/Navigation/RouteChoiceDialogViewModel, RouteChoicePrompt (RouteSubstitutes, RouteACardWalks)
-- Checks: - The requirement line's source tail (ask > buy > dropped-by, only for kinds a walk auto-sources) and the select-to-preview / Go / Cancel flow. - Card wording and visibility per fork: send-it, sole hazard (survivable or grave, obtainable or not), teleport, trap-avoid, avoid-override, boss room, blocked, shortcut, and lake crossings. Also ETAs, the calculating-then-Populate state, and teleport notes per card.
+- Checks: - The requirement line's source tail (ask > buy > dropped-by, only for kinds a walk auto-sources) and the select-to-preview / Go / Cancel flow. - Card wording and visibility per fork: send-it, sole hazard (survivable or grave, obtainable or not), teleport (with its fewest-traps third card, previewed, committed and stating a paid transport's fare), trap-avoid, avoid-override, boss room, blocked, shortcut, and lake crossings. Also ETAs, the calculating-then-Populate state, and teleport notes per card.
 - Why: Reports `paradigm-20261007-192215`, `paradigm-20261007-215302`, `paradigm-20260914-201123`, `paradigm-20261008-173911` / `-174023`.
 
 ### RouteChoicePlannerTests.cs
 - Covers: Services/RouteChoicePlanner, with Game/Map/BfsMapper, Services/MovementFilter, PathItemShopRouter, LoopExpander, AutoWalkManager (lake crossings)
-- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route. Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
-- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10.
+- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route; a teleport fork past a trap carries the fewest-traps route unless it is the walk already offered (WithTrapAvoidCard). Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
+- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10 and 2026-10-20.
 
 ### RouteDetailsColoringTests.cs
 - Covers: ViewModels/Navigation/RouteDetailsDialogViewModel (monster hit-% colouring)

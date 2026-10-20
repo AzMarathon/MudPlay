@@ -1671,6 +1671,29 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.CombatGateHeld);
     }
 
+    // Report Hang-20261020-103254: the watchdog's line called the room empty every
+    // ten seconds while the room it had just shown held the monster the gate went up
+    // for. It names the monster when the room last shown has one, and says the room
+    // is empty only when it is.
+    [Fact]
+    public void IdleStallWatchdog_NamesTheMonsterTheRoomStillShows()
+    {
+        using Harness h = new();
+        h.WireSender();
+        h.AddMonster(3222, "Archmage Lance");
+
+        h.Feed("Also here: Archmage Lance.");
+        h.FakeNow = h.FakeNow.AddSeconds(7);
+        h.Tracker.OnCombatTick();
+
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.EndsWith(
+            "no combat activity for the stall window, the room still shows 'Archmage Lance'; resyncing and clearing stuck combat state",
+            StringComparison.Ordinal));
+        Assert.Contains(h.Log.Snapshot(), e => e.Message
+            == "combat state force-cleared — idle-stall watchdog: no combat activity — the room still shows 'Archmage Lance'");
+        Assert.DoesNotContain(h.Log.Snapshot(), e => e.Message.Contains("room empty", StringComparison.Ordinal));
+    }
+
     // A ShadowRest holds combat beside a monster on purpose; that quiet isn't a stall,
     // so the watchdog doesn't re-display the room every 6 s (report
     // paradigm-20260930-193005).

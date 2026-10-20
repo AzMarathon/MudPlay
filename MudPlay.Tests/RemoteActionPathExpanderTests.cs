@@ -774,6 +774,194 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.True(((MoveStep)steps[^1]).SkipSpecialDispatch);
     }
 
+    // A corridor of `length` rooms 1/1 … 1/length walked east, its last room the host
+    // of an east exit to 1/9999 that a lever opens. The lever room 1/5000 lies north
+    // of corridor room `leverOff`.
+    private static string LongLeverCorridorJson(int length, int leverOff)
+    {
+        static string Room(int n, string name, string north, string south, string east, string west, string down) =>
+            $"{{\"Map Number\": 1, \"Room Number\": {n}, \"Name\": \"{name}\", \"Light\": 0, \"Shop\": 0, \"Lair\": \"\", \"Delay\": 0, "
+            + $"\"N\": \"{north}\", \"S\": \"{south}\", \"E\": \"{east}\", \"W\": \"{west}\", "
+            + "\"NE\": \"0\", \"NW\": \"0\", \"SE\": \"0\", \"SW\": \"0\", \"U\": \"0\", "
+            + $"\"D\": \"{down}\"}}";
+        var rooms = new System.Text.StringBuilder("[");
+        for (int n = 1; n <= length; n++)
+        {
+            string east = n < length ? $"1/{n + 1}" : "1/9999 (Hidden/Needs 1 Actions, specific order)";
+            string west = n > 1 ? $"1/{n - 1}" : "0";
+            rooms.Append(Room(n, "Corridor", n == leverOff ? "1/5000" : "0", "0", east, west, "0")).Append(',');
+        }
+        rooms.Append(Room(5000, "LeverRoom", "0", $"1/{leverOff}", "0", "0",
+            $"Action#1 [on the E exit of room 1/{length}]: pull lever")).Append(',');
+        rooms.Append(Room(9999, "Vault", "0", "0", "0", $"1/{length}", "0")).Append(']');
+        return rooms.ToString();
+    }
+
+    // Every room the search looks into, counted: each search of the map asks the
+    // filter about each room it reaches. Avoided rooms are never entered.
+    private sealed class CountingFilter(params RoomKey[] avoided) : IRoomFilter
+    {
+        public int Looks { get; private set; }
+        public bool IsAvoided(RoomKey key)
+        {
+            Looks++;
+            return avoided.Contains(key);
+        }
+    }
+
+    // A lever room no route may enter (here, one the user avoids): no room walked can
+    // get to it, so none is searched from to find that out, and the walk stops short
+    // of the exit as before.
+    [Fact]
+    public void LongApproach_LeverRoomUnreachable_IsFoundOutWithoutSearchingFromEveryRoom()
+    {
+        const int length = 300;
+        RoomGraphManager graph = NewGraph(LongLeverCorridorJson(length, leverOff: 3));
+        BfsMapper bfs = new(graph);
+        CountingFilter filter = new(new RoomKey(1, 5000));
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1), Enumerable.Repeat(Direction.E, length).ToArray(), bfs, filter);
+
+        Assert.Equal(length - 1, steps.Count);
+        Assert.DoesNotContain(steps, s => s is CommandStep);
+        Assert.False(RemoteActionPathExpander.ReachesDestination(steps, new RoomKey(1, 9999)));
+        Assert.True(filter.Looks < 10 * length, $"{filter.Looks} looks");
+    }
+
+    // 1/1 ─E─ 1/2 ─E─ … ─E─ 1/6 ─E (needs the lever in 1/5000)→ 1/9999
+    // The lever room opens north of both 1/2 and 1/4 (1/2 N, back by SW; 1/4 N, back
+    // by SE): either is two steps there and back, so the earlier one, 1/2, is where
+    // the walk goes for it.
+    private const string TwoEqualApproachesJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/5000", "S": "0", "E": "1/3", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/4", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/5000", "S": "0", "E": "1/5", "W": "1/3", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/6", "W": "1/4", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Host", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/9999 (Hidden/Needs 1 Actions, specific order)", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5000, "Name": "LeverRoom", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "1/4", "SW": "1/2", "U": "0", "D": "Action#1 [on the E exit of room 1/6]: pull lever" },
+          { "Map Number": 1, "Room Number": 9999, "Name": "Vault", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "0", "W": "1/6", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void LeverRoomAsNearFromTwoRoomsWalked_IsGoneForFromTheEarlier()
+    {
+        RoomGraphManager graph = NewGraph(TwoEqualApproachesJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1), Enumerable.Repeat(Direction.E, 6).ToArray(), bfs);
+
+        Assert.Equal(new[] { "2", "5000", "pull lever", "2", "3", "4", "5", "6", "9999" }, Walked(steps));
+    }
+
+    // 1/1 ─E─ 1/2 ─E─ … ─E─ 1/10 ─E (needs the lever in 1/5000)→ 1/9999
+    // From 1/2 the lever room is two steps away through 1/6000, a room no route
+    // enters unless nothing else gets there; from 1/8 it is three steps by a passage
+    // of its own (1/7000, 1/7001). 1/2 looks nearest, but no route goes that way,
+    // so the walk goes for the lever from 1/8.
+    private const string ClosedShortcutToLeverJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/6000", "S": "0", "E": "1/3", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/4", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/5", "W": "1/3", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/6", "W": "1/4", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/7", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/8", "W": "1/6", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/7000", "S": "0", "E": "1/9", "W": "1/7", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "C", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/10", "W": "1/8", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 10, "Name": "Host", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/9999 (Hidden/Needs 1 Actions, specific order)", "W": "1/9", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6000, "Name": "Closed", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/5000", "S": "1/2", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7000, "Name": "Passage", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/7001", "S": "1/8", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7001, "Name": "Passage", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/5000", "S": "1/7000", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5000, "Name": "LeverRoom", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "1/6000", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "Action#1 [on the E exit of room 1/10]: pull lever", "D": "1/7001" },
+          { "Map Number": 1, "Room Number": 9999, "Name": "Vault", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "0", "W": "1/10", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // 1/6000 is closed to routes: the way into it is shut by its hazard, as the
+    // movement filter has it for a room like Crystal Lake's.
+    private sealed class ClosedRoomFilter : IRoomFilter
+    {
+        private static readonly RoomKey Closed = new(1, 6000);
+        public bool IsAvoided(RoomKey key) => false;
+        public bool IsClosedToRoutes(RoomKey room) => room == Closed;
+        public bool IsExitBlocked(in RoomExit exit) => exit.Target == Closed;
+        public ExitBlockReason DescribeExitBlock(in RoomExit exit) =>
+            exit.Target == Closed ? ExitBlockReason.Hazard : ExitBlockReason.None;
+    }
+
+    [Fact]
+    public void NearestLookingRoomWithNoRouteToTheLever_IsPassedOver()
+    {
+        RoomGraphManager graph = NewGraph(ClosedShortcutToLeverJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1), Enumerable.Repeat(Direction.E, 10).ToArray(), bfs, new ClosedRoomFilter());
+
+        Assert.Equal(
+            new[] { "2", "3", "4", "5", "6", "7", "8", "7000", "7001", "5000", "pull lever", "7001", "7000", "8", "9", "10", "9999" },
+            Walked(steps));
+    }
+
+    private static string[] Walked(IReadOnlyList<WalkStep> steps) => steps.Select(s => s switch
+    {
+        MoveStep m => $"{m.ExpectedTarget.Room}",
+        CommandStep c => c.Command,
+        _ => "?",
+    }).ToArray();
+
+    // Reports Hang-20261020-103254, Hang-20261020-104120: a lever-gated exit a few
+    // hundred rooms into a walk weighed every room walked as the place to go for the
+    // lever, two searches of the map each, which froze the client for half a minute
+    // and more once the route was picked. The lever is still pulled from the room
+    // beside it, and the rooms far from it are never searched from.
+    [Fact]
+    public void LongApproach_LeverBesideTheExit_IsPulledThere_WithoutSearchingFromEveryRoom()
+    {
+        const int length = 300;
+        RoomGraphManager graph = NewGraph(LongLeverCorridorJson(length, leverOff: length - 1));
+        BfsMapper bfs = new(graph);
+        CountingFilter filter = new();
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1), Enumerable.Repeat(Direction.E, length).ToArray(), bfs, filter);
+
+        string[] walked = Walked(steps);
+        Assert.Equal(length + 3, walked.Length);
+        Assert.Equal(new[] { $"{length - 1}", "5000", "pull lever", $"{length - 1}", $"{length}", "9999" },
+            walked[^6..]);
+        // One search of the corridor costs about `length` looks; a search from every
+        // room walked cost about length² / 2.
+        Assert.True(filter.Looks < 10 * length, $"{filter.Looks} looks");
+    }
+
+    // The same corridor with the lever near its start: the walk still pulls it on
+    // the way past, not after reaching the exit and walking back, as weighing every
+    // room did; no room but the near ones is searched from to find that out.
+    [Fact]
+    public void LongApproach_LeverNearTheStart_IsPulledOnTheWayPast()
+    {
+        const int length = 300;
+        RoomGraphManager graph = NewGraph(LongLeverCorridorJson(length, leverOff: 3));
+        BfsMapper bfs = new(graph);
+        CountingFilter filter = new();
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1), Enumerable.Repeat(Direction.E, length).ToArray(), bfs, filter);
+
+        string[] walked = Walked(steps);
+        Assert.Equal(new[] { "2", "3", "5000", "pull lever", "3", "4" }, walked[..6]);
+        Assert.Equal(new[] { $"{length}", "9999" }, walked[^2..]);
+        Assert.True(((MoveStep)steps[^1]).SkipSpecialDispatch);
+        Assert.True(filter.Looks < 10 * length, $"{filter.Looks} looks");
+    }
+
     [Fact]
     public void LeverRoomOutOfReach_NamesTheLegThatCannotBeWalked()
     {

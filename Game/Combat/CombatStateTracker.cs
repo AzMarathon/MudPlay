@@ -580,6 +580,13 @@ public sealed class CombatStateTracker : IDisposable
         // dead-reckoned as a false confirm of the movement loop's in-flight step.
         // The combat state still clears optimistically either way.
         bool dark = _isInDarkRoom?.Invoke() == true;
+        // "Room empty" is the usual reading of the silence, but the room last shown
+        // may still hold the monster the gate went up for (report
+        // Hang-20261020-103254): the log names it rather than calling the room empty.
+        string? stillShown = null;
+        foreach (RoomEntity e in _classifier.Current?.Entities ?? Array.Empty<RoomEntity>())
+            if (e.Kind == EntityKind.Monster && IsEngageable(e)) { stillShown = e.ResolvedName; break; }
+        string seen = stillShown is null ? "room empty" : $"the room still shows '{stillShown}'";
         string held = _gateAsserted
             ? $"combat gate held {(_now() - _gateAssertedAt).TotalSeconds:F1}s"
             : "InCombat stuck (auto-attack off)";
@@ -587,13 +594,13 @@ public sealed class CombatStateTracker : IDisposable
             $"{held}, idle {idleSec:F1}s since last activity "
             + $"({_lastCombatActivityDesc}) — no combat activity for the stall window, "
             + (dark
-                ? "room empty; dark room, skipping resync CR and clearing stuck combat state"
-                : "room empty; resyncing and clearing stuck combat state"));
+                ? $"{seen}; dark room, skipping resync CR and clearing stuck combat state"
+                : $"{seen}; resyncing and clearing stuck combat state"));
         // With the master switch off the stuck state is still cleared, but the
         // redisplay is not sent: nothing automatic goes on the wire.
         if (!dark && MasterSwitchOff?.Invoke() != true)
             _wireSender(Encoding.Latin1.GetBytes("\r"));
-        ResetCombatState("idle-stall watchdog: no combat activity — room empty");
+        ResetCombatState($"idle-stall watchdog: no combat activity — {seen}");
     }
 
     private void SendCommand(string text)

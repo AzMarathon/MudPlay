@@ -537,6 +537,58 @@ public sealed class RouteChoiceDialogViewModelTests
             previews);
     }
 
+    // The fewest-traps route on the walk-vs-teleport fork (user, 2026-10-20): a third
+    // card, worded as the trap-avoid fork words its own, naming the teleport it takes;
+    // picking it previews that route and Go commits it.
+    [Fact]
+    public void TeleportChoice_WithTrapAvoidRoute_OffersItAsAThirdCard()
+    {
+        IReadOnlyList<RoomKey> trapFree = new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 6), new RoomKey(1, 9) };
+        RouteChoice choice = TeleportChoice() with { TrapAvoidPath = trapFree, TrapAvoidTrapCount = 0, GatedTrapCount = 2 };
+        var vm = new RouteChoiceDialogViewModel(choice, "Silver River (12/34)", id => null,
+            teleportsOn: r => r == RouteChoiceResult.TrapAvoid ? "the teleport to Silver River (12/34)" : null);
+        var previews = new List<RouteChoiceResult?>();
+        RouteChoiceResult? closed = null;
+        vm.PreviewRequested += r => previews.Add(r);
+        vm.CloseRequested += r => closed = r;
+
+        Assert.True(vm.ShowTrapAvoidCard);
+        Assert.Equal("Avoid traps — 3 steps, trap-free — takes the teleport to Silver River (12/34)", vm.TrapAvoidSummary);
+        Assert.Contains("crosses 2 traps", vm.TrapAvoidDetail);
+        Assert.DoesNotContain("Costs", vm.TrapAvoidDetail);   // no paid transport on it
+        Assert.Null(vm.SelectedRoute);              // nothing picked for the user
+
+        vm.SelectTrapAvoidCommand.Execute(null);
+        Assert.True(vm.IsTrapAvoidSelected);
+        vm.GoCommand.Execute(null);
+
+        Assert.Equal(RouteChoiceResult.TrapAvoid, closed);
+        Assert.Equal(new RouteChoiceResult?[] { RouteChoiceResult.TrapAvoid }, previews);
+    }
+
+    // A fewest-traps route through a paid NPC transport states its fare, as the
+    // teleport card states its own.
+    [Fact]
+    public void TeleportChoice_TrapAvoidRouteThroughAPaidTransport_StatesItsFare()
+    {
+        IReadOnlyList<RoomKey> trapFree = new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) };
+        RouteChoice choice = TeleportChoice() with { TrapAvoidPath = trapFree, TrapAvoidFareCopper = 500, GatedTrapCount = 1 };
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Silver River (12/34)", id => null);
+
+        Assert.EndsWith($" Costs {MudPlay.Game.Cash.CurrencyFormat.Full(500)} per person.", vm.TrapAvoidDetail);
+    }
+
+    [Fact]
+    public void TeleportChoice_WithoutTrapAvoidRoute_HasNoThirdCard()
+    {
+        var vm = new RouteChoiceDialogViewModel(TeleportChoice(), "Silver River (12/34)", id => null);
+
+        Assert.False(vm.ShowTrapAvoidCard);
+        vm.SelectTrapAvoidCommand.Execute(null);
+        Assert.Null(vm.SelectedRoute);
+    }
+
     // ----- Avoid-override fork: the card names the rooms ------------------
 
     // Report paradigm-20261007-215302: the card said "3 rooms you marked Avoid" and

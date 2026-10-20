@@ -27,6 +27,8 @@ public enum RouteChoiceResult
                       // (costs gold + a charge + wipes buffs), then walk from there to
                       // the destination. Shown alongside the plain overland walk; never
                       // auto-taken.
+    TrapAvoid,        // on the walk-vs-teleport fork: the fewest-traps route the
+                      // trap-avoid fork would have offered over the teleport route.
 }
 
 // Route picker, shown when RouteChoicePlanner found a fork worth a user decision.
@@ -240,6 +242,14 @@ public sealed partial class RouteChoiceDialogViewModel
     public string ShortcutDetail { get; private set; } = "";
     public bool IsShortcutSelected => SelectedRoute == RouteChoiceResult.Shortcut;
 
+    // The fewest-traps card on the walk-vs-teleport fork: the trap-avoid fork's route,
+    // offered beside walking and teleporting when it is neither (RouteChoice.TrapAvoidPath).
+    private IReadOnlyList<RoomKey>? _trapAvoidPath;
+    public bool ShowTrapAvoidCard => _trapAvoidPath is { Count: > 0 };
+    public string TrapAvoidSummary { get; private set; } = "";
+    public string TrapAvoidDetail { get; private set; } = "";
+    public bool IsTrapAvoidSelected => SelectedRoute == RouteChoiceResult.TrapAvoid;
+
     // The Free card is a real, selectable route only when a gate-free route exists.
     // On a sole route it used to render as a disabled "why you can't walk it" note;
     // that's now dropped (the heading + option cards carry it), so hide it entirely
@@ -276,6 +286,7 @@ public sealed partial class RouteChoiceDialogViewModel
     [NotifyPropertyChangedFor(nameof(IsAvoidAltSelected))]
     [NotifyPropertyChangedFor(nameof(IsShortcutSelected))]
     [NotifyPropertyChangedFor(nameof(IsTokenSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTrapAvoidSelected))]
     [NotifyCanExecuteChangedFor(nameof(GoCommand))]
     [NotifyCanExecuteChangedFor(nameof(GoCombatOffCommand))]
     [NotifyCanExecuteChangedFor(nameof(GoSprintCommand))]
@@ -309,13 +320,14 @@ public sealed partial class RouteChoiceDialogViewModel
         // The room the walk starts from, for the "From X to Y" title. Optional (defaults
         // empty → a plain "Route to Y").
         string sourceLabel = "",
-        Func<RouteChoiceResult, string?>? teleportsOn = null)
+        Func<RouteChoiceResult, string?>? teleportsOn = null,
+        TimeSpan trapAvoidEta = default)
     {
         Heading = ComposeHeading(destinationLabel, sourceLabel);
         Populate(
             choice, itemName, giveNameForItem, shopBuyPhraseForItem,
             dropNameForItem, freeEta, gatedEta, hazardCounterSource, hazardSurvivable,
-            resolvedHazardCounter, economyNote, teleportsOn);
+            resolvedHazardCounter, economyNote, teleportsOn, trapAvoidEta);
     }
 
     // "Calculating…" construction: the idle (off-thread) path opens the picker with
@@ -355,7 +367,9 @@ public sealed partial class RouteChoiceDialogViewModel
         // The teleports a card's route takes ("the teleport to Stone Tunnel (2/1306)"),
         // or null when it walks all the way. The picker has no map of its own, so the
         // prompt answers.
-        Func<RouteChoiceResult, string?>? teleportsOn = null)
+        Func<RouteChoiceResult, string?>? teleportsOn = null,
+        // The fewest-traps card's arrival estimate, when the choice carries one.
+        TimeSpan trapAvoidEta = default)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -432,8 +446,27 @@ public sealed partial class RouteChoiceDialogViewModel
             ? $"Cross unprotected — take the damage — {StepsEta(choice.GatedStepCount, gatedEta)}"
             : $"Direct — send it — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
+        _trapAvoidPath = IsTeleportChoice ? choice.TrapAvoidPath : null;
+        TrapAvoidSummary = string.Empty;
+        TrapAvoidDetail = string.Empty;
         if (IsTeleportChoice)
         {
+            if (_trapAvoidPath is { Count: > 0 } trapRoute)
+            {
+                int trapRouteTraps = choice.TrapAvoidTrapCount;
+                string summary = trapRouteTraps == 0
+                    ? $"Avoid traps — {StepsEta(trapRoute.Count - 1, trapAvoidEta)}, trap-free"
+                    : $"Fewest traps — {StepsEta(trapRoute.Count - 1, trapAvoidEta)}, crosses {TrapWord(trapRouteTraps)}";
+                TrapAvoidSummary = teleportsOn?.Invoke(RouteChoiceResult.TrapAvoid) is { Length: > 0 } via
+                    ? $"{summary} — takes {via}"
+                    : summary;
+                TrapAvoidDetail = $"The teleport route crosses {TrapWord(choice.GatedTrapCount)} the walker would try "
+                    + "to disarm as it steps, and a disarm can fail. This way dodges "
+                    + (trapRouteTraps == 0 ? "them all." : $"all but {TrapWord(trapRouteTraps)} it can't avoid.")
+                    + (choice.TrapAvoidFareCopper > 0
+                        ? $" Costs {CurrencyFormat.Full(choice.TrapAvoidFareCopper)} per person."
+                        : string.Empty);
+            }
             FreeSummary = $"Walk it — {StepsEta(choice.FreeStepCount, freeEta)}, no teleport";
             GatedSummary = $"Teleport — {StepsEta(choice.GatedStepCount, gatedEta)} — much shorter";
             // A paid NPC transport charges every person who asks it; the planner only
@@ -822,6 +855,14 @@ public sealed partial class RouteChoiceDialogViewModel
         if (!ShowShortcutCard) return;
         SelectedRoute = RouteChoiceResult.Shortcut;
         PreviewRequested?.Invoke(RouteChoiceResult.Shortcut);
+    }
+
+    [RelayCommand]
+    private void SelectTrapAvoid()
+    {
+        if (!ShowTrapAvoidCard) return;
+        SelectedRoute = RouteChoiceResult.TrapAvoid;
+        PreviewRequested?.Invoke(RouteChoiceResult.TrapAvoid);
     }
 
     [RelayCommand]

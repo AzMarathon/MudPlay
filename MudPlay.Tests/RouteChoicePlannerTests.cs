@@ -1409,6 +1409,68 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // ----- WithTrapAvoidCard: the trap card on a walk-vs-teleport fork ----
+    //
+    //  1/1 ──E (teleport)──▶ 1/9 ──N (Trap)──▶ 1/20 (goal)   teleport, 2 hops, 1 trap
+    //   │                     └─E─▶ 1/10 ──N──▶ 1/20          teleport, 3 hops, no trap
+    //   N 1/2 N 1/3 N 1/4 E ──────────────────▶ 1/20          walk, 4 hops, no trap
+    private static string TeleportPastTrapJson(bool cleanWayFromLanding) => $$"""
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/9 (Item: 5)", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Walk1", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Walk2", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Walk3", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/3", "E": "1/20", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Landing", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/20 (Trap)", "S": "0", "E": "{{(cleanWayFromLanding ? "1/10" : "0")}}", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 10, "Name": "Ledge", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/20", "S": "0", "E": "0", "W": "1/9", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 20, "Name": "Goal", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/9", "E": "0", "W": "1/4", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // The user, 2026-10-20: the walk-vs-teleport fork came first and hid the
+    // trap-avoid fork, so a teleport route past a trap offered no way round the trap
+    // ("it should offer the missing trap avoidance route as well").
+    [Fact]
+    public void TeleportFork_PastATrap_CarriesTheFewestTrapsRoute()
+    {
+        WithTeleportGraph(TeleportPastTrapJson(cleanWayFromLanding: true), (bfs, graph, filter) =>
+        {
+            RoomKey from = new(1, 1), to = new(1, 20);
+            RouteChoice teleport = RouteChoicePlanner.EvaluateTeleport(bfs, filter, graph, from, to)!;
+            RouteChoice choice = RouteChoicePlanner.WithTrapAvoidCard(teleport, bfs, filter, graph, from, to);
+
+            Assert.Equal(RouteChoiceKind.Teleport, choice.Kind);
+            Assert.Equal(new[] { new RoomKey(1, 1), new RoomKey(1, 9), new RoomKey(1, 10), new RoomKey(1, 20) },
+                choice.TrapAvoidPath);
+            Assert.Equal(0, choice.TrapAvoidTrapCount);
+            Assert.Equal(1, choice.GatedTrapCount);
+            // The two cards it already had are as they were.
+            Assert.Equal(teleport.FreePath, choice.FreePath);
+            Assert.Equal(teleport.GatedPath, choice.GatedPath);
+        });
+    }
+
+    // When the fewest-traps route is the walk already offered, there's no third card.
+    [Fact]
+    public void TeleportFork_FewestTrapsRouteIsTheWalk_NoThirdCard()
+    {
+        WithTeleportGraph(TeleportPastTrapJson(cleanWayFromLanding: false), (bfs, graph, filter) =>
+        {
+            RoomKey from = new(1, 1), to = new(1, 20);
+            RouteChoice teleport = RouteChoicePlanner.EvaluateTeleport(bfs, filter, graph, from, to)!;
+            RouteChoice choice = RouteChoicePlanner.WithTrapAvoidCard(teleport, bfs, filter, graph, from, to);
+
+            Assert.Null(choice.TrapAvoidPath);
+            Assert.Same(teleport, choice);
+        });
+    }
+
     // ----- EvaluateTrapAvoid: avoid-traps fork -----------------------
     //
     //  1/1 ──N (Trap)── 1/2 (goal)   trapped 1-hop shortcut

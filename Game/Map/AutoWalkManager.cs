@@ -102,6 +102,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<Models.Profile.SysopGotoLocation>? _sysGotoFire;
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private readonly LogService? _log;
+    private readonly PerformanceMonitor? _performance;
 
     private List<WalkStep>? _path;
     private int _index;                                      // index of the *next* step to send
@@ -468,7 +469,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         IRoomFilter? filter = null,
         LogService? log = null,
         WirePromptScanner? promptScanner = null,
-        EngineRecoveryGate? recovery = null)
+        EngineRecoveryGate? recovery = null,
+        PerformanceMonitor? performance = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bfs);
@@ -483,6 +485,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log = log;
         _promptScanner = promptScanner;
         _recovery = recovery;
+        _performance = performance;
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.CommandMoveRefused += OnCommandMoveRefused;
@@ -1414,6 +1417,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         List<UnroutableLeverLeg> unroutable = new();
         BoatRoutePlan? boatPlan = null;
         SysopGotoRoutePlan? sysGotoPlan = null;
+        // Planned on the calling thread, which is the UI thread for most walks: a
+        // freeze report names this scope when the route or its steps take long.
+        PerformanceMonitor.Scope? planScope = _performance?.Measure("walk route and step build");
         try
         {
             // preferTeleportFree: try the pure-walking route FIRST and only fall back to a
@@ -1551,7 +1557,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable);
             }
         }
-        finally { gateScope?.Dispose(); }
+        finally
+        {
+            gateScope?.Dispose();
+            planScope?.Dispose();
+        }
 
         // A lever the route's exit needs sits somewhere the crosser can't walk to.
         // Name the exit, the room and what's in the way, ahead of the generic

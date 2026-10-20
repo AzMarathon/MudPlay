@@ -546,6 +546,103 @@ public sealed class BfsMapper
         return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets), allowGateway: false);
     }
 
+    // Hop floors: for each room asked about, a hop count no FindPath route between it
+    // and the given room can beat. One search over every exit any of FindPath's
+    // searches may take (gateways, poor-odds doors, the way into a closed room a
+    // crossing takes), so a route FindPath finds is never shorter, and a room missing
+    // from the result has no FindPath route at all. Each stops once every room asked
+    // about is reached. They let a caller weighing many FindPath answers skip the ones
+    // that can't win, which matters on the UI thread: each answer is a search of the
+    // whole map.
+
+    // Floors of the routes from source to each of targets.
+    public IReadOnlyDictionary<RoomKey, int> HopFloorsFrom(
+        RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(targets);
+        return HopFloors(source, targets, (here, seen, visit) =>
+        {
+            if (_graph.GetRoom(here) is not { } room) return;
+            foreach (RoomExit exit in room.Exits.Values)
+                if (!seen(exit.Target) && FloorMayCross(here, in exit, filter)) visit(exit.Target);
+        });
+    }
+
+    // Floors of the routes from each of sources to destination: the same search run
+    // backwards, over the exits that lead into each room.
+    public IReadOnlyDictionary<RoomKey, int> HopFloorsTo(
+        RoomKey destination, IReadOnlyCollection<RoomKey> sources, IRoomFilter? filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]> into = ExitsInto();
+        return HopFloors(destination, sources, (here, seen, visit) =>
+        {
+            if (!into.TryGetValue(here, out (RoomKey From, Direction Dir)[]? ways)) return;
+            foreach ((RoomKey from, Direction dir) in ways)
+                if (!seen(from) && _graph.GetRoom(from) is { } room && room.Exits.TryGetValue(dir, out RoomExit exit)
+                    && FloorMayCross(from, in exit, filter))
+                    visit(from);
+        });
+    }
+
+    // neighbours(here, seen, visit) visits each room one step on from here that the
+    // search hasn't reached yet, asking seen before the filter: the filter is the
+    // costly part of a step.
+    private Dictionary<RoomKey, int> HopFloors(
+        RoomKey start, IReadOnlyCollection<RoomKey> wanted,
+        Action<RoomKey, Func<RoomKey, bool>, Action<RoomKey>> neighbours)
+    {
+        Dictionary<RoomKey, int> dist = new();
+        if (_graph.GetRoom(start) is null) return dist;
+        HashSet<RoomKey> outstanding = new(wanted);
+        dist[start] = 0;
+        outstanding.Remove(start);
+        Queue<RoomKey> queue = new();
+        queue.Enqueue(start);
+        while (queue.Count > 0 && outstanding.Count > 0)
+        {
+            RoomKey here = queue.Dequeue();
+            int hops = dist[here] + 1;
+            neighbours(here, dist.ContainsKey, next =>
+            {
+                if (!dist.TryAdd(next, hops)) return;
+                outstanding.Remove(next);
+                queue.Enqueue(next);
+            });
+        }
+        return dist;
+    }
+
+    // Whether any of FindPath's searches could take this exit out of here.
+    private bool FloorMayCross(RoomKey here, in RoomExit exit, IRoomFilter? filter)
+    {
+        RoomKey next = exit.Target;
+        if (_graph.GetRoom(next) is null || exit.CastTeleportRandom) return false;
+        if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is not { IsSatisfiable: true }) return false;
+        if (filter is null) return true;
+        if (filter.IsExitRefused(here, in exit) || filter.IsAvoided(next)) return false;
+        return !filter.IsExitBlocked(in exit) || filter.IsExitHeldOpen(here, in exit)
+            || (filter.IsClosedToRoutes(next)
+                && (filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) == ExitBlockReason.None);
+    }
+
+    // Every exit in the graph by the room it leads into. Exits are fixed once the
+    // graph has loaded, so it is built once per load.
+    private IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]> ExitsInto() =>
+        _graph.Derived("exits into", () =>
+        {
+            Dictionary<RoomKey, List<(RoomKey, Direction)>> into = new();
+            foreach (Room room in _graph.Rooms)
+                foreach ((Direction dir, RoomExit exit) in room.Exits)
+                {
+                    if (!into.TryGetValue(exit.Target, out List<(RoomKey, Direction)>? list))
+                        into[exit.Target] = list = new();
+                    list.Add((room.Key, dir));
+                }
+            return (IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]>)
+                into.ToDictionary(kv => kv.Key, kv => kv.Value.ToArray());
+        });
+
     // FindPath's hop counts for many rooms at once, its way round a poor-odds door
     // included (RoundPoorOddsDoors): where the plain search used one, the search is
     // run again with those doors shut, and a room takes the second count when it is
@@ -1698,6 +1795,9 @@ public sealed class BfsMapper
         System.Threading.Tasks.Task.Run(() =>
         {
             try { BuildLayout(origin); } catch { /* best-effort */ }
+            // The index a walk's lever detours read (HopFloorsTo), built here so the
+            // first walk past a lever doesn't build it on the UI thread.
+            try { ExitsInto(); } catch { /* best-effort: the first walk builds it */ }
         });
     }
 
