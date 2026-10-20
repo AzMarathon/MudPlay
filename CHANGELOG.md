@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.14
+
+- Memory fix: the client no longer grows the longer the Conversation window stays open on a busy channel (it held a little for every chat line, hundreds of MB over an evening)
+- Memory fix: closing the Navigation window frees it; every open and close kept a copy alive, about 15 MB each
+
 ## 3.185.13
 
 - Reopening Settings soon after closing it no longer freezes the client for good (the closed window's radio choices fought the new one's); freeze reports now name the tab, save or profile change at fault

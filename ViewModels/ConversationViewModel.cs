@@ -58,18 +58,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // terminal and Backscroll do at their draw sites. Without it every size
     // renders ~25% small and a size change barely moves (the "does nothing" bug).
     private const double PointToPixel = 96.0 / 72.0;
-    [ObservableProperty] private FontFamily _rowFontFamily = new("monospace");
-    // Message body size in POINTS (from the live Display channel); MessageFontSize
-    // / MetaFontSize are the DIP equivalents Avalonia actually renders.
-    private double _messagePointSize = DefaultMessageFontSize;
-    public double MessageFontSize => _messagePointSize * PointToPixel;
-    // Fixed line height for message rows so an emoji glyph or an inline emote image
-    // doesn't make its row taller than a plain-text row (emote images are sized under it).
-    public double MessageLineHeight => MessageFontSize * 1.45;
-    // Timestamp / channel-tag / speaker sit one point smaller than the message
-    // body — take the point off BEFORE the DIP conversion so the gap stays a
-    // true point, not ~0.75pt.
-    public double MetaFontSize => Math.Max(1, _messagePointSize - 1) * PointToPixel;
+    private ConversationRowLook _rowLook;
 
     // Accent brushes the filter-toolbar toggles paint themselves with — the
     // per-channel Label colour after overrides. Resolved once at open.
@@ -131,7 +120,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _textBrushes = BuildTextBrushMap(app);
         ApplyColorOverrides(_display.ConvoChannelColors);
 
-        ApplyFontFromDisplay();
+        _rowLook = BuildRowLook();
         _display.PropertyChanged += OnDisplayChanged;
 
         // Seed the header toggles from the character's saved state. Direct field
@@ -330,7 +319,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     private void AddRow(ChatLogEntry entry, bool scrollIntoView)
     {
-        ConversationRowViewModel row = new(entry, ChannelBrush, TextBrush);
+        ConversationRowViewModel row = new(entry, ChannelBrush, TextBrush, _rowLook);
         Rows.Add(row);
         if (scrollIntoView) ScrollToRowRequested?.Invoke(row);
     }
@@ -431,17 +420,25 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
             ? f : new FontFamily("monospace");
     }
 
-    // Re-read the row font from the live Display channel and notify. Runs at
-    // construction and whenever Display's Convo* fields change (a Settings → Talk
-    // Apply). The row template binds FontFamily / FontSize to these off the parent
-    // VM, so a change here re-fonts every row without a Rebuild.
-    private void ApplyFontFromDisplay()
+    // The row typography from the live Display channel. Each row carries it (see
+    // ConversationRowLook), so a font or emote change rebuilds the rows, as a colour
+    // change does.
+    private ConversationRowLook BuildRowLook()
     {
-        RowFontFamily = ResolveFont(_app, _display.ConvoFontFamily);
-        _messagePointSize = _display.ConvoFontSize > 0 ? _display.ConvoFontSize : DefaultMessageFontSize;
-        OnPropertyChanged(nameof(MessageFontSize));
-        OnPropertyChanged(nameof(MessageLineHeight));
-        OnPropertyChanged(nameof(MetaFontSize));
+        double points = _display.ConvoFontSize > 0 ? _display.ConvoFontSize : DefaultMessageFontSize;
+        double message = points * PointToPixel;
+        return new ConversationRowLook(
+            ResolveFont(_app, _display.ConvoFontFamily),
+            // Timestamp / channel-tag / speaker sit one point smaller than the message
+            // body — take the point off BEFORE the DIP conversion so the gap stays a
+            // true point, not ~0.75pt.
+            MetaFontSize: Math.Max(1, points - 1) * PointToPixel,
+            MessageFontSize: message,
+            // Fixed line height for message rows so an emoji glyph or an inline emote
+            // image doesn't make its row taller than a plain-text row (emote images are
+            // sized under it).
+            MessageLineHeight: message * 1.45,
+            EmotesEnabled: _display.ConvoShowEmotes);
     }
 
     // Re-resolve the accent + text brush maps from theme defaults + the live
@@ -466,24 +463,19 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private void OnDisplayChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(DisplayConfig.ConvoFontFamily)
-                           or nameof(DisplayConfig.ConvoFontSize))
+                           or nameof(DisplayConfig.ConvoFontSize)
+                           or nameof(DisplayConfig.ConvoShowEmotes))
         {
-            ApplyFontFromDisplay();
+            ConversationRowLook look = BuildRowLook();
+            if (look == _rowLook) return;
+            _rowLook = look;
+            Rebuild();
         }
         else if (e.PropertyName == nameof(DisplayConfig.ConvoChannelColors))
         {
             ApplyColorsFromDisplay();
         }
-        else if (e.PropertyName == nameof(DisplayConfig.ConvoShowEmotes))
-        {
-            OnPropertyChanged(nameof(EmotesEnabled));
-        }
     }
-
-    // Whether the rows substitute emoji / emote shortcodes — bound by the row template's
-    // ConversationMessageInlines.EmotesEnabled attached property. Sourced from the live
-    // Display channel so a Settings -> Talk Apply re-renders the open window at once.
-    public bool EmotesEnabled => _display.ConvoShowEmotes;
 
     private static IBrush LookupBrush(Application app, string key)
         => app.TryGetResource(key, null, out object? v) && v is IBrush b ? b : Brushes.Gray;

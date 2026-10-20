@@ -18,6 +18,7 @@ public sealed class ConversationRowViewModel
     public IBrush ChannelBrush { get; }
     public IBrush MessageBrush { get; }
     public bool IsDaySeparator => Entry.Channel == ChatChannel.DaySeparator;
+    public ConversationRowLook Look { get; }
 
     // Whether this row has a speaker prefix. Actions/emotes and server notices have
     // none, so the XAML collapses that column — otherwise its margin leaves an extra
@@ -32,9 +33,11 @@ public sealed class ConversationRowViewModel
             ? $"{TimestampText}  {MessageText}"
             : $"{TimestampText}  {SpeakerText} {MessageText}";
 
-    public ConversationRowViewModel(ChatLogEntry entry, Func<ChatChannel, IBrush> brushLookup, Func<ChatChannel, IBrush> textBrushLookup)
+    public ConversationRowViewModel(ChatLogEntry entry, Func<ChatChannel, IBrush> brushLookup, Func<ChatChannel, IBrush> textBrushLookup,
+                                    ConversationRowLook look)
     {
         Entry = entry;
+        Look = look;
         TimestampText = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
         ChannelText   = ConversationChannelTags.Row(entry.Channel);
         SpeakerText   = FormatSpeaker(entry);

@@ -36,9 +36,9 @@ public sealed class ConversationViewModelTests
     }
 
     private static ConversationViewModel NewViewModel(ChatHistoryStore history, TalkSettings? talk = null,
-                                                      Action? clearChatlog = null)
+                                                      Action? clearChatlog = null, DisplayConfig? display = null)
         => new(history, new CommandHistory(), _ => { }, clearChatlog ?? (() => { }), new Application(),
-               talk ?? new TalkSettings(), new ProfileService(), new DisplayConfig());
+               talk ?? new TalkSettings(), new ProfileService(), display ?? new DisplayConfig());
 
     // Fill the store to its cap with gossip "msg 0" … "msg 4999".
     private static void FillToCap(MessageRouter router)
@@ -256,5 +256,34 @@ public sealed class ConversationViewModelTests
         vm.SearchText = string.Empty;
         vm.ShowYell = false;
         Assert.Equal(ChatChannel.Gossip, Assert.Single(vm.Rows).Entry.Channel);
+    }
+
+    // Rows carry their typography (the row template binds nothing off the window's
+    // view-model), so a Settings → Talk font or emote change arriving on the Display
+    // channel re-fonts the open window's rows, new and old.
+    [Fact]
+    public void DisplayFontAndEmoteChange_RefontsEveryRow()
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        router.Dispatch(Line("Forged gossips: before", 0));
+        DisplayConfig display = new();
+        using ConversationViewModel vm = NewViewModel(history, display: display);
+        ConversationRowLook before = Assert.Single(vm.Rows).Look;
+        Assert.Equal(12 * 96.0 / 72.0, before.MessageFontSize, 6);
+        Assert.Equal(11 * 96.0 / 72.0, before.MetaFontSize, 6);
+        Assert.True(before.EmotesEnabled);
+
+        display.ConvoFontSize = 15;
+        display.ConvoShowEmotes = false;
+        router.Dispatch(Line("Forged gossips: after", 1));
+
+        Assert.Equal(2, vm.Rows.Count);
+        foreach (ConversationRowViewModel row in vm.Rows)
+        {
+            Assert.Equal(15 * 96.0 / 72.0, row.Look.MessageFontSize, 6);
+            Assert.Equal(14 * 96.0 / 72.0, row.Look.MetaFontSize, 6);
+            Assert.Equal(row.Look.MessageFontSize * 1.45, row.Look.MessageLineHeight, 6);
+            Assert.False(row.Look.EmotesEnabled);
+        }
     }
 }
