@@ -10,8 +10,11 @@
         x:DataType="vm:ConversationViewModel"
         Title="Conversation"
         Width="780" Height="520"
+        MinWidth="260"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False">
+    <!-- MinWidth: narrower than this, the header's pills squash and the ⋯ button
+         runs off the window's edge. -->
 
     <Window.Styles>
         <!-- Inline web link inside a chat message: underlined accent hot-text that
@@ -126,12 +129,12 @@
                                   ToolTip.Tip="Server: click to show or hide realm notices and PvP messages"/>
                 </WrapPanel>
 
-                <!-- MinWidth is search's 120 plus the ⋯ button: the panel holds this much
-                     back from the pills, so the menu is never pushed off the window. -->
-                <Grid ColumnDefinitions="*,Auto" MinWidth="152" VerticalAlignment="Center">
+                <!-- The panel holds this group's narrowest width (search's MinWidth plus
+                     the ⋯ button) back from the pills, so the menu never leaves the window. -->
+                <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                     <TextBox Grid.Column="0" Classes="clearable"
                              MinWidth="120" MinHeight="24" Height="24"
-                             Padding="6,2" FontSize="12"
+                             Padding="6,2" FontSize="{StaticResource FontSizeMd}"
                              VerticalContentAlignment="Center"
                              PlaceholderText="Search…"
                              ToolTip.Tip="Show only lines whose speaker or message holds this text"

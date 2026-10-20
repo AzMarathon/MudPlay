@@ -4332,7 +4332,7 @@ The single row across the top controls what you see:
   - **Auto-scroll** — when ticked, the log follows the newest line while you're at the bottom. Scroll or drag up to read back and new lines leave your place alone; scroll back to the bottom (or re-tick it) and it follows again. Untick it to never follow. Your choice is remembered per character, like the channel pills.
   - **Clear All…** — wipes the history; see *Logging and history*.
 
-When the window is too narrow for the whole row, the pills wrap onto a second line; the search box and the **⋯** menu always stay at the end of the first.
+When the window is too narrow for the whole row, the pills wrap onto a second line; the search box and the **⋯** menu stay at the row's end, beside the pills as they wrap.
 
 ## Talking
 

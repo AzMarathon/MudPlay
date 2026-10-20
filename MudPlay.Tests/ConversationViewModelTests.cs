@@ -192,16 +192,20 @@ public sealed class ConversationViewModelTests
 
     // The header's filter pills and the rows' channel chips read from one table, so each pill
     // is labelled exactly like the rows it shows or hides; a telepath row only adds its arrow.
-    // A realm notice is the server's own line, not player chat.
+    // Every channel that shares a pill is covered: both telepath directions, realm notices and
+    // PvP messages. The server's own lines (a sent-telepath confirmation, a realm notice, a PvP
+    // message) are not player chat. Actions share SAY; see the test after this one.
     public static TheoryData<string, bool, string, Func<ConversationViewModel, string>> PillCases => new()
     {
-        { "Forged gossips: hi",             true,  "GOS",    vm => vm.GossipTag },
-        { "Forged says \"hi\"",             true,  "SAY",    vm => vm.LocalTag },
-        { "Forged telepaths: hi",           true,  "←TELE",  vm => vm.TelepathTag },
-        { "Forged gangpaths: hi",           true,  "GANG",   vm => vm.GangpathTag },
-        { "Broadcast from Forged \"hi\"",   true,  "BCAST",  vm => vm.BroadcastTag },
-        { "Forged yells \"hi\"",            true,  "YELL",   vm => vm.YellTag },
-        { "Raijin just entered the Realm.", false, "SERVER", vm => vm.RealmTag },
+        { "Forged gossips: hi",                               true,  "GOS",    vm => vm.GossipTag },
+        { "Forged says \"hi\"",                               true,  "SAY",    vm => vm.LocalTag },
+        { "Forged telepaths: hi",                             true,  "←TELE",  vm => vm.TelepathTag },
+        { "--- Telepath sent to Forged ---",                  false, "TELE→",  vm => vm.TelepathTag },
+        { "Forged gangpaths: hi",                             true,  "GANG",   vm => vm.GangpathTag },
+        { "Broadcast from Forged \"hi\"",                     true,  "BCAST",  vm => vm.BroadcastTag },
+        { "Forged yells \"hi\"",                              true,  "YELL",   vm => vm.YellTag },
+        { "Raijin just entered the Realm.",                   false, "SERVER", vm => vm.RealmTag },
+        { "Server PvP Message: Balgor just killed Fizznod!",  false, "SERVER", vm => vm.RealmTag },
     };
 
     [Theory]
@@ -216,6 +220,22 @@ public sealed class ConversationViewModelTests
         ConversationRowViewModel row = Assert.Single(vm.Rows);
         Assert.Equal(rowTag, row.ChannelText);
         Assert.Equal(rowTag.Trim('←', '→'), pill(vm));
+    }
+
+    // An action rides the SAY pill. It reaches the window only off the screen (green, then its
+    // prompt), so it goes in through the terminal feed.
+    [Fact]
+    public void FilterPill_Say_IsLabelledLikeAnActionRow()
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        ServerFeed feed = new(router);
+        feed.Raw("[HP=100/MA=50]:act\r\n\u001b[0;32mYou laugh!\r\n\u001b[0;37m[HP=100/MA=50]:");
+        using ConversationViewModel vm = NewViewModel(history);
+
+        ConversationRowViewModel row = Assert.Single(vm.Rows);
+        Assert.Equal(ChatChannel.Social, row.Entry.Channel);
+        Assert.Equal("SAY", row.ChannelText);
+        Assert.Equal(row.ChannelText, vm.LocalTag);
     }
 
     [Fact]
