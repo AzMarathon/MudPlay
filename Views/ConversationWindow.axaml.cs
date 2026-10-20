@@ -9,7 +9,6 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
-using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MudPlay.ViewModels;
@@ -61,8 +60,6 @@ public partial class ConversationWindow : Window
         Closed += OnClosed;
     }
 
-    private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
     private void OnOpened(object? sender, EventArgs e)
     {
         _rowsList = this.FindControl<ListBox>("RowsList");
@@ -110,9 +107,14 @@ public partial class ConversationWindow : Window
         }
     }
 
+    // The ⋯ menu's Clear All opens the confirm on the same button. Posted so the menu
+    // has finished closing before the confirm opens over it.
+    private void OnClearAllRequested(object? sender, RoutedEventArgs e)
+        => Dispatcher.UIThread.Post(() => FlyoutBase.ShowAttachedFlyout(MoreButton));
+
     private void OnClearAllConfirmed(object? sender, RoutedEventArgs e)
     {
-        this.FindControl<Button>("ClearAllButton")?.Flyout?.Hide();
+        FlyoutBase.GetAttachedFlyout(MoreButton)?.Hide();
         if (DataContext is ConversationViewModel vm) vm.ClearAllCommand.Execute(null);
     }
 

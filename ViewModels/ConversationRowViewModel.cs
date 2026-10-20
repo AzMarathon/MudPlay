@@ -36,7 +36,7 @@ public sealed class ConversationRowViewModel
     {
         Entry = entry;
         TimestampText = entry.Timestamp.ToLocalTime().ToString("HH:mm:ss");
-        ChannelText   = ChannelAbbrev(entry.Channel);
+        ChannelText   = ConversationChannelTags.Row(entry.Channel);
         SpeakerText   = FormatSpeaker(entry);
         MessageText   = entry.Message;
         ChannelBrush  = brushLookup(entry.Channel);
@@ -83,26 +83,4 @@ public sealed class ConversationRowViewModel
         // pairs "<who>" with the message body and gets the colon.
         return entry.Channel == ChatChannel.RealmEvent ? speaker : speaker + ":";
     }
-
-    private static string ChannelAbbrev(ChatChannel c) => c switch
-    {
-        ChatChannel.Gossip            => "GOS",
-        ChatChannel.Local             => "SAY",
-        // Mirror the arrow so the two directions read as opposites at a
-        // glance: an incoming telepath leads with the arrow (pointing in),
-        // an outgoing one trails it (pointing away).
-        ChatChannel.TelepathIncoming  => "←TELE",
-        ChatChannel.TelepathOutgoing  => "TELE→",
-        ChatChannel.Gangpath          => "GANG",
-        ChatChannel.Broadcast         => "BCAST",
-        ChatChannel.Yell              => "YELL",
-        // Paradigm's realm events are server-authored, styled like the
-        // Server PvP notices — same red "SERVER" chip.
-        ChatChannel.RealmEvent        => "SERVER",
-        ChatChannel.Server            => "SERVER",
-        // Actions ride the say grouping — same chip, so they read as room-local.
-        ChatChannel.Social            => "SAY",
-        ChatChannel.DaySeparator      => string.Empty,
-        _ => "?",
-    };
 }

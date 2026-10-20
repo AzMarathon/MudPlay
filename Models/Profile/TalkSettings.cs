@@ -106,7 +106,7 @@ public sealed class TalkSettings
     // (channel tag / speaker / toggle) and the message-body text.
     public Dictionary<string, ChannelColor>? ChannelColors { get; set; }
 
-    // Conversation window header state — the seven per-channel filter checkboxes
+    // Conversation window header state — the seven per-channel filter pills
     // plus the auto-scroll toggle. Persisted per character so what the user shows /
     // hides survives closing and reopening the window and reloads with the profile.
     // All default true (everything visible, follow the newest line). Edited only in

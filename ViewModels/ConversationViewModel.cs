@@ -81,6 +81,15 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     public IBrush YellBrush      => ChannelBrush(ChatChannel.Yell);
     public IBrush RealmBrush     => ChannelBrush(ChatChannel.RealmEvent);
 
+    // The filter pills' labels, from the same table as the rows' channel chips.
+    public string GossipTag    => ConversationChannelTags.Pill(ChatChannel.Gossip);
+    public string LocalTag     => ConversationChannelTags.Pill(ChatChannel.Local);
+    public string TelepathTag  => ConversationChannelTags.Pill(ChatChannel.TelepathIncoming);
+    public string GangpathTag  => ConversationChannelTags.Pill(ChatChannel.Gangpath);
+    public string BroadcastTag => ConversationChannelTags.Pill(ChatChannel.Broadcast);
+    public string YellTag      => ConversationChannelTags.Pill(ChatChannel.Yell);
+    public string RealmTag     => ConversationChannelTags.Pill(ChatChannel.RealmEvent);
+
     // Per-channel filter toggles. Default true (everything visible).
     // Telepaths in + out share one toggle — they're conceptually the same
     // private-message stream from the user's perspective.
