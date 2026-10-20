@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
 
@@ -20,22 +21,31 @@ public sealed class ConversationRowTemplateTests
                          && e.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "RowsList"));
         XElement template = rows.Elements().Single(e => e.Name.LocalName == "ListBox.ItemTemplate");
 
-        List<string> bindings = template.Descendants()
-            .SelectMany(e => e.Attributes().Select(a => $"{e.Name.LocalName}.{a.Name.LocalName}={a.Value}"))
-            .Where(b => b.Contains("{Binding", StringComparison.Ordinal))
-            .ToList();
-        List<string> reachingOut = bindings
-            .Where(b => b.Contains("ElementName", StringComparison.Ordinal)
-                        || b.Contains("RelativeSource", StringComparison.Ordinal)
-                        || b.Contains("$parent", StringComparison.Ordinal)
-                        || b.Contains("{Binding #", StringComparison.Ordinal)
-                        || b.Contains("DataContext.", StringComparison.Ordinal))
-            .ToList();
+        // Every binding, whatever its spelling: the markup-extension forms
+        // ({Binding}, {CompiledBinding}, {ReflectionBinding}, prefixed or not) on any
+        // attribute, and the element forms (<Binding/>, <MultiBinding>…) with their
+        // attributes run together.
+        List<string> bindings = new();
+        foreach (XElement e in template.Descendants())
+        {
+            if (BindingElement.IsMatch(e.Name.LocalName))
+            {
+                bindings.Add($"<{e.Name.LocalName} " + string.Join(" ", e.Attributes().Select(a => $"{a.Name.LocalName}={a.Value}")) + ">");
+                continue;
+            }
+            foreach (XAttribute a in e.Attributes())
+                if (BindingExtension.IsMatch(a.Value)) bindings.Add($"{e.Name.LocalName}.{a.Name.LocalName}={a.Value}");
+        }
+        List<string> reachingOut = bindings.Where(b => ReachesOut.IsMatch(b)).ToList();
 
         Assert.True(bindings.Count > 10, $"found only {bindings.Count} bindings in the row template");
         Assert.True(reachingOut.Count == 0,
             "These row bindings read something other than the row:\n  " + string.Join("\n  ", reachingOut));
     }
+
+    private static readonly Regex BindingExtension = new(@"\{\s*(\w+:)?(Compiled|Reflection)?Binding\b");
+    private static readonly Regex BindingElement = new(@"^(Compiled|Reflection|Multi)?Binding$");
+    private static readonly Regex ReachesOut = new(@"ElementName|RelativeSource|\$parent|#\w|DataContext\.");
 
     private static string RepoRoot([CallerFilePath] string here = "") =>
         Path.GetDirectoryName(Path.GetDirectoryName(here)!)!;

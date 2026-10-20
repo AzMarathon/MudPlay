@@ -811,13 +811,14 @@ How to keep it current:
 
 ### ConversationRowTemplateTests.cs
 - Covers: Views/ConversationWindow.axaml (the RowsList row template)
-- Checks: Every binding in the row template reads the row itself: none goes through ElementName, RelativeSource, `$parent`, `#name` or `DataContext.`.
+- Checks: Every binding in the row template reads the row itself: none goes through ElementName, RelativeSource, `$parent`, `#name` or `DataContext.`. All spellings count: `{Binding}`, `{CompiledBinding}`, `{ReflectionBinding}`, and element-form `<Binding>` / `<MultiBinding>`.
 - Why: A row bound to the window's view-model left a weak subscription on it each time the list realized the row (over a thousand a second on a busy channel), never swept, so the client grew for as long as the window was open (2026-10-19 memory reports).
 
 ### ConversationViewModelTests.cs
 - Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore.
-- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A font-size or emote change on the Display channel re-fonts every row, old and new.
-- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window.
+- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look.
+- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place.
+- Named seam: ConversationViewModel's optional `post` (where the coalesced restyle runs; the UI dispatcher in production) — the tests run it inline, or queue it to show one Apply posts one restyle.
 
 ### CorpseHandoffTests.cs
 - Covers: Game/Recovery/CorpseHandoffManager, CorpseRecoveryLines, CorpseHandoffPlan; BugReportScrub; SentCommandTrail; CommandHistory; DoHandler.
@@ -3516,8 +3517,9 @@ How to keep it current:
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
 ### ServiceSubscriptionBalanceTests.cs
-- Covers: every disposable type in ViewModels/, Views/ and Controls/ (Mono.Cecil IL scan)
-- Checks: Each method handler hooked onto an AppServices service's event (`_services.X.Event += Handler`, getter chains included) is unhooked in the same type.
+- Covers: every type in ViewModels/, Views/ and Controls/ except the app-lifetime main window, its view-model and the terminal control (Mono.Cecil IL scan).
+- Checks: Every handler hooked onto a service event is unhooked in the same type, its lambdas and `OnDispose` closures included. A service is a type in MudPlay.Services or MudPlay.Game, or an object one hands out (a store's `Entries`), reached through a field, an AppServices getter chain, a parameter, a local or a static event. Method groups, local functions and delegates kept in a field (closure-hoisted locals included) are matched by source type, event and handler. An in-place lambda that captures anything fails, because `-=` can't name it; so does a hook whose IL the scan can't follow.
+- Not covered: matching is by type rather than instance, and a helper that subscribes on the caller's behalf is invisible.
 - Why: An app-lifetime service holding a closed window's view-model keeps the whole window alive, one copy per open. The Navigation window leaked this way through GotoHistory.Changed, about 15 MB per open and close, reaching about 1 GB in a long session (2026-10-19 memory reports).
 
 ### SessionActivityTrackerTests.cs

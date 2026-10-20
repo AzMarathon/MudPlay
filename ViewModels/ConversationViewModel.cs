@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -27,6 +28,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Live display channel carrying the Conversation row font; observed so a
     // Settings → Talk Apply re-fonts the open window without a reopen.
     private readonly DisplayConfig _display;
+    // Where a coalesced restyle runs: the UI dispatcher, after the current handler.
+    private readonly Action<Action> _post;
     // Two brushes per channel: the accent (channel tag / speaker / toolbar
     // toggle) and the message-body text colour. Both start from the theme
     // defaults and are overlaid with the character's per-channel Talk overrides.
@@ -106,7 +109,8 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Fired by the window's code-behind to scroll the newest row into view.
     public event Action<ConversationRowViewModel>? ScrollToRowRequested;
 
-    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Action clearChatlog, Application app, TalkSettings talk, ProfileService profile, DisplayConfig display)
+    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Action clearChatlog, Application app, TalkSettings talk, ProfileService profile, DisplayConfig display,
+                                 Action<Action>? post = null)
     {
         _history = history;
         _commands = commands;
@@ -116,6 +120,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         _profile = profile;
         _app = app;
         _display = display;
+        _post = post ?? (static run => Dispatcher.UIThread.Post(run));
         _channelBrushes = BuildChannelBrushMap(app);
         _textBrushes = BuildTextBrushMap(app);
         ApplyColorOverrides(_display.ConvoChannelColors);
@@ -421,7 +426,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     }
 
     // The row typography from the live Display channel. Each row carries it (see
-    // ConversationRowLook), so a font or emote change rebuilds the rows, as a colour
+    // ConversationRowLook), so a font or emote change restyles the rows, as a colour
     // change does.
     private ConversationRowLook BuildRowLook()
     {
@@ -442,9 +447,9 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     }
 
     // Re-resolve the accent + text brush maps from theme defaults + the live
-    // per-channel overrides, then repaint. The toolbar toggle brushes are computed
-    // getters (notified below); the per-row brushes are captured when a row is
-    // built, so a Rebuild re-runs them against the new maps.
+    // per-channel overrides. The toolbar toggle brushes are computed getters
+    // (notified below); the per-row brushes are captured when a row is built, so
+    // Restyle rebuilds the rows against the new maps.
     private void ApplyColorsFromDisplay()
     {
         _channelBrushes = BuildChannelBrushMap(_app);
@@ -457,24 +462,39 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(BroadcastBrush));
         OnPropertyChanged(nameof(YellBrush));
         OnPropertyChanged(nameof(RealmBrush));
-        Rebuild();
     }
 
+    // A Talk Apply (or a profile load) sets the font, size, colours and emote flag one
+    // after another; restyle once after the last of them, not once per field.
     private void OnDisplayChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(DisplayConfig.ConvoFontFamily)
-                           or nameof(DisplayConfig.ConvoFontSize)
-                           or nameof(DisplayConfig.ConvoShowEmotes))
-        {
-            ConversationRowLook look = BuildRowLook();
-            if (look == _rowLook) return;
-            _rowLook = look;
-            Rebuild();
-        }
-        else if (e.PropertyName == nameof(DisplayConfig.ConvoChannelColors))
-        {
-            ApplyColorsFromDisplay();
-        }
+        if (e.PropertyName == nameof(DisplayConfig.ConvoChannelColors)) _colorsStale = true;
+        else if (e.PropertyName is not (nameof(DisplayConfig.ConvoFontFamily)
+                                        or nameof(DisplayConfig.ConvoFontSize)
+                                        or nameof(DisplayConfig.ConvoShowEmotes))) return;
+        if (_restylePosted) return;
+        _restylePosted = true;
+        _post(Restyle);
+    }
+
+    private bool _restylePosted;
+    private bool _colorsStale;
+
+    // Rebuild each row in place with the current look and brushes. Replacing rather
+    // than clearing keeps the row count and order, so the list keeps the reader's
+    // place when they've scrolled up or turned Auto-scroll off.
+    private void Restyle()
+    {
+        _restylePosted = false;
+        if (_disposed) return;
+        bool colors = _colorsStale;
+        _colorsStale = false;
+        if (colors) ApplyColorsFromDisplay();
+        ConversationRowLook look = BuildRowLook();
+        if (!colors && look == _rowLook) return;
+        _rowLook = look;
+        for (int i = 0; i < Rows.Count; i++)
+            Rows[i] = new ConversationRowViewModel(Rows[i].Entry, ChannelBrush, TextBrush, _rowLook);
     }
 
     private static IBrush LookupBrush(Application app, string key)

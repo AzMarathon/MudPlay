@@ -36,9 +36,10 @@ public sealed class ConversationViewModelTests
     }
 
     private static ConversationViewModel NewViewModel(ChatHistoryStore history, TalkSettings? talk = null,
-                                                      Action? clearChatlog = null, DisplayConfig? display = null)
+                                                      Action? clearChatlog = null, DisplayConfig? display = null,
+                                                      Action<Action>? post = null)
         => new(history, new CommandHistory(), _ => { }, clearChatlog ?? (() => { }), new Application(),
-               talk ?? new TalkSettings(), new ProfileService(), display ?? new DisplayConfig());
+               talk ?? new TalkSettings(), new ProfileService(), display ?? new DisplayConfig(), post ?? (run => run()));
 
     // Fill the store to its cap with gossip "msg 0" … "msg 4999".
     private static void FillToCap(MessageRouter router)
@@ -259,25 +260,38 @@ public sealed class ConversationViewModelTests
     }
 
     // Rows carry their typography (the row template binds nothing off the window's
-    // view-model), so a Settings → Talk font or emote change arriving on the Display
-    // channel re-fonts the open window's rows, new and old.
+    // view-model). A Talk Apply sets the font, size, colours and emote flag one after
+    // another on the Display channel; the open window restyles once after the last of
+    // them, in place (Replace, never a Reset), so the reader keeps their place, and a
+    // line arriving afterwards gets the new look too.
     [Fact]
-    public void DisplayFontAndEmoteChange_RefontsEveryRow()
+    public void TalkApply_RestylesEveryRowOnceInPlace()
     {
         (MessageRouter router, ChatHistoryStore history) = NewStore();
-        router.Dispatch(Line("Forged gossips: before", 0));
+        router.Dispatch(Line("Forged gossips: one", 0));
+        router.Dispatch(Line("Forged gossips: two", 1));
         DisplayConfig display = new();
-        using ConversationViewModel vm = NewViewModel(history, display: display);
-        ConversationRowLook before = Assert.Single(vm.Rows).Look;
+        Queue<Action> posted = new();
+        using ConversationViewModel vm = NewViewModel(history, display: display, post: posted.Enqueue);
+        ConversationRowLook before = vm.Rows[0].Look;
         Assert.Equal(12 * 96.0 / 72.0, before.MessageFontSize, 6);
-        Assert.Equal(11 * 96.0 / 72.0, before.MetaFontSize, 6);
         Assert.True(before.EmotesEnabled);
 
+        List<NotifyCollectionChangedAction> actions = new();
+        vm.Rows.CollectionChanged += (_, e) => actions.Add(e.Action);
+        // The order TalkSectionViewModel's Apply writes them in.
+        display.ConvoFontFamily = "";
         display.ConvoFontSize = 15;
+        display.ConvoChannelColors = new Dictionary<string, ChannelColor>();
         display.ConvoShowEmotes = false;
-        router.Dispatch(Line("Forged gossips: after", 1));
 
-        Assert.Equal(2, vm.Rows.Count);
+        Assert.Single(posted);
+        Assert.Empty(actions);
+        posted.Dequeue()();
+
+        Assert.Equal(new[] { NotifyCollectionChangedAction.Replace, NotifyCollectionChangedAction.Replace }, actions);
+        router.Dispatch(Line("Forged gossips: three", 2));
+        Assert.Equal(new[] { "one", "two", "three" }, vm.Rows.Select(r => r.Entry.Message));
         foreach (ConversationRowViewModel row in vm.Rows)
         {
             Assert.Equal(15 * 96.0 / 72.0, row.Look.MessageFontSize, 6);

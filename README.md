@@ -2,8 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.185.14**
-> - Memory fix: the client no longer grows the longer the Conversation window stays open on a busy channel (it held a little for every chat line, hundreds of MB over an evening)
-> - Memory fix: closing the Navigation window frees it; every open and close kept a copy alive, about 15 MB each
+> - Conversation window no longer grows memory on a busy channel
+> - Closing the Navigation window now frees its memory
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2813,7 +2813,7 @@ public static class BugReportBuilder
     // computed estimate + per-lair breakdown the user was looking at. The estimator
     // is a build-time UI tool whose state lives only on the Navigation view-model, so
     // it reaches the report through a snapshot provider the VM registers on
-    // AppServices; null (provider unset or not estimating) reads as inactive. A
+    // AppServices; null (no Navigation window open, or not estimating) reads as inactive. A
     // "the exp/hr number looks wrong" report needs exactly this to reproduce.
     private static string BuildExpEstimator(AppServices svc)
     {
@@ -2875,11 +2875,11 @@ public static class BugReportBuilder
     // The Simulator window's last result, live check and area ranking — what a "the
     // simulated number looks wrong" report needs beside the character sections. Its
     // state lives on the Navigation view-model, which registers the provider; null
-    // (no Navigation window yet) reads as not opened.
+    // (no Navigation window open) says so.
     private static string BuildSimulator(AppServices svc)
     {
         Game.Simulation.SimulatorSnapshot? snap = svc.SimulatorSnapshotProvider?.Invoke();
-        if (snap is null) return "_(simulator not opened)_";
+        if (snap is null) return "_(no Navigation window open)_";
         System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
 
         StringBuilder sb = new();
