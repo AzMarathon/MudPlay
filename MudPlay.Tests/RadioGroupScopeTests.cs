@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -9,7 +8,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Xml.Linq;
 using Avalonia.Controls;
-using Avalonia.Data;
+using Avalonia.Controls.Primitives;
 using MudPlay.Controls;
 using Xunit;
 
@@ -20,6 +19,14 @@ namespace MudPlay.Tests;
 // uncollected (report paradigm-20261019-095332). Avalonia files their named radio
 // groups in one app-wide registry; scoped, each copy keeps its own, and released,
 // a closed window's copy leaves nothing there.
+//
+// A box and its model are joined as a two-way binding joins them on the client's UI
+// thread, by hand (TwoWay). An Avalonia binding updated on any thread but the one
+// that owns the UI dispatcher only posts the update there; in a test run nothing
+// runs that dispatcher, and which thread owns it depends on which test reached it
+// first, so a real binding here would deliver nothing in one run and everything in
+// another. Each test checks that the first copy's box was checked, since unchecked,
+// no box is unchecked across the copies and nothing here would be proven.
 public sealed class RadioGroupScopeTests
 {
     // The shape the Settings tabs bind a two-way choice to: one bool and its inverse,
@@ -49,59 +56,49 @@ public sealed class RadioGroupScopeTests
     }
 
     // A view as the XAML loader leaves it: named radios in place, scoped in the
-    // constructor, then handed its model.
+    // constructor, then joined to its model.
     private static (StackPanel View, RadioButton Stacked, RadioButton Each) View(Choice model)
     {
         RadioButton stacked = new() { GroupName = "RoundTotalsMonsters" };
         RadioButton each = new() { GroupName = "RoundTotalsMonsters" };
-        stacked.Bind(RadioButton.IsCheckedProperty, new Binding(nameof(Choice.Stacked)) { Mode = BindingMode.TwoWay });
-        each.Bind(RadioButton.IsCheckedProperty, new Binding(nameof(Choice.Each)) { Mode = BindingMode.TwoWay });
         StackPanel view = new();
         view.Children.Add(stacked);
         view.Children.Add(each);
         RadioGroupScope.ToThisView(view);
-        view.DataContext = model;
+        TwoWay(stacked, () => model.Stacked, v => model.Stacked = v, model);
+        TwoWay(each, () => model.Each, v => model.Each = v, model);
         return (view, stacked, each);
     }
 
-    // Avalonia binds its UI thread to the first thread that runs a binding, and every
-    // later binding must run there, so all the controls here are made on one thread,
-    // as the client makes them on its UI thread. It is not the test's own thread so
-    // that a view that spins can be timed out: its test fails, and the tests after it
-    // fail at once, naming it, instead of each waiting on the stuck thread.
-    private static class UiThread
+    // What `IsChecked="{Binding …, Mode=TwoWay}"` does on the UI thread: the model's
+    // value now and on every change, and the box's every change written back.
+    private static void TwoWay(RadioButton box, Func<bool> read, Action<bool> write, Choice model)
     {
-        private static readonly BlockingCollection<Action> Work = new();
-        private static string? _stuckIn;
-
-        static UiThread()
+        box.IsChecked = read();
+        model.PropertyChanged += (_, _) => box.IsChecked = read();
+        box.PropertyChanged += (_, e) =>
         {
-            Thread thread = new(() => { foreach (Action work in Work.GetConsumingEnumerable()) work(); })
-            {
-                IsBackground = true,
-                Name = "Avalonia UI (tests)",
-            };
-            thread.Start();
-        }
+            if (e.Property == ToggleButton.IsCheckedProperty && box.IsChecked is bool value) write(value);
+        };
+    }
 
-        public static void Run(Action action, [CallerMemberName] string test = "")
+    // Each test's controls are made on a thread of its own, so a view that spins is
+    // timed out and fails just that test.
+    private static void Run(Action action, [CallerMemberName] string test = "")
+    {
+        Exception? caught = null;
+        Thread thread = new(() =>
         {
-            Assert.True(_stuckIn is null, $"the UI thread is still stuck in {_stuckIn}");
-            using ManualResetEventSlim done = new();
-            Exception? caught = null;
-            Work.Add(() =>
-            {
-                try { action(); }
-                catch (Exception ex) { caught = ex; }
-                finally { done.Set(); }
-            });
-            if (!done.Wait(TimeSpan.FromSeconds(10)))
-            {
-                _stuckIn = test;
-                Assert.Fail($"{test} never finished on the UI thread");
-            }
-            Assert.Null(caught);
-        }
+            try { action(); }
+            catch (Exception ex) { caught = ex; }
+        })
+        {
+            IsBackground = true,
+            Name = test,
+        };
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), $"{test} never finished");
+        Assert.Null(caught);
     }
 
     // Unscoped, building the second copy never returns: the UI thread spins until
@@ -110,14 +107,18 @@ public sealed class RadioGroupScopeTests
     public void SecondCopy_BuildsAndLeavesTheFirstCopysChoiceAlone()
     {
         Choice first = new(), second = new();
-        UiThread.Run(() =>
+        bool? firstShown = null, firstAfter = null;
+        Run(() =>
         {
             var a = View(first);
+            firstShown = a.Stacked.IsChecked;
             var b = View(second);
             b.Each.IsChecked = true;
-            GC.KeepAlive(a.View);
+            firstAfter = a.Stacked.IsChecked;
         });
 
+        Assert.True(firstShown);
+        Assert.True(firstAfter);
         Assert.True(second.Each);
         Assert.True(first.Stacked);
     }
@@ -127,17 +128,19 @@ public sealed class RadioGroupScopeTests
     public void OneCopy_StillChoosesOne()
     {
         Choice model = new();
-        bool? stackedChecked = null;
+        bool? shown = null, stackedChecked = null;
         string? stackedGroup = null, eachGroup = null;
-        UiThread.Run(() =>
+        Run(() =>
         {
             var view = View(model);
+            shown = view.Stacked.IsChecked;
             view.Each.IsChecked = true;
             stackedChecked = view.Stacked.IsChecked;
             stackedGroup = view.Stacked.GroupName;
             eachGroup = view.Each.GroupName;
         });
 
+        Assert.True(shown);
         Assert.False(stackedChecked);
         Assert.True(model.Each);
         Assert.NotEqual("RoundTotalsMonsters", eachGroup);
@@ -145,16 +148,18 @@ public sealed class RadioGroupScopeTests
     }
 
     // A released copy is out of the registry: a box checked under the name its group
-    // had no longer unchecks the released copy's choice.
+    // had leaves the released copy's choice alone. Unreleased, that check sets off
+    // the endless walk SecondCopy guards against.
     [Fact]
     public void ReleasedCopy_IsNoLongerInItsGroup()
     {
         Choice model = new();
         string? scopedName = null, releasedName = "unset";
-        bool? stillChecked = null;
-        UiThread.Run(() =>
+        bool? shown = null, stillChecked = null;
+        Run(() =>
         {
             var view = View(model);
+            shown = view.Stacked.IsChecked;
             scopedName = view.Stacked.GroupName;
             RadioGroupScope.Release(view.View);
             releasedName = view.Stacked.GroupName;
@@ -164,6 +169,7 @@ public sealed class RadioGroupScopeTests
             stillChecked = view.Stacked.IsChecked;
         });
 
+        Assert.True(shown);
         Assert.NotNull(scopedName);
         Assert.Null(releasedName);
         Assert.True(stillChecked);
