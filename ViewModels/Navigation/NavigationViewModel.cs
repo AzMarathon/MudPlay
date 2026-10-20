@@ -354,6 +354,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.PartyPathItemGate.HoldingWalkForChanged -= OnGatesChanged;
         _services.NavigationModeProvider = null;
         _services.NavigationQueuedWalk = null;
+        _services.ExpEstimatorSnapshotProvider = null;
+        _services.SimulatorSnapshotProvider = null;
         _services.MovementControl.PausedByTypedMoveChanged -= RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
         _services.SellDetour.DetouringChanged -= OnTripChanged;
@@ -372,6 +374,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Loops.LoopsChanged -= OnLoopsChanged;
         _services.Loops.SettingsChanged -= OnLoopSettingsChanged;
         _services.Favorites.Changed -= OnFavoritesChanged;
+        _services.GotoHistory.Changed -= RefreshGotoHistory;
         _services.Profile.ProfileLoaded -= OnProfileChangedRebuildSysopGotos;
         _services.Profile.ProfileMutated -= OnProfileChangedRebuildSysopGotos;
         _services.LoopRunner.Event -= OnLoopRunnerEvent;

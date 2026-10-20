@@ -249,6 +249,9 @@
                     <VirtualizingStackPanel CacheLength="2"/>
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
+            <!-- Every binding in a row reads its own row (fonts too, via Look), never the
+                 window's view-model: each realized row left a weak subscription on the
+                 view-model, hundreds per chat line, and they were never swept. -->
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="vm:ConversationRowViewModel">
                     <Grid Margin="4,2">
@@ -269,8 +272,8 @@
                                 Padding="0,8,0,4">
                             <TextBlock HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
-                                       FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                       FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"
+                                       FontFamily="{Binding Look.FontFamily}"
+                                       FontSize="{Binding Look.MetaFontSize}"
                                        Text="{Binding MessageText, StringFormat='─── {0} ───'}"/>
                         </Border>
                         <Grid IsVisible="{Binding !IsDaySeparator}"
@@ -278,8 +281,8 @@
                             <TextBlock Grid.Column="0"
                                        Text="{Binding TimestampText}"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
-                                       FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                       FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"
+                                       FontFamily="{Binding Look.FontFamily}"
+                                       FontSize="{Binding Look.MetaFontSize}"
                                        VerticalAlignment="Center"
                                        Margin="0,0,8,0"/>
                             <Border Grid.Column="1"
@@ -292,15 +295,15 @@
                                     Margin="0,0,8,0">
                                 <TextBlock Text="{Binding ChannelText}"
                                            Foreground="{Binding ChannelBrush}"
-                                           FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                           FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"/>
+                                           FontFamily="{Binding Look.FontFamily}"
+                                           FontSize="{Binding Look.MetaFontSize}"/>
                             </Border>
                             <TextBlock Grid.Column="2"
                                        Text="{Binding SpeakerText}"
                                        IsVisible="{Binding HasSpeaker}"
                                        Foreground="{Binding ChannelBrush}"
-                                       FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                       FontSize="{Binding DataContext.MetaFontSize, ElementName=RowsList}"
+                                       FontFamily="{Binding Look.FontFamily}"
+                                       FontSize="{Binding Look.MetaFontSize}"
                                        FontWeight="Medium"
                                        VerticalAlignment="Center"
                                        Margin="0,0,8,0"/>
@@ -311,11 +314,11 @@
                                  still render + click via ConversationMessageInlines. -->
                             <TextBlock Grid.Column="3"
                                        views:ConversationMessageInlines.Message="{Binding MessageText}"
-                                       views:ConversationMessageInlines.EmotesEnabled="{Binding DataContext.EmotesEnabled, ElementName=RowsList}"
+                                       views:ConversationMessageInlines.EmotesEnabled="{Binding Look.EmotesEnabled}"
                                        Foreground="{Binding MessageBrush}"
-                                       FontFamily="{Binding DataContext.RowFontFamily, ElementName=RowsList}"
-                                       FontSize="{Binding DataContext.MessageFontSize, ElementName=RowsList}"
-                                       LineHeight="{Binding DataContext.MessageLineHeight, ElementName=RowsList}"
+                                       FontFamily="{Binding Look.FontFamily}"
+                                       FontSize="{Binding Look.MessageFontSize}"
+                                       LineHeight="{Binding Look.MessageLineHeight}"
                                        TextWrapping="Wrap"
                                        VerticalAlignment="Center"/>
                         </Grid>
@@ -324,12 +327,9 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- ":" emote picker popup, anchored below the input box. Placed after RowsList
-             and with runtime bindings so its item template's DataType doesn't pollute
-             the compiled ElementName=RowsList inference in the row template above. -->
+        <!-- ":" emote picker popup, anchored below the input box. -->
         <Popup PlacementTarget="{Binding #InputBox}" Placement="Bottom"
-               IsOpen="{Binding IsEmotePickerOpen}" IsLightDismissEnabled="False"
-               x:CompileBindings="False">
+               IsOpen="{Binding IsEmotePickerOpen}" IsLightDismissEnabled="False">
             <Border Background="{StaticResource ChromeBgBrush}"
                     BorderBrush="{StaticResource ChromeBorderSoftBrush}" BorderThickness="1"
                     CornerRadius="{StaticResource CornerSm}" MinWidth="240" MaxHeight="200">
@@ -337,7 +337,7 @@
                          SelectedIndex="{Binding SelectedEmoteIndex}"
                          PointerReleased="OnEmoteSuggestionClicked">
                     <ListBox.ItemTemplate>
-                        <DataTemplate>
+                        <DataTemplate DataType="vm:EmoteSuggestionViewModel">
                             <Grid ColumnDefinitions="26,*" Margin="2">
                                 <Image Grid.Column="0" Source="{Binding PreviewImage}" Height="18"
                                        IsVisible="{Binding IsImage}" VerticalAlignment="Center"/>

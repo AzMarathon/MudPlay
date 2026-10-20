@@ -2777,13 +2777,14 @@ public sealed class AppServices
     public Game.Map.RouteExpResolver ExpResolver { get; private set; } = null!;
 
     // Set by the Navigation window's view-model; the bug report calls it to snapshot
-    // the live Exp/Hr Estimator session (route + tunables + result). Returns null
-    // when the estimator isn't active, so a report captured any other time just
-    // notes it as inactive. Bridges VM-only state into the AppServices-based report.
+    // the live Exp/Hr Estimator session (route + tunables + result). Null while no
+    // Navigation window is open, and returns null when the estimator isn't active, so
+    // a report captured any other time just notes it as inactive. Bridges VM-only
+    // state into the AppServices-based report.
     public Func<Game.Map.ExpEstimatorSnapshot?>? ExpEstimatorSnapshotProvider { get; set; }
 
     // The Simulator window's state for the bug report, registered by the Navigation
-    // view-model that owns it; null until a Navigation window has opened.
+    // view-model that owns it; null while no Navigation window is open.
     public Func<Game.Simulation.SimulatorSnapshot?>? SimulatorSnapshotProvider { get; set; }
 
     // The Simulator's finished area rankings, by the game data and character each was

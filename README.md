@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.13**
-> - Reopening Settings soon after closing it no longer freezes the client for good (the closed window's radio choices fought the new one's); freeze reports now name the tab, save or profile change at fault
+> **Version 3.185.14**
+> - Conversation window no longer grows memory on a busy channel
+> - Closing the Navigation window now frees its memory
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
