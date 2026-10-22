@@ -74,7 +74,8 @@ public static class CombatSpellProfileReport
                        $" · drains-override-AoE={(profile.DrainsOverrideAoe ? "on" : "off")}";
 
         string verbs = $"atk={profile.NormalAttackCommand}/{profile.AlternateAttackCommand}";
-        string room = $"monsters={profile.MinMonstersInRoom}-{profile.MaxMonstersInRoom} · run={profile.RunDistance}";
+        string room = $"monsters={profile.MinMonstersInRoom}-{profile.MaxMonstersInRoom} · run={profile.RunDistance}"
+                      + (profile.EngageUnhurtable ? " · engage-unhurtable" : "");
         string weapons = $"wpn={Weapon(profile.NormalWeapon, profile.NormalOffHand)}" +
                          $" · alt={Weapon(profile.AlternateWeapon, profile.AlternateOffHand)}";
 

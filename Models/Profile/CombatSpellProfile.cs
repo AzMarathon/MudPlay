@@ -77,6 +77,7 @@ public sealed class CombatSpellProfile
     public bool SeenHiddenClearWhileInParty { get; set; } = true;
     public bool ClearHostilesWhenSneakFails { get; set; }
     public bool KillAllEngaged { get; set; }
+    public bool EngageUnhurtable { get; set; }
 
     // When running away (the Room thresholds group, beside Run distance).
     public RunDirection RunDirection { get; set; } = RunDirection.Backward;
@@ -148,6 +149,7 @@ public sealed class CombatSpellProfile
             SeenHiddenClearWhileInParty = src.SeenHiddenClearWhileInParty,
             ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails,
             KillAllEngaged = src.KillAllEngaged,
+            EngageUnhurtable = src.EngageUnhurtable,
             RunDirection = src.RunDirection,
             BreakBeforeFleeing = src.BreakBeforeFleeing,
             Health = health.Clone(),
@@ -192,6 +194,7 @@ public sealed class CombatSpellProfile
         dst.SeenHiddenClearWhileInParty = SeenHiddenClearWhileInParty;
         dst.ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails;
         dst.KillAllEngaged = KillAllEngaged;
+        dst.EngageUnhurtable = EngageUnhurtable;
         dst.RunDirection = RunDirection;
         dst.BreakBeforeFleeing = BreakBeforeFleeing;
     }
@@ -235,6 +238,7 @@ public sealed class CombatSpellProfile
         SeenHiddenClearWhileInParty = src.SeenHiddenClearWhileInParty;
         ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails;
         KillAllEngaged = src.KillAllEngaged;
+        EngageUnhurtable = src.EngageUnhurtable;
         RunDirection = src.RunDirection;
         BreakBeforeFleeing = src.BreakBeforeFleeing;
     }
@@ -276,6 +280,7 @@ public sealed class CombatSpellProfile
         SeenHiddenClearWhileInParty = SeenHiddenClearWhileInParty,
         ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails,
         KillAllEngaged = KillAllEngaged,
+        EngageUnhurtable = EngageUnhurtable,
         RunDirection = RunDirection,
         BreakBeforeFleeing = BreakBeforeFleeing,
         NormalWeapon = NormalWeapon,

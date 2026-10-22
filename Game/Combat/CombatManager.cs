@@ -1011,8 +1011,9 @@ public sealed partial class CombatManager : IDisposable
     // Room-scoped, cleared on room-cleared.
     private readonly Dictionary<int, string> _speciesByNumber = new();
 
-    // Species we've already surfaced a "cannot attack" line for this room — keeps
-    // the status message to once per species instead of once per failed round.
+    // Species we've already surfaced a "cannot attack" (or, with Engage monsters you
+    // can't hurt on, an "engaging anyway") line for this room — keeps the status
+    // message to once per species instead of once per failed round.
     private readonly HashSet<string> _cannotAttackAnnounced =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -2501,6 +2502,12 @@ public sealed partial class CombatManager : IDisposable
         foreach (EngageableCandidate cand in ordered)
         {
             EngageAssessment assess = AssessEngage(settings, cand.MonsterNumber, cand.ResolvedName);
+            if (assess != EngageAssessment.CanAct && settings.EngageUnhurtable)
+            {
+                AnnounceEngagingUnhurt(cand.ResolvedName,
+                    $"{assess}{WeaponGateNote(settings, cand.MonsterNumber, cand.ResolvedName)}");
+                assess = EngageAssessment.CanAct;
+            }
             if (assess != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
@@ -3029,6 +3036,11 @@ public sealed partial class CombatManager : IDisposable
             // regenerated, or, if nothing here is actionable, release the walker to
             // move on. It owns the "cannot attack" announce so a transient mana
             // stall (retryable) isn't mislabelled as a permanent give-up.
+            if (settings.EngageUnhurtable)
+            {
+                AnnounceEngagingUnhurt(species, "the alternate drew no effect");
+                return;
+            }
             _log?.Combat(LogCategory,
                 $"weapon-no-effect on ALT against {species} — weapon exhausted, re-assessing");
             _currentTarget = null;
@@ -3065,6 +3077,13 @@ public sealed partial class CombatManager : IDisposable
                 ? $"weapon-no-effect vs {species} — the alternate never came to hand after {tries} swaps; counting it out too"
                 : $"weapon-no-effect vs {species} — no alternate weapon on hand; counting it out too");
         if (TryFallBackToSpellAfterWeaponFail(settings)) return;
+        // The swing that drew the no-effect keeps us in the fight: stay on the target
+        // instead of dropping it and moving on.
+        if (settings.EngageUnhurtable)
+        {
+            AnnounceEngagingUnhurt(species, "no weapon of ours hurts it");
+            return;
+        }
         _log?.Combat(LogCategory, $"weapon-no-effect vs {species} — no weapon of ours hurts it, re-assessing");
         _currentTarget = null;
         TrySendRoomRefresh($"weapon exhausted vs {species} — re-pick / move on");
@@ -3080,6 +3099,16 @@ public sealed partial class CombatManager : IDisposable
         if (string.IsNullOrEmpty(species)) return;
         if (!_cannotAttackAnnounced.Add(species)) return;
         _log?.Info(LogCategory, $"cannot attack {species} — nothing in the combat chain can hurt it; moving on");
+    }
+
+    // Engage monsters you can't hurt: nothing in the combat chain can hurt species,
+    // and the setting keeps us in the fight anyway rather than moving on.
+    private void AnnounceEngagingUnhurt(string species, string why)
+    {
+        if (string.IsNullOrEmpty(species)) return;
+        if (!_cannotAttackAnnounced.Add(species)) return;
+        _log?.Info(LogCategory,
+            $"engaging {species} though nothing in the combat chain can hurt it — Engage monsters you can't hurt is on ({why})");
     }
 
     // "Your fists have no effect" — we're swinging bare-handed (a weapon that

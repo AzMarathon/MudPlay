@@ -16,8 +16,8 @@ namespace MudPlay.Game.Simulation;
 //   stats or gear     level, pools, the melee and defence profiles, regen, alignment,
 //                     the Default-gear basis and the backstab opener
 //   spells            every spell known, with its figures at that level
-//   settings          the Combat, Health and Spells sections, the buff list, and
-//                     the hang-up switch
+//   settings          the Combat (less what the simulator doesn't read), Health and
+//                     Spells sections, the buff list, and the hang-up switch
 // Two are handed in, being about the game data and the map and not the character
 // record:
 //   game-data edits   the user's record overrides at every tier (Game Data Browser)
@@ -83,7 +83,22 @@ public sealed record RankingCharacter(IReadOnlyDictionary<string, string> Groups
     {
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         IncludeFields = false,
+        TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver
+        {
+            Modifiers = { LeaveOutUnread },
+        },
     };
+
+    // Settings the simulator doesn't read stay out of the hash, so changing one
+    // doesn't mark every kept ranking. Engage monsters you can't hurt is for a
+    // character carried through a party, which the simulation doesn't play.
+    private static void LeaveOutUnread(System.Text.Json.Serialization.Metadata.JsonTypeInfo info)
+    {
+        if (info.Type != typeof(Models.Profile.CombatSettings)) return;
+        for (int i = info.Properties.Count - 1; i >= 0; i--)
+            if (info.Properties[i].Name == nameof(Models.Profile.CombatSettings.EngageUnhurtable))
+                info.Properties.RemoveAt(i);
+    }
 
     // A short hash of value's JSON form: enough to tell two states apart, not a
     // record of either.

@@ -60,6 +60,7 @@ public static class CombatProfileGroupCopy
                 to.MaxMonstersInRoom = from.MaxMonstersInRoom;
                 to.RunDistance = from.RunDistance;
                 to.KillAllEngaged = from.KillAllEngaged;
+                to.EngageUnhurtable = from.EngageUnhurtable;
                 to.RunDirection = from.RunDirection;
                 to.BreakBeforeFleeing = from.BreakBeforeFleeing;
                 break;

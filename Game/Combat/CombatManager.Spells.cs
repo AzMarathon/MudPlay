@@ -509,7 +509,13 @@ public sealed partial class CombatManager
                 // data says the normal weapon's HitMagic is below the
                 // monster's Magical level but the alternate clears it.
                 // SendWeaponAttack sets CurrentTarget.
-                bool useAlt = ShouldUseAlternateWeapon(settings, picked.ResolvedName, picked.MonsterNumber);
+                // A monster neither weapon hurts, engaged only because Engage monsters you
+                // can't hurt is on, takes the normal swing: the alternate preference would
+                // send a blank alternate command when none is configured.
+                bool engageOnly = settings.EngageUnhurtable
+                    && WeaponPathExhausted(settings, picked.ResolvedName, picked.MonsterNumber);
+                bool useAlt = !engageOnly
+                    && ShouldUseAlternateWeapon(settings, picked.ResolvedName, picked.MonsterNumber);
                 SendWeaponAttack(settings, picked.RawName, useAlt, picked.Priority);
                 break;
 
@@ -1920,9 +1926,14 @@ public sealed partial class CombatManager
     // no Magical level, a weapon or spell is unknown) so a thin data set never
     // makes us skip a monster we could actually fight. Consumed by
     // OnEntitiesObserved (retarget / move-past) and, via the delegate AppServices
-    // injects, by CombatStateTracker (walker-gate release).
-    public bool CanEngageMonster(int monsterNumber) =>
-        AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
+    // injects, by CombatStateTracker (walker-gate release). With Engage monsters you
+    // can't hurt on, every monster is engageable: the walker holds for the fight.
+    public bool CanEngageMonster(int monsterNumber)
+    {
+        CombatSettings settings = _readSettings();
+        return settings.EngageUnhurtable
+            || AssessEngage(settings, monsterNumber, species: null) == EngageAssessment.CanAct;
+    }
 
     // One monster the engine has seen in the current room, with the exact
     // engageability verdict + weapon/spell magic data behind it. Frozen for the

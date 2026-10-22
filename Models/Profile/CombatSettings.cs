@@ -162,6 +162,13 @@ public sealed class CombatSettings
     // and every other gate still apply. Default false = move on from leftovers.
     public bool KillAllEngaged { get; set; }
 
+    // Attack a monster nothing of ours can hurt (both weapons below its magic,
+    // every attack spell blocked or short of mana) instead of skipping it and
+    // moving on. The swing does no damage but puts us in the fight: a character
+    // carried through a party while another does the killing (user, 2026-10-22).
+    // Default false = skip it, as before.
+    public bool EngageUnhurtable { get; set; }
+
     // Rooms to flee before re-evaluating. Range 1–100. Default 2.
     [SettingRange(1, 100)]
     public int RunDistance { get; set; } = 2;

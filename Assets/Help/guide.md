@@ -5474,6 +5474,12 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 Off (the default) is the current behavior: if you engage a room of 8 with Min set to 3 and kill 6, it leaves the 2 survivors and moves on. On, the engine stays and clears the room to empty, then the walker continues.
 **Important notes:** Only bypasses the **minimum** — the **maximum** (too-crowded room) and every other gate still apply — and only for rooms you actually **engaged** (a room whose count never met the floor is skipped as before). An HP/MA flee still overrides it, so a survivor that's beating on you will still trigger your run threshold.
 
+### Engage monsters you can't hurt
+
+**Default:** Off
+**What it does:** Sits under **Kill all engaged** in the **Room thresholds** group. Normally a monster that nothing in your combat setup can hurt is skipped: both weapons are below the magic it needs to be hit, and no attack spell can land on it right now (it's immune, or you're short of mana). The log says `cannot attack <monster> — nothing in the combat chain can hurt it; moving on` and the walker moves past it. With this on, you attack it anyway with your normal attack. The swing does no damage, but you're in the fight. It's meant for a character carried through a party while someone else does the killing.
+**Important notes:** A castable attack spell still goes first. The weapon-only swing is used only when no spell can take the round, and the next fight with mana to spare casts again. Your weapon's "no effect" lines don't make you drop the target. You stay on it until it dies or leaves. The log names each monster you engage this way once per room (`engaging <monster> though nothing in the combat chain can hurt it`). Solo, leave it off: you'd stand in the room swinging at something you can't kill.
+
 ### Do BS attacks (backstab)
 
 **Default:** Off
@@ -5573,7 +5579,7 @@ A flee sends one move per room. A **text exit** on the way (a trail you leave wi
 **What it does:** Saves a whole combat posture under a name so you can keep **several** and switch between them in one click. This helps when different fights want different setups — a fire loadout for most monsters, a cold one for the fire-immune, a cautious "bossing" loadout with a two-hander and a lower flee threshold. Rather than re-tuning your Combat and Health tabs each time, you save each as a profile and flip between them.
 
 **What a profile remembers (a full loadout):**
-- on the **Combat tab**: the **action order** (spells-first / physical-first / custom cycle), the **weapons & attack commands** (primary / alternate + off-hands and the normal / alternate verbs), the **backstab options** (including stealth running), the **room thresholds** (min / max monsters, run distance, **kill all engaged**, and **when running away** — go backwards, break before running), and the **spell combat** slots with their per-slot gates, the mana-threshold mode and the drain settings;
+- on the **Combat tab**: the **action order** (spells-first / physical-first / custom cycle), the **weapons & attack commands** (primary / alternate + off-hands and the normal / alternate verbs), the **backstab options** (including stealth running), the **room thresholds** (min / max monsters, run distance, **kill all engaged**, **engage monsters you can't hurt**, and **when running away** — go backwards, break before running), and the **spell combat** slots with their per-slot gates, the mana-threshold mode and the drain settings;
 - the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands;
 - on the **Spells tab**: the **between-round spell-type priority order** and the **healing / regeneration picks** (Minor heal, Major heal, Emergency heal, HP Regen);
 - on the **Party tab**: **party healing** (the Minor / Major single-target and party (AOE) heals, their thresholds, and how many members switch to the AOE heal).
@@ -7421,6 +7427,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Polite mode ⚠️ unwired | `Off` | Off / WaitForOthers / SkipRoom / AttackDifferent | `PoliteMode` | Models/Profile/CombatSettings.cs |
 | Min. / Max. monsters | 0 / 20 | 0–20 / 1–20 | `MinMonstersInRoom` / `MaxMonstersInRoom` | Models/Profile/CombatSettings.cs |
 | Kill all engaged | `false` | bool | `KillAllEngaged` | Models/Profile/CombatSettings.cs |
+| Engage monsters you can't hurt | `false` | bool | `EngageUnhurtable` | Models/Profile/CombatSettings.cs |
 | Run distance | `2` | 1–100 | `RunDistance` | Models/Profile/CombatSettings.cs |
 | Go backwards if running | `Backward` (ticked) | Backward / Forward | `RunDirection` | Models/Profile/CombatSettings.cs |
 | Break combat before running | `true` | bool | `BreakBeforeFleeing` | Models/Profile/CombatSettings.cs |

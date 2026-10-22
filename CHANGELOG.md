@@ -1,5 +1,10 @@
 # Version history
 
+## 3.186.0
+
+- New Combat setting "Engage monsters you can't hurt": attack a monster nothing in the combat chain can hurt instead of walking past it, for a character carried through a party
+- That character stays on the target through its weapon's "no effect" lines
+
 ## 3.185.17
 
 - Picking a long route no longer freezes the client before the walk starts

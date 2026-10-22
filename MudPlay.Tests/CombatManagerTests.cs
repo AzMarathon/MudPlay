@@ -2720,6 +2720,124 @@ public sealed class CombatManagerTests
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
     }
 
+    // ----- Engage monsters you can't hurt -----------------------------------
+
+    // A character carried through a party whose weapon can't hit the room's monster
+    // still engages it instead of walking past (user, 2026-10-22). The fixture's
+    // shortsword is below the ice sorceress's magic and nothing else is configured.
+    private static Harness EngageUnhurtableRoom(string root, bool on)
+    {
+        Harness h = new();
+        WireMagicGate(h, root);
+        h.Settings.NormalWeapon = "shortsword";
+        h.Settings.EngageUnhurtable = on;
+        h.AddMonster(108, "ice sorceress");
+        h.Feed("Also here: ice sorceress.");
+        return h;
+    }
+
+    [Fact]
+    public void EngageUnhurtable_On_AttacksAMonsterTheWeaponCantHit()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = EngageUnhurtableRoom(root, on: true);
+
+            Assert.True(h.Combat.CanEngageMonster(108));
+            Assert.Equal("a ice sorceress", h.LastSent);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    [Fact]
+    public void EngageUnhurtable_Off_WalksPastIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = EngageUnhurtableRoom(root, on: false);
+
+            Assert.False(h.Combat.CanEngageMonster(108));
+            Assert.DoesNotContain(h.Sent, b => Encoding.Latin1.GetString(b).Contains("ice sorceress"));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // The "no effect" its swing draws keeps us on it: no target drop, no room
+    // refresh to re-pick and move on.
+    [Fact]
+    public void EngageUnhurtable_NoEffect_StaysOnTheTarget()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = EngageUnhurtableRoom(root, on: true);
+            int sent = h.Sent.Count;
+
+            h.Feed("Your weapon has no effect against this monster!");
+            h.Feed("Your weapon has no effect against this monster!");
+
+            Assert.Equal("ice sorceress", h.Combat.CurrentTarget);
+            Assert.Equal(sent, h.Sent.Count);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // The next one of the species, picked after the no-effect booked the normal
+    // weapon as failed, is swung at with the normal weapon: the alternate preference
+    // that failure sets would ask for an alternate that isn't configured (a swap to
+    // no weapon) and leave the engine believing it was on it.
+    [Fact]
+    public void EngageUnhurtable_NextOfTheSpecies_KeepsTheNormalWeapon()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireMagicGate(h, root);
+            h.Settings.NormalWeapon = "shortsword";
+            h.Settings.EngageUnhurtable = true;
+            h.AddMonster(108, "ice sorceress");
+            h.Feed("Also here: ice sorceress, ice sorceress.");
+            h.Feed("Your weapon has no effect against this monster!");
+            h.Swaps.Clear();
+
+            h.Feed("You gain 20000 experience.");
+            h.Feed("*Combat Off*");
+            h.Combat.NoteUnattributedDeath();
+
+            Assert.Equal("a ice sorceress", h.LastSent);
+            Assert.Equal(("shortsword", (string?)null), Assert.Single(h.Swaps));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // With an alternate that can't hit either, the engine tries it (swap, then one
+    // forced retry), and the no-effect that proves it out keeps us on the target
+    // rather than dropping it and moving on.
+    [Fact]
+    public void EngageUnhurtable_AlternateAlsoNoEffect_StaysOnTheTarget()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = EngageUnhurtableRoom(root, on: true);
+            h.Settings.AlternateWeapon = "shortsword";
+            h.Settings.AlternateAttackCommand = "aa";
+            h.Feed("Your weapon has no effect against this monster!");   // normal → alternate
+            h.Feed("Your weapon has no effect against this monster!");   // alternate → forced retry
+            Assert.Equal("aa ice sorceress", h.LastSent);
+            int sent = h.Sent.Count;
+
+            h.Feed("Your weapon has no effect against this monster!");   // alternate out
+
+            Assert.Equal("ice sorceress", h.Combat.CurrentTarget);
+            Assert.Equal(sent, h.Sent.Count);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
     // ----- A martial-arts strike is judged by the character, not the weapon ---
 
     // The fixture's monsters: 108 needs hit magic 1. These need more than the

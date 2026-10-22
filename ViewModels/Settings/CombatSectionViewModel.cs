@@ -209,6 +209,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _minMonstersInRoom;
     [ObservableProperty] private int _maxMonstersInRoom = 20;
     [ObservableProperty] private bool _killAllEngaged;
+    [ObservableProperty] private bool _engageUnhurtable;
     [ObservableProperty] private int _runDistance = 2;
 
     // ----- Run-away (flee) behaviour --------------------------------
@@ -672,6 +673,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
             MinMonstersInRoom = Math.Clamp(MinMonstersInRoom, 0, 20),
             KillAllEngaged = KillAllEngaged,
+            EngageUnhurtable = EngageUnhurtable,
             MaxMonstersInRoom = Math.Clamp(MaxMonstersInRoom, 1, 20),
             RunDistance       = Math.Clamp(RunDistance, 1, 100),
             RunDirection      = GoBackwardsIfRunning ? RunDirection.Backward : RunDirection.Forward,
@@ -838,6 +840,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
 
         MinMonstersInRoom = dto.MinMonstersInRoom;
         KillAllEngaged     = dto.KillAllEngaged;
+        EngageUnhurtable   = dto.EngageUnhurtable;
         MaxMonstersInRoom = dto.MaxMonstersInRoom;
         RunDistance       = dto.RunDistance;
         GoBackwardsIfRunning = dto.RunDirection == RunDirection.Backward;
@@ -964,6 +967,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     // Room-skip
     partial void OnMinMonstersInRoomChanged(int value)           => MarkDirty();
     partial void OnKillAllEngagedChanged(bool value)             => MarkDirty();
+    partial void OnEngageUnhurtableChanged(bool value)           => MarkDirty();
     partial void OnMaxMonstersInRoomChanged(int value)           => MarkDirty();
     partial void OnRunDistanceChanged(int value)                 => MarkDirty();
     partial void OnGoBackwardsIfRunningChanged(bool value)       => MarkDirty();
