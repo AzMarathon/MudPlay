@@ -244,8 +244,8 @@ public sealed class CombatSpellChooser
         // override exists for the physical rounds.
         if (preferSpell
             && ctx.SpellsAvailable
-            && TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent,
-                   new RungCounts(_normalAttackCasts, _alternateAttackCasts)) is { } spell)
+            && TryAttackSpellOrEngage(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent,
+                   new RungCounts(_normalAttackCasts, _alternateAttackCasts), why: null, reserveWaivedOnly: false) is { } spell)
             return spell;
 
         // The single-target attack cascade could not fire this round. If we'd
@@ -269,14 +269,11 @@ public sealed class CombatSpellChooser
     // engaged at all, so the engage gate and the round's pick can't disagree.
     //   currentTarget: the monster is the one being fought, so its single-target
     //     cast counts stand; any other starts at none, as it would once picked.
-    //   cannotHurt: rungs that would fire for the room but can't touch THIS monster
-    //     (a room spell under its spell immunity).
     //   reserveWaivedOnly: only rungs that fire regardless of mana in a party, for
     //     the hold that waits on such a spell's cost rather than walking on.
     public CombatSpellDecision? EngagingAttackSpell(
         CombatSettings settings, in CombatSpellContext ctx, bool currentTarget,
-        IReadOnlySet<CombatSpellAction>? cannotHurt = null, List<string>? why = null,
-        bool reserveWaivedOnly = false)
+        List<string>? why = null, bool reserveWaivedOnly = false)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (!ctx.SpellsAvailable)
@@ -285,8 +282,25 @@ public sealed class CombatSpellChooser
             return null;
         }
         RungCounts counts = currentTarget ? new RungCounts(_normalAttackCasts, _alternateAttackCasts) : default;
-        return TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent: false,
-            counts, why, cannotHurt, reserveWaivedOnly);
+        return TryAttackSpellOrEngage(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent: false,
+            counts, why, reserveWaivedOnly);
+    }
+
+    // The attack-spell cascade, and when nothing fires, nothing of ours hurts the
+    // target and we're in a party: the cascade again with element resistance set
+    // aside. A spell the monster resists outright still engages it, doing no
+    // damage (user, 2026-10-23), and while engaged the party's kill pays us exp.
+    // Solo nobody else would kill it, so resistance keeps it out. A spell that
+    // does damage always goes first.
+    private CombatSpellDecision? TryAttackSpellOrEngage(
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent,
+        RungCounts counts, List<string>? why, bool reserveWaivedOnly)
+    {
+        if (TryAttackSpell(settings, ctx, mode, singleTargetSpent, counts, why, reserveWaivedOnly) is { } spell)
+            return spell;
+        if (!ctx.WeaponIneffective || !ctx.InParty || ctx.ResistBlockedActions is not { Count: > 0 }) return null;
+        return TryAttackSpell(settings, ctx with { ResistBlockedActions = null }, mode, singleTargetSpent, counts,
+            why: null, reserveWaivedOnly);
     }
 
     // Pick the in-between debuff for the current round, or null when no debuff
@@ -452,18 +466,17 @@ public sealed class CombatSpellChooser
     // Attack-spell phase: room spell 1 while it qualifies, room spell 2 once slot 1
     // is spent, then normal, then alternate single-target damage spells. Returns
     // null when none can fire this round, with why each configured rung was passed
-    // over added to why. cannotHurt and reserveWaivedOnly are the engage gate's (see
-    // EngagingAttackSpell); a round's pick leaves them unset.
+    // over added to why. reserveWaivedOnly is the engage gate's mana hold (see
+    // EngagingAttackSpell); a round's pick leaves it unset.
     private CombatSpellDecision? TryAttackSpell(
         CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent,
-        RungCounts counts, List<string>? why = null, IReadOnlySet<CombatSpellAction>? cannotHurt = null,
-        bool reserveWaivedOnly = false)
+        RungCounts counts, List<string>? why, bool reserveWaivedOnly)
     {
         // Multi-attack is room-scoped (MinEnemies), not target-scoped, so the
         // per-target single-target latch never suppresses it.
         CombatSpellSlot multi = settings.MultiAttackSpell;
         if (IsConfigured(multi) && Rung(multi, CombatSpellAction.MultiAttack, multi.SpellName!,
-                RoomRungBlock(settings, ctx, multi, _multiAttackCasts, CombatSpellAction.MultiAttack, mode, cannotHurt),
+                RoomRungBlock(settings, ctx, multi, _multiAttackCasts, mode),
                 ctx, why, reserveWaivedOnly) is { } m1)
             return m1;
 
@@ -476,7 +489,7 @@ public sealed class CombatSpellChooser
         CombatSpellSlot multi2 = settings.MultiAttack2Spell;
         if (settings.MultiAttack2Enabled && IsConfigured(multi2)
             && Rung(multi2, CombatSpellAction.MultiAttack2, multi2.SpellName!,
-                RoomRungBlock(settings, ctx, multi2, _multiAttack2Casts, CombatSpellAction.MultiAttack2, mode, cannotHurt),
+                RoomRungBlock(settings, ctx, multi2, _multiAttack2Casts, mode),
                 ctx, why, reserveWaivedOnly) is { } m2)
             return m2;
 
@@ -542,9 +555,12 @@ public sealed class CombatSpellChooser
 
     // Why a room-attack rung can't fire this round, or null when it can. Auto-Nuke
     // gates it (a room attack is a nuke), and both slots read slot 1's MinEnemies.
+    // Nothing about the one monster asked after decides it: a room attack engages
+    // the caster with the whole room, whatever any monster's spell immunity
+    // (GAME_MECHANICS "Weapons: "no effect" lines and the magical-weapon
+    // requirement").
     private static string? RoomRungBlock(
-        CombatSettings settings, in CombatSpellContext ctx, CombatSpellSlot slot, int casts,
-        CombatSpellAction action, ThresholdMode mode, IReadOnlySet<CombatSpellAction>? cannotHurt)
+        CombatSettings settings, in CombatSpellContext ctx, CombatSpellSlot slot, int casts, ThresholdMode mode)
     {
         if (!ctx.AllowNukes) return "Auto-Nuke is off, or a bystander holds room attacks";
         CombatSpellSlot trigger = settings.MultiAttackSpell;
@@ -552,9 +568,7 @@ public sealed class CombatSpellChooser
         if (ctx.EnemyCount < trigger.MinEnemies)
             return $"{ctx.EnemyCount} enemy(ies) here, its Min enemies is {trigger.MinEnemies}";
         if (!CastsOk(slot, casts)) return $"its {slot.MaxCastsPerRoom} cast(s) this room are spent";
-        if (AttackManaBlock(slot, ctx, mode) is { } mana) return mana;
-        if (cannotHurt?.Contains(action) == true) return "can't hurt this monster (its spell immunity, type or element)";
-        return null;
+        return AttackManaBlock(slot, ctx, mode);
     }
 
     // Why a single-target attack rung can't fire at this target, or null when it

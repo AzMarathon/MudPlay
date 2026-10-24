@@ -105,11 +105,15 @@ public sealed class SpellEngageGateTests
             AddMonster(503, "stone warden");
             AddMonster(504, "acid slime");
             AddMonster(505, "iron golem");
+            AddMonster(506, "lich lord");
+            AddMonster(507, "flame wraith");
         }
 
         // A katana with hit magic 3; monsters needing 4 (the rat, slime and golem need
-        // none; the warden's and golem's spell immunity is 5); a Mage's magic missile (level 1, cost 3),
-        // dancing blades (a room attack, cost 26) and turn undead (undead only).
+        // none; the warden's and golem's spell immunity is 5, the lich's 20, and the
+        // wraith resists fire 100%); a Mage's magic missile (level 1, cost 3), dancing
+        // blades (a room attack, level 11, cost 26), turn undead (undead only) and
+        // fireball (fire, cost 4).
         private static void WriteGameData(string dir)
         {
             Directory.CreateDirectory(dir);
@@ -125,7 +129,9 @@ public sealed class SpellEngageGateTests
                   { "Number": 502, "Name": "giant rat" },
                   { "Number": 503, "Name": "stone warden", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 5 },
                   { "Number": 504, "Name": "acid slime" },
-                  { "Number": 505, "Name": "iron golem", "Abil-0": 139, "AbilVal-0": 5 } ]
+                  { "Number": 505, "Name": "iron golem", "Abil-0": 139, "AbilVal-0": 5 },
+                  { "Number": 506, "Name": "lich lord", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 20 },
+                  { "Number": 507, "Name": "flame wraith", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 5, "AbilVal-1": 100 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Spells.json"), """
                 [ { "Number": 1, "Name": "magic missile", "Short": "mmis", "ReqLevel": 1, "ManaCost": 3,
@@ -133,7 +139,9 @@ public sealed class SpellEngageGateTests
                   { "Number": 133, "Name": "dancing blades", "Short": "blad", "ReqLevel": 11, "ManaCost": 26,
                     "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 },
                   { "Number": 40, "Name": "turn undead", "Short": "turn", "ReqLevel": 3, "ManaCost": 5,
-                    "Targets": 8, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 } ]
+                    "Targets": 8, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 },
+                  { "Number": 3, "Name": "fireball", "Short": "fbal", "ReqLevel": 1, "ManaCost": 4,
+                    "Targets": 8, "AttType": 1, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 } ]
                 """);
         }
 
@@ -323,6 +331,60 @@ public sealed class SpellEngageGateTests
         Assert.False(h.WalkerHeld);
         Assert.Empty(h.AllSent);
         Assert.Contains("room attack 1 blad: 1 enemy(ies) here, its Min enemies is 2", h.CannotAttackLine);
+    }
+
+    // A room attack engages the caster with the whole room, whatever one monster's
+    // spell immunity: the lich's 20 is over dancing blades' level 11, and it's
+    // still cast and the lich still fought.
+    [Fact]
+    public void RoomAttack_MonsterSpellImmuneToIt_IsStillEngaged()
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blad", MinEnemies = 1 };
+
+        h.Server.Line("Also here: lich lord.");
+
+        Assert.True(h.Combat.CanEngageMonster(506));
+        Assert.True(h.WalkerHeld);
+        Assert.Equal(new[] { "blad" }, h.AllSent);
+    }
+
+    // A spell the monster resists outright still engages it, for no damage. In a
+    // party that is what earns the kill's exp, so it's cast; solo nobody else would
+    // kill it, so it's walked past; and a spell that does damage goes first.
+    [Theory]
+    [InlineData(true, null, "fbal flame wraith")]
+    [InlineData(false, null, null)]
+    [InlineData(true, "mmis", "mmis flame wraith")]
+    public void SpellTheMonsterResistsOutright_EngagesInAParty(bool partied, string? alternate, string? sent)
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "fbal" };
+        if (alternate is not null) h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = alternate };
+        if (partied) h.JoinParty();
+
+        h.Server.Line("Also here: flame wraith.");
+
+        Assert.Equal(sent is not null, h.Combat.CanEngageMonster(507));
+        Assert.Equal(sent is null ? Array.Empty<string>() : new[] { sent }, h.AllSent);
+        if (sent is null) Assert.Contains("the monster resists its element", h.CannotAttackLine);
+    }
+
+    // The same for a spell typed as the attack command.
+    [Fact]
+    public void SpellCommandTheMonsterResistsOutright_EngagesInAParty()
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackCommand = "fbal";
+        h.JoinParty();
+
+        h.Server.Line("Also here: flame wraith.");
+
+        Assert.True(h.Combat.CanEngageMonster(507));
+        Assert.Equal(new[] { "fbal flame wraith" }, h.AllSent);
     }
 
     // A spell the chooser would never cast at this monster doesn't make it

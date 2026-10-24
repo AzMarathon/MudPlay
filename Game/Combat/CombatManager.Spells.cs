@@ -1779,7 +1779,10 @@ public sealed partial class CombatManager
     {
         if (_normalWeaponFailedMonsters.Contains(resolvedSpecies)) return true;
         if (AttackSideCanHurt(settings, alternate: false, monsterNumber, out _) != false) return false;
-        return AttackSideCanHurt(settings, alternate: true, monsterNumber, out _) == true;
+        if (AttackSideCanHurt(settings, alternate: true, monsterNumber, out _) == true) return true;
+        // Neither hurts it: a spell side it resists still engages it in a party.
+        return !SideEngagesWithoutDamage(settings, alternate: false, resolvedSpecies, monsterNumber)
+            && SideEngagesWithoutDamage(settings, alternate: true, resolvedSpecies, monsterNumber);
     }
 
     // True when neither attack side can damage the current target, so a
@@ -1896,11 +1899,26 @@ public sealed partial class CombatManager
         : MartialArtsCommand.IsStrike(command) ? "martial-arts strike, weapon not used"
         : "weapon attack";
 
-    // Whether an attack spell can hurt this monster at all, by game data: its level
-    // at or above the monster's spell immunity, a target type the monster has, and
-    // an element it doesn't resist outright. Unknown data fails open (it can).
-    // GAME_MECHANICS "Why an attack spell fails to damage — three independent mechanics".
+    // Whether a single-target attack spell can hurt this monster, by game data: it
+    // engages it (SpellCanEngage) and the monster doesn't resist its element
+    // outright. Unknown data fails open (it can). GAME_MECHANICS "Why an attack
+    // spell fails to damage — three independent mechanics".
     private bool SpellCanHurt(string code, int monsterNumber, out string? why)
+    {
+        if (!SpellCanEngage(code, monsterNumber, out why)) return false;
+        if (!SpellResisted(code, monsterNumber)) return true;
+        why = "the monster resists its element";
+        return false;
+    }
+
+    private bool SpellResisted(string code, int monsterNumber) =>
+        ResistBlockedFor(monsterNumber, code, null) is { Count: > 0 };
+
+    // Whether a single-target attack spell engages this monster: its level at or
+    // above the monster's spell immunity and a target type the monster has. One
+    // the monster resists outright engages it too, for no damage (user,
+    // 2026-10-23).
+    private bool SpellCanEngage(string code, int monsterNumber, out string? why)
     {
         if (_monsterMagic is not null && _spellReqLevel is not null)
         {
@@ -1917,13 +1935,21 @@ public sealed partial class CombatManager
             why = "it can't affect this kind of monster";
             return false;
         }
-        if (ResistBlockedFor(monsterNumber, code, null) is { Count: > 0 })
-        {
-            why = "the monster resists its element";
-            return false;
-        }
         why = null;
         return true;
+    }
+
+    // A side whose command is a spell the monster resists outright: it engages the
+    // monster for no damage. Worth sending only in a party, whose kill then pays us
+    // the exp; solo nobody else would kill it. Never ahead of anything that hurts it.
+    private bool SideEngagesWithoutDamage(CombatSettings settings, bool alternate, string species, int monsterNumber)
+    {
+        if (!_party.IsInParty) return false;
+        if (alternate && !AlternateSideConfigured(settings)) return false;
+        HashSet<string> failSet = alternate ? _alternateWeaponFailedMonsters : _normalWeaponFailedMonsters;
+        if (!string.IsNullOrEmpty(species) && failSet.Contains(species)) return false;
+        return SpellCommandCode(SideCommand(settings, alternate, monsterNumber)) is { } spell
+            && SpellCanEngage(spell, monsterNumber, out _) && SpellResisted(spell, monsterNumber);
     }
 
     // The magic-hit level of the weapon that swings on the normal side, or -1 when
@@ -2138,8 +2164,18 @@ public sealed partial class CombatManager
         }
         else sides += "; no alternate attack";
 
-        if (!CombatSpellsWired) return new EngageVerdict(EngageAssessment.Unkillable, sides + "; no combat spells");
-        return JudgeSpellEngage(settings, monsterNumber, species, rawName, sides);
+        EngageVerdict spells = CombatSpellsWired
+            ? JudgeSpellEngage(settings, monsterNumber, species, rawName, sides)
+            : new EngageVerdict(EngageAssessment.Unkillable, sides + "; no combat spells");
+        if (spells.Assessment is EngageAssessment.CanAct or EngageAssessment.HeldForMana) return spells;
+
+        // Nothing hurts it. In a party, a spell typed as an attack command that it
+        // resists outright still engages it, for no damage, and the party's kill pays.
+        foreach (bool alternate in new[] { false, true })
+            if (SideEngagesWithoutDamage(settings, alternate, species, monsterNumber))
+                return new EngageVerdict(EngageAssessment.CanAct,
+                    $"{spells.Why}; {SideLabel(settings, alternate, monsterNumber)} engages it in a party, for no damage");
+        return spells;
     }
 
     // No attack side can hurt it, so an attack spell has to. The chooser answers
@@ -2162,20 +2198,19 @@ public sealed partial class CombatManager
             : monsterNumber >= 0 && obs is { } listed && ResolveMonsterNumber(listed, fighting) == monsterNumber);
         string target = current ? _currentTarget! : rawName ?? species;
         int enemies = obs is { } room ? Math.Max(1, CountEngageable(room)) : 1;
-        IReadOnlySet<CombatSpellAction>? cannotHurt = RoomAttacksThatCannotHurt(settings, monsterNumber);
 
         List<string> ruledOut = new();
         CombatSpellContext now = EngageContext(settings, obs, target, enemies, monsterNumber, mana: null);
-        if (_spellChooser.EngagingAttackSpell(settings, now, current, cannotHurt, ruledOut) is { } spell)
+        if (_spellChooser.EngagingAttackSpell(settings, now, current, ruledOut) is { } spell)
             return new EngageVerdict(EngageAssessment.CanAct, $"{sides}; {spell.Spell} can engage it");
 
         string why = ruledOut.Count == 0 ? "no attack spell set" : string.Join("; ", ruledOut);
         CombatSpellContext full = EngageContext(settings, obs, target, enemies, monsterNumber, FullMana());
         if (now.InParty
-            && _spellChooser.EngagingAttackSpell(settings, full, current, cannotHurt, reserveWaivedOnly: true) is { } held)
+            && _spellChooser.EngagingAttackSpell(settings, full, current, reserveWaivedOnly: true) is { } held)
             return new EngageVerdict(EngageAssessment.HeldForMana,
                 $"{sides}; {why}; {held.Spell} fires regardless of mana in a party, so it waits for mana to cover its cost");
-        if (_spellChooser.EngagingAttackSpell(settings, full, current, cannotHurt) is { } later)
+        if (_spellChooser.EngagingAttackSpell(settings, full, current) is { } later)
             return new EngageVerdict(EngageAssessment.StuckOnMana, $"{sides}; {why}; {later.Spell} once mana allows");
         return new EngageVerdict(EngageAssessment.Unkillable, $"{sides}; {why}");
     }
@@ -2199,25 +2234,6 @@ public sealed partial class CombatManager
 
     private const int UnknownPoolMana = 1_000_000;
 
-    // The room-attack rungs whose spell can't hurt this monster, read as not
-    // engaging it. Inferred, not ruled on: a Paradigm room spell engages every
-    // monster in the room, and whether that holds for one it can't hurt is an open
-    // question in GAME_MECHANICS "Weapons: "no effect" lines and the magical-weapon
-    // requirement". This is the one place the exclusion is made; returning null
-    // here drops it.
-    private IReadOnlySet<CombatSpellAction>? RoomAttacksThatCannotHurt(CombatSettings settings, int monsterNumber)
-    {
-        HashSet<CombatSpellAction>? set = null;
-        void Check(string? code, CombatSpellAction action)
-        {
-            if (NullIfBlank(code) is { } c && !SpellCanHurt(c, monsterNumber, out _))
-                (set ??= new HashSet<CombatSpellAction>()).Add(action);
-        }
-        Check(settings.MultiAttackSpell.SpellName, CombatSpellAction.MultiAttack);
-        Check(settings.MultiAttack2Spell.SpellName, CombatSpellAction.MultiAttack2);
-        return set;
-    }
-
     // The spell a target is held for: no attack side hurts it, nothing fires at the
     // mana we have (the round's pick was the useless swing), and an attack spell
     // set to fire regardless of mana would once mana covers its cost, with the
@@ -2228,8 +2244,7 @@ public sealed partial class CombatManager
     {
         if (!ctx.WeaponIneffective || !ctx.InParty) return null;
         CombatSpellContext full = EngageContext(settings, obs, target, enemyCount, monsterNumber, FullMana());
-        return _spellChooser.EngagingAttackSpell(settings, full, currentTarget: true,
-            RoomAttacksThatCannotHurt(settings, monsterNumber), reserveWaivedOnly: true);
+        return _spellChooser.EngagingAttackSpell(settings, full, currentTarget: true, reserveWaivedOnly: true);
     }
 
     // The target the engine is holding on for a fire-regardless spell's cost, so
