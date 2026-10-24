@@ -258,6 +258,21 @@ public sealed class AppServices
     // Auto-collect logs is on.
     public PerformanceMonitor Performance { get; }
 
+    // What the open windows hold (Conversation rows, scrollback, map rooms,
+    // Backscroll lines) and the running counts of lines, renders and map redraws:
+    // the memory log, the bug report and the hang report all read them.
+    public ContentSizes ContentSizes { get; } = new();
+    public ActivityCounters Activity { get; } = new();
+
+    // Whose session a new log file's header names (LogFileHeader). Read on the
+    // log writers' own threads, as the hang report reads the same names, and from
+    // the first log entry on, before the profile and game data exist.
+    private LogFileHeader.Session HeaderSession() => new(
+        Profile?.CurrentProfileName ?? "(none loaded)",
+        Profile?.CurrentBbsName ?? "(none)",
+        GameData is null ? "(not known)" : BugReportBuilder.RealmLabel(GameData.ActiveRealm),
+        GameData?.ActiveSet ?? "(none)");
+
     // Background memory hygiene: compacts the LOH once a game-data set settles
     // (reclaiming the startup JSON-parse fragmentation) and periodically returns
     // glibc's free native pages to the OS, so a loop-mode session running for days
@@ -2945,7 +2960,7 @@ public sealed class AppServices
         // Tee the program log to disk, gated on AutoCollectLogs: the writer only
         // opens once the toggle turns on (applied from the profile below or
         // flipped from the Log pane), so a normal session leaves no file.
-        ProgramLog = new ProgramLogFile(Log, LogDiagnostics);
+        ProgramLog = new ProgramLogFile(Log, LogDiagnostics, session: HeaderSession);
         // ProcessExit, not the window's Closing: it also runs on an
         // Environment.Exit (the data-folder move's restart).
         AppDomain.CurrentDomain.ProcessExit += (_, _) => ProgramLog.Dispose();
@@ -2968,8 +2983,8 @@ public sealed class AppServices
         PathGuard.Refused += line => Log.Warn("Paths", line);
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
-        MemoryLog = new MemoryUsageLog(LogDiagnostics);
-        Performance = new PerformanceMonitor(LogDiagnostics);
+        Performance = new PerformanceMonitor(LogDiagnostics, HeaderSession);
+        MemoryLog = new MemoryUsageLog(LogDiagnostics, Performance, ContentSizes, Activity, HeaderSession);
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
@@ -3010,7 +3025,10 @@ public sealed class AppServices
                 ("Active game-data set", GameData.ActiveSet ?? "(none)"),
                 ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
                 ("Log to send with this", CrashReporter.LogToSend()),
-            ]);
+            ],
+            // Skia's caches are left out: the frozen UI thread may be inside Skia.
+            () => ProcessResources.Read(Performance.GcHandleCount, renderer: false)
+                .ReportLines(ContentSizes.Describe(), Activity.Read()));
         // Built ahead of every engine: each one's enable probe reads the master
         // switch, and a probe must never run before its target exists.
         AutoModeController = new Game.AutoModeController(Profile, Log);
@@ -4606,6 +4624,7 @@ public sealed class AppServices
         RoundDamage = new Game.Combat.RoundDamageTracker(
             Router, PlayerState, Log,
             shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs,
+            traceSession: HeaderSession,
             // UI-thread one-shot, same as the door FSM's: ends a round once its lines go quiet.
             scheduleDelay: (delay, callback) =>
             {
@@ -10303,6 +10322,7 @@ public sealed class AppServices
         Walker.Event += PathItemGiveRouter.OnWalkEvent;
         Inventory.Changed += PathItemGiveRouter.OnInventoryChanged;
         Router.LineDispatched += line => PathItemGiveRouter.OnLine(line.Text);
+        Router.LineDispatched += _ => Activity.LineReceived();
         LoopRunner.SetPathItemDetourRoomProbe(() => PathItemGiveRouter.LastGiverRoom);
         LoopRunner.SetGatedApproachFetch(LoopApproachFetch);
 

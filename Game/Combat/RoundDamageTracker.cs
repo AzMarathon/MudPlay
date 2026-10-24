@@ -81,6 +81,8 @@ public sealed class RoundDamageTracker : IDisposable
     private readonly PlayerState _state;
     private readonly LogService? _log;
     private readonly Func<bool> _shouldWriteTrace;
+    // Whose session the trace file's header names.
+    private readonly Func<LogFileHeader.Session>? _traceSession;
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private IDisposable? _settleTimer;
@@ -145,9 +147,11 @@ public sealed class RoundDamageTracker : IDisposable
         LogService? log = null,
         Func<bool>? shouldWriteTrace = null,
         Func<DateTimeOffset>? clock = null,
-        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null,
+        Func<LogFileHeader.Session>? traceSession = null)
     {
         ArgumentNullException.ThrowIfNull(router);
+        _traceSession = traceSession;
         ArgumentNullException.ThrowIfNull(state);
         _router = router;
         _state = state;
@@ -646,7 +650,7 @@ public sealed class RoundDamageTracker : IDisposable
 
         if (_shouldWriteTrace())
         {
-            _trace ??= new DebugLogWriter("combat");
+            _trace ??= new DebugLogWriter("combat", LogFileHeader.Read(_traceSession));
             _trace.WriteLine(
                 $"round n={summary.RoundNumber} " +
                 $"startedAt={summary.StartedAt:HH:mm:ss.fff} " +

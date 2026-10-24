@@ -76,6 +76,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         "then CPU, memory and GC over that minute, then the types most allocated (sampled).";
 
     private readonly LogDiagnosticState? _diagnostics;
+    private readonly Func<LogFileHeader.Session>? _session;
     private readonly Func<bool> _onUiThread;
     private readonly Func<long> _timestamp;
     private readonly ProbeHost? _probe;
@@ -158,9 +159,9 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     // The production monitor: follows Auto-collect logs, probes the Avalonia
     // dispatcher from its own thread, and names windows as they open, close and
-    // take focus.
-    public PerformanceMonitor(LogDiagnosticState diagnostics)
-        : this(() => Dispatcher.UIThread.CheckAccess(), ProbeHost.Client(), diagnostics)
+    // take focus. session: whose session the performance log's header names.
+    public PerformanceMonitor(LogDiagnosticState diagnostics, Func<LogFileHeader.Session>? session = null)
+        : this(() => Dispatcher.UIThread.CheckAccess(), ProbeHost.Client(), diagnostics, session)
     {
         Window.WindowOpenedEvent.AddClassHandler<Window>(
             (window, _) => NoteWindowOpened(window.GetType().Name), RoutingStrategies.Direct);
@@ -174,9 +175,11 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     // probe: what the probe runs on, or null for a monitor with no probe, whose
     // stalls and timings are fed in directly.
-    internal PerformanceMonitor(Func<bool> onUiThread, ProbeHost? probe = null, LogDiagnosticState? diagnostics = null)
+    internal PerformanceMonitor(Func<bool> onUiThread, ProbeHost? probe = null, LogDiagnosticState? diagnostics = null,
+        Func<LogFileHeader.Session>? session = null)
     {
         _onUiThread = onUiThread;
+        _session = session;
         _probe = probe;
         _timestamp = probe?.Timestamp ?? Stopwatch.GetTimestamp;
         _diagnostics = diagnostics;
@@ -292,7 +295,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             {
                 try
                 {
-                    _writer = new DebugLogWriter("performance");
+                    _writer = new DebugLogWriter("performance", LogFileHeader.Read(_session));
                     _writer.WriteLine(HeaderLine);
                     _sink = WriteToFile;
                     _collecting = true;
@@ -490,24 +493,60 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // ----- Windows -----------------------------------------------------------
 
     // The window class handlers call these on the UI thread with the window's
-    // type name: the probe reads names, never a window.
+    // type name: the probe reads names, never a window. Each open and close goes
+    // in the program log with the windows then open, so a log read on its own
+    // says what was on screen when memory or the UI went wrong. Logged whatever
+    // Auto-collect logs says, as the client's status line is: a window opens
+    // rarely, and the line costs no more than that.
     internal void NoteWindowOpened(string name)
     {
+        string open;
         lock (_windowLock)
         {
             _openWindows.Add(name);
             _lastWindowEvent = ($"opening {name}", _timestamp());
+            open = DescribeWindows(_openWindows);
         }
+        _hangSources?.Log.Info(WindowsLogSource, $"opened {name} (open: {open})");
     }
 
     internal void NoteWindowClosed(string name)
     {
+        string open;
         lock (_windowLock)
         {
             _openWindows.Remove(name);
             _lastWindowEvent = ($"closing {name}", _timestamp());
+            open = DescribeWindows(_openWindows);
         }
+        _hangSources?.Log.Info(WindowsLogSource, $"closed {name} (open: {open})");
     }
+
+    public const string WindowsLogSource = "Windows";
+
+    // The windows open now, short: "Main, Conversation, InfoDialog x2". Any thread.
+    public string OpenWindowsSummary
+    {
+        get { lock (_windowLock) return DescribeWindows(_openWindows); }
+    }
+
+    // Under _windowLock. Type names lose their "Window" ending; repeats are counted.
+    private static string DescribeWindows(List<string> open)
+    {
+        if (open.Count == 0) return "none";
+        const string suffix = "Window";
+        return string.Join(", ", open.GroupBy(n => n, StringComparer.Ordinal).Select(g =>
+        {
+            string shortName = g.Key.Length > suffix.Length && g.Key.EndsWith(suffix, StringComparison.Ordinal)
+                ? g.Key[..^suffix.Length] : g.Key;
+            int count = g.Count();
+            return count == 1 ? shortName : $"{shortName} x{count}";
+        }));
+    }
+
+    // The GC handle count the runtime last reported, heard while collecting (the
+    // runtime gives it no API of its own); null otherwise.
+    public long? GcHandleCount => _allocations?.GcHandles;
 
     internal void NoteWindowFocused(string name)
     {
@@ -1076,6 +1115,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         // OnEventSourceCreated for the sources that exist.
         private readonly Dictionary<string, long> _bytesByType = new(StringComparer.Ordinal);
         private long _total;
+        private long _gcHandles = -1;
+
+        // From the GC's heap statistics, raised at the end of every collection.
+        public long? GcHandles => Interlocked.Read(ref _gcHandles) is var n && n >= 0 ? n : null;
 
         protected override void OnEventSourceCreated(EventSource source)
         {
@@ -1086,9 +1129,15 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
         protected override void OnEventWritten(EventWrittenEventArgs e)
         {
-            if (e.EventName is null || !e.EventName.StartsWith("GCAllocationTick", StringComparison.Ordinal)
-                || e.PayloadNames is not { } names || e.Payload is not { } payload)
+            if (e.EventName is null || e.PayloadNames is not { } names || e.Payload is not { } payload) return;
+            if (e.EventName.StartsWith("GCHeapStats", StringComparison.Ordinal))
+            {
+                int at = names.IndexOf("GCHandleCount");
+                if (at >= 0 && at < payload.Count)
+                    Interlocked.Exchange(ref _gcHandles, Convert.ToInt64(payload[at], CultureInfo.InvariantCulture));
                 return;
+            }
+            if (!e.EventName.StartsWith("GCAllocationTick", StringComparison.Ordinal)) return;
             string type = "?";
             long bytes = 0;
             for (int i = 0; i < names.Count; i++)

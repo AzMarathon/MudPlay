@@ -41,7 +41,8 @@ public sealed class HangReportTests
         // writeAside / runAside: where the report's file work and the probe's log
         // lines go; by default each runs at once.
         public Rig(Func<bool>? onUiThread = null, Func<BugReportScrub.Scrubber>? scrubber = null, bool arm = true,
-            Action<Action>? writeAside = null, Action<Action>? runAside = null)
+            Action<Action>? writeAside = null, Action<Action>? runAside = null,
+            Func<IReadOnlyList<(string Key, string Value)>>? resources = null)
         {
             // The Desktop is there already: the client never makes one.
             Directory.CreateDirectory(Folder);
@@ -52,7 +53,7 @@ public sealed class HangReportTests
                 scrubber ?? (() => BugReportScrub.Build(
                     [new(BugReportScrub.LoginPasswordLabel, LoginPassword), new(BugReportScrub.CorpsePasswordLabel, CorpsePassword)],
                     Array.Empty<string?>(), compiled: false)),
-                () => [("Character", "Fujin"), ("Realm", "paradigm")]);
+                () => [("Character", "Fujin"), ("Realm", "paradigm")], resources);
             if (arm) Monitor.ArmHangReports();
         }
 
@@ -138,6 +139,64 @@ public sealed class HangReportTests
         Assert.Contains("- **Open**: MainWindow, SettingsWindow", report);
         Assert.Contains("- **Last opened or closed**: opening SettingsWindow at", report);
         Assert.Contains("- **Last focused**: SettingsWindow at", report);
+    }
+
+    [Fact]
+    public void Each_window_opened_or_closed_goes_in_the_program_log_with_the_windows_then_open()
+    {
+        using Rig rig = new();
+        rig.Monitor.NoteWindowOpened("MainWindow");
+        rig.Monitor.NoteWindowOpened("ConversationWindow");
+        rig.Monitor.NoteWindowOpened("InfoDialog");
+        rig.Monitor.NoteWindowOpened("InfoDialog");
+        rig.Monitor.NoteWindowClosed("ConversationWindow");
+
+        string[] lines = rig.Log.Snapshot().Where(e => e.Source == PerformanceMonitor.WindowsLogSource)
+            .Select(e => $"[{e.Severity}] {e.Message}").ToArray();
+        Assert.Equal(new[]
+        {
+            "[Info] opened MainWindow (open: Main)",
+            "[Info] opened ConversationWindow (open: Main, Conversation)",
+            "[Info] opened InfoDialog (open: Main, Conversation, InfoDialog)",
+            "[Info] opened InfoDialog (open: Main, Conversation, InfoDialog x2)",
+            "[Info] closed ConversationWindow (open: Main, InfoDialog x2)",
+        }, lines);
+        Assert.Equal("Main, InfoDialog x2", rig.Monitor.OpenWindowsSummary);
+    }
+
+    [Fact]
+    public void The_report_carries_the_figures_beyond_the_managed_heap_the_bug_report_and_memory_log_show()
+    {
+        const long mb = 1024 * 1024;
+        ContentSizes contents = new();
+        List<int> rows = [1, 2, 3];
+        IDisposable tracked = contents.Track("convo", () => rows.Count);
+        contents.Track("scrollback", () => 4000, () => 4000);
+        ActivityCounters activity = new();
+        activity.LineReceived();
+        activity.TerminalRendered();
+        activity.TerminalRendered();
+        ProcessResources resources = new(2000 * mb, 500 * mb, 20 * mb, 150 * mb, 60 * mb, 5 * mb, 1 * mb,
+            PinnedObjects: 7, GcHandles: null, Threads: 42, Handles: 310, PoolThreads: 6, Timers: 25,
+            GdiObjects: 900, UserObjects: 120, SkiaCacheBytes: null, SkiaCacheLimit: null,
+            FontCacheBytes: null, FontCacheLimit: null, FontCacheEntries: null);
+        using Rig rig = new(resources: () => resources.ReportLines(contents.Describe(), activity.Read()));
+
+        using (rig.Monitor.Measure("stuck")) rig.Pass(6);
+
+        string report = rig.Report;
+        Assert.Contains("- **Native memory (private bytes less GC committed)**: 1.5 GB: private 2.0 GB, GC committed 500 MB", report);
+        Assert.Contains("- **Threads and handles**: 42 threads (6 in the pool), 310 OS handles, "
+            + "? (heard only while Auto-collect logs is on) GC handles, 7 pinned objects, 25 timers", report);
+        Assert.Contains("- **GDI / USER objects**: 900 / 120", report);
+        Assert.DoesNotContain("Skia caches", report);   // left out of a hang: the UI thread may be inside Skia
+        Assert.Contains("- **Window contents**: convo=3 scrollback=4000/4000", report);
+        Assert.Contains("- **Activity this session**: 1 lines received, 2 terminal renders, 0 map redraws", report);
+        Assert.True(report.IndexOf("## Memory", StringComparison.Ordinal) < report.IndexOf("**Window contents**", StringComparison.Ordinal));
+
+        // The Conversation window closing takes its rows out of the reports.
+        tracked.Dispose();
+        Assert.Equal("scrollback=4000/4000", contents.Describe());
     }
 
     private static void OpenSettingsAndHang(Rig rig)

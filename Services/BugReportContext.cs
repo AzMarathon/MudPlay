@@ -31,6 +31,13 @@ public static class BugReportContext
         Kv(sb, "Time zone", $"{TimeZoneInfo.Local.Id} (UTC{now:zzz}); every time in this report is local unless it ends in Z");
         Part(sb, () => Kv(sb, "Memory", $"{GC.GetTotalMemory(false) / (1024 * 1024)} MB managed, "
             + $"{Environment.WorkingSet / (1024 * 1024)} MB working set"));
+        // The same figures the memory log samples and a hang report carries.
+        Part(sb, () =>
+        {
+            foreach ((string key, string value) in ProcessResources.Read(svc.Performance.GcHandleCount, renderer: true)
+                         .ReportLines(svc.ContentSizes.Describe(), svc.Activity.Read()))
+                Kv(sb, key, value);
+        });
         // Whether this client opened every installed font itself, which stays in
         // its memory, or took the lists from the saved catalogue.
         Part(sb, () => Kv(sb, "Installed fonts",
@@ -93,6 +100,8 @@ public static class BugReportContext
             : "the last-minutes log: " + (svc.RecentLog.CurrentFiles is { Count: > 0 } files
                 ? string.Join(" and ", files.Select(Path.GetFileName))
                 : "(not written yet)"));
+        if (svc.MemoryLog.CurrentPath is { } memory)
+            Kv(sb, "Memory log", Path.GetFileName(memory));
     }
 
     // Every window of the client, as titled. Many things are only shown, and a

@@ -608,6 +608,7 @@ public sealed class TerminalControl : Control
     public override void Render(DrawingContext context)
     {
         using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance.Measure("terminal render");
+        AppServices.CurrentOrNull?.Activity.TerminalRendered();
         base.Render(context);
         var em = Emulator;
         var bounds = new Rect(Bounds.Size);

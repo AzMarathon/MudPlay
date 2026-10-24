@@ -27,11 +27,18 @@ public sealed class ClientHeartbeat
     // What the client is and runs on. The same lines open each last-minutes file.
     public static IReadOnlyList<string> StartupLines(string? activeSet, string? lastProfile) =>
     [
+        .. ClientLines(),
+        $"data folder {BugReportContext.HomeRelative(AppPaths.DataRoot)}; game data {activeSet ?? "(none yet)"}; "
+            + $"last profile {lastProfile ?? "(none)"}",
+    ];
+
+    // The build, the system and the process: the half of the startup block that
+    // every log file's header repeats (LogFileHeader).
+    public static IReadOnlyList<string> ClientLines() =>
+    [
         $"MudPlay {ClientEnvironment.Build}",
         $"{ClientEnvironment.Os} ({ClientEnvironment.Architecture}); {ClientEnvironment.Desktop}; {ClientEnvironment.Runtime}",
         $"process {ClientEnvironment.ProcessId} started {ClientEnvironment.ProcessStart:yyyy-MM-dd HH:mm:ss zzz}",
-        $"data folder {BugReportContext.HomeRelative(AppPaths.DataRoot)}; game data {activeSet ?? "(none yet)"}; "
-            + $"last profile {lastProfile ?? "(none)"}",
     ];
 
     // The changing half of a status line, read off the running client.
@@ -44,7 +51,9 @@ public sealed class ClientHeartbeat
             + $"; master switch {(svc.AutoModeController.KillSwitchEngaged ? "OFF" : "on")}"
             + $"; movement {svc.MovementControl.State} (walker {svc.Walker.State}, loop {svc.LoopRunner.State}, auto-lair {svc.AutoLair.Phase})"
             + $"; gates {(gates.Count > 0 ? string.Join(",", gates) : "none")}"
-            + $"; send gate {(svc.EngineGate.IsLocked ? "held by " + string.Join(",", svc.EngineGate.Holds) : "open")}";
+            + $"; send gate {(svc.EngineGate.IsLocked ? "held by " + string.Join(",", svc.EngineGate.Holds) : "open")}"
+            + $"; windows {svc.Performance.OpenWindowsSummary}"
+            + (svc.MemoryLog.LatestSummary is { } memory ? $"; memory log: {memory}" : string.Empty);
     }
 
     public void LogStartup(string? activeSet, string? lastProfile)

@@ -29,12 +29,16 @@ public static class HangReport
     private const string AfterwardsHeading = "## Afterwards";
 
     // Where the report reads the session from. Session: name and value pairs
-    // (character, BBS, realm, the log file to send), read at the hang.
+    // (character, BBS, realm, the log file to send), read at the hang. Resources:
+    // the process's figures beyond the managed heap, the windows' contents and the
+    // session's activity (ProcessResources.ReportLines), read before the session,
+    // since none of them waits on a lock the frozen thread may hold.
     public sealed record Sources(
         LogService Log,
         SentCommandTrail SentCommands,
         Func<BugReportScrub.Scrubber> Scrubber,
-        Func<IReadOnlyList<(string Key, string Value)>> Session);
+        Func<IReadOnlyList<(string Key, string Value)>> Session,
+        Func<IReadOnlyList<(string Key, string Value)>>? Resources = null);
 
     // A scope open on the UI thread.
     public readonly record struct Frame(string Name, string File, string Member, int Line, DateTimeOffset Since, TimeSpan OpenFor);
@@ -88,7 +92,8 @@ public static class HangReport
         string? Problems,
         IReadOnlyList<string> Log,
         BugReportScrub.Scrubber? Scrubber,
-        string? Missing)
+        string? Missing,
+        IReadOnlyList<(string Key, string Value)>? Resources = null)
     {
         public static Gathered Nothing(string why) => new([], [], null, [], null, why);
     }
@@ -148,6 +153,15 @@ public static class HangReport
             .TakeLast(LogEntriesShown).ToList() ?? [];
         Gathered logs = new([("Session", "(not read: its names did not answer in time)")], commands, problems, log, scrubber, null);
         publish(logs);
+        if (sources.Resources is { } resources)
+        {
+            IReadOnlyList<(string Key, string Value)> read;
+            // A figure that fails must not cost the report its session.
+            try { read = resources(); }
+            catch (Exception ex) { read = [("Process resources", $"(not read: {ex.GetType().Name})")]; }
+            logs = logs with { Resources = read };
+            publish(logs);
+        }
         publish(logs with { Session = sources.Session() });
     }
 
@@ -185,7 +199,7 @@ public static class HangReport
         sb.Append('\n');
 
         AppendStack(sb, snapshot);
-        AppendMemory(sb, snapshot);
+        AppendMemory(sb, snapshot, gathered.Resources);
         AppendRecent(sb, snapshot);
         AppendWindows(sb, snapshot);
 
@@ -286,9 +300,16 @@ public static class HangReport
         $"working set {Size(trail.Now.WorkingSet)} ({SignedSize(trail.Now.WorkingSet - trail.Start.WorkingSet)} since it stopped), "
         + $"heap {Size(trail.Now.Heap)}, {Rate(trail.AllocatedMbPerSecond)} allocated";
 
-    private static void AppendMemory(StringBuilder sb, Snapshot snapshot)
+    private static void AppendMemory(StringBuilder sb, Snapshot snapshot, IReadOnlyList<(string Key, string Value)>? resources)
     {
-        if (snapshot.Memory is not { } m) return;
+        if (snapshot.Memory is not { } m)
+        {
+            if (resources is not { Count: > 0 }) return;
+            sb.Append("## Memory\n\n");
+            foreach ((string key, string value) in resources) Kv(sb, key, value);
+            sb.Append('\n');
+            return;
+        }
         sb.Append("## Memory\n\n")
           .Append("When the hang began (").Append(Time(m.StartAt)).Append(") and when this was written (")
           .Append(Time(m.NowAt)).Append("). A client that runs away grows here: its working set climbs into the ")
@@ -303,6 +324,8 @@ public static class HangReport
             + $"{Rate(m.AllocatedMbPerSecond)} over {Seconds(m.NowAt - m.StartAt)}");
         Kv(sb, "Collections gen0 / gen1 / gen2", $"{m.Start.Gen0} / {m.Start.Gen1} / {m.Start.Gen2} then, "
             + $"{m.Now.Gen0} / {m.Now.Gen1} / {m.Now.Gen2} now");
+        if (resources is not null)
+            foreach ((string key, string value) in resources) Kv(sb, key, value);
         if (m.Before.Count > 0)
         {
             sb.Append("\nBefore the hang (oldest first; the rate is since the row above, or since the first row):\n\n```\n");
