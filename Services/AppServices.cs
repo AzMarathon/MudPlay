@@ -8984,8 +8984,10 @@ public sealed class AppServices
             fightRoom: () => CombatSuppressionVerdict().Room,
             // The loop's own "do not attack" / "only attack in lair rooms" alone: a
             // fight with a player reads as suppressed to the engage gates too, and is
-            // a fight all the same. A force-clear fights where the loop doesn't.
-            fightAnswered: () => !CombatSuppressionVerdict().Suppressed || Combat.ForceClearActive);
+            // a fight all the same. Nor is a monster the Min/Max monster window walks
+            // past. A force-clear fights where the loop doesn't, at any count.
+            fightAnswered: () => (!CombatSuppressionVerdict().Suppressed && !CombatTracker.HostilesOutsideCountWindow)
+                                 || Combat.ForceClearActive);
         // The room at the door is fought in while the loop stands there for mana
         // (LoopCombatSuppression.LoopIsDriving), and nothing re-asks the engage gates
         // when that starts: a monster already in the room would be left until its

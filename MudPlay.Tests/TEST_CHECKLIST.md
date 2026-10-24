@@ -709,9 +709,9 @@ How to keep it current:
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, Manaspring's summon line), fed as bytes through a `ServerFeed`.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
-- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
+- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
@@ -993,7 +993,7 @@ How to keep it current:
 ### DefaultPatternsTests.cs
 - Covers: Services/Patterns/DefaultPatterns, RegexPattern, MessageRouter.Seed.
 - Checks: the registry's ids; and per-pattern regex coverage of game wording (refusals, combat, arrivals and departures, shop, equip, follow mode, realm exit, …).
-- Why: many reports (stock-20260913-233911, -232235, paradigm-20260914-055853, …).
+- Why: many reports (stock-20260913-233911, -232235, paradigm-20260914-055853, paradigm-20261021-085438, …).
 
 ### DefaultPoolBaselineKeeperTests.cs
 - Covers: Game/Health/DefaultPoolBaselineKeeper.
@@ -1874,6 +1874,11 @@ How to keep it current:
 - Checks: the wear slot comes from the numeric Worn field.
 - Why: the warhorn was labelled as Weapon Hand
 
+### LairDoorMonsterCountTests.cs
+- Covers: Game/Combat/CombatStateTracker.HostilesOutsideCountWindow, read by Game/Map/LairEntryDebuffHold as AppServices wires its fightAnswered; room rows fed through a `ServerFeed`, time on a `ManualClock`.
+- Checks: a lone monster under Min Monsters swinging at the door doesn't park the loop; two monsters inside the window are still a fight waited out; a second arrival brings the room back into the window.
+- Why: paradigm-20261023-005038, a loop parked outside a lair for good while a lone rat swung at the character.
+
 ### LairEditorDialogViewModelTests.cs
 - Covers: ViewModels/Navigation/LairEditorDialogViewModel
 - Checks: validation; marker rows; Save/Cancel; renaming deletes the old file.
@@ -2419,7 +2424,7 @@ How to keep it current:
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)
-- Checks: Stock appear/leave line shapes match, chat doesn't.
+- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't.
 - Why: missed arrivals/departures confuse targeting.
 
 ### MonsterObservationCastLineTests.cs

@@ -499,6 +499,8 @@ A character that has never set either of the two for a loop runs it with what th
 
   If the client fights a monster there for another reason, because a rest you need has to clear the room first, that too is a fight at the doorstep, and the wait carries on after it.
 
+  **Monsters your Min/Max monsters walk past.** A doorstep room holding fewer monsters than your **Min monsters** (or more than your **Max**) isn't fought while the loop is moving you, so a monster swinging at you there is no fight at the doorstep either, whether the wait is for the cast or for mana: the wait runs as it would with nothing there, and the loop steps into the lair with the monster in tow. A second monster coming in, bringing the room inside the window, makes it a fight like any other, waited out. A bug report's *Combat gate* line says when the room's monsters are outside the window.
+
   **When the held buffs are let through again.** In all three, once the loop has the go-ahead every buff is held, so nothing takes the cast on the way through the door or ahead of the debuff. **The moment the debuff has gone out in the lair they are let through again**, each by its own *during combat* setting: one that may be cast in a fight goes out on the next free cast, one that may not goes out when the fight is over. **The hold never lasts past two rounds of the lair's fight.** If the combat engine opens the fight in the lair with no debuff to cast (none allowed on that monster, its Max casts or Min mana not met), the buffs are let through at once; if the debuff is only put off (behind a backstab, or a cast spent as the fight began), it gets the next round's cast and the buffs follow; either way they are free eleven seconds after the fight in the lair begins at the latest, so a shield you cast *during combat* is never kept waiting for a debuff that isn't coming. They are also let through when the fight ends, and in an empty lair, or one where nothing is fought, after five seconds. **They are held again when the loop is about to step into the next lair**, and not before: with lairs side by side you are next to the next one all through the fight, and that holds nothing. A buff the wait actually kept back that got no cast before the next lair's doorstep (a one-round kill, a buff that only casts out of combat, with or without an ordinary room in between) gets **one cast there first**, then the doorstep holds as usual. That owed cast is one cast, of whichever buff the caster picks first, and **eight seconds at most**; it costs nothing when no such buff is due, and a buff it ran out on without being cast (one whose item can't be used, say) isn't given it again at the following lairs. The program log says each release and why (`debuff <name> sent: buffs released`).
 
   A wait ends at once when the loop is stopped, fails, is paused by hand, or Auto-Combat or the master switch goes off. The program log (source `Loop`) says when a wait starts, what it is waiting for and holding back, and why it ended. It does nothing when the profile has no debuff set, when Auto-Combat is off, or for a lair marked **no atk**. Loops only: walk-to and Auto-Lair don't use it.
@@ -661,6 +663,16 @@ summon wordings come from the Spells table and the message catalogue, so an
 edited or new summon message is picked up too. Nothing is sent while the combat
 engine is off or the room is dark, and at most one re-display goes out every
 few seconds.
+
+**A monster that shows up with no line.** Some monsters come into a lit room
+without an arrival line, and some room spells summon with a line that names no
+monster (Manaspring Source's `A figure materializes from within the swirling
+mana!`). MudPlay re-displays the room the same way when it reads such a summon
+line, or when something swings at you or a party member while the room list
+shows nothing to fight, including a blow that names only its weapon (`The big
+depraved murderer clubs Ironbar with their spiked club!`). The same limits
+apply: not while the combat engine is off, already has a target or the room is
+dark, and at most one re-display every few seconds.
 
 ## The map and obstacles
 

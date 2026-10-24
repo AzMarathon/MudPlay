@@ -52,6 +52,8 @@ public sealed class MonsterMovementPatternTests
     [InlineData("A slimeworm crashes through the ground into the room!")]
     [InlineData("Commander Markus walks into the room.")]
     [InlineData("As the Champion of Blood falls, a tower of fire whirls about his body!")]
+    // Paradigm's Manaspring Source summoning (report paradigm-20261022-174021).
+    [InlineData("A figure materializes from within the swirling mana!")]
     public void SpawnArrival_StockAppearLines(string line)
         => Assert.True(Matches(KnownPatterns.RoomSpawnArrival, line, out _));
 

@@ -76,9 +76,14 @@ public sealed class CombatManagerTests
         public ManualClock Clock { get; } = new();
         private static readonly TimeSpan LineGap = TimeSpan.FromMilliseconds(1);
 
+        // The game's output as bytes, through the terminal and line extractor into
+        // the router, stamped on the harness clock.
+        public ServerFeed Server { get; }
+
         public Harness(bool wireDeathWatcher = false)
         {
             DefaultPatterns.Seed(Router);
+            Server = new ServerFeed(Router, () => Clock.Now);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log, now: () => Clock.Now);
             if (wireDeathWatcher)
             {
@@ -834,6 +839,54 @@ public sealed class CombatManagerTests
         h.Combat.NoteOwnSay("a giant rat");
         Assert.Null(h.Combat.CurrentTarget);
         Assert.Equal(1, h.CrRefreshSends);
+    }
+
+    // ----- a monster no line brought in ---------------------------------
+
+    // Report paradigm-20261021-085438: a big depraved murderer came into a room that
+    // listed only Archmage Lance (Friend) with no arrival line, and swung at the
+    // party and at us with "clubs <name> with their spiked club!" and no damage
+    // figure, a shape no combat pattern read. Fifteen seconds of it and nothing was
+    // fought. The blow now wakes the empty-room net: the room is asked for, and the
+    // re-display puts the murderer on the roster.
+    [Theory]
+    [InlineData("The big depraved murderer clubs Ironbar with their spiked club!")]
+    [InlineData("The big depraved murderer clubs you with their spiked club!")]
+    public void MonsterWeaponBlow_InARoomShowingNoEnemy_AsksForTheRoom_ThenEngages(string blow)
+    {
+        using Harness h = new();
+        h.AddMonster(3222, "Archmage Lance");
+        h.AddMonster(260, "depraved murderer");
+        h.SetOverlay(3222, relationship: MonsterRelationship.Friend);
+
+        h.Server.Line("Also here: Archmage Lance.");
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Empty(h.Sent);
+
+        h.Server.Line(blow);
+        Assert.Equal(1, h.CrRefreshSends);
+
+        h.Server.Line("Also here: Archmage Lance, big depraved murderer.");
+        Assert.Equal("big depraved murderer", h.Combat.CurrentTarget);
+        Assert.Equal("a big depraved murderer", h.LastSent);
+    }
+
+    // Report paradigm-20261022-174021: Manaspring Source's room spell summons with
+    // "A figure materializes from within the swirling mana!", and a mana wraith
+    // brought that way prints no arrival line. The line went unread, and the wraith
+    // was fought only when something else re-drew the room. It now asks for the room.
+    [Fact]
+    public void ManaspringSummonLine_AsksForTheRoom_ThenEngagesTheWraith()
+    {
+        using Harness h = new();
+        h.AddMonster(2423, "mana wraith");
+
+        h.Server.Line("A figure materializes from within the swirling mana!");
+        Assert.Equal(1, h.CrRefreshSends);
+
+        h.Server.Line("Also here: mana wraith.");
+        Assert.Equal("mana wraith", h.Combat.CurrentTarget);
+        Assert.Equal("a mana wraith", h.LastSent);
     }
 
     // ----- dark-room CR-refresh suppression -----------------------------

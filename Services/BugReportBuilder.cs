@@ -1114,7 +1114,10 @@ public static class BugReportBuilder
         // out on, which halts the walker (the AbandonedCombat gate).
         Kv(sb, "Combat gate",
             $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
-            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)"));
+            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)")
+            + (svc.CombatTracker.HostilesOutsideCountWindow
+                ? "; the room's monsters are outside the Min/Max monster window: walked past, not fought"
+                : string.Empty));
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
