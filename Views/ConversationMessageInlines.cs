@@ -118,6 +118,8 @@ public static class ConversationMessageInlines
                 VerticalAlignment = VerticalAlignment.Center,
                 [ToolTip.TipProperty] = seg.Shortcode,
             };
+            // Safe only because the message TextBlock is never hidden itself (a hidden
+            // ancestor is fine): a hidden host renders its embedded controls unmeasured.
             return new InlineUIContainer(img) { BaselineAlignment = BaselineAlignment.Center };
         }
         // Emoji run, or an image emote whose asset was missing → its literal text.

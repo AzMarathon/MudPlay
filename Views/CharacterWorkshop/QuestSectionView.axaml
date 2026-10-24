@@ -192,7 +192,9 @@
                                     <!-- Followable checklist parsed from the quest's step markdown:
                                          `[]`-marked lines render as tickable checkboxes, plain lines
                                          as context labels. Ticking every checkbox flips the quest
-                                         complete. -->
+                                         complete. The step text's transparent background lets a
+                                         press anywhere in a link's line reach the link, not the
+                                         checkbox. -->
                                     <ItemsControl ItemsSource="{Binding Steps}" IsVisible="{Binding HasSteps}"
                                                   Margin="0,4,0,0">
                                         <ItemsControl.ItemTemplate>
@@ -203,12 +205,14 @@
                                                               Margin="0,1,0,1" VerticalAlignment="Top">
                                                         <TextBlock Classes="FieldLabel"
                                                                    views:QuestStepInlines.Segments="{Binding Segments}"
-                                                                   TextWrapping="Wrap"/>
+                                                                   TextWrapping="Wrap"
+                                                                   Background="Transparent"/>
                                                     </CheckBox>
                                                     <TextBlock Classes="FieldLabel"
                                                                IsVisible="{Binding !IsCheckable}"
                                                                views:QuestStepInlines.Segments="{Binding Segments}"
                                                                TextWrapping="Wrap"
+                                                               Background="Transparent"
                                                                Margin="0,1,0,1"/>
                                                 </Panel>
                                             </DataTemplate>

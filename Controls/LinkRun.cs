@@ -9,14 +9,15 @@ namespace MudPlay.Controls;
 // with the click, hand cursor and tooltip handled by the host TextBlock
 // hit-testing its own text layout.
 //
-// Why not a Button in an InlineUIContainer: a TextBlock measures its embedded
-// controls again whenever it rebuilds its text layout, and it rebuilds that
-// layout while it renders. A TextBlock hidden with IsVisible="False" is still
-// rendered when it is dirty, but layout never measured it, so its embedded
-// Button first builds its template inside the render pass and Avalonia throws
-// "Visual was invalidated during the render pass". Any embedded control fails
-// the same way, since its new size invalidates the host. A Run is plain text,
-// so nothing is measured or attached while the text draws.
+// Why not a Button in an InlineUIContainer: a TextBlock hidden with
+// IsVisible="False" is marked measured by layout without its MeasureOverride
+// ever running, so its embedded controls are never measured. It is still
+// rendered when dirty, and the text layout it builds while rendering then
+// measures them for the first time: a Button builds its template inside the
+// render pass and Avalonia throws "Visual was invalidated during the render
+// pass". Any embedded control fails the same way, since its new size
+// invalidates the host. A Run is plain text, so nothing is measured or attached
+// while the text draws.
 public sealed class LinkRun : Run
 {
     private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
@@ -29,35 +30,43 @@ public sealed class LinkRun : Run
     private readonly Action _activate;
 
     // The tooltip shown while the pointer is over this link, or null for none.
-    public string? Tip { get; }
+    private readonly string? _tip;
 
     // Styled as a Run, so XAML gives a link its look with a Run.<class> selector.
     protected override Type StyleKeyOverride => typeof(Run);
 
     // Spaces become no-break spaces so a link wraps as one word.
     public LinkRun(string text, Action activate, string? tip = null)
-        : base(text.Replace(' ', '\u00A0'))
+        : base(text.Replace(' ', ' '))
     {
         _activate = activate;
-        Tip = tip;
+        _tip = tip;
     }
-
-    static LinkRun()
-    {
-        InputElement.PointerMovedEvent.AddClassHandler<TextBlock>(OnPointerMoved);
-        InputElement.PointerExitedEvent.AddClassHandler<TextBlock>((host, _) => ShowHover(host, null));
-        InputElement.PointerPressedEvent.AddClassHandler<TextBlock>(OnPointerPressed);
-        InputElement.PointerReleasedEvent.AddClassHandler<TextBlock>(OnPointerReleased);
-    }
-
-    private static void OnPointerMoved(TextBlock host, PointerEventArgs e) =>
-        ShowHover(host, LinkAt(host, e.GetPosition(host)));
 
     // A TextBlock that carries links has its cursor and tooltip driven by them;
     // every other TextBlock is left alone.
+    static LinkRun()
+    {
+        InputElement.PointerMovedEvent.AddClassHandler<TextBlock>(OnPointerMoved);
+        InputElement.PointerExitedEvent.AddClassHandler<TextBlock>((host, _) =>
+        {
+            if (HasLinks(host)) ShowHover(host, null);
+        });
+        InputElement.PointerPressedEvent.AddClassHandler<TextBlock>(OnPointerPressed);
+        InputElement.PointerReleasedEvent.AddClassHandler<TextBlock>(OnPointerReleased);
+        InputElement.PointerCaptureLostEvent.AddClassHandler<TextBlock>((host, _) =>
+        {
+            if (host == s_pressedHost) ClearPress();
+        });
+    }
+
+    private static void OnPointerMoved(TextBlock host, PointerEventArgs e)
+    {
+        if (HasLinks(host)) ShowHover(host, LinkAt(host, e.GetPosition(host)));
+    }
+
     private static void ShowHover(TextBlock host, LinkRun? link)
     {
-        if (!HasLinks(host)) return;
         if (link is null)
         {
             host.ClearValue(InputElement.CursorProperty);
@@ -65,14 +74,17 @@ public sealed class LinkRun : Run
             return;
         }
         host.Cursor = HandCursor;
-        if (link.Tip is null) host.ClearValue(ToolTip.TipProperty);
-        else ToolTip.SetTip(host, link.Tip);
+        if (link._tip is null) host.ClearValue(ToolTip.TipProperty);
+        else ToolTip.SetTip(host, link._tip);
     }
 
-    // Handled, so the press never reaches a CheckBox or list row around the text.
+    // Any left press starts over, so a press whose release never arrived can't
+    // fire later. A press on a link is handled, so it never reaches a CheckBox or
+    // list row around the text; a press on the prose bubbles on untouched.
     private static void OnPointerPressed(TextBlock host, PointerPressedEventArgs e)
     {
         if (!e.GetCurrentPoint(host).Properties.IsLeftButtonPressed) return;
+        ClearPress();
         if (LinkAt(host, e.GetPosition(host)) is not { } link) return;
         s_pressed = link;
         s_pressedHost = host;
@@ -84,12 +96,18 @@ public sealed class LinkRun : Run
     {
         if (host != s_pressedHost || e.InitialPressMouseButton != MouseButton.Left) return;
         LinkRun? pressed = s_pressed;
-        s_pressed = null;
-        s_pressedHost = null;
+        ClearPress();
         e.Pointer.Capture(null);
         e.Handled = true;
         if (pressed is not null && LinkAt(host, e.GetPosition(host)) == pressed)
             pressed._activate();
+    }
+
+    // Also lets go of the host, so a closed window's tree isn't kept alive.
+    private static void ClearPress()
+    {
+        s_pressed = null;
+        s_pressedHost = null;
     }
 
     private static bool HasLinks(TextBlock host)

@@ -300,7 +300,9 @@
                                  Copy / Ctrl+C handles the whole entry, and a built-in
                                  partial-text-selection menu here only copied empty
                                  unless you'd first dragged a selection. Inline web links
-                                 still render + click via ConversationMessageInlines. -->
+                                 still render + click via ConversationMessageInlines; the
+                                 transparent background lets a press anywhere in a link's
+                                 line reach the link. -->
                             <TextBlock Grid.Column="3"
                                        views:ConversationMessageInlines.Message="{Binding MessageText}"
                                        views:ConversationMessageInlines.EmotesEnabled="{Binding Look.EmotesEnabled}"
@@ -309,6 +311,7 @@
                                        FontSize="{Binding Look.MessageFontSize}"
                                        LineHeight="{Binding Look.MessageLineHeight}"
                                        TextWrapping="Wrap"
+                                       Background="Transparent"
                                        VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
