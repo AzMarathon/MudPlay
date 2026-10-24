@@ -421,8 +421,13 @@
                                            Value="{Binding MultiAttackMinManaPerCast, Mode=TwoWay}"
                                            Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding MultiAttackMinManaPerCastConverted}"/>
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
+                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
+                                           Text="{Binding MultiAttackMinManaPerCastConverted}"/>
+                                <CheckBox Content="Fire regardless of current mana"
+                                          IsChecked="{Binding MultiAttackFireRegardlessOfMana, Mode=TwoWay}"
+                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Multi-attack 2 — slot 1's successor, not a second room spell racing it.
@@ -455,8 +460,14 @@
                                            IsEnabled="{Binding MultiAttack2Enabled}"
                                            Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
+                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
+                                           Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
+                                <CheckBox Content="Fire regardless of current mana"
+                                          IsChecked="{Binding MultiAttack2FireRegardlessOfMana, Mode=TwoWay}"
+                                          IsEnabled="{Binding MultiAttack2Enabled}"
+                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Debuff (AOE). -->
@@ -551,8 +562,13 @@
                                            Value="{Binding NormalAttackSpellMinManaPerCast, Mode=TwoWay}"
                                            Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
+                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
+                                           Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
+                                <CheckBox Content="Fire regardless of current mana"
+                                          IsChecked="{Binding NormalAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
+                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. A monster only this spell can hurt is held on until mana covers it, not walked past. Solo: no effect."/>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Alternate attack spell (single-target — no Min enemies). -->
@@ -579,8 +595,13 @@
                                            Value="{Binding AlternateAttackSpellMinManaPerCast, Mode=TwoWay}"
                                            Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
+                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
+                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
+                                           Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
+                                <CheckBox Content="Fire regardless of current mana"
+                                          IsChecked="{Binding AlternateAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
+                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. A monster only this spell can hurt is held on until mana covers it, not walked past. Solo: no effect."/>
+                            </StackPanel>
                         </Grid>
 
                         <Separator Margin="0,6"/>

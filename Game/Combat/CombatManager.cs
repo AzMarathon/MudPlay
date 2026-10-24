@@ -2100,7 +2100,7 @@ public sealed partial class CombatManager : IDisposable
                 // pause); the attacker MUST follow through or the walker stops
                 // on a monster we then never hit and the player just gets
                 // pummelled. Sentinel -1 makes every number-keyed helper
-                // (UnengageableReason, per-monster overrides, DontBackstab,
+                // (JudgeEngage, per-monster overrides, DontBackstab,
                 // weapon-swap) fail open, so it's attacked with the normal
                 // weapon by RawName at Normal priority.
                 engageable.Add(new EngageableCandidate(
@@ -2518,18 +2518,25 @@ public sealed partial class CombatManager : IDisposable
                 $"no backstab in this room — {seer} sees hidden, so the sneak is spotted; opening with a normal attack");
         EngageableCandidate? choice = null;
         EngageableCandidate? actionableFallback = null;
+        EngageableCandidate? manaHoldFallback = null;
         foreach (EngageableCandidate cand in ordered)
         {
-            EngageAssessment assess = AssessEngage(settings, cand.MonsterNumber, cand.ResolvedName);
-            if (assess != EngageAssessment.CanAct)
+            EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName);
+            // Held for a fire-regardless spell's cost: engaged once nothing here can
+            // be acted on now, so a monster we can hurt this round goes first.
+            if (verdict.Assessment == EngageAssessment.HeldForMana)
+            {
+                manaHoldFallback ??= cand;
+                continue;
+            }
+            if (verdict.Assessment != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
-                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {assess}" +
-                    WeaponGateNote(settings, cand.MonsterNumber, cand.ResolvedName));
+                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {verdict.Assessment}: {verdict.Why}");
                 // Only a permanent give-up surfaces the "cannot attack" line; a
                 // transient mana stall stays quiet (it's retryable once MA regens).
-                if (assess == EngageAssessment.Unkillable)
-                    AnnounceCannotAttack(cand.ResolvedName);
+                if (verdict.Assessment == EngageAssessment.Unkillable)
+                    AnnounceCannotAttack(cand.ResolvedName, verdict.Why);
                 continue;
             }
             actionableFallback ??= cand;
@@ -2541,6 +2548,7 @@ public sealed partial class CombatManager : IDisposable
         // Backstab pending but every actionable monster is DontBackstab-flagged —
         // take the highest-priority actionable one and attack it normally.
         choice ??= actionableFallback;
+        choice ??= manaHoldFallback;
 
         // No engageable hostile is actionable — we can neither hit nor spell
         // anything left in the room. Move past: clear the target and dispatch
@@ -2755,6 +2763,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _castingSpellTarget = null;
         _lastCastAction = null;
+        _manaHoldTarget = null;
         _roomChannelSpell = null;   // end-of-fight ends any room-attack channel
         _alternationRound = 0;
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
@@ -3091,15 +3100,16 @@ public sealed partial class CombatManager : IDisposable
     }
 
     // Surface a "cannot attack <species>" line once per species this room — the
-    // whole configured combat chain (both weapons + every attack spell) proved
-    // ineffective, so the engine is giving up on it and moving on. Info level so
-    // it shows in the program log the operator watches. The once-per-species guard
-    // keeps a room full of the same immune mob from spamming a line every round.
-    private void AnnounceCannotAttack(string species)
+    // whole configured combat chain (both attack sides + every attack spell)
+    // proved ineffective, so the engine is giving up on it and moving on. why
+    // names each one weighed and what ruled it out. Info level so it shows in the
+    // program log the operator watches. The once-per-species guard keeps a room
+    // full of the same immune mob from spamming a line every round.
+    private void AnnounceCannotAttack(string species, string why)
     {
         if (string.IsNullOrEmpty(species)) return;
         if (!_cannotAttackAnnounced.Add(species)) return;
-        _log?.Info(LogCategory, $"cannot attack {species} — nothing in the combat chain can hurt it; moving on");
+        _log?.Info(LogCategory, $"cannot attack {species} — nothing in the combat chain can hurt it ({why}); moving on");
     }
 
     // "Your fists have no effect" — we're swinging bare-handed (a weapon that
@@ -3481,7 +3491,8 @@ public sealed partial class CombatManager : IDisposable
         {
             // Failback: only follow onto their target if WE can engage it.
             int annNumber = ResolveMonsterNumber(liveObs, announcedTarget);
-            if (UnengageableReason(settings, annNumber) is { } annReason)
+            if (JudgeEngage(settings, annNumber, ResolveSpeciesByName(announcedTarget)) is
+                { Assessment: EngageAssessment.Unkillable, Why: var annReason })
             {
                 _log?.Combat(LogCategory,
                     $"target-priority {settings.TargetPriority} skipped — " +

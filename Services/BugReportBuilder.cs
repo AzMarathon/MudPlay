@@ -1382,11 +1382,13 @@ public static class BugReportBuilder
         // own hit magic, and whether an attack command is a strike that doesn't use
         // the weapon at all.
         (int innate, string? normalCommand, string? alternateCommand) = svc.Combat.SnapshotHitMagicInputs();
-        static string AttackKind(string? command) =>
-            Game.Combat.MartialArtsCommand.IsStrike(command) ? "martial-arts strike, weapon not used" : "weapon attack";
         Kv(sb, "Character's own hit magic (class + race)", innate.ToString());
-        Kv(sb, "Normal attack", $"`{normalCommand}` — {AttackKind(normalCommand)}");
-        Kv(sb, "Alternate attack", $"`{alternateCommand}` — {AttackKind(alternateCommand)}");
+        Kv(sb, "Normal attack", $"`{normalCommand}` — {svc.Combat.AttackKindOf(normalCommand)}");
+        Kv(sb, "Alternate attack", $"`{alternateCommand}` — {svc.Combat.AttackKindOf(alternateCommand)}");
+        // A party is what lets an attack spell set to fire regardless of mana set
+        // its reserve aside, and the monster held for such a spell's cost.
+        Kv(sb, "In a party", svc.PartyState.IsInParty ? "yes" : "no");
+        Kv(sb, "Held for a fire-regardless spell's cost", svc.Combat.ManaHoldTarget ?? "(none)");
         sb.Append('\n');
 
         sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")
@@ -1406,8 +1408,9 @@ public static class BugReportBuilder
               .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
               .Append(", attack hit magic normal=").Append(Lvl(r.NormalWeaponHit))
               .Append(" alt=").Append(Lvl(r.AltWeaponHit));
-            if (!string.IsNullOrWhiteSpace(r.UnengageableReason))
-                sb.Append(" — ").Append(r.UnengageableReason);
+            // Every attack side and attack spell weighed, and what ruled it in or out.
+            if (!string.IsNullOrWhiteSpace(r.Why))
+                sb.Append(" — ").Append(r.Why);
             sb.Append('\n');
         }
         return sb.ToString();
@@ -1567,12 +1570,15 @@ public static class BugReportBuilder
         static string CureLabel(string ailment, bool afterCombat) =>
             afterCombat ? ailment + " (after combat)" : ailment;
 
+        // An attack slot set to fire regardless of mana says so on its label.
+        static string Attack(string label, Models.Profile.CombatSpellSlot slot) =>
+            slot.FireRegardlessOfMana ? label + " (fires regardless of mana in a party)" : label;
         Group("Combat", new (string, string?)[]
         {
-            ("normal-attack", combat.NormalAttackSpell.SpellName),
-            ("alternate-attack", combat.AlternateAttackSpell.SpellName),
-            ("multi-attack", combat.MultiAttackSpell.SpellName),
-            (combat.MultiAttack2Enabled ? "multi-attack-2" : "multi-attack-2 (disabled)",
+            (Attack("normal-attack", combat.NormalAttackSpell), combat.NormalAttackSpell.SpellName),
+            (Attack("alternate-attack", combat.AlternateAttackSpell), combat.AlternateAttackSpell.SpellName),
+            (Attack("multi-attack", combat.MultiAttackSpell), combat.MultiAttackSpell.SpellName),
+            (Attack(combat.MultiAttack2Enabled ? "multi-attack-2" : "multi-attack-2 (disabled)", combat.MultiAttack2Spell),
              combat.MultiAttack2Spell.SpellName),
             ("area-debuff", combat.AreaDebuffSpell.SpellName),
             ("single-debuff", combat.SingleTargetDebuffSpell.SpellName),

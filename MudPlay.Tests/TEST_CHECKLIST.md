@@ -3785,6 +3785,12 @@ How to keep it current:
 - Checks: Room-spell textblock trees: conditional branches with tone, weighted outcomes, a collapsed teleport sweep with links, summons collapsed ×N, a mid-sequence `nomonsters` gate scoping, and an empty result for no textblock.
 - Why: The game-data spell record's effect tree (sea-crossing shape).
 
+### SpellEngageGateTests.cs
+- Covers: Game/Combat/CombatManager (JudgeEngage, CanEngageMonster, the mana hold) + CombatSpellChooser.EngagingAttackSpell, CombatStateTracker (the walker gate), CastCoordinator, PartyManager, EquipmentWeaponSync, SpellbookState and the game-data indexes over a real set on disk, driven through a `ServerFeed`
+- Checks: a spell typed as the attack command (`mmis`) with a weapon below the monster's magic in the Default gear set casts under every action order (Ermias's case), as does the spell in the attack-spell slot; a spell command under the monster's spell immunity is walked past. A room attack as the only spell casts when the room meets its Min enemies and is walked past below it. A spell the chooser wouldn't cast (a type it can't affect, Max casts 0) doesn't make the monster engageable. A weapon below the monster's magic with no spell is Unkillable and walked past, the `cannot attack` line and the bug report's room assessment naming why. "Fire regardless of current mana": in a party a spell short of its reserve casts, solo or unticked it waits (StuckOnMana, no write-off); below the spell's cost it holds on the monster with the walker held and casts the round mana covers it; a monster we can hurt now goes first. An attack spell's cast counts as engaged only on `*Combat Engaged*`, not on `Your spell has no effect on …`.
+- Time: one `ManualClock` read by the classifier, combat manager, cast coordinator, party manager and state tracker; Tick() is a 5 s round. Nothing waits on real time; no private member is reached by reflection.
+- Why: Ermias's report (no report file): a monster his weapon couldn't hit but MMIS could was never attacked until he took the weapon out of the Equipment Manager. User rulings 2026-10-23 on what engages a monster.
+
 ### SpellGrowthFormatterTests.cs
 - Covers: Game/Spells/SpellGrowthFormatter
 - Checks: Magnitude range at the display level, growth formula strings (GCD reduction, fractions, negatives, flat IncLVLs=0), magnitude labels (including the NonMagical rewrite), display level, and duration seconds.

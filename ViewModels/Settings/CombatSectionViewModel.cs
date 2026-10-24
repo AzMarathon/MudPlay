@@ -279,6 +279,14 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int? _alternateAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _alternateAttackSpellMinManaPerCast;
 
+    // "Fire regardless of current mana", one per attack-spell row
+    // (CombatSpellSlot.FireRegardlessOfMana): in a party the row's Min mana is set
+    // aside and the spell casts whenever mana covers its cost.
+    [ObservableProperty] private bool _multiAttackFireRegardlessOfMana;
+    [ObservableProperty] private bool _multiAttack2FireRegardlessOfMana;
+    [ObservableProperty] private bool _normalAttackSpellFireRegardlessOfMana;
+    [ObservableProperty] private bool _alternateAttackSpellFireRegardlessOfMana;
+
     // Drain (life-steal) spell — an emergency heal that also attacks. DrainHpTrigger
     // is the HP% at/under which it overrides the round's action; DrainsOverrideAoe
     // lets it pre-empt the room AoE too (off = the AoE wins when rooming).
@@ -687,6 +695,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MinEnemies      = ClampSpell(MultiAttackMinEnemies),
                 MaxCastsPerRoom = ClampCasts(MultiAttackMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(MultiAttackMinManaPerCast),
+                FireRegardlessOfMana = MultiAttackFireRegardlessOfMana,
             },
             MultiAttack2Enabled = MultiAttack2Enabled,
             MultiAttack2Spell = new CombatSpellSlot
@@ -695,6 +704,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MinEnemies      = 0, // shared with slot 1 — never read for this slot
                 MaxCastsPerRoom = ClampCasts(MultiAttack2MaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(MultiAttack2MinManaPerCast),
+                FireRegardlessOfMana = MultiAttack2FireRegardlessOfMana,
             },
             AreaDebuffSpell = new CombatSpellSlot
             {
@@ -717,6 +727,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MinEnemies      = 0,
                 MaxCastsPerRoom = ClampCasts(NormalAttackSpellMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(NormalAttackSpellMinManaPerCast),
+                FireRegardlessOfMana = NormalAttackSpellFireRegardlessOfMana,
             },
             AlternateAttackSpell = new CombatSpellSlot
             {
@@ -724,6 +735,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
                 MinEnemies      = 0,
                 MaxCastsPerRoom = ClampCasts(AlternateAttackSpellMaxCastsPerRoom),
                 MinManaPerCast  = ClampSpell(AlternateAttackSpellMinManaPerCast),
+                FireRegardlessOfMana = AlternateAttackSpellFireRegardlessOfMana,
             },
             DrainSpell = new CombatSpellSlot
             {
@@ -850,11 +862,13 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         MultiAttackMinEnemies      = dto.MultiAttackSpell.MinEnemies;
         MultiAttackMaxCastsPerRoom = dto.MultiAttackSpell.MaxCastsPerRoom;
         MultiAttackMinManaPerCast  = dto.MultiAttackSpell.MinManaPerCast;
+        MultiAttackFireRegardlessOfMana = dto.MultiAttackSpell.FireRegardlessOfMana;
 
         MultiAttack2Enabled         = dto.MultiAttack2Enabled;
         MultiAttack2SpellName       = dto.MultiAttack2Spell.SpellName;
         MultiAttack2MaxCastsPerRoom = dto.MultiAttack2Spell.MaxCastsPerRoom;
         MultiAttack2MinManaPerCast  = dto.MultiAttack2Spell.MinManaPerCast;
+        MultiAttack2FireRegardlessOfMana = dto.MultiAttack2Spell.FireRegardlessOfMana;
 
         AreaDebuffSpellName       = dto.AreaDebuffSpell.SpellName;
         AreaDebuffMinEnemies      = dto.AreaDebuffSpell.MinEnemies;
@@ -869,10 +883,12 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         NormalAttackSpellName             = dto.NormalAttackSpell.SpellName;
         NormalAttackSpellMaxCastsPerRoom  = dto.NormalAttackSpell.MaxCastsPerRoom;
         NormalAttackSpellMinManaPerCast   = dto.NormalAttackSpell.MinManaPerCast;
+        NormalAttackSpellFireRegardlessOfMana = dto.NormalAttackSpell.FireRegardlessOfMana;
 
         AlternateAttackSpellName            = dto.AlternateAttackSpell.SpellName;
         AlternateAttackSpellMaxCastsPerRoom = dto.AlternateAttackSpell.MaxCastsPerRoom;
         AlternateAttackSpellMinManaPerCast  = dto.AlternateAttackSpell.MinManaPerCast;
+        AlternateAttackSpellFireRegardlessOfMana = dto.AlternateAttackSpell.FireRegardlessOfMana;
 
         DrainSpellName            = dto.DrainSpell.SpellName;
         DrainSpellMaxCastsPerRoom = dto.DrainSpell.MaxCastsPerRoom;
@@ -1018,6 +1034,12 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnAlternateAttackSpellNameChanged(string? value)          => MarkDirty();
     partial void OnAlternateAttackSpellMaxCastsPerRoomChanged(int? value)  => MarkDirty();
     partial void OnAlternateAttackSpellMinManaPerCastChanged(int value)    { OnPropertyChanged(nameof(AlternateAttackSpellMinManaPerCastConverted)); MarkDirty(); }
+
+    // Fire regardless of current mana (each attack-spell row)
+    partial void OnMultiAttackFireRegardlessOfManaChanged(bool value)          => MarkDirty();
+    partial void OnMultiAttack2FireRegardlessOfManaChanged(bool value)         => MarkDirty();
+    partial void OnNormalAttackSpellFireRegardlessOfManaChanged(bool value)    => MarkDirty();
+    partial void OnAlternateAttackSpellFireRegardlessOfManaChanged(bool value) => MarkDirty();
 
     // Spell slot — drain (life-steal)
     partial void OnDrainSpellNameChanged(string? value)          => MarkDirty();

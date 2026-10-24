@@ -1,5 +1,11 @@
 # Version history
 
+## 3.185.34
+
+- A monster your weapon can't hit is fought with any attack spell that can hurt it, room spells and a spell set as the attack command included
+- The "cannot attack" log line names each weapon and spell weighed and why it was ruled out
+- New "Fire regardless of current mana" box on the attack spells: in a party the spell ignores its Min mana and casts once mana covers its cost
+
 ## 3.185.32
 
 - The map, mana chart, terminal and realm rankings free their text drawings instead of leaving them to pile up

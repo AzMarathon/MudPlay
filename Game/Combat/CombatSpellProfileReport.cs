@@ -121,6 +121,7 @@ public static class CombatSpellProfileReport
         if (roomWide && slot!.MinEnemies > 0) gates.Add($"≥{slot.MinEnemies}");
         if (slot!.MaxCastsPerRoom is { } max) gates.Add(max == 0 ? "×0" : $"×{max}");
         if (slot.MinManaPerCast > 0) gates.Add($"m{slot.MinManaPerCast}");
+        if (slot.FireRegardlessOfMana) gates.Add("any mana in party");
 
         return gates.Count > 0 ? $"{label} {code}({string.Join(", ", gates)})" : $"{label} {code}";
     }
