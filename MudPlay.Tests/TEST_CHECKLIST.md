@@ -721,8 +721,8 @@ How to keep it current:
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
-- Checks: every profile field belongs to exactly one "include in profile" group; shared groups survive a profile switch; Settings staging of the shared flags and the Party tab.
-- Why: a field that no group copies would silently stop switching with profiles.
+- Checks: every profile field belongs to exactly one "include in profile" group, and copying every group reproduces a profile exactly, each spell slot's own fields (Min enemies, Max casts, Min mana, Ignore mana) included; shared groups survive a profile switch; Settings staging of the shared flags and the Party tab.
+- Why: a field that no group copies would silently stop switching with profiles; Spell combat's Ignore mana column sits under the profile badge, so it has to switch with the profile.
 
 ### CombatProfileStagingSessionTests.cs
 - Covers: ViewModels/Settings/CombatProfileStagingSession.

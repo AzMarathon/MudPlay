@@ -386,18 +386,22 @@
                                          ToolTip.Tip="Min mana columns below are read as absolute MA / KAI."/>
                         </StackPanel>
 
-                        <!-- Spell-row column headers. -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,4,0,0">
+                        <!-- Spell-row column headers. The rows' widths are cut to fit the
+                             section's 800 MaxWidth with Ignore mana as the last column:
+                             widen one and that column runs past the frame. -->
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,4,0,0">
                             <TextBlock Grid.Column="0"/>
                             <TextBlock Grid.Column="1" Classes="ColumnHeader" Text="Spell"/>
                             <TextBlock Grid.Column="2" Classes="ColumnHeader" Text="Min enemies"/>
                             <TextBlock Grid.Column="3" Classes="ColumnHeader" Text="Max casts"/>
                             <TextBlock Grid.Column="4" Classes="ColumnHeader" Text="Min mana per cast"/>
                             <TextBlock Grid.Column="5" Classes="ColumnHeader" Text="= mana / %"/>
+                            <TextBlock Grid.Column="6" Classes="ColumnHeader" Text="Ignore mana"
+                                       ToolTip.Tip="Fire regardless of current mana (attack spells only, off by default). In a party, a ticked row casts its spell at the target every time its turn comes and ignores mana: the row's Min mana per cast, the spell's own cost and your current mana. Everything else still applies: one cast a round, Max casts, and for the room spells Min enemies and Auto-Nuke. Solo it does nothing. Saved per combat profile with the rest of the row."/>
                         </Grid>
 
                         <!-- Multi-attack 1 (room spell). -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Multi-attack 1"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding MultiAttackSpellName, Mode=TwoWay}"
@@ -407,7 +411,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Multi-target room spell to fire. Suggestions come from this class's known spells."/>
                             <NumericUpDown Grid.Column="2"
                                            Value="{Binding MultiAttackMinEnemies, Mode=TwoWay}"
@@ -419,20 +423,18 @@
                                            ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding MultiAttackMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
-                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
-                                           Text="{Binding MultiAttackMinManaPerCastConverted}"/>
-                                <CheckBox Content="Fire regardless of current mana"
-                                          IsChecked="{Binding MultiAttackFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored). Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
-                            </StackPanel>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
+                                       Text="{Binding MultiAttackMinManaPerCastConverted}"/>
+                            <CheckBox Grid.Column="6" HorizontalAlignment="Center"
+                                      IsChecked="{Binding MultiAttackFireRegardlessOfMana, Mode=TwoWay}"
+                                      ToolTip.Tip="Fire regardless of current mana. In a party: cast this room spell on its turn and ignore mana (Min mana per cast, the spell's cost, your current mana). Min enemies, Max casts and Auto-Nuke still apply. Solo: no effect."/>
                         </Grid>
 
                         <!-- Multi-attack 2 — slot 1's successor, not a second room spell racing it.
                              Shares slot 1's Min enemies, so that column is inert here. -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <CheckBox Grid.Column="0" Content="Multi-attack 2"
                                       IsChecked="{Binding MultiAttack2Enabled, Mode=TwoWay}"
                                       ToolTip.Tip="Off by default. When on, this spell takes over the room once Multi-attack 1 hits its Max casts or mana drops under its Min mana — so a costly opener can fire once or twice and a cheaper spell finishes the pack."/>
@@ -445,7 +447,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Follow-up multi-target room spell. Suggestions come from this class's known spells."/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -458,20 +460,18 @@
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding MultiAttack2MinManaPerCast, Mode=TwoWay}"
                                            IsEnabled="{Binding MultiAttack2Enabled}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast — % or absolute per the toggle above."/>
-                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
-                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
-                                           Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
-                                <CheckBox Content="Fire regardless of current mana"
-                                          IsChecked="{Binding MultiAttack2FireRegardlessOfMana, Mode=TwoWay}"
-                                          IsEnabled="{Binding MultiAttack2Enabled}"
-                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored). Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
-                            </StackPanel>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
+                                       Text="{Binding MultiAttack2MinManaPerCastConverted}"/>
+                            <CheckBox Grid.Column="6" HorizontalAlignment="Center"
+                                      IsChecked="{Binding MultiAttack2FireRegardlessOfMana, Mode=TwoWay}"
+                                      IsEnabled="{Binding MultiAttack2Enabled}"
+                                      ToolTip.Tip="Fire regardless of current mana. In a party: cast this room spell on its turn and ignore mana (Min mana per cast, the spell's cost, your current mana). Min enemies, Max casts and Auto-Nuke still apply. Solo: no effect."/>
                         </Grid>
 
                         <!-- Debuff (AOE). -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (AOE)"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding AreaDebuffSpellName, Mode=TwoWay}"
@@ -481,7 +481,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Area-effect debuff (e.g. blind-room, curse-room). Suggestions come from this class's known spells."/>
                             <NumericUpDown Grid.Column="2"
                                            Value="{Binding AreaDebuffMinEnemies, Mode=TwoWay}"
@@ -493,21 +493,24 @@
                                            ToolTip.Tip="Casts per room — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding AreaDebuffMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
                                        Text="{Binding AreaDebuffMinManaPerCastConverted}"/>
+                            <TextBlock Grid.Column="6" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Attack spells only: a debuff still needs its Min mana per cast."/>
                         </Grid>
                         <TextBlock Text="{Binding AreaDebuffSpellMisSlotWarning}"
                                    IsVisible="{Binding AreaDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{StaticResource SeverityWarnBrush}"
-                                   FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
-                        <CheckBox Content="Only cast on the first round in a room" Margin="150,0,0,0"
+                                   FontSize="11" Margin="136,0,0,2" TextWrapping="Wrap"/>
+                        <CheckBox Content="Only cast on the first round in a room" Margin="136,0,0,0"
                                   IsChecked="{Binding AreaDebuffFirstRoundOnly, Mode=TwoWay}"
                                   ToolTip.Tip="Attempt the AoE debuff only on room entry (before the first combat round). If a higher-priority buff/heal takes the round's between-round cast slot on entry, the debuff is abandoned for the room rather than landing on round 2+, where it's mostly wasted mana. Off = keep retrying until it lands once per room."/>
 
                         <!-- Debuff (single target — no Min enemies). -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Debuff (single target)"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding SingleTargetDebuffSpellName, Mode=TwoWay}"
@@ -517,7 +520,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Single-target debuff (e.g. weakness, slow). Suggestions come from this class's known spells."/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -528,18 +531,21 @@
                                            ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding SingleTargetDebuffMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
                                        Text="{Binding SingleTargetDebuffMinManaPerCastConverted}"/>
+                            <TextBlock Grid.Column="6" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Attack spells only: a debuff still needs its Min mana per cast."/>
                         </Grid>
                         <TextBlock Text="{Binding SingleTargetDebuffSpellMisSlotWarning}"
                                    IsVisible="{Binding SingleTargetDebuffSpellMisSlotWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                    Foreground="{StaticResource SeverityWarnBrush}"
-                                   FontSize="11" Margin="150,0,0,2" TextWrapping="Wrap"/>
+                                   FontSize="11" Margin="136,0,0,2" TextWrapping="Wrap"/>
 
                         <!-- Normal attack spell (single-target — no Min enemies). -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Normal attack spell"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding NormalAttackSpellName, Mode=TwoWay}"
@@ -549,7 +555,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Primary single-target damage spell. Suggestions come from this class's known spells."/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -560,19 +566,17 @@
                                            ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding NormalAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
-                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
-                                           Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
-                                <CheckBox Content="Fire regardless of current mana"
-                                          IsChecked="{Binding NormalAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored); Max casts still applies. Solo: no effect."/>
-                            </StackPanel>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
+                                       Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
+                            <CheckBox Grid.Column="6" HorizontalAlignment="Center"
+                                      IsChecked="{Binding NormalAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
+                                      ToolTip.Tip="Fire regardless of current mana. In a party: cast this spell at the target on its turn and ignore mana (Min mana per cast, the spell's cost, your current mana). Max casts still applies. Solo: no effect."/>
                         </Grid>
 
                         <!-- Alternate attack spell (single-target — no Min enemies). -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Alternate attack spell"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding AlternateAttackSpellName, Mode=TwoWay}"
@@ -582,7 +586,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Fallback / second-choice damage spell — used when the normal pick can't fire. Suggestions come from this class's known spells."/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -593,21 +597,19 @@
                                            ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding AlternateAttackSpellMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast."/>
-                            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="12" Margin="8,0,0,0">
-                                <TextBlock Classes="FieldLabel" VerticalAlignment="Center"
-                                           Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
-                                <CheckBox Content="Fire regardless of current mana"
-                                          IsChecked="{Binding AlternateAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored); Max casts still applies. Solo: no effect."/>
-                            </StackPanel>
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
+                                       Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
+                            <CheckBox Grid.Column="6" HorizontalAlignment="Center"
+                                      IsChecked="{Binding AlternateAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
+                                      ToolTip.Tip="Fire regardless of current mana. In a party: cast this spell at the target on its turn and ignore mana (Min mana per cast, the spell's cost, your current mana). Max casts still applies. Solo: no effect."/>
                         </Grid>
 
                         <Separator Margin="0,6"/>
 
                         <!-- Drain (life-steal) spell — an emergency heal that also attacks. -->
-                        <Grid ColumnDefinitions="150,220,100,110,140,*" Margin="0,2,0,0">
+                        <Grid ColumnDefinitions="136,186,100,104,120,62,*" Margin="0,2,0,0">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Drain spell"/>
                             <AutoCompleteBox Grid.Column="1"
                                              Text="{Binding DrainSpellName, Mode=TwoWay}"
@@ -617,7 +619,7 @@
                                              ItemFilter="{Binding SpellSuggestionFilter}"
                                              ItemTemplate="{StaticResource SpellPickItem}"
                                              PlaceholderText="Type code or name…"
-                                             Width="210" HorizontalAlignment="Left"
+                                             Width="180" HorizontalAlignment="Left"
                                              ToolTip.Tip="Life-drain spell (e.g. vamp / dtch / nebo) — the damage it deals also heals you, so it's used as an emergency heal that also attacks. Cast in place of the round's attack when HP drops to the trigger below, on living non-undead targets only (a drain can't affect NonLiving / Undead). Suggestions come from this class's known spells."/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
                                        Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -628,13 +630,16 @@
                                            ToolTip.Tip="Casts per target — blank = no limit, 0 = never cast (off), N = at most N."/>
                             <NumericUpDown Grid.Column="4"
                                            Value="{Binding DrainSpellMinManaPerCast, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="130" HorizontalAlignment="Left"
+                                           Minimum="0" Maximum="{Binding SpellManaMax}" FormatString="0" Increment="1" Width="112" HorizontalAlignment="Left"
                                            ToolTip.Tip="Minimum mana required to cast — drops back to the normal action below this."/>
-                            <TextBlock Grid.Column="5" Classes="FieldLabel" VerticalAlignment="Center" Margin="8,0,0,0"
+                            <TextBlock Grid.Column="5" Classes="FieldLabel" HorizontalAlignment="Center"
                                        Text="{Binding DrainSpellMinManaPerCastConverted}"/>
+                            <TextBlock Grid.Column="6" Classes="FieldLabel" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       ToolTip.Tip="Attack spells only: the drain still needs its Min mana per cast."/>
                         </Grid>
                         <!-- Drain trigger + AoE-override, indented to align under the Spell column. -->
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="150,2,0,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="136,2,0,0" VerticalAlignment="Center">
                             <TextBlock Classes="FieldLabel" VerticalAlignment="Center" Text="Heal when ≤ HP"/>
                             <NumericUpDown Value="{Binding DrainHpTrigger, Mode=TwoWay}"
                                            Minimum="0" Maximum="100" FormatString="0" Increment="5" Width="100"
