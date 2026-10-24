@@ -308,6 +308,16 @@ public static class DefaultPatterns
         // into a longer line whose tail we haven't accounted for.
         yield return new RegexPattern(KnownPatterns.OtherSwingsAtTarget,
             @"^(?:The )?[\w' -]+? \w+s at [\w' -]+[.!]\s*$");
+        // A monster's blow that names its weapon and its victim — see
+        // KnownPatterns.MonsterWeaponBlow. "The " leads, as a monster's line does (a
+        // player's never). The victim is "you" or a capitalized name, captured; the
+        // pattern can't tell a party member's name from a stranger's, so its reader
+        // (CombatManager) checks it against the party. No line with the word "at" is
+        // taken: a swing "at you" is MobMisses', and "at <name> with …" is
+        // OtherAttacksWithWeapon's. A damage line is MobHits' / UserHits'.
+        yield return new RegexPattern(KnownPatterns.MonsterWeaponBlow,
+            @"^The (?![^\n]*\bat\b)(?![^\n]*\bfor \d+ damage\b)[\w' -]+? \w+ (?<victim>you|[A-Z][\w']*) "
+          + @"with (?:its|their|his|her) [\w' -]+[.!]\s*$");
 
         // Local-player death: the victim's own line for every death by damage,
         // the last life's included (GAME_MECHANICS "Death lines & the
@@ -514,11 +524,15 @@ public static class DefaultPatterns
         // "Commander Markus walks into the room.". Any capitalized lead is taken for
         // that ending, bar our own "You …" and anything quoted or channel-prefixed.
         // The greater hellion's arrival is worded as the Champion of Blood's death.
+        // Paradigm's Manaspring Source prints "A figure materializes from within the
+        // swirling mana!" as its room spell summons; a mana wraith brought that way
+        // has no arrival line of its own (report paradigm-20261022-174021).
         yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
             @"^(?:(?!You )[A-Z][^:""]* into the room"
           + @"|As the Champion of Blood falls, a tower of fire whirls about his body"
           + @"|(?:A|An|The) .+ (?:into the area"
-          + @"|materializes (?:in the room|from the shadows|with a metallic shriek|soundlessly beside you|out of the shadows next to you)"
+          + @"|materializes (?:in the room|from the shadows|with a metallic shriek|soundlessly beside you|out of the shadows next to you"
+          + @"|from within the swirling mana)"
           + @"|appears (?:in a blinding flash|in flash of light|in a burst of flame|from the waters|right behind you)"
           + @"|(?:flies|flaps) down from above|crashes through the wall|burrows in from the cavern wall"
           + @"|crawls out of the .+ corpse|steps out of the shadows|slithers out of the dark pool"

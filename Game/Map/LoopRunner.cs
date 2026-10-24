@@ -375,11 +375,33 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         ArgumentNullException.ThrowIfNull(loop);
         StagedLoop = loop;
+        _log?.Info("LoopRunner", $"loop '{loop.Name}' loaded: the toolbar Start runs it");
+        StagedChanged?.Invoke();
     }
+
+    // Raised when a loop is loaded or unloaded.
+    public event Action? StagedChanged;
 
     // Forget the staged loop: the game data changed to another set, and its rooms
     // are the last one's.
-    public void Unstage() => StagedLoop = null;
+    public void Unstage()
+    {
+        if (StagedLoop is null) return;
+        StagedLoop = null;
+        StagedChanged?.Invoke();
+    }
+
+    // Forget the staged loop, if it is still this one, because the user backed out
+    // of starting it. Kept, it was offered again on every Start, and Start never
+    // got to the Manage list to pick another (report paradigm-20261022-170426).
+    public void Unstage(Loop loop, string why)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (!ReferenceEquals(StagedLoop, loop)) return;
+        StagedLoop = null;
+        _log?.Info("LoopRunner", $"loop '{loop.Name}' no longer loaded to start: {why}");
+        StagedChanged?.Invoke();
+    }
 
     // Rename the loop currently in flight in place, keeping the lap / step
     // position intact. The Save-current chip persists a rename without restarting

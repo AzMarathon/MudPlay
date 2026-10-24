@@ -72,8 +72,9 @@ public sealed class PartyAilmentTracker : IDisposable
     // A generous cap applied when we set a chip we can't arm a real duration for
     // (a bare say announce with no witnessed cast, or a witnessed cast whose
     // duration couldn't be resolved). Not a duration claim — a backstop so a chip
-    // can never stick forever when no cure / par / @status clear ever arrives.
-    private const double FallbackDurationSeconds = 180;
+    // can never stick forever when no cure / par / @status clear ever arrives. Our own
+    // ailments fall back on the same (ConditionTracker.AilmentSeconds).
+    public const double FallbackDurationSeconds = 180;
 
     private readonly ChatRouter _chat;
     private readonly PartyManager _party;
@@ -409,6 +410,26 @@ public sealed class PartyAilmentTracker : IDisposable
         }
     }
 
+    // Clear every chip on a member whose ailments are known to be gone all at once: a
+    // token's negate magic ends every spell on its user (user, 2026-10-23). Poison is
+    // par-owned and left to the next par.
+    public void ClearMember(string name, string why)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        string given = GivenName(name);
+        // Anyone in the room can use a token: only a member has chips.
+        if (!_party.State.Members.Any(m => !m.IsSelf
+                && (Same(m.Name, name) || Same(GivenName(m.Name), given))))
+            return;
+        foreach ((_, MessageFlags flag) in Tokens)
+        {
+            if (flag == MessageFlags.Poisoned) continue;
+            _party.SetMemberAilment(name, flag, false);
+            _expiryAtMs.Remove((given, flag));
+        }
+        _log?.Info(LogCategory, $"ailment chips on {name} cleared ({why})");
+    }
+
     // Clear any chip whose armed duration has elapsed — the spell-data "duration
     // timed out" clear. Every non-timeout clear (cure / par / @status / inbound
     // off) removes the entry first, so this only fires when nothing else cleared.
@@ -449,12 +470,16 @@ public sealed class PartyAilmentTracker : IDisposable
 // (so the spell slot is confirmed, not just the target), and matchers built from
 // the spell's CasterMessage (OUR cast) and WitnessMessage (a cast by another
 // member we see in the room — clears the chip for third-party observers). The
-// witness matcher is null when the record has no witness template. Provided by
-// AppServices from the live Spells settings + spellbook so re-configuring a cure
-// spell takes effect without rebuilding the tracker.
+// witness matcher is null when the record has no witness template. Target, from the
+// TargetMessage, is the cure cast at us by someone else (SelfAilmentProof reads it;
+// this tracker leaves our own state to ConditionTracker). Built by AppServices from
+// the game data (CureSpellIndex and each cure's message record), not the local cure
+// settings, and read live so a game-data set swap or a Messages edit takes effect
+// without rebuilding the tracker.
 public readonly record struct CureCastMatcher(
     MessageFlags Ailment, string SpellName,
-    CasterMessageMatcher Caster, CasterMessageMatcher? Witness = null);
+    CasterMessageMatcher Caster, CasterMessageMatcher? Witness = null,
+    CasterMessageMatcher? Target = null);
 
 // One compiled ailment-APPLY confirmation: the ailment it inflicts, the spell's
 // name + number (number → spell-data duration at the in-room caster's cast level),

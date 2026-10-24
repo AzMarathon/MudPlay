@@ -1821,7 +1821,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // names the sailing in the walk's failure. With a land route in hand, a
         // gated boat is skipped so we never split the party for a crossing a member
         // can't make.
-        if (_boatPlanner.TryPlan(source, destination, Filter, allowGated: landHops is null)
+        if (_boatPlanner.TryPlan(source, destination, Filter, allowGated: landHops is null,
+                landHopsUnder: landHops - BoatHopWeight)
             is not { } plan)
             return null;
 

@@ -64,6 +64,26 @@ public sealed class GlobeOfDarknessSeedTests : IDisposable
         Assert.DoesNotContain(applied, r => tracker.IsActiveByName(r.Name));
     }
 
+    // The other darkness spells are the globe's shape in the game data: Illumination
+    // −9999 and no Blindness ability, so cure blindness can't lift them either.
+    // Infernal darkness (#1102, both sets) and Stock's sandstorm (#1310) carried the
+    // Blinded flag regardless (checked against data-Paradigm-1.9.1 and v1.11p,
+    // 2026-10-23). Gruesome curse (#937 / #1238) does carry the Blindness ability.
+    [Theory]
+    [InlineData("Messages.paradigm.seed.json", "An unnatural darkness surrounds you!", false)]
+    [InlineData("Messages.stock.seed.json", "An unnatural darkness surrounds you!", false)]
+    [InlineData("Messages.stock.seed.json", "A sandstorm surrounds you!", false)]
+    [InlineData("Messages.paradigm.seed.json", "You don't feel so good.", true)]
+    [InlineData("Messages.stock.seed.json", "You don't feel so good.", true)]
+    public void ADarkness_IsNotABlindness_AGruesomeCurseIs(string seedFile, string appliedLine, bool blinds)
+    {
+        using ConditionTracker tracker = TrackerOver(seedFile, out _);
+
+        Feed(appliedLine);
+
+        Assert.Equal(blinds, tracker.IsBlinded);
+    }
+
     [Theory]
     [InlineData("Messages.paradigm.seed.json")]
     [InlineData("Messages.stock.seed.json")]

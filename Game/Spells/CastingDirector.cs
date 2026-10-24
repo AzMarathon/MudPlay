@@ -1094,6 +1094,7 @@ public sealed class CastingDirector : IDisposable
         _lastSelfCureAt.Clear();
         _partyCures.Clear();
         _betweenRoundSlotUsedAt = DateTime.MinValue;
+        _slotInDoubtSince = DateTime.MinValue;
         _pausedAt = null;
     }
 
@@ -1101,7 +1102,8 @@ public sealed class CastingDirector : IDisposable
     // cast. Party members are unaffected (they stayed alive, still buffed), so THEIR
     // timers are kept: we shouldn't re-bless a party member just because we died. (A
     // full character swap still clears everything via ProfileLoaded → ResetBuffTracking.)
-    public void ClearSelfBuffTracking()
+    // A token's negate magic wipes our buffs the same way (why names it).
+    public void ClearSelfBuffTracking(string why = "self died")
     {
         int removed = RemoveTimersFor("");
         _carried.Clear();
@@ -1112,13 +1114,14 @@ public sealed class CastingDirector : IDisposable
         _pendingPartyCast = null;   // a cast in flight when we died never landed
         _pendingManualCast = null;
         _log?.Info(LogCategory,
-            $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
+            $"{why} — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
     }
 
     // A party member died — death wipes EVERY buff on them, so drop each timer we hold on
     // that member + any hidden back-off for them. No-op for a name we hold no timer for
-    // (the "<Name> is dead." line names any player in the room).
-    public void ClearMemberBuffTimers(string givenName)
+    // (the "<Name> is dead." line names any player in the room). A token's negate magic
+    // wipes theirs the same way (why names it).
+    public void ClearMemberBuffTimers(string givenName, string why = "died (death wipes buffs)")
     {
         if (string.IsNullOrWhiteSpace(givenName)) return;
         string key = GivenName(givenName).ToLowerInvariant();
@@ -1126,7 +1129,7 @@ public sealed class CastingDirector : IDisposable
         _hiddenTargets.Remove(key);
         if (removed > 0)
             _log?.Info(LogCategory,
-                $"party member {key} died — cleared {removed} buff timer(s) on them (death wipes buffs).");
+                $"party member {key} {why} — cleared {removed} buff timer(s) on them.");
     }
 
     // Manually drop the timer for one (target, cast-code) — the user clicking the clear
@@ -1464,8 +1467,27 @@ public sealed class CastingDirector : IDisposable
         if (_combatTickDamageDriven?.Invoke() == true
             && _now() - _betweenRoundSlotUsedAt < BurstSettleWindow)
             return;
+        _slotInDoubtSince = _combatTickDamageDriven?.Invoke() == false
+                            && _now() - _betweenRoundSlotUsedAt < ProjectedTickMargin
+            ? _now() : DateTime.MinValue;
+        if (_slotInDoubtSince != DateTime.MinValue)
+            _log?.Combat(LogCategory,
+                $"projected round tick {(_now() - _betweenRoundSlotUsedAt).TotalMilliseconds:0}ms after a between-round "
+                + "cast: the game may count that cast in this round, so a lair wait treats the slot as spent until the next tick");
         _betweenRoundSlotUsedAt = DateTime.MinValue;
     }
+
+    // A between-round cast sent just ahead of a round the client only projected can
+    // reach the game after that round began, and then it is the new round's cast. The
+    // decision pass tries its next cast regardless (a refusal costs it nothing it would
+    // not lose by waiting), but a loop deciding whether to step into a lair can't take
+    // the risk: a cosmic staff used 139 ms before a projected tick still held the round
+    // when the loop walked in, and the lair's debuff was refused (report
+    // paradigm-20261023-001124). Doubted until the next tick, or a round at most.
+    private DateTime _slotInDoubtSince = DateTime.MinValue;
+
+    public bool BetweenRoundSlotMayBeSpent =>
+        SlotSpentThisRound || _now() - _slotInDoubtSince < RoundWindow;
 
     // An external between-round cast — the combat engine's pre-attack debuff, which
     // fires directly rather than through Evaluate — just went out. Spend this round's

@@ -1749,6 +1749,9 @@ public sealed class MapControl : Control
     private void DrawStaticLayer(DrawingContext context)
     {
         if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+        // Each redraw paints a fresh cached bitmap (InvalidateStatic): counted, so
+        // the memory log can set native growth beside how often it happens.
+        AppServices.CurrentOrNull?.Activity.MapRedrawn();
         using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance is { IsCollecting: true } perf
             ? perf.Measure($"map redraw ({_staticCause})") : null;
 

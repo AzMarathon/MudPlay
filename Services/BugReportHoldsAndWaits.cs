@@ -65,6 +65,8 @@ public static class BugReportHoldsAndWaits
         {
             Kv(sb, "Cast clocks", svc.Cast.DescribeState());
             Kv(sb, "Between-round slot used this round", svc.CastDirector.BetweenRoundSlotUsed ? "yes" : "no");
+            Kv(sb, "Between-round slot may still be spent (a lair wait reads this)",
+                svc.CastDirector.BetweenRoundSlotMayBeSpent ? "yes" : "no");
             Kv(sb, "A cast is due", svc.CastDirector.HasCastDue() ? "yes" : "no");
             Kv(sb, "A cast held for a kept sneak", svc.CastDirector.HasSneakHeldCast ? "yes" : "no");
         });

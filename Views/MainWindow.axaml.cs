@@ -297,6 +297,9 @@ public partial class MainWindow : Window
                 AppServices.Current.Log.Error("Profile",
                     $"Auto-save on exit failed: {ex.Message}");
             }
+
+            // The unrecognized lines still waiting for their deferred write.
+            AppServices.Current.MessageCandidates.Save();
         };
     }
 

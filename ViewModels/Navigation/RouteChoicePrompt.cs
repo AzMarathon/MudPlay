@@ -130,9 +130,13 @@ public static class RouteChoicePrompt
         // reach here, so they stay out of the history exactly as before.
         if (!askOnlyOverAvoids && remember) services.GotoHistory.Record(destination);
 
-        // The game data this walk is asked for and planned on: asked again after
-        // every wait below, before the plan becomes a walk or a card (PlanOvertaken).
-        RoutePlanInFlight inFlight = new(destination, () => services.GameData.ActiveLoad, services.Log, LogCat);
+        // The game data this walk is asked for and planned on, and the stops made so
+        // far: asked again after every wait below, before the plan becomes a walk or
+        // a card (PlanOvertaken).
+        RoutePlanInFlight inFlight = new(
+            destination, () => services.GameData.ActiveLoad, services.Log, LogCat, services.MovementControl);
+        // Stop has this to end while nothing moves yet: the toolbar's is enabled for it.
+        using IDisposable planning = services.MovementControl.RouteBeingPlanned();
 
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
@@ -164,9 +168,10 @@ public static class RouteChoicePrompt
         // walker is IDLE, run them on a background thread so the UI thread stays live —
         // and if planning drags past a short threshold, surface the picker window in a
         // "Calculating…" state that paints while planning finishes. When a walk is
-        // already IN PROGRESS, the live walker shares the movement filter the planner
-        // briefly toggles (SuspendAcquirableGates), so plan on the UI thread instead
-        // (no calc window that time) to avoid racing it.
+        // already IN PROGRESS, plan on the UI thread instead (no calc window that
+        // time): the live walker re-plans, takes holds and warms the filter's party
+        // reads as it steps, and a plan alongside it isn't made to race that. The
+        // gates a plan stands down are its own thread's either way (MovementFilter).
         RouteChoiceDialogViewModel? calcVm = null;
         Task<RouteChoiceResult?>? calcDialogTask = null;
         RoutePlan plan;
@@ -317,16 +322,17 @@ public static class RouteChoicePrompt
     // The game data was read in afresh while this walk was being planned or asked
     // about: its destination and its route are the old data's numbers, so no walk
     // starts and no card goes up (RoutePlanInFlight, which writes the log line). A
-    // "Calculating…" card still up is closed, and the user is told, in the words of
-    // the stop that change makes. Posted: the party's answers the plan waits on are
-    // read inside the line pump, where writing to the terminal re-enters it. The
-    // party's count for the plan goes with it: it was taken for this walk, and
-    // one that came back after the change is by the old data's item numbers.
+    // Stop made meanwhile drops it the same way. A "Calculating…" card still up is
+    // closed, and the user is told, in the words of the stop that change makes.
+    // Posted: the party's answers the plan waits on are read inside the line pump,
+    // where writing to the terminal re-enters it. The party's count for the plan
+    // goes with it: it was taken for this walk, and one that came back after the
+    // change is by the old data's item numbers.
     private static bool PlanOvertaken(AppServices services, RoutePlanInFlight inFlight, RouteChoiceDialogViewModel? calcVm)
     {
         if (inFlight.Dropped() is not { } notice) return false;
         calcVm?.Close();
-        services.ClearPartyShortGateItems("the game data changed while the route was being planned");
+        services.ClearPartyShortGateItems($"{inFlight.Why} while the route was being planned");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => services.WriteTerminalNotice(notice));
         return true;
     }
@@ -493,7 +499,7 @@ public static class RouteChoicePrompt
             + (r.NoProtection ? " (no protection: its holders are teleported too)" : "")));
         string reqSummary = Summarize(choice.Requirements);
         if (choice.GatedWalk is not null)
-            avoidAltNote += " (the gates are on a lever detour, not the route itself)";
+            avoidAltNote += " (its walk takes lever trips off the route; the rooms and gates count them)";
         // Each route with its own length and needs, so the log shows the two the
         // cards offered rather than one route and a saving.
         if (!choice.HasFreeRoute)
@@ -618,7 +624,15 @@ public static class RouteChoicePrompt
         // so the picker's requirement line names the exact one it'll obtain ("log raft
         // (buy at Pier)") instead of the whole any-of list.
         Dictionary<RouteRequirement, (int ItemId, string Source)> resolvedCounters = new();
-        if (crossesHazard)
+        // Where each counter comes from takes a few searches of the map per hazard,
+        // which held the UI thread for twenty seconds with the card (report
+        // paradigm-20261021-135647). With the walker idle it is worked out off the UI
+        // thread, as the plan was, the floor here read first on it; the gates it
+        // stands down are its own thread's (MovementFilter). With a walk under way it
+        // stays on the UI thread, as the plan does, under a scope a freeze report
+        // names.
+        void ResolveCounters(IReadOnlySet<int>? onFloor)
+        {
             foreach (RouteRequirement req in choice.Requirements)
             {
                 // An item that doesn't stop the room teleporting is not fetched or searched for.
@@ -631,7 +645,7 @@ public static class RouteChoicePrompt
                 // the redundant second source rather than buying a rope AND a harness.
                 if (req.ItemIds.Any(id => floorCounters.Contains(id) || detourCounters.Contains(id)))
                     continue;
-                if (services.ResolveHazardCounter(req.ItemIds, source, destination) is { } r)
+                if (services.ResolveHazardCounter(req.ItemIds, source, destination, onFloor) is { } r)
                 {
                     List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
@@ -652,6 +666,43 @@ public static class RouteChoicePrompt
                     }
                 }
             }
+        }
+        if (crossesHazard)
+        {
+            if (services.Walker.State == WalkState.Idle)
+            {
+                IReadOnlySet<int> onFloor = services.CountersOnFloor(
+                    choice.Requirements.Where(r => r.Kind == RouteRequirementKind.HazardProtection).SelectMany(r => r.ItemIds));
+                try
+                {
+                    await Task.Run(() => ResolveCounters(onFloor));
+                }
+                catch (Exception ex)
+                {
+                    // As the plan's own fault above: the off-thread read of the graph,
+                    // the shop and give indexes can be disturbed by a rare UI-thread
+                    // change. Dropped for a change of game data; otherwise said and
+                    // worked out again on the UI thread, from nothing.
+                    if (PlanOvertaken(services, inFlight, calcVm)) return false;
+                    services.Log.Warn(LogCat,
+                        $"route card {source} -> {destination}: off-thread counter sources faulted ({ex.GetType().Name}: {ex.Message}); "
+                        + "working them out on the UI thread");
+                    floorCounters.Clear();
+                    detourCounters.Clear();
+                    hazardSources.Clear();
+                    buys.Clear();
+                    neededItems.Clear();
+                    hazardCounterIds.Clear();
+                    resolvedCounters.Clear();
+                    using (services.Performance.Measure("route card: hazard counter sources"))
+                        ResolveCounters(onFloor: null);
+                }
+                if (PlanOvertaken(services, inFlight, calcVm)) return false;
+            }
+            else
+                using (services.Performance.Measure("route card: hazard counter sources"))
+                    ResolveCounters(onFloor: null);
+        }
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
         bool hazardObtain = hazardCounterSource is not null;
@@ -721,7 +772,8 @@ public static class RouteChoicePrompt
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
-        gatePick = services.PlanGatePick(
+        using (services.Performance.Measure("route card: gate item sources"))
+            gatePick = services.PlanGatePick(
             choice.Requirements, source, destination,
             pickFetches: choice.Kind == RouteChoiceKind.ItemGate && hazardEdge is null && buyPauseRoom is null,
             closedGates: choice.ClosedGateItems);
@@ -1052,10 +1104,13 @@ public static class RouteChoicePrompt
     // every route card a walk-to is offered, and the loop begins when that walk
     // arrives (LoopWalkHandoff). Standing on the loop already, or with no room of it
     // to plan a walk to, the loop runner starts it directly as it always has.
+    // declined runs when that walk ends before it began: its route cards were closed
+    // without a pick, or a stop dropped it while it was being planned.
     public static async Task StartLoopAsync(
         AppServices services, Loop loop,
         Action<IReadOnlyList<RoomKey>?>? previewSink = null,
-        RunStartMode startMode = RunStartMode.Normal)
+        RunStartMode startMode = RunStartMode.Normal,
+        Action? declined = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(loop);
@@ -1080,7 +1135,9 @@ public static class RouteChoicePrompt
         services.Log.Info(LogCat, $"loop '{loop.Name}' started from off the loop: walking to {loopRoom} first, as a walk-to");
         services.LoopHandoff.Begin(loop, loopRoom);
         bool went = await WalkAsync(services, loopRoom, previewSink, startMode, remember: false);
-        if (!went) services.LoopHandoff.Cancel("cancelled at the route cards");
+        if (went) return;
+        services.LoopHandoff.Cancel("cancelled at the route cards");
+        declined?.Invoke();
     }
 
     // Start the walk, first lifting any lingering manual pause. A user picking a

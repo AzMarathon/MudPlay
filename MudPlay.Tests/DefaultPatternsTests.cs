@@ -365,6 +365,28 @@ public sealed class DefaultPatternsTests
         Assert.False(p.TryMatch(Line("Obvious exits: north, southwest"), out _));
     }
 
+    // A monster's blow naming its weapon and its victim with no "at" and no damage
+    // (report paradigm-20261021-085438). The swing "at you" and the damage line keep
+    // their own patterns, and a player's line (no "The") is not a monster's.
+    [Fact]
+    public void MonsterWeaponBlowRegex_ReadsTheBlowOnUsOrAPartyMember_Only()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.MonsterWeaponBlow);
+
+        Assert.True(p.TryMatch(Line("The big depraved murderer clubs Ironbar with their spiked club!"), out _));
+        Assert.True(p.TryMatch(Line("The big depraved murderer clubs you with their spiked club!"), out _));
+        Assert.True(p.TryMatch(Line("The thin cutpurse stabs Blasta with their dagger!"), out MatchResult blow));
+        Assert.Equal("Blasta", blow.Groups[0]);
+        // A victim outside the party still matches; CombatManager tells them apart.
+        Assert.True(p.TryMatch(Line("The guard strikes Lord Skorne with his sword!"), out _));
+        Assert.False(p.TryMatch(Line("The town guard slashes at Bob with his longsword!"), out _));
+
+        Assert.False(p.TryMatch(Line("The kobold thief lunges at you with its dagger!"), out _));
+        Assert.False(p.TryMatch(Line("The big cutpurse stabs Aunty with their dagger for 10 damage!"), out _));
+        Assert.False(p.TryMatch(Line("Ironbar cuts thin cutpurse with his longsword!"), out _));
+        Assert.False(p.TryMatch(Line("The big cutpurse stabs a dark monk with their dagger!"), out _));
+    }
+
     [Fact]
     public void ParadigmLocationRegex_CapturesMapAndRoom()
     {

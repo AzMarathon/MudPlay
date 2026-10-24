@@ -711,6 +711,65 @@ public sealed class MovementControllerTests : IDisposable
         Assert.False(h.Coordinator.IsPaused);
     }
 
+    // The user's Stop unloads a loop loaded with Load, so the next Start opens the
+    // loop list (user, 2026-10-23; report paradigm-20261022-170426). A Stop the
+    // client makes for itself (a death, a token used by hand) leaves it loaded.
+    [Fact]
+    public void StopByUser_UnloadsTheLoadedLoop_AFullStopOfTheClientsOwnDoesNot()
+    {
+        using Harness h = NewHarness();
+        Loop loaded = new("ring", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+        h.Loops.Stage(loaded);
+
+        h.Controller.Stop("token of Arlysia used by hand");
+        Assert.Same(loaded, h.Loops.StagedLoop);
+
+        Assert.True(h.Controller.StopByUser());
+        Assert.Null(h.Loops.StagedLoop);
+    }
+
+    // The press that only holds an errand is a Stop too.
+    [Fact]
+    public void StopByUser_ThatHoldsAnErrand_UnloadsTheLoadedLoopToo()
+    {
+        using Harness h = NewHarness();
+        string? errand = "the stash transfer";
+        h.Controller.SetErrandHooks(() => errand, _ => errand = null, _ => System.Threading.Tasks.Task.FromResult(true));
+        h.Loops.Stage(new Loop("ring", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+
+        Assert.False(h.Controller.StopByUser());
+
+        Assert.NotNull(h.Controller.SuspendedErrand);
+        Assert.Null(h.Loops.StagedLoop);
+    }
+
+    // With nothing moving, Stop still has a route being worked out (or its cards) and
+    // a loaded loop to end, and the toolbar enables it for them (report
+    // paradigm-20261022-170426: Stop greyed out right when it mattered).
+    [Fact]
+    public void HasStartPending_CoversARouteBeingPlanned_AndALoadedLoop_AndSaysWhenItChanges()
+    {
+        using Harness h = NewHarness();
+        int changes = 0;
+        h.Controller.StartPendingChanged += () => changes++;
+        Assert.False(h.Controller.HasStartPending);
+
+        IDisposable planning = h.Controller.RouteBeingPlanned();
+        Assert.True(h.Controller.HasStartPending);
+        Assert.True(h.Controller.IsIdle);
+        planning.Dispose();
+        planning.Dispose();
+        Assert.False(h.Controller.HasStartPending);
+
+        Loop loaded = new("ring", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+        h.Loops.Stage(loaded);
+        Assert.True(h.Controller.HasStartPending);
+        h.Loops.Unstage(loaded, "test over");
+        Assert.False(h.Controller.HasStartPending);
+
+        Assert.Equal(4, changes);
+    }
+
     // Stop is the only stop control there is: pressed again while the errand is
     // still held, it ends it, and the caller's own stop runs.
     [Fact]

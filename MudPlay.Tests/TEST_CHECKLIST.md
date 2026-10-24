@@ -33,6 +33,11 @@ How to keep it current:
 - Checks: mana-floor defaults, label and percent/absolute conversion text; Ok clamps the floor and returns the conditions; the reroll box range for Stock and Paradigm, including negatives; draw-item outcome tick boxes; no-redraw decks.
 - Why: the buff slot dialog; Stock's no-redraw deck (user, 2026-10-02).
 
+### AilmentDurationTests.cs
+- Covers: Game/Conditions/AilmentDuration over the shipped Paradigm records and Spells rows read through GameDataCache and SpellFormulaReader (data-Paradigm-1.9.1 values for banish #435 and hypnotic hands #300)
+- Checks: a spell that doesn't grow lasts its base duration; a capped one what it reaches at its cap; an uncapped one what its highest-level monster caster makes it; a record with no spell in the data has none.
+- Why: an ailment with no wear-off is ended on this time, and ending it early would drop a real one (review of report `paradigm-20261022-164244`).
+
 ### AilmentSyncEngineTests.cs
 - Covers: Game/Conditions/AilmentSyncEngine (with ConditionTracker, PartyRestSync)
 - Checks: a bare `.@blind` / `.@held` say on apply and never an `off`; poison telepaths @wait without a say. Ignore<X> suppresses both say and wait, and a configured cure suppresses only the say. One @wait / @ok pair is held across several ailments. ReevaluateWaits reconciles when an Ignore is toggled. The say and wait are given again on re-following a leader.
@@ -276,8 +281,8 @@ How to keep it current:
 
 ### AutoWalkManagerPickedRouteTests.cs
 - Covers: Game/Map/AutoWalkManager journeys (WalkJourney, JourneyFetch, Game/Map/DetourResume, RouteChoicePlanner)
-- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand.
-- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs).
+- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand. A sole-route card whose lever trip crosses a hazard room off the route shows that room, and the walk its pick starts goes; agreeing to the route's own rooms alone fails at the lever; a door on a sole route is no lever trip.
+- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs), paradigm-20261021-135647 (the temple sanctum walk failed on its water-main lever trip right after the pick).
 
 ### AutoWalkManagerRoomCommandRefusalTests.cs
 - Covers: Game/Map/AutoWalkManager (empty-room command hold), Game/Map/TBInfoActionResolver.NeedsEmptyRoom
@@ -372,8 +377,8 @@ How to keep it current:
 
 ### BoatRoutePlannerTests.cs
 - Covers: Game/Map/BoatRoutePlanner
-- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks.
-- Why: the route must stitch both land legs, not pick the nearest pier.
+- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks; with the land route as a bound, only a sailing that can beat it is planned, and one that can't costs only the floor searches.
+- Why: the route must stitch both land legs, not pick the nearest pier; report paradigm-20261021-135647 (weighing every sailing held a walk's commit for ten seconds).
 
 ### BossCatalogTests.cs
 - Covers: Game/GameData/BossCatalog, the shipped BossDefs.seed.json
@@ -569,8 +574,8 @@ How to keep it current:
 
 ### CastingDirectorTests.cs
 - Covers: Game/Spells/CastingDirector (+ CastCoordinator, ConditionTracker, TickEngine)
-- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts.
-- Why: dozens of reports cited inline; user rulings 2026-10-10 and 2026-10-17.
+- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine.
+- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124); user rulings 2026-10-10 and 2026-10-17.
 
 ### CharacterCalculatorMatchupProfileTests.cs
 - Covers: Game/Calculators/CharacterCalculator.BuildNormalAttackProfile, MonsterMatchupCalculator
@@ -703,15 +708,15 @@ How to keep it current:
 
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
-- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths. Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
+- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths; a pre-attack debuff refused `You have already cast a spell this round!` still lets the room attack out that round (report paradigm-20261023-001124). Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live. No private member is reached by reflection.
 - Why: dozens of paradigm reports cited inline.
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line), fed as bytes through a `ServerFeed`.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
-- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645); stops a stalled or doubled attack.
+- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
@@ -755,7 +760,7 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty.
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap).
 - Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
@@ -785,13 +790,23 @@ How to keep it current:
 
 ### ConditionTrackerRosterTests.cs
 - Covers: Game/Conditions/ConditionTracker, Game/Combat/RoomEntityClassifier (RosterIsWhole), RoomEntryWatcher, the shipped message seeds.
-- Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; seed flags and Ids.
-- Why: a held character must never read as free; user ruling 2026-10-17.
+- Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; a gruesome curse (BlindUser in the Spells data) always blinds, whoever is listed; a web cocoon is a hold and nothing else; seed flags and Ids.
+- Why: a held or blinded character must never read as free; user rulings 2026-10-17 and 2026-10-23 (web, by the spell data).
+
+### ConditionExpiryTests.cs
+- Covers: Game/Conditions/ConditionTracker.AilmentSeconds, over the shipped Paradigm message seed
+- Checks: an ailment with no wear-off ends when its spell's time is up and the log says so; its applied line again starts the time over; with no duration in the data the party chips' 180 s cap applies; a wear-off that comes leaves nothing to expire; a buff is never ended this way.
+- Why: report `paradigm-20261022-164244` (Confused held 23 minutes, the walk paused on it); Client policy, user 2026-10-23.
 
 ### ConditionTrackerTests.cs
 - Covers: Game/Conditions/ConditionTracker.
 - Checks: applied/ends latching; shared-line narrowing by cast line; shadowing by a longer applied text or another spell's cast line; negated casts; flag-wide wear-off; stat readouts; fumble ActionFailed; hold lines; shipped-seed cases.
 - Why: stuck conditions (paradigm-20261011-165726, -20260904-214452, -20261002-120516).
+
+### ConnectionLossTests.cs
+- Covers: Net/TelnetClient's read-loop end (EndedBecause, LastDataReceived) on a loopback TcpListener; Services/ConnectionLoss.
+- Checks: a server closing the link reads as "the server closed the connection", a reset link carries its socket error; silence past the idle window plus 5 s is a no-response drop, inside it (or with keepalive off) a lost carrier; the terminal line states the silence only when it is 5 s or more; the not-reconnecting line names the matching Reconnect-when tick box; the bug-report summary carries the reconnect outcome.
+- Why: a link that dropped with auto-reconnect off left the last round box on screen and went unnoticed for 16 minutes (paradigm-20261022-074654).
 
 ### ConfirmServiceTests.cs
 - Covers: Services/ConfirmService; Models/Settings/ConfirmSettings.
@@ -993,7 +1008,7 @@ How to keep it current:
 ### DefaultPatternsTests.cs
 - Covers: Services/Patterns/DefaultPatterns, RegexPattern, MessageRouter.Seed.
 - Checks: the registry's ids; and per-pattern regex coverage of game wording (refusals, combat, arrivals and departures, shop, equip, follow mode, realm exit, …).
-- Why: many reports (stock-20260913-233911, -232235, paradigm-20260914-055853, …).
+- Why: many reports (stock-20260913-233911, -232235, paradigm-20260914-055853, paradigm-20261021-085438, …).
 
 ### DefaultPoolBaselineKeeperTests.cs
 - Covers: Game/Health/DefaultPoolBaselineKeeper.
@@ -1386,8 +1401,8 @@ How to keep it current:
 
 ### GameDataSwitchStopsMovementTests.cs
 - Covers: Game/Map/StopOnGameDataChange, MovementController, LoopRunner, AutoWalkManager, AutoLairManager, RoutePlanInFlight, PathItemFloorCollector, HeldLoopsOnProfileSwap
-- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped; route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
-- Why: room numbers differ between sets.
+- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped, across a Stop too (one begun after a Stop goes ahead); route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
+- Why: room numbers differ between sets; report paradigm-20261022-170426 (a Stop while a route was being worked out found no walk to stop).
 
 ### GameDataTableSectionTests.cs
 - Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel
@@ -1522,8 +1537,8 @@ How to keep it current:
 
 ### GlobeOfDarknessSeedTests.cs
 - Covers: Game/Conditions/ConditionTracker with shipped Messages seeds
-- Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds.
-- Why: a nanati shadow's globe set Blinded and asked for a cure.
+- Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds; infernal darkness (both seeds) and Stock's sandstorm are not blindness, a gruesome curse is (checked against the Spells data, 2026-10-23).
+- Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
 ### GotoHistoryStoreTests.cs
 - Covers: Game/Map/GotoHistoryStore
@@ -1551,9 +1566,9 @@ How to keep it current:
 - Why: the grove shadow guard door (Phoenix quest).
 
 ### HangReportTests.cs
-- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking), Services/HangReport, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
-- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies.
-- Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18).
+- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking and its program-log lines), Services/HangReport, Services/ProcessResources (ReportLines), Services/ContentSizes, Services/ActivityCounters, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
+- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies; each window opened or closed is logged at Info under `Windows` with the windows then open (short names, repeats counted), and the same list is the status line's; the Memory section carries the native figure, threads and handles, GDI / USER objects, what the windows hold and the session's activity, as the bug report does; a closed window's contents leave the list.
+- Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18); a 26 GB native leak's logs said nothing of the windows open or what held native memory (user, 2026-10-23).
 - Named seam: PerformanceMonitor.ProbeHost and the internal constructor that takes it: the client's probe is a thread of its own pinging the Avalonia dispatcher and writing to the Desktop; the test gives it ManualTimers, a ManualClock, a ping queue it answers by hand, a folder of its own, its WriteAside / RunAside run at once or on a queue it holds (in the client, a writer thread and a thread per log line), and its ReadMemory / ReadPrivateBytes give figures the test moves (in the client, the GC's counters, Environment.WorkingSet and Process.PrivateMemorySize64).
 - Named seam: PerformanceMonitor.NoteWindowOpened / NoteWindowClosed / NoteWindowFocused, internal: the client calls them from Avalonia's window class handlers, which need real windows.
 
@@ -1874,6 +1889,11 @@ How to keep it current:
 - Checks: the wear slot comes from the numeric Worn field.
 - Why: the warhorn was labelled as Weapon Hand
 
+### LairDoorMonsterCountTests.cs
+- Covers: the Min Monsters floor lifted while a loop waits at a lair's door: Game/Combat/MonsterCountGate.Bounds read by CombatManager and CombatStateTracker through SetLairDoorWaitProbe, LairEntryDebuffHold.WaitingAtTheDoor / DoorWaitStarted, and its fightAnswered through LairEntryDebuffHold.FightIsAnswered and CombatManager.RoomSkippedForMonsterCount, wired as AppServices wires them; room rows fed through a `ServerFeed`, time on a `ManualClock`.
+- Checks: outside a door wait a lone monster is walked past; during one it is fought, the wait stands through that fight and goes in once the room is clear; a monster already there when the wait begins is fought; a room over the Max at the door is no fight to wait out; the same lone wanderer under "only attack in lair rooms" (LoopCombatSuppression.IsSuppressed with waitingAtLairDoor), walked past away from a door wait and fought during one.
+- Why: paradigm-20261023-005038, a loop parked outside a lair for good while a lone rat swung at the character; the user's ruling of 2026-10-23.
+
 ### LairEditorDialogViewModelTests.cs
 - Covers: ViewModels/Navigation/LairEditorDialogViewModel
 - Checks: validation; marker rows; Save/Cancel; renaming deletes the old file.
@@ -2086,8 +2106,8 @@ How to keep it current:
 
 ### LoopCombatSuppressionTests.cs
 - Covers: Game/Map/LoopCombatSuppression
-- Checks: do-not-attack and only-lair precedence, detour loops still judged, which room is judged mid-move, when the loop is "driving".
-- Why: reports paradigm-20261015-160835, -20260925-070016, -20261012-080902.
+- Checks: do-not-attack and only-lair precedence, detour loops still judged, which room is judged mid-move, when the loop is "driving", only-lair lifted (do-not-attack not) while waiting at a lair's door.
+- Why: reports paradigm-20261015-160835, -20260925-070016, -20261012-080902, -20261023-005038; user 2026-10-23.
 
 ### LoopEditorOtherGameDataTests.cs
 - Covers: ViewModels/Navigation/LoopEditorDialogViewModel
@@ -2132,8 +2152,8 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
-- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, …).
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; backing out of the loaded loop's start lets go of it, but not of one loaded since.
+- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, -20261022-170426, …).
 
 ### LoopSettingsStoreTests.cs
 - Covers: Services/LoopSettingsStore, LoopManager, LoopEditor/LoopBuilder VMs, Game/Remote/LoopShareReceiver
@@ -2262,6 +2282,14 @@ How to keep it current:
 - Checks: level/class/race/toll/fare/item/alignment gates judged from what is known of a member (true/false/unknown).
 - Why: party gate planning.
 
+### MemoryUsageLogTests.cs
+- Covers: Services/MemoryUsageLog, Services/LogFileHeader, Services/DebugLogWriter (header and clock), Services/ProcessResources (Columns), Services/ContentSizes, Services/ActivityCounters
+- Checks: nothing is written with Auto-collect logs off; switching on opens a file whose header names the build, the system, the process, how long the client had been up and the session, then the columns, then a baseline sample armed off the toggle's thread; a sample carries the GC's figures, the native figure (private bytes less GC committed), threads, handles, GC handles, pinned objects, timers and Skia's caches, leaves the GDI / USER counts out off Windows and has them when read, and ends with what the windows hold and which are open; each later sample says what went by since the last (lines, renders, map redraws, native growth) over its interval; a character change since the header gets a `# now` line once; on Linux native is measured from RssAnon (private bytes there are virtual), shown beside it, and never reads below zero, and a private figure of 0 reads `?`; session names that throw head the file as not known, and figures that throw leave a `? figures not read` line while the samples go on; switching off closes the file, stops the samples and clears the status line's figure.
+- Why: logs from a client at 26 GB private bytes over a 500 MB managed heap couldn't say the build, the start time, the windows open or anything about native memory (user, 2026-10-23).
+- Named seam: MemoryUsageLog.Sources and the internal constructor that takes it: in the client the figures are read from the GC and the process, the windows from PerformanceMonitor, the time from the wall clock and the ticks from a thread-pool timer; the test gives figures it moves, a ManualClock and ManualTimers.
+- Named seam: MemoryUsageLog.SampleInterval, internal: the test advances its timers by it.
+- Named seam: DebugLogWriter's internal constructor taking `now`: the client stamps lines with the wall clock (the public constructor); the memory log passes its own clock through, which the test makes a ManualClock.
+
 ### MenuActionCatalogueTests.cs
 - Covers: Services/MenuActionCatalogue, ToolbarItemCatalogue, ContextMenuDefaults, ContextMenuConfig, ViewModels/Settings/ContextMenuRowViewModel
 - Checks: every catalogue command/toggle/gesture resolves on MainWindowViewModel by reflection, submenus and deep links valid, defaults resolve, ContextMenuConfig.ApplyFrom takes entries, folders and custom labels.
@@ -2276,6 +2304,13 @@ How to keep it current:
 - Covers: Game/MessageCandidateWatcher (with real seeds and exclusions)
 - Checks: lines from real unrecognized-line exports stay out; genuine room-spell unknowns still captured.
 - Why: exports unrecognized-lines-20260912-235152, -235315, -20260922-014747.
+
+### MessageCandidateSaveTests.cs
+- Covers: Services/MessageCandidateStore (saving and the cap)
+- Checks: sightings are written together SaveDelay after the first; back-to-back deferred saves all land (a hand-off as the write lane stops starts a new one); a deferred write overtaken by Save and another client's write doesn't put its older list back; Save writes what waits at once and drops the deferred save; a realm switch writes the old realm's waiting lines to its own file; a new line past MaxPending pushes out the pending line seen longest ago and keeps dismissed ones; a file past the cap is trimmed in one pass at load and saved once.
+- Why: reports Hang-20261021-035337 and Hang-20261021-065221 (thousands of UI-thread rewrites of the realm's file a night, one a 5.3 s freeze).
+- Named seam: `MessageCandidateStore.WhenSavedAsync` completes when the handed-off writes have finished, so the test reads the file a deferred save wrote.
+- Named seam: the `arm` constructor parameter of `MessageCandidateStore` (the dispatcher's one-shot timer in the client) takes `ManualTimers.Arm`, so the test decides when SaveDelay is up.
 
 ### MessageCandidateStoreTests.cs
 - Covers: Services/MessageCandidateStore
@@ -2321,6 +2356,11 @@ How to keep it current:
 - Covers: Models/GameData/MessageRecord (JSON contract)
 - Checks: decoder-shaped seed loads (enum names, links, legacy keys tolerated, defaults).
 - Why: drift would blank the catalogue.
+
+### MirroredShieldSeedTests.cs
+- Covers: Game/Conditions/ConditionTracker with the shipped Stock Messages seed.
+- Checks: the mirrored shield (#169) record carries speed's description text (`You feel fast` / `You slow down`) and Blinded; a speed cast on us followed by `You feel fast!` is no blindness; the shield's flash line followed by the same line blinds.
+- Why: user, 2026-10-23 ("look in the DLL's"): wccmmud.dll prints a spell's DescMsg on landing and wear-off, and #169's DescMsg is speed's message 8537, so the shared line must be read by its cast line.
 
 ### MonsterAggroCalculatorTests.cs
 - Covers: Game/Calculators/ParadigmAggroCalculator, StockAggroCalculator
@@ -2419,7 +2459,7 @@ How to keep it current:
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)
-- Checks: Stock appear/leave line shapes match, chat doesn't.
+- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't.
 - Why: missed arrivals/departures confuse targeting.
 
 ### MonsterObservationCastLineTests.cs
@@ -2479,8 +2519,8 @@ How to keep it current:
 
 ### MovementControllerTests.cs
 - Covers: Game/Map/MovementController (+ AutoWalk, LoopRunner, AutoLair, Coordinator)
-- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers.
-- Why: The @stop / Auto-All / errand regressions.
+- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers; the user's Stop unloads a loaded loop (the press that only holds an errand too), the client's own full stop does not; HasStartPending covers a route being planned and a loaded loop, and says when it changes.
+- Why: The @stop / Auto-All / errand regressions; report paradigm-20261022-170426 and the user's ruling of 2026-10-23 (Stop unloads the loaded loop).
 
 ### MovementCoordinatorTests.cs
 - Covers: Game/Map/MovementCoordinator
@@ -2489,8 +2529,8 @@ How to keep it current:
 
 ### MovementFilterTests.cs
 - Covers: Services/MovementFilter (+ BfsMapper integration)
-- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
-- Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354.
+- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend, which is the suspending thread's own; route-scoped warm-ups.
+- Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354; the route card planning off the UI thread beside UI-thread walks (review of paradigm-20261021-135647).
 
 ### MovementRefusalDetectorTests.cs
 - Covers: Game/Map/MovementRefusalDetector
@@ -2664,8 +2704,8 @@ How to keep it current:
 
 ### PartyAilmentTrackerTests.cs
 - Covers: Game/Conditions/PartyAilmentTracker
-- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses.
-- Why: Party ailment sync.
+- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses; a member's token use (negate magic) clears every chip but the par-owned poison, and a stranger's touches and logs nothing.
+- Why: Party ailment sync; the user's ruling of 2026-10-23 (negate magic ends every spell on its user).
 
 ### PartyBroadcasterTests.cs
 - Covers: Game/Remote/PartyBroadcaster
@@ -2960,11 +3000,12 @@ How to keep it current:
 
 ### ProgramLogFileTests.cs
 - Covers: Services/ProgramLogFile, Services/LogEntryQueue
-- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path with its header if the failure lost it, and noted again only after a write succeeded; a failure doesn't carry into the next session's file; exit waits for a slow disk, cuts a retry wait short to write the tail, and gives up on a stuck disk at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; entries queued across a switch land in their own session's file; three loggers racing 3000 flips of the switch never start a session's file twice (bounded by counts: switch and loggers are kept in step a few entries apart, so every flip lands while they log and the test can't pass or fail for want of a race); the real file holds the header and entries.
-- Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line.
+- Checks: logging returns at once while the disk is stuck, and entries land in order once it answers; past the queue depth the oldest go and the file says how many; a failed write is noted once, never through its own file, reopened on the same path with its header if the failure lost it, and noted again only after a write succeeded; a failure doesn't carry into the next session's file; exit waits for a slow disk, cuts a retry wait short to write the tail, and gives up on a stuck disk at its bound; the crash wait lands the last line or gives up at its bound; the Auto-collect switch opens a fresh `…-program.log` each time it goes on and closes it when off; entries queued across a switch land in their own session's file; three loggers racing 3000 flips of the switch never start a session's file twice (bounded by counts: switch and loggers are kept in step a few entries apart, so every flip lands while they log and the test can't pass or fail for want of a race); every file, each new one after a switch included, opens with the build, the system, the process, how long the client had been up, and the character, BBS, realm and game data as they stand when that file opens (Services/LogFileHeader); the real file holds the header and entries.
+- Why: with Auto-collect logs on, a slow or locked disk froze the window on any log line; and a file started mid-session didn't say what build, system or session it came from (user, 2026-10-23).
 - Named seam: ProgramLogFile's `open` constructor parameter (default opens the file for appending): stands in a disk that stalls or throws.
 - Named seam: ProgramLogFile's `retryDelay` constructor parameter (default 5 s): keeps the failure tests short, and makes a wait longer than the exit's bound.
 - Named seam: ProgramLogFile.WhenWrittenAsync: the writer is a background queue; the barrier is the only way to know a line reached the file.
+- Named seam: ProgramLogFile's `session` constructor parameter: the client passes AppServices' session names; the test passes names it changes between files.
 
 ### PromptParserTests.cs
 - Covers: Game/PromptParser
@@ -3264,8 +3305,8 @@ How to keep it current:
 
 ### RoomEntryWatcherTests.cs
 - Covers: Game/Combat/RoomEntryWatcher
-- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored.
-- Why: report paradigm-20260928-230226.
+- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned.
+- Why: reports paradigm-20260928-230226 and paradigm-20261020-203400 (`elfu removes shadow`).
 
 ### RoomExitParseTests.cs
 - Covers: Game/Map/RoomExit.TryParseWire, FormatLevelGate, CastsOnWalk
@@ -3433,6 +3474,11 @@ How to keep it current:
 - Checks: Reads the textblock number from MinBase or the ability slot, and handles a block-less spell. Leaves out bosses and room-item lines but counts GameLimit monsters with no regen wait. The simulator lap carries the same tables, and one log line names the summoning spells and what was left out.
 - Why: Exp/hr estimates for summon rooms; user, 2026-10-10 (tyrannosaurs count).
 
+### RouteFloorsTests.cs
+- Covers: Game/Map/RouteFloors with Game/Map/PathItemShopRouter.TrySelectShop and BfsMapper
+- Checks: a shop chosen by way of hop floors is the one weighing every shop picks (ties to the nearer shop), with only the shops that can still win searched; a shop no route reaches is never searched from.
+- Why: report `paradigm-20261021-135647` (a route card weighing every shop selling a hazard's counters held the UI thread twenty seconds).
+
 ### RouteLightScannerTests.cs
 - Covers: Game/Light/RouteLightScanner
 - Checks: The darkest room on a route sets the light strength needed after worn illumination; unresolved rooms are skipped; a route already seeable needs none.
@@ -3480,6 +3526,11 @@ How to keep it current:
 - Checks: Our own poison, blindness and disease light the self party chip, per flag, and clear on wear-off. They also work solo (lone self row) and the chip carries over when a party forms.
 - Why: The self party-window row never showed our own poison (PartyAilmentTracker only mirrors other members).
 
+### SelfAilmentProofTests.cs
+- Covers: Game/Conditions/SelfAilmentProof (with ConditionTracker.ClearFlag, RoomTracker.MoveConfirmed / RoomDisplayRead and the router's command echo), and Game/Conditions/CureCastMatcherBuilder over CureSpellIndex (Spells rows for #87 and #19) and the shipped Paradigm message records, on TrackerWireRig.
+- Checks: a room shown by a move or a bare `look` drops a latched blindness, a peek's room (`l n`) does not; a gossip quoting a cure clears nothing; a move and a look that show only `You are blind.` keep it; a record that blinds and confuses is kept; a look keeps a hold, a move drops it; a cure blindness cast on us (our cast naming us, or another's `upon you`) drops our blindness, while one on a party member, a witnessed one on someone else, and a cure poison leave it.
+- Why: reports CureBlindlessBugReport (cure blindness cast on itself every 15 s) and paradigm-20261003-161904 (a stale hold); user, 2026-10-23: a blind look shows only `You are blind.`, and cure blindness prints no wear-off.
+
 ### SelfConfusionResponderTests.cs
 - Covers: Game/Conditions/SelfConfusionResponder
 - Checks: Confusion lights the self chip and asserts ConfusionGate; clearing it releases both. Ignore Confusion suppresses only the gate, and Reevaluate handles a mid-confusion toggle. Records sharing one applied line clear as a group; ClearAll and Dispose release the gate.
@@ -3512,7 +3563,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
@@ -4015,6 +4066,11 @@ How to keep it current:
 - Checks: rows painted by cursor positioning are emitted without a line feed, in order, with no repeats; erased rows and rows cleared by a screen clear are dropped; an escape sequence cut off by a line break.
 - Why: reports `paradigm-20261002-140153` and `paradigm-20261002-140334` (the card-name row was never parsed).
 
+### TerminalNoticeEncodingTests.cs
+- Covers: Terminal/Cp437.Encode into TerminalEmulator and LineExtractor, framed as MainWindowViewModel.WriteTerminalStatus frames a notice.
+- Checks: dashes, arrows, an ellipsis, curly quotes and × reach the grid as their ASCII stand-ins; an accent and a box line keep their CP437 glyphs; a glyph found only among the low control bytes gets a stand-in, and one with none shows as "?".
+- Why: the client's notices were encoded as Latin-1 and drew "?" for every dash and arrow, e.g. `[AUTO-RECONNECT ARMED — DIALING …]`.
+
 ### TestProfiles.cs
 - Test infrastructure.
 - Covers: test helper: a ProfileService as the client builds one, with its default-profile template and reset marker on unused paths under the data root
@@ -4070,8 +4126,8 @@ How to keep it current:
 
 ### TokenRouteCoordinatorTests.cs
 - Covers: Game/Tokens/TokenRouteCoordinator
-- Checks: solo token use (clear room vs walk overland to a monster-free room, "the Lost City" article); party leader sends `.@party use token` first, retries by room check, and tokens LAST; follower declines; new walk / Cancel abandons; fail-out vs use-anyway when a member is stranded.
-- Why: a leader who tokens before the party strands members; a user retarget or Stop must not resume the old route.
+- Checks: solo token use (clear room vs walk overland to a monster-free room, "the Lost City" article); party leader sends `.@party use token` first, retries by room check, and tokens LAST; follower declines; new walk / Cancel abandons; fail-out vs use-anyway when a member is stranded; a landing confirmed before the use line resumes after the settle, not the landing timeout.
+- Why: a leader who tokens before the party strands members; a user retarget or Stop must not resume the old route; report paradigm-20261022-164244 (the use line prints after the landing room).
 
 ### TokenRouteEvaluatorTests.cs
 - Covers: Game/Tokens/TokenRouteEvaluator
@@ -4082,6 +4138,11 @@ How to keep it current:
 - Covers: Game/Tokens/TokenTeleportReader
 - Checks: item → CastsSp (43) → spell → TextBlock (148) → TBInfo `minlevel` / `price` / `teleport` chain; "the Lost City" keys as "lost city"; non-token items ignored.
 - Why: token destinations, costs and level gates come only from game data.
+
+### TokenUseLinesTests.cs
+- Covers: Game/Tokens/TokenUseLines through Game/Tokens/TokenTracker, over the shipped Paradigm message seed
+- Checks: our own use line (no placeholder) is recognized whole and lets the buff hold go; a party member's use names them and is not ours; the line quoted in chat is no use; an edited record is read afresh.
+- Why: report `paradigm-20261022-164244` (no token use of ours was ever recognized: the buff hold timed out, nothing heard of the teleport).
 
 ### TollPurseDoubtTests.cs
 - Covers: Services/MovementFilter, Game/Map/MovementRefusalDetector, Game/Map/AutoWalkManager, Game/Inventory/OwedPurseRead, Game/Inventory/PostDeathInventoryRefresh, Game/Recovery/ArenaDeathRooms, Game/DeathDetector, Game/Map/RoomTracker, RouteChoicePlanner
@@ -4116,7 +4177,7 @@ How to keep it current:
 ### TrackerWireRig.cs
 - Test infrastructure.
 - Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests and AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache).
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs

@@ -43,7 +43,7 @@ public sealed class PartyAilmentTrackerTests
         public List<string?> Sources { get; } = new();
         public long NowMs;
 
-        public Harness()
+        public Harness(LogService? log = null)
         {
             DefaultPatterns.Seed(Router);
             Chat = new ChatRouter(Router);
@@ -57,7 +57,8 @@ public sealed class PartyAilmentTrackerTests
                     Sources.Add(source);
                     return Durations.TryGetValue(n, out double? d) ? d : null;
                 },
-                nowMs: () => NowMs);
+                nowMs: () => NowMs,
+                log: log);
             Tracker.AttachLineExtractor(Server.Lines);
         }
 
@@ -93,6 +94,40 @@ public sealed class PartyAilmentTrackerTests
         h.Say(@"Forged says ""@poisoned""");
 
         Assert.True(forged.Poisoned);
+    }
+
+    // A token's negate magic ends every spell on its user (user, 2026-10-23): the
+    // member who ports in front of us has every chip but the par-owned poison cleared.
+    [Fact]
+    public void ClearMember_EndsEveryChipButPoison()
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind""");
+        h.Say(@"Mage says ""@confused""");
+        h.Say(@"Mage says ""@poisoned""");
+
+        h.Tracker.ClearMember("Mage", "used a token (negate magic)");
+
+        Assert.False(mage.Blinded);
+        Assert.False(mage.Confused);
+        Assert.True(mage.Poisoned);
+    }
+
+    // Anyone in the room can use a token: a stranger's use touches nothing and says
+    // nothing.
+    [Fact]
+    public void ClearMember_OfAStranger_DoesNothing()
+    {
+        LogService log = new();
+        using Harness h = new(log);
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind""");
+
+        h.Tracker.ClearMember("Stranger", "used a token (negate magic)");
+
+        Assert.True(mage.Blinded);
+        Assert.DoesNotContain(log.Snapshot(), e => e.Source == PartyAilmentTracker.LogCategory && e.Message.Contains("Stranger"));
     }
 
     [Fact]

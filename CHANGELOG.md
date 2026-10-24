@@ -1,5 +1,28 @@
 # Version history
 
+## 3.185.30
+
+- Another player's gear swap no longer reads as a monster arriving
+- Blindness clears once a move or a look shows a room, or a cure blindness lands on you, ending the self-cure loop
+- Darkness spells (infernal darkness, Stock's sandstorm) no longer count as blindness, and a web cocoon is only a hold
+- Loops wait at a lair door when a cast just before the round may still hold it, and a refused lair debuff no longer holds the attack spell
+- A monster that turns up silently and swings a weapon at you or your party is now fought
+- Manaspring Source's "A figure materializes..." summon now engages the monster it brings
+- A loop waiting at a lair's door now fights the lone monster that wanders in, even under Min Monsters or "Only attack in lair rooms", then goes in
+- Stop while a walk's route is still being worked out calls the walk off and closes its route cards; the toolbar Stop stays usable then
+- Stop and closing a loaded loop's route cards both unload it, so Start opens the loop list again
+- Idle Pause and Stop toolbar buttons fade instead of looking lit
+- Route cards count their lever trips' rooms and hazards, so the Temple Sanctum walk no longer fails right after the pick
+- Route cards and walk starts no longer freeze for seconds working out shops and sailings
+- Own token uses are recognized again: the buff hold ends on landing, a token route walks on at once, and the use clears every buff and ailment on its user
+- An ailment whose wear-off never shows ends once its spell's longest possible time is up
+- A dropped connection now says so in the terminal, and says when auto-reconnect is off for it
+- Client notices in the terminal show dashes and arrows as plain text instead of "?"
+- Unrecognized lines are saved in the background and capped, so a long grind no longer stalls the window
+- Auto-collect logs say what wrote them, which windows were open and what holds native memory; bug and hang reports show the same
+- Bug reports name each active condition, the line that set it and when it expires, and the last link drop
+- bug reports addressed: paradigm-20261020-203400, CureBlindlessBugReport, paradigm-20261023-001124, paradigm-20261021-085438, paradigm-20261022-174021, paradigm-20261023-005038, paradigm-20261022-170426, paradigm-20261021-135647, paradigm-20261022-164244, paradigm-20261022-074654, Hang-20261021-035337, Hang-20261021-065221
+
 ## 3.185.17
 
 - Picking a long route no longer freezes the client before the walk starts

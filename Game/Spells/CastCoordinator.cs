@@ -77,9 +77,10 @@ public sealed class CastCoordinator : IDisposable
     // heal lost its round to an unrelated attack and never got a window to fire —
     // the character died waiting (report paradigm-20260916-113009). Tracked
     // separately per slot so an attack firing can never block a heal, or vice
-    // versa. bypassRoundCooldown is always true for attack-slot calls and always
-    // false for between-round calls (see class doc), so it doubles as the
-    // discriminator between the two clocks.
+    // versa. bypassRoundCooldown is true for attack-slot calls and false for
+    // between-round calls (see class doc), so it doubles as the discriminator between
+    // the two clocks, except for a between-round cast sent at an engage's speed
+    // (TryCast's betweenRound).
     private DateTimeOffset _lastAttackSentAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
     private DateTimeOffset _castBlockedSince = DateTimeOffset.MinValue;
@@ -193,13 +194,20 @@ public sealed class CastCoordinator : IDisposable
     // retry a fizzle. Per-round heartbeat re-casts leave it false.
     // bypassRecastInterval additionally skips the 500ms MinRecastInterval burst guard.
     // That guard exists to absorb CastingDirector's OWN back-to-back survival re-casts;
-    // the combat engine sends legitimate back-to-back attack-slot casts (a pre-attack
-    // debuff then the attack, a primary then its alternate after a "no effect") that
-    // the 500ms window would otherwise defer to the next tick. The combat dispatch is
+    // the combat engine sends legitimate back-to-back attack-slot casts (a primary then
+    // its alternate after a "no effect") that the 500ms window would otherwise defer to
+    // the next tick. Each clock has its own guard, so a pre-attack debuff (betweenRound)
+    // and the attack behind it never meet in one. The combat dispatch is
     // already paced once-per-round by ResumePacing / the round cooldown, so it can't
     // burst; CastingDirector's casts leave this false.
+    // betweenRound puts a cast sent at an engage's speed (bypassRoundCooldown) on the
+    // between-round slot: the combat engine's pre-attack debuff. Read as an attack-slot
+    // cast, its "You have already cast a spell this round!" latched the block, and the
+    // attack it goes out ahead of waited for the next round (report
+    // paradigm-20261023-001124: isto refused, hsto held two seconds while ten rats swung).
     public bool TryCast(string spellName, string? target = null,
-                        bool bypassRoundCooldown = false, bool bypassRecastInterval = false)
+                        bool bypassRoundCooldown = false, bool bypassRecastInterval = false,
+                        bool betweenRound = false)
     {
         if (string.IsNullOrWhiteSpace(spellName)) return false;
         if (_wireSender is null) return false;
@@ -225,11 +233,12 @@ public sealed class CastCoordinator : IDisposable
             CastFailed?.Invoke(CastFailureReason.Blocked, "cast-blocked", spellName.Trim());
             return false;
         }
-        // bypassRoundCooldown is always true for attack-slot calls (CombatManager)
-        // and always false for between-round calls (CastingDirector) — see the
-        // class doc and _lastAttackSentAt's comment — so it doubles as which
-        // independent clock this attempt is paced against.
-        DateTimeOffset lastSentAt = bypassRoundCooldown ? _lastAttackSentAt : _lastBetweenRoundSentAt;
+        // bypassRoundCooldown is true for attack-slot calls (CombatManager) and false
+        // for CastingDirector's between-round calls — see the class doc and
+        // _lastAttackSentAt's comment — so, unless betweenRound says otherwise, it
+        // doubles as which independent clock this attempt is paced against.
+        bool attackSlot = bypassRoundCooldown && !betweenRound;
+        DateTimeOffset lastSentAt = attackSlot ? _lastAttackSentAt : _lastBetweenRoundSentAt;
         // The once-per-round cooldown gates re-casts; the initial engage bypasses it.
         if (!bypassRoundCooldown && now - lastSentAt < CastCommandCooldown)
         {
@@ -252,8 +261,8 @@ public sealed class CastCoordinator : IDisposable
             ? spell
             : $"{spell} {target.Trim()}";
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
-        if (bypassRoundCooldown) _lastAttackSentAt = now; else _lastBetweenRoundSentAt = now;
-        _lastCastWasAttackSlot = bypassRoundCooldown;
+        if (attackSlot) _lastAttackSentAt = now; else _lastBetweenRoundSentAt = now;
+        _lastCastWasAttackSlot = attackSlot;
         _lastSpellSent = spell;
         _log?.Info(LogCategory, $"cast spell={spell} target={target ?? "<self>"}");
         CastSent?.Invoke(line);

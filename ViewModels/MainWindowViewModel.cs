@@ -840,7 +840,7 @@ public partial class MainWindowViewModel : ObservableObject
         // than the instance.
         AppServices.Current.SetEmulatorProvider(() => Emulator);
         AppServices.Current.SetConnectionProvider(() =>
-            new AppServices.ConnectionSnapshot(IsConnected, IsConnecting, IsReconnectPending));
+            new AppServices.ConnectionSnapshot(IsConnected, IsConnecting, IsReconnectPending, _lastConnectionLoss));
 
         // Live-screen watch for the character-creation stat box. It's drawn with
         // cursor positioning, so its marker row never completes as an emitted
@@ -894,6 +894,10 @@ public partial class MainWindowViewModel : ObservableObject
         // bug report's "Holds and waits"), and let the heartbeat decide whether
         // its next status line is due.
         BugReportHoldsAndWaits.RegisterProbes(AppServices.Current);
+        // The terminal's scrollback against its cap, for the memory log and the
+        // reports. Kept for the client's life: the emulator is the main window's own.
+        AppServices.Current.ContentSizes.Track("scrollback",
+            () => Emulator.Screen.Scrollback.Count, () => Emulator.Screen.Scrollback.Capacity);
         _engineStateSample = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = EngineStateWatch.SampleInterval,
@@ -952,6 +956,7 @@ public partial class MainWindowViewModel : ObservableObject
         // buttons' visibility + Pause↔Resume label; re-apply row state on
         // every transition so the toolbar mirrors the running engine.
         AppServices.Current.MovementControl.StateChanged += OnMovementControlStateChanged;
+        AppServices.Current.MovementControl.StartPendingChanged += OnMovementControlStateChanged;
         // Name-learned prompt: fires when the tracker adopts a name
         // for a previously-unnamed room (typical of map-15 ganghouse
         // rooms in 1.x exports). Modeless yes/no asks whether to keep
@@ -1087,7 +1092,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Emulator.Feed and crash (same reason as the combat-profile echo below).
         AppServices.Current.GameData.TableParseFailed += table =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
-                $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
+                $"[GAME DATA: table '{table}' is corrupt and was not loaded - re-import the set; "
                 + "some features will be missing data]", TerminalStatusKind.Error));
         // A profile whose set's name can't be a folder runs with no game data; say so
         // where the user looks, not only in the program log. The start-up profile was
@@ -1246,7 +1251,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.FollowModes.BlindNoticed += () =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
                 "[Follow mode is Blind: following prints no room, so the map can't track you as a "
-                + "follower — `set follow normal` turns the room displays back on]",
+                + "follower - `set follow normal` turns the room displays back on]",
                 TerminalStatusKind.Notice));
 
         // Room-display + movement-refusal parsers feeding RoomTracker.
@@ -1919,7 +1924,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (ShowSplash) ShowSplash = false;
                 WriteTerminalStatus(
-                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} — please attach it to a bug report.]",
+                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} - please attach it to a bug report.]",
                     TerminalStatusKind.Error);
             });
         }
@@ -2173,8 +2178,14 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             }
             case "MovementStop":
-                row.IsActionEnabled = AppServices.Current.MovementControl.IsActive;
+            {
+                // Also with nothing moving, while Stop still has something to end: a
+                // walk's route being worked out or its cards up, a loop loaded to
+                // start. Pause keeps to running engines: there is nothing to hold then.
+                Game.Map.MovementController ctl = AppServices.Current.MovementControl;
+                row.IsActionEnabled = ctl.IsActive || ctl.HasStartPending;
                 break;
+            }
         }
     }
 
@@ -2309,7 +2320,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnEquipSlotBlocked(Game.Inventory.EquipmentManager.EquipBlock block)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus(
-                $"[{block.ItemName} skipped, unable to wear — adjust set to correct]",
+                $"[{block.ItemName} skipped, unable to wear - adjust set to correct]",
                 TerminalStatusKind.Notice));
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
@@ -2682,7 +2693,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Host) || Port <= 0)
         {
-            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS + DISPLAY, PICK ONE, AND SAVE.]",
+            WriteTerminalStatus("[NO BBS SELECTED - OPEN SETTINGS > BBS + DISPLAY, PICK ONE, AND SAVE.]",
                                 TerminalStatusKind.Error);
             AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
@@ -2922,8 +2933,8 @@ public partial class MainWindowViewModel : ObservableObject
             // flow rather than telling the user to quit manually.
             bool autoLogout = ResolveActiveBbs()?.ReconnectAfterCleanup ?? false;
             string banner = autoLogout
-                ? $"[CLEANUP WARNING — BBS GOES DOWN IN {warning.MinutesRemaining} MIN — WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
-                : $"[CLEANUP WARNING — BBS GOES DOWN IN {warning.MinutesRemaining} MIN — QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
+                ? $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
+                : $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
             WriteTerminalStatus(banner, TerminalStatusKind.Notice);
             AppServices.Current.Log.Warn("Cleanup",
                 $"Server announced shutdown in {warning.MinutesRemaining} minute(s) at {warning.ObservedAt.LocalDateTime:HH:mm:ss}.");
@@ -3105,7 +3116,7 @@ public partial class MainWindowViewModel : ObservableObject
         int minutes = (int)delay.TotalMinutes;
         int seconds = delay.Seconds;
         WriteTerminalStatus(
-            $"[AUTO-RECONNECT ARMED — DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
+            $"[AUTO-RECONNECT ARMED - DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
             TerminalStatusKind.Notice);
 
         StartReconnectCountdown(delay);
@@ -3152,27 +3163,24 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConnectionLabel));
     }
 
-    // Distinguish a server-side carrier drop from a TCP-keepalive timeout.
-    // The connection was alive; now the socket died. If keepalive was
-    // enabled on the active BBS AND the wire was silent for longer than
-    // the configured idle window before the drop, attribute to
-    // DisconnectCause.NoResponse; otherwise DisconnectCause.CarrierLost.
-    // The threshold gets a small grace (+5s) so a server that responded
-    // just before the idle window closes doesn't get mis-classified as
-    // silent.
-    private DisconnectCause ClassifyServerSideDrop()
+    // The last connection that ended without anyone asking, for the bug report.
+    private ConnectionLoss? _lastConnectionLoss;
+
+    // What became of the redial after an unasked-for drop, once the cleanup and
+    // reactive schedulers have had their turn. With the matching Reconnect-when
+    // tick box off the terminal says so, or the drop would read as nothing more
+    // than a client still waiting on the game.
+    private string ReconnectOutcome(ConnectionLoss loss)
     {
+        if (_cleanupReconnectCts is not null) return "armed";
         BbsProfile? bbs = ResolveActiveBbs();
-        int idle = bbs?.NoResponseTimeoutSeconds ?? 0;
-        if (idle <= 0) return DisconnectCause.CarrierLost;
-
-        DateTimeOffset lastRead = _telnet?.LastDataReceived ?? DateTimeOffset.MinValue;
-        if (lastRead == DateTimeOffset.MinValue) return DisconnectCause.NoResponse;
-
-        double silentSeconds = (DateTimeOffset.UtcNow - lastRead).TotalSeconds;
-        return silentSeconds >= idle + 5
-            ? DisconnectCause.NoResponse
-            : DisconnectCause.CarrierLost;
+        if (bbs is null) return "not armed: no active BBS";
+        bool triggerOn = loss.WentSilent ? bbs.ReconnectOnNoResponse : bbs.ReconnectOnCarrierLost;
+        if (triggerOn) return "not armed: the redial budget was used up";
+        WriteTerminalStatus(loss.NotReconnectingLine, TerminalStatusKind.Error);
+        AppServices.Current.Log.Info("Reconnect",
+            $"Not redialing: '{loss.Trigger}' is off for this BBS.");
+        return $"not armed: '{loss.Trigger}' is off";
     }
 
     // ----- Reactive auto-reconnect (carrier-lost / failed-connect / no-response) ------
@@ -3254,7 +3262,7 @@ public partial class MainWindowViewModel : ObservableObject
         // form so the terminal doesn't get spammed with the full text
         // ten times in a row.
         string bannerText = _reactiveReconnectCount == 1
-            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
+            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) - DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
             : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}{ofBudget} IN {FormatDelay(delay)}.]";
         WriteTerminalStatus(bannerText, TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
@@ -3296,7 +3304,7 @@ public partial class MainWindowViewModel : ObservableObject
         CancellationToken token = _cleanupReconnectCts.Token;
 
         WriteTerminalStatus(
-            $"[RELOG REQUESTED — DIALING BACK IN {FormatDelay(delay)}.]",
+            $"[RELOG REQUESTED - DIALING BACK IN {FormatDelay(delay)}.]",
             TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
             $"{reason} — reconnecting in {FormatDelay(delay)}.");
@@ -3530,8 +3538,9 @@ public partial class MainWindowViewModel : ObservableObject
         };
         client.Disconnected += () =>
         {
-            // Don't log here; DisconnectInternalAsync already did, and a
-            // server-initiated drop will fire this too.
+            // A drop we asked for was logged and announced by
+            // TearDownConnectionAsync; one we didn't is logged and announced below,
+            // once it has been told apart from the deliberate kinds.
             Dispatcher.UIThread.Post(() =>
             {
                 bool wasConnected = IsConnected;
@@ -3672,6 +3681,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // kind can't be left standing for the next.
                 SentExitCommand.Intent sentExit = AppServices.Current.SentExit.Consume();
                 string relogReason = "Remote @relog";
+                ConnectionLoss? unasked = null;
                 if (_userInitiatedDisconnect)
                 {
                     _userInitiatedDisconnect = false;
@@ -3702,7 +3712,14 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 else if (wasConnected)
                 {
-                    _lastDisconnectCause = ClassifyServerSideDrop();
+                    // Silence is judged against the idle window this connection
+                    // was opened with: a change in Settings applies from the next
+                    // connect, as the keepalive itself does.
+                    unasked = ConnectionLoss.Of(Host, Port, client.NoResponseTimeoutSeconds,
+                        client.LastDataReceived, client.EndedBecause, DateTimeOffset.Now);
+                    _lastDisconnectCause = unasked.WentSilent ? DisconnectCause.NoResponse : DisconnectCause.CarrierLost;
+                    AppServices.Current.Log.Warn("Telnet", unasked.LogLine);
+                    WriteTerminalStatus(unasked.TerminalLine, TerminalStatusKind.Error);
                     // An involuntary host-side drop must auto-enter on its
                     // reconnect. Clear any stale suppress-entry intent left by
                     // an earlier deliberate hangup so it can't carry across the
@@ -3766,6 +3783,7 @@ public partial class MainWindowViewModel : ObservableObject
                     TryScheduleCleanupReconnect();
                     if (_cleanupReconnectCts is null) TryScheduleReactiveReconnect();
                 }
+                if (unasked is not null) _lastConnectionLoss = unasked with { Reconnect = ReconnectOutcome(unasked) };
             });
         };
         // TelnetClient's Log event carries IAC negotiation trace lines;
@@ -3796,8 +3814,9 @@ public partial class MainWindowViewModel : ObservableObject
             _ => string.Empty,
         };
         string line = $"\r\n{sgr}{text}\x1b[0m\r\n";
-        byte[] bytes = System.Text.Encoding.Latin1.GetBytes(line);
-        Emulator.Feed(bytes);
+        // Notices come from all over the client and are written with dashes and
+        // arrows; the grid draws CP437, so Cp437.Encode turns those into ASCII.
+        Emulator.Feed(Cp437.Encode(line));
     }
 
     private void OnStatlineFlagChanged()
@@ -4184,7 +4203,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Info("Transfers", $"our own {e.Message.Trim()} went out on the broadcast channel, which is switched off on the Talk tab; nothing will be taken from it.");
             Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice(
-                "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
+                "[the broadcast channel is switched off for @commands: Settings > Talk > Disallow @commands from broadcast]"));
             return;
         }
         // Whose request it was. The client also sends these lines for other
@@ -4535,7 +4554,12 @@ public partial class MainWindowViewModel : ObservableObject
         BackscrollViewModel vm = new(
             Emulator, display.BackscrollWheelLines, display.FontFamily, display.FontSize);
         BackscrollWindow window = new() { DataContext = vm };
-        window.Closed += (_, _) => _backscroll = null;
+        IDisposable lines = AppServices.Current.ContentSizes.Track("backscroll", () => vm.Rows.Count);
+        window.Closed += (_, _) =>
+        {
+            lines.Dispose();
+            _backscroll = null;
+        };
         _backscroll = window;
         window.Show(main);
     }
@@ -4595,9 +4619,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        ConversationWindow window = new()
-        {
-            DataContext = new ConversationViewModel(
+        ConversationViewModel vm = new(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
                 text =>
@@ -4610,9 +4632,14 @@ public partial class MainWindowViewModel : ObservableObject
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
                 AppServices.Current.Profile,
-                AppServices.Current.Display),
+                AppServices.Current.Display);
+        ConversationWindow window = new() { DataContext = vm };
+        IDisposable rows = AppServices.Current.ContentSizes.Track("convo", () => vm.Rows.Count);
+        window.Closed += (_, _) =>
+        {
+            rows.Dispose();
+            _conversation = null;
         };
-        window.Closed += (_, _) => _conversation = null;
         _conversation = window;
         window.Show(main);
     }
@@ -5777,7 +5804,7 @@ public partial class MainWindowViewModel : ObservableObject
             // An empty / malformed MDB no longer swaps to a broken set — it fails here
             // with the reason (and the reader's catalog scan) in the Program Log.
             AppServices.Current.Log.Warn("MDB", result.Message);
-            WriteTerminalStatus("[MDB IMPORT FAILED — see Program Log]", TerminalStatusKind.Error);
+            WriteTerminalStatus("[MDB IMPORT FAILED - see Program Log]", TerminalStatusKind.Error);
         }
     }
 
@@ -5803,11 +5830,11 @@ public partial class MainWindowViewModel : ObservableObject
         // The "see Program Log" hint fires whenever the user has reason to dig
         // in — skipped tables OR a suspiciously small MDB (fewer game tables
         // than any MajorMUD export ships).
-        string tooFew = r.TablesFound < 9 ? " — UNEXPECTED TABLE COUNT" : string.Empty;
+        string tooFew = r.TablesFound < 9 ? " - UNEXPECTED TABLE COUNT" : string.Empty;
         bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9;
-        string logHint = needsLogPointer ? " — see Program Log" : string.Empty;
+        string logHint = needsLogPointer ? " - see Program Log" : string.Empty;
 
-        return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}, {entries} — {lairs}, {roomCommands}{tooFew}{logHint}]";
+        return $"[MDB IMPORT COMPLETE: {r.FolderName} - {tablesPart}, {entries} - {lairs}, {roomCommands}{tooFew}{logHint}]";
     }
 
     private static TerminalStatusKind TerminalStatusKindFor(MdbImportResult r)
@@ -5877,8 +5904,10 @@ public partial class MainWindowViewModel : ObservableObject
 
         ViewModels.Navigation.NavigationViewModel vm = new(AppServices.Current);
         Views.Navigation.NavigationWindow window = new() { DataContext = vm };
+        IDisposable rooms = AppServices.Current.ContentSizes.Track("map", () => vm.Layout?.CoordToRoom.Count ?? 0);
         window.Closed += (_, _) =>
         {
+            rooms.Dispose();
             if (window.DataContext is IDisposable d) d.Dispose();
             _navigationWindow = null;
         };
@@ -5980,7 +6009,8 @@ public partial class MainWindowViewModel : ObservableObject
     // loop staged (Manage dialog's Load) → run it straight away. Otherwise — idle
     // with nothing staged, OR already running a loop/goto — open the shared Manage
     // dialog on the Go To tab, so the user can pick or SWITCH destination by
-    // hitting Run on a different favourite / loop mid-run.
+    // hitting Run on a different favourite / loop mid-run. Backing out of the
+    // staged loop's route cards lets go of it, so the next Start opens the list.
     [RelayCommand]
     private void MovementStart()
     {
@@ -5993,7 +6023,8 @@ public partial class MainWindowViewModel : ObservableObject
         }
         if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged,
+                declined: () => s.LoopRunner.Unstage(staged, "the walk to it was called off at its route cards"));
             return;
         }
         OpenNavManager(startOnGotoTab: true);

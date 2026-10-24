@@ -258,6 +258,22 @@ public sealed class AppServices
     // Auto-collect logs is on.
     public PerformanceMonitor Performance { get; }
 
+    // What the open windows hold (Conversation rows, scrollback, map rooms,
+    // Backscroll lines) and the running counts of lines, renders and map redraws:
+    // the memory log, the bug report and the hang report all read them.
+    public ContentSizes ContentSizes { get; } = new();
+    public ActivityCounters Activity { get; } = new();
+
+    // Whose session a new log file's header names (LogFileHeader). Read on the
+    // log writers' own threads, as the hang report reads the same names, and from
+    // the first log entry on, before the profile and game data exist.
+    private LogFileHeader.Session HeaderSession() => new(
+        Profile?.CurrentProfileName ?? "(none loaded)",
+        Profile?.CurrentBbsName ?? "(none)",
+        // Before a set loads, its realm isn't known: ActiveRealm would answer Stock.
+        GameData?.ActiveSet is null ? "(not known)" : BugReportBuilder.RealmLabel(GameData.ActiveRealm),
+        GameData?.ActiveSet ?? "(none)");
+
     // Background memory hygiene: compacts the LOH once a game-data set settles
     // (reclaiming the startup JSON-parse fragmentation) and periodically returns
     // glibc's free native pages to the OS, so a loop-mode session running for days
@@ -985,7 +1001,11 @@ public sealed class AppServices
     // question asked of a client that appears stuck, and without it a consumer
     // has to infer a dropped session from the absence of log traffic — which
     // looks identical to a client that's simply quiet.
-    public sealed record ConnectionSnapshot(bool Connected, bool Connecting, bool ReconnectPending);
+    //
+    // LastLoss is the last drop nobody asked for (null if none this session):
+    // whether the client noticed a dead link, and what it did about it.
+    public sealed record ConnectionSnapshot(bool Connected, bool Connecting, bool ReconnectPending,
+        ConnectionLoss? LastLoss = null);
 
     private Func<ConnectionSnapshot>? _connectionProvider;
 
@@ -2686,6 +2706,8 @@ public sealed class AppServices
     // chips; our own state is owned by ConditionTracker, so without this our self
     // row never showed poison even though `par` and "You feel ill." did.
     public Game.Conditions.SelfAilmentChipResponder SelfAilmentChip { get; private set; } = null!;
+    // Our own latched blindness or hold dropped on outside proof that it is over.
+    public Game.Conditions.SelfAilmentProof SelfAilmentProofs { get; private set; } = null!;
 
     // Follower-disconnect pause bridge (leader side) — holds movement while a
     // dropped party follower is inside the reconnect grace window, so we don't
@@ -2945,7 +2967,7 @@ public sealed class AppServices
         // Tee the program log to disk, gated on AutoCollectLogs: the writer only
         // opens once the toggle turns on (applied from the profile below or
         // flipped from the Log pane), so a normal session leaves no file.
-        ProgramLog = new ProgramLogFile(Log, LogDiagnostics);
+        ProgramLog = new ProgramLogFile(Log, LogDiagnostics, session: HeaderSession);
         // ProcessExit, not the window's Closing: it also runs on an
         // Environment.Exit (the data-folder move's restart).
         AppDomain.CurrentDomain.ProcessExit += (_, _) => ProgramLog.Dispose();
@@ -2968,8 +2990,8 @@ public sealed class AppServices
         PathGuard.Refused += line => Log.Warn("Paths", line);
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
-        MemoryLog = new MemoryUsageLog(LogDiagnostics);
-        Performance = new PerformanceMonitor(LogDiagnostics);
+        Performance = new PerformanceMonitor(LogDiagnostics, HeaderSession);
+        MemoryLog = new MemoryUsageLog(LogDiagnostics, Performance, ContentSizes, Activity, HeaderSession);
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
@@ -3010,7 +3032,10 @@ public sealed class AppServices
                 ("Active game-data set", GameData.ActiveSet ?? "(none)"),
                 ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
                 ("Log to send with this", CrashReporter.LogToSend()),
-            ]);
+            ],
+            // Skia's caches are left out: the frozen UI thread may be inside Skia.
+            () => ProcessResources.Read(Performance.GcHandleCount, renderer: false)
+                .ReportLines(ContentSizes.Describe(), Activity.Read()));
         // Built ahead of every engine: each one's enable probe reads the master
         // switch, and a probe must never run before its target exists.
         AutoModeController = new Game.AutoModeController(Profile, Log);
@@ -4606,6 +4631,7 @@ public sealed class AppServices
         RoundDamage = new Game.Combat.RoundDamageTracker(
             Router, PlayerState, Log,
             shouldWriteTrace: () => LogDiagnostics.AutoCollectLogs,
+            traceSession: HeaderSession,
             // UI-thread one-shot, same as the door FSM's: ends a round once its lines go quiet.
             scheduleDelay: (delay, callback) =>
             {
@@ -5320,6 +5346,8 @@ public sealed class AppServices
         // AttachLineExtractor lands in MainWindowViewModel alongside the other
         // line consumers.
         Conditions = new Game.Conditions.ConditionTracker(Messages, Log);
+        // An ailment with no wear-off seen ends once its spell's time is up.
+        Conditions.AilmentSeconds = SelfAilmentSeconds;
         // Stock's `stat` lists each active effect as its bare applied line; the stat
         // screen around it is what marks it a readout, not a cast.
         Conditions.SetStatScreenProbe(() => Stats.InStatScreen);
@@ -6123,6 +6151,10 @@ public sealed class AppServices
         // engage — see SetMonsterCountWindow.
         CombatTracker.SetMonsterCountWindow(
             () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"));
+        // The Party tab's cap, as CombatManager applies it, so a party's tighter cap
+        // can't have the walker held for a room combat won't fight.
+        CombatTracker.SetPartyMonsterCap(() => Game.Combat.MonsterCountGate.PartyCap(
+            PartyState.IsInParty, ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party")));
 
         // "Kill all engaged" needs the tracker to know when we've committed to the
         // current room (its count met the engage window), so it can hold the walker
@@ -6552,14 +6584,15 @@ public sealed class AppServices
         // The sender is SendGameCommand, as QuestFlagProbe's is; the outbound tap +
         // line feed are wired in MainWindowViewModel. Cleared on profile / set swap so a new
         // character re-reads from scratch.
+        Game.Tokens.TokenUseLines tokenUseLines = new(Messages);
         Tokens = new Game.Tokens.TokenTracker(
             send: cmd => SendGameCommand(cmd),
             carried: () => Inventory.Snapshot.CarriedItems,
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             // Recognise the token use lines through the seeded token spell messages —
             // the wording lives in the Messages catalogue, not a second hardcoded regex.
-            matchSelfUse: MatchTokenSelfUse,
-            matchMemberDeparted: MatchTokenMemberDeparted,
+            matchSelfUse: tokenUseLines.OwnUse,
+            matchMemberDeparted: tokenUseLines.WitnessedUse,
             // Safety-release timer for the pre-token buff-pause window.
             schedule: (ms, action) =>
             {
@@ -6569,10 +6602,10 @@ public sealed class AppServices
             },
             log: Log);
         Profile.ProfileLoaded += _ => Tokens.Clear();
-        // A set swap changes which tokens exist, where they teleport, and their spell
-        // messages — clear the charge tracker AND drop the cached teleport map + use
-        // matchers so they re-read the new set.
-        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; _tokenUseMatchers = null; };
+        // A set swap changes which tokens exist and where they teleport — clear the
+        // charge tracker AND drop the cached teleport map so they re-read the new set.
+        // The use lines follow the catalogue by themselves (TokenUseLines).
+        GameData.ActiveSetChanged += _ => { Tokens.Clear(); _tokenTeleports = null; };
         // @token <name> — read-only remaining-charges report off the tracker.
         TokenQuery = new Game.Remote.TokenQueryHandler(RemoteCommands, Tokens);
 
@@ -8964,7 +8997,7 @@ public sealed class AppServices
         // round's between-round cast is free (LairEntryDebuffHold).
         LairDebuffHold = new Game.Map.LairEntryDebuffHold(
             MovementCoordinator,
-            slotUsed: () => CastDirector.BetweenRoundSlotUsed,
+            slotUsed: () => CastDirector.BetweenRoundSlotMayBeSpent,
             castDue: () => CastDirector.HasCastDue(),
             scheduleAfter: (delay, action) =>
             {
@@ -8984,17 +9017,26 @@ public sealed class AppServices
             fightRoom: () => CombatSuppressionVerdict().Room,
             // The loop's own "do not attack" / "only attack in lair rooms" alone: a
             // fight with a player reads as suppressed to the engage gates too, and is
-            // a fight all the same. A force-clear fights where the loop doesn't.
-            fightAnswered: () => !CombatSuppressionVerdict().Suppressed || Combat.ForceClearActive);
+            // a fight all the same. Nor is a room the combat engine passed over for
+            // the Min/Max monster window. A force-clear fights where the loop doesn't.
+            fightAnswered: () => Game.Map.LairEntryDebuffHold.FightIsAnswered(
+                CombatSuppressionVerdict().Suppressed, Combat.RoomSkippedForMonsterCount, Combat.ForceClearActive));
+        // No Min Monsters floor while the loop waits at a lair's door: the lone
+        // monster that wanders in there is fought (MonsterCountGate.Bounds).
+        Combat.SetLairDoorWaitProbe(() => LairDebuffHold.WaitingAtTheDoor);
+        CombatTracker.SetLairDoorWaitProbe(() => LairDebuffHold.WaitingAtTheDoor);
         // The room at the door is fought in while the loop stands there for mana
-        // (LoopCombatSuppression.LoopIsDriving), and nothing re-asks the engage gates
-        // when that starts: a monster already in the room would be left until its
-        // next swing. Posted: the hold says so from inside the loop's own step check.
-        LairDebuffHold.ManaWaitStarted += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        // (LoopCombatSuppression.LoopIsDriving), and under no Min floor from the
+        // moment it waits there at all, and nothing re-asks the engage gates when
+        // either starts: a monster already in the room would be left until its next
+        // swing. Posted: the hold says so from inside the loop's own step check.
+        void ReaskEngageGates() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             CombatTracker.OnAutoAttackChanged();
             RoomClassifier.ReemitCurrent();
         });
+        LairDebuffHold.ManaWaitStarted += ReaskEngageGates;
+        LairDebuffHold.DoorWaitStarted += ReaskEngageGates;
         CastDirector.SetLairEntryBuffHold(LairDebuffHold);
         CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
         // An engage with no debuff to cast first: the hold has nothing to keep the
@@ -9255,6 +9297,10 @@ public sealed class AppServices
         Walker.Event += LoopHandoff.OnWalkerEvent;
         LoopRunner.Event += LoopHandoff.OnLoopEvent;
         MovementControl.Stopping += () => LoopHandoff.Cancel("stopped");
+        // Route cards still up are for a walk the Stop ends before it began: they
+        // close without a pick, and the walk they were for is dropped
+        // (RoutePlanInFlight).
+        MovementControl.Stopping += ViewModels.Navigation.RouteChoicePrompt.CloseOpenCards;
         Profile.ProfileLoaded += _ => LoopHandoff.Cancel("another character was loaded");
         Profile.ProfileClosed += () => LoopHandoff.Cancel("the character was closed");
         // A pyramid climb or an asylum maze solve counts as navigation running: the
@@ -9613,13 +9659,8 @@ public sealed class AppServices
             LoopRunner.ReplanIfATollAheadIsClosed();
         };
 
-        // A held or knocked-down character can't walk and isn't dragged by a leader,
-        // so a move that lands proves a latched hold is stale (its wear-off line was
-        // missed). Without this the walker sits "Paused by: Held" and the hold cure
-        // re-casts every window for as long as the session lasts (report
-        // paradigm-20261003-161904).
-        RoomTracker.MoveConfirmed += () =>
-            Conditions.ClearFlag(Models.GameData.MessageFlags.MovementPrevented, "a move went through");
+        SelfAilmentProofs = new Game.Conditions.SelfAilmentProof(RoomTracker, Conditions, Router, CureCastMatchers,
+            ownName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
 
         // Same reasoning as the condition reset above, for the attack-spell
         // cascade and buff-duration tracking: death is a full server-side reset
@@ -10303,6 +10344,7 @@ public sealed class AppServices
         Walker.Event += PathItemGiveRouter.OnWalkEvent;
         Inventory.Changed += PathItemGiveRouter.OnInventoryChanged;
         Router.LineDispatched += line => PathItemGiveRouter.OnLine(line.Text);
+        Router.LineDispatched += _ => Activity.LineReceived();
         LoopRunner.SetPathItemDetourRoomProbe(() => PathItemGiveRouter.LastGiverRoom);
         LoopRunner.SetGatedApproachFetch(LoopApproachFetch);
 
@@ -10506,6 +10548,19 @@ public sealed class AppServices
         // A token's textblock casts negate magic (#310) ahead of its teleport, which
         // takes a tracked hazard buff with everything else.
         Tokens.TokenUsed += place => AutoHazardCounterProvisioner.NoteNegateMagic($"token of {place}");
+        // Negate magic ends every buff and ailment on its user (user, 2026-10-23), a
+        // condition whose wear-off line never came among them: our conditions and
+        // buff timers go, and a member's who ports in front of us.
+        Tokens.TokenUsed += place =>
+        {
+            Conditions.ClearAll($"negate magic, token of {place}");
+            CastDirector.ClearSelfBuffTracking($"negate magic, token of {place}");
+        };
+        Tokens.MemberDeparted += name =>
+        {
+            CastDirector.ClearMemberBuffTimers(name, "used a token (negate magic)");
+            PartyAilment.ClearMember(name, "used a token (negate magic)");
+        };
         Tokens.TokenUsed += place =>
         {
             PartyComeback.NoteOwnTeleport();
@@ -11992,7 +12047,8 @@ public sealed class AppServices
                 standingForMana: LairDebuffHold is { WaitingForMana: true })
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
-            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);
+            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair,
+                waitingAtLairDoor: LairDebuffHold is { WaitingAtTheDoor: true });
         return (evalKey, suppressed, entering);
     }
 
@@ -12954,6 +13010,21 @@ public sealed class AppServices
         return chosen > 0 ? chosen * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
     }
 
+    // How long an ailment on us can last at most (AilmentDuration); null when no
+    // spell of it has a duration, and ConditionTracker falls back on the party
+    // chips' cap.
+    private double? SelfAilmentSeconds(Models.GameData.MessageRecord record) =>
+        Game.Conditions.AilmentDuration.LongestSeconds(record, SpellFormulaFor, HighestMonsterCastLevel);
+
+    // The highest level a monster of the set casts the spell at, 0 for none.
+    private int HighestMonsterCastLevel(int spellNumber)
+    {
+        int highest = 0;
+        foreach (Game.Combat.MonsterCatalogEntry entry in MonsterCatalog.All)
+            highest = Math.Max(highest, entry.CastLevelFor(spellNumber));
+        return highest;
+    }
+
     // Whether a witness line's caster capture is this room monster. The capture can
     // carry the article the template didn't swallow ("The kobold shaman").
     private static bool IsNamed(Game.Combat.RoomEntity e, string? source)
@@ -12966,45 +13037,12 @@ public sealed class AppServices
             || s.Equals(e.RawName, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Cure-confirmation matchers for the party ailment tracker's chip-clear path.
-    // Built from game data (CureSpellIndex), NOT the local character's configured
-    // cure slots: a party-mate cures with their own class's spells, which the local
-    // character may never learn, so keying recognition on local config missed every
-    // cross-caster cure (a Priest's cure poison never cleared the member's chip
-    // until the next `par`). Each cure spell's CasterMessage (our cast) and
-    // WitnessMessage (another member's cast seen in the room) compile to matchers
-    // that pin the spell name + target, so a cure landing on a member clears that
-    // member's chip. Cached; dropped on a game-data set swap or a Messages edit, so
-    // either takes effect.
-    private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
-    {
-        if (_cureMatchers is { } cached) return cached;
-
-        List<Game.Conditions.CureCastMatcher> list = new();
-        foreach (Game.GameData.CureSpellIndex.CureSpell cure in _cureSpells.AllCures())
-        {
-            Models.GameData.MessageRecord? rec = FindSpellMessage(cure.Number, cure.Name);
-            if (rec is null) continue;
-            // Needs a caster matcher that pins {spellname}+{target}; a record whose
-            // cast line has no placeholder (a bare NPC-healer variant) is skipped.
-            if (Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage) is not { } caster) continue;
-            Game.Spells.CasterMessageMatcher? witness =
-                Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage);
-            foreach (Models.GameData.MessageFlags ailment in CuredAilmentBits(cure.Cures))
-                list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness));
-        }
-        return _cureMatchers = list;
-    }
-
-    // Split a spell's combined cured-flags value into the individual ailment bits the
-    // tracker clears — a heal+cure removes several at once, each its own matcher.
-    private static IEnumerable<Models.GameData.MessageFlags> CuredAilmentBits(Models.GameData.MessageFlags cured)
-    {
-        if ((cured & Models.GameData.MessageFlags.Poisoned) != 0) yield return Models.GameData.MessageFlags.Poisoned;
-        if ((cured & Models.GameData.MessageFlags.Diseased) != 0) yield return Models.GameData.MessageFlags.Diseased;
-        if ((cured & Models.GameData.MessageFlags.Blinded) != 0) yield return Models.GameData.MessageFlags.Blinded;
-        if ((cured & Models.GameData.MessageFlags.MovementPrevented) != 0) yield return Models.GameData.MessageFlags.MovementPrevented;
-    }
+    // Cure-confirmation matchers for the party ailment tracker's chip-clear path and
+    // our own blindness (SelfAilmentProof), built by CureCastMatcherBuilder from the
+    // game data. Cached; dropped on a game-data set swap or a Messages edit, so either
+    // takes effect.
+    private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers() =>
+        _cureMatchers ??= Game.Conditions.CureCastMatcherBuilder.Build(_cureSpells.AllCures(), FindSpellMessage);
 
     // Spell numbers that APPLY disease — the Diseased-flagged message records'
     // linked spells. Disease has no ability code of its own, so this is how a
@@ -14557,9 +14595,13 @@ public sealed class AppServices
         if (DeterministicGiveExists(itemId)) return null;   // give preempts the buy
         System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(itemId);
         if (shops.Count == 0) return null;
+        // Under the gates DetourDistance stands down, so the floors bound its answers.
+        Game.Map.RouteFloors floors;
+        using (Movement.SuspendAcquirableGatesExceptUnprotectable(closedGates ?? Array.Empty<int>()))
+            floors = Game.Map.RouteFloors.Via(Bfs, source, destination, shops, Movement);
         if (!Game.Map.PathItemShopRouter.TrySelectShop(
                 shops, source, destination, (a, b) => GiveSources.DetourDistance(a, b, closedGates),
-                out Game.Map.RoomKey shop))
+                out Game.Map.RoomKey shop, floors))
             return null;
         return RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName
             ? PathItemBuyPhrase(itemId, shop, shopName)
@@ -14598,46 +14640,6 @@ public sealed class AppServices
 
     private System.Collections.Generic.IReadOnlyDictionary<string, Game.Tokens.TokenTeleportInfo> TokenTeleportMap()
         => _tokenTeleports ??= Game.Tokens.TokenTeleportReader.ReadAll(GameData);
-
-    // Compiled matchers for the token spells' seeded messages, so the token use lines
-    // are recognised from the Messages catalogue (single source of the wording) rather
-    // than a hardcoded regex. One per token record (Name "token of <place>"): the
-    // CasterMessage (self-use → place) and the WitnessMessage (someone else's use →
-    // the {source} actor name). Built once, dropped on a set swap.
-    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)>? _tokenUseMatchers;
-
-    private System.Collections.Generic.List<(string Place, Game.Spells.CasterMessageMatcher Caster, Game.Spells.CasterMessageMatcher Witness)> TokenUseMatchers()
-    {
-        if (_tokenUseMatchers is { } cached) return cached;
-        var list = new System.Collections.Generic.List<(string, Game.Spells.CasterMessageMatcher, Game.Spells.CasterMessageMatcher)>();
-        foreach (Models.GameData.MessageRecord r in Messages.Messages)
-        {
-            if (Game.Tokens.TokenCatalog.PlaceOf(r.Name) is not { } place) continue;
-            if (Game.Spells.CasterMessageMatcher.TryCreate(r.CasterMessage) is not { } caster) continue;
-            if (Game.Spells.CasterMessageMatcher.TryCreate(r.WitnessMessage) is not { } witness) continue;
-            list.Add((place, caster, witness));
-        }
-        _tokenUseMatchers = list;
-        return list;
-    }
-
-    // A token self-use line → its place (via the CasterMessage), or null.
-    private string? MatchTokenSelfUse(string line)
-    {
-        foreach ((string place, Game.Spells.CasterMessageMatcher caster, _) in TokenUseMatchers())
-            if (caster.TryMatch(line, out _)) return place;
-        return null;
-    }
-
-    // Someone else's token use line → the actor's name (the WitnessMessage's {source}
-    // capture), or null.
-    private string? MatchTokenMemberDeparted(string line)
-    {
-        foreach ((_, _, Game.Spells.CasterMessageMatcher witness) in TokenUseMatchers())
-            if (witness.TryMatch(line, out System.Collections.Generic.IReadOnlyList<string> caps) && caps.Count > 0)
-                return caps[0];
-        return null;
-    }
 
     // Plan a token route for a user walk-to (Paradigm only): if a held transport token
     // reaches the destination enough rooms sooner than walking, return a Token
@@ -14913,16 +14915,17 @@ public sealed class AppServices
         long cost = 0;
         Game.Map.RoomKey? nearestShop = null;
         int? nearestDist = null;
-        foreach ((int itemId, Game.Map.RoomKey shopRoom) in buys)
-        {
-            cost += PathItemBuyCost(itemId, shopRoom) ?? 0;
-            int? d = Bfs.DistanceBetween(source, shopRoom, Movement);
-            if (nearestShop is null || (d is { } dd && (nearestDist is null || dd < nearestDist)))
+        using (Performance.Measure("route card: buy cost and nearest shop"))
+            foreach ((int itemId, Game.Map.RoomKey shopRoom) in buys)
             {
-                nearestShop = shopRoom;
-                nearestDist = d;
+                cost += PathItemBuyCost(itemId, shopRoom) ?? 0;
+                int? d = Bfs.DistanceBetween(source, shopRoom, Movement);
+                if (nearestShop is null || (d is { } dd && (nearestDist is null || dd < nearestDist)))
+                {
+                    nearestShop = shopRoom;
+                    nearestDist = d;
+                }
             }
-        }
 
         // Cash on hand is live (parsed inventory — no round-trip). If it already
         // covers the buy, there's nothing to look up: skip the `bank` query AND the
@@ -15610,14 +15613,18 @@ public sealed class AppServices
     // consent, so it offers a counter the run can source whether or not it's
     // flagged AutoObtainForPath. Returns the chosen counter id + a source phrase,
     // or null when none is sourceable.
+    //
+    // onFloor: the counters lying on the floor here, read on the UI thread ahead of
+    // a resolution that runs off it (CountersOnFloor); null reads the floor here.
     public (int ItemId, string Source, bool OnFloor, Game.Map.RoomKey? ShopRoom)? ResolveHazardCounter(
-        IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination)
+        IReadOnlyList<int> counters, Game.Map.RoomKey source, Game.Map.RoomKey destination,
+        IReadOnlySet<int>? onFloor = null)
     {
         ArgumentNullException.ThrowIfNull(counters);
         // On the current floor — grabbed in place, so it never routes through the
         // detour pipeline (the caller issues a `get`); flagged OnFloor to say so.
         foreach (int id in counters)
-            if (IsItemOnFloor(id)) return (id, "grab from the floor here", true, null);
+            if (onFloor?.Contains(id) ?? IsItemOnFloor(id)) return (id, "grab from the floor here", true, null);
 
         // The destination is hazard-gated (that is WHY a counter is needed), so the
         // shop/give/drop round-trip THROUGH it is only reachable with the acquirable
@@ -15633,17 +15640,36 @@ public sealed class AppServices
                         (a, b) => Bfs.DistanceBetween(a, b, Movement), out Game.Map.GiveSource giver))
                     return (id, $"ask {giver.GiverName}", false, null);
 
-            int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b) => Bfs.DistanceBetween(a, b, Movement);
+            // Each answer once: a shop that sells several of the counters is asked
+            // about for each.
+            Dictionary<(Game.Map.RoomKey, Game.Map.RoomKey), int?> known = new();
+            int? Dist(Game.Map.RoomKey a, Game.Map.RoomKey b)
+            {
+                if (!known.TryGetValue((a, b), out int? d)) known[(a, b)] = d = Bfs.DistanceBetween(a, b, Movement);
+                return d;
+            }
+            // Floors by way of every shop that sells any of the counters, in two
+            // searches, so each counter's shop choice searches only from the shops
+            // that can still win (RouteFloors). Off the UI thread with the card when the
+            // walker is idle, its gate suspension its own thread's (MovementFilter).
+            Dictionary<int, System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>> shopsOf = new();
+            HashSet<Game.Map.RoomKey> everyShop = new();
+            foreach (int id in counters)
+                if (!shopsOf.ContainsKey(id))
+                    everyShop.UnionWith(shopsOf[id] = ShopRoomsSellingItem(id));
+            Game.Map.RouteFloors? floors = everyShop.Count == 0
+                ? null
+                : Game.Map.RouteFloors.Via(Bfs, source, destination, everyShop, Movement);
             // Among the counters buyable at a reachable shop, pick the CHEAPEST by
             // base Price (deterministic — a log raft over a river punt), not just the
             // first in the any-of list.
             (int Id, string ShopName, Game.Map.RoomKey Shop, int Price)? bestBuy = null;
             foreach (int id in counters)
             {
-                System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = ShopRoomsSellingItem(id);
+                System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> shops = shopsOf[id];
                 if (shops.Count == 0) continue;
                 if (Game.Map.PathItemShopRouter.TrySelectShop(
-                        shops, source, destination, Dist, out Game.Map.RoomKey shop)
+                        shops, source, destination, Dist, out Game.Map.RoomKey shop, floors)
                     && RoomGraph.GetRoom(shop)?.Name is { Length: > 0 } shopName)
                 {
                     int price = ItemNames.PriceOf(id) ?? int.MaxValue;
@@ -15783,6 +15809,16 @@ public sealed class AppServices
                         if (!items.Contains(id)) items.Add(id);
                     }
         return items;
+    }
+
+    // Which of these items lie on the floor here. The floor is the UI thread's.
+    public IReadOnlySet<int> CountersOnFloor(IEnumerable<int> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        HashSet<int> here = new();
+        foreach (int id in ids)
+            if (IsItemOnFloor(id)) here.Add(id);
+        return here;
     }
 
     // Is item `id` lying on the current room's floor? Matched by name against the

@@ -149,6 +149,8 @@ public sealed class CombatStateTracker : IDisposable
     // "Kill all engaged" below-floor override in IsWithinMonsterCountWindow. Null
     // (unwired) → false (no override; the Min floor behaves exactly as before).
     private Func<bool>? _roomCommitted;
+    private Func<int?>? _partyMonsterCap;
+    private Func<bool>? _waitingAtLairDoor;
 
     // Reports whether we're standing in a too-dark room (RoomTracker.IsInDarkRoom).
     // Gates the idle-stall watchdog's resync CR: a CR in the dark re-emits no
@@ -404,6 +406,23 @@ public sealed class CombatStateTracker : IDisposable
     {
         ArgumentNullException.ThrowIfNull(roomCommitted);
         _roomCommitted = roomCommitted;
+    }
+
+    // The Party tab's cap on the room's monsters while in a party
+    // (MonsterCountGate.PartyCap), as CombatManager reads it. Unwired: none.
+    public void SetPartyMonsterCap(Func<int?> partyCap)
+    {
+        ArgumentNullException.ThrowIfNull(partyCap);
+        _partyMonsterCap = partyCap;
+    }
+
+    // A loop stands at a lair's door waiting to go in
+    // (LairEntryDebuffHold.WaitingAtTheDoor): no Min floor there, as in
+    // CombatManager. Unwired: the floor always holds.
+    public void SetLairDoorWaitProbe(Func<bool> waitingAtLairDoor)
+    {
+        ArgumentNullException.ThrowIfNull(waitingAtLairDoor);
+        _waitingAtLairDoor = waitingAtLairDoor;
     }
 
     // Wire path for the break-before-run disengage. Bound at connect time (the
@@ -840,20 +859,18 @@ public sealed class CombatStateTracker : IDisposable
     // never disagree on whether a room is worth fighting — see
     // SetMonsterCountWindow. The window itself only applies while a movement
     // engine is actually attached (SetMovementActiveGate) — standing here idle
-    // with nowhere to go should fight regardless of population. Doesn't mirror
-    // the Party-tab MaxMonstersWhenPartying override CombatManager applies
-    // while partied (this tracker has no PartySettings reader); a partied cap
-    // tighter than the solo Combat-tab Max could still leave the two
-    // disagreeing in that one case. Unwired, not moving, or a misconfigured
-    // Min > Max, all fail open (every count passes — gate behaves exactly as
-    // before this fix).
+    // with nowhere to go should fight regardless of population. The bounds come
+    // from MonsterCountGate.Bounds as CombatManager's do: the Party-tab cap in a
+    // party (SetPartyMonsterCap) and no floor while a loop waits at a lair's door
+    // (SetLairDoorWaitProbe). Unwired, not moving, or a misconfigured Min > Max,
+    // all fail open (every count passes — gate behaves exactly as before this fix).
     private bool IsWithinMonsterCountWindow(int targetable)
     {
         if (_readSettings is null) return true;
         if (!(_isMovementActive?.Invoke() ?? true)) return true;
         CombatSettings settings = _readSettings();
-        int min = Math.Max(0, settings.MinMonstersInRoom);
-        int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
+        (int min, int max) = MonsterCountGate.Bounds(settings, _partyMonsterCap?.Invoke(),
+            waitingAtLairDoor: _waitingAtLairDoor?.Invoke() == true);
         // Shared with CombatManager's own gate (MonsterCountGate) so the two can't
         // diverge. "Kill all engaged" holds the walker below the floor only while
         // we've committed to this room — finish the survivors instead of moving on.

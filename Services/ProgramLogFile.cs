@@ -53,6 +53,7 @@ public sealed class ProgramLogFile : IDisposable
     private readonly LogDiagnosticState _diagnostics;
     private readonly Func<string, TextWriter> _openFile;
     private readonly TimeSpan _retryDelay;
+    private readonly Func<LogFileHeader.Session>? _sessionNames;
     // A session start the full queue lets go of is no entry lost: the session's
     // file then opens with its first entry.
     private readonly LogEntryQueue<Item> _queue = new(QueueDepth, item => item.Entry is not null);
@@ -98,17 +99,21 @@ public sealed class ProgramLogFile : IDisposable
     [ThreadStatic] private static bool t_noting;
 
     // open: how the file is opened for appending. retryDelay: how long the pump
-    // waits after a failed write before it opens the file again.
+    // waits after a failed write before it opens the file again. session: whose
+    // session each new file's header names, read on the pump's thread as the
+    // file opens.
     public ProgramLogFile(
         LogService log,
         LogDiagnosticState diagnostics,
         Func<string, TextWriter>? open = null,
-        TimeSpan? retryDelay = null)
+        TimeSpan? retryDelay = null,
+        Func<LogFileHeader.Session>? session = null)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _openFile = open ?? OpenAppending;
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
+        _sessionNames = session;
         // Not awaited by anyone: the pump catches whatever its writes throw and
         // ends only when the queue is completed.
         _ = Task.Run(PumpAsync);
@@ -263,10 +268,7 @@ public sealed class ProgramLogFile : IDisposable
         _writer = _openFile(session.Path);
         _made = session;
         if (!_headerOnDisk)
-        {
-            WriteLine($"# MudPlay debug log — topic={Topic}");
-            WriteLine($"# started {session.Started:O}");
-        }
+            foreach (string line in LogFileHeader.Lines(Topic, session.Started, LogFileHeader.Read(_sessionNames))) WriteLine(line);
         if (_resumeLinePending && _failedWith is { } failure)
         {
             string lost = _maybeLost == 0 ? "" : $": up to {(_maybeLost == 1 ? "1 entry" : $"{_maybeLost} entries")} before this line may be missing";

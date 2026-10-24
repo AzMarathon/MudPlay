@@ -22,6 +22,7 @@ public sealed class TokenRouteCoordinatorTests
         public readonly List<RoomKey> Walked = new();
         public int Stops;
         public string? FailReason;
+        public readonly List<int> Delays = new();       // each scheduled callback's delay, in order
         private readonly List<Action> _scheduled = new();
         public readonly TokenRouteCoordinator Coord;
 
@@ -37,7 +38,7 @@ public sealed class TokenRouteCoordinatorTests
                 walkToDest: Walked.Add,
                 stopWalker: () => Stops++,
                 send: Sent.Add,
-                schedule: (_, a) => _scheduled.Add(a),
+                schedule: (ms, a) => { Delays.Add(ms); _scheduled.Add(a); },
                 log: null);
             Coord.RegroupFailed += r => FailReason = r;
         }
@@ -64,6 +65,24 @@ public sealed class TokenRouteCoordinatorTests
         h.Coord.OnRoomChanged(Landing);
         h.FireLast();            // post-land settle → resume
 
+        Assert.Equal(new[] { Dest }, h.Walked);
+        Assert.False(h.Coord.Active);
+    }
+
+    // The game prints the use line after the landing room's display, so the room is
+    // confirmed first: the walk resumes after the settle, not the landing timeout.
+    [Fact]
+    public void Solo_LandingConfirmedBeforeTheUseLine_ResumesWithoutTheLandingTimeout()
+    {
+        var h = new Harness();
+        Assert.True(h.Coord.TryBegin("Silvermere", Landing, Dest));
+
+        h.Coord.OnRoomChanged(Landing);
+        h.Coord.OnTokenUsed("Silvermere");
+
+        Assert.Equal(700, h.Delays[^1]);
+        Assert.DoesNotContain(8000, h.Delays);
+        h.FireLast();
         Assert.Equal(new[] { Dest }, h.Walked);
         Assert.False(h.Coord.Active);
     }

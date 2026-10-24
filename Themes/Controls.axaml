@@ -146,6 +146,16 @@
     <Style Selector="Button.ToolbarBtn.Danger:pointerover /template/ ContentPresenter">
         <Setter Property="TextElement.Foreground" Value="{StaticResource AccentRedBrush}"/>
     </Style>
+    <!-- A button that can't act now (Pause and Stop with nothing moving) is a faded
+         icon on the bar. The theme's disabled look fills it with a grey square, which
+         on this transparent bar read as lit: idle Pause and Stop looked engaged
+         (report paradigm-20261022-170426). -->
+    <Style Selector="Button.ToolbarBtn:disabled">
+        <Setter Property="Opacity" Value="0.35"/>
+    </Style>
+    <Style Selector="Button.ToolbarBtn:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
     <!-- A split toolbar button's ▾: a narrow strip beside the main button (below it
          on a vertical toolbar) that opens the button's related actions. -->
     <Style Selector="Button.ToolbarBtn.ToolbarArrow">

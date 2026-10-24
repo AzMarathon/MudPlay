@@ -153,7 +153,8 @@ public sealed record RouteChoice(
     // TrapAvoid choice's FreePath, or a Teleport choice's TrapAvoidPath. Zero when
     // it pays none.
     long TrapAvoidFareCopper = 0,
-    // For a route whose lever detour crosses the gates (EvaluateLeverDetour): the
+    // For a gated route with lever trips on it (EvaluateLeverDetour, whose trips
+    // cross the gates, or a gated route that needs trips off it, LeverTrips): the
     // walk already expanded, lever trips included. GatedPath is then the rooms that
     // walk passes, in order, with revisits, so re-expanding it would detour twice;
     // the step list is built from this instead. Null on every other choice.
@@ -304,13 +305,24 @@ public static class RouteChoicePlanner
             // required (report paradigm-20260913-100733).
             GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated);
             IReadOnlyList<RoomKey> soleKeys = BuildKeyPath(graph, source, gc.CommittedPath);
+            List<RouteRequirement> soleReqs = gc.Requirements;
+            IReadOnlyList<WalkStep>? soleWalk =
+                LeverTrips(bfs, filter, graph, source, destination, gc.CommittedPath, gc.ClosedGateItems);
+            if (soleWalk is not null)
+            {
+                // A lever no gate item gets the walk to: no card for a walk that
+                // would fail as it starts. The plain walk's failure names the lever.
+                if (!RemoteActionPathExpander.ReachesDestination(soleWalk, destination)) return null;
+                soleKeys = WalkedRooms(graph, filter, source, soleWalk, soleReqs);
+            }
             RouteChoice sole = new(
-                0, gc.CommittedPath.Count, gc.Requirements,
+                0, soleWalk is null ? gc.CommittedPath.Count : soleKeys.Count - 1, soleReqs,
                 Array.Empty<RoomKey>(),
                 soleKeys)
             {
                 ClosedGateItems = gc.ClosedGateItems.Count > 0 ? gc.ClosedGateItems : null,
                 UnprotectedRoomNames = ClosedRoomsOn(filter, graph, soleKeys),
+                GatedWalk = soleWalk,
             };
             if (gc.ShortcutPath is { } scp)
                 sole = sole with
@@ -342,12 +354,23 @@ public static class RouteChoicePlanner
             return null;
 
         IReadOnlyList<RoomKey> gatedKeys = BuildKeyPath(graph, source, gated);
+        IReadOnlyList<WalkStep>? gatedWalk =
+            LeverTrips(bfs, filter, graph, source, destination, gated, Array.Empty<int>());
+        if (gatedWalk is not null)
+        {
+            // A shortcut whose lever trips can't be walked, or make it no shorter,
+            // is no shortcut: the free route is walked as it stands.
+            if (!RemoteActionPathExpander.ReachesDestination(gatedWalk, destination)) return null;
+            gatedKeys = WalkedRooms(graph, filter, source, gatedWalk, reqs);
+            if (gatedKeys.Count - 1 >= free.Count) return null;
+        }
         return new RouteChoice(
-            free.Count, gated.Count, reqs,
+            free.Count, gatedWalk is null ? gated.Count : gatedKeys.Count - 1, reqs,
             BuildKeyPath(graph, source, free),
             gatedKeys)
         {
             UnprotectedRoomNames = ClosedRoomsOn(filter, graph, gatedKeys),
+            GatedWalk = gatedWalk,
         };
     }
 
@@ -391,8 +414,25 @@ public static class RouteChoicePlanner
 
         // Gating is live again: every hop of the walk the filter blocks is a gate
         // the lever trips cross.
-        var keys = new List<RoomKey> { source };
         var reqs = new List<RouteRequirement>();
+        IReadOnlyList<RoomKey> keys = WalkedRooms(graph, filter, source, walk, reqs);
+        if (reqs.Count == 0) return null;
+
+        return new RouteChoice(0, keys.Count - 1, reqs, Array.Empty<RoomKey>(), keys)
+        {
+            GatedWalk = walk,
+            UnprotectedRoomNames = ClosedRoomsOn(filter, graph, keys),
+        };
+    }
+
+    // The rooms a walk passes, in order and with revisits, source first. Every hop
+    // of it the live filter blocks is added to reqs as the gate it is, so call it
+    // with gating live.
+    private static IReadOnlyList<RoomKey> WalkedRooms(
+        RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<WalkStep> walk,
+        List<RouteRequirement> reqs)
+    {
+        var keys = new List<RoomKey> { source };
         RoomKey cur = source;
         foreach (WalkStep step in walk)
         {
@@ -406,13 +446,31 @@ public static class RouteChoicePlanner
             cur = move.ExpectedTarget;
             keys.Add(cur);
         }
-        if (reqs.Count == 0) return null;
+        return keys;
+    }
 
-        return new RouteChoice(0, keys.Count - 1, reqs, Array.Empty<RoomKey>(), keys)
-        {
-            GatedWalk = walk,
-            UnprotectedRoomNames = ClosedRoomsOn(filter, graph, keys),
-        };
+    // A gated route with an exit on it that opens from other rooms walks to them and
+    // back, and the card has to show those rooms too: the hazard rooms on the route a
+    // card shows are the ones its pick agrees to walk into, and no other is opened to
+    // the walk (AutoWalkManager.WalkTo's agreedHazardRooms). A lever trip through a
+    // hazard room off the route itself had the walk fail the moment it was picked
+    // (report paradigm-20261021-135647: the temple's water-main wheels sit past
+    // flooded passages the route to the sanctum doesn't cross). Planned under the
+    // gates the route was planned under, closedGates kept shut. Null when no exit on
+    // the route needs a trip; otherwise the walk, which falls short of destination
+    // when a trip can't be routed even so.
+    private static IReadOnlyList<WalkStep>? LeverTrips(
+        BfsMapper bfs, MovementFilter filter, RoomGraphManager graph,
+        RoomKey source, RoomKey destination, IReadOnlyList<Direction> route, IReadOnlyCollection<int> closedGates)
+    {
+        IReadOnlyList<WalkStep> walk;
+        using (filter.SuspendAcquirableGatesExceptUnprotectable(closedGates))
+            walk = RemoteActionPathExpander.Expand(graph, source, route, bfs, filter);
+        // Moves only: a trip off the route is rooms walked, and the walk's other steps
+        // are none.
+        bool asPlanned = walk.Count(static s => s is MoveStep) == route.Count
+            && RemoteActionPathExpander.ReachesDestination(walk, destination);
+        return asPlanned ? null : walk;
     }
 
     // Compares the shortest route (teleport hops allowed — BFS treats an item /
