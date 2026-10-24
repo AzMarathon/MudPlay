@@ -2521,7 +2521,7 @@ public sealed partial class CombatManager : IDisposable
         EngageableCandidate? manaHoldFallback = null;
         foreach (EngageableCandidate cand in ordered)
         {
-            EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName);
+            EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName, cand.RawName);
             // Held for a fire-regardless spell's cost: engaged once nothing here can
             // be acted on now, so a monster we can hurt this round goes first.
             if (verdict.Assessment == EngageAssessment.HeldForMana)
@@ -3491,7 +3491,7 @@ public sealed partial class CombatManager : IDisposable
         {
             // Failback: only follow onto their target if WE can engage it.
             int annNumber = ResolveMonsterNumber(liveObs, announcedTarget);
-            if (JudgeEngage(settings, annNumber, ResolveSpeciesByName(announcedTarget)) is
+            if (JudgeEngage(settings, annNumber, ResolveSpeciesByName(announcedTarget), announcedTarget) is
                 { Assessment: EngageAssessment.Unkillable, Why: var annReason })
             {
                 _log?.Combat(LogCategory,

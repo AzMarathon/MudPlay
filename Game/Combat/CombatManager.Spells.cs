@@ -891,7 +891,7 @@ public sealed partial class CombatManager
 
         if (_classifier.Current is not { } obs)
         {
-            _castingSpellTarget = null;
+            LeaveSpellMode();
             return;
         }
 
@@ -901,7 +901,7 @@ public sealed partial class CombatManager
         // re-decides cleanly.
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
         {
-            _castingSpellTarget = null;
+            LeaveSpellMode();
             return;
         }
 
@@ -910,7 +910,7 @@ public sealed partial class CombatManager
         // otherwise burn the round before clearing it).
         if (!TargetPresent(obs, target))
         {
-            _castingSpellTarget = null;
+            LeaveSpellMode();
             return;
         }
 
@@ -1130,6 +1130,9 @@ public sealed partial class CombatManager
             }
             if (TryBuildCandidate(obs, target) is { } cand)
             {
+                // A switch off the spells onto the weapon, for a monster the weapon
+                // can't hurt, is a swing that can't land: give it up instead.
+                if (to is null && GaveUpUnengageable(settings, cand)) return;
                 LogSpellReannounce(reason, from, to, target, obs);
                 DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
             }
@@ -1792,13 +1795,20 @@ public sealed partial class CombatManager
         && (!AlternateSideConfigured(settings)
             || AttackSideOut(settings, alternate: true, resolvedSpecies, monsterNumber, out _));
 
-    // An alternate side is in play when it has a weapon of its own, or its command
-    // is a spell (cast, so it needs no weapon). A plain alternate command with no
-    // alternate weapon swings the normal weapon, so it adds nothing.
-    private bool AlternateSideConfigured(CombatSettings settings) =>
+    // An alternate side is in play when it has a weapon of its own, or a command of
+    // its own: a swing after a spell command (`harm`, then `attack`), a strike, or a
+    // spell after a swing are different attacks even on the same weapon.
+    private static bool AlternateSideConfigured(CombatSettings settings) =>
         !string.IsNullOrWhiteSpace(settings.AlternateWeapon)
-        || (SpellCommandCode(settings.AlternateAttackCommand) is { } alt
-            && !string.Equals(alt, SpellCommandCode(settings.NormalAttackCommand), StringComparison.OrdinalIgnoreCase));
+        || (!string.IsNullOrWhiteSpace(settings.AlternateAttackCommand)
+            && !string.Equals(settings.AlternateAttackCommand.Trim(), settings.NormalAttackCommand?.Trim(),
+                StringComparison.OrdinalIgnoreCase));
+
+    // The command a side attacks with: the alternate's own, or on the normal side a
+    // per-monster physical override ahead of the configured command.
+    private string? SideCommand(CombatSettings settings, bool alternate, int monsterNumber) =>
+        (alternate ? settings.AlternateAttackCommand
+            : PhysicalCommandOverrideFor(monsterNumber) ?? settings.NormalAttackCommand)?.Trim();
 
     // One attack side is out against this monster: the room fail-set names its
     // species, or AttackSideCanHurt proves it can't. why says which, for the log.
@@ -1808,7 +1818,7 @@ public sealed partial class CombatManager
         HashSet<string> failSet = alternate ? _alternateWeaponFailedMonsters : _normalWeaponFailedMonsters;
         if (!string.IsNullOrEmpty(resolvedSpecies) && failSet.Contains(resolvedSpecies))
         {
-            why = $"{SideLabel(settings, alternate)} drew \"no effect\" on it this room";
+            why = $"{SideLabel(settings, alternate, monsterNumber)} drew \"no effect\" on it this room";
             return true;
         }
         return AttackSideCanHurt(settings, alternate, monsterNumber, out why) == false;
@@ -1823,8 +1833,9 @@ public sealed partial class CombatManager
     // "Weapons: "no effect" lines and the magical-weapon requirement".
     private bool? AttackSideCanHurt(CombatSettings settings, bool alternate, int monsterNumber, out string why)
     {
-        string label = SideLabel(settings, alternate);
-        if (SpellCommandCode(alternate ? settings.AlternateAttackCommand : settings.NormalAttackCommand) is { } spell)
+        string? command = SideCommand(settings, alternate, monsterNumber);
+        string label = SideLabel(settings, alternate, monsterNumber);
+        if (SpellCommandCode(command) is { } spell)
         {
             bool lands = SpellCanHurt(spell, monsterNumber, out string? block);
             why = lands ? $"{label} is a spell that can hurt it" : $"{label} is a spell that can't hurt it ({block})";
@@ -1841,7 +1852,7 @@ public sealed partial class CombatManager
             why = $"{label}: it needs no magic to hit";
             return true;
         }
-        int hit = alternate ? AlternateHitMagic(settings) : NormalHitMagic(settings);
+        int hit = AttackHitMagic(command, alternate ? AlternateWeaponHitMagic(settings) : NormalWeaponHitMagic(settings));
         if (hit < 0)
         {
             why = $"{label}: hit magic unknown, assumed to hurt it (it needs {magical})";
@@ -1852,25 +1863,30 @@ public sealed partial class CombatManager
     }
 
     // "normal attack `a` with katana": the side as the log names it.
-    private string SideLabel(CombatSettings settings, bool alternate)
+    private string SideLabel(CombatSettings settings, bool alternate, int monsterNumber)
     {
-        string? command = (alternate ? settings.AlternateAttackCommand : settings.NormalAttackCommand)?.Trim();
+        string? command = SideCommand(settings, alternate, monsterNumber);
         string side = alternate ? "alternate" : "normal";
         if (SpellCommandCode(command) is not null) return $"{side} attack `{command}`";
         if (MartialArtsCommand.IsStrike(command)) return $"{side} attack `{command}` (a martial-arts strike)";
-        string? weapon = alternate ? settings.AlternateWeapon : settings.NormalWeapon;
+        // An alternate with no weapon of its own swings the normal one.
+        string? weapon = alternate && !string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            ? settings.AlternateWeapon : settings.NormalWeapon;
         return string.IsNullOrWhiteSpace(weapon)
             ? $"{side} attack `{command}` with no weapon set"
             : $"{side} attack `{command}` with {weapon.Trim()}";
     }
 
-    // The cast code an attack command names when its first word is one of the
-    // character's spells (the game casts by the code typed alone), else null: a
-    // swing.
+    // The cast code an attack command names when it is one of the character's
+    // spells, typed alone (`mmis`) or after `cast` / `c` (`cast mmis`), else null:
+    // a swing.
     private string? SpellCommandCode(string? command)
     {
         if (_resolveSpellByCode is null || string.IsNullOrWhiteSpace(command)) return null;
-        string word = command.Trim().Split(' ', 2)[0];
+        string[] words = command.Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        string word = words.Length > 1
+            && (words[0].Equals("cast", StringComparison.OrdinalIgnoreCase) || words[0].Equals("c", StringComparison.OrdinalIgnoreCase))
+            ? words[1] : words[0];
         return _resolveSpellByCode(word) is not null ? word : null;
     }
 
@@ -1944,7 +1960,14 @@ public sealed partial class CombatManager
 
     // The same for the alternate side: its weapon under its own attack command.
     private int AlternateHitMagic(CombatSettings settings) =>
-        AttackHitMagic(settings.AlternateAttackCommand, _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1);
+        AttackHitMagic(settings.AlternateAttackCommand, AlternateWeaponHitMagic(settings));
+
+    // The alternate's own weapon when it has one; without one the alternate command
+    // swings whatever the normal side does.
+    private int AlternateWeaponHitMagic(CombatSettings settings) =>
+        string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            ? NormalWeaponHitMagic(settings)
+            : _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
 
     // The magic-hit level an attack lands with, or -1 when unknown (callers fail
     // open). A class or race can carry hit magic of its own (a Mystic, a
@@ -2098,8 +2121,9 @@ public sealed partial class CombatManager
     // spell typed as the attack command) engages it. When neither can, a spell has
     // to: JudgeSpellEngage. Fails open at every unknown (indexes unwired, a weapon
     // or monster level unknown) so a thin data set never makes us skip a monster
-    // we could fight.
-    internal EngageVerdict JudgeEngage(CombatSettings settings, int monsterNumber, string? species)
+    // we could fight. rawName names the instance when the caller has it, so its own
+    // cast counts are the ones read (two of a species are two targets).
+    internal EngageVerdict JudgeEngage(CombatSettings settings, int monsterNumber, string? species, string? rawName = null)
     {
         species ??= _speciesByNumber.GetValueOrDefault(monsterNumber) ?? string.Empty;
 
@@ -2112,10 +2136,10 @@ public sealed partial class CombatManager
                 return new EngageVerdict(EngageAssessment.CanAct, alternate);
             sides += "; " + alternate;
         }
-        else sides += "; no alternate weapon";
+        else sides += "; no alternate attack";
 
         if (!CombatSpellsWired) return new EngageVerdict(EngageAssessment.Unkillable, sides + "; no combat spells");
-        return JudgeSpellEngage(settings, monsterNumber, species, sides);
+        return JudgeSpellEngage(settings, monsterNumber, species, rawName, sides);
     }
 
     // No attack side can hurt it, so an attack spell has to. The chooser answers
@@ -2127,12 +2151,16 @@ public sealed partial class CombatManager
     // never fired at a lone monster because nothing else can hurt it (user,
     // 2026-10-23; GAME_MECHANICS "Weapons: "no effect" lines and the
     // magical-weapon requirement").
-    private EngageVerdict JudgeSpellEngage(CombatSettings settings, int monsterNumber, string species, string sides)
+    private EngageVerdict JudgeSpellEngage(
+        CombatSettings settings, int monsterNumber, string species, string? rawName, string sides)
     {
         RoomEntitiesObservation? obs = _classifier.Current;
-        bool current = _currentTarget is { } fighting && !string.IsNullOrEmpty(species)
-            && string.Equals(ResolveSpeciesByName(fighting), species, StringComparison.OrdinalIgnoreCase);
-        string target = current ? _currentTarget! : species;
+        // The monster being fought, by its instance name; asked by number alone (the
+        // walker gate), it's the one whose number the target resolves to.
+        bool current = _currentTarget is { } fighting && (rawName is not null
+            ? string.Equals(fighting, rawName, StringComparison.OrdinalIgnoreCase)
+            : monsterNumber >= 0 && obs is { } listed && ResolveMonsterNumber(listed, fighting) == monsterNumber);
+        string target = current ? _currentTarget! : rawName ?? species;
         int enemies = obs is { } room ? Math.Max(1, CountEngageable(room)) : 1;
         IReadOnlySet<CombatSpellAction>? cannotHurt = RoomAttacksThatCannotHurt(settings, monsterNumber);
 
@@ -2171,8 +2199,12 @@ public sealed partial class CombatManager
 
     private const int UnknownPoolMana = 1_000_000;
 
-    // The room-attack rungs whose spell can't hurt this monster: it still fires
-    // for the room, but it doesn't engage this one.
+    // The room-attack rungs whose spell can't hurt this monster, read as not
+    // engaging it. Inferred, not ruled on: a Paradigm room spell engages every
+    // monster in the room, and whether that holds for one it can't hurt is an open
+    // question in GAME_MECHANICS "Weapons: "no effect" lines and the magical-weapon
+    // requirement". This is the one place the exclusion is made; returning null
+    // here drops it.
     private IReadOnlySet<CombatSpellAction>? RoomAttacksThatCannotHurt(CombatSettings settings, int monsterNumber)
     {
         HashSet<CombatSpellAction>? set = null;
@@ -2203,6 +2235,20 @@ public sealed partial class CombatManager
     // The target the engine is holding on for a fire-regardless spell's cost, so
     // the hold is logged once per target and its cast logged when mana arrives.
     private string? _manaHoldTarget;
+
+    // Holding on the current target for a fire-regardless spell's cost. Nothing is
+    // sent meanwhile, so the walker gate's idle-stall watchdog must read the quiet
+    // as on purpose, or it would clear the fight and let the walk leave.
+    public bool IsHoldingForMana =>
+        _manaHoldTarget is { } held && string.Equals(held, _currentTarget, StringComparison.OrdinalIgnoreCase);
+
+    // The heartbeat lost the spell target (gone from the room, or no longer the
+    // one fought): spell mode ends, and any mana hold on it with it.
+    private void LeaveSpellMode()
+    {
+        _castingSpellTarget = null;
+        _manaHoldTarget = null;
+    }
 
     // Hold on a monster only a fire-regardless spell can hurt: send nothing (a
     // swing would only draw "no effect"), keep it as the target, and stay in spell
@@ -2418,7 +2464,28 @@ public sealed partial class CombatManager
         if (_castingSpellTarget is not { } target) return;
         if (_classifier.Current is not { } obs) return;
         if (!TargetPresent(obs, target)) return;
-        if (TryBuildCandidate(obs, target) is { } cand)
+        if (TryBuildCandidate(obs, target) is { } cand && !GaveUpUnengageable(settings, cand))
             DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
+    }
+
+    // A mid-fight re-decide on a target the cascade just lost something on (its
+    // only spell drew "no effect", the party broke up during a mana hold): when
+    // the engage verdict says nothing of ours can act on it now, the round's pick
+    // would be a swing that can't land. Give the target up instead, as the
+    // attack-command fallback does, and re-read the room to re-pick or move on.
+    // Only a write-off (Unkillable) is announced; a mana stall is retried.
+    private bool GaveUpUnengageable(CombatSettings settings, EngageableCandidate cand)
+    {
+        EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName, cand.RawName);
+        if (verdict.Assessment is EngageAssessment.CanAct or EngageAssessment.HeldForMana) return false;
+        if (verdict.Assessment == EngageAssessment.Unkillable)
+            AnnounceCannotAttack(cand.ResolvedName, verdict.Why);
+        else
+            _log?.Combat(LogCategory, $"leaving {cand.RawName} for now — {verdict.Assessment}: {verdict.Why}");
+        _castingSpellTarget = null;
+        _currentTarget = null;
+        _manaHoldTarget = null;
+        TrySendRoomRefresh($"nothing of ours can act on {cand.RawName} now — re-pick / move on");
+        return true;
     }
 }

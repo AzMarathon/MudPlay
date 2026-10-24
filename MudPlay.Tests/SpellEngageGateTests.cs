@@ -94,15 +94,21 @@ public sealed class SpellEngageGateTests
             Combat.SetWeaponActuator((_, _, _) => { }, readWornWeapon: () => WornWeapon);
             Combat.SetCarriedCheck(_ => true);
             Tracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
+            // As AppServices wires the gate's idle-stall watchdog: its resync CR goes
+            // out with the rest, and a mana hold is quiet on purpose.
+            Tracker.SetWireSender(b => Sent.Add(b));
+            Tracker.SetCombatHeldOnPurposeProbe(() => Combat.IsHoldingForMana);
 
             AddMonster(500, "bog wight");
             AddMonster(501, "marsh hag");
             AddMonster(502, "giant rat");
             AddMonster(503, "stone warden");
+            AddMonster(504, "acid slime");
+            AddMonster(505, "iron golem");
         }
 
-        // A katana with hit magic 3; monsters needing 4 (the rat needs none, the
-        // warden's spell immunity is 5); a Mage's magic missile (level 1, cost 3),
+        // A katana with hit magic 3; monsters needing 4 (the rat, slime and golem need
+        // none; the warden's and golem's spell immunity is 5); a Mage's magic missile (level 1, cost 3),
         // dancing blades (a room attack, cost 26) and turn undead (undead only).
         private static void WriteGameData(string dir)
         {
@@ -117,7 +123,9 @@ public sealed class SpellEngageGateTests
                 [ { "Number": 500, "Name": "bog wight", "Abil-0": 28, "AbilVal-0": 4 },
                   { "Number": 501, "Name": "marsh hag", "Abil-0": 28, "AbilVal-0": 4 },
                   { "Number": 502, "Name": "giant rat" },
-                  { "Number": 503, "Name": "stone warden", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 5 } ]
+                  { "Number": 503, "Name": "stone warden", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 5 },
+                  { "Number": 504, "Name": "acid slime" },
+                  { "Number": 505, "Name": "iron golem", "Abil-0": 139, "AbilVal-0": 5 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Spells.json"), """
                 [ { "Number": 1, "Name": "magic missile", "Short": "mmis", "ReqLevel": 1, "ManaCost": 3,
@@ -232,6 +240,57 @@ public sealed class SpellEngageGateTests
         Assert.False(h.WalkerHeld);
         Assert.Empty(h.AllSent);
         Assert.Contains("its level 1 is under the monster's spell immunity 5", h.CannotAttackLine);
+    }
+
+    // A spell attack command with a plain alternate (`mmis`, then `a`): the
+    // alternate swings the weapon, a different attack. A monster the spell can't
+    // touch but the weapon can is fought, never walked past. Where game data can't
+    // tell (the slime), `mmis` goes first and `a` follows its "no effect" (report
+    // paradigm-20260809-131642's fallback); where it can (the golem's spell
+    // immunity 5 is over mmis's level 1), `a` goes straight out.
+    [Fact]
+    public void SpellCommandWithAPlainAlternate_MonsterOnlyTheWeaponHurts_IsFoughtWithTheAlternate()
+    {
+        using Harness slime = new();
+        slime.WieldFromGearSet("katana");
+        slime.Settings.NormalAttackCommand = "mmis";
+        slime.Settings.AlternateAttackCommand = "a";
+        slime.Server.Line("Also here: acid slime.");
+        Assert.Equal(new[] { "mmis acid slime" }, slime.AllSent);
+
+        slime.Server.Line("Your spell has no effect on acid slime.");
+
+        Assert.Equal(new[] { "mmis acid slime", "a acid slime" }, slime.AllSent);
+        Assert.True(slime.Combat.CanEngageMonster(504));
+        Assert.True(slime.WalkerHeld);
+        Assert.Null(slime.CannotAttackLine);
+
+        using Harness golem = new();
+        golem.WieldFromGearSet("katana");
+        golem.Settings.NormalAttackCommand = "mmis";
+        golem.Settings.AlternateAttackCommand = "a";
+        golem.Server.Line("Also here: iron golem.");
+
+        Assert.Equal(new[] { "a iron golem" }, golem.AllSent);
+        Assert.True(golem.Combat.CanEngageMonster(505));
+        Assert.True(golem.WalkerHeld);
+        Assert.Null(golem.CannotAttackLine);
+    }
+
+    // A spell typed after `cast` or `c` is a spell command too.
+    [Theory]
+    [InlineData("cast mmis")]
+    [InlineData("c mmis")]
+    public void SpellCommandAfterCast_IsJudgedAsTheSpell(string command)
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackCommand = command;
+
+        h.Server.Line("Also here: bog wight.");
+
+        Assert.True(h.Combat.CanEngageMonster(500));
+        Assert.Equal(new[] { $"{command} bog wight" }, h.AllSent);
     }
 
     // A room attack is the only spell, and the room meets its Min enemies: cast bare.
@@ -369,6 +428,29 @@ public sealed class SpellEngageGateTests
         Assert.Null(h.Combat.ManaHoldTarget);
     }
 
+    // A mana hold sends nothing, so the room goes quiet. The walker gate's idle-stall
+    // watchdog reads that quiet as on purpose: no force-clear, no resync CR, the
+    // hold and the gate stay.
+    [Fact]
+    public void FireRegardlessOfMana_QuietHeldRoom_IsNotForceCleared()
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", FireRegardlessOfMana = true };
+        h.Ma = 1;
+        h.JoinParty();
+        h.Server.Line("Also here: bog wight.");
+        Assert.True(h.Combat.IsHoldingForMana);
+
+        h.Clock.Advance(TimeSpan.FromSeconds(7));
+        h.Tracker.OnCombatTick();
+
+        Assert.True(h.WalkerHeld);
+        Assert.True(h.Combat.IsHoldingForMana);
+        Assert.Equal("bog wight", h.Combat.CurrentTarget);
+        Assert.Empty(h.Sent);
+    }
+
     // A monster held for mana waits behind one we can hurt this round.
     [Fact]
     public void FireRegardlessOfMana_HeldMonster_GoesAfterOneWeCanHurtNow()
@@ -386,7 +468,8 @@ public sealed class SpellEngageGateTests
 
     // After an attack spell, `*Combat Engaged*` is what says we're engaged (and in
     // line for the kill's exp); a spell that drew "no effect" instead leaves us not
-    // engaged, and that spell is out for the monster.
+    // engaged, and that spell is out for the monster. With the weapon unable to hurt
+    // it either, nothing is swung at it: it's written off and the room re-read.
     [Fact]
     public void AttackSpellCast_OnlyCombatEngagedCountsAsEngaged()
     {
@@ -406,5 +489,9 @@ public sealed class SpellEngageGateTests
         refused.Server.Line("Your spell has no effect on bog wight.");
         Assert.False(refused.Combat.EngagedSinceLastAttack);
         Assert.False(refused.Combat.CanEngageMonster(500));
+        // The cast, then only the room re-display: no swing of the katana.
+        Assert.Equal(new[] { "mmis bog wight", "" }, refused.AllSent);
+        Assert.Null(refused.Combat.CurrentTarget);
+        Assert.Contains("attack spell mmis: drew \"no effect\" on this monster this room", refused.CannotAttackLine);
     }
 }
