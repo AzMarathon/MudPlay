@@ -670,7 +670,9 @@ public static class AppPaths
     // next to the executable under Defaults/nav-seed/{realm}/ — a Loops/ tree of
     // .loop files plus a Favorites.json. NavSeedBootstrapper copies these into a
     // freshly-imported set of the matching realm so it arrives pre-populated with
-    // base navigation loops + GOTO favourites. Additive + once-only.
+    // base navigation loops + GOTO favourites. Additive + once-only. Beside them,
+    // LoopRevisions.json and FavoriteCorrections.json are read, not copied: they
+    // say which shipped loops and GOTOs were later corrected.
     public static string BundledNavSeedDir(string realm) =>
         Path.Combine(BundledSeedsDir, "nav-seed", realm);
 

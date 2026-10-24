@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.46
+
+- Four starter GOTOs pointing at the wrong map corrected, existing favourites fixed on update
+
 ## 3.185.45
 
 - Settings → Spells + Ailments gains "Cast when HP full" and "Cast when mana full": any spell, cast once each time the pool refills
