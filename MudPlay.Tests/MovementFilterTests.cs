@@ -1125,6 +1125,47 @@ public sealed class MovementFilterTests
         Assert.True(filter.IsExitBlocked(raft));       // restored after
     }
 
+    // The route picker plans on a worker while the UI thread plans walks of its own
+    // on the same filter: a suspension is the thread's own, so the other thread's
+    // gates stay as they are, and its scope ending shuts nothing under the planner.
+    [Fact]
+    public void SuspendAcquirableGates_IsTheSuspendingThreadsOwn()
+    {
+        (_, MovementFilter filter) = NewPair();
+        SetInventory(filter);   // lacking the raft
+        RoomExit raft = ItemExit(5);
+
+        bool blockedElsewhere = false;
+        using (filter.SuspendAcquirableGates())
+        {
+            System.Threading.Thread other = new(() => blockedElsewhere = filter.IsExitBlocked(raft));
+            other.Start();
+            other.Join();
+            Assert.False(filter.IsExitBlocked(raft));
+        }
+        Assert.True(blockedElsewhere);
+
+        // A worker mid-plan, and a scope opened and closed here meanwhile.
+        using System.Threading.ManualResetEventSlim suspended = new(), ended = new();
+        bool blockedForTheWorker = true;
+        System.Threading.Thread worker = new(() =>
+        {
+            using (filter.SuspendAcquirableGates())
+            {
+                suspended.Set();
+                ended.Wait();
+                blockedForTheWorker = filter.IsExitBlocked(raft);
+            }
+        });
+        worker.Start();
+        suspended.Wait();
+        Assert.True(filter.IsExitBlocked(raft));
+        using (filter.SuspendAcquirableGates()) { }
+        ended.Set();
+        worker.Join();
+        Assert.False(blockedForTheWorker);
+    }
+
     [Fact]
     public void SuspendAcquirableGates_LeavesLevelGateActive()
     {

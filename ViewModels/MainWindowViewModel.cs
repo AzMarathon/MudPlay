@@ -956,6 +956,7 @@ public partial class MainWindowViewModel : ObservableObject
         // buttons' visibility + Pause↔Resume label; re-apply row state on
         // every transition so the toolbar mirrors the running engine.
         AppServices.Current.MovementControl.StateChanged += OnMovementControlStateChanged;
+        AppServices.Current.MovementControl.StartPendingChanged += OnMovementControlStateChanged;
         // Name-learned prompt: fires when the tracker adopts a name
         // for a previously-unnamed room (typical of map-15 ganghouse
         // rooms in 1.x exports). Modeless yes/no asks whether to keep
@@ -2177,8 +2178,14 @@ public partial class MainWindowViewModel : ObservableObject
                 break;
             }
             case "MovementStop":
-                row.IsActionEnabled = AppServices.Current.MovementControl.IsActive;
+            {
+                // Also with nothing moving, while Stop still has something to end: a
+                // walk's route being worked out or its cards up, a loop loaded to
+                // start. Pause keeps to running engines: there is nothing to hold then.
+                Game.Map.MovementController ctl = AppServices.Current.MovementControl;
+                row.IsActionEnabled = ctl.IsActive || ctl.HasStartPending;
                 break;
+            }
         }
     }
 

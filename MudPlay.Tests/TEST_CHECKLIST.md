@@ -33,6 +33,11 @@ How to keep it current:
 - Checks: mana-floor defaults, label and percent/absolute conversion text; Ok clamps the floor and returns the conditions; the reroll box range for Stock and Paradigm, including negatives; draw-item outcome tick boxes; no-redraw decks.
 - Why: the buff slot dialog; Stock's no-redraw deck (user, 2026-10-02).
 
+### AilmentDurationTests.cs
+- Covers: Game/Conditions/AilmentDuration over the shipped Paradigm records and Spells rows read through GameDataCache and SpellFormulaReader (data-Paradigm-1.9.1 values for banish #435 and hypnotic hands #300)
+- Checks: a spell that doesn't grow lasts its base duration; a capped one what it reaches at its cap; an uncapped one what its highest-level monster caster makes it; a record with no spell in the data has none.
+- Why: an ailment with no wear-off is ended on this time, and ending it early would drop a real one (review of report `paradigm-20261022-164244`).
+
 ### AilmentSyncEngineTests.cs
 - Covers: Game/Conditions/AilmentSyncEngine (with ConditionTracker, PartyRestSync)
 - Checks: a bare `.@blind` / `.@held` say on apply and never an `off`; poison telepaths @wait without a say. Ignore<X> suppresses both say and wait, and a configured cure suppresses only the say. One @wait / @ok pair is held across several ailments. ReevaluateWaits reconciles when an Ignore is toggled. The say and wait are given again on re-following a leader.
@@ -276,7 +281,7 @@ How to keep it current:
 
 ### AutoWalkManagerPickedRouteTests.cs
 - Covers: Game/Map/AutoWalkManager journeys (WalkJourney, JourneyFetch, Game/Map/DetourResume, RouteChoicePlanner)
-- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand. A sole-route card whose lever trip crosses a hazard room off the route shows that room, and the walk its pick starts goes; agreeing to the route's own rooms alone fails at the lever.
+- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand. A sole-route card whose lever trip crosses a hazard room off the route shows that room, and the walk its pick starts goes; agreeing to the route's own rooms alone fails at the lever; a door on a sole route is no lever trip.
 - Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs), paradigm-20261021-135647 (the temple sanctum walk failed on its water-main lever trip right after the pick).
 
 ### AutoWalkManagerRoomCommandRefusalTests.cs
@@ -790,7 +795,7 @@ How to keep it current:
 
 ### ConditionExpiryTests.cs
 - Covers: Game/Conditions/ConditionTracker.AilmentSeconds, over the shipped Paradigm message seed
-- Checks: an ailment with no wear-off ends when its spell's time is up and the log says so; its applied line again starts the time over; with no duration in the data the party chips' 180 s cap applies; a buff is never ended this way.
+- Checks: an ailment with no wear-off ends when its spell's time is up and the log says so; its applied line again starts the time over; with no duration in the data the party chips' 180 s cap applies; a wear-off that comes leaves nothing to expire; a buff is never ended this way.
 - Why: report `paradigm-20261022-164244` (Confused held 23 minutes, the walk paused on it); Client policy, user 2026-10-23.
 
 ### ConditionTrackerTests.cs
@@ -2509,7 +2514,7 @@ How to keep it current:
 
 ### MovementControllerTests.cs
 - Covers: Game/Map/MovementController (+ AutoWalk, LoopRunner, AutoLair, Coordinator)
-- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers; the user's Stop unloads a loaded loop, the client's own full stop does not.
+- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers; the user's Stop unloads a loaded loop (the press that only holds an errand too), the client's own full stop does not; HasStartPending covers a route being planned and a loaded loop, and says when it changes.
 - Why: The @stop / Auto-All / errand regressions; report paradigm-20261022-170426 and the user's ruling of 2026-10-23 (Stop unloads the loaded loop).
 
 ### MovementCoordinatorTests.cs
@@ -2519,8 +2524,8 @@ How to keep it current:
 
 ### MovementFilterTests.cs
 - Covers: Services/MovementFilter (+ BfsMapper integration)
-- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend; route-scoped warm-ups.
-- Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354.
+- Checks: Avoided and stash sets with profile lifecycle; every exit gate (level, class, race, alignment, toll, fare, item, key and plain doors — a bare key lock known to be a key exit blocks without its key, one not known passes on the bash tried there —, hazards, boats); the acquirable-gate suspend, which is the suspending thread's own; route-scoped warm-ups.
+- Why: Routes around gates the party can't pass; stock-20260908-103628, paradigm-20261004-204354; the route card planning off the UI thread beside UI-thread walks (review of paradigm-20261021-135647).
 
 ### MovementRefusalDetectorTests.cs
 - Covers: Game/Map/MovementRefusalDetector
@@ -2694,7 +2699,7 @@ How to keep it current:
 
 ### PartyAilmentTrackerTests.cs
 - Covers: Game/Conditions/PartyAilmentTracker
-- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses; a member's token use (negate magic) clears every chip but the par-owned poison.
+- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses; a member's token use (negate magic) clears every chip but the par-owned poison, and a stranger's touches and logs nothing.
 - Why: Party ailment sync; the user's ruling of 2026-10-23 (negate magic ends every spell on its user).
 
 ### PartyBroadcasterTests.cs
@@ -4116,8 +4121,8 @@ How to keep it current:
 
 ### TokenRouteCoordinatorTests.cs
 - Covers: Game/Tokens/TokenRouteCoordinator
-- Checks: solo token use (clear room vs walk overland to a monster-free room, "the Lost City" article); party leader sends `.@party use token` first, retries by room check, and tokens LAST; follower declines; new walk / Cancel abandons; fail-out vs use-anyway when a member is stranded.
-- Why: a leader who tokens before the party strands members; a user retarget or Stop must not resume the old route.
+- Checks: solo token use (clear room vs walk overland to a monster-free room, "the Lost City" article); party leader sends `.@party use token` first, retries by room check, and tokens LAST; follower declines; new walk / Cancel abandons; fail-out vs use-anyway when a member is stranded; a landing confirmed before the use line resumes after the settle, not the landing timeout.
+- Why: a leader who tokens before the party strands members; a user retarget or Stop must not resume the old route; report paradigm-20261022-164244 (the use line prints after the landing room).
 
 ### TokenRouteEvaluatorTests.cs
 - Covers: Game/Tokens/TokenRouteEvaluator

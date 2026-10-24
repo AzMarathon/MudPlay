@@ -95,6 +95,20 @@ public sealed class ConditionExpiryTests : IDisposable
         Assert.False(_tracker.IsConfused);
     }
 
+    // A wear-off that does come ends it, and nothing expires afterwards.
+    [Fact]
+    public void AWearOffThatComes_LeavesNothingToExpire()
+    {
+        _tracker.AilmentSeconds = _ => 61;
+
+        At(0, "You are afflicted by teleportation sickness!");
+        At(30, "The teleportation sickness wears off.");
+        Assert.False(_tracker.IsConfused);
+        At(120);
+
+        Assert.DoesNotContain(_log.Snapshot(), e => e.Message.StartsWith("condition expired", StringComparison.Ordinal));
+    }
+
     // A buff is no ailment: its own timers end it, never this.
     [Fact]
     public void ABuff_IsNeverExpiredHere()

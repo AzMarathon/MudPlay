@@ -13009,24 +13009,19 @@ public sealed class AppServices
         return chosen > 0 ? chosen * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
     }
 
-    // How long an ailment on us can last, from the game data: the longest of its
-    // record's spells, at the cast level of a monster in the room that carries it
-    // (ResolveAilmentDurationSeconds) or at the spell's base duration. Clearing late
-    // is safe and early is not, so the longest wins. Null when no spell of it has
-    // a duration; ConditionTracker then falls back on the party chips' cap.
-    private double? SelfAilmentSeconds(Models.GameData.MessageRecord record)
+    // How long an ailment on us can last at most (AilmentDuration); null when no
+    // spell of it has a duration, and ConditionTracker falls back on the party
+    // chips' cap.
+    private double? SelfAilmentSeconds(Models.GameData.MessageRecord record) =>
+        Game.Conditions.AilmentDuration.LongestSeconds(record, SpellFormulaFor, HighestMonsterCastLevel);
+
+    // The highest level a monster of the set casts the spell at, 0 for none.
+    private int HighestMonsterCastLevel(int spellNumber)
     {
-        if (record.Links is not { } links) return null;
-        double? best = null;
-        foreach (Models.GameData.GameDataLink link in links)
-        {
-            if (!string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)) continue;
-            double secs = ResolveAilmentDurationSeconds(link.Number, null) ?? 0;
-            if (SpellFormulaFor(link.Number) is { Dur: > 0 } formula)
-                secs = Math.Max(secs, formula.Dur * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock);
-            if (secs > 0 && secs > (best ?? 0)) best = secs;
-        }
-        return best;
+        int highest = 0;
+        foreach (Game.Combat.MonsterCatalogEntry entry in MonsterCatalog.All)
+            highest = Math.Max(highest, entry.CastLevelFor(spellNumber));
+        return highest;
     }
 
     // Whether a witness line's caster capture is this room monster. The capture can
@@ -15654,7 +15649,8 @@ public sealed class AppServices
             }
             // Floors by way of every shop that sells any of the counters, in two
             // searches, so each counter's shop choice searches only from the shops
-            // that can still win (RouteFloors). On the UI thread, with the card.
+            // that can still win (RouteFloors). Off the UI thread with the card when the
+            // walker is idle, its gate suspension its own thread's (MovementFilter).
             Dictionary<int, System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey>> shopsOf = new();
             HashSet<Game.Map.RoomKey> everyShop = new();
             foreach (int id in counters)
@@ -15814,9 +15810,6 @@ public sealed class AppServices
         return items;
     }
 
-    // Is item `id` lying on the current room's floor? Matched by name against the
-    // ground survey (which stores the noun phrases parsed from "You notice … here."),
-    // leniently both ways so an article/qualifier on either side still matches.
     // Which of these items lie on the floor here. The floor is the UI thread's.
     public IReadOnlySet<int> CountersOnFloor(IEnumerable<int> ids)
     {
@@ -15827,6 +15820,9 @@ public sealed class AppServices
         return here;
     }
 
+    // Is item `id` lying on the current room's floor? Matched by name against the
+    // ground survey (which stores the noun phrases parsed from "You notice … here."),
+    // leniently both ways so an article/qualifier on either side still matches.
     private bool IsItemOnFloor(int id)
     {
         string? name = ItemNames.GetName(id);

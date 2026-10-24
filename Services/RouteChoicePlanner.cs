@@ -466,7 +466,10 @@ public static class RouteChoicePlanner
         IReadOnlyList<WalkStep> walk;
         using (filter.SuspendAcquirableGatesExceptUnprotectable(closedGates))
             walk = RemoteActionPathExpander.Expand(graph, source, route, bfs, filter);
-        bool asPlanned = walk.Count == route.Count && RemoteActionPathExpander.ReachesDestination(walk, destination);
+        // Moves only: a trip off the route is rooms walked, and the walk's other steps
+        // are none.
+        bool asPlanned = walk.Count(static s => s is MoveStep) == route.Count
+            && RemoteActionPathExpander.ReachesDestination(walk, destination);
         return asPlanned ? null : walk;
     }
 

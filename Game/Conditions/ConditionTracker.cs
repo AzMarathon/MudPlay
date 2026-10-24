@@ -72,22 +72,25 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     private void SweepExpired(DateTimeOffset now)
     {
         if (_expiresAt.Count == 0) return;
-        List<MessageRecord>? expired = null;
-        foreach (MessageRecord r in _messages.Messages)
-            if (_expiresAt.TryGetValue(r.Id, out DateTimeOffset until) && until <= now && _active.Contains(r.Id))
-                (expired ??= new()).Add(r);
-        foreach (string id in _expiresAt.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList())
-            _expiresAt.Remove(id);
-        if (expired is null) return;
-        foreach (MessageRecord r in expired)
+        List<string>? due = null;
+        foreach ((string id, DateTimeOffset until) in _expiresAt)
+            if (until <= now) (due ??= new()).Add(id);
+        if (due is null) return;
+        bool ended = false;
+        foreach (string id in due)
         {
-            _active.Remove(r.Id);
-            string since = _latchedBy.TryGetValue(r.Id, out (DateTimeOffset At, string Line) by)
+            _expiresAt.Remove(id);
+            if (!_active.Remove(id)) continue;
+            ended = true;
+            MessageRecord? r = null;
+            foreach (MessageRecord m in _messages.Messages)
+                if (m.Id == id) { r = m; break; }
+            string since = _latchedBy.TryGetValue(id, out (DateTimeOffset At, string Line) by)
                 ? $" {(now - by.At).TotalSeconds:0}s after it was set" : "";
             _log?.Info(LogCategory,
-                $"condition expired name='{r.Name}' flags={r.Flags}{since}: its spell's time is up and no wear-off line came");
+                $"condition expired name='{r?.Name ?? id}' flags={r?.Flags}{since}: its spell's time is up and no wear-off line came");
         }
-        RecomputeFlags();
+        if (ended) RecomputeFlags();
     }
 
     // Built from MessageStore on every CollectionChanged. Maps an applied-message
@@ -596,9 +599,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
             // The wear-off line arriving is the event, whether or not this record is
             // the one latched: an applied line and the wear-off the game prints can
-            // sit on different records that share a flag, and the tracker has no
-            // timed expiry, so a flag nothing clears stands until ClearAll. The
-            // flag-wide clear below runs either way.
+            // sit on different records that share a flag, and a flag nothing clears
+            // stands until ClearAll or, for an ailment, its spell's time running out
+            // (AilmentSeconds). The flag-wide clear below runs either way.
             bool wasOwnLatch = _active.Remove(r.Id);
             if (wasOwnLatch) activeTouched = true;
 
@@ -1138,6 +1141,10 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
     private void RecomputeFlags()
     {
+        // A record cleared by its wear-off, a cure or a reset keeps no expiry.
+        if (_expiresAt.Count > 0)
+            foreach (string id in _expiresAt.Keys.Where(id => !_active.Contains(id)).ToList())
+                _expiresAt.Remove(id);
         MessageFlags flags = MessageFlags.None;
         foreach (MessageRecord r in _messages.Messages)
         {
