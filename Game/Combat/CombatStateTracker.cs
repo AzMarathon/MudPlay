@@ -438,6 +438,14 @@ public sealed class CombatStateTracker : IDisposable
     // For the bug report: where the gate was last held.
     public RoomKey? GateRoom => _gateRoom;
 
+    // The room last read holds engageable monsters, too few or too many for the
+    // Min/Max monster window, while something is moving us: the engine walks past
+    // them, however long they swing at us. A wait that stands until "the fight" is
+    // over must not count this one, which nothing on our side will ever end (report
+    // paradigm-20261023-005038: a loop parked outside a lair while a lone rat,
+    // under Min Monsters 2, swung at the character).
+    public bool HostilesOutsideCountWindow { get; private set; }
+
     public void SetCurrentRoomProbe(Func<RoomKey?> currentRoom)
     {
         ArgumentNullException.ThrowIfNull(currentRoom);
@@ -616,6 +624,7 @@ public sealed class CombatStateTracker : IDisposable
         // engageable hostiles drive the gate; a SeeHidden occupant arms
         // the combat-off clear override.
         _anyNpcPresent = false;
+        HostilesOutsideCountWindow = false;
         int targetable = 0;
         int actionable = 0;
         int attacking = 0;
@@ -756,6 +765,7 @@ public sealed class CombatStateTracker : IDisposable
 
         // Auto-attack on — the normal gate owns pausing.
         bool withinCountWindow = IsWithinMonsterCountWindow(targetable);
+        HostilesOutsideCountWindow = targetable > 0 && !withinCountWindow;
         if (actionable > 0 && withinCountWindow)
         {
             NoteLiveFight("room-entry hostile");

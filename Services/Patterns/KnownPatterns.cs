@@ -144,6 +144,17 @@ public static class KnownPatterns
     public const string OtherAttacksWithWeapon = "combat.other-attacks-with-weapon";
     public const string OtherSwingsAtTarget    = "combat.other-swings-at-target";
 
+    // A MONSTER'S blow naming its weapon and its victim, us or a party member, with
+    // no "at" and no damage figure: "The big depraved murderer clubs Ironbar with
+    // their spiked club!", "... clubs you with their spiked club!". Neither
+    // MobHits (needs "for N damage"), MobMisses (needs "at you") nor
+    // OtherAttacksWithWeapon (needs "at <target>") reads it, so a monster that
+    // came in with no arrival line and swung only like this stayed off the roster
+    // and was never fought (report paradigm-20261021-085438). Only CombatManager's
+    // empty-room net reads it: whether such a blow landed is not recorded, so it is
+    // counted in no hit or miss statistic.
+    public const string MonsterWeaponBlow      = "combat.monster-weapon-blow";
+
     // Local-player death — "You have been killed!". DeathLineWatcher subscribes
     // here and raises PlayerDied.
     public const string UserKilled           = "combat.user-killed";

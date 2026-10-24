@@ -36,6 +36,8 @@ namespace MudPlay.Game.Map;
 //   - A monster swinging at the character where the loop stands, in a room the loop
 //     is set not to fight in, is no such fight while the wait is for the cast: see
 //     InAFightOfOurs. Once the wait is for mana the room is fought in, and it is.
+//     Monsters the Min/Max monster window walks past are no such fight in either
+//     wait: the combat engine never answers them.
 //
 // What is asked of the hold (BlockingBuffs and the rest of ILairEntryBuffHold's
 // questions, Describe) only reads. Its state moves at three places: the loop's ask,
@@ -174,8 +176,9 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // in flight is entering, else the one the character stands in); without it the
     // hold can't tell a fight at the door from one in the lair. fightAnswered: the
     // client fights in that room. False where the loop is set not to attack (the
-    // room's "do not attack", or "only attack in lair rooms" outside a lair) and
-    // nothing else has the combat engine fighting there.
+    // room's "do not attack", or "only attack in lair rooms" outside a lair), or
+    // where its monsters are too few or too many for the Min/Max monster window,
+    // and nothing else has the combat engine fighting there.
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
         Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,

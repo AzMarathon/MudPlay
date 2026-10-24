@@ -113,6 +113,7 @@ public sealed partial class CombatManager : IDisposable
     private readonly IDisposable _userHitsSub;
     private readonly IDisposable _mobHitsSub;
     private readonly IDisposable _mobMissesSub;
+    private readonly IDisposable _mobWeaponBlowSub;
     private readonly IDisposable _targetGoneSub;
     private readonly IDisposable _weaponNoEffectSub;
     private readonly IDisposable _weaponLandedSub;
@@ -1119,6 +1120,7 @@ public sealed partial class CombatManager : IDisposable
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
+        _mobWeaponBlowSub = router.Subscribe(KnownPatterns.MonsterWeaponBlow, OnCombatLine);
         // Self-defense marking rides the same incoming-attack lines (each carries the
         // attacker's name in group 0). Separate from OnCombatLine because that also
         // fires on our OWN UserHits, which aren't an incoming attack.
@@ -3771,8 +3773,9 @@ public sealed partial class CombatManager : IDisposable
         return true;
     }
 
-    // Safety net: a combat line (user hit / mob hit / mob miss) means something
-    // is swinging at us — but if the classifier shows no engageable monster and
+    // Safety net: a combat line (user hit / mob hit / mob miss, or a monster's
+    // weapon blow on us or a party member) means something is swinging at our
+    // side — but if the classifier shows no engageable monster and
     // we have no current target, our view of the room is stale (entity dropped
     // after a death, arrival line lost, prefix not resolved against the overlay,
     // etc.). Send a bare CR (^M) so the server re-emits a short room view; the
@@ -6456,6 +6459,7 @@ public sealed partial class CombatManager : IDisposable
         _userHitsSub.Dispose();
         _mobHitsSub.Dispose();
         _mobMissesSub.Dispose();
+        _mobWeaponBlowSub.Dispose();
         _targetGoneSub.Dispose();
         _weaponNoEffectSub.Dispose();
         _weaponLandedSub.Dispose();
