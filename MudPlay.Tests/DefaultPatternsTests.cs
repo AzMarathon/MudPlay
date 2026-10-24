@@ -375,7 +375,11 @@ public sealed class DefaultPatternsTests
 
         Assert.True(p.TryMatch(Line("The big depraved murderer clubs Ironbar with their spiked club!"), out _));
         Assert.True(p.TryMatch(Line("The big depraved murderer clubs you with their spiked club!"), out _));
-        Assert.True(p.TryMatch(Line("The thin cutpurse stabs Blasta with their dagger!"), out _));
+        Assert.True(p.TryMatch(Line("The thin cutpurse stabs Blasta with their dagger!"), out MatchResult blow));
+        Assert.Equal("Blasta", blow.Groups[0]);
+        // A victim outside the party still matches; CombatManager tells them apart.
+        Assert.True(p.TryMatch(Line("The guard strikes Lord Skorne with his sword!"), out _));
+        Assert.False(p.TryMatch(Line("The town guard slashes at Bob with his longsword!"), out _));
 
         Assert.False(p.TryMatch(Line("The kobold thief lunges at you with its dagger!"), out _));
         Assert.False(p.TryMatch(Line("The big cutpurse stabs Aunty with their dagger for 10 damage!"), out _));

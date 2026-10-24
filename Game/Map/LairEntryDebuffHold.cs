@@ -36,8 +36,11 @@ namespace MudPlay.Game.Map;
 //   - A monster swinging at the character where the loop stands, in a room the loop
 //     is set not to fight in, is no such fight while the wait is for the cast: see
 //     InAFightOfOurs. Once the wait is for mana the room is fought in, and it is.
-//     Monsters the Min/Max monster window walks past are no such fight in either
-//     wait: the combat engine never answers them.
+//   - While either wait stands the Min Monsters floor is lifted (WaitingAtTheDoor,
+//     MonsterCountGate.Bounds), so the lone monster that wanders in is fought, and
+//     that fight is waited out like any other (user, 2026-10-23). Monsters over the
+//     Max the combat engine still walks past, and they are no fight to this hold
+//     (FightIsAnswered).
 //
 // What is asked of the hold (BlockingBuffs and the rest of ILairEntryBuffHold's
 // questions, Describe) only reads. Its state moves at three places: the loop's ask,
@@ -177,8 +180,9 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
     // hold can't tell a fight at the door from one in the lair. fightAnswered: the
     // client fights in that room. False where the loop is set not to attack (the
     // room's "do not attack", or "only attack in lair rooms" outside a lair), or
-    // where its monsters are too few or too many for the Min/Max monster window,
-    // and nothing else has the combat engine fighting there.
+    // where the combat engine passed its monsters over for the Min/Max monster
+    // window, and nothing else has the combat engine fighting there: see
+    // FightIsAnswered.
     public LairEntryDebuffHold(MovementCoordinator coordinator, Func<bool> slotUsed, Func<bool> castDue,
         Action<TimeSpan, Action> scheduleAfter, Func<DateTimeOffset>? now = null, LogService? log = null,
         Func<bool, IReadOnlyList<string>>? buffsDue = null, Func<bool>? stillWanted = null,
@@ -228,6 +232,27 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
 
     // A wait has come to stand for mana: the engage gates are to be asked again.
     public event Action? ManaWaitStarted;
+
+    // The loop stands at a lair's door waiting to go in, for the between-round cast
+    // or for the debuff's mana, a fight there or not. The combat engine lifts its Min
+    // Monsters floor while it does (MonsterCountGate.Bounds): nothing walks the
+    // character past this room until the wait is over, so the lone monster that
+    // wanders in is fought (user, 2026-10-23: "if we are waiting to enter a room for
+    // an inbetween round spell or mana (aka a rest) we should fight the one mob that
+    // wanders in"). Without that, its swings kept "in combat" up, and the wait stood
+    // for a fight nobody fought (report paradigm-20261023-005038).
+    public bool WaitingAtTheDoor => _waiting;
+
+    // A wait at the door has begun: the engage gates are to be asked again, since a
+    // monster already in the room was passed over under the floor this lifts.
+    public event Action? DoorWaitStarted;
+
+    // Whether the client fights where the fight now is, for fightAnswered: not
+    // where the loop is set not to attack, nor where the combat engine passed the
+    // room's monsters over for the Min/Max monster window (a count over the Max; the
+    // floor is lifted at the door), unless a force-clear fights there anyway.
+    public static bool FightIsAnswered(bool loopSuppressesCombat, bool skippedForMonsterCount, bool forceClear) =>
+        (!loopSuppressesCombat && !skippedForMonsterCount) || forceClear;
 
     public bool SkipsUnpayableBuffs => _waiting || _deciding;
 
@@ -363,6 +388,7 @@ public sealed class LairEntryDebuffHold : ILairEntryBuffHold
         {
             _waiting = true;
             SchedulePoll();
+            DoorWaitStarted?.Invoke();
         }
         SayWhatTheWaitIsFor();
         HoldTheWalker();

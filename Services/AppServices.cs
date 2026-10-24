@@ -6123,6 +6123,10 @@ public sealed class AppServices
         // engage — see SetMonsterCountWindow.
         CombatTracker.SetMonsterCountWindow(
             () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat"));
+        // The Party tab's cap, as CombatManager applies it, so a party's tighter cap
+        // can't have the walker held for a room combat won't fight.
+        CombatTracker.SetPartyMonsterCap(() => Game.Combat.MonsterCountGate.PartyCap(
+            PartyState.IsInParty, ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party")));
 
         // "Kill all engaged" needs the tracker to know when we've committed to the
         // current room (its count met the engage window), so it can hold the walker
@@ -8984,19 +8988,26 @@ public sealed class AppServices
             fightRoom: () => CombatSuppressionVerdict().Room,
             // The loop's own "do not attack" / "only attack in lair rooms" alone: a
             // fight with a player reads as suppressed to the engage gates too, and is
-            // a fight all the same. Nor is a monster the Min/Max monster window walks
-            // past. A force-clear fights where the loop doesn't, at any count.
-            fightAnswered: () => (!CombatSuppressionVerdict().Suppressed && !CombatTracker.HostilesOutsideCountWindow)
-                                 || Combat.ForceClearActive);
+            // a fight all the same. Nor is a room the combat engine passed over for
+            // the Min/Max monster window. A force-clear fights where the loop doesn't.
+            fightAnswered: () => Game.Map.LairEntryDebuffHold.FightIsAnswered(
+                CombatSuppressionVerdict().Suppressed, Combat.RoomSkippedForMonsterCount, Combat.ForceClearActive));
+        // No Min Monsters floor while the loop waits at a lair's door: the lone
+        // monster that wanders in there is fought (MonsterCountGate.Bounds).
+        Combat.SetLairDoorWaitProbe(() => LairDebuffHold.WaitingAtTheDoor);
+        CombatTracker.SetLairDoorWaitProbe(() => LairDebuffHold.WaitingAtTheDoor);
         // The room at the door is fought in while the loop stands there for mana
-        // (LoopCombatSuppression.LoopIsDriving), and nothing re-asks the engage gates
-        // when that starts: a monster already in the room would be left until its
-        // next swing. Posted: the hold says so from inside the loop's own step check.
-        LairDebuffHold.ManaWaitStarted += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        // (LoopCombatSuppression.LoopIsDriving), and under no Min floor from the
+        // moment it waits there at all, and nothing re-asks the engage gates when
+        // either starts: a monster already in the room would be left until its next
+        // swing. Posted: the hold says so from inside the loop's own step check.
+        void ReaskEngageGates() => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             CombatTracker.OnAutoAttackChanged();
             RoomClassifier.ReemitCurrent();
         });
+        LairDebuffHold.ManaWaitStarted += ReaskEngageGates;
+        LairDebuffHold.DoorWaitStarted += ReaskEngageGates;
         CastDirector.SetLairEntryBuffHold(LairDebuffHold);
         CastDirector.SetManaRegenBuffProbe(IsManaRegenRollSpell);
         // An engage with no debuff to cast first: the hold has nothing to keep the
