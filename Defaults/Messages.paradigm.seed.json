@@ -3091,8 +3091,8 @@
   {
     "Id": "64bb126b53614a4a",
     "Name": "infernal darkness",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "You cast {spellname}!",
     "TargetMessage": "{source} casts {spellname}!",
     "WitnessMessage": "{source} casts {spellname}!",

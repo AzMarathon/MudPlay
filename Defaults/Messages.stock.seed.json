@@ -2567,8 +2567,8 @@
   {
     "Id": "e22188815c9c9c5c",
     "Name": "infernal darkness",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "You cast {spellname}!",
     "TargetMessage": "{source} casts {spellname}!",
     "WitnessMessage": "{source} casts {spellname}!",
@@ -3903,8 +3903,8 @@
   {
     "Id": "6c5700e37662d084",
     "Name": "sandstorm",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "A stinging sandstorm fills the room, scathing your foes!",
     "TargetMessage": "A stinging sandstorm surrounds you!",
     "WitnessMessage": "A stinging sandstorm fills the room!",

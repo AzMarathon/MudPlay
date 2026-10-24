@@ -1,16 +1,19 @@
 using MudPlay.Game.Conditions;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
 
-// A move that lands shown by its room's own display drops a latched hold, and a
-// latched blindness, whose wear-off line never came. Driven on TrackerWireRig: the
-// game's text goes through the terminal into the tracker and the condition tracker
-// as the client wires them.
-public sealed class MoveDisprovesAilmentsTests
+// Our own latched blindness or hold dropped on outside proof that it is over: any
+// room shown (a blind move and a blind look both show only "You are blind."), a move
+// that lands (a held character can't walk), and a cure blindness landing on us (it
+// prints no wear-off). Driven on TrackerWireRig: the game's text goes through the
+// terminal into the tracker, the router and the condition tracker as the client wires
+// them.
+public sealed class SelfAilmentProofTests
 {
     private static readonly RoomKey Gate = new(1, 1);
 
@@ -36,7 +39,7 @@ public sealed class MoveDisprovesAilmentsTests
             Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:") { Position = Gate };
             Conditions = new ConditionTracker(Messages, Rig.Log);
             Conditions.AttachLineExtractor(Rig.Lines);
-            MoveDisprovesAilments.Wire(Rig.Tracker, Conditions);
+            SelfAilmentProof.Wire(Rig.Tracker, Conditions, Rig.Router, () => Cures, () => "Francisco Sanders");
             Rig.ShowRoom();
             Assert.Equal(Gate, Rig.Believed);
         }
@@ -47,6 +50,20 @@ public sealed class MoveDisprovesAilmentsTests
             Rig.Dispose();
         }
     }
+
+    // Cure blindness (#87) and cure poison (#19) as the shipped message records word
+    // them: caster, target and witness lines, no wear-off.
+    private static readonly IReadOnlyList<CureCastMatcher> Cures = new[]
+    {
+        Cure(MessageFlags.Blinded, "cure blindness"),
+        Cure(MessageFlags.Poisoned, "cure poison"),
+    };
+
+    private static CureCastMatcher Cure(MessageFlags ailment, string spell) => new(
+        ailment, spell,
+        CasterMessageMatcher.TryCreate("You cast {spellname} on {target}!")!,
+        CasterMessageMatcher.TryCreate("{source} casts {spellname} on {target}!"),
+        CasterMessageMatcher.TryCreate("{source} casts {spellname} upon you!"));
 
     private static MessageRecord Record(string name, MessageFlags flags, string applied, string ends) =>
         new(
@@ -63,27 +80,30 @@ public sealed class MoveDisprovesAilmentsTests
     // The cleric cast cure blindness on itself every 15 s for as long as a blindness
     // whose wear-off it never saw stayed latched, walking a loop whose rooms it plainly
     // saw (report CureBlindlessBugReport, 2026-10-22).
-    [Fact]
-    public void LatchedBlindness_MoveShowsTheRoom_Cleared()
+    [Theory]
+    [InlineData("n")]
+    [InlineData("l")]
+    public void LatchedBlindness_ARoomShown_Cleared(string command)
     {
         using World w = new();
         w.Rig.Show("You are blind!");
         Assert.True(w.Conditions.IsBlinded);
 
-        w.Rig.Do("n");
+        w.Rig.Do(command);
 
         Assert.False(w.Conditions.IsBlinded);
     }
 
-    // Blind, a move goes through but shows only "You are blind.": no proof of sight.
+    // Blind, a move goes through and a look answers, each showing only "You are blind.".
     [Fact]
-    public void Blindness_MoveShowsOnlyYouAreBlind_StaysLatched()
+    public void Blindness_MoveAndLookShowOnlyYouAreBlind_StaysLatched()
     {
         using World w = new();
         w.Rig.Show("You are blind!");
         w.Rig.NextMoveShows.Enqueue("You are blind.");
-
         w.Rig.Do("n");
+        w.Rig.NextAnswers.Enqueue("You are blind.");
+        w.Rig.Do("l");
 
         Assert.True(w.Conditions.IsBlinded);
     }
@@ -91,7 +111,7 @@ public sealed class MoveDisprovesAilmentsTests
     // A latch that blinds and confuses is left: the room display proves sight, not that
     // the confusion is over, and dropping the record would end both.
     [Fact]
-    public void BlindAndConfusedLatch_MoveShowsTheRoom_Kept()
+    public void BlindAndConfusedLatch_ARoomShown_Kept()
     {
         using World w = new();
         w.Rig.Show("You struggle for breath!");
@@ -103,16 +123,48 @@ public sealed class MoveDisprovesAilmentsTests
     }
 
     // A held character can't walk: a move that lands drops a hold latched past its
-    // wear-off (report paradigm-20261003-161904).
+    // wear-off (report paradigm-20261003-161904). A look proves nothing about moving.
     [Fact]
-    public void LatchedHold_MoveLands_Cleared()
+    public void LatchedHold_ALookKeepsIt_AMoveClearsIt()
     {
         using World w = new();
         w.Rig.Show("You are paralyzed!");
+
+        w.Rig.Do("l");
         Assert.True(w.Conditions.IsMovementPrevented);
 
         w.Rig.Do("n");
-
         Assert.False(w.Conditions.IsMovementPrevented);
+    }
+
+    // Cure blindness prints its spell lines and no wear-off (user, 2026-10-23): the
+    // cast landing on us is the end of the blindness, ours or another's.
+    [Theory]
+    [InlineData("You cast cure blindness on Francisco!", false)]
+    [InlineData("Kenwood casts cure blindness upon you!", false)]
+    [InlineData("You cast cure blindness on Kenwood!", true)]
+    [InlineData("Kenwood casts cure blindness on Farmer!", true)]
+    [InlineData("You cast cure poison on Francisco!", true)]
+    public void CureBlindnessLandingOnUs_ClearsOurBlindness(string line, bool stillBlind)
+    {
+        using World w = new();
+        w.Rig.Show("You are blind!");
+
+        w.Rig.Show(line);
+
+        Assert.Equal(stillBlind, w.Conditions.IsBlinded);
+    }
+
+    // The cure ends a blindness that rides with a confusion as well, but the record is
+    // left, as for a room shown.
+    [Fact]
+    public void CureBlindness_BlindAndConfusedLatch_Kept()
+    {
+        using World w = new();
+        w.Rig.Show("You struggle for breath!");
+
+        w.Rig.Show("You cast cure blindness on Francisco!");
+
+        Assert.True(w.Conditions.IsConfused);
     }
 }

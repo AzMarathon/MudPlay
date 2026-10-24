@@ -9638,7 +9638,8 @@ public sealed class AppServices
             LoopRunner.ReplanIfATollAheadIsClosed();
         };
 
-        Game.Conditions.MoveDisprovesAilments.Wire(RoomTracker, Conditions);
+        Game.Conditions.SelfAilmentProof.Wire(RoomTracker, Conditions, Router, CureCastMatchers,
+            ownName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
 
         // Same reasoning as the condition reset above, for the attack-spell
         // cascade and buff-duration tracking: death is a full server-side reset
@@ -13010,8 +13011,10 @@ public sealed class AppServices
             if (Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage) is not { } caster) continue;
             Game.Spells.CasterMessageMatcher? witness =
                 Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage);
+            Game.Spells.CasterMessageMatcher? atUs =
+                Game.Spells.CasterMessageMatcher.TryCreate(rec.TargetMessage);
             foreach (Models.GameData.MessageFlags ailment in CuredAilmentBits(cure.Cures))
-                list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness));
+                list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness, atUs));
         }
         return _cureMatchers = list;
     }

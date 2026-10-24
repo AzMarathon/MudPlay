@@ -1527,8 +1527,8 @@ How to keep it current:
 
 ### GlobeOfDarknessSeedTests.cs
 - Covers: Game/Conditions/ConditionTracker with shipped Messages seeds
-- Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds.
-- Why: a nanati shadow's globe set Blinded and asked for a cure.
+- Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds; infernal darkness (both seeds) and Stock's sandstorm are not blindness, a gruesome curse is (checked against the Spells data, 2026-10-23).
+- Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
 ### GotoHistoryStoreTests.cs
 - Covers: Game/Map/GotoHistoryStore
@@ -2482,11 +2482,6 @@ How to keep it current:
 - Covers: ViewModels/GameData/Edit/MonsterMdbInfoBuilder, Tables/MonstersSectionViewModel.ComputeAttackAccuracy
 - Checks: Lair-tag id match; Accuracy column; summon detection, context, targets and outgoing labels.
 - Why: The Game Data Monsters tab columns. The file name doesn't match its content (mostly MonsterMdbInfoBuilder).
-
-### MoveDisprovesAilmentsTests.cs
-- Covers: Game/Conditions/MoveDisprovesAilments (with ConditionTracker.ClearFlag and RoomTracker.MoveConfirmed), on TrackerWireRig.
-- Checks: a move whose room displays drops a latched blindness and a latched hold; a move that shows only `You are blind.` keeps the blindness; a record that blinds and confuses is kept.
-- Why: reports CureBlindlessBugReport (cure blindness cast on itself every 15 s) and paradigm-20261003-161904 (a stale hold).
 
 ### MovePlayerHandlerStartReplyTests.cs
 - Covers: Game/Remote/MovePlayerHandler
@@ -3502,6 +3497,11 @@ How to keep it current:
 - Checks: Our own poison, blindness and disease light the self party chip, per flag, and clear on wear-off. They also work solo (lone self row) and the chip carries over when a party forms.
 - Why: The self party-window row never showed our own poison (PartyAilmentTracker only mirrors other members).
 
+### SelfAilmentProofTests.cs
+- Covers: Game/Conditions/SelfAilmentProof (with ConditionTracker.ClearFlag, RoomTracker.MoveConfirmed / RoomDisplayRead and CureCastMatcher's caster and target lines), on TrackerWireRig, the router's lines included.
+- Checks: a room shown by a move or a `look` drops a latched blindness; a move and a look that show only `You are blind.` keep it; a record that blinds and confuses is kept; a look keeps a hold, a move drops it; a cure blindness cast on us (our cast naming us, or another's `upon you`) drops our blindness, while one on a party member, a witnessed one on someone else, and a cure poison leave it.
+- Why: reports CureBlindlessBugReport (cure blindness cast on itself every 15 s) and paradigm-20261003-161904 (a stale hold); user, 2026-10-23: a blind look shows only `You are blind.`, and cure blindness prints no wear-off.
+
 ### SelfConfusionResponderTests.cs
 - Covers: Game/Conditions/SelfConfusionResponder
 - Checks: Confusion lights the self chip and asserts ConfusionGate; clearing it releases both. Ignore Confusion suppresses only the gate, and Reevaluate handles a mid-confusion toggle. Records sharing one applied line clear as a group; ClearAll and Dispose release the gate.
@@ -4138,7 +4138,7 @@ How to keep it current:
 ### TrackerWireRig.cs
 - Test infrastructure.
 - Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and MoveDisprovesAilmentsTests, which attaches a ConditionTracker to the rig's line extractor).
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs
