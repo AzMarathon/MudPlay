@@ -135,6 +135,8 @@ public static class RouteChoicePrompt
         // a card (PlanOvertaken).
         RoutePlanInFlight inFlight = new(
             destination, () => services.GameData.ActiveLoad, services.Log, LogCat, services.MovementControl);
+        // Stop has this to end while nothing moves yet: the toolbar's is enabled for it.
+        using IDisposable planning = services.MovementControl.RouteBeingPlanned();
 
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
@@ -166,9 +168,10 @@ public static class RouteChoicePrompt
         // walker is IDLE, run them on a background thread so the UI thread stays live —
         // and if planning drags past a short threshold, surface the picker window in a
         // "Calculating…" state that paints while planning finishes. When a walk is
-        // already IN PROGRESS, the live walker shares the movement filter the planner
-        // briefly toggles (SuspendAcquirableGates), so plan on the UI thread instead
-        // (no calc window that time) to avoid racing it.
+        // already IN PROGRESS, plan on the UI thread instead (no calc window that
+        // time): the live walker re-plans, takes holds and warms the filter's party
+        // reads as it steps, and a plan alongside it isn't made to race that. The
+        // gates a plan stands down are its own thread's either way (MovementFilter).
         RouteChoiceDialogViewModel? calcVm = null;
         Task<RouteChoiceResult?>? calcDialogTask = null;
         RoutePlan plan;
@@ -624,10 +627,10 @@ public static class RouteChoicePrompt
         // Where each counter comes from takes a few searches of the map per hazard,
         // which held the UI thread for twenty seconds with the card (report
         // paradigm-20261021-135647). With the walker idle it is worked out off the UI
-        // thread, as the plan was, the floor here read first on it; with a walk under
-        // way it stays on the UI thread for the same reason the plan does (the live
-        // walker shares the movement filter the resolution suspends gates on), under a
-        // scope a freeze report names.
+        // thread, as the plan was, the floor here read first on it; the gates it
+        // stands down are its own thread's (MovementFilter). With a walk under way it
+        // stays on the UI thread, as the plan does, under a scope a freeze report
+        // names.
         void ResolveCounters(IReadOnlySet<int>? onFloor)
         {
             foreach (RouteRequirement req in choice.Requirements)
@@ -670,7 +673,30 @@ public static class RouteChoicePrompt
             {
                 IReadOnlySet<int> onFloor = services.CountersOnFloor(
                     choice.Requirements.Where(r => r.Kind == RouteRequirementKind.HazardProtection).SelectMany(r => r.ItemIds));
-                await Task.Run(() => ResolveCounters(onFloor));
+                try
+                {
+                    await Task.Run(() => ResolveCounters(onFloor));
+                }
+                catch (Exception ex)
+                {
+                    // As the plan's own fault above: the off-thread read of the graph,
+                    // the shop and give indexes can be disturbed by a rare UI-thread
+                    // change. Dropped for a change of game data; otherwise said and
+                    // worked out again on the UI thread, from nothing.
+                    if (PlanOvertaken(services, inFlight, calcVm)) return false;
+                    services.Log.Warn(LogCat,
+                        $"route card {source} -> {destination}: off-thread counter sources faulted ({ex.GetType().Name}: {ex.Message}); "
+                        + "working them out on the UI thread");
+                    floorCounters.Clear();
+                    detourCounters.Clear();
+                    hazardSources.Clear();
+                    buys.Clear();
+                    neededItems.Clear();
+                    hazardCounterIds.Clear();
+                    resolvedCounters.Clear();
+                    using (services.Performance.Measure("route card: hazard counter sources"))
+                        ResolveCounters(onFloor: null);
+                }
                 if (PlanOvertaken(services, inFlight, calcVm)) return false;
             }
             else

@@ -69,6 +69,8 @@ public sealed class TokenRouteCoordinator
     private RoomKey _landing;
     private RoomKey _destination;
     private RoomKey? _lastRoom;
+    // The room confirmed since our token use went out, before its success line came.
+    private RoomKey? _confirmedSinceUse;
     // Invalidates a scheduled callback when the phase moves on before it fires.
     private int _generation;
 
@@ -266,6 +268,7 @@ public sealed class TokenRouteCoordinator
     // display name so the item matches (e.g. "token of the Lost City").
     private void UseOwnToken()
     {
+        _confirmedSinceUse = null;
         _phase = Phase.AwaitingUse;
         int gen = _generation;
         _log?.Info("Tokens", $"token route to {_place}: using token, awaiting teleport");
@@ -288,6 +291,14 @@ public sealed class TokenRouteCoordinator
 
         _phase = Phase.AwaitingLanding;
         int gen = _generation;
+        // The use line prints after the landing room's display, so the room may be
+        // confirmed already: waiting for it then sat out the whole timeout.
+        if (_confirmedSinceUse is { } here && here.Equals(_landing))
+        {
+            _log?.Info("Tokens", $"token route to {_place}: teleport confirmed, already standing at {_landing}");
+            ResumeAfterLanding(here);
+            return;
+        }
         _log?.Info("Tokens", $"token route to {_place}: teleport confirmed, awaiting landing at {_landing}");
         _schedule(LandingConfirmTimeoutMs, () =>
         {
@@ -301,6 +312,7 @@ public sealed class TokenRouteCoordinator
     public void OnRoomChanged(RoomKey? confirmedRoom)
     {
         if (confirmedRoom is not { } room) return;
+        if (_phase == Phase.AwaitingUse) _confirmedSinceUse = room;
 
         switch (_phase)
         {
@@ -316,18 +328,20 @@ public sealed class TokenRouteCoordinator
                 break;
 
             case Phase.AwaitingLanding:
-                if (room.Equals(_landing))
-                {
-                    int gen = _generation;
-                    _schedule(PostLandSettleMs, () =>
-                    {
-                        if (gen != _generation || _phase != Phase.AwaitingLanding) return;
-                        _log?.Info("Tokens", $"token route to {_place}: landed at {room} — resuming walk to {_destination}");
-                        ResumeWalk();
-                    });
-                }
+                if (room.Equals(_landing)) ResumeAfterLanding(room);
                 break;
         }
+    }
+
+    private void ResumeAfterLanding(RoomKey room)
+    {
+        int gen = _generation;
+        _schedule(PostLandSettleMs, () =>
+        {
+            if (gen != _generation || _phase != Phase.AwaitingLanding) return;
+            _log?.Info("Tokens", $"token route to {_place}: landed at {room} — resuming walk to {_destination}");
+            ResumeWalk();
+        });
     }
 
     // Walker.Event. While regrouping, using the token or landing, the route drives no

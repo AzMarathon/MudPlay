@@ -760,6 +760,21 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Assert.Equal(new[] { "e" }, h.Sent);
     }
 
+    // A door on a sole route is no lever trip: the card's route is the route, and the
+    // log says nothing of trips.
+    [Fact]
+    public void ASoleRouteCardThroughADoor_TakesNoLeverTrip()
+    {
+        Harness h = NewHarness(LeverPastAFloodRooms
+            .Replace("\"1/9 (Hidden/Needs 1 Actions, specific order)\"", "\"1/9 (Door)\"", StringComparison.Ordinal)
+            .Replace("\"Action#1 [on the E exit of room 1/5]: pull lever\"", "\"0\"", StringComparison.Ordinal), Start);
+
+        RouteChoice card = RouteChoicePlanner.Evaluate(h.Bfs, h.Filter, h.Graph, Start, Dest)!;
+
+        Assert.Null(card.GatedWalk);
+        Assert.Equal(new[] { Start, River, Host, Dest }, card.GatedPath);
+    }
+
     // What the pick did before: the route's own rooms agreed to, and the lever trip
     // finds the Flood shut.
     [Fact]

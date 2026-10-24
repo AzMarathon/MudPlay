@@ -417,6 +417,10 @@ public sealed class PartyAilmentTracker : IDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         string given = GivenName(name);
+        // Anyone in the room can use a token: only a member has chips.
+        if (!_party.State.Members.Any(m => !m.IsSelf
+                && (Same(m.Name, name) || Same(GivenName(m.Name), given))))
+            return;
         foreach ((_, MessageFlags flag) in Tokens)
         {
             if (flag == MessageFlags.Poisoned) continue;

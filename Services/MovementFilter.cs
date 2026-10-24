@@ -184,32 +184,44 @@ public sealed class MovementFilter : IRoomFilter
     // stand down so a planning pass can compute the route the crosser WOULD
     // take with every gate item in hand — the "gated" alternative the route
     // picker compares against the free route. Level / class / toll gates stay
-    // active (those aren't acquired on demand). Single-threaded planning use;
-    // set and cleared through SuspendAcquirableGates' disposable scope.
-    private bool _acquirableGateSuspended;
+    // active (those aren't acquired on demand). Set and cleared through
+    // SuspendAcquirableGates' disposable scope.
+    //
+    // The suspension is the thread's own: the route picker plans on a worker while
+    // the UI thread plans walks of its own on the same filter (a `@goto`, a loop's
+    // resume, a second Start). Held on the filter itself, a worker's suspension let
+    // those plan with every gate open, and their scope ending shut the gates under
+    // the worker's plan.
+    private readonly ThreadLocal<Suspension> _suspension = new();
+
+    private readonly record struct Suspension(
+        bool On, IReadOnlyCollection<int>? KeepClosed, bool KeepUncountered, bool KeepUnprotectable,
+        IReadOnlyCollection<RoomKey>? OpenHazardRooms);
+
+    private bool AcquirableGatesSuspended => _suspension.Value.On;
 
     // While gates are suspended, the gates for these item ids are kept evaluated
     // normally (null/empty = none), so a planning pass can ask "is the destination
     // still reachable if these item gates stay closed?" — the test that separates a
     // genuinely required gate from an optional shortcut an item merely unlocks.
     // Set/cleared through SuspendAcquirableGatesExcept's disposable scope.
-    private IReadOnlyCollection<int>? _keepClosedGateItems;
+    private IReadOnlyCollection<int>? KeptClosedGateItems => _suspension.Value.KeepClosed;
 
     // While gates are suspended, hazard rooms stay closed unless countered: by what
     // is carried, or by what the walk will obtain for that room (HazardProvisionProbe).
     // Set/cleared through SuspendAcquirableGatesButUncounteredHazards' scope.
-    private bool _keepUncounteredHazards;
+    private bool KeepsUncounteredHazards => _suspension.Value.KeepUncountered;
 
     // While gates are suspended, a hazard room stays closed when no item makes it
     // safe to route through (HazardCounterProtects): the pass asks what could be
     // walked with every gate item in hand, and having one opens nothing there.
     // Set/cleared through SuspendAcquirableGatesButUnprotectableHazards' scope.
-    private bool _keepUnprotectableHazards;
+    private bool KeepsUnprotectableHazards => _suspension.Value.KeepUnprotectable;
 
     // The hazard rooms that open anyway while uncountered hazards are kept closed:
     // the ones on a route card's path, which the user saw and agreed to walk into.
     // Set/cleared through SuspendAcquirableGatesExcept's scope.
-    private IReadOnlyCollection<RoomKey>? _openHazardRooms;
+    private IReadOnlyCollection<RoomKey>? OpenedHazardRooms => _suspension.Value.OpenHazardRooms;
 
     // The counter items a walk will obtain on its own for entering a hazard room.
     // Wired by AppServices to the same list the walk-start announce posts needs for.
@@ -304,7 +316,7 @@ public sealed class MovementFilter : IRoomFilter
     {
         // Suspended — UNLESS this exit gates on an item we're keeping closed to probe
         // whether it's genuinely required (then fall through to the live check).
-        if (_acquirableGateSuspended && !ExitGatesOnAny(in exit, _keepClosedGateItems)) return false;
+        if (AcquirableGatesSuspended && !ExitGatesOnAny(in exit, KeptClosedGateItems)) return false;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
 
         // An exit whose spell teleports the crosser on, and to the side routes are
@@ -411,7 +423,7 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
         if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0)
         {
-            if (_acquirableGateSuspended && !ExitGatesOnAny(in exit, _keepClosedGateItems)) return false;
+            if (AcquirableGatesSuspended && !ExitGatesOnAny(in exit, KeptClosedGateItems)) return false;
             if (InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
         }
         if (StrengthProvider?.Invoke() is not { } strength) return false;
@@ -487,10 +499,10 @@ public sealed class MovementFilter : IRoomFilter
     // the gated-route planning pass and skipped while inventory is unknown.
     private bool IsHazardEntryBlocked(in RoomExit exit)
     {
-        if (_acquirableGateSuspended)
+        if (AcquirableGatesSuspended)
         {
-            if (!_keepUncounteredHazards && !_keepUnprotectableHazards) return false;
-            if (_openHazardRooms?.Contains(exit.Target) == true) return false;
+            if (!KeepsUncounteredHazards && !KeepsUnprotectableHazards) return false;
+            if (OpenedHazardRooms?.Contains(exit.Target) == true) return false;
         }
         if (Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
 
@@ -504,8 +516,8 @@ public sealed class MovementFilter : IRoomFilter
         // carried changes that, so it doesn't wait for the inventory to be read.
         if (!HazardCounterProtects(hazard)) return true;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
-        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries, NegatingItemUsableProbe);
-        if (!_keepUncounteredHazards) return false;
+        if (!AcquirableGatesSuspended) return !hazard.IsSatisfiedBy(carries, NegatingItemUsableProbe);
+        if (!KeepsUncounteredHazards) return false;
 
         // Planning through gates with uncountered hazards kept: the room opens only
         // when what is carried plus what the walk will obtain covers it. An item
@@ -525,7 +537,7 @@ public sealed class MovementFilter : IRoomFilter
     // isn't shut for the hazard. A plan started anywhere else still goes round.
     private bool SharesHazardStoodIn(in RoomExit exit)
     {
-        if (_acquirableGateSuspended || Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
+        if (AcquirableGatesSuspended || Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
         if (StandingRoomProbe?.Invoke() is not { } here) return false;
         if (Hazards.HazardForSpell(spellOf(here)) is not { } mine || !HazardCounterProtects(mine)) return false;
         if (Hazards.HazardForSpell(spellOf(exit.Target)) is not { } theirs || !HazardCounterProtects(theirs)) return false;
@@ -650,20 +662,10 @@ public sealed class MovementFilter : IRoomFilter
             bool keepUnprotectableHazards = false)
         {
             _filter = filter;
-            _filter._acquirableGateSuspended = true;
-            _filter._keepClosedGateItems = keepClosed;
-            _filter._keepUncounteredHazards = keepUncounteredHazards;
-            _filter._openHazardRooms = openHazardRooms;
-            _filter._keepUnprotectableHazards = keepUnprotectableHazards;
+            _filter._suspension.Value = new Suspension(
+                On: true, keepClosed, keepUncounteredHazards, keepUnprotectableHazards, openHazardRooms);
         }
-        public void Dispose()
-        {
-            _filter._acquirableGateSuspended = false;
-            _filter._keepClosedGateItems = null;
-            _filter._keepUncounteredHazards = false;
-            _filter._openHazardRooms = null;
-            _filter._keepUnprotectableHazards = false;
-        }
+        public void Dispose() => _filter._suspension.Value = default;
     }
 
     // Does this exit gate on any item in the set? Unions the carryable-item gates

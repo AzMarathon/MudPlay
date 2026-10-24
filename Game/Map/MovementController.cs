@@ -122,12 +122,14 @@ public sealed class MovementController : IDisposable
     // all stop, and it returns true.
     // The user's Stop also unloads a loop loaded with Load, so the next Start opens
     // the loop list and doesn't set off on it again (user, 2026-10-23; report
-    // paradigm-20261022-170426).
+    // paradigm-20261022-170426). Every press does, the one that only holds an
+    // errand among them.
     public bool StopByUser(string reason = "user stop from toolbar")
     {
-        if (HoldErrandOnStop()) return false;
-        Stop(reason);
+        bool held = HoldErrandOnStop();
         if (_loops.StagedLoop is { } staged) _loops.Unstage(staged, "stopped by the user");
+        if (held) return false;
+        Stop(reason);
         return true;
     }
 
@@ -308,6 +310,7 @@ public sealed class MovementController : IDisposable
 
         _walker.Event += OnWalkerEvent;
         _loops.Event += OnLoopEvent;
+        _loops.StagedChanged += OnStagedChanged;
         _autoLair.ActiveChanged += OnAutoLairActiveChanged;
         _autoLair.PausedChanged += OnAutoLairBool;
         // GatesChanged, not PauseStateChanged: the coarse signal stays silent
@@ -439,6 +442,41 @@ public sealed class MovementController : IDisposable
     // Raised as Stop begins, so a run the engines here don't own (a picked token
     // route between walks) stops with them.
     public event Action? Stopping;
+
+    // ----- What Stop ends with nothing moving ---------------------------
+    // A walk's route still being worked out or its cards up (RoutePlanInFlight, the
+    // cards closing on Stopping), and a loop loaded to start (StopByUser unloads it).
+    // Nothing is running, so the toolbar read Stop as having nothing to do and
+    // greyed it out exactly then (report paradigm-20261022-170426).
+    private int _routesBeingPlanned;
+
+    // Raised when HasStartPending may have changed.
+    public event Action? StartPendingChanged;
+
+    public bool HasStartPending => _routesBeingPlanned > 0 || _loops.StagedLoop is not null;
+
+    private void OnStagedChanged() => StartPendingChanged?.Invoke();
+
+    // Held for as long as a walk the user asked for is being planned or asked about.
+    public IDisposable RouteBeingPlanned()
+    {
+        _routesBeingPlanned++;
+        StartPendingChanged?.Invoke();
+        return new PlanningScope(this);
+    }
+
+    private sealed class PlanningScope(MovementController owner) : IDisposable
+    {
+        private bool _ended;
+
+        public void Dispose()
+        {
+            if (_ended) return;
+            _ended = true;
+            owner._routesBeingPlanned--;
+            owner.StartPendingChanged?.Invoke();
+        }
+    }
 
     // How many stops have been made. A route still being worked out for a walk the
     // user asked for has no walk yet for a stop to end: it compares this against the
@@ -669,6 +707,7 @@ public sealed class MovementController : IDisposable
         _disposed = true;
         _walker.Event -= OnWalkerEvent;
         _loops.Event -= OnLoopEvent;
+        _loops.StagedChanged -= OnStagedChanged;
         _autoLair.ActiveChanged -= OnAutoLairActiveChanged;
         _autoLair.PausedChanged -= OnAutoLairBool;
         _coordinator.GatesChanged -= OnCoordinatorGatesChanged;
