@@ -101,17 +101,21 @@ public sealed class RadioGroupScopeTests
         Assert.Null(caught);
     }
 
-    // Unscoped, building the second copy never returns: the UI thread spins until
-    // the client is killed.
+    // Unscoped, the second copy's boxes uncheck the first copy's and write into its
+    // model; on Avalonia 12.0.2 building the second copy also never returned. The
+    // writes are counted, since the two flips the second copy makes can leave the
+    // first copy's box where it started.
     [Fact]
     public void SecondCopy_BuildsAndLeavesTheFirstCopysChoiceAlone()
     {
         Choice first = new(), second = new();
         bool? firstShown = null, firstAfter = null;
+        int firstWrites = 0;
         Run(() =>
         {
             var a = View(first);
             firstShown = a.Stacked.IsChecked;
+            first.PropertyChanged += (_, _) => firstWrites++;
             var b = View(second);
             b.Each.IsChecked = true;
             firstAfter = a.Stacked.IsChecked;
@@ -119,6 +123,7 @@ public sealed class RadioGroupScopeTests
 
         Assert.True(firstShown);
         Assert.True(firstAfter);
+        Assert.Equal(0, firstWrites);
         Assert.True(second.Each);
         Assert.True(first.Stacked);
     }
@@ -148,8 +153,8 @@ public sealed class RadioGroupScopeTests
     }
 
     // A released copy is out of the registry: a box checked under the name its group
-    // had leaves the released copy's choice alone. Unreleased, that check sets off
-    // the endless walk SecondCopy guards against.
+    // had leaves the released copy's choice alone. Unreleased, that check unchecks
+    // the released copy's box, as SecondCopy guards against.
     [Fact]
     public void ReleasedCopy_IsNoLongerInItsGroup()
     {

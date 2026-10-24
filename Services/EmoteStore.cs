@@ -314,7 +314,7 @@ public sealed partial class EmoteStore
             PixelSize target = new(System.Math.Max(1, (int)System.Math.Round(w * scale)),
                                    System.Math.Max(1, (int)System.Math.Round(h * scale)));
             using Bitmap scaled = bmp.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
-            scaled.Save(destPng);
+            scaled.Save(destPng, PngBitmapEncoderOptions.Default);
             return baseName + ".png";
         }
         catch

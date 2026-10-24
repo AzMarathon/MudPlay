@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.31
+
+- Updated to Avalonia 12.1.4, with its Windows rendering and memory-leak fixes
+
 ## 3.185.30
 
 - Another player's gear swap no longer reads as a monster arriving
