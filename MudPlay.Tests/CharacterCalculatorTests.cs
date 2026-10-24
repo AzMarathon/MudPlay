@@ -77,6 +77,34 @@ public sealed class CharacterCalculatorTests
         Assert.Equal(1, CharacterCalculator.CalcHpRegen(1, 1, 0, false, RealmType.ParaMud));
     }
 
+    // A negative HP-regen percent drops its fraction each realm's way (GAME_MECHANICS
+    // "Rest and meditate tick timing"): Paradigm adds a truncated percent of the
+    // amount, Stock scales the amount by (percent + 100).
+    [Fact]
+    public void CalcHpRegen_NegativePercent_FollowsEachRealmsForm()
+    {
+        // Paradigm level 28, Health 71: amount 6; -25% of 6 is -1.5, cut to -1.
+        Assert.Equal(5, CharacterCalculator.CalcHpRegen(28, 71, -25, false, RealmType.ParaMud));
+        // Stock level 20, Health 75: amount 4; 69 × 4 / 100 = 2.76, cut to 2.
+        Assert.Equal(2, CharacterCalculator.CalcHpRegen(20, 75, -31, false, RealmType.Stock));
+    }
+
+    // A percent of 0 or more gives what the one shared form always gave, on both realms.
+    [Fact]
+    public void CalcHpRegen_PositivePercent_IsUnchanged()
+    {
+        foreach (RealmType realm in new[] { RealmType.Stock, RealmType.ParaMud })
+            foreach (int level in new[] { 1, 17, 28, 51 })
+                foreach (int health in new[] { 30, 60, 71, 140 })
+                    foreach (bool resting in new[] { false, true })
+                    {
+                        int unscaled = CharacterCalculator.CalcHpRegen(level, health, 0, resting, realm);
+                        for (int percent = 0; percent <= 300; percent++)
+                            Assert.Equal((percent + 100) * unscaled / 100,
+                                CharacterCalculator.CalcHpRegen(level, health, percent, resting, realm));
+                    }
+    }
+
     // ----- Mana / Kai ------------------------------------------------------
 
     [Fact]

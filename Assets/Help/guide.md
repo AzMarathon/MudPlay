@@ -3370,7 +3370,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 **Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
 
-**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. On Paradigm the natural amount arrives in thirds, one every 10 s (fractions dropped); the thirds are of the amount before any HP-regen bonus, and what the bonus adds comes on the third one, with the mana tick (`+2, +2, +3` for an amount of 6 with +25%). Resting pays every 5 s instead: those three gains, then three of the whole amount with its bonus (`+7`), counted from lying down — so standing up and resting again starts back at the small gains. Mana comes every 30 s on both. Meditating adds a mana gain every 15 s on both, on top of the 30-second tick; that gain is the base amount, without your mana-regen bonus. On Paradigm every other meditate gain arrives together with the 30-second tick.
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100** (on Paradigm, the amount plus gearHPregen% of it; the two differ only for a negative bonus, by where the fraction is dropped). `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. On Paradigm the natural amount arrives in thirds, one every 10 s (fractions dropped); the thirds are of the amount before any HP-regen bonus, and what the bonus adds comes on the third one, with the mana tick (`+2, +2, +3` for an amount of 6 with +25%). Resting pays every 5 s instead: those three gains, then three of the whole amount with its bonus (`+7`), counted from lying down — so standing up and resting again starts back at the small gains. Mana comes every 30 s on both. Meditating adds a mana gain every 15 s on both, on top of the 30-second tick; that gain is the base amount, without your mana-regen bonus. On Paradigm every other meditate gain arrives together with the 30-second tick.
 
 **Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
 
@@ -5913,7 +5913,7 @@ The mana floor for re-casting buffs is set on each buff now: **Buff Watchdog →
 ### Use 'meditate' ability
 
 **Default:** Off
-**What it does:** On classes that have it, uses `meditate` when the rest is for mana: always when only mana is low, and when both are low if **Meditate before resting** is ticked. A rest for HP alone still uses `rest`.
+**What it does:** On classes that have it, uses `meditate` when the rest is for mana: always when only mana is low, and when both are low if **Meditate before resting** is ticked. A rest for HP alone still uses `rest`. A mystic (a kai character) can meditate only on Paradigm, so on a Stock realm a mystic always rests, with this on or not.
 
 ### Meditate before resting
 

@@ -87,16 +87,19 @@ public static class CharacterCalculator
     }
 
     // HP regen per tick. Base (level+20)*health/divisor with divisor 500
-    // (ParaMUD) or 750 (Stock), floored at 1, tripled while resting, then scaled
-    // by equipment +HP-regen%.
+    // (ParaMUD) or 750 (Stock), floored at 1, tripled while resting, then the
+    // +HP-regen% step in each realm's form (GAME_MECHANICS "Rest and meditate tick
+    // timing"): Stock (percent+100)*amount/100, Paradigm amount + percent*amount/100.
+    // They agree for a percent of 0 or more; below 0 the dropped fraction differs.
     public static int CalcHpRegen(int level, int health, int hpRegenPercent, bool isResting, RealmType realmType)
     {
         int divisor = realmType == RealmType.ParaMud ? 500 : 750;
         int regen = (level + 20) * health / divisor;
         if (regen < 1) regen = 1;
         if (isResting) regen *= 3;
-        regen = (hpRegenPercent + 100) * regen / 100;
-        return regen;
+        return realmType == RealmType.ParaMud
+            ? regen + hpRegenPercent * regen / 100
+            : (hpRegenPercent + 100) * regen / 100;
     }
 
     // Paradigm pays the idle HP amount in thirds: one standing gain every 10 s, and

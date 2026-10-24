@@ -6017,6 +6017,7 @@ public sealed class AppServices
         SneakGuard.SetShadowRestProbe(() => Health.ShadowRestHolding);
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
+        Health.SetKaiMeditateProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         Health.SetSneakBeforeRestProbe(() => Stealth.SneakBeforeRest());
         // The sneak a ShadowRest waits on has answered: rest now. Posted so the
         // answer line finishes its dispatch first.

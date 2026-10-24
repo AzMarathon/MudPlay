@@ -584,7 +584,7 @@ How to keep it current:
 
 ### CharacterCalculatorTests.cs
 - Covers: Game/Calculators/CharacterCalculator
-- Checks: CP gain step and stat cost (Stock cap); HP/mana/kai/regen realm branches; spellcasting bonus.
+- Checks: CP gain step and stat cost (Stock cap); HP/mana/kai/regen realm branches, including a negative HP-regen percent in each realm's form and every percent of 0 or more unchanged from the one shared form; spellcasting bonus.
 - Why: realm formula divergences.
 
 ### ChatHistoryStoreTests.cs
@@ -1626,7 +1626,7 @@ How to keep it current:
 
 ### HealthManagerTests.cs
 - Covers: Game/Health/HealthManager
-- Checks: rest and meditate gates with their confirm ticks and pacing; ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
+- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
 - Why: many paradigm-/stock- reports cited inline; user rulings 2026-09/10
 
 ### HealthSettingsTests.cs
