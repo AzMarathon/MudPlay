@@ -894,6 +894,10 @@ public partial class MainWindowViewModel : ObservableObject
         // bug report's "Holds and waits"), and let the heartbeat decide whether
         // its next status line is due.
         BugReportHoldsAndWaits.RegisterProbes(AppServices.Current);
+        // The terminal's scrollback against its cap, for the memory log and the
+        // reports. Kept for the client's life: the emulator is the main window's own.
+        AppServices.Current.ContentSizes.Track("scrollback",
+            () => Emulator.Screen.Scrollback.Count, () => Emulator.Screen.Scrollback.Capacity);
         _engineStateSample = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = EngineStateWatch.SampleInterval,
@@ -4542,7 +4546,12 @@ public partial class MainWindowViewModel : ObservableObject
         BackscrollViewModel vm = new(
             Emulator, display.BackscrollWheelLines, display.FontFamily, display.FontSize);
         BackscrollWindow window = new() { DataContext = vm };
-        window.Closed += (_, _) => _backscroll = null;
+        IDisposable lines = AppServices.Current.ContentSizes.Track("backscroll", () => vm.Rows.Count);
+        window.Closed += (_, _) =>
+        {
+            lines.Dispose();
+            _backscroll = null;
+        };
         _backscroll = window;
         window.Show(main);
     }
@@ -4602,9 +4611,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        ConversationWindow window = new()
-        {
-            DataContext = new ConversationViewModel(
+        ConversationViewModel vm = new(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
                 text =>
@@ -4617,9 +4624,14 @@ public partial class MainWindowViewModel : ObservableObject
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
                 AppServices.Current.Profile,
-                AppServices.Current.Display),
+                AppServices.Current.Display);
+        ConversationWindow window = new() { DataContext = vm };
+        IDisposable rows = AppServices.Current.ContentSizes.Track("convo", () => vm.Rows.Count);
+        window.Closed += (_, _) =>
+        {
+            rows.Dispose();
+            _conversation = null;
         };
-        window.Closed += (_, _) => _conversation = null;
         _conversation = window;
         window.Show(main);
     }
@@ -5884,8 +5896,10 @@ public partial class MainWindowViewModel : ObservableObject
 
         ViewModels.Navigation.NavigationViewModel vm = new(AppServices.Current);
         Views.Navigation.NavigationWindow window = new() { DataContext = vm };
+        IDisposable rooms = AppServices.Current.ContentSizes.Track("map", () => vm.Layout?.CoordToRoom.Count ?? 0);
         window.Closed += (_, _) =>
         {
+            rooms.Dispose();
             if (window.DataContext is IDisposable d) d.Dispose();
             _navigationWindow = null;
         };

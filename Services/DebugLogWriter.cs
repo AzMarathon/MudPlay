@@ -17,6 +17,7 @@ public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
     public const int DefaultRetentionDays = 30;
 
     private readonly object _gate = new();
+    private readonly Func<DateTimeOffset> _now;
     private StreamWriter? _writer;
 
     // Full path of the file this writer is appending to.
@@ -27,16 +28,19 @@ public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
 
     // Open a fresh log file for topic. The path is derived from
     // AppPaths.NewDebugLogFile and includes a timestamp so concurrent writers
-    // for the same topic don't collide.
-    public DebugLogWriter(string topic)
+    // for the same topic don't collide. The file opens with LogFileHeader's
+    // lines; session names whose session it is, for a file that has one. now:
+    // the clock its lines are stamped with (the wall clock by default).
+    public DebugLogWriter(string topic, LogFileHeader.Session? session = null, Func<DateTimeOffset>? now = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(topic);
         Topic = topic;
+        _now = now ?? (static () => DateTimeOffset.Now);
         Path = AppPaths.NewDebugLogFile(topic);
 
         FileStream stream = new(Path, FileMode.Append, FileAccess.Write, FileShare.Read);
         _writer = new StreamWriter(stream) { AutoFlush = true };
-        WriteHeader();
+        foreach (string line in LogFileHeader.Lines(topic, _now(), session)) _writer.WriteLine(line);
     }
 
     // Append message as a single line prefixed with a millisecond-precision
@@ -46,17 +50,10 @@ public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
         lock (_gate)
         {
             if (_writer is null) return;
-            _writer.Write(DateTimeOffset.Now.ToString("HH:mm:ss.fff"));
+            _writer.Write(_now().ToString("HH:mm:ss.fff"));
             _writer.Write(' ');
             _writer.WriteLine(message);
         }
-    }
-
-    private void WriteHeader()
-    {
-        if (_writer is null) return;
-        _writer.WriteLine($"# MudPlay debug log — topic={Topic}");
-        _writer.WriteLine($"# started {DateTimeOffset.Now:O}");
     }
 
     public void Dispose()

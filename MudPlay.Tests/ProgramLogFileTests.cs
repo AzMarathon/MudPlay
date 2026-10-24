@@ -392,6 +392,39 @@ public sealed class ProgramLogFileTests
     }
 
     [Fact]
+    public async Task EveryFile_OpensWithTheBuildTheProcessAndWhoseSessionItIs_AsItStandsWhenThatFileOpens()
+    {
+        LogService log = new();
+        LogDiagnosticState diagnostics = new();
+        Disks disks = new();
+        string character = "Fujin";
+        using ProgramLogFile file = new(log, diagnostics, disks.Open,
+            session: () => new LogFileHeader.Session(character, "Mudbbs", "paradigm", "Paradigm 1.11"));
+
+        diagnostics.AutoCollectLogs = true;
+        log.Info("Walker", "first");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+        diagnostics.AutoCollectLogs = false;
+        character = "Raiden";
+        diagnostics.AutoCollectLogs = true;
+        log.Info("Walker", "second");
+        await file.WhenWrittenAsync().WaitAsync(Patience);
+
+        Assert.Equal(2, disks.Opened.Count);
+        foreach ((TestDisk disk, string who) in disks.Opened.Zip(["Fujin", "Raiden"]))
+        {
+            string[] lines = disk.Text.Split(Environment.NewLine);
+            Assert.Equal("# MudPlay debug log — topic=program", lines[0]);
+            Assert.StartsWith("# started ", lines[1]);
+            Assert.Equal("# MudPlay " + ClientEnvironment.Build, lines[2]);
+            Assert.Contains(ClientEnvironment.Os, lines[3]);
+            Assert.StartsWith($"# process {Environment.ProcessId} started ", lines[4]);
+            Assert.StartsWith("# client up ", lines[5]);
+            Assert.Equal($"# character {who}; BBS Mudbbs; realm paradigm; game data Paradigm 1.11", lines[6]);
+        }
+    }
+
+    [Fact]
     public async Task WithTheRealDisk_TheSessionFileUnderLogsHoldsTheHeaderAndTheEntries()
     {
         ScratchRoot.Require();
