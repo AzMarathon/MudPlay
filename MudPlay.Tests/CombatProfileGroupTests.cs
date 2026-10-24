@@ -53,9 +53,10 @@ public sealed class CombatProfileGroupTests
                 Type t = prop.PropertyType;
                 object? cur = prop.GetValue(obj);
                 if (cur is HealthSettings or CombatProfileSpells or CombatProfileParty) { Fill(cur); continue; }
-                if (cur is CombatSpellSlot slot) { slot.SpellName = "x" + prop.Name; continue; }
+                if (cur is CombatSpellSlot slot) { Fill(slot); continue; }
                 if (t == typeof(bool)) prop.SetValue(obj, !(bool)cur!);
                 else if (t == typeof(int)) prop.SetValue(obj, (int)cur! + 7);
+                else if (t == typeof(int?)) prop.SetValue(obj, ((int?)cur ?? 0) + 7);
                 else if (t == typeof(string)) prop.SetValue(obj, "x" + prop.Name);
                 else if (t.IsEnum)
                 {
@@ -78,10 +79,12 @@ public sealed class CombatProfileGroupTests
         Assert.Equal(fresh.Count, needed.Count);   // the fixture really changed every field
 
         var owner = new Dictionary<string, CombatProfileGroup>();
+        var everyGroup = new CombatSpellProfile();
         foreach (CombatProfileGroup g in Enum.GetValues<CombatProfileGroup>())
         {
             var target = new CombatSpellProfile();
             CombatProfileGroupCopy.Copy(g, src, target);
+            CombatProfileGroupCopy.Copy(g, src, everyGroup);
             foreach (var kv in Flatten(target).Where(kv => fresh[kv.Key] != kv.Value))
             {
                 Assert.False(owner.ContainsKey(kv.Key), $"{kv.Key} is copied by both {owner.GetValueOrDefault(kv.Key)} and {g}");
@@ -89,6 +92,10 @@ public sealed class CombatProfileGroupTests
             }
         }
         Assert.Empty(needed.Except(owner.Keys));   // a field no group copies would never share
+        // Copying every group reproduces the profile exactly, down to each spell slot's
+        // own fields (Ignore mana's FireRegardlessOfMana): a slot field the copy drops
+        // would otherwise pass, the slot still differing from a fresh one by its name.
+        Assert.Equal(full, Flatten(everyGroup));
     }
 
     // ----- manager: a live switch -----

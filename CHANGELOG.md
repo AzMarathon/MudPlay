@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.41
+
+- Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings
+
 ## 3.185.40
 
 - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give

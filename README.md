@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.40**
-> - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
-> - Buff Watchdog's mana per tick and the Stock mana-regen roll read count race, class and quest ManaRgn, not just gear
-> - Stock Mystics rest instead of meditating
-> - Expected HP regen is right with a negative HP-regen bonus on Paradigm
+> **Version 3.185.41**
+> - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

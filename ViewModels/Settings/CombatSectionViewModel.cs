@@ -70,6 +70,7 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         "Normal attack spell", "Alternate attack spell",
         "Drain spell", "Life drain", "Drain HP trigger", "Drains override AOE",
         "Min enemies", "Max casts per room", "Minimum mana per cast",
+        "Ignore mana", "Fire regardless of current mana",
         "Show combat round totals", "Display",
     };
 
@@ -279,9 +280,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int? _alternateAttackSpellMaxCastsPerRoom;
     [ObservableProperty] private int _alternateAttackSpellMinManaPerCast;
 
-    // "Fire regardless of current mana", one per attack-spell row
-    // (CombatSpellSlot.FireRegardlessOfMana): in a party the row's Min mana is set
-    // aside and the spell casts whenever mana covers its cost.
+    // The "Ignore mana" column, one per attack-spell row
+    // (CombatSpellSlot.FireRegardlessOfMana): in a party the row casts on its turn
+    // whatever the mana, its Min mana and the spell's cost both set aside.
     [ObservableProperty] private bool _multiAttackFireRegardlessOfMana;
     [ObservableProperty] private bool _multiAttack2FireRegardlessOfMana;
     [ObservableProperty] private bool _normalAttackSpellFireRegardlessOfMana;
