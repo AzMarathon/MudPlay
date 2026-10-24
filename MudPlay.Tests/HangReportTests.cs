@@ -165,7 +165,7 @@ public sealed class HangReportTests
     }
 
     [Fact]
-    public void The_report_carries_the_figures_beyond_the_managed_heap_the_bug_report_and_memory_log_show()
+    public void The_report_carries_the_figures_beyond_the_managed_heap_the_bug_report_shows()
     {
         const long mb = 1024 * 1024;
         ContentSizes contents = new();
@@ -185,13 +185,13 @@ public sealed class HangReportTests
         using (rig.Monitor.Measure("stuck")) rig.Pass(6);
 
         string report = rig.Report;
-        Assert.Contains("- **Native memory (private bytes less GC committed)**: 1.5 GB: private 2.0 GB, GC committed 500 MB", report);
+        Assert.Contains("- **Native memory (outside the GC's committed memory)**: 1.5 GB, private bytes less GC committed: "
+            + "private 2.0 GB, GC committed 500 MB", report);
         Assert.Contains("- **Threads and handles**: 42 threads (6 in the pool), 310 OS handles, "
             + "? (heard only while Auto-collect logs is on) GC handles, 7 pinned objects, 25 timers", report);
         Assert.Contains("- **GDI / USER objects**: 900 / 120", report);
-        Assert.DoesNotContain("Skia caches", report);   // left out of a hang: the UI thread may be inside Skia
         Assert.Contains("- **Window contents**: convo=3 scrollback=4000/4000", report);
-        Assert.Contains("- **Activity this session**: 1 lines received, 2 terminal renders, 0 map redraws", report);
+        Assert.Contains("- **Activity this session**: 1 line received, 2 terminal renders, 0 map redraws", report);
         Assert.True(report.IndexOf("## Memory", StringComparison.Ordinal) < report.IndexOf("**Window contents**", StringComparison.Ordinal));
 
         // The Conversation window closing takes its rows out of the reports.

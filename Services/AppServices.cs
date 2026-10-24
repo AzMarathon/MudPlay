@@ -270,7 +270,8 @@ public sealed class AppServices
     private LogFileHeader.Session HeaderSession() => new(
         Profile?.CurrentProfileName ?? "(none loaded)",
         Profile?.CurrentBbsName ?? "(none)",
-        GameData is null ? "(not known)" : BugReportBuilder.RealmLabel(GameData.ActiveRealm),
+        // Before a set loads, its realm isn't known: ActiveRealm would answer Stock.
+        GameData?.ActiveSet is null ? "(not known)" : BugReportBuilder.RealmLabel(GameData.ActiveRealm),
         GameData?.ActiveSet ?? "(none)");
 
     // Background memory hygiene: compacts the LOH once a game-data set settles

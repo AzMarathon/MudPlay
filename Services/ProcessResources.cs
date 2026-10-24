@@ -7,10 +7,14 @@ namespace MudPlay.Services;
 
 // What the process holds beyond the managed heap: the figures that name a native
 // leak. A client up for days at 26 GB of private bytes over a 500 MB managed heap
-// has a leak no GC figure shows; these say where to look. Native is private bytes
-// less the GC's committed memory: everything the process has asked the OS for
-// that the GC does not account for (Skia's caches and bitmaps, the window
-// system's buffers, native libraries, malloc arenas).
+// has a leak no GC figure shows; these say where to look. Native is the process's
+// own memory less the GC's committed memory: what the GC does not account for
+// (Skia's caches and bitmaps, the window system's buffers, native libraries,
+// malloc arenas). On Windows and macOS the process's own memory is private bytes,
+// memory committed to it. On Linux private bytes are VmData, address space
+// reserved rather than used (every thread's stack reservation, mappings never
+// touched), which overstates native by hundreds of MB; there it is RssAnon, the
+// anonymous memory actually resident, with private bytes kept beside it.
 //
 // Read once a minute by the memory log and once per bug or hang report, off the
 // UI thread except for the bug report. None of it touches a window.
@@ -34,9 +38,18 @@ public readonly record struct ProcessResources(
     long? SkiaCacheLimit,
     long? FontCacheBytes,
     long? FontCacheLimit,
-    int? FontCacheEntries)
+    int? FontCacheEntries,
+    long? ResidentAnon = null)
 {
-    public long? NativeBytes => PrivateBytes is { } p ? p - GcCommitted : null;
+    // Never below zero: resident memory can be less than the GC has committed
+    // (pages committed, never touched). A figure the OS gives as 0 (macOS may) is
+    // taken as not read.
+    public long? NativeBytes => NativeBase is { } b ? Math.Max(0, b - GcCommitted) : null;
+
+    private long? NativeBase => ResidentAnon is > 0 ? ResidentAnon : PrivateBytes is > 0 ? PrivateBytes : null;
+
+    // What NativeBytes was measured from.
+    public string NativeSource => ResidentAnon is > 0 ? "resident anonymous memory (RssAnon)" : "private bytes";
 
     // gcHandles: the GC handle count the runtime last reported, or null when no
     // listener is on to hear it (it has no API of its own; PerformanceMonitor
@@ -75,7 +88,28 @@ public readonly record struct ProcessResources(
             gens.Length > 3 ? gens[3].FragmentationAfterBytes : 0,
             gens.Length > 4 ? gens[4].SizeAfterBytes : 0,
             gc.PinnedObjectsCount, gcHandles, threads, handles, ThreadPool.ThreadCount, Timer.ActiveCount,
-            gdi, user, skia, skiaLimit, font, fontLimit, fontEntries);
+            gdi, user, skia, skiaLimit, font, fontLimit, fontEntries,
+            OperatingSystem.IsLinux() ? ReadRssAnon() : null);
+    }
+
+    // RssAnon from /proc/self/status, given there in kB.
+    private static long? ReadRssAnon()
+    {
+        try
+        {
+            foreach (string line in File.ReadLines("/proc/self/status"))
+            {
+                if (!line.StartsWith("RssAnon:", StringComparison.Ordinal)) continue;
+                string[] parts = line["RssAnon:".Length..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                return parts.Length > 0 && long.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out long kb)
+                    ? kb * 1024 : null;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // No /proc to read (a sandbox): native falls back to private bytes.
+        }
+        return null;
     }
 
     private static (int?, int?) GuiObjects()
@@ -112,8 +146,12 @@ public readonly record struct ProcessResources(
     {
         List<(string, string)> lines =
         [
-            ("Native memory (private bytes less GC committed)",
-                $"{Size(NativeBytes)}: private {Size(PrivateBytes)}, GC committed {Size(GcCommitted)}, "
+            ("Native memory (outside the GC's committed memory)",
+                $"{Size(NativeBytes)}, {NativeSource} less GC committed: "
+                + (ResidentAnon is > 0
+                    ? $"resident anonymous {Size(ResidentAnon)}, private {Size(PrivateBytes)} (virtual on Linux), "
+                    : $"private {Size(PrivateBytes)}, ")
+                + $"GC committed {Size(GcCommitted)}, "
                 + $"fragmented {Size(Fragmented)}, gen2 {Size(Gen2Size)}, LOH {Size(LohSize)} ({Size(LohFragmented)} fragmented), POH {Size(PohSize)}"),
             ("Threads and handles",
                 $"{Count(Threads)} threads ({PoolThreads} in the pool), {Count(Handles)} OS handles, "
@@ -126,16 +164,21 @@ public readonly record struct ProcessResources(
             lines.Add(("Skia caches", $"resources {Size(SkiaCacheBytes)} of {Size(SkiaCacheLimit)}; "
                 + $"fonts {Size(FontCacheBytes)} of {Size(FontCacheLimit)}, {Count(FontCacheEntries)} entries"));
         lines.Add(("Window contents", contents));
-        lines.Add(("Activity this session", $"{activity.Lines} lines received, {activity.Renders} terminal renders, "
-            + $"{activity.MapRedraws} map redraws"));
+        lines.Add(("Activity this session", $"{Many(activity.Lines, "line")} received, "
+            + $"{Many(activity.Renders, "terminal render")}, {Many(activity.MapRedraws, "map redraw")}"));
         return lines;
     }
 
+    private static string Many(long n, string what) =>
+        n.ToString(CultureInfo.InvariantCulture) + " " + what + (n == 1 ? string.Empty : "s");
+
     // The memory log's columns after the GC's own: key=value, "?" for a figure
-    // not read, and the Windows and Skia figures only where they exist.
+    // not read, and the Linux, Windows and Skia figures only where they exist.
     public string Columns()
     {
-        string line = $"native={Mb(NativeBytes)} threads={Count(Threads)} handles={Count(Handles)} "
+        string line = $"native={Mb(NativeBytes)} "
+            + (ResidentAnon is > 0 ? $"rssanon={Mb(ResidentAnon)} " : string.Empty)
+            + $"threads={Count(Threads)} handles={Count(Handles)} "
             + $"gchandles={Count(GcHandles)} pinned={PinnedObjects} pool={PoolThreads} timers={Timers}";
         if (GdiObjects is not null || UserObjects is not null) line += $" gdi={Count(GdiObjects)} user={Count(UserObjects)}";
         if (SkiaCacheBytes is not null)

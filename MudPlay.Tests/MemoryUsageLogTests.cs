@@ -25,21 +25,26 @@ public sealed class MemoryUsageLogTests
         public LogFileHeader.Session Session { get; set; } = new("Fujin", "Mudbbs", "paradigm", "Paradigm 1.11");
         public string Windows { get; set; } = "Main, Conversation";
         public long PrivateMb = 2000, CommittedMb = 500;
+        public long? RssAnonMb;
         public int? Gdi;
+        // Set: the next reads of the figures, or of the session's names, throw it.
+        public Exception? FiguresFail, SessionFails;
 
         public Rig()
         {
             ScratchRoot.Require();
             Contents.Track("convo", () => ConversationRows.Count);
-            Log = new MemoryUsageLog(Diagnostics, new MemoryUsageLog.Sources(Read, () => Session, () => Clock.Now, Timers.Arm));
+            Log = new MemoryUsageLog(Diagnostics, new MemoryUsageLog.Sources(Read,
+                () => SessionFails is { } fail ? throw fail : Session, () => Clock.Now, Timers.Arm));
         }
 
-        private MemoryUsageLog.Sample Read() => new(
+        private MemoryUsageLog.Sample Read() => FiguresFail is { } fail ? throw fail : new(
             new HangReport.Memory(300 * Mb, 9000 * Mb, 2500 * Mb, PrivateMb * Mb, 320 * Mb, CommittedMb * Mb, 40, 12, 3),
             new ProcessResources(PrivateMb * Mb, CommittedMb * Mb, 20 * Mb, 150 * Mb, 60 * Mb, 5 * Mb, 1 * Mb,
                 PinnedObjects: 7, GcHandles: 1800, Threads: 42, Handles: 310, PoolThreads: 6, Timers: 25,
                 GdiObjects: Gdi, UserObjects: Gdi is null ? null : 120, SkiaCacheBytes: 64 * Mb, SkiaCacheLimit: 256 * Mb,
-                FontCacheBytes: 2 * Mb, FontCacheLimit: 2 * Mb, FontCacheEntries: 31),
+                FontCacheBytes: 2 * Mb, FontCacheLimit: 2 * Mb, FontCacheEntries: 31,
+                ResidentAnon: RssAnonMb is { } rss ? rss * Mb : null),
             Windows, Contents.Describe(), Activity.Read());
 
         // A minute on the clock and the timers.
@@ -123,6 +128,47 @@ public sealed class MemoryUsageLogTests
         rig.Minute();
         Assert.Contains(" | in 60s: lines+0 renders+0 mapdraws+0 native+0.0MB", rig.Lines[^1]);
         Assert.DoesNotContain(rig.Lines, l => l.Contains("# now") && l.StartsWith("12:02", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task On_Linux_native_is_measured_from_resident_memory_and_never_reads_below_zero()
+    {
+        await using Rig rig = new();
+        rig.RssAnonMb = 800;   // private bytes (2000 MB) are VmData there: virtual
+        rig.Diagnostics.AutoCollectLogs = true;
+        rig.Timers.Advance(TimeSpan.Zero);
+        Assert.Contains("priv=2000.0MB", rig.Lines[^1]);
+        Assert.Contains(" native=300.0MB rssanon=800.0MB threads=", rig.Lines[^1]);
+
+        rig.RssAnonMb = 400;   // committed but untouched GC pages leave resident below committed
+        rig.Minute();
+        Assert.Contains(" native=0.0MB rssanon=400.0MB ", rig.Lines[^1]);
+
+        rig.RssAnonMb = null;
+        rig.PrivateMb = 0;     // an OS that gives no private figure (macOS may say 0)
+        rig.Minute();
+        Assert.Contains(" native=? threads=", rig.Lines[^1]);
+        Assert.Contains("native?", rig.Lines[^1]);
+    }
+
+    [Fact]
+    public async Task A_figure_or_a_session_name_that_cant_be_read_is_a_gap_and_the_samples_go_on()
+    {
+        await using Rig rig = new();
+        rig.SessionFails = new IOException("Info.json is held");
+        rig.Diagnostics.AutoCollectLogs = true;
+        rig.Timers.Advance(TimeSpan.Zero);
+        Assert.Contains("# character (not known); BBS (not known); realm (not known); game data (not known)", rig.Lines);
+
+        rig.SessionFails = null;
+        rig.FiguresFail = new InvalidOperationException("process gone");
+        rig.Minute();
+        Assert.Equal("12:01:00.000 ? figures not read (InvalidOperationException)", rig.Lines[^1]);
+        Assert.True(rig.Log.IsCollecting);
+
+        rig.FiguresFail = null;
+        rig.Minute();
+        Assert.StartsWith("12:02:00.000 ws=", rig.Lines[^1]);
     }
 
     [Fact]

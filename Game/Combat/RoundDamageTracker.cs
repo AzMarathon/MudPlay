@@ -151,8 +151,8 @@ public sealed class RoundDamageTracker : IDisposable
         Func<LogFileHeader.Session>? traceSession = null)
     {
         ArgumentNullException.ThrowIfNull(router);
-        _traceSession = traceSession;
         ArgumentNullException.ThrowIfNull(state);
+        _traceSession = traceSession;
         _router = router;
         _state = state;
         _log   = log;
