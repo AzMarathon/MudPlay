@@ -1386,7 +1386,7 @@ How a character is named, how it earns and spends character points (CP), how exp
 
 - **Matches the full passive-tick model in *Health, resting & recovery → Mana regeneration & the ManaRgn breakpoints*** (the 30 s tick, the `ManaRgn%` modifier and its breakpoints, realm forms); the stat-side view follows.
 
-- **Mana regen scales off ONE stat per class:** magery type 1 = INT (Mage), 2 = WIL (Priest), 3 = (INT+WIL)/2 (Druid), 4 = CHM (Bard), 5 = Kai (Mystic), which no stat drives: 1 a tick plus 1 per 100 worn ManaRgn (*Health, resting & recovery → Mana regeneration & the ManaRgn breakpoints*).
+- **Mana regen scales off ONE stat per class:** magery type 1 = INT (Mage), 2 = WIL (Priest), 3 = (INT+WIL)/2 (Druid), 4 = CHM (Bard), 5 = Kai (Mystic), which no stat drives: 1 a tick plus 1 per 100 ManaRgn (*Health, resting & recovery → Mana regeneration & the ManaRgn breakpoints*).
 - **Core formula:** `((level+20)*stat*(mageryLevel+2))/1650`.
 - **Maximum mana is NOT stat-driven** — it's `mageryLevel*level*2 + 6` — so a caster raises mana *regen* by training its casting stat, never max mana.
 
@@ -1925,8 +1925,10 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 ```
 
 - **All four magery types, Bard included, use the same formula; only the stat differs** *([OBSERVED] 2026-09-28, DLL jump table: type 1 INT, 2 WIL, 3 (INT+WIL)/2, 4 CHA; MMUD-Explorer has no realm split for any of them)*. The DLL reads the current stat values, the same ones `stat` shows.
-- **A Mystic's Kai regenerates `1 + floor(worn ManaRgn / 100)` per tick: 1, and 1 more for every 100 ManaRgn the mystic wears** *([CONFIRMED] 2026-10-24, user: "kai regens 1 kai per tick.. increasing by +1 for every 100 mana regen the mystic wears")*. The tick is the passive tick above. (An earlier note here had "mystic = fixed 1"; superseded 2026-10-24.)
-  - `[NEEDS CONFIRMATION]`: does meditating change Kai regen? And does ManaRgn from race, class or quests count, or only the worn gear's (the user said "wears")?
+- **A Mystic's Kai regenerates `1 + floor(ManaRgn / 100)` per tick: 1, and 1 more for every 100 ManaRgn** *([CONFIRMED] 2026-10-24, user: "kai regens 1 kai per tick.. increasing by +1 for every 100 mana regen the mystic wears")*. The tick is the passive tick above. (An earlier note here had "mystic = fixed 1"; superseded 2026-10-24.)
+  - **`ManaRgn` is the whole sum of code-145 sources, as for mana: race, class and quests count with the gear** *([CONFIRMED] 2026-10-24, user: "yes, look at the equations")*.
+  - **Meditating: only on Paradigm, where it brings the Kai ticks faster but each pays the same amount** *([CONFIRMED] 2026-10-24, user: "meditating can only happen on paradigm, not stock and yes, it makes kai regen faster but not more")*. A Stock mystic can't meditate.
+  - `[NEEDS CONFIRMATION]`: how often a meditating mystic's Kai ticks come. The client takes it to be mana's Paradigm meditate cadence, a gain every 15 s (*Rest and meditate tick timing*), and doesn't know whether the 30 s pass keeps paying beside it.
 - **`mageryLevel` is the class's magery tier (`Classes.MageryLVL`), a constant per class — NOT the character level.** It also drives max mana: `MaxMana = (mageryLevel · level · 2) + 6`. (A stock ability code 145 = "ManaRgn".)
 - **`ManaRgn%` is the sum of every code-145 source** *(Stock [OBSERVED] 2026-09-28: `_update_dynamic_with_ability` adds code 145 to the character's mana-regen percent, as code 123 feeds the HP-regen percent)*. That is gear/quest `addability 145 N` bonuses (`+N ManaRgn`) **plus** a cast mana-regen roll spell's rolled magnitude. It is a **percent modifier on the tick, not flat mana**.
 - **Breakpoints are emergent, not a table.** Because `tick` is truncated, it steps up by 1 MP only when `ManaRgn%` (or level / stat) crosses the integer threshold `(N·100/base − 100)`. Between thresholds, extra ManaRgn% does nothing.
@@ -1940,7 +1942,8 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **Client use:**
   - `CharacterCalculator.CalcManaRegen` implements the formula; the Level Projection grid already relies on it.
   - The mana-regen breakpoint calculator uses only the CONFIRMED passive formula above.
-  - `RegenReadout` (the status bar's expected mana item) shows the 30 s tick with `ManaRgn%` from gear, race, class and quests plus a roll spell's roll once read (on Stock, the natural tick the roll was read off), a tick range over the roll's span until then, and the meditate base beside the pass while meditating. A Mystic's Kai is `1 + floor(worn ManaRgn / 100)`, from the worn gear only (2026-10-24).
+  - `RegenReadout` (the status bar's expected mana item) shows the 30 s tick with `ManaRgn%` from gear, race, class and quests plus a roll spell's roll once read (on Stock, the natural tick the roll was read off), a tick range over the roll's span until then, and the meditate base beside the pass while meditating. A Mystic's Kai is `1 + floor(ManaRgn / 100)` from every source, shown per meditate tick while a Paradigm mystic meditates (2026-10-24).
+  - `ManaRegenBreakpointCalculator.LiveInputs` builds the live inputs for the readout, the Stock reroll (`AppServices.StockManaRollContextFor`) and the Buff Watchdog's mana per tick (`AppServices.PassiveManaRegenTick`), with `ManaRgn%` summed from gear, race, class and quests. Until 2026-10-24 the reroll and the Watchdog read the worn gear's ManaRgn only.
 
 ### Rerolling a mana-regen roll spell
 *Status: per-fact tags below (CONFIRMED 2026-08-28 user + screenshot; 2026-08-30 report `paradigm-20260830-110918`; 2026-09-09 user) · Realm: both (reading the roll differs by realm)*
@@ -1960,10 +1963,10 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 
   The **`spells:` value** is the rolled magnitude (e.g. a priest's `prfl` rolling 32). Reroll if `spells:` < the min gate.
 - **Reading the roll — Stock:** there is **no `abil 145`**, so the roll is read back off the next natural mana tick, using the formula in *Mana regeneration & the ManaRgn breakpoints* *(design 2026-09-28, from the Stock DLL and MMUD-Explorer)*:
-  - The tick is truncated, so it pins the roll to a **band** (every roll that pays exactly that tick), e.g. base 12 and tick 18 → roll 50..58. Worn `ManaRgn%` is subtracted using the gear the client sees.
+  - The tick is truncated, so it pins the roll to a **band** (every roll that pays exactly that tick), e.g. base 12 and tick 18 → roll 50..58. The standing `ManaRgn%` (the gear the client sees, race, class and quests; worn gear only until 2026-10-24) is subtracted.
   - **Meditating:** a jump equal to the base is the meditate tick alone; a bigger one is `base + natural` (they share a prompt every other meditate tick).
   - **A tick that fills the pool** was cut short and is skipped.
-  - **Gear-set swaps:** the gear-dependent inputs (worn `ManaRgn%` and INT / WIL / CHA) are taken from the gear worn when the tick lands. The `stat` screen's stats are corrected by the stat bonuses of the gear worn when it was read, and a tick within 3 s of a worn-list change is skipped *(**Client policy**, user 2026-09-28: a mana-regen gear set should raise the tick)*.
+  - **Gear-set swaps:** the gear-dependent inputs (the gear's share of `ManaRgn%` and INT / WIL / CHA) are taken from the gear worn when the tick lands. The `stat` screen's stats are corrected by the stat bonuses of the gear worn when it was read, and a tick within 3 s of a worn-list change is skipped *(**Client policy**, user 2026-09-28: a mana-regen gear set should raise the tick)*.
   - **A roll so bad the natural tick pays 0 shows no jump.** No natural tick within 40 s of the cast, with mana below max, reads as a 0 tick.
   - **Decision** *(**Client policy**, user 2026-09-28)*: the threshold is the **rolled percent on both realms**. Stock rerolls only when the whole band is below it; a band straddling it counts as good.
   - *(An earlier design judged Stock on a desired mana tick instead; superseded 2026-09-28. Saved Stock tick thresholds convert once to the smallest roll that pays that tick — **Client policy**, user 2026-09-28.)*
@@ -1973,7 +1976,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
   - **Trigger timing:** the reroll cycle keys off the **cast** (we know what we cast), not the applied-line confirm: after the cast reaches the wire, send `abil 145` and read the fresh roll. Keying it on the confirm meant it never fired at all.
   - **Running out of mana mid-cycle PAUSES, it does not surrender** *(2026-09-01, report `paradigm-20260901-114223`: the reroller quit at 3/20 when a recast would breach the mana floor, stranding the spell at a bad roll)*. Each recast costs mana, so if the next one would drop under the buff mana floor the cycle SUSPENDS with its reroll counter intact and resumes the next attempt once meditation lifts mana back over the floor — so it spends its full reroll budget across rest instead of abandoning a bad roll at the floor.
   - **Built — Paradigm:** `ManaRegenReroller` sends `abil 145`, parses the `spells:` slice, rerolls below the per-slot threshold up to its cap.
-  - **Built — Stock:** `ManaRegenReroller.OnManaTickObserved` / `JudgeNaturalTick` read the band via `ManaRegenBreakpointCalculator.RollsForTick`, from a `StockManaRollContext` that AppServices builds (level, stats, magery, worn ManaRgn%, the roll range, the meditate tick). `OnRecoveryTick` handles the 0-tick timeout. `AppServices.ConvertLegacyStockRerollThreshold` does the one-time conversion (`BuffSlot.RerollThresholdIsRoll`).
+  - **Built — Stock:** `ManaRegenReroller.OnManaTickObserved` / `JudgeNaturalTick` read the band via `ManaRegenBreakpointCalculator.RollsForTick`, from a `StockManaRollContext` that AppServices builds (level, stats, magery, ManaRgn% from gear, race, class and quests — worn gear only until 2026-10-24 — the roll range, the meditate tick). `OnRecoveryTick` handles the 0-tick timeout. `AppServices.ConvertLegacyStockRerollThreshold` does the one-time conversion (`BuffSlot.RerollThresholdIsRoll`).
 
 ### Looking at a monster — coarse wound bands
 *Status: CONFIRMED*

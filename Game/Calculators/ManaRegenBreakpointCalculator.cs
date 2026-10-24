@@ -30,9 +30,37 @@ public static class ManaRegenBreakpointCalculator
         int Intellect,
         int Willpower,
         int MageryLevel,       // class magery tier (Classes.MageryLVL), constant per class
-        int GearRegenPercent,  // summed +ManaRgn% from gear / quests (code 145), no spell
+        int GearRegenPercent,  // summed standing +ManaRgn% (code 145: gear, race, class, quests), no spell
         RealmType Realm,
         int Charm = 0);
+
+    // The live character's inputs: level, magery from its class row, the `stat`
+    // screen's INT / WIL / CHA, and ManaRgn% summed over every standing code-145
+    // source (GAME_MECHANICS "Mana regeneration & the ManaRgn breakpoints": gear,
+    // race, class and quests; a spell's roll is the caller's). statScreenGear is the
+    // worn gear's INT / WIL / CHA bonuses when `stat` was read: a gear-set swap since
+    // changes the stats the tick uses, so that gear's bonuses are swapped for what is
+    // worn now. Null for a class with no mana.
+    public static Inputs? LiveInputs(PlayerStats stats, IReadOnlyList<Inventory.EquippedItem> worn,
+        Services.GameDataCache gameData, IReadOnlyList<Quests.QuestBonus>? questBonuses,
+        (int Int, int Wil, int Cha)? statScreenGear = null)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+        RealmType realm = gameData.ActiveRealm;
+        StatContext cls = StatContext.Resolve(gameData, stats.Class, stats.Race, realm);
+        if (cls.MageryType == 0) return null;
+        EquipmentStatSummary gear = CharacterCalculator.AggregateEquipmentStats(worn, gameData).Totals;
+        (int atInt, int atWil, int atCha) = statScreenGear ?? (gear.PlusIntellect, gear.PlusWillpower, gear.PlusCharm);
+        return new Inputs(
+            Level: Math.Max(1, stats.Level), MageryType: cls.MageryType,
+            Intellect: stats.Intellect - atInt + gear.PlusIntellect,
+            Willpower: stats.Willpower - atWil + gear.PlusWillpower,
+            MageryLevel: cls.MageryLevel,
+            GearRegenPercent: CharacterCalculator.CharacterTotals(stats, worn, gameData, questBonuses).MpRegenPercent,
+            Realm: realm, Charm: stats.Charm - atCha + gear.PlusCharm);
+    }
 
     // One reachable tick step the roll spell can push us to: the tick it yields
     // and the roll value it needs.

@@ -149,7 +149,7 @@ public static class CharacterCalculator
         if (mageryType == 0) return 0;
 
         // Kai: 1 a tick plus 1 per 100 ManaRgn (GAME_MECHANICS "Mana regeneration &
-        // the ManaRgn breakpoints"; the user's rule counts worn ManaRgn).
+        // the ManaRgn breakpoints"), ManaRgn summed over every source.
         if (mageryType == 5)
         {
             return (mpRegenPercent + 100) * 1 / 100;

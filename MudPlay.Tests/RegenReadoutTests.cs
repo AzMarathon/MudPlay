@@ -40,6 +40,8 @@ public sealed class RegenReadoutTests : IDisposable
     private readonly RegenTracker _tracker;
     private readonly HpRegenExpectationSource _hpExpected;
     private (int Min, int Max, DateTimeOffset Until)? _rollSpellUp;
+    // What the client notes of the worn gear's INT / WIL / CHA when a `stat` screen is read.
+    private (int Int, int Wil, int Cha)? _statScreenGear;
     private readonly RegenReadout _readout;
 
     public RegenReadoutTests()
@@ -65,7 +67,8 @@ public sealed class RegenReadoutTests : IDisposable
         _hpExpected = new HpRegenExpectationSource(_stats, _inventory, _gameData, () => null);
         _tracker.SetHpExpectation(() => _hpExpected.Current);
         _readout = new RegenReadout(_tracker, _state, _stats, _inventory, _gameData, _profile, _inGame, _deaths,
-            _hpExpected, _reroller, () => null, rollSpellUp: () => _rollSpellUp, clock: () => _clock.Now);
+            _hpExpected, _reroller, () => null, rollSpellUp: () => _rollSpellUp,
+            statScreenGear: () => _statScreenGear, clock: () => _clock.Now);
     }
 
     public void Dispose()
@@ -110,7 +113,8 @@ public sealed class RegenReadoutTests : IDisposable
               { "Number": 2, "Name": "silver ring", "Abil-0": 145, "AbilVal-0": 50 },
               { "Number": 3, "Name": "copper ring", "Abil-0": 145, "AbilVal-0": 99 },
               { "Number": 4, "Name": "iron ring", "Abil-0": 145, "AbilVal-0": 100 },
-              { "Number": 5, "Name": "platinum ring", "Abil-0": 145, "AbilVal-0": 250 }
+              { "Number": 5, "Name": "platinum ring", "Abil-0": 145, "AbilVal-0": 250 },
+              { "Number": 6, "Name": "sage ring", "Abil-0": 44, "AbilVal-0": 10 }
             ]
             """);
     }
@@ -332,41 +336,80 @@ public sealed class RegenReadoutTests : IDisposable
         Assert.Equal("MA +30/tick", _readout.MaExpectedText);
     }
 
-    // Stock reads the roll off a natural tick with the reroller's own inputs (worn gear
-    // only); the readout shows that tick rather than adding the roll to its own
-    // ManaRgn%, which here also holds the race's +20 and would show +15.
+    // ManaRgn% is every standing code-145 source summed (user, 2026-10-24: race, class
+    // and quests count with the gear). The `stat` screen was read wearing the sage
+    // ring (+10 INT), then the silver ring (+50 ManaRgn) went on: the inputs take the
+    // INT the character has now.
     [Fact]
-    public void Stock_APinnedRoll_ShowsTheTickItWasReadOff()
+    public void LiveInputs_SumEveryManaRgnSource_AndMoveTheStatsOntoTheGearWornNow()
     {
-        Stat("Mage", level: 20, health: 75, intellect: 80, race: "Elf");
+        Stat("Mage", level: 20, health: 75, intellect: 90, race: "Elf");
+        Wearing("sage ring (Finger)");
+        _statScreenGear = (10, 0, 0);
+        Wearing("silver ring (Finger)");
+
+        var inputs = ManaRegenBreakpointCalculator.LiveInputs(_stats, _inventory.Snapshot.EquippedItems, _gameData,
+            new[] { new Game.Quests.QuestBonus(145, 30) }, _statScreenGear);
+
+        Assert.NotNull(inputs);
+        Assert.Equal(80, inputs.Value.Intellect);
+        Assert.Equal(100, inputs.Value.GearRegenPercent);   // race 20 + ring 50 + quest 30
+        Assert.Equal(18, ManaRegenBreakpointCalculator.Tick(inputs.Value, 0));   // base 9, doubled
+    }
+
+    // The Stock reroll reads a roll with the same inputs the readout shows: the range
+    // before the read is the breakpoint calculator's, and the read tick is what the
+    // roll pays with those inputs.
+    [Fact]
+    public void Stock_TheRollIsReadWithTheReadoutsInputs_AndThePinnedTickIsTheReadOne()
+    {
+        Stat("Mage", level: 20, health: 75, intellect: 90, race: "Elf");
+        Wearing("sage ring (Finger)");
+        _statScreenGear = (10, 0, 0);
+        Wearing("silver ring (Finger)");
         Prompt("[HP=100/MA=10]:");
-        _stockRoll = new StockManaRollContext(
-            new ManaRegenBreakpointCalculator.Inputs(Level: 20, MageryType: 1, Intellect: 80, Willpower: 50,
-                MageryLevel: 3, GearRegenPercent: 0, Realm: RealmType.Stock, Charm: 50),
-            RollMin: 0, RollMax: 100, MeditateTick: 9, ManaBelowMax: true);
+        ManaRegenBreakpointCalculator.Inputs inputs = ManaRegenBreakpointCalculator.LiveInputs(
+            _stats, _inventory.Snapshot.EquippedItems, _gameData, null, _statScreenGear)!.Value;
+        _stockRoll = new StockManaRollContext(inputs, RollMin: 0, RollMax: 100, MeditateTick: 9, ManaBelowMax: true);
         _rollSpellUp = (0, 100, _clock.Now.AddMinutes(10));
 
         _reroller.OnRollSpellLanded("flux");
-        Assert.Equal("MA +10–19/tick", _readout.MaExpectedText);
+        ManaRegenBreakpointCalculator.Result span = ManaRegenBreakpointCalculator.Compute(inputs, 0, 100);
+        Assert.Equal($"MA +{span.WorstTick}–{span.BestTick}/tick", _readout.MaExpectedText);   // +15–24
 
-        _reroller.OnManaTickObserved(new RegenSample(_clock.Now, 13, TimeSpan.FromSeconds(30), PlayerPosition.Standing),
+        _reroller.OnManaTickObserved(new RegenSample(_clock.Now, 20, TimeSpan.FromSeconds(30), PlayerPosition.Standing),
             reachedMax: false);
-        Assert.Equal("MA +13/tick", _readout.MaExpectedText);
+        Assert.Equal("MA +20/tick", _readout.MaExpectedText);
+        Assert.Equal(20, ManaRegenBreakpointCalculator.Tick(inputs, _reroller.CurrentRoll!.Value));
     }
 
-    // Kai: 1 a tick, and 1 more for every 100 ManaRgn worn (user, 2026-10-24).
+    // Kai: 1 a tick, and 1 more for every 100 ManaRgn, every source summed (user,
+    // 2026-10-24). The Elf's +20 takes the copper ring's 99 over a hundred.
     [Theory]
-    [InlineData(null, 1)]
-    [InlineData("copper ring (Finger)", 1)]
-    [InlineData("iron ring (Finger)", 2)]
-    [InlineData("platinum ring (Finger)", 3)]
-    public void Kai_IsOneATick_AndOneMorePerHundredManaRgnWorn(string? ring, int kai)
+    [InlineData(null, "Human", 1)]
+    [InlineData("copper ring (Finger)", "Human", 1)]
+    [InlineData("iron ring (Finger)", "Human", 2)]
+    [InlineData("platinum ring (Finger)", "Human", 3)]
+    [InlineData("copper ring (Finger)", "Elf", 2)]
+    public void Kai_IsOneATick_AndOneMorePerHundredManaRgn(string? ring, string race, int kai)
     {
-        Stat("Mystic", level: 30, health: 60);
+        Stat("Mystic", level: 30, health: 60, race: race);
         if (ring is not null) Wearing(ring);
         Prompt("[HP=100/KAI=2]:");
 
         Assert.Equal($"KAI +{kai}/tick", _readout.MaExpectedText);
+    }
+
+    // Only Paradigm lets a mystic meditate: the ticks come faster, each the same.
+    [Fact]
+    public void Kai_Meditating_OnParadigm_IsTheSameAmountATick()
+    {
+        _gameData.SwitchSet("paradigm");
+        Stat("Mystic", level: 30, health: 60);
+        Wearing("iron ring (Finger)");
+        Prompt("[HP=100/KAI=2]: (Meditating)");
+
+        Assert.Equal("KAI +2/meditate tick", _readout.MaExpectedText);
     }
 
     [Fact]

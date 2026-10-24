@@ -6432,7 +6432,9 @@ public sealed class AppServices
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
         RegenReadout = new Game.RegenReadout(Regen, PlayerState, PlayerStats, Inventory, GameData, Profile,
             InGameCapture, DeathWatcher, HpRegenExpected, ManaRegen, _regenQuestBonuses, RollSpellUp,
-            log: Log, post: a => Avalonia.Threading.Dispatcher.UIThread.Post(a));
+            statScreenGear: () => _statScreenGearStats, log: Log, post: a => Avalonia.Threading.Dispatcher.UIThread.Post(a));
+        // After NoteStatScreenGear, so the readout sees the gear the new screen was read under.
+        Stats.ScreenParsed += _ => RegenReadout.QueueRefresh();
         // The sent-command trail keeps nothing typed outside the game (a login is)
         // and nothing that may be a suicide password, typed or sent by @suicide.
         EngineGate.Trail = SentCommands;
@@ -13570,7 +13572,7 @@ public sealed class AppServices
     private Func<IReadOnlyList<Game.Quests.QuestBonus>?> _regenQuestBonuses = () => null;
 
     // The Stock tick inputs for the configured mana-regen roll spell: level, stats,
-    // magery, worn +ManaRgn%, the spell's level-scaled roll range and the meditate tick
+    // magery, +ManaRgn% from gear, race, class and quests, the spell's level-scaled roll range and the meditate tick
     // (the unscaled base). Null before the first stat parse, for a non-caster, or when
     // no roll spell is configured — the reroller then can't read a roll back.
     private Game.Spells.StockManaRollContext? StockManaRollContext()
@@ -13584,26 +13586,15 @@ public sealed class AppServices
         if (!Stats.HasParsed) return null;
         if (Spellbook.FindByCastCode(spellCode.Trim()) is not { } spell) return null;
         if (!Game.Spells.ManaRegenReroller.IsRollSpell(spell.Formula)) return null;
-        GameRow? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
-        int mageryType = RowInt(classRow, "MageryType");
-        if (mageryType == 0) return null;
-        int level = System.Math.Max(1, PlayerStats.Level);
-        (long a, long b) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, level);
-        var worn = Game.Calculators.CharacterCalculator
-            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals;
         // The `stat` screen counted the gear worn when it was read; a gear-set swap
-        // since (a meditate / mana set) changes the stats the tick uses, so swap that
-        // gear's stat bonuses for what's worn now.
-        (int atInt, int atWil, int atCha) = _statScreenGearStats ?? (worn.PlusIntellect, worn.PlusWillpower, worn.PlusCharm);
-        Game.Calculators.ManaRegenBreakpointCalculator.Inputs inputs = new(
-            Level: level, MageryType: mageryType,
-            Intellect: PlayerStats.Intellect - atInt + worn.PlusIntellect,
-            Willpower: PlayerStats.Willpower - atWil + worn.PlusWillpower,
-            MageryLevel: RowInt(classRow, "MageryLVL"),
-            GearRegenPercent: worn.MpRegenPercent,
-            Realm: GameData.ActiveRealm, Charm: PlayerStats.Charm - atCha + worn.PlusCharm);
+        // since (a meditate / mana set) changes the stats the tick uses, so the inputs
+        // swap that gear's stat bonuses for what's worn now.
+        if (Game.Calculators.ManaRegenBreakpointCalculator.LiveInputs(PlayerStats, Inventory.Snapshot.EquippedItems,
+                GameData, _regenQuestBonuses(), _statScreenGearStats) is not { } inputs)
+            return null;
+        (long a, long b) = Game.Spells.SpellCalculator.AffectMagnitude(spell.Formula, inputs.Level);
         int meditate = Game.Calculators.CharacterCalculator.CalcManaRegen(
-            level, inputs.Intellect, inputs.Willpower, inputs.Charm, mageryType, inputs.MageryLevel,
+            inputs.Level, inputs.Intellect, inputs.Willpower, inputs.Charm, inputs.MageryType, inputs.MageryLevel,
             0, isMeditating: true, inputs.Realm);
         return new Game.Spells.StockManaRollContext(inputs, (int)System.Math.Min(a, b), (int)System.Math.Max(a, b),
             meditate, PlayerState.MaxMa > 0 && PlayerState.Ma < PlayerState.MaxMa,
@@ -13660,7 +13651,7 @@ public sealed class AppServices
     // The Stock reroll's tick inputs, for the bug report.
     public string DescribeStockManaRollContext() => StockManaRollContext() is { } c
         ? $"level {c.Inputs.Level}, magery type {c.Inputs.MageryType} tier {c.Inputs.MageryLevel}, " +
-          $"INT {c.Inputs.Intellect} WIL {c.Inputs.Willpower} CHA {c.Inputs.Charm}, worn ManaRgn {c.Inputs.GearRegenPercent}%, " +
+          $"INT {c.Inputs.Intellect} WIL {c.Inputs.Willpower} CHA {c.Inputs.Charm}, ManaRgn {c.Inputs.GearRegenPercent}% (gear, race, class, quests), " +
           $"meditate (base) tick {c.MeditateTick}, roll range {c.RollMin}..{c.RollMax}, mana below max {c.ManaBelowMax}"
         : "(unknown — no roll spell configured, or stats / class not known yet)";
 
@@ -13718,7 +13709,7 @@ public sealed class AppServices
     }
 
     // The character's natural passive mana-regen per 30 s tick — level / stats /
-    // magery with worn +ManaRgn% folded in, NOT meditating — the "mana gained per
+    // magery with +ManaRgn% from gear, race, class and quests folded in, NOT meditating — the "mana gained per
     // tick" the Buff Watchdog shows against its per-tick maintenance cost so you can
     // see at a glance whether a buff set is self-sustaining. Deliberately excludes any
     // mana-regen roll spell (nature tap / flux): its magnitude is a variable roll, and
@@ -13728,15 +13719,11 @@ public sealed class AppServices
     public int? PassiveManaRegenTick()
     {
         if (!Stats.HasParsed) return null;
-        GameRow? classRow = GameData.FindRowByName("Classes", PlayerStats.Class);
-        int mageryType = RowInt(classRow, "MageryType");
-        if (mageryType == 0) return null;   // non-caster: no mana pool worth planning
-        int mageryLevel = RowInt(classRow, "MageryLVL");
-        int gearRegen = Game.Calculators.CharacterCalculator
-            .AggregateEquipmentStats(Inventory.Snapshot.EquippedItems, GameData).Totals.MpRegenPercent;
-        return Game.Calculators.CharacterCalculator.CalcManaRegen(
-            System.Math.Max(1, PlayerStats.Level), PlayerStats.Intellect, PlayerStats.Willpower,
-            PlayerStats.Charm, mageryType, mageryLevel, gearRegen, isMeditating: false, GameData.ActiveRealm);
+        // The `stat` stats as read (no gear-swap correction), as this figure always was.
+        return Game.Calculators.ManaRegenBreakpointCalculator.LiveInputs(
+                PlayerStats, Inventory.Snapshot.EquippedItems, GameData, _regenQuestBonuses()) is { } inputs
+            ? Game.Calculators.ManaRegenBreakpointCalculator.Tick(inputs, 0)
+            : null;   // non-caster: no mana pool worth planning
     }
 
     private static int RowInt(GameRow? row, string property)

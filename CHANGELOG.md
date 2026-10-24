@@ -3,6 +3,7 @@
 ## 3.185.38
 
 - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
+- Buff Watchdog's mana per tick and the Stock mana-regen roll read count race, class and quest ManaRgn, not just gear
 
 ## 3.185.37
 

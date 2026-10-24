@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.185.38**
 > - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
+> - Buff Watchdog's mana per tick and the Stock mana-regen roll read count race, class and quest ManaRgn, not just gear
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

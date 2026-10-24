@@ -40,6 +40,8 @@ public sealed class RegenReadout : IDisposable
     // The mana-regen roll spell's level-scaled range and when its timer runs out,
     // while it is up; null when none is configured or it isn't up.
     private readonly Func<(int Min, int Max, DateTimeOffset Until)?> _rollSpellUp;
+    // The worn gear's INT / WIL / CHA bonuses when `stat` was read (ManaRegenBreakpointCalculator.LiveInputs).
+    private readonly Func<(int Int, int Wil, int Cha)?> _statScreenGear;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _clock;
     // Runs a refresh on the UI thread: inventory changes can arrive off it.
@@ -61,8 +63,10 @@ public sealed class RegenReadout : IDisposable
         GameDataCache gameData, ProfileService profile, InGameCapture inGame, DeathLineWatcher deaths,
         HpRegenExpectationSource hpExpected, ManaRegenReroller reroller, Func<IReadOnlyList<QuestBonus>?> questBonuses,
         Func<(int Min, int Max, DateTimeOffset Until)?>? rollSpellUp = null,
+        Func<(int Int, int Wil, int Cha)?>? statScreenGear = null,
         LogService? log = null, Func<DateTimeOffset>? clock = null, Action<Action>? post = null)
     {
+        _statScreenGear = statScreenGear ?? (() => null);
         _tracker = tracker ?? throw new ArgumentNullException(nameof(tracker));
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _stats = stats ?? throw new ArgumentNullException(nameof(stats));
@@ -239,29 +243,32 @@ public sealed class RegenReadout : IDisposable
         _rollUntil = null;
         int level = _stats.Level;
         if (level <= 0) return (string.Empty, "no `stat` read yet");
-        StatContext cls = StatContext.Resolve(_gameData, _stats.Class, _stats.Race, realm);
-        if (cls.MageryType == 0) return (string.Empty, $"{_stats.Class} has no mana");
+        // The same inputs the Stock reroll reads a roll with, gear-swap correction included.
+        if (ManaRegenBreakpointCalculator.LiveInputs(_stats, _inventory.Snapshot.EquippedItems, _gameData,
+                _questBonuses(), _statScreenGear()) is not { } inputs)
+            return (string.Empty, $"{_stats.Class} has no mana");
+        int regen = inputs.GearRegenPercent;
 
-        if (cls.MageryType == KaiMagery)
+        if (inputs.MageryType == KaiMagery)
         {
-            // Kai regenerates 1 a tick, and 1 more for every 100 ManaRgn the mystic
-            // wears (user, 2026-10-24): gear only, never below nothing.
-            int wornGear = CharacterCalculator.AggregateEquipmentStats(
-                _inventory.Snapshot.EquippedItems, _gameData).Totals.MpRegenPercent;
-            int kai = Math.Max(0, 1 + (int)Math.Floor(wornGear / 100.0));
-            return ($"KAI +{kai}/tick", $"level {level}, worn ManaRgn {wornGear}, {Word(posture)}, {realm}");
+            // Kai regenerates 1 a tick and 1 more per 100 ManaRgn, every source summed
+            // (user, 2026-10-24); never below nothing. Only Paradigm lets a mystic
+            // meditate, which brings the ticks faster at the same amount.
+            int kai = Math.Max(0, ManaRegenBreakpointCalculator.Tick(inputs, 0));
+            string kaiInputs = $"level {inputs.Level}, ManaRgn {regen} (gear, race, class, quests), {Word(posture)}, {realm}";
+            return realm == RealmType.ParaMud && posture == PlayerPosition.Meditating
+                ? ($"KAI {Signed(kai)}/meditate tick", kaiInputs + "; the meditate cadence is assumed from mana's")
+                : ($"KAI {Signed(kai)}/tick", kaiInputs);
         }
 
-        int worn = CharacterCalculator.CharacterTotals(
-            _stats, _inventory.Snapshot.EquippedItems, _gameData, _questBonuses()).MpRegenPercent;
-        int Tick(int percent, bool meditating) => CharacterCalculator.CalcManaRegen(level, _stats.Intellect,
-            _stats.Willpower, _stats.Charm, cls.MageryType, cls.MageryLevel, percent, meditating, realm);
-        string stats = $"level {level}, magery {cls.MageryType} tier {cls.MageryLevel}, "
-            + $"INT {_stats.Intellect} WIL {_stats.Willpower} CHA {_stats.Charm}, ManaRgn {worn}% (gear, race, class, quests)";
+        int Tick(int percent, bool meditating) => CharacterCalculator.CalcManaRegen(inputs.Level, inputs.Intellect,
+            inputs.Willpower, inputs.Charm, inputs.MageryType, inputs.MageryLevel, percent, meditating, realm);
+        string stats = $"level {inputs.Level}, magery {inputs.MageryType} tier {inputs.MageryLevel}, "
+            + $"INT {inputs.Intellect} WIL {inputs.Willpower} CHA {inputs.Charm}, ManaRgn {regen}% (gear, race, class, quests)";
 
         // A roll spell's roll adds to ManaRgn%: once read, it pins the tick; until
         // then the tick is a range over what the roll can be.
-        int low = Tick(worn, false), high = low;
+        int low = Tick(regen, false), high = low;
         string rollNote = string.Empty, rollInputs = "no roll spell up";
         if (_rollSpellUp() is { } spell)
         {
@@ -275,24 +282,24 @@ public sealed class RegenReadout : IDisposable
             }
             else if (_reroller.CurrentRoll is { } roll)
             {
-                low = high = Tick(worn + roll, false);
+                low = high = Tick(regen + roll, false);
                 rollInputs = $"roll {roll}";
                 rollNote = $" (roll {roll})";
             }
             else
             {
-                int atMin = Tick(worn + spell.Min, false), atMax = Tick(worn + spell.Max, false);
+                int atMin = Tick(regen + spell.Min, false), atMax = Tick(regen + spell.Max, false);
                 (low, high) = (Math.Min(atMin, atMax), Math.Max(atMin, atMax));
                 rollInputs = $"roll not read yet, {spell.Min}..{spell.Max}";
             }
         }
         string passive = low == high ? Signed(low) : $"{Signed(low)}–{(low < 0 ? Signed(high) : $"{high}")}";
-        string inputs = $"{stats}, {rollInputs}, {Word(posture)}, {realm}";
+        string workedFrom = $"{stats}, {rollInputs}, {Word(posture)}, {realm}";
         // Meditating pays the base without ManaRgn% every 15 s, and the 30 s pass
         // keeps paying beside it.
         return posture == PlayerPosition.Meditating
-            ? ($"MA {Signed(Tick(0, true))}/meditate tick ({passive}/30s)", inputs)
-            : ($"MA {passive}/tick{rollNote}", inputs);
+            ? ($"MA {Signed(Tick(0, true))}/meditate tick ({passive}/30s)", workedFrom)
+            : ($"MA {passive}/tick{rollNote}", workedFrom);
     }
 
     private static string Word(PlayerPosition position) => position switch
