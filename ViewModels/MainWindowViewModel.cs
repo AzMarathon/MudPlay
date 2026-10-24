@@ -5980,7 +5980,8 @@ public partial class MainWindowViewModel : ObservableObject
     // loop staged (Manage dialog's Load) → run it straight away. Otherwise — idle
     // with nothing staged, OR already running a loop/goto — open the shared Manage
     // dialog on the Go To tab, so the user can pick or SWITCH destination by
-    // hitting Run on a different favourite / loop mid-run.
+    // hitting Run on a different favourite / loop mid-run. Backing out of the
+    // staged loop's route cards lets go of it, so the next Start opens the list.
     [RelayCommand]
     private void MovementStart()
     {
@@ -5993,7 +5994,8 @@ public partial class MainWindowViewModel : ObservableObject
         }
         if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged,
+                declined: () => s.LoopRunner.Unstage(staged, "the walk to it was called off at its route cards"));
             return;
         }
         OpenNavManager(startOnGotoTab: true);

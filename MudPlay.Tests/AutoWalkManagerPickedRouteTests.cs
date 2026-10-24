@@ -110,6 +110,31 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         ]
         """;
 
+    // The only way to the Vault crosses the River (spell 700), and its door opens
+    // from the Lever room, which is reached only through the Flood (spell 700 too),
+    // off the route itself: the temple sanctum's shape, whose water-main wheels sit
+    // past flooded passages (report paradigm-20261021-135647).
+    //   1/1 Start ─E─ 1/2 River ─E─ 1/5 Host ─E (lever)─ 1/9 Vault
+    //                               1/5 Host ─N─ 1/7 Flood ─N─ 1/8 Lever
+    private const string LeverPastAFloodRooms = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 700, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/5", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Host", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/7", "S": "0", "E": "1/9 (Hidden/Needs 1 Actions, specific order)", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "Flood", "Spell": 700, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/8", "S": "1/5", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "Lever", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/7", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "Action#1 [on the E exit of room 1/5]: pull lever" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static readonly RoomKey Host = new(1, 5), Flood = new(1, 7), LeverRoom = new(1, 8);
+
     private static readonly RoomKey Start = new(1, 1), River = new(1, 2), Camp = new(1, 5), Swamp = new(1, 6);
     private static readonly RoomKey Hills = new(1, 1), Lake = new(1, 4), Dest = new(1, 9), Giver = new(1, 10);
     private static readonly RoomKey Grove = new(1, 10), Trail = new(1, 11), Arch = new(7, 131), Shop = new(1, 20);
@@ -697,6 +722,57 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Assert.False(h.Walker.WalkTo(Dest, planThroughAcquirableGates: true));
 
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // ----- a lever trip off the picked route ---------------------------------
+
+    // The pick agrees to the hazard rooms its card's route shows, as CommitWalk passes
+    // them on.
+    private static bool PickTheCard(Harness h, RouteChoice card) =>
+        h.Walker.WalkTo(card.GatedPath[^1], planThroughAcquirableGates: true, armItemAcquisition: false,
+            pickedRoute: true, keepGatesClosedFor: card.ClosedGateItems,
+            agreedHazardRooms: RouteChoicePlanner.UncounteredHazardRooms(h.Filter, card.GatedPath));
+
+    // Report paradigm-20261021-135647: the card showed the route alone, the pick
+    // agreed to the River and nothing more, and the walk failed on the spot because
+    // the trip to the lever crosses the Flood. The card's route is the walk, lever
+    // trip and all, and the walk it starts goes.
+    [Fact]
+    public void ASoleRouteCard_ShowsTheHazardRoomsItsLeverTripCrosses_AndItsWalkGoes()
+    {
+        Harness h = NewHarness(LeverPastAFloodRooms, Start);
+
+        RouteChoice card = RouteChoicePlanner.Evaluate(h.Bfs, h.Filter, h.Graph, Start, Dest)!;
+
+        Assert.False(card.HasFreeRoute);
+        Assert.Equal(new[] { Start, River, Host, Flood, LeverRoom, Flood, Host, Dest }, card.GatedPath);
+        Assert.Equal(7, card.GatedStepCount);
+        Assert.Contains(card.GatedWalk!, s => s is CommandStep { Command: "pull lever" });
+        RouteRequirement hazard = Assert.Single(card.Requirements);
+        Assert.Equal(RouteRequirementKind.HazardProtection, hazard.Kind);
+        Assert.Equal(new[] { River, Flood }, RouteChoicePlanner.UncounteredHazardRooms(h.Filter, card.GatedPath));
+
+        Assert.True(PickTheCard(h, card));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal("7 move(s), 1 action(s)", h.LastPlan);
+        Play(h);
+        Assert.Equal(new[] { "e" }, h.Sent);
+    }
+
+    // What the pick did before: the route's own rooms agreed to, and the lever trip
+    // finds the Flood shut.
+    [Fact]
+    public void APickAgreeingToTheRouteAlone_FailsAtTheLeverTrip()
+    {
+        Harness h = NewHarness(LeverPastAFloodRooms, Start);
+
+        Assert.False(h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, armItemAcquisition: false,
+            pickedRoute: true, agreedHazardRooms: new[] { River }));
+
+        WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("is opened from 1/8 (Lever)", failed.Detail, StringComparison.Ordinal);
+        Assert.Empty(h.Sent);
     }
 
     // "Walk it, don't teleport" is a refusal, and holds on a side trip as well: with

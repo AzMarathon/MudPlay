@@ -276,8 +276,8 @@ How to keep it current:
 
 ### AutoWalkManagerPickedRouteTests.cs
 - Covers: Game/Map/AutoWalkManager journeys (WalkJourney, JourneyFetch, Game/Map/DetourResume, RouteChoicePlanner)
-- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand.
-- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs).
+- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand. A sole-route card whose lever trip crosses a hazard room off the route shows that room, and the walk its pick starts goes; agreeing to the route's own rooms alone fails at the lever.
+- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs), paradigm-20261021-135647 (the temple sanctum walk failed on its water-main lever trip right after the pick).
 
 ### AutoWalkManagerRoomCommandRefusalTests.cs
 - Covers: Game/Map/AutoWalkManager (empty-room command hold), Game/Map/TBInfoActionResolver.NeedsEmptyRoom
@@ -1386,8 +1386,8 @@ How to keep it current:
 
 ### GameDataSwitchStopsMovementTests.cs
 - Covers: Game/Map/StopOnGameDataChange, MovementController, LoopRunner, AutoWalkManager, AutoLairManager, RoutePlanInFlight, PathItemFloorCollector, HeldLoopsOnProfileSwap
-- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped; route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
-- Why: room numbers differ between sets.
+- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped, across a Stop too (one begun after a Stop goes ahead); route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
+- Why: room numbers differ between sets; report paradigm-20261022-170426 (a Stop while a route was being worked out found no walk to stop).
 
 ### GameDataTableSectionTests.cs
 - Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel
@@ -2132,8 +2132,8 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
-- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, …).
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; backing out of the loaded loop's start lets go of it, but not of one loaded since.
+- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, -20261022-170426, …).
 
 ### LoopSettingsStoreTests.cs
 - Covers: Services/LoopSettingsStore, LoopManager, LoopEditor/LoopBuilder VMs, Game/Remote/LoopShareReceiver
@@ -4082,6 +4082,11 @@ How to keep it current:
 - Covers: Game/Tokens/TokenTeleportReader
 - Checks: item → CastsSp (43) → spell → TextBlock (148) → TBInfo `minlevel` / `price` / `teleport` chain; "the Lost City" keys as "lost city"; non-token items ignored.
 - Why: token destinations, costs and level gates come only from game data.
+
+### TokenUseLinesTests.cs
+- Covers: Game/Tokens/TokenUseLines through Game/Tokens/TokenTracker, over the shipped Paradigm message seed
+- Checks: our own use line (no placeholder) is recognized whole and lets the buff hold go; a party member's use names them and is not ours; the line quoted in chat is no use; an edited record is read afresh.
+- Why: report `paradigm-20261022-164244` (no token use of ours was ever recognized: the buff hold timed out, nothing heard of the teleport).
 
 ### TollPurseDoubtTests.cs
 - Covers: Services/MovementFilter, Game/Map/MovementRefusalDetector, Game/Map/AutoWalkManager, Game/Inventory/OwedPurseRead, Game/Inventory/PostDeathInventoryRefresh, Game/Recovery/ArenaDeathRooms, Game/DeathDetector, Game/Map/RoomTracker, RouteChoicePlanner

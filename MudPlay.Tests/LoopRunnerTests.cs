@@ -488,6 +488,27 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(new[] { h.Runner.LastRunLoop, staged }, h.Runner.HeldLoops);
     }
 
+    // Report paradigm-20261022-170426: the toolbar Start runs the loaded loop, and
+    // closing that start's route cards lets go of it so the next Start opens the
+    // Manage list. Only the loop that start was for: one loaded meanwhile stays.
+    [Fact]
+    public void BackingOutOfTheLoadedLoop_LetsGoOfIt_ButNotOfOneLoadedSince()
+    {
+        LogService log = new();
+        Harness h = NewHarness(log: log);
+        Loop first = AbCycle(), second = AbCycle();
+        h.Runner.Stage(first);
+        h.Runner.Stage(second);
+
+        h.Runner.Unstage(first, "the walk to it was called off at its route cards");
+        Assert.Same(second, h.Runner.StagedLoop);
+
+        h.Runner.Unstage(second, "the walk to it was called off at its route cards");
+        Assert.Null(h.Runner.StagedLoop);
+        Assert.Single(log.Snapshot(), e => e.Source == "LoopRunner"
+            && e.Message == $"loop '{second.Name}' no longer loaded to start: the walk to it was called off at its route cards");
+    }
+
     // A loop cut off by a disconnect is held to restart on reconnect, and is no
     // longer the running one: a change to its settings in that gap must reach it.
     [Fact]

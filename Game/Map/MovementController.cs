@@ -436,8 +436,14 @@ public sealed class MovementController : IDisposable
     // route between walks) stops with them.
     public event Action? Stopping;
 
+    // How many stops have been made. A route still being worked out for a walk the
+    // user asked for has no walk yet for a stop to end: it compares this against the
+    // count when it began and drops itself (RoutePlanInFlight).
+    public int StopsMade { get; private set; }
+
     public void Stop(string reason = "user stop from toolbar")
     {
+        StopsMade++;
         LetErrandGo();
         DropQueuedRun();
         Stopping?.Invoke();

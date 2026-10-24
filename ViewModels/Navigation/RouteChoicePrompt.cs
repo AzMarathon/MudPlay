@@ -130,9 +130,11 @@ public static class RouteChoicePrompt
         // reach here, so they stay out of the history exactly as before.
         if (!askOnlyOverAvoids && remember) services.GotoHistory.Record(destination);
 
-        // The game data this walk is asked for and planned on: asked again after
-        // every wait below, before the plan becomes a walk or a card (PlanOvertaken).
-        RoutePlanInFlight inFlight = new(destination, () => services.GameData.ActiveLoad, services.Log, LogCat);
+        // The game data this walk is asked for and planned on, and the stops made so
+        // far: asked again after every wait below, before the plan becomes a walk or
+        // a card (PlanOvertaken).
+        RoutePlanInFlight inFlight = new(
+            destination, () => services.GameData.ActiveLoad, services.Log, LogCat, services.MovementControl);
 
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
@@ -317,16 +319,17 @@ public static class RouteChoicePrompt
     // The game data was read in afresh while this walk was being planned or asked
     // about: its destination and its route are the old data's numbers, so no walk
     // starts and no card goes up (RoutePlanInFlight, which writes the log line). A
-    // "Calculating…" card still up is closed, and the user is told, in the words of
-    // the stop that change makes. Posted: the party's answers the plan waits on are
-    // read inside the line pump, where writing to the terminal re-enters it. The
-    // party's count for the plan goes with it: it was taken for this walk, and
-    // one that came back after the change is by the old data's item numbers.
+    // Stop made meanwhile drops it the same way. A "Calculating…" card still up is
+    // closed, and the user is told, in the words of the stop that change makes.
+    // Posted: the party's answers the plan waits on are read inside the line pump,
+    // where writing to the terminal re-enters it. The party's count for the plan
+    // goes with it: it was taken for this walk, and one that came back after the
+    // change is by the old data's item numbers.
     private static bool PlanOvertaken(AppServices services, RoutePlanInFlight inFlight, RouteChoiceDialogViewModel? calcVm)
     {
         if (inFlight.Dropped() is not { } notice) return false;
         calcVm?.Close();
-        services.ClearPartyShortGateItems("the game data changed while the route was being planned");
+        services.ClearPartyShortGateItems($"{inFlight.Why} while the route was being planned");
         Avalonia.Threading.Dispatcher.UIThread.Post(() => services.WriteTerminalNotice(notice));
         return true;
     }
@@ -493,7 +496,7 @@ public static class RouteChoicePrompt
             + (r.NoProtection ? " (no protection: its holders are teleported too)" : "")));
         string reqSummary = Summarize(choice.Requirements);
         if (choice.GatedWalk is not null)
-            avoidAltNote += " (the gates are on a lever detour, not the route itself)";
+            avoidAltNote += " (its walk takes lever trips off the route; the rooms and gates count them)";
         // Each route with its own length and needs, so the log shows the two the
         // cards offered rather than one route and a saving.
         if (!choice.HasFreeRoute)
@@ -1052,10 +1055,13 @@ public static class RouteChoicePrompt
     // every route card a walk-to is offered, and the loop begins when that walk
     // arrives (LoopWalkHandoff). Standing on the loop already, or with no room of it
     // to plan a walk to, the loop runner starts it directly as it always has.
+    // declined runs when that walk ends before it began: its route cards were closed
+    // without a pick, or a stop dropped it while it was being planned.
     public static async Task StartLoopAsync(
         AppServices services, Loop loop,
         Action<IReadOnlyList<RoomKey>?>? previewSink = null,
-        RunStartMode startMode = RunStartMode.Normal)
+        RunStartMode startMode = RunStartMode.Normal,
+        Action? declined = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(loop);
@@ -1080,7 +1086,9 @@ public static class RouteChoicePrompt
         services.Log.Info(LogCat, $"loop '{loop.Name}' started from off the loop: walking to {loopRoom} first, as a walk-to");
         services.LoopHandoff.Begin(loop, loopRoom);
         bool went = await WalkAsync(services, loopRoom, previewSink, startMode, remember: false);
-        if (!went) services.LoopHandoff.Cancel("cancelled at the route cards");
+        if (went) return;
+        services.LoopHandoff.Cancel("cancelled at the route cards");
+        declined?.Invoke();
     }
 
     // Start the walk, first lifting any lingering manual pause. A user picking a

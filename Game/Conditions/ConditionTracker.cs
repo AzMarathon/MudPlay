@@ -39,6 +39,13 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // the matching EndsWith hasn't).
     private readonly HashSet<string> _active = new(StringComparer.Ordinal);
 
+    // When each record last latched and the line that latched it. Read only for the
+    // records still in _active: an ailment held with no wear-off ever seen has the
+    // line that set it named in the bug report, which the program log has long
+    // since dropped by then (report paradigm-20261022-164244: Confused held for 23
+    // minutes, set before the log's window opened).
+    private readonly Dictionary<string, (DateTimeOffset At, string Line)> _latchedBy = new(StringComparer.Ordinal);
+
     // Built from MessageStore on every CollectionChanged. Maps an applied-message
     // string to the records that carry it (multiple records can share text —
     // realm variants).
@@ -194,6 +201,20 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         foreach (MessageRecord r in _messages.Messages)
             if (_active.Contains(r.Id) && match(r)) return true;
         return false;
+    }
+
+    // The records active on us, each with when it latched and the line that latched
+    // it (null for both when that went unrecorded), for the bug report.
+    public IReadOnlyList<(MessageRecord Record, DateTimeOffset? At, string? Line)> ActiveRecords()
+    {
+        List<(MessageRecord, DateTimeOffset?, string?)> records = new();
+        foreach (MessageRecord r in _messages.Messages)
+        {
+            if (!_active.Contains(r.Id)) continue;
+            records.Add(_latchedBy.TryGetValue(r.Id, out (DateTimeOffset At, string Line) by)
+                ? (r, by.At, by.Line) : (r, null, null));
+        }
+        return records;
     }
 
     // True when any currently-active record's Name matches name
@@ -620,6 +641,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 if (actionFailed is null && r.Flags.HasFlag(MessageFlags.LastActionFailed))
                     actionFailed = r;
                 if (!_active.Add(r.Id)) continue;
+                _latchedBy[r.Id] = (line.Timestamp, text);
                 appliedThisLine.Add(r);
             }
         }
@@ -1043,7 +1065,10 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         List<string>? latched = null;
         foreach ((_, MessageRecord r) in _appliedIndex)
             if (match(r) && _active.Add(r.Id))
+            {
+                _latchedBy[r.Id] = (DateTimeOffset.Now, "(carried over from time out of the game)");
                 (latched ??= new()).Add(r.Name);
+            }
         if (latched is null) return;
         RecomputeFlags();
         _log?.Info(LogCategory,
