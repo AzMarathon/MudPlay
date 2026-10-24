@@ -37,27 +37,16 @@
         <Style Selector="Button.QuestHeader /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
         </Style>
-        <!-- Inline map/room walk-to link inside a step line: flat accent hot-text
+        <!-- Inline map/room walk-to link inside a step line: accent hot-text
              the user clicks to start a walk to that coordinate. -->
-        <Style Selector="Button.MapLink">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="3,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.MapLink /template/ ContentPresenter">
-            <Setter Property="Background" Value="Transparent"/>
-        </Style>
-        <Style Selector="TextBlock.MapLinkText">
+        <Style Selector="Run.MapLinkText">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
         <!-- Inline command link inside a step line: green hot-text the user clicks
              to type that command at the game (distinct from the cyan walk links). -->
-        <Style Selector="TextBlock.CmdLinkText">
+        <Style Selector="Run.CmdLinkText">
             <Setter Property="Foreground" Value="{StaticResource AccentGreenBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
@@ -203,7 +192,9 @@
                                     <!-- Followable checklist parsed from the quest's step markdown:
                                          `[]`-marked lines render as tickable checkboxes, plain lines
                                          as context labels. Ticking every checkbox flips the quest
-                                         complete. -->
+                                         complete. The step text's transparent background lets a
+                                         press anywhere in a link's line reach the link, not the
+                                         checkbox. -->
                                     <ItemsControl ItemsSource="{Binding Steps}" IsVisible="{Binding HasSteps}"
                                                   Margin="0,4,0,0">
                                         <ItemsControl.ItemTemplate>
@@ -214,12 +205,14 @@
                                                               Margin="0,1,0,1" VerticalAlignment="Top">
                                                         <TextBlock Classes="FieldLabel"
                                                                    views:QuestStepInlines.Segments="{Binding Segments}"
-                                                                   TextWrapping="Wrap"/>
+                                                                   TextWrapping="Wrap"
+                                                                   Background="Transparent"/>
                                                     </CheckBox>
                                                     <TextBlock Classes="FieldLabel"
                                                                IsVisible="{Binding !IsCheckable}"
                                                                views:QuestStepInlines.Segments="{Binding Segments}"
                                                                TextWrapping="Wrap"
+                                                               Background="Transparent"
                                                                Margin="0,1,0,1"/>
                                                 </Panel>
                                             </DataTemplate>

@@ -28,9 +28,6 @@ public sealed class QuestStepSegmentViewModel
     // Which action the clickable run performs (None for plain prose).
     public QuestStepLinkKind Kind { get; }
 
-    // True when this run is a clickable link (drives the view's link styling).
-    public bool IsLink => Command is not null;
-
     public QuestStepSegmentViewModel(string text)
     {
         ArgumentNullException.ThrowIfNull(text);

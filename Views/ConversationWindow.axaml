@@ -20,18 +20,7 @@
         <!-- Inline web link inside a chat message: underlined accent hot-text that
              opens the URL in the OS default browser. Font is inherited from the
              message block so the link matches the user's message font size. -->
-        <Style Selector="Button.ChatLink">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Margin" Value="0"/>
-            <Setter Property="MinHeight" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="Button.ChatLink /template/ ContentPresenter">
-            <Setter Property="Background" Value="Transparent"/>
-        </Style>
-        <Style Selector="TextBlock.ChatLinkText">
+        <Style Selector="Run.ChatLinkText">
             <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
             <Setter Property="TextDecorations" Value="Underline"/>
         </Style>
@@ -311,7 +300,9 @@
                                  Copy / Ctrl+C handles the whole entry, and a built-in
                                  partial-text-selection menu here only copied empty
                                  unless you'd first dragged a selection. Inline web links
-                                 still render + click via ConversationMessageInlines. -->
+                                 still render + click via ConversationMessageInlines; the
+                                 transparent background lets a press anywhere in a link's
+                                 line reach the link. -->
                             <TextBlock Grid.Column="3"
                                        views:ConversationMessageInlines.Message="{Binding MessageText}"
                                        views:ConversationMessageInlines.EmotesEnabled="{Binding Look.EmotesEnabled}"
@@ -320,6 +311,7 @@
                                        FontSize="{Binding Look.MessageFontSize}"
                                        LineHeight="{Binding Look.MessageLineHeight}"
                                        TextWrapping="Wrap"
+                                       Background="Transparent"
                                        VerticalAlignment="Center"/>
                         </Grid>
                     </Grid>
