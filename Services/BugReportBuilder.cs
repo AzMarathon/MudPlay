@@ -1385,10 +1385,14 @@ public static class BugReportBuilder
         Kv(sb, "Character's own hit magic (class + race)", innate.ToString());
         Kv(sb, "Normal attack", $"`{normalCommand}` — {svc.Combat.AttackKindOf(normalCommand)}");
         Kv(sb, "Alternate attack", $"`{alternateCommand}` — {svc.Combat.AttackKindOf(alternateCommand)}");
-        // A party is what lets an attack spell set to fire regardless of mana set
-        // its reserve aside, and the monster held for such a spell's cost.
+        // A party is what lets an attack spell set to fire regardless of mana ignore
+        // mana, and a spell the monster resists (or a room spell that can damage
+        // nothing here) engage it for no damage.
         Kv(sb, "In a party", svc.PartyState.IsInParty ? "yes" : "no");
-        Kv(sb, "Held for a fire-regardless spell's cost", svc.Combat.ManaHoldTarget ?? "(none)");
+        // Instances written off mid-fight (cast cap spent, "no effect"), kept off the
+        // next pick until the room clears.
+        IReadOnlyList<string> givenUp = svc.Combat.SnapshotGivenUp();
+        Kv(sb, "Given up on this room", givenUp.Count == 0 ? "(none)" : string.Join(", ", givenUp));
         sb.Append('\n');
 
         sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")

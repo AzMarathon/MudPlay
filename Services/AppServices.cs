@@ -6009,10 +6009,8 @@ public sealed class AppServices
         Combat.SetShadowRestSuppression(() => Health.ShadowRestHolding);
         // Likewise a monster left standing by the user's own `break`: the quiet is
         // what they asked for, and the watchdog's force-clear would let a walk leave.
-        // And one held for a fire-regardless spell's cost: nothing is sent until mana
-        // covers it.
         CombatTracker.SetCombatHeldOnPurposeProbe(
-            () => Health.ShadowRestHolding || Combat.AttackHeldByUserBreak || Combat.IsHoldingForMana);
+            () => Health.ShadowRestHolding || Combat.AttackHeldByUserBreak);
         SneakGuard.SetShadowRestProbe(() => Health.ShadowRestHolding);
         Health.SetSneakKeptProbe(() => SneakGuard.Holds);
         Health.SetMeditateWhilePoisonedProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);

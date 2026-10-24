@@ -426,7 +426,7 @@
                                            Text="{Binding MultiAttackMinManaPerCastConverted}"/>
                                 <CheckBox Content="Fire regardless of current mana"
                                           IsChecked="{Binding MultiAttackFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
+                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored). Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
                             </StackPanel>
                         </Grid>
 
@@ -466,7 +466,7 @@
                                 <CheckBox Content="Fire regardless of current mana"
                                           IsChecked="{Binding MultiAttack2FireRegardlessOfMana, Mode=TwoWay}"
                                           IsEnabled="{Binding MultiAttack2Enabled}"
-                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
+                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored). Room settings (Min enemies, Max casts, Auto-Nuke) still apply. Solo: no effect."/>
                             </StackPanel>
                         </Grid>
 
@@ -567,7 +567,7 @@
                                            Text="{Binding NormalAttackSpellMinManaPerCastConverted}"/>
                                 <CheckBox Content="Fire regardless of current mana"
                                           IsChecked="{Binding NormalAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. A monster only this spell can hurt is held on until mana covers it, not walked past. Solo: no effect."/>
+                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored); Max casts still applies. Solo: no effect."/>
                             </StackPanel>
                         </Grid>
 
@@ -600,7 +600,7 @@
                                            Text="{Binding AlternateAttackSpellMinManaPerCastConverted}"/>
                                 <CheckBox Content="Fire regardless of current mana"
                                           IsChecked="{Binding AlternateAttackSpellFireRegardlessOfMana, Mode=TwoWay}"
-                                          ToolTip.Tip="In a party: ignore Min mana per cast and cast whenever mana covers the spell's cost. A monster only this spell can hurt is held on until mana covers it, not walked past. Solo: no effect."/>
+                                          ToolTip.Tip="In a party: cast at the target whatever your mana (Min mana per cast and the spell cost are ignored); Max casts still applies. Solo: no effect."/>
                             </StackPanel>
                         </Grid>
 

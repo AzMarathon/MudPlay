@@ -4,7 +4,7 @@
 
 - A monster your weapon can't hit is fought with any attack spell that can hurt it, room spells and a spell set as the attack command included
 - The "cannot attack" log line names each weapon and spell weighed and why it was ruled out
-- New "Fire regardless of current mana" box on the attack spells: in a party the spell ignores its Min mana and casts once mana covers its cost
+- New "Fire regardless of current mana" box on the attack spells: in a party the spell is cast whatever your mana
 
 ## 3.185.32
 

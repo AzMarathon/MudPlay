@@ -328,8 +328,27 @@ public sealed class CastCoordinator : IDisposable
         BlockAndLog(CastFailureReason.Fizzled, $"spell={spell}");
     }
 
-    private void OnNoMana(MatchResult _) =>
+    private void OnNoMana(MatchResult _)
+    {
+        // An attack spell set to fire regardless of mana is refused for mana as a
+        // matter of course and simply goes again on its next turn: no block latched
+        // for the rest of the round over it.
+        if (_noManaRefusalExpected?.Invoke(_lastSpellSent) == true)
+        {
+            _log?.Info(LogCategory,
+                $"cast failed reason=NotEnoughMana spell={_lastSpellSent} — it fires regardless of mana; no cast block latched");
+            CastFailed?.Invoke(CastFailureReason.NotEnoughMana, "insufficient-mana-fire-regardless", _lastSpellSent);
+            return;
+        }
         BlockAndLog(CastFailureReason.NotEnoughMana, "insufficient-mana");
+    }
+
+    // Which cast codes are expected to be refused for mana now and then (an attack
+    // slot set to fire regardless of mana), so the refusal latches nothing. Optional.
+    private Func<string?, bool>? _noManaRefusalExpected;
+
+    public void SetNoManaRefusalExpected(Func<string?, bool> expected)
+        => _noManaRefusalExpected = expected ?? throw new ArgumentNullException(nameof(expected));
 
     // "You have already cast a spell this round!" is SLOT-SPECIFIC. The attack slot and the
     // between-round slot are independent server-side (confirmed — see the class doc), so a

@@ -45,6 +45,9 @@ public sealed class SpellEngageGateTests
         public string? WornWeapon { get; set; }
         public int Ma { get; set; } = 30;
         public int MaxMa { get; set; } = 30;
+        // Per-monster overlays (Game Data), by monster number.
+        public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
+        private MonsterOverlay Overlay(int number) => Overlays.TryGetValue(number, out MonsterOverlay? o) ? o : new MonsterOverlay();
 
         public Harness()
         {
@@ -55,6 +58,7 @@ public sealed class SpellEngageGateTests
 
             DefaultPatterns.Seed(Router);
             Server = new ServerFeed(Router, () => Clock.Now);
+            Log.Diagnostics = new LogDiagnosticState { CombatDiagnostics = true };
             Log.EntryAdded += e => Logged.Add(e.Message);
             PartyManager = new PartyManager(Router, Party, Log, now: () => Clock.Now);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log, now: () => Clock.Now);
@@ -62,13 +66,13 @@ public sealed class SpellEngageGateTests
             // each room before the combat manager does.
             Coordinator = new MovementCoordinator(Log);
             Tracker = new CombatStateTracker(Router, Coordinator, Classifier, Monsters, State,
-                () => true, resolveOverlay: _ => new MonsterOverlay(), log: Log, clock: () => Clock.Now);
+                () => true, resolveOverlay: Overlay, log: Log, clock: () => Clock.Now);
             Cast = new CastCoordinator(Router, Log, now: () => Clock.Now);
             Cast.SetWireSender(b => Sent.Add(b));
             Spellbook = new SpellbookState(new KnownSpellCatalog(cache));
             Spellbook.Refresh(12, 20);
             Combat = new CombatManager(Router, Classifier, Monsters,
-                resolveOverlay: _ => new MonsterOverlay(),
+                resolveOverlay: Overlay,
                 party: Party,
                 // The weapons are the Default gear set's, overlaid on each read.
                 readSettings: () =>
@@ -94,10 +98,6 @@ public sealed class SpellEngageGateTests
             Combat.SetWeaponActuator((_, _, _) => { }, readWornWeapon: () => WornWeapon);
             Combat.SetCarriedCheck(_ => true);
             Tracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
-            // As AppServices wires the gate's idle-stall watchdog: its resync CR goes
-            // out with the rest, and a mana hold is quiet on purpose.
-            Tracker.SetWireSender(b => Sent.Add(b));
-            Tracker.SetCombatHeldOnPurposeProbe(() => Combat.IsHoldingForMana);
 
             AddMonster(500, "bog wight");
             AddMonster(501, "marsh hag");
@@ -113,7 +113,7 @@ public sealed class SpellEngageGateTests
         // none; the warden's and golem's spell immunity is 5, the lich's 20, and the
         // wraith resists fire 100%); a Mage's magic missile (level 1, cost 3), dancing
         // blades (a room attack, level 11, cost 26), turn undead (undead only) and
-        // fireball (fire, cost 4).
+        // fireball (fire, cost 4) and holy wave (an undead-only room attack).
         private static void WriteGameData(string dir)
         {
             Directory.CreateDirectory(dir);
@@ -141,7 +141,9 @@ public sealed class SpellEngageGateTests
                   { "Number": 40, "Name": "turn undead", "Short": "turn", "ReqLevel": 3, "ManaCost": 5,
                     "Targets": 8, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 },
                   { "Number": 3, "Name": "fireball", "Short": "fbal", "ReqLevel": 1, "ManaCost": 4,
-                    "Targets": 8, "AttType": 1, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 } ]
+                    "Targets": 8, "AttType": 1, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 },
+                  { "Number": 41, "Name": "holy wave", "Short": "hwav", "ReqLevel": 3, "ManaCost": 10,
+                    "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 } ]
                 """);
         }
 
@@ -427,9 +429,9 @@ public sealed class SpellEngageGateTests
         Assert.Contains("katana hits magic 3", row.Why);
     }
 
-    // "Fire regardless of current mana": in a party the slot's mana reserve is set
-    // aside and the spell casts on its cost alone; solo, or with the box clear, the
-    // reserve holds and the monster is left for now (a mana stall, not a write-off).
+    // "Fire regardless of current mana": in a party the slot asks nothing of mana
+    // and casts; solo, or with the box clear, the reserve holds and the monster is
+    // left for now (a mana stall, not a write-off).
     [Theory]
     [InlineData(true, true, true)]
     [InlineData(false, true, false)]
@@ -460,72 +462,136 @@ public sealed class SpellEngageGateTests
         Assert.Contains("mana 10 is under its reserve of 20", row.Why);
     }
 
-    // In a party with the box ticked but mana under the spell's own cost: hold on the
-    // monster (the walker stays, nothing is swung for "no effect"), and cast the
-    // round mana covers the cost.
-    [Fact]
-    public void FireRegardlessOfMana_BelowTheSpellsCost_HoldsOnTheMonster_ThenCasts()
+    // Ticked, in a party, with mana under the spell's own cost (even none): the cast
+    // still goes out, and the game's `*Combat Engaged*` engages us. A refusal for mana
+    // latches no cast block, keeps the target and the rung, and the spell goes again
+    // the next round, once a round.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0)]
+    public void FireRegardlessOfMana_BelowTheSpellsCost_StillCasts_AndARefusalDoesntStopTheNext(int mana)
     {
         using Harness h = new();
         h.WieldFromGearSet("katana");
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", FireRegardlessOfMana = true };
-        h.Ma = 1;
+        h.Ma = mana;
         h.JoinParty();
 
         h.Server.Line("Also here: bog wight.");
-
         Assert.True(h.Combat.CanEngageMonster(500));
-        Assert.True(h.WalkerHeld);
-        Assert.Empty(h.AllSent);
-        Assert.Equal("bog wight", h.Combat.CurrentTarget);
-        Assert.Contains(h.Logged, l => l.StartsWith("holding on bog wight", StringComparison.Ordinal));
-
-        h.Tick();
-        Assert.Empty(h.AllSent);
-
-        h.Ma = 5;
-        h.Tick();
-
         Assert.Equal(new[] { "mmis bog wight" }, h.AllSent);
-        Assert.Null(h.Combat.ManaHoldTarget);
+        h.Server.Line("*Combat Engaged*");
+        Assert.True(h.Combat.EngagedSinceLastAttack);
+
+        h.Server.Line("You do not have enough mana to cast that spell.");
+        Assert.Contains(h.Logged, l => l.Contains("no cast block latched", StringComparison.Ordinal));
+        Assert.Equal("bog wight", h.Combat.CurrentTarget);
+        Assert.Equal(new[] { "mmis bog wight" }, h.AllSent);   // nothing re-sent in the same round
+
+        h.Tick();
+
+        Assert.Equal(new[] { "mmis bog wight", "mmis bog wight" }, h.AllSent);
+        Assert.True(h.WalkerHeld);
     }
 
-    // A mana hold sends nothing, so the room goes quiet. The walker gate's idle-stall
-    // watchdog reads that quiet as on purpose: no force-clear, no resync CR, the
-    // hold and the gate stay.
+    // Unticked, a refusal for mana still latches the round's cast block as before.
     [Fact]
-    public void FireRegardlessOfMana_QuietHeldRoom_IsNotForceCleared()
+    public void NoManaRefusal_OnAnUntickedSlot_LatchesAsBefore()
     {
         using Harness h = new();
         h.WieldFromGearSet("katana");
-        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", FireRegardlessOfMana = true };
-        h.Ma = 1;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis" };
         h.JoinParty();
         h.Server.Line("Also here: bog wight.");
-        Assert.True(h.Combat.IsHoldingForMana);
 
-        h.Clock.Advance(TimeSpan.FromSeconds(7));
-        h.Tracker.OnCombatTick();
+        h.Server.Line("You do not have enough mana to cast that spell.");
 
-        Assert.True(h.WalkerHeld);
-        Assert.True(h.Combat.IsHoldingForMana);
-        Assert.Equal("bog wight", h.Combat.CurrentTarget);
-        Assert.Empty(h.Sent);
+        Assert.Contains(h.Logged, l => l.StartsWith("cast failed reason=NotEnoughMana insufficient-mana", StringComparison.Ordinal));
     }
 
-    // A monster held for mana waits behind one we can hurt this round.
+    // Ticked, the slot's Max casts still caps it: 0 is never.
     [Fact]
-    public void FireRegardlessOfMana_HeldMonster_GoesAfterOneWeCanHurtNow()
+    public void FireRegardlessOfMana_IsStillCappedByMaxCasts()
     {
         using Harness h = new();
         h.WieldFromGearSet("katana");
-        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", FireRegardlessOfMana = true };
-        h.Ma = 1;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot
+        {
+            SpellName = "mmis", FireRegardlessOfMana = true, MaxCastsPerRoom = 0,
+        };
+        h.Ma = 0;
         h.JoinParty();
 
-        h.Server.Line("Also here: bog wight, giant rat.");
+        h.Server.Line("Also here: bog wight.");
 
-        Assert.Equal(new[] { "a giant rat" }, h.AllSent);
+        Assert.False(h.Combat.CanEngageMonster(500));
+        Assert.Empty(h.AllSent);
+    }
+
+    // A target given up on once its cast cap ran out (nothing else hurts it) is not
+    // picked again in the room, where its cap would read as a new target's and the
+    // spell be cast again every cycle.
+    [Fact]
+    public void TargetGivenUpWhenItsCastCapRanOut_IsNotRePicked()
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mmis", MaxCastsPerRoom = 1 };
+        h.Server.Line("Also here: bog wight.");
+        h.Server.Line("*Combat Engaged*");
+        Assert.Equal(new[] { "mmis bog wight" }, h.AllSent);
+
+        h.Tick();                                   // its one round tallies: the cap is spent
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Contains("its 1 cast(s) at this target are spent", h.CannotAttackLine);
+
+        h.Server.Line("Also here: bog wight.");     // the room re-read the give-up asked for
+
+        Assert.Single(h.AllSent, s => s == "mmis bog wight");
+        Assert.False(h.Combat.CanEngageMonster(500));
+        Assert.False(h.WalkerHeld);
+        Assert.Contains("bog wight", h.Combat.SnapshotGivenUp());
+    }
+
+    // A per-monster physical override is the normal side's command: with the spell
+    // command under the monster's spell immunity, the override still hurts it, so it
+    // isn't walked past.
+    [Fact]
+    public void PhysicalOverride_CountsAsTheNormalAttack_WhenTheSpellCommandCantLand()
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackCommand = "mmis";
+        h.Overlays[505] = new MonsterOverlay { OverridePhysicalCommand = "attack" };
+
+        h.Server.Line("Also here: iron golem.");
+
+        Assert.True(h.Combat.CanEngageMonster(505));
+        Assert.True(h.WalkerHeld);
+        Assert.Equal(new[] { "attack iron golem" }, h.AllSent);
+    }
+
+    // An undead-only room attack with no undead here damages nothing, but casting it
+    // engages the caster with the room. In a party it's cast for that, the log says
+    // so; solo nobody else would kill the monster, so it's walked past.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UndeadOnlyRoomAttack_NoUndeadHere_EngagesOnlyInAParty(bool partied)
+    {
+        using Harness h = new();
+        h.WieldFromGearSet("katana");
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hwav", MinEnemies = 1 };
+        if (partied) h.JoinParty();
+
+        h.Server.Line("Also here: bog wight.");
+
+        Assert.Equal(partied, h.Combat.CanEngageMonster(500));
+        Assert.Equal(partied ? new[] { "hwav" } : Array.Empty<string>(), h.AllSent);
+        if (partied)
+            Assert.Contains(h.Logged, l => l.StartsWith("casting hwav at bog wight for no damage", StringComparison.Ordinal));
+        else
+            Assert.Contains("it can damage nothing here", h.CannotAttackLine);
     }
 
     // After an attack spell, `*Combat Engaged*` is what says we're engaged (and in

@@ -2518,17 +2518,9 @@ public sealed partial class CombatManager : IDisposable
                 $"no backstab in this room — {seer} sees hidden, so the sneak is spotted; opening with a normal attack");
         EngageableCandidate? choice = null;
         EngageableCandidate? actionableFallback = null;
-        EngageableCandidate? manaHoldFallback = null;
         foreach (EngageableCandidate cand in ordered)
         {
             EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName, cand.RawName);
-            // Held for a fire-regardless spell's cost: engaged once nothing here can
-            // be acted on now, so a monster we can hurt this round goes first.
-            if (verdict.Assessment == EngageAssessment.HeldForMana)
-            {
-                manaHoldFallback ??= cand;
-                continue;
-            }
             if (verdict.Assessment != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
@@ -2548,7 +2540,6 @@ public sealed partial class CombatManager : IDisposable
         // Backstab pending but every actionable monster is DontBackstab-flagged —
         // take the highest-priority actionable one and attack it normally.
         choice ??= actionableFallback;
-        choice ??= manaHoldFallback;
 
         // No engageable hostile is actionable — we can neither hit nor spell
         // anything left in the room. Move past: clear the target and dispatch
@@ -2735,6 +2726,7 @@ public sealed partial class CombatManager : IDisposable
         _normalNoEffectRetries.Clear();
         _speciesByNumber.Clear();
         _cannotAttackAnnounced.Clear();
+        _givenUpInstances.Clear();
         ClearBackstabResolution();
         ClearAttackSpellCascadeState();
 
@@ -2763,7 +2755,7 @@ public sealed partial class CombatManager : IDisposable
     {
         _castingSpellTarget = null;
         _lastCastAction = null;
-        _manaHoldTarget = null;
+        _noDamageEngageLoggedFor = null;
         _roomChannelSpell = null;   // end-of-fight ends any room-attack channel
         _alternationRound = 0;
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;

@@ -218,6 +218,42 @@ public sealed partial class CombatManager
         // Watch for a debuff the server rejects after our optimistic send so we can
         // roll the mark back and re-fire it next round (see _debuffAwaitingConfirm).
         _cast.CastFailed += OnCombatCastFailed;
+        _cast.SetNoManaRefusalExpected(FiresRegardlessOfMana);
+    }
+
+    // The attack spell the server is repeating for us is from a slot set to fire
+    // regardless of mana, with the character in a party.
+    private bool FiresRegardlessOfMana(string? code)
+    {
+        if (code is null || !_party.IsInParty || _lastCastAction is not { } action) return false;
+        if (!string.Equals(code, _announcedSpellCode, StringComparison.OrdinalIgnoreCase)) return false;
+        CombatSettings settings = _readSettings();
+        CombatSpellSlot? slot = action switch
+        {
+            CombatSpellAction.MultiAttack => settings.MultiAttackSpell,
+            CombatSpellAction.MultiAttack2 => settings.MultiAttack2Spell,
+            CombatSpellAction.NormalAttackSpell => settings.NormalAttackSpell,
+            CombatSpellAction.AlternateAttackSpell => settings.AlternateAttackSpell,
+            _ => null,
+        };
+        return slot is { FireRegardlessOfMana: true }
+            && string.Equals(slot.SpellName?.Trim(), code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The game refused a fire-regardless attack spell for mana. Nothing is latched,
+    // the target kept, the rung left in play; the announce is forgotten so the next
+    // round's heartbeat sends it again (one announce a round, as ever), and the
+    // round is made to exist when no combat line drives it. Not tallied toward
+    // MaxCasts: no cast landed.
+    private void ReannounceAfterNoMana(string? spell)
+    {
+        if (!FiresRegardlessOfMana(spell)) return;
+        _announcedSpellCode = null;
+        _spellAttackOwed = true;
+        _ensureCombatTickAnchor?.Invoke();
+        _log?.Combat(LogCategory,
+            $"{spell} refused for mana; it fires regardless of mana in a party, so it goes again next round "
+            + $"at {_castingSpellTarget ?? "(no target)"}");
     }
 
     // A cast the engine sent failed on the wire. Two rejections matter here, both for
@@ -229,6 +265,11 @@ public sealed partial class CombatManager
     // path (which owes-and-retries its own blocked send).
     private void OnCombatCastFailed(CastFailureReason reason, string detail, string? spell)
     {
+        if (reason == CastFailureReason.NotEnoughMana)
+        {
+            ReannounceAfterNoMana(spell);
+            return;
+        }
         if (reason is not (CastFailureReason.AlreadyCastThisRound or CastFailureReason.NoTargets)) return;
         if (reason == CastFailureReason.AlreadyCastThisRound) DisarmCastResumeOnRefusal();
         if (TryRollBackRejectedDebuff(reason, spell)) return;
@@ -490,16 +531,6 @@ public sealed partial class CombatManager
         switch (decision.Action)
         {
             case CombatSpellAction.WeaponAttack:
-                // Nothing of ours hurts it at this mana, but a spell set to fire
-                // regardless of mana in a party will once mana covers its cost: hold
-                // on it rather than swing for "no effect" or walk on (HoldForMana).
-                if (CombatSpellsWired
-                    && ManaHoldSpell(settings, ctx, obs, picked.RawName, enemyCount, picked.MonsterNumber) is { } held)
-                {
-                    HoldForMana(picked, held);
-                    break;
-                }
-                _manaHoldTarget = null;
                 // A per-monster Physical override replaces the weapon command on the
                 // rounds the decision engine already landed on physical — it does NOT
                 // force physical (a spell-phase round cast a spell above) and carries
@@ -601,9 +632,7 @@ public sealed partial class CombatManager
                     // (or continues) the channel; any other attack action switches off
                     // it, so drop the marker — the post-kill re-pick guard keys on it.
                     _roomChannelSpell = roomSpell ? decision.Spell : null;
-                    if (string.Equals(_manaHoldTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
-                        _log?.Info(LogCategory, $"mana covers {decision.Spell} now — casting at {picked.RawName}");
-                    _manaHoldTarget = null;
+                    if (CombatSpellChooser.DealsNoDamage(decision, ctx)) LogNoDamageEngage(settings, ctx, decision, picked.RawName);
                     if (decision.Action == CombatSpellAction.DrainSpell)
                         _log?.Info(LogCategory,
                             $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");
@@ -891,7 +920,7 @@ public sealed partial class CombatManager
 
         if (_classifier.Current is not { } obs)
         {
-            LeaveSpellMode();
+            _castingSpellTarget = null;
             return;
         }
 
@@ -901,7 +930,7 @@ public sealed partial class CombatManager
         // re-decides cleanly.
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
         {
-            LeaveSpellMode();
+            _castingSpellTarget = null;
             return;
         }
 
@@ -910,20 +939,13 @@ public sealed partial class CombatManager
         // otherwise burn the round before clearing it).
         if (!TargetPresent(obs, target))
         {
-            LeaveSpellMode();
+            _castingSpellTarget = null;
             return;
         }
 
-        int targetNumber = ResolveMonsterNumber(obs, target);
-        int enemies = CountEngageable(obs);
-        CombatSpellContext ctx = BuildContext(settings, obs, target, enemies, targetNumber);
+        CombatSpellContext ctx = BuildContext(
+            settings, obs, target, CountEngageable(obs), ResolveMonsterNumber(obs, target));
         CombatSpellDecision decision = _spellChooser.Choose(settings, ctx);
-
-        // Still holding for a fire-regardless spell's cost (HoldForMana): nothing to
-        // send until the round mana covers it, when the chooser picks the spell.
-        if (decision.Action == CombatSpellAction.WeaponAttack
-            && ManaHoldSpell(settings, ctx, obs, target, enemies, targetNumber) is not null)
-            return;
 
         // The server auto-repeats the announced spell every round (CONFIRMED mechanic),
         // so re-announce ONLY when the chooser's decision CHANGES. While it stays the
@@ -1655,7 +1677,8 @@ public sealed partial class CombatManager
             DrainTargetEligible: drainEligible,
             RoomMobKeys:         obs is { } listed ? CollectEngageableMobKeys(listed) : null,
             ManaCostOf:          _spellManaCost,
-            InParty:             _party.IsInParty);
+            InParty:             _party.IsInParty,
+            RoomAttacksNoDamage: RoomAttacksThatDamageNothing(settings, obs, monsterNumber));
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -2046,14 +2069,12 @@ public sealed partial class CombatManager
         int monsterNumber, string? normalCode, string? altCode) =>
         CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode);
 
-    // Can the engine engage this monster: it can act on it now, or it holds for a
-    // spell that fires regardless of mana (HeldForMana stays, it doesn't walk on).
-    // Consumed, via the delegate AppServices injects, by CombatStateTracker (the
-    // walker gate), and asks JudgeEngage, as the retarget loop does, so the gate
-    // and the round's pick can't disagree.
+    // Can the engine act on this monster this round. Consumed, via the delegate
+    // AppServices injects, by CombatStateTracker (the walker gate), and asks
+    // JudgeEngage, as the retarget loop does, so the gate and the round's pick
+    // can't disagree.
     public bool CanEngageMonster(int monsterNumber) =>
-        AssessEngage(_readSettings(), monsterNumber, species: null)
-            is EngageAssessment.CanAct or EngageAssessment.HeldForMana;
+        AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
 
     // One monster the engine has seen in the current room, with the exact
     // engageability verdict + weapon/spell magic data behind it. Frozen for the
@@ -2104,19 +2125,14 @@ public sealed partial class CombatManager
     internal (IReadOnlyList<string> Normal, IReadOnlyList<string> Alternate) SnapshotWeaponFailSets()
         => (_normalWeaponFailedMonsters.ToArray(), _alternateWeaponFailedMonsters.ToArray());
 
-    // The monster held for a fire-regardless spell's cost, or null. For the bug report.
-    internal string? ManaHoldTarget => _manaHoldTarget;
+    // The monsters given up on mid-fight this room, for the bug report.
+    internal IReadOnlyList<string> SnapshotGivenUp() => _givenUpInstances.ToArray();
 
     // How the engine can act against a monster THIS round.
     internal enum EngageAssessment
     {
         // An attack side can hurt it, or an attack spell would take the round now.
         CanAct,
-        // Nothing fires at the mana we have, but an attack spell set to fire
-        // regardless of mana in a party would once mana covers its cost. Engaged
-        // and held on (the walker stays), but a monster we can act on now is
-        // picked ahead of it.
-        HeldForMana,
         // Nothing is castable this round only because MA is short — transient.
         // Re-assessed on every observation, so once MA regenerates the spell
         // becomes castable and it reads CanAct again ("retry the cast chain if we
@@ -2126,7 +2142,8 @@ public sealed partial class CombatManager
         // Nothing can engage it, even at full mana: no attack side can hurt it
         // (game data or observed) and no attack spell would take the round —
         // unset, immune, level / element / type blocked, its cast cap spent, or a
-        // room attack the room doesn't meet the settings for.
+        // room attack the room doesn't meet the settings for — or it was given up
+        // on mid-fight this room (GaveUpUnengageable).
         Unkillable,
     }
 
@@ -2134,12 +2151,12 @@ public sealed partial class CombatManager
     // side and attack spell weighed, with what ruled it in or out.
     internal readonly record struct EngageVerdict(EngageAssessment Assessment, string Why);
 
-    // Consumed by the retarget loop (which skips anything but CanAct, falls back
-    // to HeldForMana, and only announces "cannot attack" on Unkillable) and, via
-    // CanEngageMonster, by the walker gate. The optional species lets the retarget
-    // loop pass EngageableCandidate.ResolvedName directly (so an unresolved -1
-    // Number still gets its runtime check); the gate path passes only a Number and
-    // resolves the species from _speciesByNumber.
+    // Consumed by the retarget loop (which skips anything but CanAct and only
+    // announces "cannot attack" on Unkillable) and, via CanEngageMonster, by the
+    // walker gate. The optional species lets the retarget loop pass
+    // EngageableCandidate.ResolvedName directly (so an unresolved -1 Number still
+    // gets its runtime check); the gate path passes only a Number and resolves the
+    // species from _speciesByNumber.
     internal EngageAssessment AssessEngage(CombatSettings settings, int monsterNumber, string? species) =>
         JudgeEngage(settings, monsterNumber, species).Assessment;
 
@@ -2152,6 +2169,10 @@ public sealed partial class CombatManager
     internal EngageVerdict JudgeEngage(CombatSettings settings, int monsterNumber, string? species, string? rawName = null)
     {
         species ??= _speciesByNumber.GetValueOrDefault(monsterNumber) ?? string.Empty;
+
+        if (GivenUpOn(monsterNumber, rawName))
+            return new EngageVerdict(EngageAssessment.Unkillable,
+                "given up on this room: its cast cap was spent or it proved immune mid-fight, and nothing else hurts it");
 
         if (!AttackSideOut(settings, alternate: false, species, monsterNumber, out string normal))
             return new EngageVerdict(EngageAssessment.CanAct, normal);
@@ -2167,7 +2188,7 @@ public sealed partial class CombatManager
         EngageVerdict spells = CombatSpellsWired
             ? JudgeSpellEngage(settings, monsterNumber, species, rawName, sides)
             : new EngageVerdict(EngageAssessment.Unkillable, sides + "; no combat spells");
-        if (spells.Assessment is EngageAssessment.CanAct or EngageAssessment.HeldForMana) return spells;
+        if (spells.Assessment == EngageAssessment.CanAct) return spells;
 
         // Nothing hurts it. In a party, a spell typed as an attack command that it
         // resists outright still engages it, for no damage, and the party's kill pays.
@@ -2181,12 +2202,10 @@ public sealed partial class CombatManager
     // No attack side can hurt it, so an attack spell has to. The chooser answers
     // which would take the round with the weapon out (EngagingAttackSpell), every
     // gate it applies to a round applied here too. None now but one at full mana
-    // is StuckOnMana; a spell set to fire regardless of mana in a party holds
-    // instead (HeldForMana), waiting for mana to cover its cost. None at all is
-    // Unkillable. A room attack counts only under its own room settings: it is
-    // never fired at a lone monster because nothing else can hurt it (user,
-    // 2026-10-23; GAME_MECHANICS "Weapons: "no effect" lines and the
-    // magical-weapon requirement").
+    // is StuckOnMana; none at all is Unkillable. A room attack counts only under its
+    // own room settings: it is never fired at a lone monster because nothing else
+    // can hurt it (user, 2026-10-23; GAME_MECHANICS "Weapons: "no effect" lines and
+    // the magical-weapon requirement").
     private EngageVerdict JudgeSpellEngage(
         CombatSettings settings, int monsterNumber, string species, string? rawName, string sides)
     {
@@ -2206,10 +2225,6 @@ public sealed partial class CombatManager
 
         string why = ruledOut.Count == 0 ? "no attack spell set" : string.Join("; ", ruledOut);
         CombatSpellContext full = EngageContext(settings, obs, target, enemies, monsterNumber, FullMana());
-        if (now.InParty
-            && _spellChooser.EngagingAttackSpell(settings, full, current, reserveWaivedOnly: true) is { } held)
-            return new EngageVerdict(EngageAssessment.HeldForMana,
-                $"{sides}; {why}; {held.Spell} fires regardless of mana in a party, so it waits for mana to cover its cost");
         if (_spellChooser.EngagingAttackSpell(settings, full, current) is { } later)
             return new EngageVerdict(EngageAssessment.StuckOnMana, $"{sides}; {why}; {later.Spell} once mana allows");
         return new EngageVerdict(EngageAssessment.Unkillable, $"{sides}; {why}");
@@ -2234,58 +2249,76 @@ public sealed partial class CombatManager
 
     private const int UnknownPoolMana = 1_000_000;
 
-    // The spell a target is held for: no attack side hurts it, nothing fires at the
-    // mana we have (the round's pick was the useless swing), and an attack spell
-    // set to fire regardless of mana would once mana covers its cost, with the
-    // character in a party. Null when there's no such hold.
-    private CombatSpellDecision? ManaHoldSpell(
-        CombatSettings settings, in CombatSpellContext ctx, RoomEntitiesObservation obs,
-        string target, int enemyCount, int monsterNumber)
+    // The room-attack rungs whose spell can damage nothing here: an undead-only one
+    // with no undead in the room. Stock's room cast checks no other target class,
+    // and neither spell immunity nor element, so that is the only room-wide no-damage
+    // case; the cast still engages the caster with the room (GAME_MECHANICS
+    // "Weapons: "no effect" lines and the magical-weapon requirement"). A monster
+    // whose number isn't known could be undead, so it keeps the spell in play.
+    private IReadOnlySet<CombatSpellAction>? RoomAttacksThatDamageNothing(
+        CombatSettings settings, RoomEntitiesObservation? obs, int monsterNumber)
     {
-        if (!ctx.WeaponIneffective || !ctx.InParty) return null;
-        CombatSpellContext full = EngageContext(settings, obs, target, enemyCount, monsterNumber, FullMana());
-        return _spellChooser.EngagingAttackSpell(settings, full, currentTarget: true, reserveWaivedOnly: true);
-    }
-
-    // The target the engine is holding on for a fire-regardless spell's cost, so
-    // the hold is logged once per target and its cast logged when mana arrives.
-    private string? _manaHoldTarget;
-
-    // Holding on the current target for a fire-regardless spell's cost. Nothing is
-    // sent meanwhile, so the walker gate's idle-stall watchdog must read the quiet
-    // as on purpose, or it would clear the fight and let the walk leave.
-    public bool IsHoldingForMana =>
-        _manaHoldTarget is { } held && string.Equals(held, _currentTarget, StringComparison.OrdinalIgnoreCase);
-
-    // The heartbeat lost the spell target (gone from the room, or no longer the
-    // one fought): spell mode ends, and any mana hold on it with it.
-    private void LeaveSpellMode()
-    {
-        _castingSpellTarget = null;
-        _manaHoldTarget = null;
-    }
-
-    // Hold on a monster only a fire-regardless spell can hurt: send nothing (a
-    // swing would only draw "no effect"), keep it as the target, and stay in spell
-    // mode so each round's heartbeat re-asks the chooser, which casts it the round
-    // mana covers its cost. The round tick is made to exist even when no combat
-    // line drives it, as for a cast blocked before it was sent.
-    private void HoldForMana(EngageableCandidate picked, CombatSpellDecision held)
-    {
-        if (!string.Equals(_manaHoldTarget, picked.RawName, StringComparison.OrdinalIgnoreCase))
+        if (_spellTargetType is null || _monsterLife is null) return null;
+        bool AnyUndeadHere()
         {
-            (int ma, _) = _readMana!();
-            string cost = _spellManaCost?.Invoke(held.Spell!) is { } c ? $"{c}" : "unknown";
-            _log?.Info(LogCategory,
-                $"holding on {picked.RawName}: nothing of ours hurts it at {ma} mana, and {held.Spell} fires "
-                + $"regardless of mana in a party; casting it once mana covers its cost ({cost})");
+            if (obs is not { } room) return _monsterLife.CanAffect(monsterNumber, SpellTargetType.UndeadOnly);
+            foreach (RoomEntity e in room.Entities)
+            {
+                if (e.Kind != EntityKind.Monster) continue;
+                if (e.MonsterNumber is not int n || _monsterLife.CanAffect(n, SpellTargetType.UndeadOnly)) return true;
+            }
+            return false;
         }
-        _manaHoldTarget = picked.RawName;
-        _castingSpellTarget = picked.RawName;
-        _currentTarget = picked.RawName;
-        _combatOff = false;
-        _spellAttackOwed = true;
-        _ensureCombatTickAnchor?.Invoke();
+        HashSet<CombatSpellAction>? set = null;
+        void Check(string? code, CombatSpellAction action)
+        {
+            if (NullIfBlank(code) is not { } c) return;
+            if (_spellTargetType.TargetType(c) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
+            (set ??= new HashSet<CombatSpellAction>()).Add(action);
+        }
+        Check(settings.MultiAttackSpell.SpellName, CombatSpellAction.MultiAttack);
+        Check(settings.MultiAttack2Spell.SpellName, CombatSpellAction.MultiAttack2);
+        return set;
+    }
+
+    // Monsters given up on mid-fight this room (by instance name): the cascade lost
+    // its last rung on one (its cast cap spent, or a "no effect") with nothing else
+    // able to hurt it. A fresh pick of it would read the cast caps as a new target's
+    // and cast them all again, so it stays given up until the room clears.
+    private readonly HashSet<string> _givenUpInstances = new(StringComparer.OrdinalIgnoreCase);
+
+    // Asked by name, that instance; asked by number alone (the walker gate), every
+    // monster of that number the room shows has been given up on.
+    private bool GivenUpOn(int monsterNumber, string? rawName)
+    {
+        if (_givenUpInstances.Count == 0) return false;
+        if (rawName is not null) return _givenUpInstances.Contains(rawName);
+        if (monsterNumber < 0 || _classifier.Current is not { } room) return false;
+        bool any = false;
+        foreach (RoomEntity e in room.Entities)
+        {
+            if (e.Kind != EntityKind.Monster || e.MonsterNumber != monsterNumber) continue;
+            if (!_givenUpInstances.Contains(e.RawName)) return false;
+            any = true;
+        }
+        return any;
+    }
+
+    // The target a no-damage engagement was last logged for, so it is said once.
+    private string? _noDamageEngageLoggedFor;
+
+    // A spell cast for no damage, only to stay engaged for the party's kill: say so
+    // once per target, with what kept a damaging spell from the round.
+    private void LogNoDamageEngage(
+        CombatSettings settings, in CombatSpellContext ctx, CombatSpellDecision decision, string target)
+    {
+        if (string.Equals(_noDamageEngageLoggedFor, target, StringComparison.OrdinalIgnoreCase)) return;
+        _noDamageEngageLoggedFor = target;
+        List<string> why = new();
+        _spellChooser.EngagingAttackSpell(settings, ctx with { WeaponIneffective = true }, currentTarget: true, why);
+        _log?.Combat(LogCategory,
+            $"casting {decision.Spell} at {target} for no damage, to stay engaged for the party's kill "
+            + $"({(why.Count == 0 ? "nothing else set" : string.Join("; ", why))})");
     }
 
     // Resolve the MonsterNumber of the entity matching rawName in obs, or -1 when
@@ -2484,23 +2517,30 @@ public sealed partial class CombatManager
     }
 
     // A mid-fight re-decide on a target the cascade just lost something on (its
-    // only spell drew "no effect", the party broke up during a mana hold): when
-    // the engage verdict says nothing of ours can act on it now, the round's pick
-    // would be a swing that can't land. Give the target up instead, as the
-    // attack-command fallback does, and re-read the room to re-pick or move on.
-    // Only a write-off (Unkillable) is announced; a mana stall is retried.
+    // only spell drew "no effect", its cast cap ran out, the party broke up under a
+    // spell that fired regardless of mana): when the engage verdict says nothing of
+    // ours can act on it now, the round's pick would be a swing that can't land.
+    // Give the target up instead, as the attack-command fallback does, and re-read
+    // the room to re-pick or move on. A write-off (Unkillable) is announced and the
+    // instance kept off the next pick for the room (_givenUpInstances), where its
+    // cast caps would read as a fresh target's; a mana stall is only retried.
     private bool GaveUpUnengageable(CombatSettings settings, EngageableCandidate cand)
     {
         EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName, cand.RawName);
-        if (verdict.Assessment is EngageAssessment.CanAct or EngageAssessment.HeldForMana) return false;
+        if (verdict.Assessment == EngageAssessment.CanAct) return false;
         if (verdict.Assessment == EngageAssessment.Unkillable)
+        {
             AnnounceCannotAttack(cand.ResolvedName, verdict.Why);
+            _givenUpInstances.Add(cand.RawName);
+        }
         else
             _log?.Combat(LogCategory, $"leaving {cand.RawName} for now — {verdict.Assessment}: {verdict.Why}");
         _castingSpellTarget = null;
         _currentTarget = null;
-        _manaHoldTarget = null;
-        TrySendRoomRefresh($"nothing of ours can act on {cand.RawName} now — re-pick / move on");
+        if (!TrySendRoomRefresh($"nothing of ours can act on {cand.RawName} now — re-pick / move on"))
+            _log?.Combat(LogCategory,
+                $"gave up on {cand.RawName} with no room re-display sent (a dark room, or one asked for moments ago); "
+                + "the next room read, or the walker gate's stall watchdog, re-picks or moves on");
         return true;
     }
 }
