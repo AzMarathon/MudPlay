@@ -70,10 +70,10 @@ public sealed class BbsProfile
 
     // Seconds of TCP-level idle before the OS starts probing the connection
     // with TCP keepalive packets. Defaults to 20 — a lost carrier is caught
-    // within ~50s (idle + the ~30s probe tail; TelnetClient also caps the
-    // actively-sending case at idle + 30s via TCP_USER_TIMEOUT). 0 disables the
-    // idle keepalive probing (TelnetClient still caps dead-connection detection
-    // at ~60s); the OS default of ~2h idle would be way too long for a BBS.
+    // within ~50s (idle + the ~30s probe tail; on Linux TelnetClient also caps
+    // the actively-sending case at idle + 30s via TCP_USER_TIMEOUT). 0 disables
+    // the idle keepalive probing (on Linux TelnetClient still caps dead-connection
+    // detection at ~60s); the OS default of ~2h idle would be way too long for a BBS.
     //
     // We pair this with hardcoded probe interval = 10s and retry count = 3,
     // so once the idle elapses the OS declares the socket dead within ~30s.
