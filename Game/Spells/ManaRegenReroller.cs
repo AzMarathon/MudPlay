@@ -157,14 +157,22 @@ public sealed class ManaRegenReroller : IDisposable
     // the band, which pays the tick it was read off.
     public int? CurrentRoll { get; private set; }
 
+    // Stock: the natural tick CurrentRoll was read off, which is what that roll pays
+    // with the inputs it was read with. Null on Paradigm and whenever CurrentRoll is.
+    public int? CurrentRollTick { get; private set; }
+
     // A roll spell was cast (a fresh roll, not read yet), or the roll was read.
     public event Action? RollCastOrRead;
 
-    private void SetCurrentRoll(int? roll)
+    private void SetCurrentRoll(int? roll, int? tick = null)
     {
         CurrentRoll = roll;
+        CurrentRollTick = roll is null ? null : tick;
         RollCastOrRead?.Invoke();
     }
+
+    // A profile load: the roll read belongs to the character before.
+    public void ForgetCurrentRoll() => SetCurrentRoll(null);
 
     // The natural tick pays at least 1 MP for any roll that isn't terrible, so a
     // cycle that sees none this long after the cast (mana below max, the tick not
@@ -297,7 +305,7 @@ public sealed class ManaRegenReroller : IDisposable
         }
         string shown = band.Lo == band.Hi ? $"{band.Lo} (tick {natural})" : $"{band.Lo}..{band.Hi} (tick {natural})";
         _log?.Debug(LogCategory, $"natural mana tick {natural} → roll {band.Lo}..{band.Hi}");
-        Decide(band.Hi, "roll", shown);
+        Decide(band.Hi, "roll", shown, natural);
     }
 
     // Close the cycle on a roll we can't judge, remembering nothing about it.
@@ -349,12 +357,12 @@ public sealed class ManaRegenReroller : IDisposable
     // The shared accept-or-reroll decision. value is the roll's quality — the rolled
     // percent on Paradigm, the observed tick on Stock — compared against the configured
     // threshold; reroll while below it, up to the cap, pausing at the mana floor.
-    private void Decide(int value, string valueLabel, string? shown = null)
+    private void Decide(int value, string valueLabel, string? shown = null, int? naturalTick = null)
     {
         if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
         LastObservedValue = value;
         LastObservedText = shown ?? value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        SetCurrentRoll(value);
+        SetCurrentRoll(value, naturalTick);
         string v = LastObservedText;
         ManaRegenRerollConfig cfg = _readConfig();
 

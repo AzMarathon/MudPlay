@@ -6303,17 +6303,10 @@ public sealed class AppServices
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData, regenQuestBonuses);
         Regen.SetHpExpectation(() => HpRegenExpected.Current);
         Profile.ProfileLoaded += _ => HpRegenExpected.Invalidate();
-        RegenReadout = new Game.RegenReadout(Regen, PlayerState, PlayerStats, Inventory, GameData, HpRegenExpected,
-            ManaRegen, regenQuestBonuses,
-            rollSpellUp: () => ManaRegenRerollSlot()?.Spell?.Trim() is { Length: > 0 } rollCode && BuffIsUp(rollCode)
-                ? ManaRegenRollRange(rollCode) : null,
-            log: Log, post: a => Avalonia.Threading.Dispatcher.UIThread.Post(a));
-        Profile.ProfileLoaded += _ =>
-        {
-            RegenReadout.Forget("a profile was loaded");
-            RegenReadout.QueueRefresh();
-        };
-        DeathWatcher.PlayerDied += () => RegenReadout.Forget("the character died");
+        // The roll read belongs to the character before; cleared ahead of the regen
+        // readout's own refresh on the load.
+        Profile.ProfileLoaded += _ => ManaRegen.ForgetCurrentRoll();
+        _regenQuestBonuses = regenQuestBonuses;
         TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, MovementCoordinator, Log);
         // A spell that cuts carrying capacity (weakness, frail) can leave us over our
         // max; `i` is the only place that shows. Records sharing one applied line each
@@ -6437,11 +6430,9 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
-        // The link dropping or the game being left ends the session the kept regen ticks came from.
-        InGameCapture.InGameChanged += inGame =>
-        {
-            if (!inGame) RegenReadout.Forget("out of the game");
-        };
+        RegenReadout = new Game.RegenReadout(Regen, PlayerState, PlayerStats, Inventory, GameData, Profile,
+            InGameCapture, DeathWatcher, HpRegenExpected, ManaRegen, _regenQuestBonuses, RollSpellUp,
+            log: Log, post: a => Avalonia.Threading.Dispatcher.UIThread.Post(a));
         // The sent-command trail keeps nothing typed outside the game (a login is)
         // and nothing that may be a suicide password, typed or sent by @suicide.
         EngineGate.Trail = SentCommands;
@@ -10122,6 +10113,12 @@ public sealed class AppServices
                     : def.Name,
                 PlayerStats.Level),
             log: Log);
+        // A sync that marks quests complete changes the quest bonuses in both regen percents.
+        QuestFlagSync.Synced += () =>
+        {
+            HpRegenExpected.Invalidate();
+            RegenReadout.QueueRefresh();
+        };
 
         QuestQuery = new Game.Remote.QuestQueryHandler(
             RemoteCommands,
@@ -13550,12 +13547,27 @@ public sealed class AppServices
     public void ReconsiderManaRegenRerollAfterConfigChange()
     {
         if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return;
-        if (!BuffIsUp(shortCode)) return;
+        bool active = CastDirector.SnapshotActiveBuffs()
+            .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
+        if (!active) return;
         ManaRegen.ReconsiderActiveRoll(shortCode);
     }
 
-    private bool BuffIsUp(string shortCode) => CastDirector.SnapshotActiveBuffs()
-        .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
+    // The configured mana-regen roll spell's level-scaled range and when its timer runs
+    // out, while that timer says it is up: what the status bar's expected mana counts.
+    // Null when none is configured or it isn't up.
+    private (int Min, int Max, DateTimeOffset Until)? RollSpellUp()
+    {
+        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } code || !CastDirector.IsSelfBuffUp(code))
+            return null;
+        if (ManaRegenRollRange(code) is not { } range) return null;
+        Game.Spells.ActiveBuffTimer timer = CastDirector.SnapshotActiveBuffs()
+            .First(t => t.Target.Length == 0 && string.Equals(t.Short, code, System.StringComparison.OrdinalIgnoreCase));
+        return (range.Min, range.Max, new DateTimeOffset(timer.Until));
+    }
+
+    // The quest bonuses the regen readouts fold in, set where the first of them is built.
+    private Func<IReadOnlyList<Game.Quests.QuestBonus>?> _regenQuestBonuses = () => null;
 
     // The Stock tick inputs for the configured mana-regen roll spell: level, stats,
     // magery, worn +ManaRgn%, the spell's level-scaled roll range and the meditate tick
