@@ -44,6 +44,16 @@ public sealed class LairDoorMonsterCountTests
         public List<Action> Scheduled { get; } = new();
         // This round's between-round cast is spent: the hold waits for it.
         public bool SlotUsed { get; set; }
+        // The running loop, judged against the doorstep room (no lair), as
+        // AppServices.CombatSuppressionVerdict judges it; null = no loop settings.
+        public Loop? Loop { get; set; }
+        public static readonly RoomKey DoorRoom = new(17, 10573);
+
+        // Combat suppressed in the doorstep room by the loop's own settings.
+        private bool LoopSuppresses() =>
+            Loop is { } loop
+            && LoopCombatSuppression.IsSuppressed(loop, DoorRoom, currentIsLair: false,
+                waitingAtLairDoor: Hold.WaitingAtTheDoor);
 
         public Harness()
         {
@@ -51,14 +61,16 @@ public sealed class LairDoorMonsterCountTests
             Server = new ServerFeed(Router, () => Clock.Now);
             Coordinator = new MovementCoordinator(Log);
             Classifier = new RoomEntityClassifier(Router, Monsters, Players, Log, now: () => Clock.Now);
+            // Auto-combat on, less the loop's suppression of this room, as AppServices
+            // gives both engines their enable signal.
             Tracker = new CombatStateTracker(Router, Coordinator, Classifier, Monsters, State,
-                isAutoAttackEnabled: () => true, resolveOverlay: _ => new MonsterOverlay(), log: Log,
+                isAutoAttackEnabled: () => !LoopSuppresses(), resolveOverlay: _ => new MonsterOverlay(), log: Log,
                 clock: () => Clock.Now);
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: _ => new MonsterOverlay(),
                 party: Party,
                 readSettings: () => Settings,
-                isEnabled: () => true,
+                isEnabled: () => !LoopSuppresses(),
                 readOwnGivenName: () => "Ridic",
                 post: a => a(),
                 log: Log,
@@ -72,7 +84,7 @@ public sealed class LairDoorMonsterCountTests
                 log: Log,
                 inCombat: () => State.InCombat,
                 fightAnswered: () => LairEntryDebuffHold.FightIsAnswered(
-                    loopSuppressesCombat: false, Combat.RoomSkippedForMonsterCount, Combat.ForceClearActive));
+                    LoopSuppresses(), Combat.RoomSkippedForMonsterCount, Combat.ForceClearActive));
 
             // As AppServices wires them: a loop is running, so the Min/Max window
             // applies, save at a lair's door while the hold waits there.
@@ -171,6 +183,53 @@ public sealed class LairDoorMonsterCountTests
 
         Assert.True(h.AttackedTheRat);
         Assert.True(h.CombatGateHeld);
+    }
+
+    private static Loop OnlyLairLoop()
+    {
+        Loop loop = new("lairs", new[] { new LoopWaypoint(Harness.DoorRoom, doNotAttack: false) });
+        loop.OnlyAttackInLairRooms = true;
+        return loop;
+    }
+
+    // "Only attack in lair rooms" walks the loop past a non-lair room's monster, as
+    // before, away from a door wait.
+    [Fact]
+    public void OnlyLairRooms_AwayFromADoorWait_LoneWandererIsWalkedPast()
+    {
+        using Harness h = new() { Loop = OnlyLairLoop() };
+        h.Settings.MinMonstersInRoom = 0;
+
+        h.Server.Line("Also here: nasty pinion rat.");
+        h.Server.Line("The nasty pinion rat lunges at you!");
+
+        Assert.False(h.AttackedTheRat);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    // Waiting at the door, the lone wanderer is fought under "only attack in lair
+    // rooms" too (user, 2026-10-23), the wait stands through it, then the loop goes in.
+    [Fact]
+    public void OnlyLairRooms_DuringADoorWait_LoneWandererIsFought_ThenTheLoopGoesIn()
+    {
+        using Harness h = new() { Loop = OnlyLairLoop(), SlotUsed = true };
+        h.Settings.MinMonstersInRoom = 0;
+
+        Assert.False(h.AskToEnter());
+        h.Server.Line("A nasty pinion rat scampers in from the north!");
+        h.Server.Line("Also here: nasty pinion rat.");
+        h.Server.Line("The nasty pinion rat lunges at you!");
+
+        Assert.True(h.AttackedTheRat);
+        h.SlotUsed = false;
+        h.Poll();
+        Assert.True(h.HeldAtTheDoor);
+
+        h.Server.Line("You gain 600 experience.");
+        h.Server.Line("*Combat Off*");
+        h.Server.Line("Also here: Because.");
+        h.Poll();
+        Assert.False(h.HeldAtTheDoor);
     }
 
     // The Max still holds at the door: a room over it is passed over, its swings

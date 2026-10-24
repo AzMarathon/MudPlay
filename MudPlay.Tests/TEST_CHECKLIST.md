@@ -1876,7 +1876,7 @@ How to keep it current:
 
 ### LairDoorMonsterCountTests.cs
 - Covers: the Min Monsters floor lifted while a loop waits at a lair's door: Game/Combat/MonsterCountGate.Bounds read by CombatManager and CombatStateTracker through SetLairDoorWaitProbe, LairEntryDebuffHold.WaitingAtTheDoor / DoorWaitStarted, and its fightAnswered through LairEntryDebuffHold.FightIsAnswered and CombatManager.RoomSkippedForMonsterCount, wired as AppServices wires them; room rows fed through a `ServerFeed`, time on a `ManualClock`.
-- Checks: outside a door wait a lone monster is walked past; during one it is fought, the wait stands through that fight and goes in once the room is clear; a monster already there when the wait begins is fought; a room over the Max at the door is no fight to wait out.
+- Checks: outside a door wait a lone monster is walked past; during one it is fought, the wait stands through that fight and goes in once the room is clear; a monster already there when the wait begins is fought; a room over the Max at the door is no fight to wait out; the same lone wanderer under "only attack in lair rooms" (LoopCombatSuppression.IsSuppressed with waitingAtLairDoor), walked past away from a door wait and fought during one.
 - Why: paradigm-20261023-005038, a loop parked outside a lair for good while a lone rat swung at the character; the user's ruling of 2026-10-23.
 
 ### LairEditorDialogViewModelTests.cs
@@ -2091,8 +2091,8 @@ How to keep it current:
 
 ### LoopCombatSuppressionTests.cs
 - Covers: Game/Map/LoopCombatSuppression
-- Checks: do-not-attack and only-lair precedence, detour loops still judged, which room is judged mid-move, when the loop is "driving".
-- Why: reports paradigm-20261015-160835, -20260925-070016, -20261012-080902.
+- Checks: do-not-attack and only-lair precedence, detour loops still judged, which room is judged mid-move, when the loop is "driving", only-lair lifted (do-not-attack not) while waiting at a lair's door.
+- Why: reports paradigm-20261015-160835, -20260925-070016, -20261012-080902, -20261023-005038; user 2026-10-23.
 
 ### LoopEditorOtherGameDataTests.cs
 - Covers: ViewModels/Navigation/LoopEditorDialogViewModel
