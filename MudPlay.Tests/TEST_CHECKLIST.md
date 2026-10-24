@@ -2279,9 +2279,10 @@ How to keep it current:
 
 ### MessageCandidateSaveTests.cs
 - Covers: Services/MessageCandidateStore (saving and the cap)
-- Checks: sightings are written together SaveDelay after the first, Save writes what waits at once and drops the deferred save, a realm switch writes the old realm's waiting lines to its own file, a new line past MaxPending pushes out the pending line seen longest ago and keeps dismissed ones.
+- Checks: sightings are written together SaveDelay after the first; back-to-back deferred saves all land (a hand-off as the write lane stops starts a new one); a deferred write overtaken by Save and another client's write doesn't put its older list back; Save writes what waits at once and drops the deferred save; a realm switch writes the old realm's waiting lines to its own file; a new line past MaxPending pushes out the pending line seen longest ago and keeps dismissed ones; a file past the cap is trimmed in one pass at load and saved once.
 - Why: reports Hang-20261021-035337 and Hang-20261021-065221 (thousands of UI-thread rewrites of the realm's file a night, one a 5.3 s freeze).
 - Named seam: `MessageCandidateStore.WhenSavedAsync` completes when the handed-off writes have finished, so the test reads the file a deferred save wrote.
+- Named seam: the `arm` constructor parameter of `MessageCandidateStore` (the dispatcher's one-shot timer in the client) takes `ManualTimers.Arm`, so the test decides when SaveDelay is up.
 
 ### MessageCandidateStoreTests.cs
 - Covers: Services/MessageCandidateStore
