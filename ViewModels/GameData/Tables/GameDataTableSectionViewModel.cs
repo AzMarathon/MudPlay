@@ -515,6 +515,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         _activeRanges = AllRangeFilters.Where(r => r.IsActive).ToArray();
         _activeBools = AllBoolFilters.Where(b => b.IsActive).ToArray();
         _activeCategories = AllCategoryFilters.Where(c => c.IsActive).ToArray();
+        _activePresences = AllPresenceFilters.Where(p => p.IsActive).ToArray();
 
         List<GameDataRow> matched = new();
         foreach (GameDataRow row in AllRows)
@@ -528,6 +529,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private RangeFilter[] _activeRanges = Array.Empty<RangeFilter>();
     private BoolFilter[] _activeBools = Array.Empty<BoolFilter>();
     private CategoryFilter[] _activeCategories = Array.Empty<CategoryFilter>();
+    private PresenceFilter[] _activePresences = Array.Empty<PresenceFilter>();
 
     // ----- Curation filter panel (subclasses populate FilterGroups; empty = no panel) -----
     // A sidebar beside the grid: min/max ranges, checkboxes, and dropdowns, grouped
@@ -542,6 +544,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
     private IEnumerable<RangeFilter> AllRangeFilters => FilterGroups.SelectMany(g => g.Ranges);
     private IEnumerable<BoolFilter> AllBoolFilters => FilterGroups.SelectMany(g => g.Bools);
     private IEnumerable<CategoryFilter> AllCategoryFilters => FilterGroups.SelectMany(g => g.Categories);
+    private IEnumerable<PresenceFilter> AllPresenceFilters => FilterGroups.SelectMany(g => g.Presences);
 
     // Commit every pending panel edit and re-filter. The "Apply" button.
     [RelayCommand]
@@ -557,6 +560,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (RangeFilter r in AllRangeFilters) r.Commit();
         foreach (BoolFilter b in AllBoolFilters) b.Commit();
         foreach (CategoryFilter c in AllCategoryFilters) c.Commit();
+        foreach (PresenceFilter p in AllPresenceFilters) p.Commit();
     }
 
     // Drives ApplyFilter's "run even with an empty text box" path (see ApplyFilter).
@@ -567,6 +571,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
             foreach (RangeFilter r in AllRangeFilters) if (r.IsActive) return true;
             foreach (BoolFilter b in AllBoolFilters) if (b.IsActive) return true;
             foreach (CategoryFilter c in AllCategoryFilters) if (c.IsActive) return true;
+            foreach (PresenceFilter p in AllPresenceFilters) if (p.IsActive) return true;
             return false;
         }
     }
@@ -578,16 +583,18 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         foreach (RangeFilter r in AllRangeFilters) r.Clear();
         foreach (BoolFilter b in AllBoolFilters) b.Clear();
         foreach (CategoryFilter c in AllCategoryFilters) c.Clear();
+        foreach (PresenceFilter p in AllPresenceFilters) p.Clear();
         SearchText = string.Empty;   // OnSearchTextChanged re-applies (no-op if already empty)
         CommitPanelFilters();        // make the cleared boxes take effect
         ApplyFilter();
         OnPropertyChanged(nameof(StatusText));
     }
 
-    // Panel filters (range + bool + category), all AND'd together. Empty groups pass
-    // everything, so non-panel tables are unaffected. Range filters test the leading
+    // Panel filters (range + bool + category + presence), all AND'd together. Empty groups
+    // pass everything, so non-panel tables are unaffected. Range filters test the leading
     // integer of the raw cell; bool filters test the raw value via their predicate;
-    // category filters match the rendered display value.
+    // category filters match the rendered display value; presence filters test their
+    // columns' raw values.
     private bool PassesPanelFilters(GameDataRow row)
     {
         foreach (RangeFilter r in _activeRanges)
@@ -598,6 +605,9 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
                 return false;
         foreach (CategoryFilter c in _activeCategories)
             if (!c.Passes(row.GetDisplay(c.Column)))
+                return false;
+        foreach (PresenceFilter p in _activePresences)
+            if (!p.Passes(row.Get))
                 return false;
         return true;
     }

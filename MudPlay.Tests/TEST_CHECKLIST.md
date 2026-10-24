@@ -1412,9 +1412,9 @@ How to keep it current:
 - Why: room numbers differ between sets; report paradigm-20261022-170426 (a Stop while a route was being worked out found no walk to stop).
 
 ### GameDataTableSectionTests.cs
-- Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel
-- Checks: toggle summary; lazy load; lair columns; search on Enter incl. display labels; range/bool/category/flag filters; synthesised columns; reload on set change; status text.
-- Why: report paradigm-20260814-103219 (stacked filters).
+- Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel, PresenceFilter; Game/Map/RoomGraphManager.PlacedRoomsByMonster
+- Checks: toggle summary; lazy load; lair columns; search on Enter incl. display labels; range/bool/category/flag filters; synthesised columns; reload on set change; status text; Monsters Cash filter (any / drops cash / no cash, each currency, ticked currencies match any, Reset clears); Placed in checkbox from the graph's sorted placement snapshot; cash + placed + search combined.
+- Why: report paradigm-20260814-103219 (stacked filters); the Monsters tab's Cash and Placed in filters.
 
 ### GameTableTests.cs
 - Covers: Services/GameTable, GameTableReader, GameRow, GameValue

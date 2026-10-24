@@ -341,6 +341,179 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.Equal("Caster", Assert.Single(vm.FilteredRows).Get("Name"));
     }
 
+    // Coins as the imported Monsters table stores them: R runic, P platinum, G gold,
+    // S silver, C copper.
+    private const string CashMonsters =
+        "[{\"Number\":1,\"Name\":\"Pauper\",\"R\":0,\"P\":0,\"G\":0,\"S\":0,\"C\":0}," +
+         "{\"Number\":2,\"Name\":\"Rune lord\",\"R\":1,\"P\":0,\"G\":0,\"S\":0,\"C\":0}," +
+         "{\"Number\":3,\"Name\":\"Plat baron\",\"R\":0,\"P\":5,\"G\":0,\"S\":0,\"C\":0}," +
+         "{\"Number\":4,\"Name\":\"Gold miser\",\"R\":0,\"P\":0,\"G\":10,\"S\":0,\"C\":0}," +
+         "{\"Number\":5,\"Name\":\"Silver thief\",\"R\":0,\"P\":0,\"G\":0,\"S\":20,\"C\":0}," +
+         "{\"Number\":6,\"Name\":\"Copper beggar\",\"R\":0,\"P\":0,\"G\":0,\"S\":0,\"C\":40}," +
+         "{\"Number\":7,\"Name\":\"Gold and copper merchant\",\"R\":0,\"P\":0,\"G\":3,\"S\":0,\"C\":7}]";
+
+    private static PresenceFilter Cash(MonstersSectionViewModel vm)
+        => vm.FilterGroups.SelectMany(g => g.Presences).Single(p => p.Label == "Cash");
+
+    private static string[] Names(MonstersSectionViewModel vm)
+        => vm.FilteredRows.Select(r => r.Get("Name")!).Order(StringComparer.Ordinal).ToArray();
+
+    [Fact]
+    public async Task CashFilter_AnyDropsCashNoCash()
+    {
+        SeedMonsters("v1.11p", CashMonsters);
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+        PresenceFilter cash = Cash(vm);
+
+        Assert.False(cash.ShowsParts);                 // currencies hidden until Drops cash
+        cash.Selected = cash.WithOption;
+        Assert.True(cash.ShowsParts);
+        Assert.Equal(7, vm.FilteredRows.Count);        // pending until Apply
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(6, vm.FilteredRows.Count);        // every coin counts with none ticked
+        Assert.DoesNotContain("Pauper", Names(vm));
+
+        cash.Selected = cash.WithoutOption;
+        Assert.False(cash.ShowsParts);
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Pauper" }, Names(vm));
+
+        cash.Selected = CategoryFilter.AnyOption;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(7, vm.FilteredRows.Count);
+    }
+
+    [Theory]
+    [InlineData("R", "Rune lord")]
+    [InlineData("P", "Plat baron")]
+    [InlineData("G", "Gold and copper merchant|Gold miser")]
+    [InlineData("S", "Silver thief")]
+    [InlineData("C", "Copper beggar|Gold and copper merchant")]
+    public async Task CashFilter_EachCurrency_KeepsMonstersCarryingIt(string column, string expected)
+    {
+        SeedMonsters("v1.11p", CashMonsters);
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+        PresenceFilter cash = Cash(vm);
+
+        cash.Selected = cash.WithOption;
+        cash.Parts.Single(p => p.Column == column).IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+
+        Assert.Equal(expected.Split('|'), Names(vm));
+    }
+
+    [Fact]
+    public async Task CashFilter_TickedCurrencies_MatchAny_NoCashIgnoresThem()
+    {
+        SeedMonsters("v1.11p", CashMonsters);
+        _cache.SwitchSet("v1.11p");
+        MonstersSectionViewModel vm = new(_cache);
+        await vm.LoadAsync();
+        PresenceFilter cash = Cash(vm);
+
+        cash.Selected = cash.WithOption;
+        cash.Parts.Single(p => p.Column == "R").IsChecked = true;
+        cash.Parts.Single(p => p.Column == "S").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Rune lord", "Silver thief" }, Names(vm));
+
+        // The ticks stay but No cash doesn't read them.
+        cash.Selected = cash.WithoutOption;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Pauper" }, Names(vm));
+
+        vm.ResetFiltersCommand.Execute(null);
+        Assert.Equal(CategoryFilter.AnyOption, cash.Selected);
+        Assert.All(cash.Parts, p => Assert.False(p.IsChecked));
+        Assert.Equal(7, vm.FilteredRows.Count);
+    }
+
+    // A Rooms.json row whose NPC field places one monster there.
+    private static string NpcRoom(int map, int room, int npc)
+        => $"{{\"Map Number\":{map},\"Room Number\":{room},\"Name\":\"R{room}\",\"Light\":0," +
+           $"\"Shop\":0,\"NPC\":{npc},\"Lair\":\"\",\"Delay\":0," +
+           "\"N\":\"0\",\"S\":\"0\",\"E\":\"0\",\"W\":\"0\",\"NE\":\"0\",\"NW\":\"0\"," +
+           "\"SE\":\"0\",\"SW\":\"0\",\"U\":\"0\",\"D\":\"0\"}";
+
+    private async Task<MonstersSectionViewModel> PlacedMonstersAsync()
+    {
+        // Gold miser (4) is placed in two rooms, Rune lord (2) in one; the rest live
+        // in a lair or nowhere.
+        SeedMonsters("v1.11p", CashMonsters);
+        SeedTable("v1.11p", "Rooms",
+            "[" + NpcRoom(3, 9, 4) + "," + NpcRoom(1, 5, 4) + "," + NpcRoom(2, 7, 2) + ","
+                + LairRoom(4, 1, 3, 6) + "]");
+        _cache.SwitchSet("v1.11p");
+        RoomGraphManager graph = new(_cache);
+        graph.OnActiveSetChanged("v1.11p");
+        MonstersSectionViewModel vm = new(_cache, roomGraph: graph);
+        await vm.LoadAsync();
+        return vm;
+    }
+
+    [Fact]
+    public async Task PlacedInCheckbox_KeepsPlacedMonstersOnly()
+    {
+        MonstersSectionViewModel vm = await PlacedMonstersAsync();
+
+        Bool(vm, "Placed").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Gold miser", "Rune lord" }, Names(vm));
+        Assert.All(vm.FilteredRows, r => Assert.Equal("✓", r.GetDisplay("Placed")));
+
+        Bool(vm, "Placed").IsChecked = false;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(7, vm.FilteredRows.Count);
+    }
+
+    [Fact]
+    public void PlacedRooms_ComeFromTheGraphSnapshot_Sorted()
+    {
+        SeedTable("v1.11p", "Rooms",
+            "[" + NpcRoom(3, 9, 4) + "," + NpcRoom(1, 5, 4) + "," + NpcRoom(1, 2, 4) + "," + NpcRoom(2, 7, 2) + "]");
+        _cache.SwitchSet("v1.11p");
+        RoomGraphManager graph = new(_cache);
+        graph.OnActiveSetChanged("v1.11p");
+
+        Assert.Equal(new[] { new RoomKey(1, 2), new RoomKey(1, 5), new RoomKey(3, 9) },
+            graph.PlacedRoomsByMonster[4]);
+        Assert.Equal(new[] { new RoomKey(2, 7) }, graph.PlacedRoomsByMonster[2]);
+        Assert.False(graph.PlacedRoomsByMonster.ContainsKey(0));   // NPC 0 = nobody placed
+    }
+
+    [Fact]
+    public async Task CashAndPlacedFilters_CombineWithSearch()
+    {
+        MonstersSectionViewModel vm = await PlacedMonstersAsync();
+        PresenceFilter cash = Cash(vm);
+
+        // Placed (Gold miser, Rune lord) AND carrying gold (Gold miser, merchant).
+        Bool(vm, "Placed").IsChecked = true;
+        cash.Selected = cash.WithOption;
+        cash.Parts.Single(p => p.Column == "G").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Gold miser" }, Names(vm));
+
+        // The search box finds within the curated list: "rune" matches a monster the
+        // panel has filtered out, so nothing shows.
+        vm.SearchText = "rune";
+        vm.ApplySearchCommand.Execute(null);
+        Assert.Empty(vm.FilteredRows);
+
+        // Widening the panel to any cash lets the search find it.
+        cash.Parts.Single(p => p.Column == "G").IsChecked = false;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Rune lord" }, Names(vm));
+
+        // Clearing the search leaves the panel's curation in place.
+        vm.SearchText = string.Empty;
+        Assert.Equal(new[] { "Gold miser", "Rune lord" }, Names(vm));
+    }
+
     [Fact]
     public async Task MissingColumn_RendersAsNull()
     {

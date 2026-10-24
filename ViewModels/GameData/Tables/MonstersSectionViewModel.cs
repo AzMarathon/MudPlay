@@ -99,18 +99,27 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Lairs"]       = "# Lairs",
             ["AvgLairSize"] = "Avg Lair Size",
             ["BiggestLair"] = "Biggest Lair",
+            ["R"]           = "Runic",
+            ["P"]           = "Platinum",
+            ["G"]           = "Gold",
+            ["S"]           = "Silver",
+            ["C"]           = "Copper",
+            ["Placed"]      = "Placed in",
         };
 
     // Carried on each row for filtering but not shown as grid columns: the raw
     // AC / DR fields (the grid shows them combined), Alignment + Type (their
-    // dropdowns read the formatted value), and the Monster-Intel facets synthesised
-    // in ComputeRowCells (elemental resists, spell immunity, flag presences).
+    // dropdowns read the formatted value), the Monster-Intel facets synthesised
+    // in ComputeRowCells (elemental resists, spell immunity, flag presences), the
+    // record's raw coin fields for the Cash filter (R runic, P platinum, G gold, S silver,
+    // C copper — the record's "Cash (up to)" line), and Placed (a room's NPC field names it).
     protected override IReadOnlyList<string> FilterOnlyColumns { get; } =
         new[]
         {
             "Align", "Type", "ArmourClass", "DamageResist",
             "ResCold", "ResFire", "ResStone", "ResLightning", "ResWater",
             "SpellImmu", "Animal", "NonLiving", "CastsSpells", "HasLoot",
+            "R", "P", "G", "S", "C", "Placed",
         };
 
     public override IEnumerable<string> SearchableLabels => new[]
@@ -129,11 +138,20 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["BSDefense"]  = static raw => raw is null or "" or "0" ? "" : raw,
             // Undead monsters render an "✗"; living monsters read blank.
             ["Undead"]     = static raw => raw is null or "" or "0" ? "" : "✗",
+            ["Placed"]     = static raw => raw is null or "" ? "" : "✓",
+            // Coins: most monsters carry none of a given coin, so 0 reads blank.
+            ["R"]          = BlankZero,
+            ["P"]          = BlankZero,
+            ["G"]          = BlankZero,
+            ["S"]          = BlankZero,
+            ["C"]          = BlankZero,
             // Filter-only columns: format so the Alignment / Type dropdowns read
             // names, not codes.
             ["Align"]      = LookupEnums.FormatMonAlignment,
             ["Type"]       = LookupEnums.FormatMonType,
         };
+
+    private static string? BlankZero(string? raw) => raw is "0" ? "" : raw;
 
     // Thousands-separated display for big counts ("300,000"); 0 / blank render empty.
     // The raw value stays comma-free, so the leading-int threshold filters read it
@@ -240,6 +258,22 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             bools: new[]
             {
                 new BoolFilter("Drops an item", "HasLoot", FlagPresent),
+                new BoolFilter("Placed in", "Placed", FlagPresent,
+                    "Only monsters a room places as its fixed resident (the record's Placed In list)"),
+            },
+            presences: new[]
+            {
+                new PresenceFilter("Cash", "Drops cash", "No cash", "Currency",
+                    new[]
+                    {
+                        new PresencePart("Runic", "R"),
+                        new PresencePart("Platinum", "P"),
+                        new PresencePart("Gold", "G"),
+                        new PresencePart("Silver", "S"),
+                        new PresencePart("Copper", "C"),
+                    },
+                    FlagPresent,
+                    "Coins the monster can carry. Drops cash keeps monsters carrying any of the ticked coins (none ticked = any coin)"),
             }));
     }
 
@@ -256,6 +290,11 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         return list;
     }
 
+    // Monster numbers some room places (its NPC field), from the room graph's placement
+    // snapshot; captured each load beside the lair index.
+    private IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> _placedIndex
+        = new Dictionary<int, IReadOnlyList<RoomKey>>();
+
     // Monster Number → lair stats from the room graph: Count (# rooms whose lair tag
     // names it = # Lairs), SumMax + MaxMax of those rooms' per-room "(Max N)" caps
     // (for the average / biggest lair size). Sourced from the immutable
@@ -267,7 +306,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
 
     protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
     {
-        BuildLairIndex();
+        CaptureRoomIndexes();
         base.PopulateRows(rows);
     }
 
@@ -277,12 +316,16 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         => _location.Load(AllRows.Select(r =>
             (r.Get("Landmass") ?? string.Empty, r.Get("Region") ?? string.Empty, r.Get("Area") ?? string.Empty)));
 
-    // Capture the room graph's immutable per-monster lair-size snapshot (built from
-    // each room's lair tag). Empty when no graph is wired — the lair
-    // columns then render blank.
-    private void BuildLairIndex()
-        => _lairIndex = _roomGraph?.LairSizeByMonster
+    // Capture the room graph's immutable per-monster lair-size and placement snapshots
+    // (built once per graph load from each room's lair tag and NPC field). Empty when no
+    // graph is wired — the lair columns then render blank and no monster reads as placed.
+    private void CaptureRoomIndexes()
+    {
+        _lairIndex = _roomGraph?.LairSizeByMonster
             ?? new Dictionary<int, (int, long, int)>();
+        _placedIndex = _roomGraph?.PlacedRoomsByMonster
+            ?? new Dictionary<int, IReadOnlyList<RoomKey>>();
+    }
 
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
@@ -329,6 +372,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["NonLiving"]    = HasAbil(element, 109) ? "1" : null,
             ["CastsSpells"]  = HasMidSpell(element) ? "1" : null,
             ["HasLoot"]      = HasDrop(element) ? "1" : null,
+            ["Placed"]       = _placedIndex.ContainsKey(ReadInt(element, "Number")) ? "1" : null,
             // Our configured combat treatment for this monster — the same 4-tier overlay
             // the combat engine reads, so the columns show exactly how the engine treats it.
             // Each is its own column (like Relationship) rather than a merged blob.

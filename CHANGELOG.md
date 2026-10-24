@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.43
+
+- Game Data Monsters filters by cash: any, drops cash or no cash, narrowed to chosen currencies
+- Game Data Monsters "Placed in" checkbox shows only monsters a room places
+
 ## 3.185.40
 
 - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
