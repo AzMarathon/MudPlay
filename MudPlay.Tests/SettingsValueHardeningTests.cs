@@ -232,18 +232,46 @@ public sealed class SettingsValueHardeningTests : IDisposable
         string path = WriteProfile("""{ "Name": "Hero" }""");
         string folder = Path.GetDirectoryName(path)!;
 
+        DamageFiveTimes(path);
+
+        Assert.Equal(new[] { 3, 4, 5 }, StatesKept(folder));
+    }
+
+    // A copy stamped ahead of the clock (the clock set back since it was made) is
+    // the newest: the copies after it carry its stamp, counted on from it, so all
+    // five share one stamp, as five made inside one millisecond do, and they still
+    // sort, and are pruned, in the order they were made.
+    [Fact]
+    public void Backups_StayInTheOrderMade_WhenTheClockIsBehindTheNewestCopy()
+    {
+        string path = WriteProfile("""{ "Name": "Hero" }""");
+        string folder = Path.GetDirectoryName(path)!;
+        File.WriteAllText(Path.Combine(folder, "profile.json.unreadable-99991231-235959999Z-00.bak"), "made before the clock went back");
+
+        DamageFiveTimes(path);
+
+        Assert.Equal(new[] { 3, 4, 5 }, StatesKept(folder));
+        Assert.All(Directory.GetFiles(folder, "profile.json.unreadable-*.bak"),
+            k => Assert.StartsWith("profile.json.unreadable-99991231-235959999Z-", Path.GetFileName(k), StringComparison.Ordinal));
+    }
+
+    // Five states of the profile, each read twice.
+    private void DamageFiveTimes(string path)
+    {
         for (int state = 1; state <= 5; state++)
         {
             File.WriteAllText(path, $$"""{ "Name": "Hero", "Favorites": {{state}} }""");
             TestProfiles.Service().Load(_bbs, "Hero");
             TestProfiles.Service().Load(_bbs, "Hero");
         }
-
-        string[] kept = Directory.GetFiles(folder, "profile.json.unreadable-*.bak").Order(StringComparer.Ordinal).ToArray();
-        Assert.Equal(SettingsValueGuard.BackupsKept, kept.Length);
-        Assert.Equal(new[] { 3, 4, 5 }, kept.Select(k => File.ReadAllText(k)).Select(t => t.Contains("\"Favorites\": 3", StringComparison.Ordinal) ? 3
-            : t.Contains("\"Favorites\": 4", StringComparison.Ordinal) ? 4 : t.Contains("\"Favorites\": 5", StringComparison.Ordinal) ? 5 : 0));
     }
+
+    // The state each kept copy holds (0 for none of DamageFiveTimes'), in name order.
+    private static int[] StatesKept(string folder) =>
+        Directory.GetFiles(folder, "profile.json.unreadable-*.bak").Order(StringComparer.Ordinal)
+            .Select(File.ReadAllText)
+            .Select(t => Enumerable.Range(1, 5).FirstOrDefault(s => t.Contains($"\"Favorites\": {s} ", StringComparison.Ordinal)))
+            .ToArray();
 
     // A copy of the character is the character, not its rescued damaged files.
     [Fact]

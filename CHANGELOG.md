@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.35
+
+- A damaged settings file's rescued copies stay in the order made when several share one millisecond or the clock is set back
+- Two timing-sensitive tests no longer fail under a loaded machine
+
 ## 3.185.32
 
 - The map, mana chart, terminal and realm rankings free their text drawings instead of leaving them to pile up

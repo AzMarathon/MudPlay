@@ -73,8 +73,12 @@ public sealed class CrashReporterTests
         Assert.Contains("no exception object", md);
     }
 
+    // The report is built while the disk is stuck, and what is on the disk the
+    // moment it returns is checked. Its wait is given a bound no loaded machine
+    // runs out, so the disk answering late can't fail it; the client's own bound
+    // (CrashDrainBound) races a stuck disk by design.
     [Fact]
-    public void Build_LetsTheProgramLogLandBeforeNamingIt()
+    public async Task Build_LetsTheProgramLogLandBeforeNamingIt()
     {
         LogService log = new();
         ProgramLogFileTests.TestDisk disk = new() { StallFirstWrite = true };
@@ -84,12 +88,19 @@ public sealed class CrashReporterTests
         {
             Assert.True(disk.Stuck.Wait(TimeSpan.FromSeconds(10)));
             log.Error("Combat", "the line before the crash");
-            // The disk answers a moment into the report, well inside its wait.
-            using Timer answer = new(_ => disk.Released.Set(), null, 300, Timeout.Infinite);
 
-            CrashReporter.Build(new InvalidOperationException("boom"), "UI run loop");
+            Task<string> onDiskAtReturn = Task.Run(() =>
+            {
+                CrashReporter.Build(new InvalidOperationException("boom"), "UI run loop", programLogBound: TimeSpan.FromMinutes(1));
+                return disk.Text;
+            });
+            // A report that waits can't come back while the disk is stuck, however
+            // long this is; the pause only gives one that doesn't wait time to show it.
+            await Task.WhenAny(onDiskAtReturn, Task.Delay(250));
+            Assert.False(onDiskAtReturn.IsCompleted);
+            disk.Released.Set();
 
-            Assert.Contains("[Error] Combat: the line before the crash", disk.Text);
+            Assert.Contains("[Error] Combat: the line before the crash", await onDiskAtReturn.WaitAsync(TimeSpan.FromMinutes(1)));
         }
         finally
         {

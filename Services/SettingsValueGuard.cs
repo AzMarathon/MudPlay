@@ -838,8 +838,12 @@ public static class SettingsValueGuard
     // Keep json, the file as it was read, as <file>.unreadable-<UTC time>-NN.bak
     // beside it, unless the newest copy already holds the same text, and keep only
     // the newest BackupsKept. The stamp is UTC to the millisecond and every name
-    // carries a two-digit count, so names sort in the order they were made: a
-    // clock change can't reorder them, nor can several made within one second.
+    // carries a two-digit count, so names sort in the order they were made, which
+    // is what the pruning goes by. A copy is counted on from the newest one when
+    // the clock has not passed its stamp (several within one millisecond, or a
+    // clock set back). The first free count would not do: once the oldest copy of
+    // a stamp is pruned its count is free again, and a copy given it sorts below
+    // the ones before it and is pruned as the oldest.
     // Returns the copy that holds the text, or null when none could be made (said,
     // and the load goes on: losing the copy must not cost the profile too).
     private static string? KeepBackup(string path, string json)
@@ -851,9 +855,13 @@ public static class SettingsValueGuard
             List<string> kept = Directory.GetFiles(folder, prefix + "*.bak").Order(StringComparer.Ordinal).ToList();
             if (kept.Count > 0 && File.ReadAllText(kept[^1]) == json) return kept[^1];
 
-            string stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture) + "Z";
-            string backup = Path.Combine(folder, $"{prefix}{stamp}-00.bak");
-            for (int n = 1; File.Exists(backup); n++) backup = Path.Combine(folder, $"{prefix}{stamp}-{n:00}.bak");
+            string stamp = DateTime.UtcNow.ToString(BackupStampFormat, CultureInfo.InvariantCulture) + "Z";
+            int n = 0;
+            if (kept.Count > 0 && BackupName(Path.GetFileName(kept[^1]), prefix) is { } newest
+                && string.CompareOrdinal(newest.Stamp, stamp) >= 0)
+                (stamp, n) = (newest.Stamp, newest.Count + 1);
+            string backup = Path.Combine(folder, $"{prefix}{stamp}-{n:00}.bak");
+            while (File.Exists(backup)) backup = Path.Combine(folder, $"{prefix}{stamp}-{++n:00}.bak");
             File.WriteAllText(backup, json);
             kept.Add(backup);
             kept.Sort(StringComparer.Ordinal);
@@ -865,6 +873,21 @@ public static class SettingsValueGuard
             Report(path + " (backup)", new List<string> { $"Couldn't keep a copy of {path} before values in it were left out: {ex.Message}" });
             return null;
         }
+    }
+
+    private const string BackupStampFormat = "yyyyMMdd-HHmmssfff";
+
+    // The stamp and count of a copy named <prefix><stamp>Z-NN.bak, or null for a
+    // name in any other form (an older client's copies were stamped to the second).
+    private static (string Stamp, int Count)? BackupName(string name, string prefix)
+    {
+        int stampLength = BackupStampFormat.Length + 1;
+        if (!name.StartsWith(prefix, StringComparison.Ordinal) || !name.EndsWith(".bak", StringComparison.Ordinal)) return null;
+        string rest = name[prefix.Length..^".bak".Length];
+        if (rest.Length < stampLength + 2 || rest[stampLength - 1] != 'Z' || rest[stampLength] != '-') return null;
+        return int.TryParse(rest.AsSpan(stampLength + 1), NumberStyles.None, CultureInfo.InvariantCulture, out int count)
+            ? (rest[..stampLength], count)
+            : null;
     }
 
     // ----- Reporting ----------------------------------------------------------
