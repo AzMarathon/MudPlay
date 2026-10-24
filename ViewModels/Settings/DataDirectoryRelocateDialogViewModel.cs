@@ -73,6 +73,10 @@ public sealed partial class DataDirectoryRelocateDialogViewModel : ObservableObj
         if (!CanMove) return;
 
         Busy = true;
+        // The restart after the move exits without the main window's Closing, which
+        // writes the unrecognized lines still waiting for their deferred save; they
+        // go now, so the move carries them.
+        AppServices.Current.MessageCandidates.Save();
         DataRootRelocator.FailureReason outcome =
             DataRootRelocator.Relocate(DestinationPath, AppServices.Current.Log);
         Busy = false;

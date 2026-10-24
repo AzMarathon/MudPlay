@@ -16,6 +16,12 @@ public sealed class SharedFileStamp
     // Note the file as this client just read or wrote it.
     public void Mark(string? path) => _seen = WriteTime(path);
 
+    // The file's stamp now, taken before a read, and marked with once the read is
+    // in: a write landing between the two is then still seen as another client's.
+    public DateTime Look(string? path) => WriteTime(path);
+
+    public void MarkAs(DateTime seen) => _seen = seen;
+
     // True when the file was written (made, or removed) since the last Mark.
     public bool ChangedOutside(string? path) => WriteTime(path) != _seen;
 

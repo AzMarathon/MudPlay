@@ -20,6 +20,8 @@ public sealed class MessageCandidateSaveTests : IDisposable
         Path.Combine(AppPaths.BbsDir, "test-candsave-" + Guid.NewGuid().ToString("N").Substring(0, 12));
     private readonly ManualTimers _timers = new();
 
+    public MessageCandidateSaveTests() => ScratchRoot.Require();
+
     private string Realm(string name)
     {
         string folder = Path.Combine(_bbs, name);
@@ -69,6 +71,79 @@ public sealed class MessageCandidateSaveTests : IDisposable
         // The next change arms a new save.
         store.RecordSighting("The zephyr dissipates, its debris falling to the ground.", t.AddSeconds(40));
         Assert.Equal(1, _timers.Pending);
+    }
+
+    // Each deferred save hands its list to the write lane while the lane may still be
+    // finishing the one before. A hand-off landing as the lane stopped used to start
+    // no lane, and no deferred save was written again for the session.
+    [Fact]
+    public async Task BackToBackDeferredSaves_EveryOneLands()
+    {
+        string realm = Realm("realm");
+        MessageCandidateStore store = NewStore(realm);
+        DateTimeOffset t = DateTimeOffset.UtcNow;
+
+        for (int i = 0; i < 60; i++)
+        {
+            store.RecordSighting($"A strange rune number {i} glows.", t.AddSeconds(i));
+            _timers.Advance(MessageCandidateStore.SaveDelay);
+        }
+        await store.WhenSavedAsync();
+
+        Assert.Equal(60, OnFile(realm).Count);
+    }
+
+    // A deferred write overtaken by Save, and then by another client's write, must
+    // not put its older list back over theirs.
+    [Fact]
+    public async Task OvertakenDeferredWrite_DoesNotPutAnOlderListBack()
+    {
+        string realm = Realm("realm");
+        MessageCandidateStore first = NewStore(realm);
+        MessageCandidateStore second = new(arm: new ManualTimers().Arm);
+        second.Load(realm);
+        DateTimeOffset t = DateTimeOffset.UtcNow;
+
+        first.RecordSighting("The floor shakes.", t);
+        _timers.Advance(MessageCandidateStore.SaveDelay);   // handed to the lane
+        first.Save();                                        // and written at once
+        second.RecordSighting("You smell smoke.", t.AddSeconds(1));
+        second.Save();
+        await first.WhenSavedAsync();
+
+        Assert.Equal(new[] { "The floor shakes.", "You smell smoke." },
+            OnFile(realm).Select(c => c.RawText).OrderBy(x => x));
+    }
+
+    // A file grown far past the cap loses its oldest pending lines in one pass at
+    // load, and the trimmed list goes out with one deferred save.
+    [Fact]
+    public async Task Load_OfAFilePastTheCap_TrimsTheOldestPendingLines_AndSavesOnce()
+    {
+        string realm = Realm("realm");
+        DateTimeOffset t = DateTimeOffset.UtcNow;
+        List<MessageCandidateRecord> big = new();
+        for (int i = 0; i < MessageCandidateStore.MaxPending + 25; i++)
+        {
+            string text = $"Old line {i}.";
+            big.Add(new(MessageCandidateRecord.ComputeId(text), text, t.AddMinutes(i), t.AddMinutes(i),
+                Occurrences: 1, Dismissed: false));
+        }
+        big.Add(new(MessageCandidateRecord.ComputeId("A verdict."), "A verdict.", t.AddDays(-9), t.AddDays(-9),
+            Occurrences: 1, Dismissed: true));
+        JsonStore.Save(AppPaths.RealmMessageCandidatesFile(realm), big);
+
+        MessageCandidateStore store = NewStore(realm);
+
+        Assert.Equal(MessageCandidateStore.MaxPending, store.Candidates.Count(c => !c.Dismissed));
+        Assert.False(store.Contains("Old line 24."));
+        Assert.True(store.Contains("Old line 25."));
+        Assert.True(store.IsDismissed("A verdict."));
+        Assert.Equal(1, _timers.Pending);
+
+        _timers.Advance(MessageCandidateStore.SaveDelay);
+        await store.WhenSavedAsync();
+        Assert.Equal(MessageCandidateStore.MaxPending + 1, OnFile(realm).Count);
     }
 
     [Fact]

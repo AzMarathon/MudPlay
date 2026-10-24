@@ -22,8 +22,9 @@ namespace MudPlay.Services;
 // staged line bumps its count, so a grind that repeats one (a cast line per fight)
 // used to rewrite the whole file on the UI thread every few seconds: 4,441 writes
 // in a night, one of them a 5.3 s freeze when the disk stalled (reports
-// Hang-20261021-035337, Hang-20261021-065221). A realm switch and the client's
-// exit write what is still waiting at once (Save), so nothing is left unsaved.
+// Hang-20261021-035337, Hang-20261021-065221). A realm switch, the client's exit
+// and the restart after a data-folder move write what is still waiting at once
+// (Save), so nothing is left unsaved.
 //
 // Bounded: at most MaxPending lines wait for review. A new line past that pushes
 // out the pending line seen longest ago. Dismissed lines are the user's verdicts
@@ -71,8 +72,10 @@ public sealed class MessageCandidateStore
     // pool thread's mark of the file and the UI thread's look at it apart.
     private readonly object _writeGate = new();
     private readonly object _stampGate = new();
+    private long _stampMarks;
     private readonly object _laneGate = new();
     private PendingWrite? _waiting;
+    private bool _draining;
     private Task _lane = Task.CompletedTask;
     private long _changesWritten;
     private bool _writeFailureLogged;
@@ -104,9 +107,18 @@ public sealed class MessageCandidateStore
         AdoptLegacyFile(path, legacySet);
         MarkStamp(path);
         List<MessageCandidateRecord> loaded = TryLoad(path) ?? [];
-        int over = PendingOverCap(loaded);
+        HashSet<string> pushedOut = OldestPastCap(loaded);
+        if (pushedOut.Count > 0)
+        {
+            // Dropped before the list is shown, in one pass: a file grown far past
+            // the cap would otherwise be trimmed a line and a list change at a time.
+            loaded.RemoveAll(c => pushedOut.Contains(c.Id));
+            foreach (string id in pushedOut) _removedHere[id] = ++_changes;
+            QueueSave();
+            _log?.Info("MessageCandidates",
+                $"{pushedOut.Count} unrecognized line(s) seen longest ago left the review queue: it keeps {MaxPending} pending lines.");
+        }
         Candidates.ReplaceAll(loaded);
-        if (over > 0) TrimToCap(over);
     }
 
     private void AdoptLegacyFile(string realmFile, string? legacySet)
@@ -131,12 +143,34 @@ public sealed class MessageCandidateStore
     {
         if (ActiveRealmFolder is null) return false;
         string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
-        return ChangedOutside(path) && Rebase(path);
+        if (!ChangedOutside(path) || !Rebase(path)) return false;
+        // A deferred write that found the file changed under it was let go (see
+        // Write); the lines it held go out again on top of what was just taken in.
+        if (_changes > Interlocked.Read(ref _changesWritten)) QueueSave();
+        return true;
     }
 
     private void MarkStamp(string path)
     {
-        lock (_stampGate) _stamp.Mark(path);
+        lock (_stampGate)
+        {
+            _stamp.Mark(path);
+            _stampMarks++;
+        }
+    }
+
+    private (DateTime Seen, long Marks) LookStamp(string path)
+    {
+        lock (_stampGate) return (_stamp.Look(path), _stampMarks);
+    }
+
+    // Mark with what a read looked at, unless this client's own write marked the
+    // file since: that mark is newer, and putting the older one back would make
+    // our own write look like another client's.
+    private void MarkStampAs((DateTime Seen, long Marks) look)
+    {
+        lock (_stampGate)
+            if (_stampMarks == look.Marks) _stamp.MarkAs(look.Seen);
     }
 
     private bool ChangedOutside(string path)
@@ -144,10 +178,12 @@ public sealed class MessageCandidateStore
         lock (_stampGate) return _stamp.ChangedOutside(path);
     }
 
-    // Forget the changes a finished write has put in the file.
-    private void ForgetWrittenChanges()
+    // Forget the changes a finished write has put in the file: all of them, or (for
+    // a read of the file) those written before the read began. A write landing
+    // during the read may be missing from what was read, so its changes are kept.
+    private void ForgetWrittenChanges(long? upTo = null)
     {
-        long written = Interlocked.Read(ref _changesWritten);
+        long written = upTo ?? Interlocked.Read(ref _changesWritten);
         Forget(_changedHere, written);
         Forget(_removedHere, written);
 
@@ -167,10 +203,12 @@ public sealed class MessageCandidateStore
     // either. False when the file is there but can't be read (the list is kept).
     private bool Rebase(string path)
     {
+        long writtenBeforeRead = Interlocked.Read(ref _changesWritten);
+        (DateTime, long) seen = LookStamp(path);
         List<MessageCandidateRecord>? onFile = File.Exists(path) ? TryLoad(path) : [];
         if (onFile is null) return false;
 
-        ForgetWrittenChanges();
+        ForgetWrittenChanges(writtenBeforeRead);
         Dictionary<string, MessageCandidateRecord> mine = new(StringComparer.Ordinal);
         foreach (MessageCandidateRecord c in Candidates)
             if (_changedHere.ContainsKey(c.Id)) mine[c.Id] = c;
@@ -189,7 +227,7 @@ public sealed class MessageCandidateStore
         }
         merged.AddRange(mine.Values);   // first seen here
 
-        MarkStamp(path);
+        MarkStampAs(seen);
         Candidates.ReplaceAll(merged);
         return true;
     }
@@ -219,7 +257,10 @@ public sealed class MessageCandidateStore
         _saveDue?.Dispose();
         _saveDue = null;
         if (_changes <= Interlocked.Read(ref _changesWritten)) return;
-        if (TakeSnapshot() is { } write) Write(write);
+        // Another client writing between the snapshot's look at the file and the
+        // write sends it round again, on top of their lines; a few rounds at most.
+        for (int round = 0; round < 3; round++)
+            if (TakeSnapshot() is not { } write || Write(write) != WriteOutcome.FileChangedUnderIt) break;
         ForgetWrittenChanges();
     }
 
@@ -234,6 +275,7 @@ public sealed class MessageCandidateStore
     // then copy the list as it stands.
     private PendingWrite? TakeSnapshot()
     {
+        ForgetWrittenChanges();
         if (ActiveRealmFolder is null) return null;
         string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
         if (ChangedOutside(path)) Rebase(path);
@@ -248,9 +290,10 @@ public sealed class MessageCandidateStore
         if (TakeSnapshot() is not { } write) return;
         lock (_laneGate)
         {
-            bool idle = _waiting is null && _lane.IsCompleted;
             _waiting = write;
-            if (idle) _lane = Task.Run(DrainWrites);
+            if (_draining) return;   // the running lane takes it before it stops
+            _draining = true;
+            _lane = Task.Run(DrainWrites);
         }
     }
 
@@ -263,25 +306,40 @@ public sealed class MessageCandidateStore
             {
                 next = _waiting;
                 _waiting = null;
+                // Cleared under the same lock that hands a list over, so a list
+                // handed after this look starts a lane of its own.
+                if (next is null) { _draining = false; return; }
             }
-            if (next is null) return;
-            Write(next);
+            try { Write(next); }
+            catch (Exception ex)
+            {
+                // Anything Write's own catch doesn't expect. The lane goes on, and the
+                // changes stay marked for the next save.
+                _log?.Warn("MessageCandidates", $"Saving '{next.Path}' failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 
-    // Write one list. A write older than one already on disk is skipped: a save
-    // made at once (Save) can overtake a deferred one still waiting its turn.
-    private void Write(PendingWrite write)
+    private enum WriteOutcome { Written, AlreadyOnDisk, FileChangedUnderIt, Failed }
+
+    // Write one list. A list no newer than what is on disk is skipped: a save made
+    // at once (Save) can overtake a deferred one still waiting its turn. So is one
+    // whose file another client wrote since the list was taken: written, it would
+    // put back the lines their write took out and drop the ones it added. The
+    // heartbeat takes their lines in and arms the save again (TakeInOutsideChanges).
+    private WriteOutcome Write(PendingWrite write)
     {
         lock (_writeGate)
         {
-            if (write.Changes < Interlocked.Read(ref _changesWritten)) return;
+            if (write.Changes <= Interlocked.Read(ref _changesWritten)) return WriteOutcome.AlreadyOnDisk;
+            if (ChangedOutside(write.Path)) return WriteOutcome.FileChangedUnderIt;
             try
             {
                 JsonStore.Save(write.Path, write.Records);
                 MarkStamp(write.Path);
                 Interlocked.Exchange(ref _changesWritten, write.Changes);
                 _writeFailureLogged = false;
+                return WriteOutcome.Written;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -290,6 +348,7 @@ public sealed class MessageCandidateStore
                 if (!_writeFailureLogged)
                     _log?.Warn("MessageCandidates", $"Couldn't save '{write.Path}': {ex.Message}");
                 _writeFailureLogged = true;
+                return WriteOutcome.Failed;
             }
         }
     }
@@ -329,7 +388,7 @@ public sealed class MessageCandidateStore
         Candidates.Add(created);
         _removedHere.Remove(id);
         MarkChanged(id);
-        if (PendingOverCap(Candidates) is > 0 and int over) TrimToCap(over);
+        foreach (string oldest in OldestPastCap(Candidates)) Remove(oldest);
         return (created, true);
     }
 
@@ -397,26 +456,18 @@ public sealed class MessageCandidateStore
         QueueSave();
     }
 
-    // How many pending lines the list holds past MaxPending.
-    private static int PendingOverCap(IEnumerable<MessageCandidateRecord> list)
+    // The pending lines of `list` past MaxPending, seen longest ago first. A new
+    // line past the cap pushes out one, quietly: the queue only ever holds lines
+    // waiting for review, and a log line per push would bury the log once full.
+    private static HashSet<string> OldestPastCap(IReadOnlyCollection<MessageCandidateRecord> list)
     {
-        int pending = 0;
-        foreach (MessageCandidateRecord c in list)
-            if (!c.Dismissed) pending++;
-        return pending - MaxPending;
-    }
-
-    // Push out the `count` pending lines seen longest ago.
-    private void TrimToCap(int count)
-    {
-        List<MessageCandidateRecord> oldest = Candidates
-            .Where(c => !c.Dismissed)
+        int over = list.Count(c => !c.Dismissed) - MaxPending;
+        if (over <= 0) return [];
+        return list.Where(c => !c.Dismissed)
             .OrderBy(c => c.LastSeenAt)
-            .Take(count)
-            .ToList();
-        foreach (MessageCandidateRecord c in oldest) Remove(c.Id);
-        _log?.Info("MessageCandidates",
-            $"{oldest.Count} unrecognized line(s) seen longest ago left the review queue: it keeps {MaxPending} pending lines.");
+            .Take(over)
+            .Select(c => c.Id)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     // Put the write off until SaveDelay after the first change it will hold.
