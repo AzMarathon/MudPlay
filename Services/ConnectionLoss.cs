@@ -33,9 +33,6 @@ public sealed record ConnectionLoss(
         => new(now, host, port, Silent(idleSeconds, lastRead, now),
             lastRead == DateTimeOffset.MinValue ? null : now - lastRead, endedBecause);
 
-    // The terminal lines are plain ASCII: WriteTerminalStatus feeds them to the
-    // emulator as Latin-1, where a dash or an arrow would show as "?".
-    //
     // The terminal line. The silence is only worth stating when it is long enough
     // to explain why the screen had stood still.
     public string TerminalLine

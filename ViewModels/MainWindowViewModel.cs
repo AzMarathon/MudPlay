@@ -1087,7 +1087,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Emulator.Feed and crash (same reason as the combat-profile echo below).
         AppServices.Current.GameData.TableParseFailed += table =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
-                $"[GAME DATA: table '{table}' is corrupt and was not loaded — re-import the set; "
+                $"[GAME DATA: table '{table}' is corrupt and was not loaded - re-import the set; "
                 + "some features will be missing data]", TerminalStatusKind.Error));
         // A profile whose set's name can't be a folder runs with no game data; say so
         // where the user looks, not only in the program log. The start-up profile was
@@ -1246,7 +1246,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.FollowModes.BlindNoticed += () =>
             Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
                 "[Follow mode is Blind: following prints no room, so the map can't track you as a "
-                + "follower — `set follow normal` turns the room displays back on]",
+                + "follower - `set follow normal` turns the room displays back on]",
                 TerminalStatusKind.Notice));
 
         // Room-display + movement-refusal parsers feeding RoomTracker.
@@ -1919,7 +1919,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (ShowSplash) ShowSplash = false;
                 WriteTerminalStatus(
-                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} — please attach it to a bug report.]",
+                    $"[The update failed and this version was restored. What went wrong is in {failedUpdateLog} - please attach it to a bug report.]",
                     TerminalStatusKind.Error);
             });
         }
@@ -2309,7 +2309,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnEquipSlotBlocked(Game.Inventory.EquipmentManager.EquipBlock block)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus(
-                $"[{block.ItemName} skipped, unable to wear — adjust set to correct]",
+                $"[{block.ItemName} skipped, unable to wear - adjust set to correct]",
                 TerminalStatusKind.Notice));
 
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
@@ -2682,7 +2682,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Host) || Port <= 0)
         {
-            WriteTerminalStatus("[NO BBS SELECTED — OPEN SETTINGS → BBS + DISPLAY, PICK ONE, AND SAVE.]",
+            WriteTerminalStatus("[NO BBS SELECTED - OPEN SETTINGS > BBS + DISPLAY, PICK ONE, AND SAVE.]",
                                 TerminalStatusKind.Error);
             AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
@@ -2922,8 +2922,8 @@ public partial class MainWindowViewModel : ObservableObject
             // flow rather than telling the user to quit manually.
             bool autoLogout = ResolveActiveBbs()?.ReconnectAfterCleanup ?? false;
             string banner = autoLogout
-                ? $"[CLEANUP WARNING — BBS GOES DOWN IN {warning.MinutesRemaining} MIN — WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
-                : $"[CLEANUP WARNING — BBS GOES DOWN IN {warning.MinutesRemaining} MIN — QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
+                ? $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
+                : $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
             WriteTerminalStatus(banner, TerminalStatusKind.Notice);
             AppServices.Current.Log.Warn("Cleanup",
                 $"Server announced shutdown in {warning.MinutesRemaining} minute(s) at {warning.ObservedAt.LocalDateTime:HH:mm:ss}.");
@@ -3105,7 +3105,7 @@ public partial class MainWindowViewModel : ObservableObject
         int minutes = (int)delay.TotalMinutes;
         int seconds = delay.Seconds;
         WriteTerminalStatus(
-            $"[AUTO-RECONNECT ARMED — DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
+            $"[AUTO-RECONNECT ARMED - DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
             TerminalStatusKind.Notice);
 
         StartReconnectCountdown(delay);
@@ -3251,7 +3251,7 @@ public partial class MainWindowViewModel : ObservableObject
         // form so the terminal doesn't get spammed with the full text
         // ten times in a row.
         string bannerText = _reactiveReconnectCount == 1
-            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) — DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
+            ? $"[AUTO-RECONNECT ARMED ({reasonLabel.ToUpperInvariant()}, REDIAL {_reactiveReconnectCount}{ofBudget}) - DIALING IN {FormatDelay(delay)}. PRESS CONNECT TO CANCEL.]"
             : $"[ATTEMPTING REDIAL {_reactiveReconnectCount}{ofBudget} IN {FormatDelay(delay)}.]";
         WriteTerminalStatus(bannerText, TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
@@ -3293,7 +3293,7 @@ public partial class MainWindowViewModel : ObservableObject
         CancellationToken token = _cleanupReconnectCts.Token;
 
         WriteTerminalStatus(
-            $"[RELOG REQUESTED — DIALING BACK IN {FormatDelay(delay)}.]",
+            $"[RELOG REQUESTED - DIALING BACK IN {FormatDelay(delay)}.]",
             TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
             $"{reason} — reconnecting in {FormatDelay(delay)}.");
@@ -3803,8 +3803,9 @@ public partial class MainWindowViewModel : ObservableObject
             _ => string.Empty,
         };
         string line = $"\r\n{sgr}{text}\x1b[0m\r\n";
-        byte[] bytes = System.Text.Encoding.Latin1.GetBytes(line);
-        Emulator.Feed(bytes);
+        // Notices come from all over the client and are written with dashes and
+        // arrows; the grid draws CP437, so Cp437.Encode turns those into ASCII.
+        Emulator.Feed(Cp437.Encode(line));
     }
 
     private void OnStatlineFlagChanged()
@@ -4191,7 +4192,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             AppServices.Current.Log.Info("Transfers", $"our own {e.Message.Trim()} went out on the broadcast channel, which is switched off on the Talk tab; nothing will be taken from it.");
             Dispatcher.UIThread.Post(() => AppServices.Current.WriteTerminalNotice(
-                "[the broadcast channel is switched off for @commands: Settings → Talk → Disallow @commands from broadcast]"));
+                "[the broadcast channel is switched off for @commands: Settings > Talk > Disallow @commands from broadcast]"));
             return;
         }
         // Whose request it was. The client also sends these lines for other
@@ -5784,7 +5785,7 @@ public partial class MainWindowViewModel : ObservableObject
             // An empty / malformed MDB no longer swaps to a broken set — it fails here
             // with the reason (and the reader's catalog scan) in the Program Log.
             AppServices.Current.Log.Warn("MDB", result.Message);
-            WriteTerminalStatus("[MDB IMPORT FAILED — see Program Log]", TerminalStatusKind.Error);
+            WriteTerminalStatus("[MDB IMPORT FAILED - see Program Log]", TerminalStatusKind.Error);
         }
     }
 
@@ -5810,11 +5811,11 @@ public partial class MainWindowViewModel : ObservableObject
         // The "see Program Log" hint fires whenever the user has reason to dig
         // in — skipped tables OR a suspiciously small MDB (fewer game tables
         // than any MajorMUD export ships).
-        string tooFew = r.TablesFound < 9 ? " — UNEXPECTED TABLE COUNT" : string.Empty;
+        string tooFew = r.TablesFound < 9 ? " - UNEXPECTED TABLE COUNT" : string.Empty;
         bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9;
-        string logHint = needsLogPointer ? " — see Program Log" : string.Empty;
+        string logHint = needsLogPointer ? " - see Program Log" : string.Empty;
 
-        return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}, {entries} — {lairs}, {roomCommands}{tooFew}{logHint}]";
+        return $"[MDB IMPORT COMPLETE: {r.FolderName} - {tablesPart}, {entries} - {lairs}, {roomCommands}{tooFew}{logHint}]";
     }
 
     private static TerminalStatusKind TerminalStatusKindFor(MdbImportResult r)

@@ -47,4 +47,48 @@ public static class Cp437
 
     // Return the Unicode glyph that corresponds to a CP437 byte.
     public static char ToUnicode(byte b) => Table[b];
+
+    // The byte that draws a glyph; the lowest one where two bytes draw the same.
+    private static readonly Dictionary<char, byte> Bytes = BuildBytes();
+
+    private static Dictionary<char, byte> BuildBytes()
+    {
+        Dictionary<char, byte> bytes = new();
+        for (int b = 255; b >= 0; b--) bytes[Table[b]] = (byte)b;
+        return bytes;
+    }
+
+    public static bool TryFromUnicode(char c, out byte b) => Bytes.TryGetValue(c, out b);
+
+    // The client's own text (its terminal notices) as the bytes the grid draws it
+    // from. ASCII stands for itself, the controls an escape sequence or a line end
+    // is made of included. Anything else is its CP437 byte from the upper half
+    // (the low glyphs share their bytes with controls), else a plain-ASCII stand-in:
+    // Latin-1 bytes drew an em dash or an arrow as "?" and an accent as the wrong
+    // CP437 glyph.
+    public static byte[] Encode(string text)
+    {
+        List<byte> bytes = new(text.Length);
+        foreach (char c in text)
+        {
+            if (c < 0x80) bytes.Add((byte)c);
+            else if (TryFromUnicode(c, out byte b) && b >= 0x80) bytes.Add(b);
+            else foreach (char s in Standin(c)) bytes.Add((byte)s);
+        }
+        return bytes.ToArray();
+    }
+
+    private static string Standin(char c) => c switch
+    {
+        '—' or '–' or '‒' or '―' or '−' => "-",
+        '→' or '⇒' or '►' or '▶' => ">",
+        '←' or '⇐' or '◄' or '◀' => "<",
+        '…' => "...",
+        '‘' or '’' or '′' => "'",
+        '“' or '”' or '″' => "\"",
+        '×' => "x",
+        '•' => "*",
+        ' ' => " ",
+        _ => "?",
+    };
 }
