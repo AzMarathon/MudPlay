@@ -289,7 +289,7 @@
       "Folder": "Barren Hills"
     },
     {
-      "Map": 15,
+      "Map": 16,
       "Room": 640,
       "Label": "Narrow Ledge",
       "Folder": "Barren Hills"
@@ -1453,7 +1453,7 @@
       "Folder": "Dwarven Mines"
     },
     {
-      "Map": 6,
+      "Map": 15,
       "Room": 1791,
       "Label": "Diamond Mine (Devil Fiend area)",
       "Folder": "Dwarven Mines"
@@ -3793,7 +3793,7 @@
       "Folder": "Trainers"
     },
     {
-      "Map": 1,
+      "Map": 8,
       "Room": 1041,
       "Label": "Ethereal Prison (Timelord) (41-54)",
       "Folder": "Trainers"
@@ -7249,7 +7249,7 @@
       "Folder": "Shad-Outlands"
     },
     {
-      "Map": 2,
+      "Map": 5,
       "Room": 2151,
       "Label": "Crystal Forest, Beast Shrine",
       "Folder": "Shad-Outlands"

@@ -26,6 +26,12 @@ namespace MudPlay.Services;
 //    number in the bundle's LoopRevisions.json. A set whose ledger holds an older
 //    revision gets the new file over its copy (the old one kept beside it as .bak),
 //    once per revision. A loop the user deleted or moved is left alone.
+//  - Corrected favourites are moved, not added: a starter GOTO that shipped at the
+//    wrong room is listed in the bundle's FavoriteCorrections.json. Once per set,
+//    the set's copy is moved to the right room (or dropped, when the set already
+//    has one there) and its ledger key with it, so the fixed bundle entry isn't
+//    offered as new beside the stale one and a deleted one stays deleted. Runs
+//    before the additive pass for that reason.
 //  - Realm-matched (stock vs paradigm via Info.json Legit); best-effort (a failure
 //    logs and leaves the set as-is rather than blocking).
 //
@@ -83,13 +89,14 @@ public static class NavSeedBootstrapper
         try
         {
             // Idempotent — runs on every activate, so only touch disk when the ledger
-            // actually grew (a new bundled item was offered this pass).
+            // actually grew (a new bundled item was offered this pass) or moved.
             int before = ledger.Loops.Count + ledger.Favorites.Count + ledger.Folders.Count;
+            bool corrected = ApplyFavouriteCorrections(bundle, favDest, ledger, setName, log);
             int loops = ApplyLoops(Path.Combine(bundle, "Loops"), loopsDest, ledger);
             int favs = ApplyFavourites(Path.Combine(bundle, "Favorites.json"), favDest, ledger);
             (int replaced, bool revisionsMoved) = ApplyLoopRevisions(bundle, loopsDest, ledger);
             bool grew = ledger.Loops.Count + ledger.Favorites.Count + ledger.Folders.Count != before;
-            if (grew || revisionsMoved) SaveLedger(ledgerPath, ledger);
+            if (grew || revisionsMoved || corrected) SaveLedger(ledgerPath, ledger);
             if (loops > 0 || favs > 0)
                 log?.Log(LogSeverity.Info, "NavSeed",
                     $"Seeded set '{setName}' ({realm}): +{loops} loop(s), +{favs} favourite(s).");
@@ -217,6 +224,57 @@ public static class NavSeedBootstrapper
         return (replaced, changed);
     }
 
+    // Apply each bundled favourite correction this set's ledger hasn't recorded:
+    // the set's copy of the shipped favourite moves to the corrected room (dropped
+    // when the set already has a favourite there), and the ledger's key for it
+    // follows, whatever folder it was offered under. Returns whether the ledger
+    // changed.
+    private static bool ApplyFavouriteCorrections(string bundle, string favDest, NavSeedLedger ledger,
+                                                  string setName, LogService? log)
+    {
+        IReadOnlyList<FavoriteCorrection> corrections = FavoriteCorrection.Load(bundle);
+        HashSet<string> done = new(ledger.FavoriteCorrections, StringComparer.Ordinal);
+        List<FavoriteCorrection> pending = corrections.Where(c => !done.Contains(c.Id)).ToList();
+        if (pending.Count == 0) return false;
+
+        JsonObject? cur = File.Exists(favDest) ? JsonNode.Parse(File.ReadAllText(favDest))?.AsObject() : null;
+        JsonArray? favs = cur?["Favorites"] as JsonArray;
+        bool fileChanged = false;
+        foreach (FavoriteCorrection c in pending)
+        {
+            ledger.FavoriteCorrections.Add(c.Id);
+            string fromKey = $"{c.FromMap}/{c.FromRoom}|{c.Label}|";
+            for (int i = 0; i < ledger.Favorites.Count; i++)
+                if (ledger.Favorites[i].StartsWith(fromKey, StringComparison.Ordinal))
+                    ledger.Favorites[i] = $"{c.ToMap}/{c.ToRoom}|{c.Label}|" + ledger.Favorites[i][fromKey.Length..];
+            ledger.Favorites = ledger.Favorites.Distinct(StringComparer.Ordinal).ToList();
+
+            if (favs is null) continue;
+            List<JsonNode> stale = favs.OfType<JsonNode>()
+                .Where(f => c.IsShipped(NodeInt(f["Map"]), NodeInt(f["Room"]), f["Label"]?.ToString()))
+                .ToList();
+            if (stale.Count == 0) continue;
+            bool hadTarget = favs.Any(f => NodeInt(f?["Map"]) == c.ToMap && NodeInt(f?["Room"]) == c.ToRoom);
+            bool haveTarget = hadTarget;
+            foreach (JsonNode f in stale)
+            {
+                if (haveTarget) favs.Remove(f);
+                else { f["Map"] = c.ToMap; f["Room"] = c.ToRoom; haveTarget = true; }
+            }
+            fileChanged = true;
+            log?.Log(LogSeverity.Info, "NavSeed", hadTarget
+                ? $"Set '{setName}': dropped starter GOTO {c.Describe} from the set's favourites, which have the corrected room."
+                : $"Set '{setName}': corrected starter GOTO {c.Describe} in the set's favourites.");
+        }
+        if (fileChanged)
+            File.WriteAllText(favDest, cur!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        return true;
+    }
+
+    // A favourite's map or room as written, a number or (in older files) a string.
+    private static int NodeInt(JsonNode? n) =>
+        int.TryParse(n?.ToString(), out int v) ? v : -1;
+
     // Union the bundle's Favorites/FavoriteFolders into the set's — but only entries
     // whose identity isn't already in the ledger (so a deleted favourite/folder is
     // never re-added). Records every offered identity. Returns favourites added.
@@ -332,5 +390,7 @@ public static class NavSeedBootstrapper
         public List<string> Folders { get; set; } = new();
         // Bundled loop → the revision of it this set holds (absent = as first shipped).
         public Dictionary<string, int> LoopRevisions { get; set; } = new();
+        // Ids of the bundled favourite corrections already applied to this set.
+        public List<string> FavoriteCorrections { get; set; } = new();
     }
 }

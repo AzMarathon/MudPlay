@@ -58,11 +58,12 @@ public sealed class FavoritesStore
 
         _profile.ProfileLoaded += Hydrate;
         _profile.ProfileClosed += OnProfileClosed;
-        // A profile that loaded before any game data was there takes its list once
-        // a set is.
+        // A profile that loaded before any game data was there takes its list, and
+        // its corrections, once a set is.
         cache.ActiveSetChanged += _ =>
         {
-            if (_profile.Current is { Favorites: null } waiting) Hydrate(waiting);
+            if (_profile.Current is { } waiting && (waiting.Favorites is null || ApplyCorrections(waiting)))
+                Hydrate(waiting);
         };
         if (_profile.Current is { } current) Hydrate(current);
     }
@@ -296,6 +297,7 @@ public sealed class FavoritesStore
         _favorites.Clear();
         _emptyFolders.Clear();
         if (profile.Favorites is null) TakeFirstList(profile);
+        ApplyCorrections(profile);
 
         if (profile.Favorites is { } list)
             foreach (FavoriteRoom f in list) _favorites[new RoomKey(f.Map, f.Room)] = f;
@@ -323,6 +325,50 @@ public sealed class FavoritesStore
         _log?.Info("Favorites", shared
             ? $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'"
             : $"started with the {profile.Favorites.Count} bundled favourite(s) for game data '{set}'");
+    }
+
+    // Correct the starter GOTOs this character holds that shipped at the wrong
+    // room (FavoriteCorrection), each once: the profile records what it has had.
+    // Every character's list is read only through this load, so correcting here
+    // reaches each one, however long since it was last played, before its GOTO list
+    // is shown; rewriting profile files on disk instead would race another running
+    // client that has one of them loaded. Like TakeFirstList, set on the profile and
+    // not saved here: until the next save, a reload corrects it the same way.
+    // Returns whether the profile changed.
+    private bool ApplyCorrections(CharacterProfile profile)
+    {
+        if (profile.Favorites is not { } list || _profileSet() is not { Length: > 0 } set) return false;
+        IReadOnlyList<FavoriteCorrection> corrections;
+        try { corrections = FavoriteCorrection.Load(Path.GetDirectoryName(_starterFile(set)) ?? string.Empty); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _log?.Warn("Favorites", $"couldn't read the starter GOTO corrections for '{set}' ({ex.Message})");
+            return false;
+        }
+
+        bool changed = false;
+        foreach (FavoriteCorrection c in corrections)
+        {
+            if (profile.FavoriteCorrections?.Contains(c.Id) == true) continue;
+            (profile.FavoriteCorrections ??= new()).Add(c.Id);
+            changed = true;
+
+            List<FavoriteRoom> stale = list.Where(f => c.IsShipped(f.Map, f.Room, f.Label)).ToList();
+            if (stale.Count == 0) continue;
+            // A favourite already at the right room is the one kept: the stale one
+            // is dropped rather than doubled.
+            bool hadTarget = list.Any(f => f.Map == c.ToMap && f.Room == c.ToRoom);
+            bool haveTarget = hadTarget;
+            foreach (FavoriteRoom f in stale)
+            {
+                if (haveTarget) list.Remove(f);
+                else { f.Map = c.ToMap; f.Room = c.ToRoom; haveTarget = true; }
+            }
+            _log?.Info("Favorites", hadTarget
+                ? $"'{profile.Name}': dropped starter GOTO {c.Describe}, already a favourite at the corrected room"
+                : $"'{profile.Name}': corrected starter GOTO {c.Describe}");
+        }
+        return changed;
     }
 
     // ----- The bundled starters ------------------------------------------

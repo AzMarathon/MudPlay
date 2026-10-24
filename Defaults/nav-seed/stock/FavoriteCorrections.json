@@ -1,0 +1,5 @@
+[
+  { "Label": "Narrow Ledge", "FromMap": 15, "FromRoom": 640, "ToMap": 16, "ToRoom": 640 },
+  { "Label": "Diamond Mine (Devil Fiend area)", "FromMap": 6, "FromRoom": 1791, "ToMap": 15, "ToRoom": 1791 },
+  { "Label": "Ethereal Prison (Timelord) (41-54)", "FromMap": 1, "FromRoom": 1041, "ToMap": 8, "ToRoom": 1041 }
+]

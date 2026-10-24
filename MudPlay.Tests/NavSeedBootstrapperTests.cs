@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
 
@@ -170,6 +173,96 @@ public sealed class NavSeedBootstrapperTests : IDisposable
         // And a subsequent apply still adds nothing (everything already offered).
         Apply();
         Assert.False(File.Exists(Path.Combine(LoopsDest, "Zone", "A.loop")));
+    }
+
+    // ----- Corrected starter GOTOs ---------------------------------------
+
+    private void BundleFavorites(params (int Map, int Room, string Label, string Folder)[] rooms)
+    {
+        Directory.CreateDirectory(Bundle);
+        JsonStore.Save(Path.Combine(Bundle, "Favorites.json"), new
+        {
+            Favorites = rooms.Select(r => new FavoriteRoom(r.Map, r.Room, r.Label, r.Folder)).ToList(),
+        });
+    }
+
+    private void BundleCorrections(params (string Label, int FromMap, int FromRoom, int ToMap, int ToRoom)[] fixes) =>
+        File.WriteAllText(Path.Combine(Bundle, FavoriteCorrection.FileName), JsonSerializer.Serialize(
+            fixes.Select(f => new FavoriteCorrection(f.Label, f.FromMap, f.FromRoom, f.ToMap, f.ToRoom))));
+
+    private List<FavoriteRoom> SetFavourites() => JsonStore.Load<FavoritesFile>(FavDest)!.Favorites!;
+
+    private void WriteSetFavourites(List<FavoriteRoom> favs) =>
+        JsonStore.Save(FavDest, new FavoritesFile { Favorites = favs });
+
+    // Narrow Ledge shipped at 15/640 ("Darkened Tunnels"); it is 16/640. The set's
+    // copy moves, keeping its folder, a room the user saved under a label of their
+    // own stays, and the fixed bundle entry isn't offered again beside it.
+    [Fact]
+    public void CorrectedStarter_MovesTheSetsCopy_Once_AndLeavesTheUsersOwn()
+    {
+        BundleFavorites((15, 640, "Narrow Ledge", "Barren Hills"), (1, 100, "Home", "Town"));
+        Apply();
+        List<FavoriteRoom> set = SetFavourites();
+        set.Add(new FavoriteRoom(6, 1791, "my devil fiends"));
+        WriteSetFavourites(set);
+
+        BundleFavorites((16, 640, "Narrow Ledge", "Barren Hills"), (1, 100, "Home", "Town"),
+                        (15, 1791, "Diamond Mine (Devil Fiend area)", "Dwarven Mines"));
+        BundleCorrections(("Narrow Ledge", 15, 640, 16, 640),
+                          ("Diamond Mine (Devil Fiend area)", 6, 1791, 15, 1791));
+        Apply();
+
+        set = SetFavourites();
+        FavoriteRoom ledge = Assert.Single(set, f => f.Label == "Narrow Ledge");
+        Assert.Equal((16, 640, "Barren Hills"), (ledge.Map, ledge.Room, ledge.Folder));
+        Assert.Contains(set, f => f is { Map: 6, Room: 1791, Label: "my devil fiends" });
+        Assert.Contains(set, f => f is { Map: 15, Room: 1791 });   // a new starter, added
+        Assert.Equal(4, set.Count);
+        Assert.DoesNotContain("15/640|Narrow Ledge|Barren Hills", File.ReadAllText(LedgerPath));
+        Assert.Contains("16/640|Narrow Ledge|Barren Hills", File.ReadAllText(LedgerPath));
+
+        // Once: a 15/640 "Narrow Ledge" the user puts back by hand is theirs.
+        set.Add(new FavoriteRoom(15, 640, "Narrow Ledge"));
+        WriteSetFavourites(set);
+        Apply();
+        Assert.Contains(SetFavourites(), f => f is { Map: 15, Room: 640 });
+        Assert.Equal(5, SetFavourites().Count);
+    }
+
+    // A stale starter the user deleted stays deleted: the corrected one is not
+    // offered as new.
+    [Fact]
+    public void CorrectedStarter_TheUserDeleted_IsNotAddedBack()
+    {
+        BundleFavorites((15, 640, "Narrow Ledge", "Barren Hills"), (1, 100, "Home", "Town"));
+        Apply();
+        WriteSetFavourites(SetFavourites().Where(f => f.Room != 640).ToList());
+
+        BundleFavorites((16, 640, "Narrow Ledge", "Barren Hills"), (1, 100, "Home", "Town"));
+        BundleCorrections(("Narrow Ledge", 15, 640, 16, 640));
+        Apply();
+
+        Assert.DoesNotContain(SetFavourites(), f => f.Room == 640);
+    }
+
+    // A set that already has a favourite at the right room keeps that one and loses
+    // the stale one, rather than holding two.
+    [Fact]
+    public void CorrectedStarter_WhenTheSetAlreadyHasTheRightRoom_DropsTheStaleOne()
+    {
+        BundleFavorites((15, 640, "Narrow Ledge", "Barren Hills"));
+        Apply();
+        List<FavoriteRoom> set = SetFavourites();
+        set.Add(new FavoriteRoom(16, 640, "the real ledge"));
+        WriteSetFavourites(set);
+
+        BundleFavorites((16, 640, "Narrow Ledge", "Barren Hills"));
+        BundleCorrections(("Narrow Ledge", 15, 640, 16, 640));
+        Apply();
+
+        FavoriteRoom only = Assert.Single(SetFavourites());
+        Assert.Equal((16, 640, "the real ledge"), (only.Map, only.Room, only.Label));
     }
 
     // ----- Restore defaults (asked for by hand) -------------------------

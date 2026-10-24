@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.46
+
+- Four starter GOTOs pointing at the wrong map corrected, existing favourites fixed on update
+
 ## 3.185.44
 
 - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings

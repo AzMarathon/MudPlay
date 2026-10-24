@@ -1099,8 +1099,8 @@ How to keep it current:
 
 ### EmbeddedSeedsTests.cs
 - Covers: Services/AppPaths.ExtractEmbeddedSeeds/ExtractEmbeddedNavSeed, shipped seed content
-- Checks: every seed file is materialised; the Witchunter quest lock; guardian = Friend; location triples complete; landmass names; nav-seed unzip.
-- Why: report paradigm-20261001-235024; a csproj regression would drop the embedded seeds.
+- Checks: every seed file is materialised; the Witchunter quest lock; guardian = Friend; location triples complete; landmass names; nav-seed unzip; each shipped starter-GOTO correction is also made in the bundled starters.
+- Why: report paradigm-20261001-235024; a csproj regression would drop the embedded seeds; a correction the bundle disagrees with would leave new installs wrong (user 2026-10-24).
 
 ### EmoteInputCompleterTests.cs
 - Covers: Game/Emotes/EmoteInputCompleter
@@ -1306,9 +1306,9 @@ How to keep it current:
 - Why: the navigation search shortcut.
 
 ### FavoritesStoreTests.cs
-- Covers: Services/FavoritesStore
-- Checks: per-character copy of the old shared list; new characters get the bundled starters; Restore defaults; late game data; star toggle with a 10 cap; persistence on the profile.
-- Why: report paradigm-20261006-220135; user 2026-10-12.
+- Covers: Services/FavoritesStore, Services/FavoriteCorrection
+- Checks: per-character copy of the old shared list; new characters get the bundled starters; Restore defaults; late game data; star toggle with a 10 cap; persistence on the profile; starter-GOTO corrections on load (star and folder kept, the user's own label left alone, the stale one dropped when the right room is already saved, applied once, Restore defaults afterwards adds no old or doubled room).
+- Why: report paradigm-20261006-220135; user 2026-10-12; user 2026-10-24 (Narrow Ledge and three more starters at the wrong map).
 
 ### FlavorPrefixStoreTests.cs
 - Covers: Services/FlavorPrefixStore
@@ -2601,8 +2601,8 @@ How to keep it current:
 
 ### NavSeedBootstrapperTests.cs
 - Covers: Services/NavSeedBootstrapper
-- Checks: Seed ledger that adds new items and respects deletions; legacy-marker migration; revised loops with backup; Restore defaults.
-- Why: Never resurrecting loops or favourites the user deleted.
+- Checks: Seed ledger that adds new items and respects deletions; legacy-marker migration; revised loops with backup; Restore defaults; starter-GOTO corrections move the set's copy and its ledger key once, leave the user's own label alone, keep a deleted one deleted and drop the stale one when the right room is there.
+- Why: Never resurrecting loops or favourites the user deleted; user 2026-10-24 (a corrected starter must not be added beside the stale one).
 
 ### NavTreeBuilderTests.cs
 - Covers: ViewModels/Navigation/NavTreeBuilder

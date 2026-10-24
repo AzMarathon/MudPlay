@@ -202,6 +202,82 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.True(store.IsFavorite(new RoomKey(1, 45)));
     }
 
+    // ----- Corrected starter GOTOs ---------------------------------------
+
+    // Shipped beside the starters, as the bundle ships them.
+    private void WriteCorrections(params (string Label, int FromMap, int FromRoom, int ToMap, int ToRoom)[] fixes) =>
+        JsonStore.Save(Path.Combine(AppPaths.GameDataRoot, _setName, FavoriteCorrection.FileName),
+            fixes.Select(f => new FavoriteCorrection(f.Label, f.FromMap, f.FromRoom, f.ToMap, f.ToRoom)).ToList());
+
+    private void WriteCharacterWith(string name, params FavoriteRoom[] favs) =>
+        TestProfiles.Service().CreateProfile(_bbs, name, p => p.Favorites = favs.ToList());
+
+    // Narrow Ledge shipped at 15/640 ("Darkened Tunnels"); it is 16/640. A character
+    // holding the shipped one has it moved, star and folder kept; a room it saved
+    // under its own label is left alone; "Restore defaults" afterwards adds what is
+    // missing without bringing back the old room or doubling the new one; and the
+    // correction runs once, so a 15/640 the user then saves is theirs.
+    [Fact]
+    public void ExistingCharacter_HasItsStarterCorrected_Once_AndKeepsItsOwn()
+    {
+        WriteStarters((16, 640, "Narrow Ledge", "Barren Hills"),
+                      (15, 1791, "Diamond Mine (Devil Fiend area)", "Dwarven Mines"));
+        WriteCorrections(("Narrow Ledge", 15, 640, 16, 640),
+                         ("Diamond Mine (Devil Fiend area)", 6, 1791, 15, 1791));
+        WriteCharacterWith("Veteran",
+            new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills") { Starred = true },
+            new FavoriteRoom(6, 1791, "my devil fiends"));
+
+        (_, FavoritesStore store) = LoadCharacter("Veteran");
+
+        Assert.False(store.IsFavorite(new RoomKey(15, 640)));
+        Assert.True(store.IsStarred(new RoomKey(16, 640)));
+        Assert.Equal("Barren Hills", store.FolderOf(new RoomKey(16, 640)));
+        Assert.Equal("my devil fiends", store.All.Single(f => f.Map == 6 && f.Room == 1791).Label);
+
+        Assert.Equal(1, store.AddStarters());                  // the Diamond Mine starter only
+        Assert.False(store.IsFavorite(new RoomKey(15, 640)));
+        Assert.Single(store.All, f => f.Map == 16 && f.Room == 640);
+        Assert.Equal(3, store.All.Count);
+
+        store.Add(new RoomKey(15, 640), "Narrow Ledge");
+        (_, FavoritesStore again) = LoadCharacter("Veteran");
+        Assert.True(again.IsFavorite(new RoomKey(15, 640)));
+        Assert.True(again.IsFavorite(new RoomKey(16, 640)));
+    }
+
+    // A character that already saved the right room keeps that favourite and loses
+    // the shipped one, rather than holding the place twice.
+    [Fact]
+    public void Character_WithTheRightRoomAlready_LosesTheStaleStarter()
+    {
+        WriteStarters((16, 640, "Narrow Ledge", "Barren Hills"));
+        WriteCorrections(("Narrow Ledge", 15, 640, 16, 640));
+        WriteCharacterWith("Careful",
+            new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills"),
+            new FavoriteRoom(16, 640, "the real ledge"));
+
+        (_, FavoritesStore store) = LoadCharacter("Careful");
+
+        FavoriteRoom only = Assert.Single(store.All);
+        Assert.Equal((16, 640, "the real ledge"), (only.Map, only.Room, only.Label));
+    }
+
+    // A character from before per-character favourites copies the old shared list,
+    // stale starter and all, and has it corrected in the same load.
+    [Fact]
+    public void OlderCharacter_CopyingTheSharedList_HasItsStarterCorrected()
+    {
+        WriteSharedList((1, 1041, "Ethereal Prison (Timelord) (41-54)"));
+        WriteCorrections(("Ethereal Prison (Timelord) (41-54)", 1, 1041, 8, 1041));
+        WriteOlderCharacter("Ancient");
+
+        (_, FavoritesStore store) = LoadCharacter("Ancient");
+
+        Assert.False(store.IsFavorite(new RoomKey(1, 1041)));
+        Assert.True(store.IsFavorite(new RoomKey(8, 1041)));
+    }
+
     [Fact]
     public void SetStarred_TogglesFlagAndCount()
     {

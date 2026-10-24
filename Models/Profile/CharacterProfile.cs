@@ -62,6 +62,10 @@ public sealed class CharacterProfile
     public List<FavoriteRoom>? Favorites { get; set; }
     public List<string>? FavoriteFolders { get; set; }
 
+    // Ids of the starter GOTO corrections already applied to Favorites, so each
+    // runs once (FavoriteCorrection). null = none yet.
+    public List<string>? FavoriteCorrections { get; set; }
+
     // The saved loops and auto-lair setups this character has favourited, by name.
     // The loops and setups themselves stay with the game data, shared; which of
     // them are favourites is each character's own, kept by LoopFavoritesStore.

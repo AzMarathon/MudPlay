@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using MudPlay.Services;
 using Xunit;
@@ -146,6 +147,28 @@ public sealed class EmbeddedSeedsTests : IDisposable
             string loops = Path.Combine(realmDir, "Loops");
             Assert.True(Directory.Exists(loops), $"{realm} Loops/ not unzipped");
             Assert.NotEmpty(Directory.EnumerateFiles(loops, "*.loop", SearchOption.AllDirectories));
+        }
+    }
+
+    // Each shipped starter-GOTO correction is made in the bundled starters too: a new
+    // install gets the right room, and "Restore defaults" can't put the wrong one back.
+    [Fact]
+    public void ShippedFavouriteCorrections_AgreeWithTheBundledStarters()
+    {
+        AppPaths.ExtractEmbeddedNavSeed(_dir);
+
+        foreach (string realm in new[] { "stock", "paradigm" })
+        {
+            string realmDir = Path.Combine(_dir, "nav-seed", realm);
+            IReadOnlyList<FavoriteCorrection> corrections = FavoriteCorrection.Load(realmDir);
+            Assert.NotEmpty(corrections);
+            List<MudPlay.Models.Profile.FavoriteRoom> starters =
+                JsonStore.Load<FavoritesFile>(Path.Combine(realmDir, "Favorites.json"))!.Favorites!;
+            foreach (FavoriteCorrection c in corrections)
+            {
+                Assert.DoesNotContain(starters, f => c.IsShipped(f.Map, f.Room, f.Label));
+                Assert.Single(starters, f => f.Map == c.ToMap && f.Room == c.ToRoom && f.Label == c.Label);
+            }
         }
     }
 }
