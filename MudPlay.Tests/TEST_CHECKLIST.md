@@ -2461,8 +2461,8 @@ How to keep it current:
 
 ### MonsterMatchupCalculatorTests.cs
 - Covers: Game/Calculators/MonsterMatchupCalculator, MonsterMatchupCalculatorSpells
-- Checks: hit chance and DPS (dodge at floors, Stock DR multipliers, crits), prot/vile wards by alignment, spell ranking (immunity, resist, target type), weighted incoming hit.
-- Why: report paradigm-20261014-121847.
+- Checks: hit chance and DPS (dodge at floors, Stock DR multipliers, crits), prot/vile wards by alignment, spell ranking (immunity, resist, target type; a room spell ignores spell immunity, elemental resist and living-only, keeps undead-only), weighted incoming hit.
+- Why: report paradigm-20261014-121847; user 2026-10-23 (a room spell damages a monster whatever its spell immunity, both realms).
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)

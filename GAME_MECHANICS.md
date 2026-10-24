@@ -2323,7 +2323,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
     - The command counts the room's valid targets (`_count_valid_targets` @0x4402e2, each through `_is_valid_monster_target` @0x43f1e4, which reads the spell's `Targets` and the guard / angel / Lawful Good / charm rules of *Room-attack spells: cast bare, persistent channel*, not spell immunity). With any, it queues the caster with no target monster, `_engage_autocombat(caster, -1, 0xffff, 1, spell)` @0x4404b9, the entry whose share of every kill in the room `_distribute_experience` pays.
     - Spell immunity (ability 139) is read nowhere in `_cast_no_target`. Its only reads in the DLL are `_monster_cast` @0x427e1c, `_cast_user_target` @0x444e3a, `_cast_monster_target` @0x447901 and `_room_cast_on_monster` @0x475a23.
     - Per monster, the damage loop skips one the spell can't affect, an undead-only spell (ability 23) at a monster that isn't undead printing `Your spell has no effect on %s.` (@0x441905–0x44194b, again @0x44208b), and one that passes its magic-resist roll (ability 36) printing `The %s resists your spell!` (@0x441992–0x441a46). Neither touches the caster's queued entry.
-    - **So a room attack damages a monster whatever its spell immunity or elemental resist**: those are the only per-monster stops in `_cast_no_target`. No elemental resist (abilities 3, 5, 65, 66, 147) is read there either, and ability 23 is the only target class it checks. A monster immune to the spell takes the damage, with the spell's ordinary damage line. *(Same DLL reading; [CONFIRMED] 2026-10-23, user, for Stock and Paradigm: "yes, that is right on both".)*
+    - **So a room attack damages a monster whatever its spell immunity or elemental resist**: those are the only per-monster stops in `_cast_no_target`. No elemental resist (abilities 3, 5, 65, 66, 147) is read there either, and ability 23 is the only target class it checks (living-only, 108, and animals-only, 80, are not read there). Two other branches read poison immunity (ability 21, @0x4437f8 and @0x443a59). A monster immune to the spell takes the damage, with the spell's ordinary damage line. *(Same DLL reading; [CONFIRMED] 2026-10-23, user, for Stock and Paradigm: "yes, that is right on both".)*
   - **Client policy** *(user, 2026-10-23)*: **a room spell keeps to the room-spell settings** (Min enemies, Max casts, Auto-Nuke, mana). It is never cast at a lone monster just because nothing else can hurt it.
 - **Hit-magic (the "magical" to-hit level) only matters on weapons** *([CONFIRMED])*. It's the weapon's magical hit level compared above against a monster's magical defense; nothing else consults it. If a non-weapon item (armour / jewellery) carries a hit-magic ability value it's inert — the game ignores it. (The Stock routine agrees for ability 28, which it reads from the wielded weapon alone. This is about items: a class's own `HitMagic` is the character's, covered above.)
 
@@ -3078,6 +3078,13 @@ How one damage spell cast against a monster is worked out.
     folds it into whether the monster is engageable at all (since 2026-10-23 also for a spell typed as the
     attack command; `AttackSpellCanLand` before). A room attack is never level-blocked
     (`CombatSpellChooser.RoomRungBlock` reads nothing of one monster).
+  - Monster Intel's spell ranking (`MonsterMatchupCalculatorSpells.RankAttackSpells`, and the
+    rounds-to-kill column through it) flags a single-target spell under the monster's `SpellImmu`
+    (`Spell immune below level N`). A room spell is never flagged for it, and neither blocked nor cut by
+    elemental resist; of the target classes it is ruled out only by undead-only, and the magic-resist
+    figures still apply (since 2026-10-23; before, a room spell was judged like a single-target one).
+    The monster's ability line reads `Spell-immune below level N — single-target spells; a room spell
+    hurts it at any level`.
 
 ### Spell targeting: monster type tags
 *Status: CONFIRMED (monster-side flags verified against 1.11p) · charm-level rule [OBSERVED] for Stock (`wccmmud.dll` 1.11p, re-read 2026-10-09; was NEEDS CONFIRMATION); what a too-low level prints still NEEDS CONFIRMATION*

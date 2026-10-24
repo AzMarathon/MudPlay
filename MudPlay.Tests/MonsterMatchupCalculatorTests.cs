@@ -176,14 +176,17 @@ public sealed class MonsterMatchupCalculatorTests
 
 // Pins MonsterMatchupCalculatorSpells — the Monster Intel "Your Matchup"
 // panel's spell-vs-monster ranking: the weapon-vs-Magical eligibility gate and
-// RankAttackSpells' SpellImmu / elemental-resist logic.
+// RankAttackSpells' SpellImmu / elemental-resist logic, which a room spell ignores.
 public sealed class MonsterMatchupCalculatorSpellsTests
 {
     private static PlayerAttackSpell Spell(
         string name = "fireball", string shortCode = "fire", int reqLevel = 10,
         int attType = 1, long maxDmg = 100, long mana = 20,
-        bool undeadOnly = false, bool livingOnly = false) =>
-        new(name, shortCode, reqLevel, attType, maxDmg, mana, undeadOnly, livingOnly);
+        bool undeadOnly = false, bool livingOnly = false, int targets = 0) =>
+        new(name, shortCode, reqLevel, attType, maxDmg, mana, undeadOnly, livingOnly, targets);
+
+    // A room spell's target scope (Full Attack Area).
+    private const int RoomTargets = 12;
 
     [Theory]
     [InlineData(5, 3, true)]
@@ -450,6 +453,45 @@ public sealed class MonsterMatchupCalculatorSpellsTests
             new Dictionary<int, int>(), monsterIsUndead: true);
 
         Assert.True(Assert.Single(result).Eligible);
+    }
+
+    // A room spell ignores spell immunity and elemental resist (the game's room
+    // cast reads neither; user, 2026-10-23, both realms): against a monster immune
+    // to it and resisting its element fully, it ranks as usable at its full damage,
+    // while the same spell cast single-target is still flagged spell-immune.
+    [Fact]
+    public void RankAttackSpells_RoomSpell_IgnoresSpellImmunityAndElementalResist()
+    {
+        var result = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[]
+            {
+                Spell(name: "fire storm", reqLevel: 5, attType: 1, maxDmg: 100, targets: RoomTargets),
+                Spell(name: "fire bolt", reqLevel: 5, attType: 1, maxDmg: 100),
+            },
+            monsterSpellImmunity: 10, new Dictionary<int, int> { [5] = 100 });
+
+        SpellEffectivenessResult room = result.Single(r => r.Name == "fire storm");
+        Assert.True(room.IsAoe);
+        Assert.True(room.Eligible);
+        Assert.Equal(100, room.EffectiveDamage);
+        SpellEffectivenessResult single = result.Single(r => r.Name == "fire bolt");
+        Assert.False(single.Eligible);
+        Assert.Contains("immune", single.BlockedReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Of the target classes, the room cast checks only undead-only.
+    [Fact]
+    public void RankAttackSpells_RoomSpell_KeepsUndeadOnly_IgnoresLivingOnly()
+    {
+        var undeadOnly = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(undeadOnly: true, targets: RoomTargets) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: false);
+        var livingOnly = MonsterMatchupCalculatorSpells.RankAttackSpells(
+            new[] { Spell(livingOnly: true, targets: RoomTargets) }, monsterSpellImmunity: 0,
+            new Dictionary<int, int>(), monsterIsUndead: true);
+
+        Assert.False(Assert.Single(undeadOnly).Eligible);
+        Assert.True(Assert.Single(livingOnly).Eligible);
     }
 
     // ----- Weighted "Hits You %" across all physical attacks -----
