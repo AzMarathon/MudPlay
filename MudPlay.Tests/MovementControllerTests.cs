@@ -711,6 +711,23 @@ public sealed class MovementControllerTests : IDisposable
         Assert.False(h.Coordinator.IsPaused);
     }
 
+    // The user's Stop unloads a loop loaded with Load, so the next Start opens the
+    // loop list (user, 2026-10-23; report paradigm-20261022-170426). A Stop the
+    // client makes for itself (a death, a token used by hand) leaves it loaded.
+    [Fact]
+    public void StopByUser_UnloadsTheLoadedLoop_AFullStopOfTheClientsOwnDoesNot()
+    {
+        using Harness h = NewHarness();
+        Loop loaded = new("ring", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+        h.Loops.Stage(loaded);
+
+        h.Controller.Stop("token of Arlysia used by hand");
+        Assert.Same(loaded, h.Loops.StagedLoop);
+
+        Assert.True(h.Controller.StopByUser());
+        Assert.Null(h.Loops.StagedLoop);
+    }
+
     // Stop is the only stop control there is: pressed again while the errand is
     // still held, it ends it, and the caller's own stop runs.
     [Fact]

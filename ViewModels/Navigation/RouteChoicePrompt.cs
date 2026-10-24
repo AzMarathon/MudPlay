@@ -621,7 +621,15 @@ public static class RouteChoicePrompt
         // so the picker's requirement line names the exact one it'll obtain ("log raft
         // (buy at Pier)") instead of the whole any-of list.
         Dictionary<RouteRequirement, (int ItemId, string Source)> resolvedCounters = new();
-        if (crossesHazard)
+        // Where each counter comes from takes a few searches of the map per hazard,
+        // which held the UI thread for twenty seconds with the card (report
+        // paradigm-20261021-135647). With the walker idle it is worked out off the UI
+        // thread, as the plan was, the floor here read first on it; with a walk under
+        // way it stays on the UI thread for the same reason the plan does (the live
+        // walker shares the movement filter the resolution suspends gates on), under a
+        // scope a freeze report names.
+        void ResolveCounters(IReadOnlySet<int>? onFloor)
+        {
             foreach (RouteRequirement req in choice.Requirements)
             {
                 // An item that doesn't stop the room teleporting is not fetched or searched for.
@@ -634,7 +642,7 @@ public static class RouteChoicePrompt
                 // the redundant second source rather than buying a rope AND a harness.
                 if (req.ItemIds.Any(id => floorCounters.Contains(id) || detourCounters.Contains(id)))
                     continue;
-                if (services.ResolveHazardCounter(req.ItemIds, source, destination) is { } r)
+                if (services.ResolveHazardCounter(req.ItemIds, source, destination, onFloor) is { } r)
                 {
                     List<int> bucket = r.OnFloor ? floorCounters : detourCounters;
                     if (!bucket.Contains(r.ItemId)) bucket.Add(r.ItemId);
@@ -655,6 +663,20 @@ public static class RouteChoicePrompt
                     }
                 }
             }
+        }
+        if (crossesHazard)
+        {
+            if (services.Walker.State == WalkState.Idle)
+            {
+                IReadOnlySet<int> onFloor = services.CountersOnFloor(
+                    choice.Requirements.Where(r => r.Kind == RouteRequirementKind.HazardProtection).SelectMany(r => r.ItemIds));
+                await Task.Run(() => ResolveCounters(onFloor));
+                if (PlanOvertaken(services, inFlight, calcVm)) return false;
+            }
+            else
+                using (services.Performance.Measure("route card: hazard counter sources"))
+                    ResolveCounters(onFloor: null);
+        }
         string? hazardCounterSource = hazardSources.Count > 0
             ? string.Join("; ", hazardSources) : null;
         bool hazardObtain = hazardCounterSource is not null;
@@ -724,7 +746,8 @@ public static class RouteChoicePrompt
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
-        gatePick = services.PlanGatePick(
+        using (services.Performance.Measure("route card: gate item sources"))
+            gatePick = services.PlanGatePick(
             choice.Requirements, source, destination,
             pickFetches: choice.Kind == RouteChoiceKind.ItemGate && hazardEdge is null && buyPauseRoom is null,
             closedGates: choice.ClosedGateItems);

@@ -72,8 +72,9 @@ public sealed class PartyAilmentTracker : IDisposable
     // A generous cap applied when we set a chip we can't arm a real duration for
     // (a bare say announce with no witnessed cast, or a witnessed cast whose
     // duration couldn't be resolved). Not a duration claim — a backstop so a chip
-    // can never stick forever when no cure / par / @status clear ever arrives.
-    private const double FallbackDurationSeconds = 180;
+    // can never stick forever when no cure / par / @status clear ever arrives. Our own
+    // ailments fall back on the same (ConditionTracker.AilmentSeconds).
+    public const double FallbackDurationSeconds = 180;
 
     private readonly ChatRouter _chat;
     private readonly PartyManager _party;
@@ -407,6 +408,22 @@ public sealed class PartyAilmentTracker : IDisposable
                 _log?.Info(LogCategory, $"cure confirmed ailment={cm.Ailment} target={m.Name}");
             }
         }
+    }
+
+    // Clear every chip on a member whose ailments are known to be gone all at once: a
+    // token's negate magic ends every spell on its user (user, 2026-10-23). Poison is
+    // par-owned and left to the next par.
+    public void ClearMember(string name, string why)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        string given = GivenName(name);
+        foreach ((_, MessageFlags flag) in Tokens)
+        {
+            if (flag == MessageFlags.Poisoned) continue;
+            _party.SetMemberAilment(name, flag, false);
+            _expiryAtMs.Remove((given, flag));
+        }
+        _log?.Info(LogCategory, $"ailment chips on {name} cleared ({why})");
     }
 
     // Clear any chip whose armed duration has elapsed — the spell-data "duration

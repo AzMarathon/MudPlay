@@ -1750,12 +1750,13 @@ public static class BugReportBuilder
         // Which records hold those flags, since when, and the line that set each:
         // an ailment held long after its wear-off should have come is named here
         // when the program log no longer reaches back to it.
-        IReadOnlyList<(Models.GameData.MessageRecord Record, DateTimeOffset? At, string? Line)> held =
+        IReadOnlyList<(Models.GameData.MessageRecord Record, DateTimeOffset? At, string? Line, DateTimeOffset? Expires)> held =
             svc.Conditions.ActiveRecords();
         Kv(sb, "Active condition records (self)", held.Count == 0 ? "(none)" : string.Join("; ", held.Select(h =>
             $"{h.Record.Name} ({h.Record.Flags})"
             + (h.At is { } at ? $" since {at.ToLocalTime():HH:mm:ss}" : "")
             + (h.Line is { } line ? $" from `{line}`" : "")
+            + (h.Expires is { } until ? $", expires {until.ToLocalTime():HH:mm:ss} if no wear-off comes" : "")
             + (Models.GameData.MessageRecord.IsBlankOrAbsent(h.Record.AppliedEndsWith) ? ", no wear-off line on record" : $", ends on `{h.Record.AppliedEndsWith}`"))));
         // What an applied line several spells share is read by: a record none of
         // these can have cast is left out (ConditionTracker.KeepWhatCouldBeCastHere).

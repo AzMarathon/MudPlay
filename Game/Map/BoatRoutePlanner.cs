@@ -60,14 +60,24 @@ public sealed class BoatRoutePlanner
     // (what the walker does with one is on BoatRoutePlan.IsGated). With allowGated
     // false a gated sailing is skipped, so a land route (or a boardable boat) is
     // preferred.
+    //
+    // landHopsUnder: the caller takes a boat only when its land legs come to fewer
+    // hops than this (the land route less the boat's overhead), so a sailing that
+    // can't is not planned. Each sailing's legs are two searches of the whole map,
+    // planned on the UI thread with the walk; weighing every sailing held a walk's
+    // commit for ten seconds (report paradigm-20261021-135647). Hop floors to every
+    // dock and from every port (RouteFloors), two searches in all, leave out a
+    // sailing that can't beat the best found or the land route, or can't be reached.
+    // The plan is the one weighing every sailing makes.
     public BoatRoutePlan? TryPlan(
-        RoomKey source, RoomKey destination, IRoomFilter? filter, bool allowGated = false)
+        RoomKey source, RoomKey destination, IRoomFilter? filter, bool allowGated = false, int? landHopsUnder = null)
     {
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null)
             return null;
 
         BoatRoutePlan? best = null;
         (int Gated, int Hops) bestRank = (int.MaxValue, int.MaxValue);
+        RouteFloors? floors = null;
 
         foreach (BoatPassage passage in _graph.AllBoatPassages)
         {
@@ -77,6 +87,11 @@ public sealed class BoatRoutePlanner
             ExitBlockReason block = filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
             bool gated = block != ExitBlockReason.None;
             if (gated && !allowGated) continue;
+
+            floors ??= FloorsFor(source, destination, filter);
+            if (floors.Bound(passage.DockRoom, passage.ArrivalRoom) is not { } floor) continue;
+            if (floor >= landHopsUnder) continue;
+            if (((gated ? 1 : 0), floor).CompareTo(bestRank) >= 0) continue;
 
             IReadOnlyList<Direction>? toDock = LegTo(source, passage.DockRoom, filter);
             if (toDock is null) continue;
@@ -88,6 +103,7 @@ public sealed class BoatRoutePlanner
             // boardable sailing always beats a gated one even if it's a touch
             // longer, and a gated sailing only surfaces when nothing boardable does.
             (int Gated, int Hops) rank = (gated ? 1 : 0, toDock.Count + fromArrival.Count);
+            if (rank.Hops >= landHopsUnder) continue;
             if (rank.CompareTo(bestRank) < 0)
             {
                 bestRank = rank;
@@ -102,6 +118,17 @@ public sealed class BoatRoutePlanner
                 + $"{plan.ToDock.Count} hop(s) to dock + {plan.FromArrival.Count} from port"
                 + (plan.IsGated ? $"; GATED ({plan.Block}) — sole crossing, will warn." : "."));
         return best;
+    }
+
+    private RouteFloors FloorsFor(RoomKey source, RoomKey destination, IRoomFilter? filter)
+    {
+        HashSet<RoomKey> ends = new();
+        foreach (BoatPassage passage in _graph.AllBoatPassages)
+        {
+            ends.Add(passage.DockRoom);
+            ends.Add(passage.ArrivalRoom);
+        }
+        return RouteFloors.Via(_bfs, source, destination, ends, filter);
     }
 
     // A land leg between two rooms; empty when they're the same room. FindPath

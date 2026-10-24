@@ -46,6 +46,50 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // minutes, set before the log's window opened).
     private readonly Dictionary<string, (DateTimeOffset At, string Line)> _latchedBy = new(StringComparer.Ordinal);
 
+    // ----- Ailments that outlive their spell ----------------------------
+    // An ailment whose wear-off line never comes ends here once its spell's time is
+    // up (Client policy, user 2026-10-23): Confused was held for 23 minutes on a
+    // spell of seconds, and the walk sat paused on it (report
+    // paradigm-20261022-164244). The applied line arms it again, so an ailment cast
+    // anew stays. The seconds are the record's spell duration from the game data,
+    // or PartyAilmentTracker.FallbackDurationSeconds when none resolves (the cap the
+    // party's chips use). Unset, nothing expires. Swept on each line, prompts
+    // included, by the line's own time.
+    public Func<MessageRecord, double?>? AilmentSeconds { get; set; }
+
+    private const MessageFlags AilmentFlags = MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.Poisoned
+        | MessageFlags.Fear | MessageFlags.MovementPrevented | MessageFlags.AttackPrevented | MessageFlags.Diseased;
+
+    private readonly Dictionary<string, DateTimeOffset> _expiresAt = new(StringComparer.Ordinal);
+
+    private void ArmExpiry(MessageRecord r, DateTimeOffset at)
+    {
+        if (AilmentSeconds is not { } seconds || (r.Flags & AilmentFlags) == MessageFlags.None) return;
+        double secs = seconds(r) is > 0 and double s ? s : PartyAilmentTracker.FallbackDurationSeconds;
+        _expiresAt[r.Id] = at + TimeSpan.FromSeconds(secs);
+    }
+
+    private void SweepExpired(DateTimeOffset now)
+    {
+        if (_expiresAt.Count == 0) return;
+        List<MessageRecord>? expired = null;
+        foreach (MessageRecord r in _messages.Messages)
+            if (_expiresAt.TryGetValue(r.Id, out DateTimeOffset until) && until <= now && _active.Contains(r.Id))
+                (expired ??= new()).Add(r);
+        foreach (string id in _expiresAt.Where(kv => kv.Value <= now).Select(kv => kv.Key).ToList())
+            _expiresAt.Remove(id);
+        if (expired is null) return;
+        foreach (MessageRecord r in expired)
+        {
+            _active.Remove(r.Id);
+            string since = _latchedBy.TryGetValue(r.Id, out (DateTimeOffset At, string Line) by)
+                ? $" {(now - by.At).TotalSeconds:0}s after it was set" : "";
+            _log?.Info(LogCategory,
+                $"condition expired name='{r.Name}' flags={r.Flags}{since}: its spell's time is up and no wear-off line came");
+        }
+        RecomputeFlags();
+    }
+
     // Built from MessageStore on every CollectionChanged. Maps an applied-message
     // string to the records that carry it (multiple records can share text —
     // realm variants).
@@ -204,15 +248,17 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     }
 
     // The records active on us, each with when it latched and the line that latched
-    // it (null for both when that went unrecorded), for the bug report.
-    public IReadOnlyList<(MessageRecord Record, DateTimeOffset? At, string? Line)> ActiveRecords()
+    // it (null for both when that went unrecorded) and, for an ailment, when it
+    // expires with no wear-off seen, for the bug report.
+    public IReadOnlyList<(MessageRecord Record, DateTimeOffset? At, string? Line, DateTimeOffset? Expires)> ActiveRecords()
     {
-        List<(MessageRecord, DateTimeOffset?, string?)> records = new();
+        List<(MessageRecord, DateTimeOffset?, string?, DateTimeOffset?)> records = new();
         foreach (MessageRecord r in _messages.Messages)
         {
             if (!_active.Contains(r.Id)) continue;
+            DateTimeOffset? expires = _expiresAt.TryGetValue(r.Id, out DateTimeOffset until) ? until : null;
             records.Add(_latchedBy.TryGetValue(r.Id, out (DateTimeOffset At, string Line) by)
-                ? (r, by.At, by.Line) : (r, null, null));
+                ? (r, by.At, by.Line, expires) : (r, null, null, expires));
         }
         return records;
     }
@@ -292,6 +338,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // the program-log breadcrumb naming what triggered the clear.
     public void ClearAll(string reason = "reset")
     {
+        _expiresAt.Clear();
         if (_active.Count == 0) return;
         _active.Clear();
         ActiveFlags = MessageFlags.None;
@@ -494,6 +541,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
     private void OnLine(LineExtractor.EmittedLine line)
     {
+        SweepExpired(line.Timestamp);
         if (line.IsPromptLine) return;
         string text = line.Text;
         if (string.IsNullOrEmpty(text)) return;
@@ -640,8 +688,13 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 // match only; alias records sharing the line must not double the retry.
                 if (actionFailed is null && r.Flags.HasFlag(MessageFlags.LastActionFailed))
                     actionFailed = r;
-                if (!_active.Add(r.Id)) continue;
+                if (!_active.Add(r.Id))
+                {
+                    ArmExpiry(r, line.Timestamp);
+                    continue;
+                }
                 _latchedBy[r.Id] = (line.Timestamp, text);
+                ArmExpiry(r, line.Timestamp);
                 appliedThisLine.Add(r);
             }
         }

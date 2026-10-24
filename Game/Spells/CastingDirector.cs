@@ -1101,7 +1101,8 @@ public sealed class CastingDirector : IDisposable
     // cast. Party members are unaffected (they stayed alive, still buffed), so THEIR
     // timers are kept: we shouldn't re-bless a party member just because we died. (A
     // full character swap still clears everything via ProfileLoaded → ResetBuffTracking.)
-    public void ClearSelfBuffTracking()
+    // A token's negate magic wipes our buffs the same way (why names it).
+    public void ClearSelfBuffTracking(string why = "self died")
     {
         int removed = RemoveTimersFor("");
         _carried.Clear();
@@ -1112,13 +1113,14 @@ public sealed class CastingDirector : IDisposable
         _pendingPartyCast = null;   // a cast in flight when we died never landed
         _pendingManualCast = null;
         _log?.Info(LogCategory,
-            $"self died — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
+            $"{why} — cleared {removed} self-buff timer(s); party-buff timers kept (those members are alive).");
     }
 
     // A party member died — death wipes EVERY buff on them, so drop each timer we hold on
     // that member + any hidden back-off for them. No-op for a name we hold no timer for
-    // (the "<Name> is dead." line names any player in the room).
-    public void ClearMemberBuffTimers(string givenName)
+    // (the "<Name> is dead." line names any player in the room). A token's negate magic
+    // wipes theirs the same way (why names it).
+    public void ClearMemberBuffTimers(string givenName, string why = "died (death wipes buffs)")
     {
         if (string.IsNullOrWhiteSpace(givenName)) return;
         string key = GivenName(givenName).ToLowerInvariant();
@@ -1126,7 +1128,7 @@ public sealed class CastingDirector : IDisposable
         _hiddenTargets.Remove(key);
         if (removed > 0)
             _log?.Info(LogCategory,
-                $"party member {key} died — cleared {removed} buff timer(s) on them (death wipes buffs).");
+                $"party member {key} {why} — cleared {removed} buff timer(s) on them.");
     }
 
     // Manually drop the timer for one (target, cast-code) — the user clicking the clear

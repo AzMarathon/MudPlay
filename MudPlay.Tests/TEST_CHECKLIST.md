@@ -372,8 +372,8 @@ How to keep it current:
 
 ### BoatRoutePlannerTests.cs
 - Covers: Game/Map/BoatRoutePlanner
-- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks.
-- Why: the route must stitch both land legs, not pick the nearest pier.
+- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks; with the land route as a bound, only a sailing that can beat it is planned, and one that can't costs only the floor searches.
+- Why: the route must stitch both land legs, not pick the nearest pier; report paradigm-20261021-135647 (weighing every sailing held a walk's commit for ten seconds).
 
 ### BossCatalogTests.cs
 - Covers: Game/GameData/BossCatalog, the shipped BossDefs.seed.json
@@ -787,6 +787,11 @@ How to keep it current:
 - Covers: Game/Conditions/ConditionTracker, Game/Combat/RoomEntityClassifier (RosterIsWhole), RoomEntryWatcher, the shipped message seeds.
 - Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; seed flags and Ids.
 - Why: a held character must never read as free; user ruling 2026-10-17.
+
+### ConditionExpiryTests.cs
+- Covers: Game/Conditions/ConditionTracker.AilmentSeconds, over the shipped Paradigm message seed
+- Checks: an ailment with no wear-off ends when its spell's time is up and the log says so; its applied line again starts the time over; with no duration in the data the party chips' 180 s cap applies; a buff is never ended this way.
+- Why: report `paradigm-20261022-164244` (Confused held 23 minutes, the walk paused on it); Client policy, user 2026-10-23.
 
 ### ConditionTrackerTests.cs
 - Covers: Game/Conditions/ConditionTracker.
@@ -2479,8 +2484,8 @@ How to keep it current:
 
 ### MovementControllerTests.cs
 - Covers: Game/Map/MovementController (+ AutoWalk, LoopRunner, AutoLair, Coordinator)
-- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers.
-- Why: The @stop / Auto-All / errand regressions.
+- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers; the user's Stop unloads a loaded loop, the client's own full stop does not.
+- Why: The @stop / Auto-All / errand regressions; report paradigm-20261022-170426 and the user's ruling of 2026-10-23 (Stop unloads the loaded loop).
 
 ### MovementCoordinatorTests.cs
 - Covers: Game/Map/MovementCoordinator
@@ -2664,8 +2669,8 @@ How to keep it current:
 
 ### PartyAilmentTrackerTests.cs
 - Covers: Game/Conditions/PartyAilmentTracker
-- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses.
-- Why: Party ailment sync.
+- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses; a member's token use (negate magic) clears every chip but the par-owned poison.
+- Why: Party ailment sync; the user's ruling of 2026-10-23 (negate magic ends every spell on its user).
 
 ### PartyBroadcasterTests.cs
 - Covers: Game/Remote/PartyBroadcaster
@@ -3432,6 +3437,11 @@ How to keep it current:
 - Covers: Game/Map/RouteExpResolver (room-spell summon credit), with RoomSummonParser
 - Checks: Reads the textblock number from MinBase or the ability slot, and handles a block-less spell. Leaves out bosses and room-item lines but counts GameLimit monsters with no regen wait. The simulator lap carries the same tables, and one log line names the summoning spells and what was left out.
 - Why: Exp/hr estimates for summon rooms; user, 2026-10-10 (tyrannosaurs count).
+
+### RouteFloorsTests.cs
+- Covers: Game/Map/RouteFloors with Game/Map/PathItemShopRouter.TrySelectShop and BfsMapper
+- Checks: a shop chosen by way of hop floors is the one weighing every shop picks (ties to the nearer shop), with only the shops that can still win searched; a shop no route reaches is never searched from.
+- Why: report `paradigm-20261021-135647` (a route card weighing every shop selling a hazard's counters held the UI thread twenty seconds).
 
 ### RouteLightScannerTests.cs
 - Covers: Game/Light/RouteLightScanner

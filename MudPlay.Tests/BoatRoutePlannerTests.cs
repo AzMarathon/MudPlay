@@ -247,6 +247,38 @@ public sealed class BoatRoutePlannerTests : IDisposable
         Assert.Null(planner.TryPlan(new RoomKey(1, 1), new RoomKey(9, 999), filter: null));
     }
 
+    // Every room each search looks into, counted.
+    private sealed class CountingFilter : IRoomFilter
+    {
+        public int Looks { get; set; }
+        public bool IsAvoided(RoomKey key)
+        {
+            Looks++;
+            return false;
+        }
+    }
+
+    // Report paradigm-20261021-135647: weighing every sailing's two legs held a
+    // walk's commit for ten seconds. A sailing whose legs can't come in under the
+    // land route is not planned, and neither is one that can't beat the best found.
+    [Fact]
+    public void TryPlan_LandRouteBound_PlansOnlyASailingThatCanBeatIt()
+    {
+        var (planner, _, _) = NewPlanner();
+        CountingFilter unbounded = new(), bounded = new(), beaten = new();
+
+        BoatRoutePlan? any = planner.TryPlan(new RoomKey(1, 1), new RoomKey(1, 11), unbounded);
+        BoatRoutePlan? under4 = planner.TryPlan(new RoomKey(1, 1), new RoomKey(1, 11), bounded, landHopsUnder: 4);
+        BoatRoutePlan? under3 = planner.TryPlan(new RoomKey(1, 1), new RoomKey(1, 11), beaten, landHopsUnder: 3);
+
+        Assert.Equal("secure passage to islea", any?.Passage.Keyword);
+        Assert.Equal(any?.Passage.Keyword, under4?.Passage.Keyword);
+        Assert.Equal(any?.LandHops, under4?.LandHops);
+        Assert.Null(under3);
+        // No sailing comes in under three hops: only the floors are searched.
+        Assert.True(beaten.Looks < bounded.Looks, $"{beaten.Looks} vs {bounded.Looks}");
+    }
+
     [Fact]
     public void TryPlan_NoDocksInSet_ReturnsNull()
     {

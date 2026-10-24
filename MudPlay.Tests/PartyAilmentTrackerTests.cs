@@ -95,6 +95,24 @@ public sealed class PartyAilmentTrackerTests
         Assert.True(forged.Poisoned);
     }
 
+    // A token's negate magic ends every spell on its user (user, 2026-10-23): the
+    // member who ports in front of us has every chip but the par-owned poison cleared.
+    [Fact]
+    public void ClearMember_EndsEveryChipButPoison()
+    {
+        using Harness h = new();
+        PartyMember mage = h.AddMember("Mage");
+        h.Say(@"Mage says ""@blind""");
+        h.Say(@"Mage says ""@confused""");
+        h.Say(@"Mage says ""@poisoned""");
+
+        h.Tracker.ClearMember("Mage", "used a token (negate magic)");
+
+        Assert.False(mage.Blinded);
+        Assert.False(mage.Confused);
+        Assert.True(mage.Poisoned);
+    }
+
     [Fact]
     public void InboundBlind_SetsMemberChip()
     {
