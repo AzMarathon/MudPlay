@@ -60,15 +60,6 @@ internal sealed class ServerFeed
         finally { _at = null; }
     }
 
-    private static readonly Dictionary<char, byte> Cp437Bytes = BuildCp437Bytes();
-
-    private static Dictionary<char, byte> BuildCp437Bytes()
-    {
-        Dictionary<char, byte> bytes = new();
-        for (int b = 255; b >= 0; b--) bytes[Cp437.ToUnicode((byte)b)] = (byte)b;
-        return bytes;
-    }
-
     // ASCII (the controls an escape sequence or a line end is made of included)
     // stands for itself; anything else is the CP437 byte that shows it.
     private static byte[] ToCp437(string text)
@@ -78,7 +69,7 @@ internal sealed class ServerFeed
         {
             char c = text[i];
             bytes[i] = c < 0x80 ? (byte)c
-                : Cp437Bytes.TryGetValue(c, out byte b) ? b
+                : Cp437.TryFromUnicode(c, out byte b) ? b
                 : throw new ArgumentException($"'{c}' has no CP437 byte", nameof(text));
         }
         return bytes;

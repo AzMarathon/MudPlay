@@ -3552,7 +3552,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
@@ -4054,6 +4054,11 @@ How to keep it current:
 - Covers: Terminal/LineExtractor (with TerminalEmulator)
 - Checks: rows painted by cursor positioning are emitted without a line feed, in order, with no repeats; erased rows and rows cleared by a screen clear are dropped; an escape sequence cut off by a line break.
 - Why: reports `paradigm-20261002-140153` and `paradigm-20261002-140334` (the card-name row was never parsed).
+
+### TerminalNoticeEncodingTests.cs
+- Covers: Terminal/Cp437.Encode into TerminalEmulator and LineExtractor, framed as MainWindowViewModel.WriteTerminalStatus frames a notice.
+- Checks: dashes, arrows, an ellipsis, curly quotes and × reach the grid as their ASCII stand-ins; an accent and a box line keep their CP437 glyphs; a glyph found only among the low control bytes gets a stand-in, and one with none shows as "?".
+- Why: the client's notices were encoded as Latin-1 and drew "?" for every dash and arrow, e.g. `[AUTO-RECONNECT ARMED — DIALING …]`.
 
 ### TestProfiles.cs
 - Test infrastructure.
