@@ -1,8 +1,8 @@
 using System;
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Controls;
@@ -60,8 +60,8 @@ public sealed class ManaRegenChart : Control
         {
             double y = YFor(t);
             ctx.DrawLine(GridPen, new Point(plot.X, y), new Point(plot.Right, y));
-            FormattedText ft = Label(t.ToString());
-            ctx.DrawText(ft, new Point(plot.X - ft.Width - 6, y - ft.Height / 2));
+            TextLayout ft = Label(t.ToString());
+            ft.Draw(ctx, new Point(plot.X - ft.Width - 6, y - ft.Height / 2));
         }
 
         // X gridlines + level labels.
@@ -69,18 +69,18 @@ public sealed class ManaRegenChart : Control
         {
             double x = XFor(lv);
             ctx.DrawLine(GridPen, new Point(x, plot.Y), new Point(x, plot.Bottom));
-            FormattedText ft = Label(lv.ToString());
-            ctx.DrawText(ft, new Point(x - ft.Width / 2, plot.Bottom + 4));
+            TextLayout ft = Label(lv.ToString());
+            ft.Draw(ctx, new Point(x - ft.Width / 2, plot.Bottom + 4));
         }
 
         ctx.DrawLine(AxisPen, new Point(plot.X, plot.Y), new Point(plot.X, plot.Bottom));
         ctx.DrawLine(AxisPen, new Point(plot.X, plot.Bottom), new Point(plot.Right, plot.Bottom));
 
         // Axis captions.
-        FormattedText xcap = Label("level");
-        ctx.DrawText(xcap, new Point(plot.X + (plot.Width - xcap.Width) / 2, plot.Bottom + 15));
-        FormattedText ycap = Label("MP/30s");
-        ctx.DrawText(ycap, new Point(plot.X - padL + 2, plot.Y - 16));
+        TextLayout xcap = Label("level");
+        xcap.Draw(ctx, new Point(plot.X + (plot.Width - xcap.Width) / 2, plot.Bottom + 15));
+        TextLayout ycap = Label("MP/30s");
+        ycap.Draw(ctx, new Point(plot.X - padL + 2, plot.Y - 16));
 
         // Series polylines + point dots + a compact legend across the top.
         double legendX = plot.X + ycap.Width + 12;
@@ -96,9 +96,9 @@ public sealed class ManaRegenChart : Control
                 ctx.DrawEllipse(brush, null, p, 2.5, 2.5);
                 prev = p;
             }
-            FormattedText ft = Label(s.Label);
+            TextLayout ft = Label(s.Label);
             ctx.FillRectangle(brush, new Rect(legendX, plot.Y - 15, 10, 3));
-            ctx.DrawText(ft, new Point(legendX + 14, plot.Y - 21));
+            ft.Draw(ctx, new Point(legendX + 14, plot.Y - 21));
             legendX += 14 + ft.Width + 14;
         }
 
@@ -113,6 +113,17 @@ public sealed class ManaRegenChart : Control
         }
     }
 
-    private static FormattedText Label(string text)
-        => new(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Tf, 11, TextBrush);
+    // Axis numbers, captions and legend names, laid out once each rather than on
+    // every redraw (see DisposingCache). Recomputes bring new numbers and legend
+    // names; the cap holds several charts' worth before it starts over.
+    private readonly DisposingCache<string, TextLayout> _labels = new(512);
+
+    private TextLayout Label(string text)
+        => _labels.GetOrAdd(text, static t => new TextLayout(t, Tf, 11, TextBrush));
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _labels.Clear();
+    }
 }

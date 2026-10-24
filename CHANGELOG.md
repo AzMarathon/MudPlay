@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.32
+
+- The map, mana chart, terminal and realm rankings free their text drawings instead of leaving them to pile up
+- bug reports addressed: Hang-20261021-035337, Hang-20261021-065221
+
 ## 3.185.31
 
 - Updated to Avalonia 12.1.4, with its Windows rendering and memory-leak fixes

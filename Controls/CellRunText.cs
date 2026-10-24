@@ -20,8 +20,8 @@ namespace MudPlay.Controls;
 // the CP437 block glyphs.
 //
 // No shaping and no font fallback happen here: a character the face has no glyph
-// for is drawn on its own as a FormattedText, which falls back to another font the
-// way the per-glyph drawing did. Regular weight only — SGR "bold" is BRIGHT and is
+// for is drawn on its own as a cached TextLayout, which falls back to another font
+// the way the per-glyph drawing did. Regular weight only — SGR "bold" is BRIGHT and is
 // already in the colour the caller passes.
 //
 // UI-thread only, like the rendering that uses it.
@@ -29,8 +29,7 @@ internal sealed class CellRunText
 {
     // Glyph index per character; 0 means the face has no glyph for it.
     private readonly Dictionary<char, ushort> _glyphIndex = new();
-    private readonly Dictionary<(char Ch, uint Fg), FormattedText> _fallback = new();
-    private const int FallbackCap = 4096;
+    private readonly DisposingCache<(char Ch, uint Fg), TextLayout> _fallback = new(4096);
 
     private Typeface _typeface;
     private GlyphTypeface? _face;
@@ -61,8 +60,6 @@ internal sealed class CellRunText
     {
         if (count <= 0 || _face is null) return;
 
-        // The run keeps its glyph list and characters past this call (the frame is
-        // recorded and drawn later), so both are fresh arrays, never reused buffers.
         GlyphInfo[] glyphs = new GlyphInfo[count];
         bool anyGlyph = false;
         for (int i = 0; i < count; i++)
@@ -71,7 +68,9 @@ internal sealed class CellRunText
             ushort index = ch == ' ' ? _spaceGlyph : GlyphFor(ch);
             if (index == 0 && ch != ' ')
             {
-                context.DrawText(Fallback(ch, fgArgb, fg), new Point(left + i * _cellW, top));
+                _fallback.GetOrAdd((ch, fgArgb), (_typeface, _emSize, fg),
+                        static (k, s) => new TextLayout(k.Ch.ToString(), s._typeface, s._emSize, s.fg))
+                    .Draw(context, new Point(left + i * _cellW, top));
                 index = _spaceGlyph;
             }
             else if (ch != ' ')
@@ -82,10 +81,19 @@ internal sealed class CellRunText
         }
         if (!anyGlyph) return;
 
-        GlyphRun run = new(_face, _emSize, new ReadOnlyMemory<char>(chars, 0, count), glyphs,
+        // Disposed as soon as it is drawn: the recorded frame takes its own reference
+        // to the native glyph run, so ours would only wait on the finalizer, one per
+        // colour run per frame.
+        using GlyphRun run = new(_face, _emSize, new ReadOnlyMemory<char>(chars, 0, count), glyphs,
             new Point(left, top + _baseline));
         context.DrawGlyphRun(fg, run);
     }
+
+    // A cached fallback layout must not be drawn by the render thread (replaying
+    // the last direct frame) and the UI thread (the zoom bitmap) at once: its native
+    // glyph run is not thread-safe. The owner calls this when it switches between
+    // the two, so each path draws layouts of its own.
+    public void ClearFallback() => _fallback.Clear();
 
     private ushort GlyphFor(char ch)
     {
@@ -93,15 +101,5 @@ internal sealed class CellRunText
         if (_face is null || !_face.CharacterToGlyphMap.TryGetGlyph(ch, out index)) index = 0;
         _glyphIndex[ch] = index;
         return index;
-    }
-
-    private FormattedText Fallback(char ch, uint fgArgb, IBrush fg)
-    {
-        if (_fallback.TryGetValue((ch, fgArgb), out FormattedText? cached)) return cached;
-        if (_fallback.Count >= FallbackCap) _fallback.Clear();
-        FormattedText ft = new(ch.ToString(), CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            _typeface, _emSize, fg);
-        _fallback[(ch, fgArgb)] = ft;
-        return ft;
     }
 }

@@ -1045,6 +1045,11 @@ How to keep it current:
 - Checks: the deposit/sell detour holds combat only outside the loop's rooms, releases when the detour ends, never holds with the box off, holds for a whole lair detour.
 - Why: report paradigm-20260929-224330 (a deposit trip walked past monsters).
 
+### DisposingCacheTests.cs
+- Covers: Controls/DisposingCache (the text-layout cache of MapControl, ManaRegenChart and CellRunText).
+- Checks: a label asked for every frame is made once; a sweep of thousands of distinct labels never holds more than the cap, and every one it lets go is disposed; Clear disposes all it holds.
+- Why: each text layout holds native glyph memory, so one never disposed is a leak and one made per frame is the pile-up the cache replaced (reports `Hang-20261021-035337`, `Hang-20261021-065221`).
+
 ### DivertHandlerTests.cs
 - Covers: Game/Remote/DivertHandler (@divert)
 - Checks: an authorised start/stop/retarget, forwarding incoming telepaths as ASCII, skipping the target's own and the @divert verb, permission gate, dispose.

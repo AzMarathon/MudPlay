@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
 using MudPlay.Game.Map;
 using MudPlay.Services;
@@ -1140,6 +1141,9 @@ public sealed class MapControl : Control
         double cxOld = (cursor.X - Bounds.Width  / 2 - _panX) / (TileWorldSize * zoomBefore);
         double cyOld = (cursor.Y - Bounds.Height / 2 - _panY) / (TileWorldSize * zoomBefore);
         _zoom = zoomAfter;
+        // Label sizes follow the zoom, so the old sizes' layouts are dropped here to
+        // keep the cache to one zoom's worth rather than wait for the cap.
+        _labels.Clear();
         _panX = Math.Round(cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom);
         _panY = Math.Round(cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom);
         ViewMoved();
@@ -1985,10 +1989,8 @@ public sealed class MapControl : Control
         for (int i = wps.Count - 1; i >= 0 && number == 0; i--)
             if (wps[i].Equals(from)) number = i + 1;
         string label = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        FormattedText ft = new(label, System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, new Typeface("Inter", FontStyle.Normal, FontWeight.Bold),
-            Math.Clamp(tilePixels * 0.33, 10.0, 14.0), NumberedWaypointTextBrush);
-        ctx.DrawText(ft, new Point(_chipDragPoint.X - ft.Width / 2, _chipDragPoint.Y - ft.Height / 2));
+        TextLayout ft = Label(label, LabelFace, Math.Clamp(tilePixels * 0.33, 10.0, 14.0), NumberedWaypointTextBrush);
+        ft.Draw(ctx, new Point(_chipDragPoint.X - ft.Width / 2, _chipDragPoint.Y - ft.Height / 2));
     }
 
     private static Rect ComputeCellRect((int X, int Y) coord, double tilePixels, double cx, double cy)
@@ -2661,14 +2663,12 @@ public sealed class MapControl : Control
 
     private void DrawSequenceNumber(DrawingContext ctx, Rect cell, int seq)
     {
-        Typeface tf = new("Inter", FontStyle.Normal, FontWeight.Bold);
         double size = Math.Clamp(cell.Width * 0.32, 8, 16);
-        FormattedText ft = new(seq.ToString(), System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, tf, size, SeqNumberFill);
+        TextLayout ft = Label(seq.ToString(), LabelFace, size, SeqNumberFill);
         Point p = new(
             cell.X + (cell.Width  - ft.Width)  / 2,
             cell.Y + (cell.Height - ft.Height) / 2);
-        ctx.DrawText(ft, p);
+        ft.Draw(ctx, p);
     }
 
     // Shared renderer for the numbered per-waypoint circle markers — the loop-builder
@@ -2684,7 +2684,6 @@ public sealed class MapControl : Control
         if (Layout is null) return;
 
         double radius = Math.Clamp(tilePixels * 0.34, 7.0, 15.0);
-        Typeface tf = new("Inter", FontStyle.Normal, FontWeight.Bold);
         double textSize = Math.Clamp(tilePixels * 0.33, 10.0, 14.0);
 
         for (int i = 0; i < waypoints.Count; i++)
@@ -2698,9 +2697,8 @@ public sealed class MapControl : Control
             ctx.DrawEllipse(fill, ring, centre, radius, radius);
 
             string label = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            FormattedText ft = new(label, System.Globalization.CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, tf, textSize, NumberedWaypointTextBrush);
-            ctx.DrawText(ft, new Point(
+            TextLayout ft = Label(label, LabelFace, textSize, NumberedWaypointTextBrush);
+            ft.Draw(ctx, new Point(
                 centre.X - ft.Width  / 2,
                 centre.Y - ft.Height / 2));
         }
@@ -3036,14 +3034,33 @@ public sealed class MapControl : Control
 
     private void DrawCenteredMessage(DrawingContext ctx, string text)
     {
-        Typeface tf = new("Inter");
-        FormattedText ft = new(text, System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, tf, 12,
-            new SolidColorBrush(Color.Parse("#888")));
+        TextLayout ft = Label(text, MessageFace, 12, MessageBrush);
         Point p = new(
             (Bounds.Width  - ft.Width)  / 2,
             (Bounds.Height - ft.Height) / 2);
-        ctx.DrawText(ft, p);
+        ft.Draw(ctx, p);
+    }
+
+    // ----- Text labels ---------------------------------------------------
+    // Every number and message the map draws, laid out once per text, face, size
+    // and colour (see DisposingCache for why it is not a FormattedText per draw).
+    // Lair counts repeat a few numbers across many rooms, but a loop numbers every
+    // room on it, and the cache empties itself when full: the cap leaves room for a
+    // loop of a few thousand rooms before a static redraw would start over.
+    private const int LabelCacheCapacity = 4096;
+    private static readonly Typeface LabelFace = new("Inter", FontStyle.Normal, FontWeight.Bold);
+    private static readonly Typeface MessageFace = new("Inter");
+    private static readonly IBrush MessageBrush = new SolidColorBrush(Color.Parse("#888"));
+    private readonly DisposingCache<(string Text, Typeface Face, double Size, IBrush Brush), TextLayout> _labels =
+        new(LabelCacheCapacity);
+
+    private TextLayout Label(string text, Typeface face, double size, IBrush brush)
+        => _labels.GetOrAdd((text, face, size, brush), static k => new TextLayout(k.Text, k.Face, k.Size, k.Brush));
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _labels.Clear();
     }
 
     private bool TryHitTestRoom(Point position, out RoomKey hit)
