@@ -569,8 +569,8 @@ How to keep it current:
 
 ### CastingDirectorTests.cs
 - Covers: Game/Spells/CastingDirector (+ CastCoordinator, ConditionTracker, TickEngine)
-- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts.
-- Why: dozens of reports cited inline; user rulings 2026-10-10 and 2026-10-17.
+- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine.
+- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124); user rulings 2026-10-10 and 2026-10-17.
 
 ### CharacterCalculatorMatchupProfileTests.cs
 - Covers: Game/Calculators/CharacterCalculator.BuildNormalAttackProfile, MonsterMatchupCalculator
@@ -703,7 +703,7 @@ How to keep it current:
 
 ### CombatManagerSpellsTests.cs
 - Covers: Game/Combat/CombatManager (spell economy) + CastCoordinator, MonsterDeathWatcher, TickEngine
-- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths. Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
+- Checks: spell vs weapon choice; room-channel lifetime; arrival settle and moves in flight; MaxCasts counting; corpse-cast guards; resumes after interrupts; manual overrides; overrides and immunity; alternating/cycle orders; self-defence; attack timing; room-spell kills as deaths; a pre-attack debuff refused `You have already cast a spell this round!` still lets the room attack out that round (report paradigm-20261023-001124). Attack Not Last and follow-leader holds with spells: the first announce engages, a party member's or the leader's damage line releases, the deadline attacks once before the projected round, and a drag, a refused move or a late line from the room we left never ends the next room's hold.
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, and the state tracker the room-spell tests build); each fed line or arrival lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time. A fight that runs past its opening round is fed the game's `*Combat Engaged*`, or the engage-verify window (5 s) re-displays the room as it would live. No private member is reached by reflection.
 - Why: dozens of paradigm reports cited inline.
 
@@ -2467,6 +2467,11 @@ How to keep it current:
 - Checks: Lair-tag id match; Accuracy column; summon detection, context, targets and outgoing labels.
 - Why: The Game Data Monsters tab columns. The file name doesn't match its content (mostly MonsterMdbInfoBuilder).
 
+### MoveDisprovesAilmentsTests.cs
+- Covers: Game/Conditions/MoveDisprovesAilments (with ConditionTracker.ClearFlag and RoomTracker.MoveConfirmed), on TrackerWireRig.
+- Checks: a move whose room displays drops a latched blindness and a latched hold; a move that shows only `You are blind.` keeps the blindness; a record that blinds and confuses is kept.
+- Why: reports CureBlindlessBugReport (cure blindness cast on itself every 15 s) and paradigm-20261003-161904 (a stale hold).
+
 ### MovePlayerHandlerStartReplyTests.cs
 - Covers: Game/Remote/MovePlayerHandler
 - Checks: @loop, @lair and @goto answer "started" only when they started; otherwise the engine's reason; a goto answered after the in-flight move settles.
@@ -3264,8 +3269,8 @@ How to keep it current:
 
 ### RoomEntryWatcherTests.cs
 - Covers: Game/Combat/RoomEntryWatcher
-- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored.
-- Why: report paradigm-20260928-230226.
+- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned.
+- Why: reports paradigm-20260928-230226 and paradigm-20261020-203400 (`elfu removes shadow`).
 
 ### RoomExitParseTests.cs
 - Covers: Game/Map/RoomExit.TryParseWire, FormatLevelGate, CastsOnWalk
@@ -4116,7 +4121,7 @@ How to keep it current:
 ### TrackerWireRig.cs
 - Test infrastructure.
 - Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests and AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache).
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and MoveDisprovesAilmentsTests, which attaches a ConditionTracker to the rig's line extractor).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs

@@ -1296,7 +1296,8 @@ public sealed partial class CombatManager
         // active (fear doesn't stop debuffs). Returning false lets the caller try the
         // attack directly, which its own AttacksBlocked gate then also holds, so nothing
         // goes out until the block clears.
-        if (AttacksBlocked(debuff: true) || !_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true))
+        if (AttacksBlocked(debuff: true)
+            || !_cast.TryCast(decision.Spell!, castTarget, bypassRoundCooldown: true, betweenRound: true))
             return false;
 
         _spellChooser.MarkCast(decision, picked.RawName, ctx.RoomMobKeys);

@@ -565,6 +565,38 @@ public sealed class RoomEntryWatcherTests
         Assert.Single(h.Arrivals);
     }
 
+    // Another player's gear swap is painted yellow, and "shadow bracelet" carries the
+    // monster name "shadow": the scan put "removes shadow" on the roster and the attack
+    // spell went out at it (report paradigm-20261020-203400). Bytes as the wire sent them.
+    [Fact]
+    public void PartyMemberGearSwap_YellowItemNamedLikeMonster_NotAnArrival()
+    {
+        using Harness h = new();
+        h.AddMonster(2723, "shadow");
+        h.AddPlayer("Francisco");
+        ServerFeed feed = new(h.Router);
+        feed.Line("Also here: Francisco.");
+        feed.Raw("\u001b[0;33mFrancisco removes shadow bracelet!\r\n");
+        feed.Raw("\u001b[0;33mFrancisco wears shadow bracelet!\r\n");
+
+        Assert.Empty(h.Arrivals);
+        Assert.DoesNotContain(h.Classifier.Current!.Value.Entities, e => e.Kind == EntityKind.Monster);
+    }
+
+    // The swap is only skipped for a player: the same shape from a name nobody knows
+    // as a player still goes through the scan.
+    [Fact]
+    public void GearSwapShape_SubjectNotAPlayer_StillScanned()
+    {
+        using Harness h = new();
+        h.AddMonster(2723, "shadow");
+        ServerFeed feed = new(h.Router);
+        feed.Raw("\u001b[0;33mA shadow removes itself from the wall!\r\n");
+
+        Assert.Single(h.Arrivals);
+        Assert.Equal("shadow", h.Arrivals[0].Name);
+    }
+
     // A structured arrival whose name is ALSO yellow is handled by the directional
     // pattern; the colour scan must not double-count it (AnyPatternMatches gate).
     [Fact]

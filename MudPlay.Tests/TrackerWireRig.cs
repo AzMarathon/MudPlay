@@ -45,6 +45,9 @@ internal sealed class TrackerWireRig : IDisposable
     public List<string> Sent { get; } = new();
     public List<RecoveryFailedEvent> Failures { get; } = new();
     public MovementCoordinator Coordinator { get; }
+    // The rows the game's text comes out as, for a component the test attaches beside
+    // the tracker (as AppServices attaches the condition tracker).
+    public LineExtractor Lines => _lines;
     public MessageRouter Router { get; } = new();
     public WirePromptScanner Prompts { get; } = new();
     private readonly Queue<Action> _posted = new();

@@ -283,14 +283,22 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // over-clear: a condition that is really still on re-latches on its next line.
     // No ConditionEnded fires — the buff timers that event feeds anchor on a
     // record's own wear-off line, same as the collateral clears in OnLine.
-    public void ClearFlag(MessageFlags flags, string reason)
+    // onlyWholly leaves a record that also carries a flag the proof says nothing about
+    // (a breath that blinds and confuses, when only sight is proven): dropping it would
+    // end the other condition too, and its onset line won't come again.
+    public void ClearFlag(MessageFlags flags, string reason, bool onlyWholly = false)
     {
         if ((ActiveFlags & flags) == MessageFlags.None) return;
         List<string> names = new();
         foreach (MessageRecord r in _messages.Messages)
-            if ((r.Flags & flags) != MessageFlags.None && _active.Remove(r.Id))
+            if ((r.Flags & flags) != MessageFlags.None
+                && (!onlyWholly || (r.Flags & ~flags) == MessageFlags.None)
+                && _active.Remove(r.Id))
                 names.Add(r.Name);
         RecomputeFlags();
+        // Each latch carrying the flag also carried another one (onlyWholly): nothing
+        // was cleared, so nothing is logged.
+        if (names.Count == 0) return;
         _log?.Info(LogCategory,
             $"{flags} cleared ({reason}) — dropped {names.Count} record(s): {string.Join(", ", names)}");
     }

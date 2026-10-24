@@ -232,6 +232,12 @@ public sealed class RoomEntryWatcher : IDisposable
         // re-engaged a monster we'd just killed (report paradigm-20260928-230226).
         if (ClientNotice.IsNotice(text)) return;
 
+        // Another player changing gear is painted yellow too, and an item can carry a
+        // monster's name: "Francisco removes shadow bracelet!" put a 'shadow' on the
+        // roster and the attack spell went out at "removes shadow" (report
+        // paradigm-20261020-203400).
+        if (BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsPlayerName)) return;
+
         if (!TryFindYellowMonster(line, out RoomEntity monster)) return;
 
         // A later yellow mention of a monster already in the room isn't a new
@@ -293,6 +299,19 @@ public sealed class RoomEntryWatcher : IDisposable
             }
         }
         return false;
+    }
+
+    // A player on the room roster, or one the players-seen list knows. Only someone in
+    // the room can be seen changing gear, but they may have walked in since the roster
+    // was read, so the list backs the roster up.
+    private bool IsPlayerName(string name)
+    {
+        if (_classifier.Current is { } cur)
+            foreach (RoomEntity e in cur.Entities)
+                if (e.Kind == EntityKind.Player
+                    && string.Equals(FirstToken(e.ResolvedName), name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+        return _classifier.Classify(name).Kind == EntityKind.Player;
     }
 
     private bool AlreadyPresent(RoomEntity monster)

@@ -833,6 +833,26 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
     }
 
+    // A cosmic staff used just before the step had the round's cast: the lair's debuff
+    // was refused, and the latch that refusal set held the room attack until the next
+    // round while ten rats swung (report paradigm-20261023-001124). The debuff is a
+    // between-round cast and the attack an independent one: the attack still goes out.
+    [Fact]
+    public void PreAttackDebuffRefusedAlreadyCast_RoomAttackStillGoesOutThisRound()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.Settings.AreaDebuffSpell = new CombatSpellSlot { SpellName = "isto", MinEnemies = 2, MaxCastsPerRoom = 1 };
+        h.AddMonster(2852, "pinion rat");
+
+        h.Feed("Also here: pinion rat, pinion rat.");
+        Assert.Equal(new[] { "isto" }, h.AllSent);
+        h.Feed("You have already cast a spell this round!");
+        h.DrainPosted();
+
+        Assert.Equal(new[] { "isto", "hsto" }, h.AllSent);
+    }
+
     // The same swing with the step refused: we never left, so it is answered.
     [Fact]
     public void SwingWhileOurMoveIsInFlight_MoveRefused_IsAnsweredInTheRoomWeStayedIn()
