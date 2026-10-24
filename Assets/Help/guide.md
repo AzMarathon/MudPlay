@@ -2977,7 +2977,7 @@ Because a round's damage lines arrive a beat before the prompt that reports your
 
 ## Curing and blessing
 
-Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells + Ailments**; the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs).
+Configure cure spells for holds, poison, disease, and blindness on **Settings → Spells + Ailments**, and there too any spell to cast once each time HP or mana comes up to full (**Cast when HP full / Cast when mana full**); the bless (buff) slots that recast as they expire now live in the **Buff Watchdog** (View → Buff Watchdog — one unified list for self *and* party buffs).
 
 A cure that doesn't take isn't cast over and over. On yourself, the same cure goes out at most once every 15 seconds while the ailment stays. On a party member, each cast that leaves the ailment in place doubles the wait before the next: 15 seconds, then 30, 60, and 2 minutes from there on. That matters most for poison, where a cure spell only takes its own strength off the poison, so a heavy one outlasts several casts. Once the member has stayed clear for 12 seconds the count starts over, and other members are cured as usual in the meantime.
 
@@ -3099,7 +3099,8 @@ What comes across:
 - **The auto switches** (Auto-Combat, Auto-Nuke, Auto-Heal and Rest, Auto-Bless, Auto-Light, Auto-Get Cash and Items, Auto-Search, Auto-Sneak, Auto-Hide).
 - **Health**: the rest, heal, run and hang-up thresholds for HP and mana, meditate, and the pre / post rest commands.
   - **The pre / post rest commands are highlighted** so you look at them before importing. In MegaMUD they are very often a hand-typed gear swap. When one contains `rem`, `eq`, `wear` or `wea` the line turns red and says so: in MudPlay, gear swaps for resting belong to the **Equipment Manager's Pre-rest HP / Pre-rest Mana sets** (Workshop → My Equipment). Build the set there and clear the box in the review, or the typed command and the gear sets will both be changing what you wear. The highlight follows the box as you edit it.
-- **Spells**: the heal, regen, cure, light and when-full spells, by the same short codes MegaMUD uses.
+- **Spells**: the heal, regen, cure and light spells, by the same short codes MegaMUD uses.
+  - **Cast when HP / mana is full** land in Settings → Spells + Ailments' **Cast when HP full** / **Cast when mana full** slots, which work as MegaMUD's do: cast once as the pool reaches full, again only after it dips and refills. A command that names a target after the code (`bles raijin`) fills the slot's spell and target boxes. **Cast while resting** keeps its default (on).
 - **Combat**: the attack command, the multi-attack, debuff and attack spells with their mana and cast limits, backstab switches, monster limits and the run settings.
 - **MegaMUD's profiles** (Smash / Bash / Attack and the like) each become a MudPlay combat profile, with the one MegaMUD had active made active.
 - **Blesses**: self and party blesses become Buff Watchdog slots. A spell listed for both is one slot that does both.
@@ -5799,9 +5800,26 @@ The mana-regen spell and its **reroll** knobs are no longer picked here. Add the
 
 Rerolling works on **Paradigm** (it reads the roll back from `abil 145`) and on **Stock** (it reads the roll back off your next natural mana tick). Each reroll still runs through the normal between-round priority, so a due heal or cure fires ahead of it. See the **Buff Watchdog** section for details.
 
-### When HP full / When Mana full — moved to the Buff Watchdog
+### When-full buffs — in the Buff Watchdog
 
-The "spend a maxed-out pool on something useful" casts are configured as ordinary buffs in the **Buff Watchdog** now — add the spell and tick **Only when HP is full** or **Only when MA is full** on the slot (they fire once you've rested up to your **rest-max** target). See the **Buff Watchdog** section.
+A **buff** you want kept up only while a pool is topped off is set in the **Buff Watchdog**: add the spell and tick **Only when HP is full** or **Only when MA is full** on the slot (it casts once you've rested up to your **rest-max** target, and is recast as it runs out, like any buff). See the **Buff Watchdog** section. For any other kind of spell, use the two slots below.
+
+### Cast when HP full / Cast when mana full
+
+**Default:** unset; target blank; **Cast while resting** on
+**What it does:** Any spell, not just a buff: a utility spell, a spell you cast to train it, a mana burn. It is cast **once**, out of combat, when the pool comes **up to full**, and again only after that pool has **dropped below full and refilled**. "Full" is the **Rest max** level on the Health tab (the same mark the Buff Watchdog's when-full buffs use), not 100%. So a spell that doesn't change the pool (an HP-full utility spell) goes out once and isn't repeated while you stay full, and a mana-full mana burn goes out every time your mana refills.
+
+- **Spell** — the cast code; the suggestions are your class's spells, as on the other pickers.
+- **Target** — what to type after the code, such as a party member's name. Blank casts it with no target (on yourself).
+- **Cast while resting** — ticked, the spell goes out even during a recovery rest (casting ends the rest; MudPlay lies down again). Unticked, it waits until the rest is over.
+
+**How it differs from a when-full buff:** a buff has a timer and is recast as it runs out, with its own mana floor; these slots have no timer and no floor, and fire on the pool reaching full. They come after the whole **spell type priority** list: a slot gets the round's one between-round cast only when no heal, cure, buff or debuff goes out that round. And when one of those is due but was passed over because its cost is more than your mana, the slots wait too, so they never spend the mana it is waiting for. Other casts passed over for their own reasons (a cure waiting out its retry window, a heal that would repeat on unchanged HP, an item buff that can't be used) don't hold them. They run under **Auto-Bless** (as the when-full buffs do), and also wait while a loop holds its cast at a lair's doorstep, while a sneak is being kept, or while their own spell costs more than your mana. A cast the game turns away (a fizzle, a lost concentration, *already cast a spell this round*) is tried again while the pool is still full; *not enough mana* isn't.
+
+- **After you log in**, the first prompt that shows a pool already at full counts as reaching it, so a slot can fire then.
+- A **Rest max** that works out to 0 leaves the slot inactive: every reading would count as full, so it could never re-arm.
+- The **Exp/Hr Estimator**'s simulation doesn't play these slots, and changing them doesn't mark a kept area ranking as made for another character.
+
+Saved with the character, like the cure spells; not part of a combat profile. The program log shows each cast as `cast when HP full: …` / `cast when mana full: …`, and a `… held — <reason>` line whenever a due slot starts waiting for a new reason; the bug report shows each slot's state and what it is waiting on.
 
 ### Cure Holds / Cure poison / Cure disease / Cure blindness
 
@@ -7478,6 +7496,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Minor / Major / Emergency heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `EmergencyHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Cure after combat (per cure) | off | checkbox | `CureHoldsAfterCombat` etc. | Models/Profile/SpellsSettings.cs |
+| Cast when HP full / Cast when mana full: spell, target, cast while resting | unset / blank / on | spell code / free text / bool | `CastWhenHpFullSpell`, `CastWhenHpFullTarget`, `CastWhenHpFullWhileResting` (and `CastWhenMaFull…`) | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Per buff: Cast if mana ≥ / Cast while resting / Cast during combat | `50` (%) / false / false | 0–100 (%) or a mana amount / bool / bool | `BlessIfAboveMa` / `BlessWhileResting` / `BlessDuringCombat` on each `BuffSlot` | Models/Profile/BuffSettings.cs (Buff Watchdog → edit a buff) |
 | Ignore poison, blindness, confusion, diseased (each suppresses both @wait + say) | false (all) | bool | `IgnorePoison` etc. | Models/Profile/SpellsSettings.cs |

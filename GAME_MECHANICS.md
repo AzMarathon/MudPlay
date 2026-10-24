@@ -1814,6 +1814,7 @@ How HP works from full health down through dropping and death, how monster healt
 - **Client use:**
   - `HealthManager`'s confirm/interrupt latch (`_restInFlight` / `_restConfirmedByPrompt`) only recognized `PlayerPosition.Resting`, never `PlayerPosition.Meditating`. So a `meditate` send's confirmation step never fired, the interruption step's guard never tripped either, and the latch stuck `true` forever after a meditate got interrupted in place (no room move to fall back on and clear it via `NoteRoomChanged`).
   - Fixed by treating Resting and Meditating as the same "in a resting-family position" state for the confirm/interrupt check. `rest` was never affected, since its position always matched.
+  - The Spells tab's **Cast when HP full / Cast when mana full** slots wait out a recovery rest when their **Cast while resting** box is unticked (`CastingDirector.TryCastWhenFull`, 2026-10-24).
   - A rest broken off outside a fight is owed again until it is re-sent (`HealthManager._restResumeOwed`), so the recovery gate keeps clearing against the rest target, not the rest trigger, when the re-send is put off — a ShadowRest character sneaks first (report `paradigm-20261004-202253`: a buff ticked "cast while resting" stood the character up at 96/151, the re-rest waited for the sneak, and the gate cleared at the 77 trigger instead of the 121 target).
 
 ### What ends a rest

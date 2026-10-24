@@ -263,7 +263,7 @@ public sealed class RankingStampTests : IDisposable
     // ----- The character ---------
 
     private static SimCharacter Character(int damage = 20, int maxHp = 200, string? spell = null,
-        CombatSettings? combat = null, Func<int, double>? hpResting = null) => new(
+        CombatSettings? combat = null, Func<int, double>? hpResting = null, SpellsSettings? spellSlots = null) => new(
         RealmType.ParaMud, Level: 30, MaxHp: maxHp, MaxMana: 100,
         Melee: new PlayerMatchupProfile(RealmType.ParaMud, NormalAccuracy: 100, AvgWeaponDamage: damage,
             SwingsPerRound: 2, HasWeapon: true, DamageResist: 2),
@@ -279,7 +279,7 @@ public sealed class RankingStampTests : IDisposable
             },
         Combat: combat ?? new CombatSettings(),
         Health: new HealthSettings(),
-        SpellSlots: new SpellsSettings(),
+        SpellSlots: spellSlots ?? new SpellsSettings(),
         Overlay: _ => new MonsterOverlay(),
         SpellShortByNumber: _ => null,
         AlignmentValue: 0);
@@ -313,6 +313,22 @@ public sealed class RankingStampTests : IDisposable
         // Several at once, in the order they are always named in.
         Assert.Equal(new[] { RankingCharacter.StatsOrGear, RankingCharacter.Settings, RankingCharacter.Reach },
             Of(Character(damage: 25, spell: "bolt", combat: new CombatSettings { RunDistance = 3 }), reach: "other").ChangedSince(made));
+    }
+
+    // The simulator doesn't play the cast-when-full slots, so filling them in doesn't
+    // mark a ranking; a cure spell, which the settings group does hold, does.
+    [Fact]
+    public void TheCastWhenFullSlots_LeaveTheSettingsAsTheyWere()
+    {
+        RankingCharacter made = Of(Character());
+
+        Assert.Empty(Of(Character(spellSlots: new SpellsSettings
+        {
+            CastWhenHpFullSpell = "lght", CastWhenHpFullTarget = "raijin", CastWhenHpFullWhileResting = false,
+            CastWhenMaFullSpell = "mmis", CastWhenMaFullTarget = "orc", CastWhenMaFullWhileResting = false,
+        })).ChangedSince(made));
+        Assert.Equal(new[] { RankingCharacter.Settings },
+            Of(Character(spellSlots: new SpellsSettings { CurePoisonSpell = "cure" })).ChangedSince(made));
     }
 
     [Fact]

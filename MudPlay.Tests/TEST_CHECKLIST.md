@@ -561,6 +561,11 @@ How to keep it current:
 - Checks: exit landings and item gate; landing booking from two or one displays, dark/blind/follower cases; party-split hold and reinvite for walks and loops; an engine step the game never took leaves EngineRecoveryGate's walk-back history. A display of the room passed through is not reported as the landing's (`RoomTracker.RoomShown`); the landing's own display is.
 - Why: reports paradigm-20261007-134305 and -134824 (golden idol passage).
 
+### CastWhenFullTests.cs
+- Covers: Game/Spells/CastingDirector's cast-when-full slots (+ CastCoordinator, PromptParser, CombatStateTracker), driven by the game's prompts, room and combat lines, and a ManualClock
+- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
+- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds).
+
 ### CasterMessageMatcherLongLineTests.cs
 - Covers: Game/Spells/CasterMessageMatcher (literal walk)
 - Checks: the walk never refuses a regex match (catalogue + exhaustive small cases); floor lists reach few regexes.
@@ -2276,8 +2281,8 @@ How to keep it current:
 
 ### MegaMudProfileImporterTests.cs
 - Covers: Services/MegaMudProfileImporter, MegaMudIni, MegaMudImportPlan
-- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
-- Why: MegaMUD character import.
+- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
+- Why: MegaMUD character import; MegaMUD's when-full commands behave as the cast-when-full slots do (user, 2026-10-24).
 
 ### MeleeMatchupProfilesTests.cs
 - Covers: Game/Calculators/CharacterCalculator (melee profiles)
@@ -2982,7 +2987,7 @@ How to keep it current:
 
 ### ProfileMigrationsTests.cs
 - Covers: Services/ProfileMigrations
-- Checks: each schema step v1→v10 (keybind and toolbar reset, per-buff bless conditions, spell priority, quest tick mark, swing-tally reset); current schema is a no-op.
+- Checks: each schema step v1→v10 (keybind and toolbar reset, per-buff bless conditions, spell priority, quest tick mark, swing-tally reset); the v2 fold of the old when-full picks leaves the cast-when-full slots untouched; current schema is a no-op.
 - Why: old profiles load correctly.
 
 ### ProfilePickerDialogViewModelTests.cs
@@ -3152,7 +3157,7 @@ How to keep it current:
 
 ### RankingStampTests.cs
 - Covers: Game/Simulation/RankingWorld, RankingWorldWatch, Services/RankingStampReader, MonsterOverlaySeedStore.StampOf, RankingCharacter, RankingCheck, RankingReach
-- Checks: world differences; tables stamped as read with mid-load rereads making the world unfit; seed and game-edit stamps; character change groups; reach hash.
+- Checks: world differences; tables stamped as read with mid-load rereads making the world unfit; seed and game-edit stamps; character change groups (the unsimulated cast-when-full slots leave the settings group as it was); reach hash.
 - Why: kept rankings must match the world and character they were made for.
 
 ### RateTextTests.cs
@@ -3846,7 +3851,7 @@ How to keep it current:
 
 ### SpellsSettingsTests.cs
 - Covers: Models/Profile/SpellsSettings
-- Checks: default priority order 1..10 and empty spell slots; bless slots serialise sparsely and keep a slot out of the realm's range.
+- Checks: default priority order 1..10 and empty spell slots; the cast-when-full slots start empty with "Cast while resting" on, also read from a save that predates them; bless slots serialise sparsely and keep a slot out of the realm's range.
 - Why: CastingDirector's between-round order (user, 2026-10-06)
 
 ### SplitReformJoinNagTests.cs

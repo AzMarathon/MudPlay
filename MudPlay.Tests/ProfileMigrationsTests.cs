@@ -217,6 +217,35 @@ public sealed class ProfileMigrationsTests
         Assert.True(slot.BlessWhileResting);
     }
 
+    // The old when-full picks fold into buffs; the cast-when-full slots, which sit
+    // beside them in the same section, are left exactly as they were.
+    [Fact]
+    public void V2Profile_FoldsTheOldWhenFullPicks_AndLeavesTheCastWhenFullSlots()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 2,
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Spells"] = JsonSerializer.SerializeToElement(new SpellsSettings
+                {
+                    WhenHpFullSpell = "dete",
+                    CastWhenHpFullSpell = "lght", CastWhenHpFullTarget = "raijin",
+                    CastWhenMaFullSpell = "burn", CastWhenMaFullWhileResting = false,
+                }),
+            },
+        };
+
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        BuffSlot folded = Assert.Single(profile.PartyBuffs!.Slots);
+        Assert.Equal(("dete", true), (folded.Spell, folded.OnlyWhenHpFull));
+        SpellsSettings spells = JsonSerializer.Deserialize<SpellsSettings>(profile.Settings!["Spells"].GetRawText())!;
+        Assert.Null(spells.WhenHpFullSpell);
+        Assert.Equal(("lght", "raijin", true), (spells.CastWhenHpFullSpell, spells.CastWhenHpFullTarget, spells.CastWhenHpFullWhileResting));
+        Assert.Equal(("burn", (string?)null, false), (spells.CastWhenMaFullSpell, spells.CastWhenMaFullTarget, spells.CastWhenMaFullWhileResting));
+    }
+
     [Fact]
     public void CurrentProfile_IsNoOp()
     {

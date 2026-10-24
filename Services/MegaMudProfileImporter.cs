@@ -222,8 +222,13 @@ public static class MegaMudProfileImporter
         p.Text(s, "DiseaseCmd", g, "Cure disease spell", v => sp.CureDiseaseSpell = v);
         p.Text(s, "FreedomCmd", g, "Cure holds spell", v => sp.CureHoldsSpell = v);
         p.Text(s, "LightCmd", g, "Room light spell", v => sp.RoomLightSpell = v);
-        p.Text(s, "HpFullCmd", g, "Cast when HP is full", v => sp.WhenHpFullSpell = v);
-        p.Text(s, "MaFullCmd", g, "Cast when mana is full", v => sp.WhenMaFullSpell = v);
+        // MegaMUD casts these once as the pool reaches full and again only after it
+        // dips and refills (user, 2026-10-24): the cast-when-full slots, not a buff.
+        // The command may name a target after the code.
+        p.Text(s, "HpFullCmd", g, "Cast when HP is full",
+            v => (sp.CastWhenHpFullSpell, sp.CastWhenHpFullTarget) = Game.Combat.OutboundCastObserver.SplitCastCommand(v));
+        p.Text(s, "MaFullCmd", g, "Cast when mana is full",
+            v => (sp.CastWhenMaFullSpell, sp.CastWhenMaFullTarget) = Game.Combat.OutboundCastObserver.SplitCastCommand(v));
         p.Flag("Other", "IgnorePoison", g, "Ignore poison", v => sp.IgnorePoison = v);
         p.Flag("Other", "IgnoreBlind", g, "Ignore blindness", v => sp.IgnoreBlindness = v);
         p.Flag("Other", "IgnoreConfusion", g, "Ignore confusion", v => sp.IgnoreConfusion = v);
