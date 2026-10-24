@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace MudPlay.Game.Simulation;
 
@@ -83,7 +84,20 @@ public sealed record RankingCharacter(IReadOnlyDictionary<string, string> Groups
     {
         NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         IncludeFields = false,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { LeaveOutWhatTheSimulationDoesNotRead } },
     };
+
+    // A setting the simulation never reads is left out of the hash, so changing it
+    // doesn't mark every kept ranking as made for another character. An attack
+    // slot's "fire regardless of mana" acts only in a party, and the simulated
+    // character is always solo.
+    private static void LeaveOutWhatTheSimulationDoesNotRead(JsonTypeInfo info)
+    {
+        if (info.Type != typeof(Models.Profile.CombatSpellSlot)) return;
+        for (int i = info.Properties.Count - 1; i >= 0; i--)
+            if (info.Properties[i].Name == nameof(Models.Profile.CombatSpellSlot.FireRegardlessOfMana))
+                info.Properties.RemoveAt(i);
+    }
 
     // A short hash of value's JSON form: enough to tell two states apart, not a
     // record of either.

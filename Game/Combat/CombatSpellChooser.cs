@@ -35,7 +35,9 @@ namespace MudPlay.Game.Combat;
 // Mana gating reads SpellManaThresholdMode: Percentage treats MinManaPerCast as
 // a 0–100 share of max MA; Absolute treats it as raw points. A debuff that can't
 // meet its mana gate this round is skipped (we fall through to the attack phase)
-// rather than stalling the round.
+// rather than stalling the round. An attack slot set to fire regardless of mana
+// asks nothing of mana while the character is in a party (ctx.InParty): not its
+// reserve, not the spell's cost, not that there is any.
 //
 // Three deterministic "skip this single-target attack spell" inputs flow in via
 // CombatSpellContext, each gating NormalAttackSpell / AlternateAttackSpell down
@@ -240,9 +242,11 @@ public sealed class CombatSpellChooser
         // meant to be — the earlier unconditional-override behaviour (report
         // paradigm-20260904-220509) is superseded now that a dedicated Physical
         // override exists for the physical rounds.
+        // With no mana nothing casts but a slot that fires regardless of mana in a
+        // party; each rung asks (AttackManaBlock).
         if (preferSpell
-            && ctx.SpellsAvailable
-            && TryAttackSpell(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent) is { } spell)
+            && TryAttackSpellOrEngage(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent,
+                   new RungCounts(_normalAttackCasts, _alternateAttackCasts), why: null) is { } spell)
             return spell;
 
         // The single-target attack cascade could not fire this round. If we'd
@@ -257,6 +261,54 @@ public sealed class CombatSpellChooser
 
         return CombatSpellDecision.Weapon;
     }
+
+    // The attack spell that would take a round against a monster no weapon of ours
+    // can hurt: the cascade Choose walks with the weapon out, every gate applied
+    // (room settings, cast caps, mana reserve and cost, immunity, level, element,
+    // target type). Null when none would, with the reason each configured rung was
+    // passed over added to why. This is what decides whether such a monster can be
+    // engaged at all, so the engage gate and the round's pick can't disagree.
+    //   currentTarget: the monster is the one being fought, so its single-target
+    //     cast counts stand; any other starts at none, as it would once picked.
+    public CombatSpellDecision? EngagingAttackSpell(
+        CombatSettings settings, in CombatSpellContext ctx, bool currentTarget,
+        List<string>? why = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        RungCounts counts = currentTarget ? new RungCounts(_normalAttackCasts, _alternateAttackCasts) : default;
+        return TryAttackSpellOrEngage(settings, ctx, settings.SpellManaThresholdMode, singleTargetSpent: false,
+            counts, why);
+    }
+
+    // The attack-spell cascade, and when nothing fires, nothing of ours hurts the
+    // target and we're in a party: the cascade again with the no-damage blocks set
+    // aside. A spell the monster resists outright still engages it, doing no
+    // damage (user, 2026-10-23), and so does a room attack that can damage nothing
+    // here; while engaged the party's kill pays us exp. Solo nobody else would kill
+    // it, so they stay out. A spell that does damage always goes first.
+    private CombatSpellDecision? TryAttackSpellOrEngage(
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent,
+        RungCounts counts, List<string>? why)
+    {
+        if (TryAttackSpell(settings, ctx, mode, singleTargetSpent, counts, why) is { } spell)
+            return spell;
+        return CanEngageWithoutDamage(ctx)
+            ? TryAttackSpell(settings, WithoutNoDamageBlocks(ctx), mode, singleTargetSpent, counts, why: null)
+            : null;
+    }
+
+    private static bool CanEngageWithoutDamage(in CombatSpellContext ctx) =>
+        ctx.WeaponIneffective && ctx.InParty
+        && (ctx.ResistBlockedActions is { Count: > 0 } || ctx.RoomAttacksNoDamage is { Count: > 0 });
+
+    private static CombatSpellContext WithoutNoDamageBlocks(in CombatSpellContext ctx) =>
+        ctx with { ResistBlockedActions = null, RoomAttacksNoDamage = null };
+
+    // Whether this round's pick is one of those no-damage engagements: a spell the
+    // chooser only cast because nothing that does damage could fire.
+    public static bool DealsNoDamage(in CombatSpellDecision decision, in CombatSpellContext ctx) =>
+        (ctx.ResistBlockedActions?.Contains(decision.Action) ?? false)
+        || (ctx.RoomAttacksNoDamage?.Contains(decision.Action) ?? false);
 
     // Pick the in-between debuff for the current round, or null when no debuff
     // applies. Debuffing is an in-between action (≤1/round) in the realm's round
@@ -394,12 +446,12 @@ public sealed class CombatSpellChooser
         if (!preferSpell) return false;
         if (!MultiAttackRoomQualifies(settings, ctx)) return false;
         CombatSpellSlot multi = settings.MultiAttackSpell;
-        if (CastsOk(multi, _multiAttackCasts) && ManaOk(multi, ctx, mode)) return true;
+        if (CastsOk(multi, _multiAttackCasts) && AttackManaBlock(multi, ctx, mode) is null) return true;
         CombatSpellSlot multi2 = settings.MultiAttack2Spell;
         return settings.MultiAttack2Enabled
             && IsConfigured(multi2)
             && CastsOk(multi2, _multiAttack2Casts)
-            && ManaOk(multi2, ctx, mode);
+            && AttackManaBlock(multi2, ctx, mode) is null;
     }
 
     // Does the room meet the room multi-attack spell's TRIGGER — Auto-Nuke on, the spell
@@ -414,40 +466,46 @@ public sealed class CombatSpellChooser
         return ctx.AllowNukes && IsConfigured(multi) && ctx.EnemyCount >= multi.MinEnemies;
     }
 
+    // The single-target cast counts an attack walk reads: the current target's, or
+    // none for a monster not being fought yet.
+    private readonly record struct RungCounts(int Normal, int Alternate);
+
     // Attack-spell phase: room spell 1 while it qualifies, room spell 2 once slot 1
     // is spent, then normal, then alternate single-target damage spells. Returns
-    // null when none can fire this round.
+    // null when none can fire this round, with why each configured rung was passed
+    // over added to why.
     private CombatSpellDecision? TryAttackSpell(
-        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent)
+        CombatSettings settings, in CombatSpellContext ctx, ThresholdMode mode, bool singleTargetSpent,
+        RungCounts counts, List<string>? why)
     {
-        // Auto-Nuke gate: the multi-target attack spell is a nuke — when the
-        // auto-engine is off we skip it and fall to the single-target spells.
         // Multi-attack is room-scoped (MinEnemies), not target-scoped, so the
         // per-target single-target latch never suppresses it.
         CombatSpellSlot multi = settings.MultiAttackSpell;
-        bool roomQualifies = MultiAttackRoomQualifies(settings, ctx);
-        if (roomQualifies
-            && CastsOk(multi, _multiAttackCasts)
-            && ManaOk(multi, ctx, mode))
-            return new CombatSpellDecision(CombatSpellAction.MultiAttack, multi.SpellName!);
+        if (IsConfigured(multi) && Rung(CombatSpellAction.MultiAttack, multi.SpellName!,
+                RoomRungBlock(settings, ctx, multi, _multiAttackCasts, CombatSpellAction.MultiAttack, mode),
+                why) is { } m1)
+            return m1;
 
         // Room spell 2 is slot 1's successor, not a rival — it only ever sees this
         // rung once slot 1 has spent its per-room cap or mana has fallen under slot
         // 1's floor, which is what makes "open with the expensive one twice, finish
         // with the cheap one" configurable. The enemy-count trigger is shared (slot
-        // 1's MinEnemies, via roomQualifies), so a pack too small to room with slot 1
-        // isn't roomed by slot 2 instead; slot 2's own MinEnemies is never read.
+        // 1's MinEnemies), so a pack too small to room with slot 1 isn't roomed by
+        // slot 2 instead; slot 2's own MinEnemies is never read.
         CombatSpellSlot multi2 = settings.MultiAttack2Spell;
-        if (roomQualifies
-            && settings.MultiAttack2Enabled
-            && IsConfigured(multi2)
-            && CastsOk(multi2, _multiAttack2Casts)
-            && ManaOk(multi2, ctx, mode))
-            return new CombatSpellDecision(CombatSpellAction.MultiAttack2, multi2.SpellName!);
+        if (settings.MultiAttack2Enabled && IsConfigured(multi2)
+            && Rung(CombatSpellAction.MultiAttack2, multi2.SpellName!,
+                RoomRungBlock(settings, ctx, multi2, _multiAttack2Casts, CombatSpellAction.MultiAttack2, mode),
+                why) is { } m2)
+            return m2;
 
         // Single-target attack cascade latched off for this target (its mana
         // reserve is spent or its MaxCasts rounds elapsed) — skip to the weapon.
-        if (singleTargetSpent) return null;
+        if (singleTargetSpent)
+        {
+            why?.Add("single-target attack spells: done with this target (its mana reserve or cast cap ran out)");
+            return null;
+        }
 
         // Normal-attack rung. A per-monster override spell (ctx.OverrideAttackSpell)
         // SUBSTITUTES for the configured NormalAttackSpell here and runs the exact
@@ -457,33 +515,107 @@ public sealed class CombatSpellChooser
         // When an override is set the global slot is never used for this monster
         // (mutually exclusive); the cap is the override's, and mana is the override
         // spell's affordability (its reserve floor was applied upstream).
-        CombatSpellSlot normal = settings.NormalAttackSpell;
-        bool normalOverridden = ctx.OverrideAttackSpell is not null;
-        string? normalCode = ctx.OverrideAttackSpell ?? (IsConfigured(normal) ? normal.SpellName : null);
-        if (normalCode is not null
-            && !IsImmune(ctx, CombatSpellAction.NormalAttackSpell)
-            && !IsLevelBlocked(ctx, CombatSpellAction.NormalAttackSpell)
-            && !IsResistBlocked(ctx, CombatSpellAction.NormalAttackSpell)
-            && !IsTargetTypeBlocked(ctx, CombatSpellAction.NormalAttackSpell)
-            && CastsOk(normalOverridden ? ctx.OverrideAttackMaxCasts : normal.MaxCastsPerRoom, _normalAttackCasts)
-            && (normalOverridden ? ManaOk(normalCode, ctx) : ManaOk(normal, ctx, mode)))
-            return new CombatSpellDecision(CombatSpellAction.NormalAttackSpell, normalCode);
+        if (SingleRung(settings.NormalAttackSpell, ctx.OverrideAttackSpell, ctx.OverrideAttackMaxCasts,
+                CombatSpellAction.NormalAttackSpell, counts.Normal, ctx, mode, why) is { } normal)
+            return normal;
 
         // Alternate-attack rung — same substitution contract as Normal, one rung down.
-        CombatSpellSlot alt = settings.AlternateAttackSpell;
-        bool altOverridden = ctx.OverrideAltAttackSpell is not null;
-        string? altCode = ctx.OverrideAltAttackSpell ?? (IsConfigured(alt) ? alt.SpellName : null);
-        if (altCode is not null
-            && !IsImmune(ctx, CombatSpellAction.AlternateAttackSpell)
-            && !IsLevelBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
-            && !IsResistBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
-            && !IsTargetTypeBlocked(ctx, CombatSpellAction.AlternateAttackSpell)
-            && CastsOk(altOverridden ? ctx.OverrideAltAttackMaxCasts : alt.MaxCastsPerRoom, _alternateAttackCasts)
-            && (altOverridden ? ManaOk(altCode, ctx) : ManaOk(alt, ctx, mode)))
-            return new CombatSpellDecision(CombatSpellAction.AlternateAttackSpell, altCode);
+        return SingleRung(settings.AlternateAttackSpell, ctx.OverrideAltAttackSpell, ctx.OverrideAltAttackMaxCasts,
+            CombatSpellAction.AlternateAttackSpell, counts.Alternate, ctx, mode, why);
+    }
 
+    // One rung's outcome: the decision when nothing blocks it, else null with the
+    // block noted.
+    private static CombatSpellDecision? Rung(CombatSpellAction action, string code, string? block, List<string>? why)
+    {
+        if (block is null) return new CombatSpellDecision(action, code);
+        why?.Add($"{RungLabel(action)} {code}: {block}");
         return null;
     }
+
+    private CombatSpellDecision? SingleRung(
+        CombatSpellSlot configured, string? overrideCode, int? overrideCap, CombatSpellAction action,
+        int casts, in CombatSpellContext ctx, ThresholdMode mode, List<string>? why)
+    {
+        bool overridden = overrideCode is not null;
+        string? code = overrideCode ?? (IsConfigured(configured) ? configured.SpellName : null);
+        if (code is null) return null;
+        CombatSpellSlot? slot = overridden ? null : configured;
+        string? block = SingleRungBlock(ctx, action, code, slot,
+            overridden ? overrideCap : configured.MaxCastsPerRoom, casts, mode);
+        return Rung(action, code, block, why);
+    }
+
+    private static string RungLabel(CombatSpellAction action) => action switch
+    {
+        CombatSpellAction.MultiAttack => "room attack 1",
+        CombatSpellAction.MultiAttack2 => "room attack 2",
+        CombatSpellAction.NormalAttackSpell => "attack spell",
+        CombatSpellAction.AlternateAttackSpell => "alternate attack spell",
+        _ => action.ToString(),
+    };
+
+    // Why a room-attack rung can't fire this round, or null when it can. Auto-Nuke
+    // gates it (a room attack is a nuke), and both slots read slot 1's MinEnemies.
+    // Nothing about the one monster asked after decides it: a room attack engages
+    // the caster with the whole room, whatever any monster's spell immunity
+    // (GAME_MECHANICS "Weapons: "no effect" lines and the magical-weapon
+    // requirement").
+    private static string? RoomRungBlock(
+        CombatSettings settings, in CombatSpellContext ctx, CombatSpellSlot slot, int casts,
+        CombatSpellAction action, ThresholdMode mode)
+    {
+        if (!ctx.AllowNukes) return "Auto-Nuke is off, or a bystander holds room attacks";
+        CombatSpellSlot trigger = settings.MultiAttackSpell;
+        if (!IsConfigured(trigger)) return "takes Multi-attack 1's room trigger, and that slot is empty";
+        if (ctx.EnemyCount < trigger.MinEnemies)
+            return $"{ctx.EnemyCount} enemy(ies) here, its Min enemies is {trigger.MinEnemies}";
+        if (!CastsOk(slot, casts)) return $"its {slot.MaxCastsPerRoom} cast(s) this room are spent";
+        if (ctx.RoomAttacksNoDamage?.Contains(action) == true) return "it can damage nothing here (undead only, and no undead here)";
+        return AttackManaBlock(slot, ctx, mode);
+    }
+
+    // Why a single-target attack rung can't fire at this target, or null when it
+    // can. slot is null for a per-monster override, whose own reserve was applied
+    // upstream, so only its cost is checked here.
+    private static string? SingleRungBlock(
+        in CombatSpellContext ctx, CombatSpellAction action, string code, CombatSpellSlot? slot,
+        int? cap, int casts, ThresholdMode mode)
+    {
+        if (IsImmune(ctx, action)) return "drew \"no effect\" on this monster this room";
+        if (IsLevelBlocked(ctx, action)) return "its level is under the monster's spell immunity";
+        if (IsResistBlocked(ctx, action)) return "the monster resists its element";
+        if (IsTargetTypeBlocked(ctx, action)) return "can't affect this kind of monster";
+        if (!CastsOk(cap, casts)) return $"its {cap} cast(s) at this target are spent";
+        if (slot is not null) return AttackManaBlock(slot, ctx, mode);
+        return ctx.SpellsAvailable ? CostBlock(code, ctx) : NoManaBlock(ctx);
+    }
+
+    // An attack slot that fires regardless of mana, with the character in a party,
+    // asks nothing of mana at all: not its reserve, not its cost, not that there is
+    // any (user, 2026-10-23: "it should always ignore our mana and cast the spell at
+    // the target.. regardless of mana cost of spell or our current mana"). A cast
+    // the game then refuses for mana goes again on the slot's next turn
+    // (CombatManager's NotEnoughMana handling).
+    private static bool ManaWaived(CombatSpellSlot slot, in CombatSpellContext ctx) =>
+        slot.FireRegardlessOfMana && ctx.InParty;
+
+    private static string? AttackManaBlock(CombatSpellSlot slot, in CombatSpellContext ctx, ThresholdMode mode)
+    {
+        if (ManaWaived(slot, ctx)) return null;
+        if (!ctx.SpellsAvailable) return NoManaBlock(ctx);
+        if (!ManaMeetsReserve(slot.MinManaPerCast, ctx.Mana, ctx.MaxMana, mode))
+            return $"mana {ctx.Mana} is under its reserve of {ReserveInMana(slot.MinManaPerCast, ctx.MaxMana, mode)}";
+        return CostBlock(slot.SpellName!, ctx);
+    }
+
+    private static string NoManaBlock(in CombatSpellContext ctx) => $"nothing can be cast at {ctx.Mana} mana";
+
+    // A below-cost cast silently no-ops; an unknown cost never blocks.
+    private static string? CostBlock(string code, in CombatSpellContext ctx) =>
+        ctx.ManaCostOf?.Invoke(code) is { } cost && ctx.Mana < cost
+            ? $"mana {ctx.Mana} is under its cost of {cost}"
+            : null;
 
     // Record that the engine successfully sent the cast for decision against
     // targetRawName. No-op for WeaponAttack. Keeps the per-room counters in step
@@ -809,4 +941,11 @@ public readonly record struct CombatSpellContext(
     // it" — a below-cost cast is a silent no-op (report paradigm-20260820-082741, DTCH
     // spammed at 5/13/20 mana vs its 25 cost). null (unwired) → no cost floor,
     // old behavior.
-    System.Func<string, int?>? ManaCostOf = null);
+    System.Func<string, int?>? ManaCostOf = null,
+    // The character is in a party, which is when an attack slot set to fire
+    // regardless of mana asks nothing of mana (ManaWaived).
+    bool InParty = false,
+    // Room-attack rungs whose spell can damage nothing in the room (an undead-only
+    // spell with no undead here). It would still engage the caster with the room,
+    // so it is cast only as the no-damage engagement (TryAttackSpellOrEngage).
+    IReadOnlySet<CombatSpellAction>? RoomAttacksNoDamage = null);

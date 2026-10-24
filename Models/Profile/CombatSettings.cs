@@ -321,6 +321,15 @@ public sealed class CombatSpellSlot
     [SettingRange(0, 100_000)]
     public int MinManaPerCast { get; set; }
 
+    // "Fire regardless of current mana": while the character is in a party this
+    // attack spell is cast whenever its turn comes, whatever the mana (neither
+    // MinManaPerCast nor its cost is asked), so a monster only it can hurt is
+    // engaged (a party kill pays exp only to those engaged) instead of walked past
+    // for a mana stall. Solo it does nothing.
+    // Offered on the four attack-spell rows only; the debuff and drain rows never
+    // read it.
+    public bool FireRegardlessOfMana { get; set; }
+
     // Deep copy — combat spell profiles snapshot these slots and must never share
     // a reference with the live CombatSettings (an edit to one would leak to the
     // other).
@@ -330,6 +339,7 @@ public sealed class CombatSpellSlot
         MinEnemies = MinEnemies,
         MaxCastsPerRoom = MaxCastsPerRoom,
         MinManaPerCast = MinManaPerCast,
+        FireRegardlessOfMana = FireRegardlessOfMana,
     };
 }
 

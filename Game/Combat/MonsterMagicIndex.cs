@@ -11,9 +11,10 @@ namespace MudPlay.Game.Combat;
 // - Magical N — a physical weapon hits this monster only when the weapon's
 //   HitMagic (ItemMagicIndex) is ≥ N. A monster with no Magical ability is level
 //   0, so any weapon hits.
-// - SpellImmu N — a spell affects this monster only when its ReqLevel
-//   (SpellReqLevelIndex) is ≥ N. Applies to both attack spells and debuffs. No
-//   SpellImmu = 0, so any spell is allowed.
+// - SpellImmu N — a single-target spell affects this monster only when its
+//   ReqLevel (SpellReqLevelIndex) is ≥ N, attack spell or debuff alike. A room
+//   attack ignores it (GAME_MECHANICS "Why an attack spell fails to damage —
+//   three independent mechanics"). No SpellImmu = 0, so any spell is allowed.
 //
 // Mirrors SeeHiddenIndex: the map is built lazily by scanning the raw Monsters
 // table's paired Abil-0..9 / AbilVal-0..9 columns, cached, and dropped on

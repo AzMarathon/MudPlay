@@ -750,8 +750,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     // Rounds for one attack spell to drop a monster: HP / its resist-adjusted
     // per-round damage (the same RankAttackSpells the Your Matchup panel uses).
-    // 0 when the spell can't land (SpellImmu too high, fully resisted, wrong
-    // target type) — the column renders that as "—", like an unkillable weapon.
+    // 0 when the spell can't land (a single-target spell under its SpellImmu or
+    // fully resisted, or a target type it can't affect; a room spell ignores the
+    // first two) — the column renders that as "—", like an unkillable weapon.
     private int SpellRoundsToKill(PlayerAttackSpell spell, MonsterCatalogEntry m)
     {
         SpellEffectivenessResult r = MonsterMatchupCalculatorSpells.RankAttackSpells(
@@ -1343,7 +1344,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         if (m.Magical > 0)
             AbilityLines.Add($"Magic weapon required — your weapon's HitMagic must be ≥ {m.Magical} to hit it");
         if (m.SpellImmunity > 0)
-            AbilityLines.Add($"Spell-immune below level {m.SpellImmunity}");
+            AbilityLines.Add($"Spell-immune below level {m.SpellImmunity} — single-target spells; a room spell hurts it at any level");
         if (m.MagicRes != 0)
             AbilityLines.Add($"Magic resist {m.MagicRes} — cuts spell damage once above 50");
         if (m.DamageResist != 0)

@@ -178,7 +178,8 @@ public readonly record struct MonsterMatchupResult(
 
 // One of the player's known, damage-dealing attack spells — the input
 // MonsterMatchupCalculator.RankAttackSpells scores against a specific
-// monster's SpellImmu, resists and magic resist. Min/MaxDamagePerRound and
+// monster's SpellImmu, resists and magic resist (a room spell: magic resist and
+// undead-only alone). Min/MaxDamagePerRound and
 // ManaCostPerRound are already level-scaled, energy-multiplied and lifted by the
 // caster's spell-damage bonus (see SpellCalculator.MinDamage / MaxDamage /
 // ManaCost) — this record carries the RESULT of that player-side math, not the
@@ -198,9 +199,10 @@ public readonly record struct PlayerAttackSpell(
     int ManaCostPerCast = 0, long? MinDamagePerRound = null, bool UsesMagicResist = false,
     int TypeOfResists = 0);
 
-// One spell's effectiveness against a specific monster — either blocked
-// (SpellImmu too high, or the monster resists its element at or above 100%)
-// with a human-readable reason, or eligible with its resist-adjusted effective
+// One spell's effectiveness against a specific monster — either blocked (a
+// single-target spell under its SpellImmu or whose element it resists at or
+// above 100%, or a target class the spell can't affect) with a human-readable
+// reason, or eligible with its resist-adjusted effective
 // damage AND its mana efficiency against that monster: how many rounds to kill,
 // the total mana that costs, and the damage-per-mana ratio — so the user can
 // judge which spell is the cheapest kill (RankAttackSpells fills RoundsToKill /
@@ -296,19 +298,20 @@ public static class MonsterMatchupCalculatorSpells
     }
 
     // Rank the player's known attack spells by effective damage against one
-    // monster: a spell whose ReqLevel is below the monster's SpellImmu never
-    // lands (GAME_MECHANICS "Why an attack spell fails to damage — three
-    // independent mechanics"; the combat engine applies the same rule in
-    // CombatSpellGates.LevelBlocked); a spell restricted to undead-
-    // only (Abil 23) or living-only (Abil 108) targets is blocked outright
-    // against a monster on the wrong side of that gate, independent of
-    // SpellImmu/resist; a spell whose element the monster resists ≥100% deals
-    // zero real damage (MonsterResistIndex's own determinism — exactly 100
-    // blocks, over 100 heals the target, so both read as blocked here, not
-    // just "reduced to 0"). Everything else scores by (100 - resist%) applied
-    // to the spell's own per-round max damage. Eligible spells sort first,
-    // highest effective damage first; blocked spells trail, in their input
-    // order.
+    // monster. A single-target spell whose ReqLevel is below the monster's
+    // SpellImmu never lands (GAME_MECHANICS "Why an attack spell fails to damage —
+    // three independent mechanics"; the combat engine applies the same rule in
+    // CombatSpellGates.LevelBlocked); one restricted to undead-only (Abil 23) or
+    // living-only (Abil 108) targets is blocked against a monster on the wrong
+    // side of that gate; one whose element the monster resists ≥100% deals zero
+    // real damage (exactly 100 blocks, over 100 heals, so both read as blocked
+    // here, not just "reduced to 0"). A room spell ignores spell immunity and
+    // elemental resist, and of the target classes checks only undead-only: those
+    // are the room cast's only per-monster stops besides the magic-resist roll
+    // (user, 2026-10-23, confirming the Stock DLL reading for both realms).
+    // Everything else scores by (100 - resist%) applied to the spell's own
+    // per-round damage. Eligible spells sort first; blocked spells trail, in their
+    // input order.
     public static IReadOnlyList<SpellEffectivenessResult> RankAttackSpells(
         IReadOnlyList<PlayerAttackSpell> spells,
         int monsterSpellImmunity,
@@ -331,7 +334,7 @@ public static class MonsterMatchupCalculatorSpells
             // everything else is single-target. Drives the panel's spell grouping.
             bool isAoe = Game.Combat.DebuffTargeting.IsAreaEnemy(s.Targets);
 
-            if (s.ReqLevel < monsterSpellImmunity)
+            if (!isAoe && s.ReqLevel < monsterSpellImmunity)
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
                     s.ManaCostPerRound, Eligible: false,
@@ -345,7 +348,7 @@ public static class MonsterMatchupCalculatorSpells
                     s.ManaCostPerRound, Eligible: false, "Affects undead only — this monster isn't undead", IsAoe: isAoe));
                 continue;
             }
-            if (s.AffectsLivingOnly && monsterIsUndead)
+            if (!isAoe && s.AffectsLivingOnly && monsterIsUndead)
             {
                 results.Add(new SpellEffectivenessResult(s.Name, s.Short, element, 0,
                     s.ManaCostPerRound, Eligible: false, "Affects living only — this monster is undead", IsAoe: isAoe));
@@ -353,7 +356,7 @@ public static class MonsterMatchupCalculatorSpells
             }
 
             int resistCode = Game.Combat.MonsterResistIndex.ElementalResistCode(s.AttType);
-            int resistPercent = resistCode >= 0 && monsterElementalResists.TryGetValue(resistCode, out int pct)
+            int resistPercent = !isAoe && resistCode >= 0 && monsterElementalResists.TryGetValue(resistCode, out int pct)
                 ? pct : 0;
             if (resistPercent >= 100)
             {

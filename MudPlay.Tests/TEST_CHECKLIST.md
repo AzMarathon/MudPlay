@@ -716,6 +716,7 @@ How to keep it current:
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
 - Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line), fed as bytes through a `ServerFeed`.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
+- Spells: the harness resolves the character's spells by cast code as the spell book does (`SpellsByCode`, empty unless a test adds one), so a spell typed as the attack command (`harm`) is recognised as a spell.
 - Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
@@ -2460,8 +2461,8 @@ How to keep it current:
 
 ### MonsterMatchupCalculatorTests.cs
 - Covers: Game/Calculators/MonsterMatchupCalculator, MonsterMatchupCalculatorSpells
-- Checks: hit chance and DPS (dodge at floors, Stock DR multipliers, crits), prot/vile wards by alignment, spell ranking (immunity, resist, target type), weighted incoming hit.
-- Why: report paradigm-20261014-121847.
+- Checks: hit chance and DPS (dodge at floors, Stock DR multipliers, crits), prot/vile wards by alignment, spell ranking (immunity, resist, target type; a room spell ignores spell immunity, elemental resist and living-only, keeps undead-only), weighted incoming hit.
+- Why: report paradigm-20261014-121847; user 2026-10-23 (a room spell damages a monster whatever its spell immunity, both realms).
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)
@@ -3785,6 +3786,12 @@ How to keep it current:
 - Covers: ViewModels/GameData/Edit/SpellInfoRowsBuilder.BuildEffectTree
 - Checks: Room-spell textblock trees: conditional branches with tone, weighted outcomes, a collapsed teleport sweep with links, summons collapsed ×N, a mid-sequence `nomonsters` gate scoping, and an empty result for no textblock.
 - Why: The game-data spell record's effect tree (sea-crossing shape).
+
+### SpellEngageGateTests.cs
+- Covers: Game/Combat/CombatManager (JudgeEngage, CanEngageMonster, the give-up set, the no-mana re-announce) + CombatSpellChooser.EngagingAttackSpell, CombatStateTracker (the walker gate), CastCoordinator, PartyManager, EquipmentWeaponSync, SpellbookState and the game-data indexes over a real set on disk, driven through a `ServerFeed`
+- Checks: a spell typed as the attack command (`mmis`) with a weapon below the monster's magic in the Default gear set casts under every action order (Ermias's case), as does the spell in the attack-spell slot, and one typed after `cast` / `c`; a spell command under the monster's spell immunity is walked past. A spell command with a plain alternate (`mmis`, `a`) fights a monster only the weapon hurts: `a` after the spell's "no effect", or straight away when game data shows the spell can't land, and never walks past it; a per-monster physical override counts as the normal attack. A room attack as the only spell casts when the room meets its Min enemies, is walked past below it, and engages a monster whose spell immunity is over its level; an undead-only room attack with no undead here engages only in a party. A spell the monster resists outright engages it in a party (slot or attack command), not solo, and a spell that does damage goes first. A spell the chooser wouldn't cast (a type it can't affect, Max casts 0) doesn't make the monster engageable. A weapon below the monster's magic with no spell is Unkillable and walked past, the `cannot attack` line and the bug report's room assessment naming why. A target given up on when its cast cap ran out isn't re-picked in the room. "Fire regardless of current mana": in a party a spell short of its reserve, its cost or any mana is cast, solo or unticked it waits (StuckOnMana, no write-off); a refusal for mana latches no cast block and the spell goes again the next round; Max casts still caps it; an unticked refusal latches as before. An attack spell's cast counts as engaged only on `*Combat Engaged*`, not on `Your spell has no effect on …`, and after that "no effect" with the weapon unable too, nothing is swung: the monster is written off and the room re-read.
+- Time: one `ManualClock` read by the classifier, combat manager, cast coordinator, party manager and state tracker; Tick() is a 5 s round. Nothing waits on real time; no private member is reached by reflection. Combat-level logging is on, so its lines can be read.
+- Why: Ermias's report (no report file): a monster his weapon couldn't hit but MMIS could was never attacked until he took the weapon out of the Equipment Manager. User rulings 2026-10-23 on what engages a monster, the solo fully resisted spell, and "Fire regardless of current mana".
 
 ### SpellGrowthFormatterTests.cs
 - Covers: Game/Spells/SpellGrowthFormatter

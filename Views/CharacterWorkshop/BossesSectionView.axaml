@@ -42,7 +42,7 @@
                 <ComboBox ItemsSource="{Binding SpellImmunityOptions}"
                           SelectedItem="{Binding SelectedSpellImmunity, Mode=TwoWay}"
                           MinWidth="76"
-                          ToolTip.Tip="Show the bosses whose spell immunity is this level or lower: the ones a spell learned at that level lands on. The level is the spell's own, not yours. 0 shows the bosses with no spell immunity. Hover a boss's name for what it needs."/>
+                          ToolTip.Tip="Show the bosses whose spell immunity is this level or lower: the ones a single-target spell learned at that level lands on (a room spell lands whatever the immunity). The level is the spell's own, not yours. 0 shows the bosses with no spell immunity. Hover a boss's name for what it needs."/>
                 <TextBlock Text="or lower" VerticalAlignment="Center"
                            Foreground="{StaticResource ChromeFgSecBrush}"/>
             </StackPanel>

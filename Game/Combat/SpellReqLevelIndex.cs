@@ -6,9 +6,9 @@ namespace MudPlay.Game.Combat;
 // Fast lookup of a spell's ReqLevel (its learn-level requirement) by the spell's
 // Short cast-code in the active game-data set.
 //
-// Spell immunity gates by level: a spell affects a monster only when its
-// ReqLevel is ≥ the monster's SpellImmu (MonsterMagicIndex). This applies to
-// both attack spells and debuffs.
+// Spell immunity gates by level: a single-target spell affects a monster only
+// when its ReqLevel is ≥ the monster's SpellImmu (MonsterMagicIndex), attack
+// spell or debuff alike. A room attack ignores spell immunity.
 //
 // The key is the Short cast-code because the combat spell slots
 // (CombatSpellSlot.SpellName) store the cast-code that gets typed to the server,

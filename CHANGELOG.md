@@ -1,5 +1,12 @@
 # Version history
 
+## 3.185.37
+
+- A monster your weapon can't hit is fought with any attack spell that can hurt it, room spells and a spell set as the attack command included
+- The "cannot attack" log line names each weapon and spell weighed and why it was ruled out
+- New "Fire regardless of current mana" box on the attack spells: in a party the spell is cast whatever your mana
+- Monster Intel ranks room spells as usable against spell-immune and element-resistant monsters
+
 ## 3.185.35
 
 - A damaged settings file's rescued copies stay in the order made when several share one millisecond or the clock is set back

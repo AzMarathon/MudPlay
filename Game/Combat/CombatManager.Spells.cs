@@ -218,6 +218,42 @@ public sealed partial class CombatManager
         // Watch for a debuff the server rejects after our optimistic send so we can
         // roll the mark back and re-fire it next round (see _debuffAwaitingConfirm).
         _cast.CastFailed += OnCombatCastFailed;
+        _cast.SetNoManaRefusalExpected(FiresRegardlessOfMana);
+    }
+
+    // The attack spell the server is repeating for us is from a slot set to fire
+    // regardless of mana, with the character in a party.
+    private bool FiresRegardlessOfMana(string? code)
+    {
+        if (code is null || !_party.IsInParty || _lastCastAction is not { } action) return false;
+        if (!string.Equals(code, _announcedSpellCode, StringComparison.OrdinalIgnoreCase)) return false;
+        CombatSettings settings = _readSettings();
+        CombatSpellSlot? slot = action switch
+        {
+            CombatSpellAction.MultiAttack => settings.MultiAttackSpell,
+            CombatSpellAction.MultiAttack2 => settings.MultiAttack2Spell,
+            CombatSpellAction.NormalAttackSpell => settings.NormalAttackSpell,
+            CombatSpellAction.AlternateAttackSpell => settings.AlternateAttackSpell,
+            _ => null,
+        };
+        return slot is { FireRegardlessOfMana: true }
+            && string.Equals(slot.SpellName?.Trim(), code, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // The game refused a fire-regardless attack spell for mana. Nothing is latched,
+    // the target kept, the rung left in play; the announce is forgotten so the next
+    // round's heartbeat sends it again (one announce a round, as ever), and the
+    // round is made to exist when no combat line drives it. Not tallied toward
+    // MaxCasts: no cast landed.
+    private void ReannounceAfterNoMana(string? spell)
+    {
+        if (!FiresRegardlessOfMana(spell)) return;
+        _announcedSpellCode = null;
+        _spellAttackOwed = true;
+        _ensureCombatTickAnchor?.Invoke();
+        _log?.Combat(LogCategory,
+            $"{spell} refused for mana; it fires regardless of mana in a party, so it goes again next round "
+            + $"at {_castingSpellTarget ?? "(no target)"}");
     }
 
     // A cast the engine sent failed on the wire. Two rejections matter here, both for
@@ -229,6 +265,11 @@ public sealed partial class CombatManager
     // path (which owes-and-retries its own blocked send).
     private void OnCombatCastFailed(CastFailureReason reason, string detail, string? spell)
     {
+        if (reason == CastFailureReason.NotEnoughMana)
+        {
+            ReannounceAfterNoMana(spell);
+            return;
+        }
         if (reason is not (CastFailureReason.AlreadyCastThisRound or CastFailureReason.NoTargets)) return;
         if (reason == CastFailureReason.AlreadyCastThisRound) DisarmCastResumeOnRefusal();
         if (TryRollBackRejectedDebuff(reason, spell)) return;
@@ -591,6 +632,7 @@ public sealed partial class CombatManager
                     // (or continues) the channel; any other attack action switches off
                     // it, so drop the marker — the post-kill re-pick guard keys on it.
                     _roomChannelSpell = roomSpell ? decision.Spell : null;
+                    if (CombatSpellChooser.DealsNoDamage(decision, ctx)) LogNoDamageEngage(settings, ctx, decision, picked.RawName);
                     if (decision.Action == CombatSpellAction.DrainSpell)
                         _log?.Info(LogCategory,
                             $"drain-life {decision.Spell} vs {picked.RawName} — HP under trigger, overriding the round's attack");
@@ -1110,6 +1152,9 @@ public sealed partial class CombatManager
             }
             if (TryBuildCandidate(obs, target) is { } cand)
             {
+                // A switch off the spells onto the weapon, for a monster the weapon
+                // can't hurt, is a swing that can't land: give it up instead.
+                if (to is null && GaveUpUnengageable(settings, cand)) return;
                 LogSpellReannounce(reason, from, to, target, obs);
                 DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
             }
@@ -1575,13 +1620,14 @@ public sealed partial class CombatManager
     // Build the per-round chooser context for target, reading live mana and
     // folding in any room-scoped attack-spell immunity for that target's species.
     // Shared by the initial cast decision (DispatchRoundAction, passed enemyCount
-    // from the candidate build) and the per-round heartbeat (OnCombatTick,
-    // counting the live observation).
+    // from the candidate build), the per-round heartbeat (OnCombatTick, counting
+    // the live observation) and the engage gate (EngageContext), which may ask at
+    // a full pool (mana) and before any room is on record (obs null).
     private CombatSpellContext BuildContext(
-        CombatSettings settings, RoomEntitiesObservation obs, string target,
-        int enemyCount, int monsterNumber)
+        CombatSettings settings, RoomEntitiesObservation? obs, string target,
+        int enemyCount, int monsterNumber, (int Ma, int MaxMa)? mana = null)
     {
-        (int ma, int maxMa) = _readMana!();
+        (int ma, int maxMa) = mana ?? _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
         (string? altAttackOverride, int? altAttackCap) = AltAttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
         (string? preAttackOverride, int? preAttackCap) = PreAttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
@@ -1605,7 +1651,7 @@ public sealed partial class CombatManager
             TargetRawName:       target,
             Mana:                ma,
             MaxMana:             maxMa,
-            BackstabPending:     BackstabPending(settings, obs),
+            BackstabPending:     obs is { } room && BackstabPending(settings, room),
             ImmuneAttackSpells:  ImmuneActionsFor(target),
             // At literal 0 mana nothing that costs MA can land, no matter what a
             // slot's MinManaPerCast says (0 there means "no floor set", not "free").
@@ -1629,8 +1675,10 @@ public sealed partial class CombatManager
             AlternationPreferSpell: AlternationPreferSpell(settings),
             HpBelowDrainTrigger: hpBelowDrain,
             DrainTargetEligible: drainEligible,
-            RoomMobKeys:         CollectEngageableMobKeys(obs),
-            ManaCostOf:          _spellManaCost);
+            RoomMobKeys:         obs is { } listed ? CollectEngageableMobKeys(listed) : null,
+            ManaCostOf:          _spellManaCost,
+            InParty:             _party.IsInParty,
+            RoomAttacksNoDamage: RoomAttacksThatDamageNothing(settings, obs, monsterNumber));
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -1744,89 +1792,187 @@ public sealed partial class CombatManager
             overlay.OverridePreAttackMinMana, mana, maxMana, manaMode, _spellShortByNumber);
     }
 
-    // An override slot's cast-code and cap with no mana floor applied — for the
-    // callers that only ask WHICH spell occupies a rung.
-    private (string? Spell, int? Cap) ResolveSpellOverride(int? spellId, int? count) =>
-        CombatSpellGates.ResolveOverride(spellId, count, minMana: null, 0, 0, ThresholdMode.Absolute, _spellShortByNumber);
-
-    // Choose the alternate weapon when (a) this species already produced a "no
-    // effect" line vs the normal weapon this room, OR (b) game data says the
-    // normal weapon can't hit this monster but the alternate can. The magic check
-    // is deterministic: a weapon hits iff its HitMagic ≥ the monster's Magical
-    // level. Fails open — no swap — when the eligibility indexes aren't wired, the
-    // monster has no Magical level, the normal weapon is unknown, or the
-    // alternate can't hit either.
+    // Choose the alternate attack when (a) this species already produced a "no
+    // effect" line vs the normal attack this room, OR (b) game data says the normal
+    // attack can't hurt this monster but the alternate can. Fails open — no swap —
+    // when the normal attack's verdict is unknown, or the alternate can't be shown
+    // to hurt it either.
     private bool ShouldUseAlternateWeapon(
         CombatSettings settings, string resolvedSpecies, int monsterNumber)
     {
         if (_normalWeaponFailedMonsters.Contains(resolvedSpecies)) return true;
-        if (_monsterMagic is null || _itemMagic is null) return false;
-
-        int magical = _monsterMagic.MagicalLevel(monsterNumber);
-        if (magical <= 0) return false;                 // any weapon hits
-
-        int normalHit = NormalHitMagic(settings);
-        if (normalHit < 0) return false;                // unknown normal → don't second-guess
-        if (normalHit >= magical) return false;         // normal already hits → keep it
-
-        // Normal can't hit. Swap only if the alternate actually clears the bar.
-        return AlternateHitMagic(settings) >= magical;
+        if (AttackSideCanHurt(settings, alternate: false, monsterNumber, out _) != false) return false;
+        if (AttackSideCanHurt(settings, alternate: true, monsterNumber, out _) == true) return true;
+        // Neither hurts it: a spell side it resists still engages it in a party.
+        return !SideEngagesWithoutDamage(settings, alternate: false, resolvedSpecies, monsterNumber)
+            && SideEngagesWithoutDamage(settings, alternate: true, resolvedSpecies, monsterNumber);
     }
 
-    // True when neither configured weapon can damage the current target, so a
+    // True when neither attack side can damage the current target, so a
     // Physical-first round should fall back to the attack-spell cascade rather
-    // than swing uselessly. The path is exhausted when the normal weapon is out
-    // AND the alternate is out (or unconfigured); if either weapon can still hit,
-    // it isn't (ShouldUseAlternateWeapon owns the swap to a working alternate).
+    // than swing uselessly. The path is exhausted when the normal attack is out
+    // AND the alternate is out (or unconfigured); if either can still hurt it, it
+    // isn't (ShouldUseAlternateWeapon owns the swap to a working alternate).
     // Fails closed — keep swinging — when nothing proves ineffectiveness, so we
     // never divert to spells on missing data.
     private bool WeaponPathExhausted(
-        CombatSettings settings, string resolvedSpecies, int monsterNumber)
+        CombatSettings settings, string resolvedSpecies, int monsterNumber) =>
+        AttackSideOut(settings, alternate: false, resolvedSpecies, monsterNumber, out _)
+        && (!AlternateSideConfigured(settings)
+            || AttackSideOut(settings, alternate: true, resolvedSpecies, monsterNumber, out _));
+
+    // An alternate side is in play when it has a weapon of its own, or a command of
+    // its own: a swing after a spell command (`harm`, then `attack`), a strike, or a
+    // spell after a swing are different attacks even on the same weapon.
+    private static bool AlternateSideConfigured(CombatSettings settings) =>
+        !string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+        || (!string.IsNullOrWhiteSpace(settings.AlternateAttackCommand)
+            && !string.Equals(settings.AlternateAttackCommand.Trim(), settings.NormalAttackCommand?.Trim(),
+                StringComparison.OrdinalIgnoreCase));
+
+    // The command a side attacks with: the alternate's own, or on the normal side a
+    // per-monster physical override ahead of the configured command.
+    private string? SideCommand(CombatSettings settings, bool alternate, int monsterNumber) =>
+        (alternate ? settings.AlternateAttackCommand
+            : PhysicalCommandOverrideFor(monsterNumber) ?? settings.NormalAttackCommand)?.Trim();
+
+    // One attack side is out against this monster: the room fail-set names its
+    // species, or AttackSideCanHurt proves it can't. why says which, for the log.
+    private bool AttackSideOut(
+        CombatSettings settings, bool alternate, string resolvedSpecies, int monsterNumber, out string why)
     {
-        if (!WeaponCannotHit(NormalHitMagic(settings), resolvedSpecies, monsterNumber,
-                _normalWeaponFailedMonsters))
-            return false;
+        HashSet<string> failSet = alternate ? _alternateWeaponFailedMonsters : _normalWeaponFailedMonsters;
+        if (!string.IsNullOrEmpty(resolvedSpecies) && failSet.Contains(resolvedSpecies))
+        {
+            why = $"{SideLabel(settings, alternate, monsterNumber)} drew \"no effect\" on it this room";
+            return true;
+        }
+        return AttackSideCanHurt(settings, alternate, monsterNumber, out why) == false;
+    }
 
-        if (!string.IsNullOrWhiteSpace(settings.AlternateWeapon)
-            && !WeaponCannotHit(AlternateHitMagic(settings),
-                resolvedSpecies, monsterNumber, _alternateWeaponFailedMonsters))
-            return false;
+    // Whether one attack side can hurt this monster by game data: true, false, or
+    // null when it can't be told (the caller fails open). A spell typed as the
+    // attack command is judged as the spell it is (SpellCanHurt), never by the
+    // weapon in hand; a swing by the hit magic it lands with (AttackHitMagic).
+    // User, 2026-10-23: a weapon below the monster's magic can neither hit nor
+    // engage it, and a spell at or above its spell immunity can. GAME_MECHANICS
+    // "Weapons: "no effect" lines and the magical-weapon requirement".
+    private bool? AttackSideCanHurt(CombatSettings settings, bool alternate, int monsterNumber, out string why)
+    {
+        string? command = SideCommand(settings, alternate, monsterNumber);
+        string label = SideLabel(settings, alternate, monsterNumber);
+        if (SpellCommandCode(command) is { } spell)
+        {
+            bool lands = SpellCanHurt(spell, monsterNumber, out string? block);
+            why = lands ? $"{label} is a spell that can hurt it" : $"{label} is a spell that can't hurt it ({block})";
+            return lands;
+        }
+        if (_monsterMagic is null || _itemMagic is null)
+        {
+            why = $"{label}: no magic data, assumed to hurt it";
+            return null;
+        }
+        int magical = _monsterMagic.MagicalLevel(monsterNumber);
+        if (magical <= 0)
+        {
+            why = $"{label}: it needs no magic to hit";
+            return true;
+        }
+        int hit = AttackHitMagic(command, alternate ? AlternateWeaponHitMagic(settings) : NormalWeaponHitMagic(settings));
+        if (hit < 0)
+        {
+            why = $"{label}: hit magic unknown, assumed to hurt it (it needs {magical})";
+            return null;
+        }
+        why = $"{label} hits magic {hit}, it needs {magical}";
+        return hit >= magical;
+    }
 
+    // "normal attack `a` with katana": the side as the log names it.
+    private string SideLabel(CombatSettings settings, bool alternate, int monsterNumber)
+    {
+        string? command = SideCommand(settings, alternate, monsterNumber);
+        string side = alternate ? "alternate" : "normal";
+        if (SpellCommandCode(command) is not null) return $"{side} attack `{command}`";
+        if (MartialArtsCommand.IsStrike(command)) return $"{side} attack `{command}` (a martial-arts strike)";
+        // An alternate with no weapon of its own swings the normal one.
+        string? weapon = alternate && !string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            ? settings.AlternateWeapon : settings.NormalWeapon;
+        return string.IsNullOrWhiteSpace(weapon)
+            ? $"{side} attack `{command}` with no weapon set"
+            : $"{side} attack `{command}` with {weapon.Trim()}";
+    }
+
+    // The cast code an attack command names when it is one of the character's
+    // spells, typed alone (`mmis`) or after `cast` / `c` (`cast mmis`), else null:
+    // a swing.
+    private string? SpellCommandCode(string? command)
+    {
+        if (_resolveSpellByCode is null || string.IsNullOrWhiteSpace(command)) return null;
+        string[] words = command.Trim().Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        string word = words.Length > 1
+            && (words[0].Equals("cast", StringComparison.OrdinalIgnoreCase) || words[0].Equals("c", StringComparison.OrdinalIgnoreCase))
+            ? words[1] : words[0];
+        return _resolveSpellByCode(word) is not null ? word : null;
+    }
+
+    // What kind of attack a command is, for the bug report.
+    internal string AttackKindOf(string? command) =>
+        SpellCommandCode(command) is { } spell ? $"spell `{spell}`, judged by its level against spell immunity, not the weapon"
+        : MartialArtsCommand.IsStrike(command) ? "martial-arts strike, weapon not used"
+        : "weapon attack";
+
+    // Whether a single-target attack spell can hurt this monster, by game data: it
+    // engages it (SpellCanEngage) and the monster doesn't resist its element
+    // outright. Unknown data fails open (it can). GAME_MECHANICS "Why an attack
+    // spell fails to damage — three independent mechanics".
+    private bool SpellCanHurt(string code, int monsterNumber, out string? why)
+    {
+        if (!SpellCanEngage(code, monsterNumber, out why)) return false;
+        if (!SpellResisted(code, monsterNumber)) return true;
+        why = "the monster resists its element";
+        return false;
+    }
+
+    private bool SpellResisted(string code, int monsterNumber) =>
+        ResistBlockedFor(monsterNumber, code, null) is { Count: > 0 };
+
+    // Whether a single-target attack spell engages this monster: its level at or
+    // above the monster's spell immunity and a target type the monster has. One
+    // the monster resists outright engages it too, for no damage (user,
+    // 2026-10-23).
+    private bool SpellCanEngage(string code, int monsterNumber, out string? why)
+    {
+        if (_monsterMagic is not null && _spellReqLevel is not null)
+        {
+            int immu = _monsterMagic.SpellImmunity(monsterNumber);
+            int req = _spellReqLevel.ReqLevel(code);
+            if (immu > 0 && req >= 0 && req < immu)
+            {
+                why = $"its level {req} is under the monster's spell immunity {immu}";
+                return false;
+            }
+        }
+        if (TargetTypeBlockedFor(monsterNumber, code, null) is { Count: > 0 })
+        {
+            why = "it can't affect this kind of monster";
+            return false;
+        }
+        why = null;
         return true;
     }
 
-    // One weapon's effectiveness verdict against the current target: out when the
-    // room fail-set already names this species OR game data's HitMagic can't clear
-    // the monster's Magical level. Fails open (effective) when the eligibility
-    // indexes aren't wired or the weapon / monster levels are unknown — we don't
-    // second-guess a swing on missing data.
-    private bool WeaponCannotHit(
-        int hit, string resolvedSpecies, int monsterNumber, HashSet<string> failSet)
+    // A side whose command is a spell the monster resists outright: it engages the
+    // monster for no damage. Worth sending only in a party, whose kill then pays us
+    // the exp; solo nobody else would kill it. Never ahead of anything that hurts it.
+    private bool SideEngagesWithoutDamage(CombatSettings settings, bool alternate, string species, int monsterNumber)
     {
-        if (!string.IsNullOrEmpty(resolvedSpecies) && failSet.Contains(resolvedSpecies))
-            return true;
-        if (_monsterMagic is null || _itemMagic is null) return false;
-        int magical = _monsterMagic.MagicalLevel(monsterNumber);
-        if (magical <= 0) return false;                 // any weapon hits
-        if (hit < 0) return false;                       // unknown weapon → don't assume
-        return hit < magical;
-    }
-
-    // Why the weapons are out against a monster, for the skip line in the log: the
-    // magic it needs against what each weapon hits with, and any no-effect evidence
-    // from this room. Empty when the monster needs no magic and nothing was observed.
-    private string WeaponGateNote(CombatSettings settings, int monsterNumber, string? species)
-    {
-        int magical = _monsterMagic?.MagicalLevel(monsterNumber) ?? 0;
-        bool normalFailed = !string.IsNullOrEmpty(species) && _normalWeaponFailedMonsters.Contains(species);
-        bool altFailed = !string.IsNullOrEmpty(species) && _alternateWeaponFailedMonsters.Contains(species);
-        if (magical <= 0 && !normalFailed && !altFailed) return string.Empty;
-        return $" (needs hit magic {magical}; normal attack `{settings.NormalAttackCommand}` hits {NormalHitMagic(settings)}" +
-               (MartialArtsCommand.IsStrike(settings.NormalAttackCommand) ? " as a martial-arts strike, weapon not used" : string.Empty) +
-               (normalFailed ? ", no effect seen" : string.Empty) +
-               $"; alternate `{settings.AlternateAttackCommand}` hits {AlternateHitMagic(settings)}" +
-               (altFailed ? ", no effect seen" : string.Empty) +
-               $"; the character's own hit magic is {Math.Max(0, _innateHitMagic?.Invoke() ?? 0)}; -1 = unknown)";
+        if (!_party.IsInParty) return false;
+        if (alternate && !AlternateSideConfigured(settings)) return false;
+        HashSet<string> failSet = alternate ? _alternateWeaponFailedMonsters : _normalWeaponFailedMonsters;
+        if (!string.IsNullOrEmpty(species) && failSet.Contains(species)) return false;
+        return SpellCommandCode(SideCommand(settings, alternate, monsterNumber)) is { } spell
+            && SpellCanEngage(spell, monsterNumber, out _) && SpellResisted(spell, monsterNumber);
     }
 
     // The magic-hit level of the weapon that swings on the normal side, or -1 when
@@ -1863,7 +2009,14 @@ public sealed partial class CombatManager
 
     // The same for the alternate side: its weapon under its own attack command.
     private int AlternateHitMagic(CombatSettings settings) =>
-        AttackHitMagic(settings.AlternateAttackCommand, _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1);
+        AttackHitMagic(settings.AlternateAttackCommand, AlternateWeaponHitMagic(settings));
+
+    // The alternate's own weapon when it has one; without one the alternate command
+    // swings whatever the normal side does.
+    private int AlternateWeaponHitMagic(CombatSettings settings) =>
+        string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            ? NormalWeaponHitMagic(settings)
+            : _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
 
     // The magic-hit level an attack lands with, or -1 when unknown (callers fail
     // open). A class or race can carry hit magic of its own (a Mystic, a
@@ -1916,15 +2069,10 @@ public sealed partial class CombatManager
         int monsterNumber, string? normalCode, string? altCode) =>
         CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode);
 
-    // Deterministic actionability gate: can we kill this monster at all? True
-    // (engageable) unless game data proves we can neither hit it physically nor
-    // land an attack spell on it — i.e. both weapons' HitMagic are below the
-    // monster's Magical level AND every configured attack spell is level-blocked
-    // by its SpellImmu. Fail-open at every unknown (indexes unwired, monster has
-    // no Magical level, a weapon or spell is unknown) so a thin data set never
-    // makes us skip a monster we could actually fight. Consumed by
-    // OnEntitiesObserved (retarget / move-past) and, via the delegate AppServices
-    // injects, by CombatStateTracker (walker-gate release).
+    // Can the engine act on this monster this round. Consumed, via the delegate
+    // AppServices injects, by CombatStateTracker (the walker gate), and asks
+    // JudgeEngage, as the retarget loop does, so the gate and the round's pick
+    // can't disagree.
     public bool CanEngageMonster(int monsterNumber) =>
         AssessEngage(_readSettings(), monsterNumber, species: null) == EngageAssessment.CanAct;
 
@@ -1932,7 +2080,8 @@ public sealed partial class CombatManager
     // engageability verdict + weapon/spell magic data behind it. Frozen for the
     // bug report so a "skip un-actionable … Unkillable" decision is diagnosable
     // from the capture without combat logging being on or the scrollback still
-    // holding the line.
+    // holding the line. Why lists each attack side and attack spell weighed and
+    // what ruled it in or out.
     internal readonly record struct RoomEngageSnapshot(
         int MonsterNumber,
         string Species,
@@ -1941,13 +2090,13 @@ public sealed partial class CombatManager
         int NormalWeaponHit,
         int AltWeaponHit,
         EngageAssessment Assessment,
-        string? UnengageableReason);
+        string Why);
 
     // Snapshot every monster known in the current room (the room-scoped
-    // _speciesByNumber map, cleared on room change) with its live EngageAssessment
-    // and the raw magic numbers the gate weighs. Reuses the same _readSettings() /
-    // magic indexes the live path uses, so the report shows precisely what the
-    // engine decided.
+    // _speciesByNumber map, cleared on room change) with its live verdict and the
+    // raw magic numbers the gate weighs. Reuses the same _readSettings() / magic
+    // indexes the live path uses, so the report shows precisely what the engine
+    // decided.
     internal IReadOnlyList<RoomEngageSnapshot> SnapshotRoomEngage()
     {
         List<RoomEngageSnapshot> list = new(_speciesByNumber.Count);
@@ -1960,27 +2109,29 @@ public sealed partial class CombatManager
         {
             int magical = _monsterMagic?.MagicalLevel(number) ?? -1;
             int immu = _monsterMagic?.SpellImmunity(number) ?? -1;
+            EngageVerdict verdict = JudgeEngage(settings, number, species);
             list.Add(new RoomEngageSnapshot(
-                number, species, magical, immu, normalHit, altHit,
-                AssessEngage(settings, number, species),
-                UnengageableReason(settings, number)));
+                number, species, magical, immu, normalHit, altHit, verdict.Assessment, verdict.Why));
         }
         list.Sort((a, b) => a.MonsterNumber.CompareTo(b.MonsterNumber));
         return list;
     }
 
     // The runtime weapon fail-sets standing behind an Unkillable verdict. These
-    // hold observed "no effect" evidence, which UnengageableReason (pure game data)
-    // can't show — so a report where the engine walks past a monster game data says
-    // it should be able to hit has nothing to explain the decision without them.
-    // Room-scoped, cleared with the rest of the per-room state.
+    // hold observed "no effect" evidence, which game data can't show — so a report
+    // where the engine walks past a monster game data says it should be able to
+    // hit has nothing to explain the decision without them. Room-scoped, cleared
+    // with the rest of the per-room state.
     internal (IReadOnlyList<string> Normal, IReadOnlyList<string> Alternate) SnapshotWeaponFailSets()
         => (_normalWeaponFailedMonsters.ToArray(), _alternateWeaponFailedMonsters.ToArray());
+
+    // The monsters given up on mid-fight this room, for the bug report.
+    internal IReadOnlyList<string> SnapshotGivenUp() => _givenUpInstances.ToArray();
 
     // How the engine can act against a monster THIS round.
     internal enum EngageAssessment
     {
-        // A weapon can still hit it, or an attack spell is castable right now.
+        // An attack side can hurt it, or an attack spell would take the round now.
         CanAct,
         // Nothing is castable this round only because MA is short — transient.
         // Re-assessed on every observation, so once MA regenerates the spell
@@ -1988,154 +2139,186 @@ public sealed partial class CombatManager
         // regen"). The walker still moves on rather than stand getting beaten
         // waiting for a mana tick, but we do NOT permanently write the mob off.
         StuckOnMana,
-        // Permanently un-actionable this room: weapons can't hit (game-data or
-        // observed) AND every attack spell is blocked (immune / level / element-
-        // resist) or unconfigured. No amount of waiting helps.
+        // Nothing can engage it, even at full mana: no attack side can hurt it
+        // (game data or observed) and no attack spell would take the round —
+        // unset, immune, level / element / type blocked, its cast cap spent, or a
+        // room attack the room doesn't meet the settings for — or it was given up
+        // on mid-fight this room (GaveUpUnengageable).
         Unkillable,
     }
 
-    // Assess whether we can do anything to monsterNumber this round. Consumed by
-    // the retarget loop (which skips anything but CanAct, and only announces
-    // "cannot attack" on Unkillable) and, via CanEngageMonster, by the walker gate
-    // (which releases on StuckOnMana OR Unkillable — move on, don't sit and take
-    // hits waiting for mana). The optional species override lets the retarget loop
-    // pass EngageableCandidate.ResolvedName directly (so an unresolved -1 Number
-    // still gets its runtime check); the gate path passes only a Number and
-    // resolves the species from _speciesByNumber.
-    internal EngageAssessment AssessEngage(CombatSettings settings, int monsterNumber, string? species)
+    // What the engine can do against a monster this round, and why: each attack
+    // side and attack spell weighed, with what ruled it in or out.
+    internal readonly record struct EngageVerdict(EngageAssessment Assessment, string Why);
+
+    // Consumed by the retarget loop (which skips anything but CanAct and only
+    // announces "cannot attack" on Unkillable) and, via CanEngageMonster, by the
+    // walker gate. The optional species lets the retarget loop pass
+    // EngageableCandidate.ResolvedName directly (so an unresolved -1 Number still
+    // gets its runtime check); the gate path passes only a Number and resolves the
+    // species from _speciesByNumber.
+    internal EngageAssessment AssessEngage(CombatSettings settings, int monsterNumber, string? species) =>
+        JudgeEngage(settings, monsterNumber, species).Assessment;
+
+    // An attack side that can hurt the monster (a weapon swing, a strike, or a
+    // spell typed as the attack command) engages it. When neither can, a spell has
+    // to: JudgeSpellEngage. Fails open at every unknown (indexes unwired, a weapon
+    // or monster level unknown) so a thin data set never makes us skip a monster
+    // we could fight. rawName names the instance when the caller has it, so its own
+    // cast counts are the ones read (two of a species are two targets).
+    internal EngageVerdict JudgeEngage(CombatSettings settings, int monsterNumber, string? species, string? rawName = null)
     {
-        // Game data proves it un-killable (weapons can't hit + spells level/immu-blocked).
-        if (UnengageableReason(settings, monsterNumber) is not null)
-            return EngageAssessment.Unkillable;
+        species ??= _speciesByNumber.GetValueOrDefault(monsterNumber) ?? string.Empty;
 
-        species ??= _speciesByNumber.GetValueOrDefault(monsterNumber);
-        if (string.IsNullOrEmpty(species)) return EngageAssessment.CanAct;   // can't assess → assume actionable
+        if (GivenUpOn(monsterNumber, rawName))
+            return new EngageVerdict(EngageAssessment.Unkillable,
+                "given up on this room: its cast cap was spent or it proved immune mid-fight, and nothing else hurts it");
 
-        // A weapon that can still hit (not observed-failed, not game-data-blocked)
-        // keeps it actionable — swing.
-        if (!WeaponPathExhausted(settings, species, monsterNumber)) return EngageAssessment.CanAct;
-
-        // Both weapons are out. With no caster there's nothing left to try.
-        if (!CombatSpellsWired) return EngageAssessment.Unkillable;
-
-        (int ma, int maxMa) = _readMana!();
-        IReadOnlySet<CombatSpellAction>? immune = _attackSpellImmuneSpecies.GetValueOrDefault(species);
-
-        // Effective single-target kill spell per rung: the per-monster override when
-        // set, else the configured slot — so a monster only an override could kill is
-        // still assessed as actionable, not skipped by the walker. The override code
-        // is resolved mana-INDEPENDENTLY; its own floor feeds the reserve check below,
-        // so a mana-blocked override reads StuckOnMana (transient), never Unkillable.
-        // (When both an override and a lower-floor configured slot are set for one
-        // rung, engageability follows the override — the user's authoritative pick.)
-        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
-        (string? normalCode, int normalFloor) = EffectiveKillSpell(
-            overlay.OverrideAttackSpellId, overlay.OverrideAttackMinMana, settings.NormalAttackSpell);
-        (string? altCode, int altFloor) = EffectiveKillSpell(
-            overlay.OverrideAltAttackSpellId, overlay.OverrideAltAttackMinMana, settings.AlternateAttackSpell);
-
-        // Level / element-resist blocks weigh the EFFECTIVE spell too — an override is
-        // gated on its own ReqLevel / element. The single-debuff code is not a kill
-        // means, so it never decides this verdict.
-        IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(monsterNumber,
-            NullIfBlank(settings.SingleTargetDebuffSpell.SpellName), normalCode, altCode);
-        IReadOnlySet<CombatSpellAction>? resistBlocked = ResistBlockedFor(monsterNumber, normalCode, altCode);
-
-        bool anyUnaffordable = false;
-        ThresholdMode manaMode = settings.SpellManaThresholdMode;
-
-        // A rung is castable this round unless its spell is unconfigured, observed-
-        // immune, level- or resist-blocked, or unaffordable (which marks the transient
-        // mana stall rather than a permanent block). Shared by the normal + alternate
-        // rungs so the effective-spell gating stays in one place.
-        EngageAssessment? RungVerdict(string? code, int floor, CombatSpellAction action)
+        if (!AttackSideOut(settings, alternate: false, species, monsterNumber, out string normal))
+            return new EngageVerdict(EngageAssessment.CanAct, normal);
+        string sides = normal;
+        if (AlternateSideConfigured(settings))
         {
-            if (string.IsNullOrWhiteSpace(code)) return null;
-            if (immune?.Contains(action) == true) return null;
-            if (levelBlocked?.Contains(action) == true) return null;
-            if (resistBlocked?.Contains(action) == true) return null;
-            if (!CombatSpellChooser.ManaMeetsReserve(floor, ma, maxMa, manaMode))
-            {
-                anyUnaffordable = true;
-                return null;
-            }
-            return EngageAssessment.CanAct;
+            if (!AttackSideOut(settings, alternate: true, species, monsterNumber, out string alternate))
+                return new EngageVerdict(EngageAssessment.CanAct, alternate);
+            sides += "; " + alternate;
         }
+        else sides += "; no alternate attack";
 
-        if (RungVerdict(normalCode, normalFloor, CombatSpellAction.NormalAttackSpell) is { } nv) return nv;
-        if (RungVerdict(altCode, altFloor, CombatSpellAction.AlternateAttackSpell) is { } av) return av;
+        EngageVerdict spells = CombatSpellsWired
+            ? JudgeSpellEngage(settings, monsterNumber, species, rawName, sides)
+            : new EngageVerdict(EngageAssessment.Unkillable, sides + "; no combat spells");
+        if (spells.Assessment == EngageAssessment.CanAct) return spells;
 
-        // Nothing castable now: unaffordable-only means a mana tick fixes it
-        // (transient); otherwise every spell is permanently blocked / unconfigured.
-        return anyUnaffordable ? EngageAssessment.StuckOnMana : EngageAssessment.Unkillable;
+        // Nothing hurts it. In a party, a spell typed as an attack command that it
+        // resists outright still engages it, for no damage, and the party's kill pays.
+        foreach (bool alternate in new[] { false, true })
+            if (SideEngagesWithoutDamage(settings, alternate, species, monsterNumber))
+                return new EngageVerdict(EngageAssessment.CanAct,
+                    $"{spells.Why}; {SideLabel(settings, alternate, monsterNumber)} engages it in a party, for no damage");
+        return spells;
     }
 
-    // The effective single-target kill spell for a rung — the per-monster override
-    // (resolved mana-independently) when set, else the configured slot — paired with
-    // the mana floor that applies (the override's own, or the slot's).
-    private (string? Code, int Floor) EffectiveKillSpell(
-        int? overrideSpellId, int? overrideMinMana, CombatSpellSlot configured)
+    // No attack side can hurt it, so an attack spell has to. The chooser answers
+    // which would take the round with the weapon out (EngagingAttackSpell), every
+    // gate it applies to a round applied here too. None now but one at full mana
+    // is StuckOnMana; none at all is Unkillable. A room attack counts only under its
+    // own room settings: it is never fired at a lone monster because nothing else
+    // can hurt it (user, 2026-10-23; GAME_MECHANICS "Weapons: "no effect" lines and
+    // the magical-weapon requirement").
+    private EngageVerdict JudgeSpellEngage(
+        CombatSettings settings, int monsterNumber, string species, string? rawName, string sides)
     {
-        if (ResolveSpellOverride(overrideSpellId, null).Spell is { } code)
-            return (code, overrideMinMana ?? 0);
-        return (NullIfBlank(configured.SpellName), configured.MinManaPerCast);
+        RoomEntitiesObservation? obs = _classifier.Current;
+        // The monster being fought, by its instance name; asked by number alone (the
+        // walker gate), it's the one whose number the target resolves to.
+        bool current = _currentTarget is { } fighting && (rawName is not null
+            ? string.Equals(fighting, rawName, StringComparison.OrdinalIgnoreCase)
+            : monsterNumber >= 0 && obs is { } listed && ResolveMonsterNumber(listed, fighting) == monsterNumber);
+        string target = current ? _currentTarget! : rawName ?? species;
+        int enemies = obs is { } room ? Math.Max(1, CountEngageable(room)) : 1;
+
+        List<string> ruledOut = new();
+        CombatSpellContext now = EngageContext(settings, obs, target, enemies, monsterNumber, mana: null);
+        if (_spellChooser.EngagingAttackSpell(settings, now, current, ruledOut) is { } spell)
+            return new EngageVerdict(EngageAssessment.CanAct, $"{sides}; {spell.Spell} can engage it");
+
+        string why = ruledOut.Count == 0 ? "no attack spell set" : string.Join("; ", ruledOut);
+        CombatSpellContext full = EngageContext(settings, obs, target, enemies, monsterNumber, FullMana());
+        if (_spellChooser.EngagingAttackSpell(settings, full, current) is { } later)
+            return new EngageVerdict(EngageAssessment.StuckOnMana, $"{sides}; {why}; {later.Spell} once mana allows");
+        return new EngageVerdict(EngageAssessment.Unkillable, $"{sides}; {why}");
     }
 
-    // The reason we can't kill monsterNumber, or null when it's actionable.
-    // Physical eligibility is checked first (deterministic, fails open); only when
-    // both weapons are proven unable to hit do we consult the attack-spell rungs.
-    // An attack spell counts as a kill means when it's present (a per-monster
-    // override, else the configured slot) and either the monster has no spell
-    // immunity or the spell's ReqLevel clears it. Area / single-target debuffs are
-    // NOT kill means and never count here.
-    private string? UnengageableReason(CombatSettings settings, int monsterNumber)
+    // The chooser's context for asking about a monster with the weapon out: no
+    // backstab opener (it has no say in whether a monster can be engaged), at live
+    // mana or at the mana given.
+    private CombatSpellContext EngageContext(
+        CombatSettings settings, RoomEntitiesObservation? obs, string target, int enemyCount,
+        int monsterNumber, (int Ma, int MaxMa)? mana) =>
+        BuildContext(settings, obs, target, enemyCount, monsterNumber, mana)
+            with { WeaponIneffective = true, BackstabPending = false };
+
+    // A full pool: the max when it's known, else enough for any spell (a max of 0
+    // means the statline hasn't been read yet).
+    private (int Ma, int MaxMa) FullMana()
     {
-        if (_monsterMagic is null || _itemMagic is null) return null;   // unwired → fail open
-        if (monsterNumber < 0) return null;                             // unknown monster → fail open
-
-        int magical = _monsterMagic.MagicalLevel(monsterNumber);
-        if (magical <= 0) return null;                                  // any weapon hits
-
-        int normalHit = NormalHitMagic(settings);
-        if (normalHit < 0) return null;                                 // unknown normal weapon → fail open
-        if (normalHit >= magical) return null;                          // normal hits
-
-        int altHit = AlternateHitMagic(settings);
-        if (altHit < 0) return null;                                    // unknown alt weapon → fail open
-        if (altHit >= magical) return null;                             // alt hits
-
-        // Neither weapon can hit. The monster is actionable only if some attack
-        // spell can still land on it — weighing the per-monster override (resolved
-        // mana-independently) ahead of the configured slot for the normal/alternate
-        // rungs, so an override that clears the immunity keeps the monster killable.
-        if (_spellReqLevel is null) return null;                        // can't prove spell-blocked → fail open
-        int immu = _monsterMagic.SpellImmunity(monsterNumber);
-        MonsterOverlay overlay = ResolveOverlay(monsterNumber);
-        string? normalEff = ResolveSpellOverride(overlay.OverrideAttackSpellId, null).Spell
-                            ?? NullIfBlank(settings.NormalAttackSpell.SpellName);
-        string? altEff = ResolveSpellOverride(overlay.OverrideAltAttackSpellId, null).Spell
-                         ?? NullIfBlank(settings.AlternateAttackSpell.SpellName);
-        if (AttackSpellCanLand(normalEff, immu)) return null;
-        if (AttackSpellCanLand(altEff, immu)) return null;
-        if (AttackSpellCanLand(NullIfBlank(settings.MultiAttackSpell.SpellName), immu)) return null;
-        if (settings.MultiAttack2Enabled
-            && AttackSpellCanLand(NullIfBlank(settings.MultiAttack2Spell.SpellName), immu)) return null;
-
-        return $"weapons HitMagic<{magical} (normal={normalHit} alt={altHit}) " +
-               $"and no eligible attack spell (SpellImmu={immu})";
+        (int ma, int maxMa) = _readMana!();
+        return maxMa > 0 ? (Math.Max(ma, maxMa), maxMa) : (UnknownPoolMana, UnknownPoolMana);
     }
 
-    // True when code is an attack spell that can land on a monster with spell-
-    // immunity immu: a null/blank code is not a kill means; an unknown spell fails
-    // open (assume it works); otherwise the spell lands iff its ReqLevel is ≥ the
-    // immunity. Assumes _spellReqLevel is wired (the only caller checks first).
-    private bool AttackSpellCanLand(string? code, int immu)
+    private const int UnknownPoolMana = 1_000_000;
+
+    // The room-attack rungs whose spell can damage nothing here: an undead-only one
+    // with no undead in the room. Stock's room cast checks no other target class,
+    // and neither spell immunity nor element, so that is the only room-wide no-damage
+    // case; the cast still engages the caster with the room (GAME_MECHANICS
+    // "Weapons: "no effect" lines and the magical-weapon requirement"). A monster
+    // whose number isn't known could be undead, so it keeps the spell in play.
+    private IReadOnlySet<CombatSpellAction>? RoomAttacksThatDamageNothing(
+        CombatSettings settings, RoomEntitiesObservation? obs, int monsterNumber)
     {
-        if (string.IsNullOrWhiteSpace(code)) return false;              // no spell → not a kill means
-        int req = _spellReqLevel!.ReqLevel(code);
-        if (req < 0) return true;                                       // unknown spell → fail open
-        if (immu <= 0) return true;                                     // no immunity → any spell lands
-        return req >= immu;                                             // eligible iff ReqLevel ≥ SpellImmu
+        if (_spellTargetType is null || _monsterLife is null) return null;
+        bool AnyUndeadHere()
+        {
+            if (obs is not { } room) return _monsterLife.CanAffect(monsterNumber, SpellTargetType.UndeadOnly);
+            foreach (RoomEntity e in room.Entities)
+            {
+                if (e.Kind != EntityKind.Monster) continue;
+                if (e.MonsterNumber is not int n || _monsterLife.CanAffect(n, SpellTargetType.UndeadOnly)) return true;
+            }
+            return false;
+        }
+        HashSet<CombatSpellAction>? set = null;
+        void Check(string? code, CombatSpellAction action)
+        {
+            if (NullIfBlank(code) is not { } c) return;
+            if (_spellTargetType.TargetType(c) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
+            (set ??= new HashSet<CombatSpellAction>()).Add(action);
+        }
+        Check(settings.MultiAttackSpell.SpellName, CombatSpellAction.MultiAttack);
+        Check(settings.MultiAttack2Spell.SpellName, CombatSpellAction.MultiAttack2);
+        return set;
+    }
+
+    // Monsters given up on mid-fight this room (by instance name): the cascade lost
+    // its last rung on one (its cast cap spent, or a "no effect") with nothing else
+    // able to hurt it. A fresh pick of it would read the cast caps as a new target's
+    // and cast them all again, so it stays given up until the room clears.
+    private readonly HashSet<string> _givenUpInstances = new(StringComparer.OrdinalIgnoreCase);
+
+    // Asked by name, that instance; asked by number alone (the walker gate), every
+    // monster of that number the room shows has been given up on.
+    private bool GivenUpOn(int monsterNumber, string? rawName)
+    {
+        if (_givenUpInstances.Count == 0) return false;
+        if (rawName is not null) return _givenUpInstances.Contains(rawName);
+        if (monsterNumber < 0 || _classifier.Current is not { } room) return false;
+        bool any = false;
+        foreach (RoomEntity e in room.Entities)
+        {
+            if (e.Kind != EntityKind.Monster || e.MonsterNumber != monsterNumber) continue;
+            if (!_givenUpInstances.Contains(e.RawName)) return false;
+            any = true;
+        }
+        return any;
+    }
+
+    // The target a no-damage engagement was last logged for, so it is said once.
+    private string? _noDamageEngageLoggedFor;
+
+    // A spell cast for no damage, only to stay engaged for the party's kill: say so
+    // once per target, with what kept a damaging spell from the round.
+    private void LogNoDamageEngage(
+        CombatSettings settings, in CombatSpellContext ctx, CombatSpellDecision decision, string target)
+    {
+        if (string.Equals(_noDamageEngageLoggedFor, target, StringComparison.OrdinalIgnoreCase)) return;
+        _noDamageEngageLoggedFor = target;
+        List<string> why = new();
+        _spellChooser.EngagingAttackSpell(settings, ctx with { WeaponIneffective = true }, currentTarget: true, why);
+        _log?.Combat(LogCategory,
+            $"casting {decision.Spell} at {target} for no damage, to stay engaged for the party's kill "
+            + $"({(why.Count == 0 ? "nothing else set" : string.Join("; ", why))})");
     }
 
     // Resolve the MonsterNumber of the entity matching rawName in obs, or -1 when
@@ -2299,7 +2482,9 @@ public sealed partial class CombatManager
 
         // No distinct alternate, or the alternate already failed too → the whole
         // command chain is out for this species. Concede it and re-pick / move on.
-        AnnounceCannotAttack(species);
+        AnnounceCannotAttack(species, distinctAlternate
+            ? $"attack commands `{normal}` and `{alternate}` both drew \"no effect\""
+            : $"attack command `{normal}` drew \"no effect\" and there is no other");
         _currentTarget = null;
         TrySendRoomRefresh($"attack command ineffective vs {species} — re-pick / move on");
     }
@@ -2327,7 +2512,35 @@ public sealed partial class CombatManager
         if (_castingSpellTarget is not { } target) return;
         if (_classifier.Current is not { } obs) return;
         if (!TargetPresent(obs, target)) return;
-        if (TryBuildCandidate(obs, target) is { } cand)
+        if (TryBuildCandidate(obs, target) is { } cand && !GaveUpUnengageable(settings, cand))
             DispatchRoundAction(settings, cand, CountEngageable(obs), obs, bypassRecastInterval: true);
+    }
+
+    // A mid-fight re-decide on a target the cascade just lost something on (its
+    // only spell drew "no effect", its cast cap ran out, the party broke up under a
+    // spell that fired regardless of mana): when the engage verdict says nothing of
+    // ours can act on it now, the round's pick would be a swing that can't land.
+    // Give the target up instead, as the attack-command fallback does, and re-read
+    // the room to re-pick or move on. A write-off (Unkillable) is announced and the
+    // instance kept off the next pick for the room (_givenUpInstances), where its
+    // cast caps would read as a fresh target's; a mana stall is only retried.
+    private bool GaveUpUnengageable(CombatSettings settings, EngageableCandidate cand)
+    {
+        EngageVerdict verdict = JudgeEngage(settings, cand.MonsterNumber, cand.ResolvedName, cand.RawName);
+        if (verdict.Assessment == EngageAssessment.CanAct) return false;
+        if (verdict.Assessment == EngageAssessment.Unkillable)
+        {
+            AnnounceCannotAttack(cand.ResolvedName, verdict.Why);
+            _givenUpInstances.Add(cand.RawName);
+        }
+        else
+            _log?.Combat(LogCategory, $"leaving {cand.RawName} for now — {verdict.Assessment}: {verdict.Why}");
+        _castingSpellTarget = null;
+        _currentTarget = null;
+        if (!TrySendRoomRefresh($"nothing of ours can act on {cand.RawName} now — re-pick / move on"))
+            _log?.Combat(LogCategory,
+                $"gave up on {cand.RawName} with no room re-display sent (a dark room, or one asked for moments ago); "
+                + "the next room read, or the walker gate's stall watchdog, re-picks or moves on");
+        return true;
     }
 }

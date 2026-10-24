@@ -2,6 +2,7 @@ using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Map;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -33,6 +34,9 @@ public sealed class CombatManagerTests
         };
 
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
+        // The character's spells by cast code, as the spell book resolves them: an
+        // attack command naming one is a spell, not a swing. Empty by default.
+        public Dictionary<string, KnownSpell> SpellsByCode { get; } = new(StringComparer.OrdinalIgnoreCase);
         public string? OwnName { get; set; } = "MudPlay";
         public bool AutoCombatEnabled { get; set; } = true;
         // Drives the AttackPrevented gate — true = a stun/petrify/bind message is
@@ -102,6 +106,7 @@ public sealed class CombatManagerTests
                 readOwnGivenName: () => OwnName,
                 post: a => { if (DeferUi) _uiJobs.Enqueue(a); else a(); },
                 log: Log,
+                resolveSpellByCode: c => SpellsByCode.TryGetValue(c, out KnownSpell s) ? s : null,
                 now: () => Clock.Now);
             Combat.SetWireSender(b => Sent.Add(b));
             Combat.SetWeaponActuator((w, oh, force) => { Swaps.Add((w, oh)); SwapForced.Add(force); },
@@ -3066,6 +3071,7 @@ public sealed class CombatManagerTests
         // so the server's immunity reply is the SPELL line, not the weapon line.
         // The command path must still fall back to the alternate command.
         using Harness h = new();
+        h.SpellsByCode["harm"] = new KnownSpell(37, "harm", "harm", 2, 1, 1, 8, new SpellFormulaInput { EnergyCost = 1000 });
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "attack";
         h.AddMonster(1, "acid slime");
@@ -3076,6 +3082,7 @@ public sealed class CombatManagerTests
         h.Feed("Your spell has no effect on acid slime.");
 
         Assert.Equal("attack acid slime", h.LastSent);   // dropped to the alternate command
+        Assert.True(h.Combat.CanEngageMonster(1));       // the alternate swing still counts
     }
 
     [Fact]
@@ -3085,6 +3092,7 @@ public sealed class CombatManagerTests
         // command is genuinely ineffective here: drop the target and CR to re-pick
         // rather than re-hammering the immune command every round.
         using Harness h = new();
+        h.SpellsByCode["harm"] = new KnownSpell(37, "harm", "harm", 2, 1, 1, 8, new SpellFormulaInput { EnergyCost = 1000 });
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "harm";   // same → nothing to fall to
         h.AddMonster(1, "acid slime");
@@ -3119,6 +3127,7 @@ public sealed class CombatManagerTests
         // The physical override is trusted — a "no effect" line must NOT flip it to the
         // alternate command (it owns this species' physical rounds).
         using Harness h = new();
+        h.SpellsByCode["harm"] = new KnownSpell(37, "harm", "harm", 2, 1, 1, 8, new SpellFormulaInput { EnergyCost = 1000 });
         h.Settings.NormalAttackCommand = "harm";
         h.Settings.AlternateAttackCommand = "attack";
         h.AddMonster(1, "acid slime");
