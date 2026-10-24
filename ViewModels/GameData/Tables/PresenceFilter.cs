@@ -62,13 +62,13 @@ public sealed partial class PresenceFilter : ObservableObject
 
     public bool IsActive => !string.Equals(_committed, CategoryFilter.AnyOption, StringComparison.Ordinal);
 
-    public bool Passes(Func<string, string?> get)
+    public bool Passes(GameDataRow row)
     {
         if (!IsActive) return true;
         if (string.Equals(_committed, WithoutOption, StringComparison.Ordinal))
-            return !Parts.Any(p => _present(get(p.Column)));
+            return !Parts.Any(p => _present(row.Get(p.Column)));
         foreach (string column in _committedColumns)
-            if (_present(get(column))) return true;
+            if (_present(row.Get(column))) return true;
         return false;
     }
 

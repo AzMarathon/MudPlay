@@ -548,8 +548,9 @@ public sealed class RoomGraphManager
 
     // Per-monster placement: the rooms whose NPC field names the monster as their
     // fixed resident, sorted by map then room. Built with the lair snapshot and for
-    // the same reason: the monster record's Placed In list and the Monsters table's
-    // Placed in filter read it off the UI thread. Key = monster number.
+    // the same reason: the Monsters table's Placed in filter reads it off the UI thread,
+    // from its worker-thread build. The monster record's Placed In list reads it on the
+    // UI thread, so both share one placement source. Key = monster number.
     private IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> _placedRoomsByMonster
         = new Dictionary<int, IReadOnlyList<RoomKey>>();
     public IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> PlacedRoomsByMonster => _placedRoomsByMonster;
@@ -977,6 +978,7 @@ public sealed class RoomGraphManager
         _boatPassages.Clear();
         _castPocketEntrances.Clear();
         _placedRoomsByMonster = new Dictionary<int, IReadOnlyList<RoomKey>>();
+        _lairSizeByMonster = new Dictionary<int, (int, long, int)>();
     }
 
     // Recognise placed guardian monsters whose greet dialogue opens a door on
@@ -1810,7 +1812,7 @@ public sealed class RoomGraphManager
         foreach ((int monster, List<RoomKey> homes) in placed)
         {
             homes.Sort(static (a, b) => a.Map != b.Map ? a.Map.CompareTo(b.Map) : a.Room.CompareTo(b.Room));
-            placedSorted[monster] = homes;
+            placedSorted[monster] = homes.ToArray();
         }
         _placedRoomsByMonster = placedSorted;
     }

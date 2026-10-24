@@ -272,10 +272,15 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                         new PresencePart("Silver", "S"),
                         new PresencePart("Copper", "C"),
                     },
-                    FlagPresent,
+                    CarriesCoin,
                     "Coins the monster can carry. Drops cash keeps monsters carrying any of the ticked coins (none ticked = any coin)"),
             }));
     }
+
+    // A coin field counts when it holds a positive amount, as the record's Cash line reads it.
+    private static readonly Func<string?, bool> CarriesCoin =
+        static raw => int.TryParse(raw, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int n) && n > 0;
 
     // A flag facet stores "1" when present, blank otherwise.
     private static readonly Func<string?, bool> FlagPresent = static raw => !(raw is null or "" or "0");

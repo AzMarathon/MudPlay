@@ -607,7 +607,7 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
             if (!c.Passes(row.GetDisplay(c.Column)))
                 return false;
         foreach (PresenceFilter p in _activePresences)
-            if (!p.Passes(row.Get))
+            if (!p.Passes(row))
                 return false;
         return true;
     }

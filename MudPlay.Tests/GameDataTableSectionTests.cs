@@ -486,6 +486,43 @@ public sealed class GameDataTableSectionTests : IDisposable
     }
 
     [Fact]
+    public async Task SetSwitch_ToSetWithoutRooms_EmptiesPlacementAndLairSnapshots()
+    {
+        // Set A places Gold miser and Rune lord and lairs Copper beggar; set B has the
+        // same monsters and no Rooms.json. The graph follows set switches ahead of the
+        // table, as AppServices wires it, so after the switch nobody reads as placed or
+        // laired — the previous set's snapshots must not carry over.
+        SeedMonsters("setA", CashMonsters);
+        SeedTable("setA", "Rooms",
+            "[" + NpcRoom(3, 9, 4) + "," + NpcRoom(2, 7, 2) + "," + LairRoom(4, 1, 3, 6) + "]");
+        SeedMonsters("setB", CashMonsters);
+        RoomGraphManager graph = new(_cache);
+        _cache.ActiveSetChanged += graph.OnActiveSetChanged;
+        _cache.SwitchSet("setA");
+        MonstersSectionViewModel vm = new(_cache, roomGraph: graph);
+        await vm.LoadAsync();
+
+        Bool(vm, "Placed").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Gold miser", "Rune lord" }, Names(vm));
+        Bool(vm, "Placed").IsChecked = false;
+        Range(vm, "Lairs").Min = 1;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "Copper beggar" }, Names(vm));
+
+        _cache.SwitchSet("setB");
+
+        Assert.Empty(graph.PlacedRoomsByMonster);
+        Assert.Empty(graph.LairSizeByMonster);
+        Assert.Empty(vm.FilteredRows);                 // # Lairs ≥ 1 keeps nobody
+        Range(vm, "Lairs").Min = null;
+        Bool(vm, "Placed").IsChecked = true;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Empty(vm.FilteredRows);                 // Placed in keeps nobody
+        Assert.Equal(7, vm.AllRows.Count);
+    }
+
+    [Fact]
     public async Task CashAndPlacedFilters_CombineWithSearch()
     {
         MonstersSectionViewModel vm = await PlacedMonstersAsync();

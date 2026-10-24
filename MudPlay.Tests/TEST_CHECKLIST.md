@@ -1413,7 +1413,7 @@ How to keep it current:
 
 ### GameDataTableSectionTests.cs
 - Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel, PresenceFilter; Game/Map/RoomGraphManager.PlacedRoomsByMonster
-- Checks: toggle summary; lazy load; lair columns; search on Enter incl. display labels; range/bool/category/flag filters; synthesised columns; reload on set change; status text; Monsters Cash filter (any / drops cash / no cash, each currency, ticked currencies match any, Reset clears); Placed in checkbox from the graph's sorted placement snapshot; cash + placed + search combined.
+- Checks: toggle summary; lazy load; lair columns; search on Enter incl. display labels; range/bool/category/flag filters; synthesised columns; reload on set change; status text; Monsters Cash filter (any / drops cash / no cash, each currency, ticked currencies match any, Reset clears); Placed in checkbox from the graph's sorted placement snapshot; placement and lair snapshots emptied on a switch to a set without rooms; cash + placed + search combined.
 - Why: report paradigm-20260814-103219 (stacked filters); the Monsters tab's Cash and Placed in filters.
 
 ### GameTableTests.cs
