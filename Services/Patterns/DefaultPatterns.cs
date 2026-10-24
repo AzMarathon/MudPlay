@@ -310,12 +310,13 @@ public static class DefaultPatterns
             @"^(?:The )?[\w' -]+? \w+s at [\w' -]+[.!]\s*$");
         // A monster's blow that names its weapon and its victim — see
         // KnownPatterns.MonsterWeaponBlow. "The " leads, as a monster's line does (a
-        // player's never). The victim is us or a capitalized name, so the blow is on
-        // our side of the fight. A swing "at you" (MobMisses) and a damage line
-        // (MobHits / UserHits) are left to their own patterns, so the empty-room net
-        // isn't woken twice by one line.
+        // player's never). The victim is "you" or a capitalized name, captured; the
+        // pattern can't tell a party member's name from a stranger's, so its reader
+        // (CombatManager) checks it against the party. No line with the word "at" is
+        // taken: a swing "at you" is MobMisses', and "at <name> with …" is
+        // OtherAttacksWithWeapon's. A damage line is MobHits' / UserHits'.
         yield return new RegexPattern(KnownPatterns.MonsterWeaponBlow,
-            @"^The (?![^\n]*\bat you\b)(?![^\n]*\bfor \d+ damage\b)[\w' -]+? \w+ (?:you|[A-Z][\w']*) "
+            @"^The (?![^\n]*\bat\b)(?![^\n]*\bfor \d+ damage\b)[\w' -]+? \w+ (?<victim>you|[A-Z][\w']*) "
           + @"with (?:its|their|his|her) [\w' -]+[.!]\s*$");
 
         // Local-player death: the victim's own line for every death by damage,

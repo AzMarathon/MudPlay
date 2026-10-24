@@ -858,6 +858,7 @@ public sealed class CombatManagerTests
         h.AddMonster(3222, "Archmage Lance");
         h.AddMonster(260, "depraved murderer");
         h.SetOverlay(3222, relationship: MonsterRelationship.Friend);
+        h.Party.Members.Add(new PartyMember { Name = "Ironbar" });
 
         h.Server.Line("Also here: Archmage Lance.");
         Assert.Null(h.Combat.CurrentTarget);
@@ -869,6 +870,23 @@ public sealed class CombatManagerTests
         h.Server.Line("Also here: Archmage Lance, big depraved murderer.");
         Assert.Equal("big depraved murderer", h.Combat.CurrentTarget);
         Assert.Equal("a big depraved murderer", h.LastSent);
+    }
+
+    // The same blow on someone outside the party (a guard fighting a stranger in our
+    // room) is none of our fight: no re-display, and the roster stays whole.
+    [Fact]
+    public void MonsterWeaponBlow_OnAStranger_AsksForNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(3222, "Archmage Lance");
+        h.SetOverlay(3222, relationship: MonsterRelationship.Friend);
+        h.Party.Members.Add(new PartyMember { Name = "Ironbar" });
+
+        h.Server.Line("Also here: Archmage Lance.");
+        h.Server.Line("The town guard strikes Bob with his sword!");
+
+        Assert.Equal(0, h.CrRefreshSends);
+        Assert.True(h.Classifier.RosterIsWhole);
     }
 
     // Report paradigm-20261022-174021: Manaspring Source's room spell summons with

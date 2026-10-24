@@ -709,7 +709,7 @@ How to keep it current:
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, Manaspring's summon line), fed as bytes through a `ServerFeed`.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line), fed as bytes through a `ServerFeed`.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
 - Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
 
@@ -755,7 +755,7 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty.
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap).
 - Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
@@ -1885,9 +1885,9 @@ How to keep it current:
 - Why: the warhorn was labelled as Weapon Hand
 
 ### LairDoorMonsterCountTests.cs
-- Covers: Game/Combat/CombatStateTracker.HostilesOutsideCountWindow, read by Game/Map/LairEntryDebuffHold as AppServices wires its fightAnswered; room rows fed through a `ServerFeed`, time on a `ManualClock`.
-- Checks: a lone monster under Min Monsters swinging at the door doesn't park the loop; two monsters inside the window are still a fight waited out; a second arrival brings the room back into the window.
-- Why: paradigm-20261023-005038, a loop parked outside a lair for good while a lone rat swung at the character.
+- Covers: the Min Monsters floor lifted while a loop waits at a lair's door: Game/Combat/MonsterCountGate.Bounds read by CombatManager and CombatStateTracker through SetLairDoorWaitProbe, LairEntryDebuffHold.WaitingAtTheDoor / DoorWaitStarted, and its fightAnswered through LairEntryDebuffHold.FightIsAnswered and CombatManager.RoomSkippedForMonsterCount, wired as AppServices wires them; room rows fed through a `ServerFeed`, time on a `ManualClock`.
+- Checks: outside a door wait a lone monster is walked past; during one it is fought, the wait stands through that fight and goes in once the room is clear; a monster already there when the wait begins is fought; a room over the Max at the door is no fight to wait out.
+- Why: paradigm-20261023-005038, a loop parked outside a lair for good while a lone rat swung at the character; the user's ruling of 2026-10-23.
 
 ### LairEditorDialogViewModelTests.cs
 - Covers: ViewModels/Navigation/LairEditorDialogViewModel

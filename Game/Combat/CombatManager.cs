@@ -199,6 +199,7 @@ public sealed partial class CombatManager : IDisposable
     // see SetMovementActiveGate. null until wired → fail-open (the gate
     // always applies, this check's original unconditional behavior).
     private Func<bool>? _isMovementActive;
+    private Func<bool>? _waitingAtLairDoor;
 
     // Reports whether an AttackPrevented condition is active on us
     // (ConditionTracker.IsAttackPrevented) — a stun/petrify/etc. line latched and
@@ -1120,7 +1121,7 @@ public sealed partial class CombatManager : IDisposable
         _userHitsSub  = router.Subscribe(KnownPatterns.UserHits,  OnCombatLine);
         _mobHitsSub   = router.Subscribe(KnownPatterns.MobHits,   OnCombatLine);
         _mobMissesSub = router.Subscribe(KnownPatterns.MobMisses, OnCombatLine);
-        _mobWeaponBlowSub = router.Subscribe(KnownPatterns.MonsterWeaponBlow, OnCombatLine);
+        _mobWeaponBlowSub = router.Subscribe(KnownPatterns.MonsterWeaponBlow, OnMonsterWeaponBlow);
         // Self-defense marking rides the same incoming-attack lines (each carries the
         // attacker's name in group 0). Separate from OnCombatLine because that also
         // fires on our OWN UserHits, which aren't an incoming attack.
@@ -1244,6 +1245,23 @@ public sealed partial class CombatManager : IDisposable
         ArgumentNullException.ThrowIfNull(isMovementActive);
         _isMovementActive = isMovementActive;
     }
+
+    // Wire the "a loop stands at a lair's door waiting to go in" probe
+    // (LairEntryDebuffHold.WaitingAtTheDoor): the Min floor is lifted there, so the
+    // lone monster that wanders in is fought (MonsterCountGate.Bounds). Until set,
+    // the floor always holds.
+    public void SetLairDoorWaitProbe(Func<bool> waitingAtLairDoor)
+    {
+        ArgumentNullException.ThrowIfNull(waitingAtLairDoor);
+        _waitingAtLairDoor = waitingAtLairDoor;
+    }
+
+    // The last room read was passed over by the Min/Max monster window: the
+    // engine doesn't fight its monsters, however long they swing at us. A wait
+    // that stands until "the fight" is over must not wait for this one (report
+    // paradigm-20261023-005038). Read off this engine's own decision, Party-tab
+    // cap included.
+    public bool RoomSkippedForMonsterCount { get; private set; }
 
     // Wire the attack-prevented probe (ConditionTracker.IsAttackPrevented). While
     // it returns true the engine issues no attack — see _attacksPrevented /
@@ -1913,6 +1931,7 @@ public sealed partial class CombatManager : IDisposable
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
+        RoomSkippedForMonsterCount = false;
         // A room display (or the room-change wipe) supersedes an arrival held for our
         // move: we've landed, and what's here is on the new roster.
         if (obs.Source is RoomObservationSource.AlsoHere or RoomObservationSource.RoomChange)
@@ -2174,15 +2193,13 @@ public sealed partial class CombatManager : IDisposable
         // with Max=2 — releasing the walker gate doesn't help when there's no
         // walker running to begin with). Unwired _isMovementActive fails open
         // to the gate always applying, matching this check's original,
-        // unconditional behavior.
+        // unconditional behavior. For the same reason a loop standing at a lair's
+        // door, waiting to go in, has no Min floor (MonsterCountGate.Bounds).
         if (!forceClearOverride && (_isMovementActive?.Invoke() ?? true))
         {
-            int min = Math.Max(0, settings.MinMonstersInRoom);
-            int max = settings.MaxMonstersInRoom > 0 ? settings.MaxMonstersInRoom : int.MaxValue;
-            // In an active party the Party-tab cap overrides the Combat
-            // upper bound (the lower bound stays Combat-owned).
-            if (_party.IsInParty && _readPartySettings?.Invoke() is { MaxMonstersWhenPartying: > 0 } ps)
-                max = ps.MaxMonstersWhenPartying;
+            (int min, int max) = MonsterCountGate.Bounds(settings,
+                MonsterCountGate.PartyCap(_party.IsInParty, _readPartySettings?.Invoke()),
+                waitingAtLairDoor: _waitingAtLairDoor?.Invoke() == true);
             if (min > max)
             {
                 // Misconfig — treat as off and warn once per room observation.
@@ -2206,6 +2223,7 @@ public sealed partial class CombatManager : IDisposable
                     // Clear target so we don't keep swinging at an old pick
                     // that's now out-of-window after a kill.
                     _currentTarget = null;
+                    RoomSkippedForMonsterCount = true;
                     return;
                 }
 
@@ -3831,6 +3849,18 @@ public sealed partial class CombatManager : IDisposable
             // resolves — a hostile that leapt in must engage before we step past it.
             RoomAppearsEmptyDuringCombat?.Invoke();
         }
+    }
+
+    // A monster's weapon blow (KnownPatterns.MonsterWeaponBlow) is a combat line of
+    // ours only when it lands on our side: us, or a party member. A guard or Friend
+    // NPC fighting a stranger in our room would otherwise mark the roster short
+    // and ask for the room every round.
+    private void OnMonsterWeaponBlow(MatchResult match)
+    {
+        if (match.Groups.Count == 0) return;
+        string victim = match.Groups[0];
+        if (!string.Equals(victim, "you", StringComparison.Ordinal) && !_party.HasMember(victim)) return;
+        OnCombatLine(match);
     }
 
     // Pre-emptive sibling of OnCombatLine, keyed on a directionless spawn line

@@ -1115,8 +1115,11 @@ public static class BugReportBuilder
         Kv(sb, "Combat gate",
             $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
             + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)")
-            + (svc.CombatTracker.HostilesOutsideCountWindow
-                ? "; the room's monsters are outside the Min/Max monster window: walked past, not fought"
+            + (svc.Combat.RoomSkippedForMonsterCount
+                ? "; the last room read was passed over for the Min/Max monster window: walked past, not fought"
+                : string.Empty)
+            + (svc.LairDebuffHold.WaitingAtTheDoor
+                ? "; no Min Monsters floor while the loop waits at a lair's door"
                 : string.Empty));
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.

@@ -1165,6 +1165,25 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.Tracker.SeeHiddenClearActive);
     }
 
+    // In a party the Party tab's cap replaces the Combat tab's Max, as it does for
+    // CombatManager: a room over it doesn't hold the walker for a fight the combat
+    // engine won't open (review of report paradigm-20261023-005038's fix).
+    [Fact]
+    public void PartyMonsterCap_ReplacesTheMax_AsCombatManagerReadsIt()
+    {
+        using Harness h = new();
+        h.WireMonsterCountWindow();
+        h.AddMonster(1, "brigand");
+        h.Tracker.SetPartyMonsterCap(() => MonsterCountGate.PartyCap(
+            inParty: true, new PartySettings { MaxMonstersWhenPartying = 2 }));
+
+        h.Feed("Also here: brigand, brigand, brigand.");
+        Assert.False(h.CombatGateHeld);
+
+        h.Feed("Also here: brigand, brigand.");
+        Assert.True(h.CombatGateHeld);
+    }
+
     // Once stopped, the room is cleared whatever the count does: a third monster
     // walking in doesn't turn the clear into a room to leave.
     [Fact]
