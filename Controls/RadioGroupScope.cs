@@ -11,11 +11,13 @@ namespace MudPlay.Controls;
 // Settings window builds all its section views before they are shown (for its
 // search), so a closed window's views, until they are collected, share their groups
 // with the next window's. Checking a box in the new view then unchecks its twin in
-// the old one, which writes into the old view's model. Where that model checks the
-// pair's other half in answer (a pair bound to one bool and its inverse), Avalonia
-// adds the re-checked box to the very list it is walking, every time, so the walk
-// never ends: the UI thread spins, allocating, until the client is killed (report
-// paradigm-20261019-095332).
+// the old one, which writes into the old view's model. On Avalonia 12.0.2, where that
+// model checked the pair's other half in answer (a pair bound to one bool and its
+// inverse), the re-checked box was added to the very list being walked, every time,
+// so the UI thread spun until the client was killed (report
+// paradigm-20261019-095332). Avalonia 12.0.4 stopped filing a button twice, which
+// ends that loop, but the shared registry and the write into the closed view's
+// model remain.
 //
 // ToThisView suffixes each group name with the view's own number, so each copy has
 // groups of its own. Call it in the constructor, right after InitializeComponent,

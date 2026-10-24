@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.185.30</Version>
+    <Version>3.185.31</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -145,17 +145,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.2" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.2" />
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
     <!-- DataGrid widget — first-party Avalonia control shipped as a
          separate package; powers the Game Data Browser tables. -->
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
     <!-- Diagnostics overlay (F12 dev tools) — only pulled in for Debug
          builds so Release ships without it. -->
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
