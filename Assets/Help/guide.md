@@ -3453,7 +3453,7 @@ The tab **opens sorted by the 100% timer with running timers on top**, so a fres
 
 **Filtering to what you can hurt.** Dropdowns beside the filter box narrow the table by what it takes to damage a boss:
 - **Hit magic**, a lowest and a highest: the bosses whose weapon requirement falls between the two. Set both to the same level to see that level alone (1 to 1), or apart for several together (1 to 2). With only the highest set, it is every boss a weapon of that level can hit; **0** is a weapon with no magic.
-- **Spell immune … or lower**: the bosses whose spell immunity is that level or lower. The immunity is the level a spell has to be learned at to land (the spell's own level, not yours), so pick the level your attack spell reaches to see what it works on. **0** shows the bosses with no spell immunity.
+- **Spell immune … or lower**: the bosses whose spell immunity is that level or lower. The immunity is the level a single-target spell has to be learned at to land (the spell's own level, not yours; a room spell lands whatever the immunity), so pick the level your attack spell reaches to see what it works on. **0** shows the bosses with no spell immunity.
 
 Each dropdown lists the levels the bosses in your table actually have. **(Any)** switches a dropdown off, and they all combine with each other and with the filter box. Hover a boss's name to see what it needs. For a boss that turns into something else as it dies (Lord Chisholm into the malformation), it is the highest any of them asks for, since the boss isn't dead until the last one is. Boxes and chests need nothing. The bulk toggles act on whatever the filters leave showing.
 

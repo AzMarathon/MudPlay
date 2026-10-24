@@ -2323,7 +2323,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
     - The command counts the room's valid targets (`_count_valid_targets` @0x4402e2, each through `_is_valid_monster_target` @0x43f1e4, which reads the spell's `Targets` and the guard / angel / Lawful Good / charm rules of *Room-attack spells: cast bare, persistent channel*, not spell immunity). With any, it queues the caster with no target monster, `_engage_autocombat(caster, -1, 0xffff, 1, spell)` @0x4404b9, the entry whose share of every kill in the room `_distribute_experience` pays.
     - Spell immunity (ability 139) is read nowhere in `_cast_no_target`. Its only reads in the DLL are `_monster_cast` @0x427e1c, `_cast_user_target` @0x444e3a, `_cast_monster_target` @0x447901 and `_room_cast_on_monster` @0x475a23.
     - Per monster, the damage loop skips one the spell can't affect, an undead-only spell (ability 23) at a monster that isn't undead printing `Your spell has no effect on %s.` (@0x441905–0x44194b, again @0x44208b), and one that passes its magic-resist roll (ability 36) printing `The %s resists your spell!` (@0x441992–0x441a46). Neither touches the caster's queued entry.
-    - **So a room attack damages a monster whatever its spell immunity or elemental resist**: those are the only per-monster stops in `_cast_no_target`. No elemental resist (abilities 3, 5, 65, 66, 147) is read there either, and ability 23 is the only target class it checks. A monster immune to the spell takes the damage, with the spell's ordinary damage line. *(Same DLL reading; same on Paradigm per the user's 2026-10-23 answer for this path.)*
+    - **So a room attack damages a monster whatever its spell immunity or elemental resist**: those are the only per-monster stops in `_cast_no_target`. No elemental resist (abilities 3, 5, 65, 66, 147) is read there either, and ability 23 is the only target class it checks. A monster immune to the spell takes the damage, with the spell's ordinary damage line. *(Same DLL reading; [CONFIRMED] 2026-10-23, user, for Stock and Paradigm: "yes, that is right on both".)*
   - **Client policy** *(user, 2026-10-23)*: **a room spell keeps to the room-spell settings** (Min enemies, Max casts, Auto-Nuke, mana). It is never cast at a lone monster just because nothing else can hurt it.
 - **Hit-magic (the "magical" to-hit level) only matters on weapons** *([CONFIRMED])*. It's the weapon's magical hit level compared above against a monster's magical defense; nothing else consults it. If a non-weapon item (armour / jewellery) carries a hit-magic ability value it's inert — the game ignores it. (The Stock routine agrees for ability 28, which it reads from the wielded weapon alone. This is about items: a class's own `HitMagic` is the character's, covered above.)
 
@@ -2334,7 +2334,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - A fists or feet line drawn by a strike is booked like the weapon line (`CombatManager.OnFistsNoEffect`): the species is written off for that attack and the next pick moves on. From a weapon attack it still means the hand is empty, and the weapon is put back.
 - **Whether a monster can be engaged is one question, asked of the spell chooser** (`CombatManager.JudgeEngage`, behind `CanEngageMonster`, the walker gate and the retarget loop; since 2026-10-23, Ermias's case). An attack side that can hurt it engages it (`AttackSideCanHurt`). Otherwise `CombatSpellChooser.EngagingAttackSpell` walks the attack-spell cascade with the weapon out, every gate of a round applied: the room-attack slots under their room settings, Max casts, the mana reserve and the spell's cost, immunity, level, element and target type. A room spell counts for every monster in the room, whatever its spell immunity (`CombatSpellChooser.RoomRungBlock` reads nothing of the one monster; the per-monster exclusion this first shipped with was dropped the same day on the DLL reading and the user's ruling). A single-target spell the monster resists outright, and an undead-only room attack with no undead in the room (`RoomAttacksThatDamageNothing`), count as engaging it only in a party, and only once nothing that does damage would fire (`TryAttackSpellOrEngage`, `CombatManager.SideEngagesWithoutDamage`); the log says so once per target at Combat level (`LogNoDamageEngage`). **Solo nobody else would kill it, so it's still walked past there** *([CONFIRMED] 2026-10-23, user: asked whether a solo character should cast a fully resisted spell, "no")*. A target given up on mid-fight (its cast cap spent or a "no effect", nothing else hurting it) is kept off the next pick until the room clears (`CombatManager._givenUpInstances`), or a fresh pick would read its cap as a new target's and cast again. A spell that would fire at full mana makes it `StuckOnMana` (left for now), none `Unkillable` (written off, the `cannot attack` line naming each attack and spell weighed and what ruled it out).
 - **A spell typed as the attack command is judged as a spell** (`CombatManager.SpellCommandCode`, `SpellCanHurt`, `SpellCanEngage`): its level against the monster's spell immunity, its target type and element, never the weapon in hand. A code typed after `cast` or `c` counts too. The alternate attack is weighed beside it whenever it has its own command or its own weapon (`AlternateSideConfigured`), by the alternate weapon or else the normal one (a strike by the class's own hit magic), so `harm` with `attack` as the alternate still fights a monster `harm` can't touch (*Attack-command "no effect" fallback*). A per-monster physical override is the normal side's command where set. Ermias's case: `mmis` as the attack command was judged by the Default gear set's katana (hit magic 3) against a monster needing 4, and never sent until the katana was taken out of the set.
-- **"Fire regardless of current mana"** (`CombatSpellSlot.FireRegardlessOfMana`, the four attack-spell rows) **Client policy** *(user, 2026-10-23: "if we're partied, it should just use it"; and asked about mana under the spell's cost, "no, it should always ignore our mana and cast the spell at the target.. regardless of mana cost of spell or our current mana")*: in a party a ticked slot asks nothing of mana (`CombatSpellChooser.ManaWaived`), not its reserve, not its cost, not that there is any. Everything else still gates it: one cast a round, its Max casts, room settings, immunity. An announce with too little mana still engages and fires the round mana covers it, by the DLL bullet of this topic. Should the game refuse it for mana all the same (`You do not have enough mana to cast that spell.`), `CastCoordinator` latches no cast block for it (`SetNoManaRefusalExpected`), and `CombatManager.ReannounceAfterNoMana` keeps the target and the rung and sends it again the next round. Party-only is the client's reading of the first quote. (A first version held on the target until mana covered the cost; superseded 2026-10-23 by the second quote.)
+- **"Fire regardless of current mana"** (`CombatSpellSlot.FireRegardlessOfMana`, the four attack-spell rows) **Client policy** *(user, 2026-10-23: "if we're partied, it should just use it"; and asked about mana under the spell's cost, "no, it should always ignore our mana and cast the spell at the target.. regardless of mana cost of spell or our current mana")*: in a party a ticked slot asks nothing of mana (`CombatSpellChooser.ManaWaived`), not its reserve, not its cost, not that there is any. Everything else still gates it: one cast a round, its Max casts, room settings, immunity. An announce with too little mana still engages and fires the round mana covers it, by the DLL bullet of this topic. Should the game refuse it for mana all the same (`You do not have enough mana to cast that spell.`), `CastCoordinator` latches no cast block for it (`SetNoManaRefusalExpected`), and `CombatManager.ReannounceAfterNoMana` keeps the target and the rung and sends it again the next round. Party-only *([CONFIRMED] 2026-10-23, user: asked whether the box should act only in a party, "yes")*. (A first version held on the target until mana covered the cost; superseded 2026-10-23 by the second quote.)
 
 ### Attack-command "no effect" fallback
 *Status: Client policy (report `paradigm-20260809-131642`)*
@@ -3061,23 +3061,23 @@ How one damage spell cast against a monster is worked out.
      *"Your spell has no effect" — immunity spends no round*.
   3. **Damage-type resistance** — see *Elemental resistance — flat, deterministic, pre-emptable*,
      *Magic Resist (M.R.) and `TypeOfResists`* and *Poison (`AttType 6`) — immunity and damage resist*.
-- **`SpellImmu +N` blocks any spell whose base learnable level (the Spells table `ReqLevel`) is below
-  N; such a spell deals no damage.** A spell learnable at level ≥ N still lands.
+- **`SpellImmu +N` blocks any single-target spell whose base learnable level (the Spells table
+  `ReqLevel`) is below N; such a spell deals no damage.** A spell learnable at level ≥ N still lands.
+  (An earlier wording said it blocks any spell; superseded 2026-10-23: a room spell ignores it, below.)
+- **A room spell damages a monster whatever its spell immunity** *([CONFIRMED] 2026-10-23, user: "yes,
+  that is right on both"; Realm: both)*. Stock 1.11p's room cast (`_cast_no_target`) never reads ability
+  139 (*Combat → Weapons: "no effect" lines and the magical-weapon requirement*, the room-spell bullets),
+  and Paradigm behaves the same.
 - **Example:** monster **#184** has `SpellImmu +10`, so every spell learnable at level 9 or lower can't
   hurt it — only spells learnable at 10+ work.
 - **A spell that can hurt a monster also engages it**, where no weapon of ours can: *Combat → Weapons:
   "no effect" lines and the magical-weapon requirement*.
-- `[CONFLICT — ask the user]` **Does spell immunity stop a room attack's damage?** The rule above is
-  confirmed for spells in general, but Stock 1.11p's room cast (`_cast_no_target`) never reads ability
-  139, so there a room attack damages an immune monster (*Combat → Weapons: "no effect" lines and the
-  magical-weapon requirement*, the room-spell bullets). The client goes by the DLL reading: a room
-  attack counts as hurting an immune monster. Question: is a room spell's damage really unaffected by
-  `SpellImmu` on Paradigm, or is the immunity applied somewhere the DLL reading missed?
 - **Client use:**
-  - Level immunity is deterministic from game data, so the engine **pre-empts** it: `LevelBlockedFor`
-    skips a level-blocked spell before casting, and `CombatManager.SpellCanHurt` folds it into whether the
-    monster is engageable at all (since 2026-10-23 also for a spell typed as the attack command and a room
-    attack; `AttackSpellCanLand` before).
+  - Level immunity is deterministic from game data, so the engine **pre-empts** it for single-target
+    spells: `LevelBlockedFor` skips a level-blocked spell before casting, and `CombatManager.SpellCanHurt`
+    folds it into whether the monster is engageable at all (since 2026-10-23 also for a spell typed as the
+    attack command; `AttackSpellCanLand` before). A room attack is never level-blocked
+    (`CombatSpellChooser.RoomRungBlock` reads nothing of one monster).
 
 ### Spell targeting: monster type tags
 *Status: CONFIRMED (monster-side flags verified against 1.11p) · charm-level rule [OBSERVED] for Stock (`wccmmud.dll` 1.11p, re-read 2026-10-09; was NEEDS CONFIRMATION); what a too-low level prints still NEEDS CONFIRMATION*
@@ -3335,7 +3335,7 @@ How one damage spell cast against a monster is worked out.
     amplified by `(50 − MR)%`. The probabilistic full-resist chance is shown separately, never folded
     into the range.
   - **The combat engine never estimates M.R.-reduced damage** — it only pre-empts spells on
-    deterministic signals (elemental ≥100% resist via `MonsterResistIndex`, `SpellImmu`, and the
+    deterministic signals (a single-target spell's elemental ≥100% resist via `MonsterResistIndex` and `SpellImmu`, and the
     `Magical` weapon-hit gate) — M.R. is never a resist-block (see *Elemental resistance — flat,
     deterministic, pre-emptable*).
   - So correcting the code-1↔17 gating changed **no combat decision** — the old reversed note was never
