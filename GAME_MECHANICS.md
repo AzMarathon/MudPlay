@@ -1769,6 +1769,7 @@ How HP works from full health down through dropping and death, how monster healt
 **Client use:**
 - `RealmRegenProfile` gives `RegenTracker` its countdowns and the Exp/Hr simulator its cadence (see *Timing & rounds → The engine clock — one fast tick drives every timer*). On Paradigm the rest cycle anchors on the round grid; on Stock it counts from lying down. `RegenTracker` learns the per-tick amounts live.
 - `HealthManager` never sends `rest` / `meditate` to a character already in that posture (lain down by hand, or left resting while the engine was switched off): it takes the rest under way as its own. A second `rest` restarts the count toward the next tick (Stock, the bullets in this topic; the user said the same of Paradigm, 2026-09-29).
+- `RegenReadout` (the status bar's expected HP item) shows each posture's ticks by this rule: Stock's idle tick, and while resting the rest tick beside the 30 s pass; Paradigm's `A/3`, `A/3`, `A/3 + B` every 10 s, and while resting those then three of `A + B` every 5 s (`CharacterCalculator.ParadigmHpRegenGains`). Meditating shows the standing HP rate (2026-10-23).
 - Character Info's HP Regen readout shows Paradigm as measured: the standing third and the whole amount as a rest's full gain, and with an HP-regen bonus the three low gains as they come (`+2, +2, +3`) (`CharacterCalculator.ParadigmHpRegenThird`). (Until 2026-10-04 its tooltip still described the superseded 10 s cycle and showed three times the amount as the full rest gain.)
 - `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm as measured: mana whole every 30 s; standing HP a third of the idle amount, fraction dropped, every 10 s; resting a gain every 5 s on the round grid, three of that third then three of the whole idle amount, counted from lying down. The third is of the amount before the regen percent, and what the percent adds is paid on the last low gain of a run and on the standing gain that comes with the mana pass (`SimRegen.HpLowExtra`). A third is kept to at least 1 — `[NEEDS CONFIRMATION]`, since no capture has shown a character whose idle amount is under 3. (Until 2026-10-04 it played the superseded 10 s cycle, which paid `5 ×` the idle amount per 30 s; the measured cycle pays `3 × third + 3 × idle`: 15 against 20 for the captured character.)
 
@@ -1937,6 +1938,7 @@ tick = base + trunc( ManaRgn% · base / 100 )          [Paradigm / GreaterMUD �
 - **Client use:**
   - `CharacterCalculator.CalcManaRegen` implements the formula; the Level Projection grid already relies on it.
   - The mana-regen breakpoint calculator uses only the CONFIRMED passive formula above.
+  - `RegenReadout` (the status bar's expected mana item) shows the 30 s tick with worn `ManaRgn%` plus a roll spell's roll once read, a tick range over the roll's span until then, and the meditate base beside the pass while meditating (2026-10-23).
 
 ### Rerolling a mana-regen roll spell
 *Status: per-fact tags below (CONFIRMED 2026-08-28 user + screenshot; 2026-08-30 report `paradigm-20260830-110918`; 2026-09-09 user) · Realm: both (reading the roll differs by realm)*

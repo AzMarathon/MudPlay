@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.37**
-> - A monster your weapon can't hit is fought with any attack spell that can hurt it, room spells and a spell set as the attack command included
-> - The "cannot attack" log line names each weapon and spell weighed and why it was ruled out
-> - New "Fire regardless of current mana" box on the attack spells: in a party the spell is cast whatever your mana
-> - Monster Intel ranks room spells as usable against spell-immune and element-resistant monsters
+> **Version 3.185.38**
+> - Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

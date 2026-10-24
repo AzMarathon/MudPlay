@@ -106,6 +106,17 @@ public static class CharacterCalculator
     // (GAME_MECHANICS "Rest and meditate tick timing").
     public static int ParadigmHpRegenThird(int baseAmount) => Math.Max(1, baseAmount / 3);
 
+    // The gains Paradigm pays at a regen percent: the small third, the last third of
+    // each three (the third plus what the percent adds to the whole amount), and a
+    // rest's full gain, the whole amount with its percent.
+    public static (int Third, int LastThird, int Full) ParadigmHpRegenGains(int level, int health, int hpRegenPercent)
+    {
+        int amount = CalcHpRegen(level, health, 0, isResting: false, RealmType.ParaMud);
+        int full = CalcHpRegen(level, health, hpRegenPercent, isResting: false, RealmType.ParaMud);
+        int third = ParadigmHpRegenThird(amount);
+        return (third, third + full - amount, full);
+    }
+
     // ----- Mana / Kai ------------------------------------------------------
 
     // Max mana: (mageryLevel * level * 2) + 6 + plusMaxMana. Returns 0 for

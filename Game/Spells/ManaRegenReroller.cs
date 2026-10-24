@@ -152,6 +152,20 @@ public sealed class ManaRegenReroller : IDisposable
     // Paradigm, "lo..hi (tick N)" on Stock.
     public string? LastObservedText { get; private set; }
 
+    // The roll of the spell cast last, once it has been judged: null from each cast
+    // until its roll is read, and when it can't be read. On Stock it is the top of
+    // the band, which pays the tick it was read off.
+    public int? CurrentRoll { get; private set; }
+
+    // A roll spell was cast (a fresh roll, not read yet), or the roll was read.
+    public event Action? RollCastOrRead;
+
+    private void SetCurrentRoll(int? roll)
+    {
+        CurrentRoll = roll;
+        RollCastOrRead?.Invoke();
+    }
+
     // The natural tick pays at least 1 MP for any roll that isn't terrible, so a
     // cycle that sees none this long after the cast (mana below max, the tick not
     // hidden by a full pool) read the roll as paying 0. A natural tick is every 30 s.
@@ -169,6 +183,7 @@ public sealed class ManaRegenReroller : IDisposable
     public void OnRollSpellLanded(string spellShort)
     {
         if (string.IsNullOrWhiteSpace(spellShort)) return;
+        SetCurrentRoll(null);
 
         ManaRegenRerollConfig cfg = _readConfig();
         if (cfg.Threshold is null || MasterSwitchOff?.Invoke() == true)
@@ -290,6 +305,7 @@ public sealed class ManaRegenReroller : IDisposable
     {
         LastObservedValue = null;
         LastObservedText = null;
+        SetCurrentRoll(null);
         Reset();
     }
 
@@ -338,6 +354,7 @@ public sealed class ManaRegenReroller : IDisposable
         if (_activeShort is not { } shortCode) return;   // defensive: no active cycle
         LastObservedValue = value;
         LastObservedText = shown ?? value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        SetCurrentRoll(value);
         string v = LastObservedText;
         ManaRegenRerollConfig cfg = _readConfig();
 

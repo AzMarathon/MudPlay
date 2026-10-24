@@ -37,15 +37,14 @@ public sealed record HpRegenExpectation(IReadOnlyList<(int Min, int Max)> Amount
 
         if (realm == RealmType.ParaMud)
         {
-            int amount = Idle(0);
-            int third = CharacterCalculator.ParadigmHpRegenThird(amount);
-            int extra = Idle(regenPercent) - amount, extraWithBuffs = Idle(withBuffs) - amount;
+            var gains = CharacterCalculator.ParadigmHpRegenGains(level, health, regenPercent);
+            var withBuffGains = CharacterCalculator.ParadigmHpRegenGains(level, health, withBuffs);
             return new HpRegenExpectation(new[]
             {
-                (third, third),
-                Range(third + extra, third + extraWithBuffs),
-                Range(amount + extra, amount + extraWithBuffs),
-            }, Math.Max(amount + extra, amount + extraWithBuffs));
+                (gains.Third, gains.Third),
+                Range(gains.LastThird, withBuffGains.LastThird),
+                Range(gains.Full, withBuffGains.Full),
+            }, Math.Max(gains.Full, withBuffGains.Full));
         }
 
         int Rest(int percent) => CharacterCalculator.CalcHpRegen(level, health, percent, isResting: true, realm);

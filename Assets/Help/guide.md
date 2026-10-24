@@ -5370,13 +5370,19 @@ Above the rows, **Preview** draws the bar as it would look with your edits so fa
 |---|---|
 | Standard bar | Engine state chip · Location (map/room, the walk readout, or the lap and its step: `lap 12 · step 36 of 60`) · Exp rate · Time to next level · Looked-at target HP · Statline warning · Combat tick · HP tick · Mana tick · Connection light |
 | Character | Profile name · Character name · Level · Race and class · Lives · BBS · Game data set · Combat profile (number and name, number only, or name only) · Gear set |
-| Vitals | HP · HP percent · Mana · Mana percent · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
+| Vitals | HP · HP percent · Mana · Mana percent · HP regen (last tick) · HP regen (expected) · Mana regen (last tick) · Mana regen (expected) · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
 | Location and movement | Map / room number · Room name · Loop name · Lap · Loop step (`Step 36 of 60`) · Walk destination |
 | Combat | Combat target · Exp to next level · Party (size and leader) · Hit rate · Crit rate · Backstab rate · Average hit · Average round · Dodge rate · Hit-taken rate |
 | Session stats | Time online · Exp earned · Kills · Kills per hour · Cash collected · Cash per hour · Items collected · Items sold · Steps walked · Average step time · Sneak success |
 | Other | Auto engines (which are on) · Next event (the Event due soonest, and how long until it fires) · Cash carried · Clock · Custom text |
 
 The Combat and Session stats items are the same tallies the **Session Stats** window shows.
+
+**The regen items.** The two *last tick* items show what the last HP or mana (kai) regen tick gave, `HP +7`. A heal isn't counted, and neither is a tick that filled the pool, since it was cut short. When the tick came in another posture than yours now, it says so (`HP +7 (resting)`). The item empties after two minutes without a tick, and when you disconnect, leave the game, die, load a profile or switch game data. The two *expected* items show what your level, stats, worn gear, race, class and completed quests say a tick gives in your posture; they read from your last `stat`, so they are empty until one is read. Buffs that raise HP regen aren't counted.
+- **HP on Stock:** `HP +6/tick` every 30 s; resting, `HP +18/rest tick (+6/30s)`, since the 30 s tick keeps paying beside the rest tick.
+- **HP on Paradigm:** the 30 s amount comes in thirds, with the regen bonus on the last of each three: `HP +2/+2/+3 per 10s`. Resting, a gain comes every 5 s, three small then three whole: `HP +2/+2/+3 then +7/+7/+7 per 5s`. Lying down again starts back at the small ones.
+- **Mana:** `MA +29/tick` every 30 s. Meditating adds a tick every 15 s that pays your base without the mana-regen bonus: `MA +30/meditate tick (+29/30s)`. A mystic's kai shows as `KAI +1/tick`; a class with no mana shows nothing.
+- **A mana-regen roll spell** (nature tap, mana flux) in your buff list counts while it's up. Until its roll has been read (MudPlay reads it when the spell has a reroll threshold), the item shows the range the roll can give (`MA +27–29/tick`); on Paradigm the read roll is shown, `MA +31/tick (roll 32)`.
 
 ### Custom text
 

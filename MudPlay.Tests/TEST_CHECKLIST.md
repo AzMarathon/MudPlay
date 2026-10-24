@@ -3183,6 +3183,11 @@ How to keep it current:
 - Checks: Debug-channel tick lines (amount, position, interval) only with debug on; uneven amounts kept verbatim.
 - Why: Issue #11 (measuring Paradigm regen).
 
+### RegenReadoutTests.cs
+- Covers: Game/RegenReadout (with RegenTracker, HpRegenExpectationSource, CharacterCalculator.ParadigmHpRegenGains, ManaRegenReroller.CurrentRoll)
+- Checks: the status bar's regen items. Last tick: each pool's last regen gain is kept from prompts on the wire; a gain that filled the pool and a heal the tracker turns away aren't; the posture is named when it isn't the character's now; it blanks after two minutes and is forgotten on a game-data set switch and when the client calls Forget. Expected, from `stat` and worn gear through the real parsers: empty before `stat`; Paradigm level 28 Paladin, Health 71, +25% ring gives `+2/+2/+3` standing and `then +7/+7/+7` resting; level 17 Gypsy, Health 60 gives `+1/+1/+1` and `+4`; Stock rest tick beside the 30 s pass; level 51 Priest, WIL 140 meditating gets base 30 without ManaRgn% beside the pass; a roll spell up is a tick range until its roll is read, then pinned; Kai's fixed rate; a non-caster shows no mana. The bug-report readout carries the inputs.
+- Why: PTBrennan's request for HP and mana regen on the status bar; the numbers are the captures in GAME_MECHANICS "Rest and meditate tick timing" (reports paradigm-20261004-140923, paradigm-20261004-024314) and "Mana regeneration & the ManaRgn breakpoints".
+
 ### RegenSpellClassifierTests.cs
 - Covers: Game/Spells/RegenSpellClassifier, ManaRegenReroller.IsRollSpell
 - Checks: which spells are mana-regen roll spells by ability code (Nature Tap and Mana Flux are, a roll among other abilities still is; Chaos Surge, Rapid Healing, a fixed bonus, a damage spell and an empty formula aren't), and ManaRegenReroller.IsRollSpell agrees.

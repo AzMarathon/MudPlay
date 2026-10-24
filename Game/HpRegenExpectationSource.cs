@@ -17,6 +17,7 @@ public sealed class HpRegenExpectationSource : IDisposable
     private readonly GameDataCache _gameData;
     private readonly Func<IReadOnlyList<QuestBonus>?> _questBonuses;
     private HpRegenExpectation? _current;
+    private int _percent;
     // Inventory changes can arrive off the UI thread; the value itself is only read
     // and rebuilt on it.
     private volatile bool _stale = true;
@@ -37,13 +38,30 @@ public sealed class HpRegenExpectationSource : IDisposable
     {
         get
         {
-            if (!_stale) return _current;
-            _stale = false;
-            EquipmentStatSummary totals = CharacterCalculator.CharacterTotals(
-                _stats, _inventory.Snapshot.EquippedItems, _gameData, _questBonuses());
-            _current = HpRegenExpectation.For(_gameData.ActiveRealm, _stats.Level, _stats.Health, totals.HpRegenPercent);
+            WorkOutIfStale();
             return _current;
         }
+    }
+
+    // The HP regen percent (ability 123) the amounts are worked from: gear, race,
+    // class and completed quests. A buff's percent isn't in it.
+    public int Percent
+    {
+        get
+        {
+            WorkOutIfStale();
+            return _percent;
+        }
+    }
+
+    private void WorkOutIfStale()
+    {
+        if (!_stale) return;
+        _stale = false;
+        EquipmentStatSummary totals = CharacterCalculator.CharacterTotals(
+            _stats, _inventory.Snapshot.EquippedItems, _gameData, _questBonuses());
+        _percent = totals.HpRegenPercent;
+        _current = HpRegenExpectation.For(_gameData.ActiveRealm, _stats.Level, _stats.Health, _percent);
     }
 
     // The quest log or the profile changed: work the amounts out again when next asked.

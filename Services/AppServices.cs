@@ -872,6 +872,9 @@ public sealed class AppServices
     // use to leave out heals and other HP sources by their size.
     public Game.HpRegenExpectationSource HpRegenExpected { get; private set; } = null!;
 
+    // The status bar's regen items: the last HP / mana tick and what one should give.
+    public Game.RegenReadout RegenReadout { get; private set; } = null!;
+
     // Live mirror of the loaded character profile's Display settings.
     // The Settings → Display section writes through to this so changes
     // (font size in particular) apply without restarting the app.
@@ -6295,11 +6298,22 @@ public sealed class AppServices
             Stealth.NoteCarriedChanged();
         };
         Inventory.Changed += () => Stealth.NoteCarriedChanged();
-        HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
-            () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
-                Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog));
+        Func<IReadOnlyList<Game.Quests.QuestBonus>?> regenQuestBonuses = () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
+            Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog);
+        HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData, regenQuestBonuses);
         Regen.SetHpExpectation(() => HpRegenExpected.Current);
         Profile.ProfileLoaded += _ => HpRegenExpected.Invalidate();
+        RegenReadout = new Game.RegenReadout(Regen, PlayerState, PlayerStats, Inventory, GameData, HpRegenExpected,
+            ManaRegen, regenQuestBonuses,
+            rollSpellUp: () => ManaRegenRerollSlot()?.Spell?.Trim() is { Length: > 0 } rollCode && BuffIsUp(rollCode)
+                ? ManaRegenRollRange(rollCode) : null,
+            log: Log, post: a => Avalonia.Threading.Dispatcher.UIThread.Post(a));
+        Profile.ProfileLoaded += _ =>
+        {
+            RegenReadout.Forget("a profile was loaded");
+            RegenReadout.QueueRefresh();
+        };
+        DeathWatcher.PlayerDied += () => RegenReadout.Forget("the character died");
         TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, MovementCoordinator, Log);
         // A spell that cuts carrying capacity (weakness, frail) can leave us over our
         // max; `i` is the only place that shows. Records sharing one applied line each
@@ -6423,6 +6437,11 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // The link dropping or the game being left ends the session the kept regen ticks came from.
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (!inGame) RegenReadout.Forget("out of the game");
+        };
         // The sent-command trail keeps nothing typed outside the game (a login is)
         // and nothing that may be a suicide password, typed or sent by @suicide.
         EngineGate.Trail = SentCommands;
@@ -13531,11 +13550,12 @@ public sealed class AppServices
     public void ReconsiderManaRegenRerollAfterConfigChange()
     {
         if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return;
-        bool active = CastDirector.SnapshotActiveBuffs()
-            .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
-        if (!active) return;
+        if (!BuffIsUp(shortCode)) return;
         ManaRegen.ReconsiderActiveRoll(shortCode);
     }
+
+    private bool BuffIsUp(string shortCode) => CastDirector.SnapshotActiveBuffs()
+        .Any(t => string.Equals(t.Short, shortCode, System.StringComparison.OrdinalIgnoreCase));
 
     // The Stock tick inputs for the configured mana-regen roll spell: level, stats,
     // magery, worn +ManaRgn%, the spell's level-scaled roll range and the meditate tick
