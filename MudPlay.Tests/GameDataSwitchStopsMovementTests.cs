@@ -630,7 +630,7 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
     // number: without the question the walk below starts, on the new set's rooms.
     private static async Task<string?> PlanThenWalk(Harness h, RoomKey destination, Task planned, bool ask = true)
     {
-        RoutePlanInFlight inFlight = new(destination, () => h.Cache.ActiveLoad, h.Log);
+        RoutePlanInFlight inFlight = new(destination, () => h.Cache.ActiveLoad, h.Log, movement: h.Controller);
         await planned;
         if (ask && inFlight.Dropped() is { } notice) return notice;
         h.Walker.WalkTo(destination);
@@ -718,6 +718,47 @@ public sealed class GameDataSwitchStopsMovementTests : IDisposable
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
         Assert.Equal(new[] { "n" }, h.Sent);
         Assert.DoesNotContain(h.Log.Snapshot(), e => e.Source == "RoutePick");
+    }
+
+    // Report paradigm-20261022-170426: Stop pressed while a walk's route is still
+    // being worked out finds no walk to stop. The plan asks after it, and starts
+    // nothing; the user's Stop is the toolbar's, with the walker idle throughout.
+    [Fact]
+    public async Task APlanInFlightAcrossAStop_StartsNoWalk_AndSaysWhy()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        Assert.True(h.Controller.StopByUser());
+        planned.SetResult();
+
+        Assert.Equal(
+            "[Walk to 1/3 not started: movement was stopped while its route was being planned]",
+            await walk);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Single(h.Log.Snapshot(), e => e.Severity == LogSeverity.Info && e.Source == "RoutePick"
+            && e.Message == "route pick -> 1/3: dropped, no walk started: movement was stopped while its route was being planned");
+        h.LetTimePass();
+        Assert.Empty(h.Sent);
+    }
+
+    // A Stop made before the plan began is no reason to drop it: the plan is the
+    // user's next start.
+    [Fact]
+    public async Task APlanBegunAfterAStop_StartsItsWalk()
+    {
+        Harness h = OnAlpha();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Controller.StopByUser());
+        TaskCompletionSource planned = new();
+        Task<string?> walk = PlanThenWalk(h, new RoomKey(1, 3), planned.Task);
+
+        planned.SetResult();
+
+        Assert.Null(await walk);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
     // What the question is there for: the same plan, not asked, walks off on the

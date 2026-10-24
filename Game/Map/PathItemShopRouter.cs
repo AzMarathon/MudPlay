@@ -494,17 +494,28 @@ public sealed class PathItemShopRouter : IDisposable
     // then room-key order, so the pick is deterministic. Static so the route
     // picker can name the very shop this router would detour to, without
     // duplicating the selection rule.
+    //
+    // floors, taken from cur to dest by way of these shops under the filter
+    // distanceBetween reads, spares the searches that can't win: each answer is two
+    // searches of the whole map, and a route card weighing every shop that sells a
+    // hazard's counters held the UI thread for twenty seconds (report
+    // paradigm-20261021-135647). Shops are weighed lowest floor first and left once
+    // none can beat the best found; the pick is the one weighing every shop makes.
     internal static bool TrySelectShop(
         IReadOnlyList<RoomKey> shopRooms, RoomKey cur, RoomKey dest,
-        Func<RoomKey, RoomKey, int?> distanceBetween, out RoomKey best)
+        Func<RoomKey, RoomKey, int?> distanceBetween, out RoomKey best, RouteFloors? floors = null)
     {
         ArgumentNullException.ThrowIfNull(shopRooms);
         ArgumentNullException.ThrowIfNull(distanceBetween);
         best = default;
         int bestTotal = int.MaxValue;
         int bestToShop = int.MaxValue;
-        foreach (RoomKey shop in shopRooms)
+        IEnumerable<RoomKey> weighed = floors is null
+            ? shopRooms
+            : shopRooms.Where(s => floors.Bound(s, s) is not null).OrderBy(s => floors.Bound(s, s)!.Value);
+        foreach (RoomKey shop in weighed)
         {
+            if (floors?.Bound(shop, shop) > bestTotal) break;
             if (distanceBetween(cur, shop) is not { } toShop) continue;
             if (distanceBetween(shop, dest) is not { } toDest) continue;
             int total = toShop + toDest;

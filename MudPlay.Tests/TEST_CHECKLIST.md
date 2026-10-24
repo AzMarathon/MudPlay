@@ -276,8 +276,8 @@ How to keep it current:
 
 ### AutoWalkManagerPickedRouteTests.cs
 - Covers: Game/Map/AutoWalkManager journeys (WalkJourney, JourneyFetch, Game/Map/DetourResume, RouteChoicePlanner)
-- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand.
-- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs).
+- Checks: a route-card walk keeps its closed gates, teleport preference and agreed hazard rooms across re-plans, deferred starts, detour legs, recovery re-plans and errand restarts (ResumeJourney / DetourResume). A new walk, an arrival, a failure or a Stop (even idle between legs) ends the journey; stop-before boss legs count as legs to the goal. Side trips go on foot when possible and never teleport on a walk-it journey. A door-flow reset inside a silent redirect raises nothing. A card's agreed trade stays in force only for its own journey and connection, and ends when the key is in hand. A sole-route card whose lever trip crosses a hazard room off the route shows that room, and the walk its pick starts goes; agreeing to the route's own rooms alone fails at the lever.
+- Why: reports paradigm-20261008-173911 (re-plan went through the gates the card avoided), paradigm-20261008-174236 (teleport preference lost on legs), paradigm-20261021-135647 (the temple sanctum walk failed on its water-main lever trip right after the pick).
 
 ### AutoWalkManagerRoomCommandRefusalTests.cs
 - Covers: Game/Map/AutoWalkManager (empty-room command hold), Game/Map/TBInfoActionResolver.NeedsEmptyRoom
@@ -372,8 +372,8 @@ How to keep it current:
 
 ### BoatRoutePlannerTests.cs
 - Covers: Game/Map/BoatRoutePlanner
-- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks.
-- Why: the route must stitch both land legs, not pick the nearest pier.
+- Checks: picks the sailing with the fewest total land hops; gated sailings with filters and allowGated; null for unreachable source, destination or no docks; with the land route as a bound, only a sailing that can beat it is planned, and one that can't costs only the floor searches.
+- Why: the route must stitch both land legs, not pick the nearest pier; report paradigm-20261021-135647 (weighing every sailing held a walk's commit for ten seconds).
 
 ### BossCatalogTests.cs
 - Covers: Game/GameData/BossCatalog, the shipped BossDefs.seed.json
@@ -787,6 +787,11 @@ How to keep it current:
 - Covers: Game/Conditions/ConditionTracker, Game/Combat/RoomEntityClassifier (RosterIsWhole), RoomEntryWatcher, the shipped message seeds.
 - Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; seed flags and Ids.
 - Why: a held character must never read as free; user ruling 2026-10-17.
+
+### ConditionExpiryTests.cs
+- Covers: Game/Conditions/ConditionTracker.AilmentSeconds, over the shipped Paradigm message seed
+- Checks: an ailment with no wear-off ends when its spell's time is up and the log says so; its applied line again starts the time over; with no duration in the data the party chips' 180 s cap applies; a buff is never ended this way.
+- Why: report `paradigm-20261022-164244` (Confused held 23 minutes, the walk paused on it); Client policy, user 2026-10-23.
 
 ### ConditionTrackerTests.cs
 - Covers: Game/Conditions/ConditionTracker.
@@ -1391,8 +1396,8 @@ How to keep it current:
 
 ### GameDataSwitchStopsMovementTests.cs
 - Covers: Game/Map/StopOnGameDataChange, MovementController, LoopRunner, AutoWalkManager, AutoLairManager, RoutePlanInFlight, PathItemFloorCollector, HeldLoopsOnProfileSwap
-- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped; route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
-- Why: room numbers differ between sets.
+- Checks: a switch or re-read stops loops/lairs/walks and drops held starts with notices (a loop or an Auto-Lair run held for a reconnect among them); no-op for the same set; plans in flight are dropped, across a Stop too (one begun after a Stop goes ahead); route item needs forgotten; loop stamps; profile swaps drop held loops and Auto-Lair runs.
+- Why: room numbers differ between sets; report paradigm-20261022-170426 (a Stop while a route was being worked out found no walk to stop).
 
 ### GameDataTableSectionTests.cs
 - Covers: ViewModels/GameData/Tables/GameDataTableSectionViewModel, MonstersSectionViewModel, ItemsSectionViewModel
@@ -2142,8 +2147,8 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing.
-- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, …).
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; backing out of the loaded loop's start lets go of it, but not of one loaded since.
+- Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, -20261022-170426, …).
 
 ### LoopSettingsStoreTests.cs
 - Covers: Services/LoopSettingsStore, LoopManager, LoopEditor/LoopBuilder VMs, Game/Remote/LoopShareReceiver
@@ -2495,8 +2500,8 @@ How to keep it current:
 
 ### MovementControllerTests.cs
 - Covers: Game/Map/MovementController (+ AutoWalk, LoopRunner, AutoLair, Coordinator)
-- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers.
-- Why: The @stop / Auto-All / errand regressions.
+- Checks: Coalesced run state; pause, resume and stop routing; Auto-All suspend; an errand held by Stop and the resume question; pause by typed move; puzzle solvers; the user's Stop unloads a loaded loop, the client's own full stop does not.
+- Why: The @stop / Auto-All / errand regressions; report paradigm-20261022-170426 and the user's ruling of 2026-10-23 (Stop unloads the loaded loop).
 
 ### MovementCoordinatorTests.cs
 - Covers: Game/Map/MovementCoordinator
@@ -2680,8 +2685,8 @@ How to keep it current:
 
 ### PartyAilmentTrackerTests.cs
 - Covers: Game/Conditions/PartyAilmentTracker
-- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses.
-- Why: Party ailment sync.
+- Checks: Ailment chips set by @announce or @status; cleared by a witnessed cure; witnessed apply and duration; held pauses; a member's token use (negate magic) clears every chip but the par-owned poison.
+- Why: Party ailment sync; the user's ruling of 2026-10-23 (negate magic ends every spell on its user).
 
 ### PartyBroadcasterTests.cs
 - Covers: Game/Remote/PartyBroadcaster
@@ -3450,6 +3455,11 @@ How to keep it current:
 - Checks: Reads the textblock number from MinBase or the ability slot, and handles a block-less spell. Leaves out bosses and room-item lines but counts GameLimit monsters with no regen wait. The simulator lap carries the same tables, and one log line names the summoning spells and what was left out.
 - Why: Exp/hr estimates for summon rooms; user, 2026-10-10 (tyrannosaurs count).
 
+### RouteFloorsTests.cs
+- Covers: Game/Map/RouteFloors with Game/Map/PathItemShopRouter.TrySelectShop and BfsMapper
+- Checks: a shop chosen by way of hop floors is the one weighing every shop picks (ties to the nearer shop), with only the shops that can still win searched; a shop no route reaches is never searched from.
+- Why: report `paradigm-20261021-135647` (a route card weighing every shop selling a hazard's counters held the UI thread twenty seconds).
+
 ### RouteLightScannerTests.cs
 - Covers: Game/Light/RouteLightScanner
 - Checks: The darkest room on a route sets the light strength needed after worn illumination; unresolved rooms are skipped; a route already seeable needs none.
@@ -4104,6 +4114,11 @@ How to keep it current:
 - Covers: Game/Tokens/TokenTeleportReader
 - Checks: item → CastsSp (43) → spell → TextBlock (148) → TBInfo `minlevel` / `price` / `teleport` chain; "the Lost City" keys as "lost city"; non-token items ignored.
 - Why: token destinations, costs and level gates come only from game data.
+
+### TokenUseLinesTests.cs
+- Covers: Game/Tokens/TokenUseLines through Game/Tokens/TokenTracker, over the shipped Paradigm message seed
+- Checks: our own use line (no placeholder) is recognized whole and lets the buff hold go; a party member's use names them and is not ours; the line quoted in chat is no use; an edited record is read afresh.
+- Why: report `paradigm-20261022-164244` (no token use of ours was ever recognized: the buff hold timed out, nothing heard of the teleport).
 
 ### TollPurseDoubtTests.cs
 - Covers: Services/MovementFilter, Game/Map/MovementRefusalDetector, Game/Map/AutoWalkManager, Game/Inventory/OwedPurseRead, Game/Inventory/PostDeathInventoryRefresh, Game/Recovery/ArenaDeathRooms, Game/DeathDetector, Game/Map/RoomTracker, RouteChoicePlanner

@@ -120,10 +120,14 @@ public sealed class MovementController : IDisposable
     // press with an errand under way only holds it and returns false; otherwise the
     // walk, loop or Auto-Lair, the solves, the errand and any run queued behind it
     // all stop, and it returns true.
+    // The user's Stop also unloads a loop loaded with Load, so the next Start opens
+    // the loop list and doesn't set off on it again (user, 2026-10-23; report
+    // paradigm-20261022-170426).
     public bool StopByUser(string reason = "user stop from toolbar")
     {
         if (HoldErrandOnStop()) return false;
         Stop(reason);
+        if (_loops.StagedLoop is { } staged) _loops.Unstage(staged, "stopped by the user");
         return true;
     }
 
@@ -436,8 +440,14 @@ public sealed class MovementController : IDisposable
     // route between walks) stops with them.
     public event Action? Stopping;
 
+    // How many stops have been made. A route still being worked out for a walk the
+    // user asked for has no walk yet for a stop to end: it compares this against the
+    // count when it began and drops itself (RoutePlanInFlight).
+    public int StopsMade { get; private set; }
+
     public void Stop(string reason = "user stop from toolbar")
     {
+        StopsMade++;
         LetErrandGo();
         DropQueuedRun();
         Stopping?.Invoke();
