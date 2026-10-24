@@ -2281,8 +2281,8 @@ How to keep it current:
 
 ### MegaMudProfileImporterTests.cs
 - Covers: Services/MegaMudProfileImporter, MegaMudIni, MegaMudImportPlan
-- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
-- Why: MegaMUD character import.
+- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
+- Why: MegaMUD character import; MegaMUD's when-full commands behave as the cast-when-full slots do (user, 2026-10-24).
 
 ### MeleeMatchupProfilesTests.cs
 - Covers: Game/Calculators/CharacterCalculator (melee profiles)

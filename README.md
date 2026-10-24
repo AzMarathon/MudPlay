@@ -4,6 +4,7 @@
 > **Version 3.185.45**
 > - Settings → Spells + Ailments gains "Cast when HP full" and "Cast when mana full": any spell, cast once each time the pool refills
 > - Buff Watchdog's when-HP/MA-full buffs count "full" where the rest stops, Default-gear basis and gear caps included
+> - MegaMUD profile import brings Cast-when-full commands into the new slots, target included
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -3099,7 +3099,8 @@ What comes across:
 - **The auto switches** (Auto-Combat, Auto-Nuke, Auto-Heal and Rest, Auto-Bless, Auto-Light, Auto-Get Cash and Items, Auto-Search, Auto-Sneak, Auto-Hide).
 - **Health**: the rest, heal, run and hang-up thresholds for HP and mana, meditate, and the pre / post rest commands.
   - **The pre / post rest commands are highlighted** so you look at them before importing. In MegaMUD they are very often a hand-typed gear swap. When one contains `rem`, `eq`, `wear` or `wea` the line turns red and says so: in MudPlay, gear swaps for resting belong to the **Equipment Manager's Pre-rest HP / Pre-rest Mana sets** (Workshop → My Equipment). Build the set there and clear the box in the review, or the typed command and the gear sets will both be changing what you wear. The highlight follows the box as you edit it.
-- **Spells**: the heal, regen, cure, light and when-full spells, by the same short codes MegaMUD uses.
+- **Spells**: the heal, regen, cure and light spells, by the same short codes MegaMUD uses.
+  - **Cast when HP / mana is full** land in Settings → Spells + Ailments' **Cast when HP full** / **Cast when mana full** slots, which work as MegaMUD's do: cast once as the pool reaches full, again only after it dips and refills. A command that names a target after the code (`bles raijin`) fills the slot's spell and target boxes. **Cast while resting** keeps its default (on).
 - **Combat**: the attack command, the multi-attack, debuff and attack spells with their mana and cast limits, backstab switches, monster limits and the run settings.
 - **MegaMUD's profiles** (Smash / Bash / Attack and the like) each become a MudPlay combat profile, with the one MegaMUD had active made active.
 - **Blesses**: self and party blesses become Buff Watchdog slots. A spell listed for both is one slot that does both.

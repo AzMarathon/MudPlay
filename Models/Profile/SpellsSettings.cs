@@ -119,8 +119,7 @@ public sealed class SpellsSettings
 
     // LEGACY: the old dedicated "cast when HP / mana is full" picks. A buff slot's
     // OnlyWhenHpFull / OnlyWhenMaFull does this now; the profile migration folds
-    // these into such a slot. Kept so an older profile (or a MegaMUD import) still
-    // loads and migrates.
+    // these into such a slot. Kept so an older profile still loads and migrates.
     public string? WhenHpFullSpell { get; set; }
     public string? WhenMaFullSpell { get; set; }
 
