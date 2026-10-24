@@ -2322,6 +2322,11 @@ How to keep it current:
 - Checks: decoder-shaped seed loads (enum names, links, legacy keys tolerated, defaults).
 - Why: drift would blank the catalogue.
 
+### MirroredShieldSeedTests.cs
+- Covers: Game/Conditions/ConditionTracker with the shipped Stock Messages seed.
+- Checks: the mirrored shield (#169) record carries speed's description text (`You feel fast` / `You slow down`) and Blinded; a speed cast on us followed by `You feel fast!` is no blindness; the shield's flash line followed by the same line blinds.
+- Why: user, 2026-10-23 ("look in the DLL's"): wccmmud.dll prints a spell's DescMsg on landing and wear-off, and #169's DescMsg is speed's message 8537, so the shared line must be read by its cast line.
+
 ### MonsterAggroCalculatorTests.cs
 - Covers: Game/Calculators/ParadigmAggroCalculator, StockAggroCalculator
 - Checks: Paradigm scores/lottery/floor; Stock acquisition by alignment, spread, follow lock, stickiness.
