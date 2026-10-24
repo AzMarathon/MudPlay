@@ -47,7 +47,9 @@ internal static class LoopCombatSuppression
     // 2026-10-12: "if we get held for having not enough mana to debuff, we should
     // fight.. if we're just waiting on the open cast round to be free to debuff, we
     // should not fight"). The wait for the cast is over within a round or so and
-    // the loop walks on, so that one suppresses as any step does.
+    // the loop walks on, so for a waypoint's "do not attack" that one suppresses as
+    // any step does; "only attack in lair rooms" is lifted at the door for every
+    // wait (IsSuppressed, user 2026-10-23).
     public static bool LoopIsDriving(LoopState state, bool heldByUser, bool following, bool standingForMana) =>
         state != LoopState.Idle && !heldByUser && !following && !standingForMana;
 
@@ -61,9 +63,16 @@ internal static class LoopCombatSuppression
         : selling && sell.Kind == DetourResumeKind.Loop ? sell.Loop
         : null;
 
-    public static bool IsSuppressed(Loop loop, RoomKey current, bool currentIsLair)
+    // waitingAtLairDoor: the loop stands at a lair's door waiting to go in
+    // (LairEntryDebuffHold.WaitingAtTheDoor), for the debuff's cast, the priority
+    // buffs or the debuff's mana. Nothing walks the character on from there, so
+    // "only attack in lair rooms" doesn't keep it from fighting the lone monster
+    // that wanders in (user, 2026-10-23, superseding 2026-10-12 for that setting).
+    // A waypoint's own DoNotAttack still holds there, bar the wait for mana
+    // (LoopIsDriving).
+    public static bool IsSuppressed(Loop loop, RoomKey current, bool currentIsLair, bool waitingAtLairDoor = false)
     {
-        if (loop.OnlyAttackInLairRooms && !currentIsLair)
+        if (loop.OnlyAttackInLairRooms && !currentIsLair && !waitingAtLairDoor)
             return true;
 
         foreach (LoopWaypoint w in loop.Waypoints)

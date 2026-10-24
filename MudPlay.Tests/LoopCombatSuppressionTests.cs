@@ -50,6 +50,19 @@ public sealed class LoopCombatSuppressionTests
         Assert.False(LoopCombatSuppression.IsSuppressed(loop, K(5), currentIsLair: true));
     }
 
+    // A loop waiting at a lair's door fights what wanders in there under "only attack
+    // in lair rooms" (user, 2026-10-23); a waypoint's own "do not attack" still holds.
+    [Fact]
+    public void WaitingAtALairDoor_LiftsOnlyLair_NotDoNotAttack()
+    {
+        Loop onlyLair = LoopWith(onlyLair: true, (5, false));
+        Assert.True(LoopCombatSuppression.IsSuppressed(onlyLair, K(5), currentIsLair: false));
+        Assert.False(LoopCombatSuppression.IsSuppressed(onlyLair, K(5), currentIsLair: false, waitingAtLairDoor: true));
+
+        Loop noAttack = LoopWith(onlyLair: false, (5, true));
+        Assert.True(LoopCombatSuppression.IsSuppressed(noAttack, K(5), currentIsLair: false, waitingAtLairDoor: true));
+    }
+
     [Fact]
     public void DoNotAttackWaypoint_Suppressed_EvenOnLair()
     {

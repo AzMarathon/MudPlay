@@ -12047,7 +12047,8 @@ public sealed class AppServices
                 standingForMana: LairDebuffHold is { WaitingForMana: true })
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
-            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);
+            && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair,
+                waitingAtLairDoor: LairDebuffHold is { WaitingAtTheDoor: true });
         return (evalKey, suppressed, entering);
     }
 

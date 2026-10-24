@@ -8,7 +8,7 @@
 > - Loops wait at a lair door when a cast just before the round may still hold it, and a refused lair debuff no longer holds the attack spell
 > - A monster that turns up silently and swings a weapon at you or your party is now fought
 > - Manaspring Source's "A figure materializes..." summon now engages the monster it brings
-> - A loop waiting at a lair's door now fights the lone monster that wanders in, then goes in
+> - A loop waiting at a lair's door now fights the lone monster that wanders in, even under Min Monsters or "Only attack in lair rooms", then goes in
 > - Stop while a walk's route is still being worked out calls the walk off and closes its route cards; the toolbar Stop stays usable then
 > - Stop and closing a loaded loop's route cards both unload it, so Start opens the loop list again
 > - Idle Pause and Stop toolbar buttons fade instead of looking lit
