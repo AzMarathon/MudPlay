@@ -245,6 +245,39 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <!-- Has some / has none dropdown; its narrowing checkboxes
+                                         show only while "has some" is picked. -->
+                                    <ItemsControl ItemsSource="{Binding Presences}" IsVisible="{Binding HasPresences}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:PresenceFilter">
+                                                <StackPanel Margin="0,2,0,4">
+                                                    <TextBlock Classes="FilterLabel" Text="{Binding Label}"
+                                                               ToolTip.Tip="{Binding Hint}"/>
+                                                    <ComboBox HorizontalAlignment="Stretch"
+                                                              ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding Selected, Mode=TwoWay}"
+                                                              ToolTip.Tip="{Binding Hint}"/>
+                                                    <StackPanel IsVisible="{Binding ShowsParts}" Margin="0,6,0,0">
+                                                        <TextBlock Classes="FilterLabel" Text="{Binding PartsLabel}"/>
+                                                        <ItemsControl ItemsSource="{Binding Parts}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <WrapPanel/>
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="vm:PresencePart">
+                                                                    <CheckBox Margin="0,0,10,0"
+                                                                              Content="{Binding Label}"
+                                                                              IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

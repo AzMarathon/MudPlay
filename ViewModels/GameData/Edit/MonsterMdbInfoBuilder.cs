@@ -379,17 +379,9 @@ public sealed class MonsterMdbInfoBuilder
     // Rooms that "place" wccNo via their NPC field (fixed-spawn home room), sorted by map
     // then room. Empty when the graph isn't wired or the monster is laired-only / unplaced.
     private IReadOnlyList<RoomKey> FindPlacedRooms(int wccNo)
-    {
-        if (_roomGraph is null) return Array.Empty<RoomKey>();
-        List<RoomKey> rooms = new();
-        foreach (Room room in _roomGraph.Rooms)
-        {
-            if (room.Npc == wccNo)
-                rooms.Add(room.Key);
-        }
-        rooms.Sort(static (a, b) => a.Map != b.Map ? a.Map.CompareTo(b.Map) : a.Room.CompareTo(b.Room));
-        return rooms;
-    }
+        => _roomGraph is not null && _roomGraph.PlacedRoomsByMonster.TryGetValue(wccNo, out IReadOnlyList<RoomKey>? rooms)
+            ? rooms
+            : Array.Empty<RoomKey>();
 
     // Spells (number + name) that summon wccNo (best-effort — see SpellSummons). Covers
     // monsters that aren't laired or placed but are conjured by a caster.
