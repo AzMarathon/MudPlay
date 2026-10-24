@@ -127,10 +127,10 @@ public static class CrashReporter
 
     // The program log is written by a background task: the report names the file
     // to send (LogToSend), so the lines leading up to the crash go in first, for
-    // as long as ProgramLogFile.CrashDrainBound allows.
-    private static void LetProgramLogLand()
+    // as long as bound allows.
+    private static void LetProgramLogLand(TimeSpan bound)
     {
-        try { _programLog?.WaitWritten(ProgramLogFile.CrashDrainBound); }
+        try { _programLog?.WaitWritten(bound); }
         catch
         {
             // The crash handler must never throw: the report goes without the
@@ -161,9 +161,11 @@ public static class CrashReporter
             : "(nothing was logged)";
     }
 
-    internal static string Build(Exception? ex, string source)
+    // programLogBound: how long the program log is given to land, by default
+    // ProgramLogFile.CrashDrainBound.
+    internal static string Build(Exception? ex, string source, TimeSpan? programLogBound = null)
     {
-        LetProgramLogLand();
+        LetProgramLogLand(programLogBound ?? ProgramLogFile.CrashDrainBound);
         StringBuilder sb = new(capacity: 16 * 1024);
         sb.Append("# MudPlay crash report\n\n");
         sb.Append("_Captured ").Append(DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz")).Append("_\n\n");
