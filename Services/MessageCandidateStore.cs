@@ -16,9 +16,30 @@ namespace MudPlay.Services;
 // Game.MessageCandidateWatcher is the sole writer via RecordSighting; the Game
 // Data Browser's Unrecognized Lines tab and the
 // LogPane double-click flow both read/dismiss/remove through this store.
+//
+// Saving: a change is written SaveDelay after it, together with every change made
+// in the meantime, and the write itself runs on a pool thread. Every repeat of a
+// staged line bumps its count, so a grind that repeats one (a cast line per fight)
+// used to rewrite the whole file on the UI thread every few seconds: 4,441 writes
+// in a night, one of them a 5.3 s freeze when the disk stalled (reports
+// Hang-20261021-035337, Hang-20261021-065221). A realm switch and the client's
+// exit write what is still waiting at once (Save), so nothing is left unsaved.
+//
+// Bounded: at most MaxPending lines wait for review. A new line past that pushes
+// out the pending line seen longest ago. Dismissed lines are the user's verdicts
+// and are never pushed out.
 public sealed class MessageCandidateStore
 {
+    // How long a change waits for the others that follow it before the file is
+    // written. A crash loses at most this much of the queue, which only ever holds
+    // lines waiting for review and their counts.
+    public static readonly TimeSpan SaveDelay = TimeSpan.FromSeconds(30);
+
+    // Pending (not dismissed) lines kept for review.
+    public const int MaxPending = 2000;
+
     private readonly LogService? _log;
+    private readonly Func<TimeSpan, Action, IDisposable> _arm;
 
     // Live mirror of the active set's staged candidates. BulkObservableCollection
     // so a full (re)load raises one Reset instead of Clear + N Add, matching
@@ -33,26 +54,47 @@ public sealed class MessageCandidateStore
     // Every client on the realm records into the one file. What this client changed
     // since it last read or wrote the file is kept here, so that a write is the
     // file as the last character left it plus these changes, not this client's whole
-    // copy over theirs.
+    // copy over theirs. Each change is marked with the change count it was made at,
+    // and is forgotten once a write that holds it has reached the file.
     private readonly SharedFileStamp _stamp = new();
-    private readonly HashSet<string> _changedHere = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _removedHere = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _changedHere = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _removedHere = new(StringComparer.Ordinal);
 
-    private bool _saveQueued;
+    // Changes made so far, counted on the UI thread.
+    private long _changes;
 
-    public MessageCandidateStore() { }
+    // The armed save, or null when nothing waits to be written.
+    private IDisposable? _saveDue;
 
-    public MessageCandidateStore(LogService log)
+    // The write lane. One write runs at a time, under _writeGate, and the newest
+    // list waiting replaces an older one that hasn't started. _stampGate keeps the
+    // pool thread's mark of the file and the UI thread's look at it apart.
+    private readonly object _writeGate = new();
+    private readonly object _stampGate = new();
+    private readonly object _laneGate = new();
+    private PendingWrite? _waiting;
+    private Task _lane = Task.CompletedTask;
+    private long _changesWritten;
+    private bool _writeFailureLogged;
+
+    // The list as it stood at a change count, for one realm's file.
+    private sealed record PendingWrite(string Path, List<MessageCandidateRecord> Records, long Changes);
+
+    // arm: how a save is put off by SaveDelay; the dispatcher's one-shot timer by
+    // default.
+    public MessageCandidateStore(LogService? log = null, Func<TimeSpan, Action, IDisposable>? arm = null)
     {
-        ArgumentNullException.ThrowIfNull(log);
         _log = log;
+        _arm = arm ?? DispatcherTicks.Once;
     }
 
     // Load realmFolder's lines. legacySet names the game-data set the realm runs
     // on: a realm with no file of its own yet takes a copy of the one that set
-    // carried, from when the lines were kept per set.
+    // carried, from when the lines were kept per set. What the realm being left
+    // still had waiting is written to its file first.
     public void Load(string? realmFolder, string? legacySet = null)
     {
+        Save();
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
         _changedHere.Clear();
         _removedHere.Clear();
@@ -60,8 +102,11 @@ public sealed class MessageCandidateStore
 
         string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
         AdoptLegacyFile(path, legacySet);
-        _stamp.Mark(path);
-        Candidates.ReplaceAll(TryLoad(path) ?? []);
+        MarkStamp(path);
+        List<MessageCandidateRecord> loaded = TryLoad(path) ?? [];
+        int over = PendingOverCap(loaded);
+        Candidates.ReplaceAll(loaded);
+        if (over > 0) TrimToCap(over);
     }
 
     private void AdoptLegacyFile(string realmFile, string? legacySet)
@@ -86,7 +131,35 @@ public sealed class MessageCandidateStore
     {
         if (ActiveRealmFolder is null) return false;
         string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
-        return _stamp.ChangedOutside(path) && Rebase(path);
+        return ChangedOutside(path) && Rebase(path);
+    }
+
+    private void MarkStamp(string path)
+    {
+        lock (_stampGate) _stamp.Mark(path);
+    }
+
+    private bool ChangedOutside(string path)
+    {
+        lock (_stampGate) return _stamp.ChangedOutside(path);
+    }
+
+    // Forget the changes a finished write has put in the file.
+    private void ForgetWrittenChanges()
+    {
+        long written = Interlocked.Read(ref _changesWritten);
+        Forget(_changedHere, written);
+        Forget(_removedHere, written);
+
+        static void Forget(Dictionary<string, long> marks, long upTo)
+        {
+            if (marks.Count == 0) return;
+            List<string>? done = null;
+            foreach ((string id, long at) in marks)
+                if (at <= upTo) (done ??= new()).Add(id);
+            if (done is null) return;
+            foreach (string id in done) marks.Remove(id);
+        }
     }
 
     // Make the list the file's, with this client's unsaved changes on top: a line
@@ -97,14 +170,15 @@ public sealed class MessageCandidateStore
         List<MessageCandidateRecord>? onFile = File.Exists(path) ? TryLoad(path) : [];
         if (onFile is null) return false;
 
+        ForgetWrittenChanges();
         Dictionary<string, MessageCandidateRecord> mine = new(StringComparer.Ordinal);
         foreach (MessageCandidateRecord c in Candidates)
-            if (_changedHere.Contains(c.Id)) mine[c.Id] = c;
+            if (_changedHere.ContainsKey(c.Id)) mine[c.Id] = c;
 
         List<MessageCandidateRecord> merged = new(onFile.Count + mine.Count);
         foreach (MessageCandidateRecord theirs in onFile)
         {
-            if (_removedHere.Contains(theirs.Id)) continue;
+            if (_removedHere.ContainsKey(theirs.Id)) continue;
             if (!mine.Remove(theirs.Id, out MessageCandidateRecord? ours)) { merged.Add(theirs); continue; }
             MessageCandidateRecord latest = theirs.LastSeenAt > ours.LastSeenAt ? theirs : ours;
             merged.Add(latest with
@@ -115,7 +189,7 @@ public sealed class MessageCandidateStore
         }
         merged.AddRange(mine.Values);   // first seen here
 
-        _stamp.Mark(path);
+        MarkStamp(path);
         Candidates.ReplaceAll(merged);
         return true;
     }
@@ -137,16 +211,87 @@ public sealed class MessageCandidateStore
         }
     }
 
-    // Write the realm's file: what is on file now, plus this client's changes.
+    // Write the realm's file now, on this thread, when a change waits: what is on
+    // file, plus this client's changes. For a realm switch and the client's exit; a
+    // change on its own is written later and off the UI thread (see QueueSave).
     public void Save()
     {
-        if (ActiveRealmFolder is null) return;
+        _saveDue?.Dispose();
+        _saveDue = null;
+        if (_changes <= Interlocked.Read(ref _changesWritten)) return;
+        if (TakeSnapshot() is { } write) Write(write);
+        ForgetWrittenChanges();
+    }
+
+    // Completes when the writes handed off so far have finished. The client never
+    // waits on it; a test does, to read the file a deferred save wrote.
+    internal Task WhenSavedAsync()
+    {
+        lock (_laneGate) return _lane;
+    }
+
+    // On the UI thread: take in another client's lines if they wrote the file,
+    // then copy the list as it stands.
+    private PendingWrite? TakeSnapshot()
+    {
+        if (ActiveRealmFolder is null) return null;
         string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
-        if (_stamp.ChangedOutside(path)) Rebase(path);
-        JsonStore.Save(path, Candidates);
-        _stamp.Mark(path);
-        _changedHere.Clear();
-        _removedHere.Clear();
+        if (ChangedOutside(path)) Rebase(path);
+        return new PendingWrite(path, [.. Candidates], _changes);
+    }
+
+    // The save SaveDelay after the first change it holds: the list goes to the
+    // pool thread, and the UI thread is back at once.
+    private void OnSaveDue()
+    {
+        _saveDue = null;
+        if (TakeSnapshot() is not { } write) return;
+        lock (_laneGate)
+        {
+            bool idle = _waiting is null && _lane.IsCompleted;
+            _waiting = write;
+            if (idle) _lane = Task.Run(DrainWrites);
+        }
+    }
+
+    private void DrainWrites()
+    {
+        while (true)
+        {
+            PendingWrite? next;
+            lock (_laneGate)
+            {
+                next = _waiting;
+                _waiting = null;
+            }
+            if (next is null) return;
+            Write(next);
+        }
+    }
+
+    // Write one list. A write older than one already on disk is skipped: a save
+    // made at once (Save) can overtake a deferred one still waiting its turn.
+    private void Write(PendingWrite write)
+    {
+        lock (_writeGate)
+        {
+            if (write.Changes < Interlocked.Read(ref _changesWritten)) return;
+            try
+            {
+                JsonStore.Save(write.Path, write.Records);
+                MarkStamp(write.Path);
+                Interlocked.Exchange(ref _changesWritten, write.Changes);
+                _writeFailureLogged = false;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The changes stay marked, and the next change or the exit writes
+                // them again. Logged once until a write succeeds.
+                if (!_writeFailureLogged)
+                    _log?.Warn("MessageCandidates", $"Couldn't save '{write.Path}': {ex.Message}");
+                _writeFailureLogged = true;
+            }
+        }
     }
 
     // Insert-or-bump keyed by ComputeId(rawText). A dismissed record still gets
@@ -175,17 +320,16 @@ public sealed class MessageCandidateStore
                 Occurrences = Candidates[i].Occurrences + 1,
             };
             Candidates[i] = bumped;
-            _changedHere.Add(id);
-            QueueSave();
+            MarkChanged(id);
             return (bumped, false);
         }
 
         MessageCandidateRecord created = new(
             id, rawText, when, when, Occurrences: 1, Dismissed: false, Map: map, Room: room);
         Candidates.Add(created);
-        _changedHere.Add(id);
         _removedHere.Remove(id);
-        QueueSave();
+        MarkChanged(id);
+        if (PendingOverCap(Candidates) is > 0 and int over) TrimToCap(over);
         return (created, true);
     }
 
@@ -202,8 +346,7 @@ public sealed class MessageCandidateStore
             if (Candidates[i].Id != id) continue;
             if (Candidates[i].Dismissed) return;
             Candidates[i] = Candidates[i] with { Dismissed = true };
-            _changedHere.Add(id);
-            QueueSave();
+            MarkChanged(id);
             return;
         }
     }
@@ -242,18 +385,40 @@ public sealed class MessageCandidateStore
             if (Candidates[i].Id != id) continue;
             Candidates.RemoveAt(i);
             _changedHere.Remove(id);
-            _removedHere.Add(id);
+            _removedHere[id] = ++_changes;
             QueueSave();
             return;
         }
     }
 
-    private void QueueSave()
+    private void MarkChanged(string id)
     {
-        if (_saveQueued) return;
-        _saveQueued = true;
-        Avalonia.Threading.Dispatcher.UIThread.Post(
-            () => { _saveQueued = false; Save(); },
-            Avalonia.Threading.DispatcherPriority.Background);
+        _changedHere[id] = ++_changes;
+        QueueSave();
     }
+
+    // How many pending lines the list holds past MaxPending.
+    private static int PendingOverCap(IEnumerable<MessageCandidateRecord> list)
+    {
+        int pending = 0;
+        foreach (MessageCandidateRecord c in list)
+            if (!c.Dismissed) pending++;
+        return pending - MaxPending;
+    }
+
+    // Push out the `count` pending lines seen longest ago.
+    private void TrimToCap(int count)
+    {
+        List<MessageCandidateRecord> oldest = Candidates
+            .Where(c => !c.Dismissed)
+            .OrderBy(c => c.LastSeenAt)
+            .Take(count)
+            .ToList();
+        foreach (MessageCandidateRecord c in oldest) Remove(c.Id);
+        _log?.Info("MessageCandidates",
+            $"{oldest.Count} unrecognized line(s) seen longest ago left the review queue: it keeps {MaxPending} pending lines.");
+    }
+
+    // Put the write off until SaveDelay after the first change it will hold.
+    private void QueueSave() => _saveDue ??= _arm(SaveDelay, OnSaveDue);
 }

@@ -2298,6 +2298,12 @@ How to keep it current:
 - Checks: lines from real unrecognized-line exports stay out; genuine room-spell unknowns still captured.
 - Why: exports unrecognized-lines-20260912-235152, -235315, -20260922-014747.
 
+### MessageCandidateSaveTests.cs
+- Covers: Services/MessageCandidateStore (saving and the cap)
+- Checks: sightings are written together SaveDelay after the first, Save writes what waits at once and drops the deferred save, a realm switch writes the old realm's waiting lines to its own file, a new line past MaxPending pushes out the pending line seen longest ago and keeps dismissed ones.
+- Why: reports Hang-20261021-035337 and Hang-20261021-065221 (thousands of UI-thread rewrites of the realm's file a night, one a 5.3 s freeze).
+- Named seam: `MessageCandidateStore.WhenSavedAsync` completes when the handed-off writes have finished, so the test reads the file a deferred save wrote.
+
 ### MessageCandidateStoreTests.cs
 - Covers: Services/MessageCandidateStore
 - Checks: sightings create/bump records, dismiss freezes, first location kept, remove, contains.
