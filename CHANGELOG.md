@@ -1,5 +1,12 @@
 # Version history
 
+## 3.185.40
+
+- Status bar can show HP and mana regen: the last tick, and what your stats say a tick should give
+- Buff Watchdog's mana per tick and the Stock mana-regen roll read count race, class and quest ManaRgn, not just gear
+- Stock Mystics rest instead of meditating
+- Expected HP regen is right with a negative HP-regen bonus on Paradigm
+
 ## 3.185.37
 
 - A monster your weapon can't hit is fought with any attack spell that can hurt it, room spells and a spell set as the attack command included

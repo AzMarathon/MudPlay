@@ -3370,7 +3370,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 **Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
 
-**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. On Paradigm the natural amount arrives in thirds, one every 10 s (fractions dropped); the thirds are of the amount before any HP-regen bonus, and what the bonus adds comes on the third one, with the mana tick (`+2, +2, +3` for an amount of 6 with +25%). Resting pays every 5 s instead: those three gains, then three of the whole amount with its bonus (`+7`), counted from lying down — so standing up and resting again starts back at the small gains. Mana comes every 30 s on both. Meditating adds a mana gain every 15 s on both, on top of the 30-second tick; that gain is the base amount, without your mana-regen bonus. On Paradigm every other meditate gain arrives together with the 30-second tick.
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100** (on Paradigm, the amount plus gearHPregen% of it; the two differ only for a negative bonus, by where the fraction is dropped). `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. On Paradigm the natural amount arrives in thirds, one every 10 s (fractions dropped); the thirds are of the amount before any HP-regen bonus, and what the bonus adds comes on the third one, with the mana tick (`+2, +2, +3` for an amount of 6 with +25%). Resting pays every 5 s instead: those three gains, then three of the whole amount with its bonus (`+7`), counted from lying down — so standing up and resting again starts back at the small gains. Mana comes every 30 s on both. Meditating adds a mana gain every 15 s on both, on top of the 30-second tick; that gain is the base amount, without your mana-regen bonus. On Paradigm every other meditate gain arrives together with the 30-second tick.
 
 **Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
 
@@ -4562,7 +4562,7 @@ The warning is about the two buffs being **configured together**, not about whic
 
 **The mana budget** is a live readout just under the buttons — **`Mana/Tick gained: N - Mana/Tick to maintain: N`** — both sides measured per 30-second passive-regen tick (the "MP +N after ~30s" cadence) so they compare directly. The instant one number exceeds the other you know whether a buff loadout is self-sustaining before you commit to it in-game. It updates the moment you check or uncheck a box, the party roster changes, your gear changes (an `i`), or you level.
 
-- **Mana/Tick gained** is your **natural passive mana regen** per tick — from your level, casting stat, and worn **+ManaRgn%** gear. It does *not* fold in a mana-regen roll spell (nature tap / mana flux and kin): those roll a variable amount and the spell itself already shows up on the cost side. 0 for a non-caster.
+- **Mana/Tick gained** is your **natural passive mana regen** per tick — from your level, casting stat, and **+ManaRgn%** from your worn gear, race, class and completed quests together. It does *not* fold in a mana-regen roll spell (nature tap / mana flux and kin): those roll a variable amount and the spell itself already shows up on the cost side. 0 for a non-caster.
 - **Mana/Tick to maintain** is what every currently-**checked** buff costs to keep recast forever: each buff's mana cost spread over its (level-scaled) duration, scaled to the 30-second tick, times how many casts it actually fires:
   - a **single-target** buff counts one cast per person it's aimed at (yourself plus each targeted member — blessing 3 members is 3 casts);
   - a **whole-party** buff counts as a **single** cast no matter how many are in the party, since one cast covers everyone (its cost only moves with your level, if its duration scales);
@@ -5370,13 +5370,19 @@ Above the rows, **Preview** draws the bar as it would look with your edits so fa
 |---|---|
 | Standard bar | Engine state chip · Location (map/room, the walk readout, or the lap and its step: `lap 12 · step 36 of 60`) · Exp rate · Time to next level · Looked-at target HP · Statline warning · Combat tick · HP tick · Mana tick · Connection light |
 | Character | Profile name · Character name · Level · Race and class · Lives · BBS · Game data set · Combat profile (number and name, number only, or name only) · Gear set |
-| Vitals | HP · HP percent · Mana · Mana percent · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
+| Vitals | HP · HP percent · Mana · Mana percent · HP regen (last tick) · HP regen (expected) · Mana regen (last tick) · Mana regen (expected) · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
 | Location and movement | Map / room number · Room name · Loop name · Lap · Loop step (`Step 36 of 60`) · Walk destination |
 | Combat | Combat target · Exp to next level · Party (size and leader) · Hit rate · Crit rate · Backstab rate · Average hit · Average round · Dodge rate · Hit-taken rate |
 | Session stats | Time online · Exp earned · Kills · Kills per hour · Cash collected · Cash per hour · Items collected · Items sold · Steps walked · Average step time · Sneak success |
 | Other | Auto engines (which are on) · Next event (the Event due soonest, and how long until it fires) · Cash carried · Clock · Custom text |
 
 The Combat and Session stats items are the same tallies the **Session Stats** window shows.
+
+**The regen items.** The two *last tick* items show what the last HP or mana (kai) regen tick gave, `HP +7`. A heal isn't counted, and neither is a tick that filled the pool, since it was cut short. When the tick came in another posture than yours now, it says so (`HP +7 (resting)`). The item empties after two minutes without a tick, and when you disconnect, leave the game, die, load a profile or switch game data. The two *expected* items show what your level, stats, worn gear, race, class and completed quests say a tick gives in your posture. They use the stats from your last `stat`, which are kept with the profile, so they show from the start once a character has read `stat` before; a character that never has shows nothing until it does. Buffs that raise HP regen aren't counted.
+- **HP on Stock:** `HP +6/tick` every 30 s; resting, `HP +18/rest tick (+6/30s)`, since the 30 s tick keeps paying beside the rest tick.
+- **HP on Paradigm:** the 30 s amount comes in thirds, with the regen bonus on the last of each three: `HP +2/+2/+3 per 10s`. Resting, a gain comes every 5 s, three small then three whole: `HP +2/+2/+3 then +7/+7/+7 per 5s`. Lying down again starts back at the small ones.
+- **Mana:** `MA +29/tick` every 30 s. Meditating adds a tick every 15 s that pays your base without the mana-regen bonus: `MA +30/meditate tick (+29/30s)`. A mystic's kai regenerates 1 a tick, and 1 more for every 100 mana regen from gear, race, class and quests together: `KAI +2/tick`. Meditating (Paradigm only) brings the kai ticks faster but no bigger: `KAI +2/meditate tick`. A class with no mana shows nothing.
+- **A mana-regen roll spell** (nature tap, mana flux) in your buff list counts while its timer says it's up. Until its roll has been read (MudPlay reads it when the spell has a reroll threshold and the master switch is on), the item shows the range the roll can give (`MA +27–29/tick`). Once read, Paradigm shows the roll, `MA +39/tick (roll 32)`, and Stock shows the tick the roll was read off.
 
 ### Custom text
 
@@ -5907,7 +5913,7 @@ The mana floor for re-casting buffs is set on each buff now: **Buff Watchdog →
 ### Use 'meditate' ability
 
 **Default:** Off
-**What it does:** On classes that have it, uses `meditate` when the rest is for mana: always when only mana is low, and when both are low if **Meditate before resting** is ticked. A rest for HP alone still uses `rest`.
+**What it does:** On classes that have it, uses `meditate` when the rest is for mana: always when only mana is low, and when both are low if **Meditate before resting** is ticked. A rest for HP alone still uses `rest`. A mystic (a kai character) can meditate only on Paradigm, so on a Stock realm a mystic always rests, with this on or not.
 
 ### Meditate before resting
 

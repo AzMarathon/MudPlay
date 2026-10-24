@@ -87,16 +87,19 @@ public static class CharacterCalculator
     }
 
     // HP regen per tick. Base (level+20)*health/divisor with divisor 500
-    // (ParaMUD) or 750 (Stock), floored at 1, tripled while resting, then scaled
-    // by equipment +HP-regen%.
+    // (ParaMUD) or 750 (Stock), floored at 1, tripled while resting, then the
+    // +HP-regen% step in each realm's form (GAME_MECHANICS "Rest and meditate tick
+    // timing"): Stock (percent+100)*amount/100, Paradigm amount + percent*amount/100.
+    // They agree for a percent of 0 or more; below 0 the dropped fraction differs.
     public static int CalcHpRegen(int level, int health, int hpRegenPercent, bool isResting, RealmType realmType)
     {
         int divisor = realmType == RealmType.ParaMud ? 500 : 750;
         int regen = (level + 20) * health / divisor;
         if (regen < 1) regen = 1;
         if (isResting) regen *= 3;
-        regen = (hpRegenPercent + 100) * regen / 100;
-        return regen;
+        return realmType == RealmType.ParaMud
+            ? regen + hpRegenPercent * regen / 100
+            : (hpRegenPercent + 100) * regen / 100;
     }
 
     // Paradigm pays the idle HP amount in thirds: one standing gain every 10 s, and
@@ -105,6 +108,17 @@ public static class CharacterCalculator
     // What the percent adds to the whole amount comes on the last gain of each three
     // (GAME_MECHANICS "Rest and meditate tick timing").
     public static int ParadigmHpRegenThird(int baseAmount) => Math.Max(1, baseAmount / 3);
+
+    // The gains Paradigm pays at a regen percent: the small third, the last third of
+    // each three (the third plus what the percent adds to the whole amount), and a
+    // rest's full gain, the whole amount with its percent.
+    public static (int Third, int LastThird, int Full) ParadigmHpRegenGains(int level, int health, int hpRegenPercent)
+    {
+        int amount = CalcHpRegen(level, health, 0, isResting: false, RealmType.ParaMud);
+        int full = CalcHpRegen(level, health, hpRegenPercent, isResting: false, RealmType.ParaMud);
+        int third = ParadigmHpRegenThird(amount);
+        return (third, third + full - amount, full);
+    }
 
     // ----- Mana / Kai ------------------------------------------------------
 
@@ -137,7 +151,8 @@ public static class CharacterCalculator
     {
         if (mageryType == 0) return 0;
 
-        // Kai: special fixed-rate path
+        // Kai: 1 a tick plus 1 per 100 ManaRgn (GAME_MECHANICS "Mana regeneration &
+        // the ManaRgn breakpoints"), ManaRgn summed over every source.
         if (mageryType == 5)
         {
             return (mpRegenPercent + 100) * 1 / 100;

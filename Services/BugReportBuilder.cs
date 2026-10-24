@@ -237,6 +237,7 @@ public static class BugReportBuilder
     private static string BuildTickTiming(AppServices svc) =>
         $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
         + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
+        + "\n\n" + svc.RegenReadout.Describe()
         // The length projected rounds step by, and whether the last one could
         // be placed: a cast refused as "already cast this round" out of a
         // fight is a projection running ahead of the game's round.

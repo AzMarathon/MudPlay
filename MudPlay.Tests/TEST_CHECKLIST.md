@@ -584,7 +584,7 @@ How to keep it current:
 
 ### CharacterCalculatorTests.cs
 - Covers: Game/Calculators/CharacterCalculator
-- Checks: CP gain step and stat cost (Stock cap); HP/mana/kai/regen realm branches; spellcasting bonus.
+- Checks: CP gain step and stat cost (Stock cap); HP/mana/kai/regen realm branches, including a negative HP-regen percent in each realm's form and every percent of 0 or more unchanged from the one shared form; spellcasting bonus.
 - Why: realm formula divergences.
 
 ### ChatHistoryStoreTests.cs
@@ -1626,7 +1626,7 @@ How to keep it current:
 
 ### HealthManagerTests.cs
 - Covers: Game/Health/HealthManager
-- Checks: rest and meditate gates with their confirm ticks and pacing; ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
+- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
 - Why: many paradigm-/stock- reports cited inline; user rulings 2026-09/10
 
 ### HealthSettingsTests.cs
@@ -3182,6 +3182,12 @@ How to keep it current:
 - Covers: Game/RegenDiagnosticsRecorder
 - Checks: Debug-channel tick lines (amount, position, interval) only with debug on; uneven amounts kept verbatim.
 - Why: Issue #11 (measuring Paradigm regen).
+
+### RegenReadoutTests.cs
+- Covers: Game/RegenReadout (with RegenTracker, HpRegenExpectationSource, CharacterCalculator.ParadigmHpRegenGains, ManaRegenBreakpointCalculator.LiveInputs, ManaRegenReroller.CurrentRoll / CurrentRollTick)
+- Checks: the status bar's regen items. Last tick: each pool's last regen gain is kept from prompts on the wire; a heal the tracker turns away isn't, nor a regen-sized gain that topped the pool off (194→200 of 200); the posture is named when it isn't the character's now; it blanks after two minutes, and is forgotten when the link drops (InGameCapture.NotifyDisconnected), on the death line through DeathLineWatcher, on a profile load and on a game-data set switch. Expected, from `stat` and worn gear through the real parsers: empty before `stat`; Paradigm level 28 Paladin, Health 71, +25% ring gives `+2/+2/+3` standing and `then +7/+7/+7` resting; level 17 Gypsy, Health 60 gives `+1/+1/+1` and `+4`; Stock rest tick beside the 30 s pass; level 51 Priest, WIL 140 meditating gets base 30 without ManaRgn% beside the pass; a Paradigm roll spell up is a tick range until its `abil 145` roll is read, then pinned, and drops out when its timer runs out with nothing else changing; ManaRegenBreakpointCalculator.LiveInputs (the readout's, the Stock reroll's and the Buff Watchdog's inputs) sums ManaRgn over race, gear and quests and moves the `stat` INT onto the gear worn now; a Stock roll is read with those same inputs, the range before the read is the breakpoint calculator's and the pinned tick is the one read; Kai is 1 a tick plus 1 per 100 ManaRgn from every source (0, 99, 100, 250 worn → 1, 1, 2, 3; a race +20 takes 99 to 2), the same amount per meditate tick on Paradigm; a non-caster shows no mana. The bug-report readout carries the inputs.
+- Not covered: AppServices.StockManaRollContextFor and PassiveManaRegenTick themselves (no test builds AppServices); both are LiveInputs plus the spell's range or Tick, which this file covers. StatusBarValues.Read for the four ids. It reads AppServices.Current and the main window's view model, which no test builds; it forwards RegenReadout's four texts and nothing else.
+- Why: PTBrennan's request for HP and mana regen on the status bar; the numbers are the captures in GAME_MECHANICS "Rest and meditate tick timing" (reports paradigm-20261004-140923, paradigm-20261004-024314) and "Mana regeneration & the ManaRgn breakpoints" (the Kai rule: user, 2026-10-24).
 
 ### RegenSpellClassifierTests.cs
 - Covers: Game/Spells/RegenSpellClassifier, ManaRegenReroller.IsRollSpell

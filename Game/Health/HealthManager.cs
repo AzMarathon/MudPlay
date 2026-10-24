@@ -2676,7 +2676,7 @@ public sealed class HealthManager : IDisposable
     private string ChooseRestCommand(HealthSettings s)
     {
         // No meditate ability → always rest.
-        if (!s.UseMeditateAbility || MeditateRecentlyRefused()) return "rest";
+        if (!s.UseMeditateAbility || MeditateRecentlyRefused() || KaiCantMeditateHere()) return "rest";
 
         bool needsHp = _hpGateAsserted;
         bool needsMa = _maGateAsserted;
@@ -2696,6 +2696,23 @@ public sealed class HealthManager : IDisposable
     private Func<bool>? _meditateWhilePoisoned;
 
     public void SetMeditateWhilePoisonedProbe(Func<bool> allowed) => _meditateWhilePoisoned = allowed;
+
+    // A kai character (a Mystic) can meditate only on Paradigm (GAME_MECHANICS "Mana
+    // regeneration & the ManaRgn breakpoints", user 2026-10-24), so with Use meditate
+    // on, one on Stock rests instead. Mana casters meditate on both realms.
+    private Func<bool>? _kaiCanMeditate;
+    private bool _kaiMeditateGuardLogged;
+
+    public void SetKaiMeditateProbe(Func<bool> allowed) => _kaiCanMeditate = allowed;
+
+    private bool KaiCantMeditateHere()
+    {
+        bool cant = _state.ManaType == ManaType.Kai && _kaiCanMeditate?.Invoke() == false;
+        if (cant && !_kaiMeditateGuardLogged)
+            _log?.Info(LogCategory, "a kai character can't meditate on this realm: resting instead of meditating");
+        _kaiMeditateGuardLogged = cant;
+        return cant;
+    }
 
     private bool MeditatesWhilePoisoned(HealthSettings s, bool selfPoisoned) =>
         selfPoisoned && _meditateWhilePoisoned?.Invoke() == true
@@ -2784,7 +2801,7 @@ public sealed class HealthManager : IDisposable
     // held, so the choice is driven by live pool fill.
     private string ChooseOpportunisticRestCommand(HealthSettings s)
     {
-        if (!s.UseMeditateAbility || MeditateRecentlyRefused()) return "rest";
+        if (!s.UseMeditateAbility || MeditateRecentlyRefused() || KaiCantMeditateHere()) return "rest";
 
         bool missingMana = _state.MaxMa > 0 && _state.Ma < _state.MaxMa;
         if (s.MeditateBeforeResting && missingMana) return "meditate";

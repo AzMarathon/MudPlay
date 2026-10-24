@@ -3836,6 +3836,30 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("meditate", h.SentLines);
     }
 
+    // A kai character (a Mystic) can meditate only on Paradigm (user, 2026-10-24); a
+    // mana caster meditates on both realms. Pools arrive as the game's prompts: full,
+    // then the second pool down to a fifth.
+    [Theory]
+    [InlineData("KAI", false, "rest")]
+    [InlineData("KAI", true, "meditate")]
+    [InlineData("MA", false, "meditate")]
+    public void Meditate_AKaiCharacterOnStock_RestsInstead(string pool, bool paradigm, string expected)
+    {
+        using Harness h = new(new HealthSettings { UseMeditateAbility = true });
+        h.Health.SetKaiMeditateProbe(() => paradigm);
+        List<LogEntry> logged = new();
+        h.Log.EntryAdded += logged.Add;
+        WirePromptScanner scanner = new();
+        using PromptParser prompts = new(scanner, h.State);
+
+        scanner.Append(Encoding.Latin1.GetBytes($"[HP=200/{pool}=10]:"));
+        scanner.Append(Encoding.Latin1.GetBytes($"[HP=200/{pool}=2]:"));
+
+        Assert.Equal(expected, h.LastSent);
+        Assert.Equal(expected == "rest" && pool == "KAI" ? 1 : 0,
+            logged.Count(e => e.Message.Contains("can't meditate on this realm")));
+    }
+
     [Fact]
     public void Meditate_BothPoolsGated_MeditateBeforeRestingFlipsOrder()
     {
