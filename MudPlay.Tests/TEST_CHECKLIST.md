@@ -785,8 +785,8 @@ How to keep it current:
 
 ### ConditionTrackerRosterTests.cs
 - Covers: Game/Conditions/ConditionTracker, Game/Combat/RoomEntityClassifier (RosterIsWhole), RoomEntryWatcher, the shipped message seeds.
-- Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; seed flags and Ids.
-- Why: a held character must never read as free; user ruling 2026-10-17.
+- Checks: a caster that followed in leaves nothing ruled out; a named caster not listed breaks the roster; paralysis is always a hold; a gruesome curse (BlindUser in the Spells data) always blinds, whoever is listed; a web cocoon is a hold and nothing else; seed flags and Ids.
+- Why: a held or blinded character must never read as free; user rulings 2026-10-17 and 2026-10-23 (web, by the spell data).
 
 ### ConditionTrackerTests.cs
 - Covers: Game/Conditions/ConditionTracker.
@@ -3481,8 +3481,8 @@ How to keep it current:
 - Why: The self party-window row never showed our own poison (PartyAilmentTracker only mirrors other members).
 
 ### SelfAilmentProofTests.cs
-- Covers: Game/Conditions/SelfAilmentProof (with ConditionTracker.ClearFlag, RoomTracker.MoveConfirmed / RoomDisplayRead and CureCastMatcher's caster and target lines), on TrackerWireRig, the router's lines included.
-- Checks: a room shown by a move or a `look` drops a latched blindness; a move and a look that show only `You are blind.` keep it; a record that blinds and confuses is kept; a look keeps a hold, a move drops it; a cure blindness cast on us (our cast naming us, or another's `upon you`) drops our blindness, while one on a party member, a witnessed one on someone else, and a cure poison leave it.
+- Covers: Game/Conditions/SelfAilmentProof (with ConditionTracker.ClearFlag, RoomTracker.MoveConfirmed / RoomDisplayRead and the router's command echo), and Game/Conditions/CureCastMatcherBuilder over CureSpellIndex (Spells rows for #87 and #19) and the shipped Paradigm message records, on TrackerWireRig.
+- Checks: a room shown by a move or a bare `look` drops a latched blindness, a peek's room (`l n`) does not; a gossip quoting a cure clears nothing; a move and a look that show only `You are blind.` keep it; a record that blinds and confuses is kept; a look keeps a hold, a move drops it; a cure blindness cast on us (our cast naming us, or another's `upon you`) drops our blindness, while one on a party member, a witnessed one on someone else, and a cure poison leave it.
 - Why: reports CureBlindlessBugReport (cure blindness cast on itself every 15 s) and paradigm-20261003-161904 (a stale hold); user, 2026-10-23: a blind look shows only `You are blind.`, and cure blindness prints no wear-off.
 
 ### SelfConfusionResponderTests.cs

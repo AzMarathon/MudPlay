@@ -451,9 +451,10 @@ public sealed class PartyAilmentTracker : IDisposable
 // member we see in the room — clears the chip for third-party observers). The
 // witness matcher is null when the record has no witness template. Target, from the
 // TargetMessage, is the cure cast at us by someone else (SelfAilmentProof reads it;
-// this tracker leaves our own state to ConditionTracker). Provided by AppServices
-// from the live Spells settings + spellbook so re-configuring a cure spell takes
-// effect without rebuilding the tracker.
+// this tracker leaves our own state to ConditionTracker). Built by AppServices from
+// the game data (CureSpellIndex and each cure's message record), not the local cure
+// settings, and read live so a game-data set swap or a Messages edit takes effect
+// without rebuilding the tracker.
 public readonly record struct CureCastMatcher(
     MessageFlags Ailment, string SpellName,
     CasterMessageMatcher Caster, CasterMessageMatcher? Witness = null,

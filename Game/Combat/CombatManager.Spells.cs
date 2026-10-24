@@ -532,11 +532,13 @@ public sealed partial class CombatManager
                 // bypasses the shared 5.5s round cooldown (mirroring a weapon's
                 // cooldown-free SendAttack), so a fresh mob is cast at immediately rather
                 // than after it swings. bypassRecastInterval additionally skips the 500ms
-                // burst guard: the debuff half of debuff-then-attack is cast on the same
-                // attack-slot clock moments before this dispatch, so a fresh engage /
-                // arrival and an interrupt-resume pass it true to still land THIS round's
-                // attack behind it, and so does a target-priority follow, which moves off a
-                // cast just sent at our own pick. The plain per-round re-decide paths
+                // burst guard on the attack-slot clock. The pre-attack debuff ahead of this
+                // dispatch rides the between-round clock (TryCast's betweenRound), so it
+                // never trips the guard; a fresh engage / arrival and an interrupt-resume
+                // still pass it true so an attack-slot cast moments before (a primary, then
+                // its alternate after a "no effect") can't push THIS round's attack to the
+                // next tick, and so does a target-priority follow, which moves off a cast
+                // just sent at our own pick. The plain per-round re-decide paths
                 // (@kill retarget) leave it false so the guard still absorbs a burst of
                 // dispatches in the same frame. The server then auto-repeats the spell
                 // each round; the heartbeat re-announces only if the chooser's decision
@@ -1363,12 +1365,13 @@ public sealed partial class CombatManager
                     + "deferred dispatch (the debuff's kill landed first); no corpse-cast");
                 return;
             }
-            // bypassRecastInterval: the attack lands right behind the debuff's own
-            // cast (within the ~200ms spacing), so without the bypass CastCoordinator's
-            // recast interval defers an attack SPELL to the next tick and the round is
-            // lost — the exact "missed a combat round" this fix removes. The debuff and
-            // the attack are independent slots server-side, so the back-to-back cast is
-            // legitimate (mirrors the between-round-cast spell-resume path).
+            // bypassRecastInterval: the attack lands right behind the debuff (within the
+            // ~200ms spacing). The debuff is paced on the between-round clock, so the
+            // bypass only matters when another attack-slot cast went out just before;
+            // without it CastCoordinator's recast interval would defer the attack SPELL
+            // to the next tick and lose the round. The debuff and the attack are
+            // independent slots server-side, so the back-to-back cast is legitimate
+            // (mirrors the between-round-cast spell-resume path).
             if (TryBuildCandidate(obs, target) is { } cand)
                 DispatchRoundAction(settings, cand, CountEngageable(obs), obs,
                     bypassRecastInterval: true);

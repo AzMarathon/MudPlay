@@ -1,6 +1,8 @@
+using System.IO;
+using System.Linq;
 using MudPlay.Game.Conditions;
+using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
-using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using Xunit;
@@ -23,8 +25,19 @@ public sealed class SelfAilmentProofTests
         TrackerWireRig.Room(1, 2, "Yard", ("S", "1/1")),
     });
 
+    // Cure blindness (#87) and cure poison (#19), their ability columns as the
+    // Paradigm 1.9.1 Spells table has them.
+    private const string Spells = """
+        [
+          { "Number": 87, "Name": "cure blindness", "Short": "site", "Abil-0": 73, "AbilVal-0": 107 },
+          { "Number": 19, "Name": "cure poison", "Short": "cure", "Abil-0": 20, "Abil-1": 73, "AbilVal-1": 19 }
+        ]
+        """;
+
     private sealed class World : IDisposable
     {
+        private readonly string _root;
+        private readonly SelfAilmentProof _proof;
         public TrackerWireRig Rig { get; }
         public MessageStore Messages { get; } = new();
         public ConditionTracker Conditions { get; }
@@ -36,34 +49,40 @@ public sealed class SelfAilmentProofTests
                 "You struggle for breath!", "The effects of the mummy's breath wears off!"));
             Messages.Messages.Add(Record("hold", MessageFlags.MovementPrevented,
                 "You are paralyzed", "You can move again"));
+
+            // The cure confirmations as the client builds them: from the Spells table
+            // and the shipped Paradigm message records.
+            _root = Path.Combine(Path.GetTempPath(), "mudplay-self-ailment-" + Path.GetRandomFileName());
+            Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+            File.WriteAllText(Path.Combine(_root, "alpha", "Spells.json"), Spells);
+            GameDataCache cache = new(_root);
+            cache.SwitchSet("alpha");
+            string seeds = Path.Combine(_root, "seeds");
+            AppPaths.ExtractEmbeddedSeeds(seeds);
+            List<MessageRecord> shipped =
+                JsonStore.Load<List<MessageRecord>>(Path.Combine(seeds, "Messages.paradigm.seed.json"))!;
+            IReadOnlyList<CureCastMatcher> cures = CureCastMatcherBuilder.Build(
+                new CureSpellIndex(cache).AllCures(),
+                (number, _) => shipped.Find(r => r.Links is { } links && links.Any(l => l.Table == "Spells" && l.Number == number)));
+            Assert.Contains(cures, c => c.Ailment == MessageFlags.Blinded && c.Target is not null);
+
             Rig = new TrackerWireRig(Rooms, prompt: "[HP=100/MA=50]:") { Position = Gate };
             Conditions = new ConditionTracker(Messages, Rig.Log);
             Conditions.AttachLineExtractor(Rig.Lines);
-            SelfAilmentProof.Wire(Rig.Tracker, Conditions, Rig.Router, () => Cures, () => "Francisco Sanders");
+            _proof = new SelfAilmentProof(Rig.Tracker, Conditions, Rig.Router, () => cures, () => "Francisco Sanders");
             Rig.ShowRoom();
             Assert.Equal(Gate, Rig.Believed);
         }
 
         public void Dispose()
         {
+            _proof.Dispose();
             Conditions.Dispose();
             Rig.Dispose();
+            try { Directory.Delete(_root, recursive: true); }
+            catch (IOException) { /* best-effort temp cleanup */ }
         }
     }
-
-    // Cure blindness (#87) and cure poison (#19) as the shipped message records word
-    // them: caster, target and witness lines, no wear-off.
-    private static readonly IReadOnlyList<CureCastMatcher> Cures = new[]
-    {
-        Cure(MessageFlags.Blinded, "cure blindness"),
-        Cure(MessageFlags.Poisoned, "cure poison"),
-    };
-
-    private static CureCastMatcher Cure(MessageFlags ailment, string spell) => new(
-        ailment, spell,
-        CasterMessageMatcher.TryCreate("You cast {spellname} on {target}!")!,
-        CasterMessageMatcher.TryCreate("{source} casts {spellname} on {target}!"),
-        CasterMessageMatcher.TryCreate("{source} casts {spellname} upon you!"));
 
     private static MessageRecord Record(string name, MessageFlags flags, string applied, string ends) =>
         new(
@@ -92,6 +111,32 @@ public sealed class SelfAilmentProofTests
         w.Rig.Do(command);
 
         Assert.False(w.Conditions.IsBlinded);
+    }
+
+    // Only a move and a bare look are confirmed to show a blind character nothing but
+    // "You are blind."; a peek's room (`l n`) proves nothing yet.
+    [Fact]
+    public void LatchedBlindness_APeekShowsARoom_StaysLatched()
+    {
+        using World w = new();
+        w.Rig.Show("You are blind!");
+        w.Rig.NextAnswers.Enqueue("\u001b[1;36mYard\u001b[0m\r\nObvious exits: south");
+
+        w.Rig.Do("l n");
+
+        Assert.True(w.Conditions.IsBlinded);
+    }
+
+    // A gossip quoting a cure is another player's text, never the game's.
+    [Fact]
+    public void LatchedBlindness_AGossipQuotingACure_StaysLatched()
+    {
+        using World w = new();
+        w.Rig.Show("You are blind!");
+
+        w.Rig.Show("Kenwood gossips: Bob casts cure blindness upon you!");
+
+        Assert.True(w.Conditions.IsBlinded);
     }
 
     // Blind, a move goes through and a look answers, each showing only "You are blind.".

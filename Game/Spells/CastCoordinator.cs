@@ -194,9 +194,10 @@ public sealed class CastCoordinator : IDisposable
     // retry a fizzle. Per-round heartbeat re-casts leave it false.
     // bypassRecastInterval additionally skips the 500ms MinRecastInterval burst guard.
     // That guard exists to absorb CastingDirector's OWN back-to-back survival re-casts;
-    // the combat engine sends legitimate back-to-back attack-slot casts (a pre-attack
-    // debuff then the attack, a primary then its alternate after a "no effect") that
-    // the 500ms window would otherwise defer to the next tick. The combat dispatch is
+    // the combat engine sends legitimate back-to-back attack-slot casts (a primary then
+    // its alternate after a "no effect") that the 500ms window would otherwise defer to
+    // the next tick. Each clock has its own guard, so a pre-attack debuff (betweenRound)
+    // and the attack behind it never meet in one. The combat dispatch is
     // already paced once-per-round by ResumePacing / the round cooldown, so it can't
     // burst; CastingDirector's casts leave this false.
     // betweenRound puts a cast sent at an engage's speed (bypassRoundCooldown) on the

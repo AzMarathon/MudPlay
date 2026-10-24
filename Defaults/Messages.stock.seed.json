@@ -5732,8 +5732,8 @@
   {
     "Id": "ed8624968b614df9",
     "Name": "web",
-    "Flags": "Blinded, Confused, MovementPrevented",
-    "RawFlagsHex": 19,
+    "Flags": "MovementPrevented",
+    "RawFlagsHex": 16,
     "CasterMessage": "{null}",
     "TargetMessage": "The spider quickly wraps you in a sticky cocoon!",
     "WitnessMessage": "The spider quickly wraps {source} in a sticky cocoon!",
