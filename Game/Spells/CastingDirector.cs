@@ -111,12 +111,14 @@ public sealed class CastingDirector : IDisposable
     private readonly CastCoordinator _cast;
     private readonly Conditions.ConditionTracker? _conditions;
     private readonly PartyState? _party;
-    // Rest-target pool ceilings for the self-heal triggers — the DEFAULT gear set's
-    // max HP + the current gear's real (stat-screen) max — so a heal anchors to the
-    // loadout the user tuned (like the rest gates), not a Pre-rest set's altered pool.
-    // Null until wired → the heal falls back to the live _state.MaxHp.
+    // Rest-target pool ceilings — the DEFAULT gear set's max + the current gear's real
+    // (stat-screen) max — for the self-heal triggers and the when-full marks, so they
+    // anchor to the loadout the user tuned, exactly as HealthManager's rest does, not
+    // a Pre-rest set's altered pool. Null until wired → the live max.
     private Func<int>? _restDefaultMaxHp;
     private Func<int>? _restRealMaxHp;
+    private Func<int>? _restDefaultMaxMa;
+    private Func<int>? _restRealMaxMa;
     private Func<bool>? _inputCaptured;
     private Func<bool>? _buffStripRoom;
     private Func<bool>? _tokenBuffPause;
@@ -520,18 +522,28 @@ public sealed class CastingDirector : IDisposable
     // alone.
     public event Action? CastFired;
 
-    // Wire the self-heal rest-target ceilings (DEFAULT-set max HP + current gear's
-    // real max) so heal triggers anchor to the Default set like the rest gates.
-    public void SetRestPoolMaxHp(Func<int>? defaultMaxHp, Func<int>? realMaxHp)
+    // Wire the rest-target ceilings (DEFAULT-set max + current gear's real max, per
+    // pool) — the same providers HealthManager.SetRestPoolMaxProviders takes — so the
+    // heal triggers and the when-full marks anchor where the rest does.
+    public void SetRestPoolMaxProviders(
+        Func<int>? defaultMaxHp, Func<int>? defaultMaxMa,
+        Func<int>? realMaxHp, Func<int>? realMaxMa)
     {
         _restDefaultMaxHp = defaultMaxHp;
+        _restDefaultMaxMa = defaultMaxMa;
         _restRealMaxHp = realMaxHp;
+        _restRealMaxMa = realMaxMa;
     }
 
-    // Resolve a self-heal HP trigger against the Default-set basis + real-max cap.
-    private int ResolveHealHpTrigger(ThresholdMode mode, int pct)
+    // Resolve an HP / mana threshold (a self-heal trigger, a rest max) against the
+    // Default-set basis + real-max cap.
+    private int ResolveHpThreshold(ThresholdMode mode, int pct)
         => RestThresholds.ResolveValue(mode, pct,
             _restDefaultMaxHp?.Invoke() ?? 0, _restRealMaxHp?.Invoke() ?? 0, _state.MaxHp);
+
+    private int ResolveMaThreshold(ThresholdMode mode, int pct)
+        => RestThresholds.ResolveValue(mode, pct,
+            _restDefaultMaxMa?.Invoke() ?? 0, _restRealMaxMa?.Invoke() ?? 0, _state.MaxMa);
 
     // Wire a "the keyboard is captured by a full-screen menu" predicate. While
     // it returns true, Evaluate suppresses EVERY cast — not just buffs. When the
@@ -2363,6 +2375,9 @@ public sealed class CastingDirector : IDisposable
         _slotCastHeldForSneak = false;
         _clientUseHeldForSneak = false;
         SneakHeldCategory = null;
+        // A due cast passed over only because mana is short of its cost: the
+        // cast-when-full slots mustn't spend the mana it is waiting for.
+        string? dueWaitingForMana = null;
 
         // The client's own use (a hazard counter's buff) goes ahead of the user's
         // categories, an emergency heal excepted: it is due only in a short window
@@ -2459,6 +2474,7 @@ public sealed class CastingDirector : IDisposable
                 _log?.Combat(LogCategory,
                     $"{category} skip spell={cand.Spell} cost={cost} ma={_state.Ma} " +
                     "(insufficient mana)");
+                dueWaitingForMana ??= $"{cand.Spell.Trim()} ({category}) is due and waiting for mana to reach its cost of {cost}";
                 continue;
             }
 
@@ -2536,10 +2552,10 @@ public sealed class CastingDirector : IDisposable
             return cand.Spell;
         }
 
-        // Nothing in the priority list is due: the round's cast is free for a
+        // Nothing in the priority list went out: the round's cast is free for a
         // cast-when-full slot. Mid-burst the settled pass decides instead.
         return blessEnabled && !settling
-            ? TryCastWhenFull(spells, health, deferSneakMaintenance)
+            ? TryCastWhenFull(spells, health, deferSneakMaintenance, dueWaitingForMana)
             : null;
     }
 
@@ -2747,7 +2763,7 @@ public sealed class CastingDirector : IDisposable
     private SelfHealInputs SelfHealState() => new(
         _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
         Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true,
-        HealHpTrigger: ResolveHealHpTrigger,
+        HealHpTrigger: ResolveHpThreshold,
         Affordable: SpellAffordable,
         HpRegenRecastDue: spell => IsRecastDue("", spell));
 
@@ -3395,11 +3411,13 @@ public sealed class CastingDirector : IDisposable
 
     // "Full" is the rest-max target (HealthSettings.RestMaxHp / RestMaxMa read per the
     // threshold mode), not literal 100%: a buff or spell meant for "topped off, ready
-    // for the next fight" goes out as soon as a recovery rest finishes. The Buff
+    // for the next fight" goes out as soon as a recovery rest finishes. Resolved as
+    // HealthManager resolves the rest target — the Default-set basis, capped at the real
+    // and live max — so "full" is where the rest stops, whatever gear is on. The Buff
     // Watchdog's when-full buffs and the cast-when-full slots share it.
     private (int Hp, int Ma) FullMarks(HealthSettings health) => (
-        PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp),
-        PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa));
+        ResolveHpThreshold(health.HpThresholdMode, health.RestMaxHp),
+        ResolveMaThreshold(health.MaThresholdMode, health.RestMaxMa));
 
     private bool HpAtFull(int mark) => _state.MaxHp > 0 && _state.Hp >= mark;
     private bool MaAtFull(int mark) => _state.MaxMa > 0 && _state.Ma >= mark;
@@ -3416,6 +3434,8 @@ public sealed class CastingDirector : IDisposable
         public int Mark { get; set; } = int.MaxValue;
         public string? SentSpell { get; set; }
         public DateTime? SentAt { get; set; }
+        // Why a cast that is otherwise due is waiting; null when nothing holds it.
+        public string? HoldReason { get; set; }
 
         public void Reset()
         {
@@ -3423,6 +3443,7 @@ public sealed class CastingDirector : IDisposable
             Mark = int.MaxValue;
             SentSpell = null;
             SentAt = null;
+            HoldReason = null;
         }
     }
 
@@ -3445,39 +3466,40 @@ public sealed class CastingDirector : IDisposable
     }
 
     // The two slots' cast, when one is due: out of combat, the pool at full and the
-    // slot armed. Called only when nothing in the priority list is due, under the
-    // Auto-Bless switch the when-full buffs answer to.
-    private string? TryCastWhenFull(SpellsSettings spells, HealthSettings health, bool keepSneak)
+    // slot armed. Called only when nothing in the priority list went out, under the
+    // Auto-Bless switch the when-full buffs answer to. dueWaitingForMana names a due
+    // cast the pass passed over for want of mana: the slots wait with it.
+    private string? TryCastWhenFull(SpellsSettings spells, HealthSettings health, bool keepSneak,
+        string? dueWaitingForMana)
     {
         (int hpMark, int maMark) = FullMarks(health);
         _hpFull.Mark = hpMark;
         _maFull.Mark = maMark;
         return TryCastWhenFull(_hpFull, spells.CastWhenHpFullSpell, spells.CastWhenHpFullTarget,
-                   spells.CastWhenHpFullWhileResting, HpAtFull(hpMark), keepSneak)
+                   spells.CastWhenHpFullWhileResting, HpAtFull(hpMark), keepSneak, dueWaitingForMana)
             ?? TryCastWhenFull(_maFull, spells.CastWhenMaFullSpell, spells.CastWhenMaFullTarget,
-                   spells.CastWhenMaFullWhileResting, MaAtFull(maMark), keepSneak);
+                   spells.CastWhenMaFullWhileResting, MaAtFull(maMark), keepSneak, dueWaitingForMana);
     }
 
     private string? TryCastWhenFull(WhenFullSlot slot, string? spell, string? target, bool whileResting,
-        bool full, bool keepSneak)
+        bool full, bool keepSneak, string? dueWaitingForMana)
     {
         string? code = spell?.Trim();
-        if (string.IsNullOrEmpty(code) || !full || _state.InCombat) return null;
-        // A different spell picked since the last cast hasn't gone out yet.
-        if (!slot.Armed && string.Equals(code, slot.SentSpell, StringComparison.OrdinalIgnoreCase)) return null;
-        // The slot takes a spell; an item token would go to the game as typed.
-        if (ItemCastToken.IsToken(code)) return null;
-        // Casting ends a rest (GAME_MECHANICS "Casting a spell interrupts resting /
-        // meditating"), so an unticked "Cast while resting" waits for the rest to end.
-        if (!whileResting && _isTriggeredRest?.Invoke() == true) return null;
-        // A loop at a lair's doorstep keeps the round's cast for its debuff and
-        // priority buffs; sneak keeping holds every in-between cast.
-        if (_lairHold is { BlockingBuffs: true } or { BlockingOrdinaryBuffs: true }) return null;
-        if (keepSneak) return null;
-        if (UnpayableCost(code) is not null) return null;
+        // A mark of 0 or less (a Rest max of 0, a pool not known yet) is always met, so
+        // nothing could re-arm the slot after one cast: it stays inactive instead. A
+        // different spell picked since the last cast hasn't gone out yet.
+        bool due = !string.IsNullOrEmpty(code) && slot.Mark > 0 && full && !_state.InCombat
+            && (slot.Armed || !string.Equals(code, slot.SentSpell, StringComparison.OrdinalIgnoreCase));
+        string? hold = due ? WhenFullHold(code!, whileResting, keepSneak, dueWaitingForMana) : null;
+        if (hold != slot.HoldReason)
+        {
+            slot.HoldReason = hold;
+            if (hold is not null) _log?.Info(LogCategory, $"cast when {slot.Pool} full held — {hold}.");
+        }
+        if (!due || hold is not null) return null;
 
-        string? aim = string.IsNullOrWhiteSpace(target) ? null : target.Trim();
-        if (!_cast.TryCast(code, aim)) return null;
+        string? aim = WireTarget(target);
+        if (!_cast.TryCast(code!, aim)) return null;
         slot.Armed = false;
         slot.SentSpell = code;
         slot.SentAt = _now();
@@ -3485,6 +3507,36 @@ public sealed class CastingDirector : IDisposable
             $"cast when {slot.Pool} full: {code} → {aim ?? "self"} (hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}, full mark {slot.Mark}).");
         CastFired?.Invoke();
         return code;
+    }
+
+    // Why a due cast-when-full slot waits, or null to cast it now.
+    private string? WhenFullHold(string code, bool whileResting, bool keepSneak, string? dueWaitingForMana)
+    {
+        // CastCoordinator.TryCast turns a token away too; asked here, it isn't sent to
+        // be refused (a Blocked failure) on every pass.
+        if (ItemCastToken.IsToken(code)) return $"{code} is an item token; this slot casts spells only";
+        // Casting ends a rest (GAME_MECHANICS "Casting a spell interrupts resting /
+        // meditating"), so an unticked "Cast while resting" waits for the rest to end.
+        if (!whileResting && _isTriggeredRest?.Invoke() == true)
+            return "a recovery rest is under way and Cast while resting is unticked";
+        // A loop at a lair's doorstep keeps the round's cast for its debuff and
+        // priority buffs; sneak keeping holds every in-between cast.
+        if (_lairHold is { BlockingBuffs: true } or { BlockingOrdinaryBuffs: true })
+            return "a loop at a lair's doorstep is keeping the round's cast";
+        if (keepSneak) return "the sneak is being kept";
+        // The slots come last: they mustn't spend the mana a due cast is waiting for.
+        if (dueWaitingForMana is not null) return dueWaitingForMana;
+        if (UnpayableCost(code) is { } cost) return $"{code} costs {cost} mana, more than there is";
+        return null;
+    }
+
+    // The target as typed, with any control character (a stray CR or LF would end the
+    // command early and send the rest as a second one) taken out; null when nothing's left.
+    private static string? WireTarget(string? target)
+    {
+        if (target is null) return null;
+        string clean = new string(target.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        return clean.Length == 0 ? null : clean;
     }
 
     // A cast the game turned away never went off: the slot tries again while the pool
@@ -3514,13 +3566,15 @@ public sealed class CastingDirector : IDisposable
 
         static string Describe(WhenFullSlot slot, string? spell)
         {
+            if (string.IsNullOrWhiteSpace(spell)) return $"{slot.Pool} full: (empty)";
             string mark = slot.Mark == int.MaxValue ? "not worked out yet" : slot.Mark.ToString();
-            string state = slot.Armed
-                ? $"armed, fires when {slot.Pool} reaches the full mark ({mark})"
-                : $"fired {slot.SentSpell} at {slot.SentAt:HH:mm:ss} UTC, re-arms when {slot.Pool} drops under {mark}";
-            return string.IsNullOrWhiteSpace(spell)
-                ? $"{slot.Pool} full: (empty)"
-                : $"{slot.Pool} full: {spell.Trim()} — {state}";
+            string state = slot.Mark <= 0
+                ? $"inactive, the full mark resolves to {slot.Mark}"
+                : slot.Armed
+                    ? $"armed, fires when {slot.Pool} reaches the full mark ({mark})"
+                    : $"fired {slot.SentSpell} at {slot.SentAt?.ToLocalTime():HH:mm:ss}, re-arms when {slot.Pool} drops under {mark}";
+            string held = slot.HoldReason is { } why ? $"; held: {why}" : "";
+            return $"{slot.Pool} full: {spell.Trim()} — {state}{held}";
         }
     }
 

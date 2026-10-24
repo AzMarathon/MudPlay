@@ -3,6 +3,7 @@
 ## 3.185.45
 
 - Settings → Spells + Ailments gains "Cast when HP full" and "Cast when mana full": any spell, cast once each time the pool refills
+- Buff Watchdog's when-HP/MA-full buffs count "full" where the rest stops, Default-gear basis and gear caps included
 
 ## 3.185.44
 

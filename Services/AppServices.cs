@@ -7209,10 +7209,13 @@ public sealed class AppServices
             () => DefaultBasisMaxMa(),
             () => PlayerStats.MaxHits,
             () => PlayerStats.MaxMana);
-        // Self-heal HP triggers anchor to the Default set too (same basis as rest).
-        CastDirector.SetRestPoolMaxHp(
+        // Self-heal HP triggers and the when-full marks anchor to the Default set too
+        // (same basis as rest).
+        CastDirector.SetRestPoolMaxProviders(
             () => DefaultBasisMaxHp(),
-            () => PlayerStats.MaxHits);
+            () => DefaultBasisMaxMa(),
+            () => PlayerStats.MaxHits,
+            () => PlayerStats.MaxMana);
 
         // Hold every movement engine while a paced gear-set apply streams, so the
         // loop never steps out of a room mid-swap — the "finished resting, moved,

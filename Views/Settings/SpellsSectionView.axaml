@@ -243,9 +243,9 @@
                               ToolTip.Tip="Ticked: this cure waits until the fight is over (no monster left to fight), on you or a party member, so the round's one between-round cast stays free for healing. Unticked: it is cast between rounds as soon as nothing ranked above Curing is due."/>
                 </Grid>
 
-                <!-- Self-bless spell picks + the "when HP/MA full" utility casts
-                     moved to the unified Buff Watchdog list; only the timing
-                     gates below still live on this tab. -->
+                <!-- Self-bless picks and the "when HP/MA full" buffs live in the
+                     Buff Watchdog list, timing included; the cast-when-full slots
+                     below are for spells that aren't buffs. -->
                 <TextBlock Text="Self bless slots and the “when HP full / MA full” buffs are configured in the Buff Watchdog window (View → Buff Watchdog)."
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            FontSize="11"
@@ -273,9 +273,9 @@
                                      ItemFilter="{Binding SpellSuggestionFilter}"
                                      ItemTemplate="{StaticResource SpellPickItem}"
                                      PlaceholderText="Type code or name…"
-                                     Width="200" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast once, out of combat, when HP comes up to the Health tab's Rest-max level; again only after HP has dropped below it. Unlike a Buff Watchdog buff ticked &quot;when HP full&quot;, nothing is timed or recast on expiry. Only goes out when no heal, cure or buff is due, under Auto-Bless."/>
-                    <TextBox Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Width="120"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast once, out of combat, when HP comes up to the Health tab's Rest-max level; again only after HP has dropped below it. Unlike a Buff Watchdog buff ticked &quot;when HP full&quot;, nothing is timed or recast on expiry. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
+                    <TextBox Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Width="96"
                              Text="{Binding CastWhenHpFullTarget, Mode=TwoWay}"
                              PlaceholderText="Target (self)"
                              ToolTip.Tip="Who to cast it on, as you'd type it after the spell code. Leave blank for a spell with no target or cast on yourself."/>
@@ -293,9 +293,9 @@
                                      ItemFilter="{Binding SpellSuggestionFilter}"
                                      ItemTemplate="{StaticResource SpellPickItem}"
                                      PlaceholderText="Type code or name…"
-                                     Width="200" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast once, out of combat, when mana comes up to the Health tab's Rest-max level; again each time mana has dropped below it and refilled, so a mana burn goes out on every refill. Only goes out when no heal, cure or buff is due, under Auto-Bless."/>
-                    <TextBox Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" Width="120"
+                                     Width="260" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast once, out of combat, when mana comes up to the Health tab's Rest-max level; again each time mana has dropped below it and refilled, so a mana burn goes out on every refill. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
+                    <TextBox Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" Width="96"
                              Text="{Binding CastWhenMaFullTarget, Mode=TwoWay}"
                              PlaceholderText="Target (self)"
                              ToolTip.Tip="Who to cast it on, as you'd type it after the spell code. Leave blank for a spell with no target or cast on yourself."/>

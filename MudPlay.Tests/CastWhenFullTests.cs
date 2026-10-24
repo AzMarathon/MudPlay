@@ -249,6 +249,150 @@ public sealed class CastWhenFullTests : IDisposable
         Assert.Equal(new[] { "lght", "lght" }, _wire);
     }
 
+    [Theory]
+    [InlineData("You attempt to cast lght, but fail.")]
+    [InlineData("You lost your concentration on the spell!")]
+    public void AFizzleOrLostConcentration_IsTriedAgainWhileStillFull(string refusal)
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        StatScreen();
+        Prompt(200, 100);
+        _feed.Line(refusal);
+
+        NextRound();
+
+        Assert.Equal(new[] { "lght", "lght" }, _wire);
+    }
+
+    // Another try wouldn't find more mana.
+    [Fact]
+    public void NotEnoughMana_DoesNotReArm()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        StatScreen();
+        Prompt(200, 100);
+        _feed.Line("You do not have enough mana to cast that spell.");
+
+        NextRound();
+        NextRound();
+
+        Assert.Equal(new[] { "lght" }, _wire);
+    }
+
+    // A profile load wipes the director's tracking (AppServices wires ProfileLoaded to
+    // ResetBuffTracking): the incoming character starts armed.
+    [Fact]
+    public void AProfileSwap_ReArmsTheSlots()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        StatScreen();
+        Prompt(200, 100);
+        NextRound();
+        Assert.Single(_wire);
+
+        _director.ResetBuffTracking();
+        NextRound();
+
+        Assert.Equal(new[] { "lght", "lght" }, _wire);
+    }
+
+    // A full mark of 0 is always met, so the slot could fire once and never re-arm.
+    [Fact]
+    public void ARestMaxOfZero_LeavesTheSlotInactive()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        _health.RestMaxHp = 0;
+        StatScreen();
+        Prompt(150, 100);
+        Prompt(200, 100);
+        NextRound();
+
+        Assert.Empty(_wire);
+        Assert.Contains(_director.DescribeWhenFull(), l => l.StartsWith("HP full: lght — inactive"));
+    }
+
+    // A CR or LF typed into the target would end the command early and send the rest
+    // as a command of its own.
+    [Fact]
+    public void ControlCharactersInTheTarget_NeverReachTheWire()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        _spells.CastWhenHpFullTarget = "rai\r\njin\t";
+        StatScreen();
+        Prompt(200, 100);
+
+        Assert.Equal(new[] { "lght raijin" }, _wire);
+    }
+
+    // Full is where the rest stops: the Default-set basis, capped at the real and live
+    // max (HealthManager's RestThresholds), not the live max alone.
+    [Fact]
+    public void TheFullMark_IsTheRestTarget_AbsoluteCappedAtTheRealMax()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        _health.HpThresholdMode = ThresholdMode.Absolute;
+        _health.RestMaxHp = 500;             // more than this character has
+        _director.SetRestPoolMaxProviders(() => 0, () => 0, () => 450, () => 100);
+        StatScreen(maxHp: 450);
+        Prompt(300, 100);
+        Prompt(450, 100);                    // the most the rest gets back
+
+        Assert.Equal(new[] { "lght" }, _wire);
+    }
+
+    [Fact]
+    public void TheFullMark_ReadsAgainstTheDefaultGear_NotAPreRestSetsBiggerPool()
+    {
+        _spells.CastWhenMaFullSpell = "burn";
+        _director.SetRestPoolMaxProviders(() => 200, () => 100, () => 200, () => 160);
+        StatScreen(maxMa: 160);              // a Pre-rest set adds 60 mana
+        Prompt(200, 50);
+        Prompt(200, 95);                     // 95% of the Default set's 100
+
+        Assert.Equal(new[] { "burn" }, _wire);
+    }
+
+    // A due buff passed over because its cost is above the mana there is: the slot
+    // doesn't spend the mana it waits for, and says so once.
+    [Fact]
+    public void ADueBuffShortOfMana_HoldsTheSlot()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        BuffSettings buffs = new() { Slots = { new BuffSlot { Spell = "prot", CastOnSelf = true, BlessIfAboveMa = 0 } } };
+        _director.SetPartyBuffSource(() => buffs);
+        Dictionary<string, int> costs = new() { ["prot"] = 50, ["lght"] = 5 };
+        _director.SetManaCostLookup(c => costs.TryGetValue(c, out int n) ? n : null);
+        StatScreen();
+        Prompt(200, 40);
+        NextRound();
+        NextRound();
+        Assert.Empty(_wire);
+        Assert.Single(_logged, m => m.StartsWith("cast when HP full held — prot (Buffing) is due and waiting for mana"));
+        Assert.Contains(_director.DescribeWhenFull(), l => l.Contains("held: prot (Buffing)"));
+
+        NextRound();
+        Prompt(200, 60);
+        Assert.Equal(new[] { "prot" }, _wire);
+        NextRound();
+
+        Assert.Equal(new[] { "prot", "lght" }, _wire);
+    }
+
+    // The slot's own spell short of mana: held, and the reason logged once.
+    [Fact]
+    public void ItsOwnSpellShortOfMana_HoldsTheSlot_AndSaysSoOnce()
+    {
+        _spells.CastWhenHpFullSpell = "lght";
+        _director.SetManaCostLookup(c => c == "lght" ? 30 : null);
+        StatScreen();
+        Prompt(200, 20);
+        NextRound();
+        NextRound();
+
+        Assert.Empty(_wire);
+        Assert.Single(_logged, m => m.StartsWith("cast when HP full held — lght costs 30 mana"));
+    }
+
     // A between-round cast in the priority list (here an always-due self buff) takes
     // the round first; the when-full slot gets a round of its own.
     [Fact]

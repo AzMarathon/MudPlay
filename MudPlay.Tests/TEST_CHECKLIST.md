@@ -563,8 +563,8 @@ How to keep it current:
 
 ### CastWhenFullTests.cs
 - Covers: Game/Spells/CastingDirector's cast-when-full slots (+ CastCoordinator, PromptParser, CombatStateTracker), driven by the game's prompts, room and combat lines, and a ManualClock
-- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code; empty slots and Auto-Bless off cast nothing; a refused cast is tried again while full; a due buff takes the round first.
-- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full.
+- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
+- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds).
 
 ### CasterMessageMatcherLongLineTests.cs
 - Covers: Game/Spells/CasterMessageMatcher (literal walk)
