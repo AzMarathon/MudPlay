@@ -29,9 +29,11 @@ public sealed class DebugLogWriter : IDisposable, IAsyncDisposable
     // Open a fresh log file for topic. The path is derived from
     // AppPaths.NewDebugLogFile and includes a timestamp so concurrent writers
     // for the same topic don't collide. The file opens with LogFileHeader's
-    // lines; session names whose session it is, for a file that has one. now:
-    // the clock its lines are stamped with (the wall clock by default).
-    public DebugLogWriter(string topic, LogFileHeader.Session? session = null, Func<DateTimeOffset>? now = null)
+    // lines; session names whose session it is, for a file that has one.
+    public DebugLogWriter(string topic, LogFileHeader.Session? session = null) : this(topic, session, null) { }
+
+    // now: the clock its lines are stamped with (the wall clock when null).
+    internal DebugLogWriter(string topic, LogFileHeader.Session? session, Func<DateTimeOffset>? now)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(topic);
         Topic = topic;

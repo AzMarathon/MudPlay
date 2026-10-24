@@ -29,12 +29,14 @@ public static class LogFileHeader
     }
 
     // Reads the session through read, which may throw while the client is still
-    // being built or a profile is swapping: the header then says it isn't known.
+    // being built, a profile is swapping, or the realm's game data is read from a
+    // disk that fails: the header then says it isn't known. Whatever it throws is
+    // a failed read, never a failed write of the file it heads.
     public static Session Read(Func<Session>? read)
     {
         if (read is null) return Session.NotKnown;
         try { return read(); }
-        catch (Exception ex) when (ex is NullReferenceException or InvalidOperationException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             return Session.NotKnown;
         }

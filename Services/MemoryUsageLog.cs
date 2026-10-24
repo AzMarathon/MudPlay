@@ -36,13 +36,15 @@ public sealed class MemoryUsageLog : IAsyncDisposable
 {
     // A sample a minute keeps an all-night file tiny (~500 lines over 8 h) while
     // still resolving a slow crawl.
-    public static readonly TimeSpan SampleInterval = TimeSpan.FromMinutes(1);
+    internal static readonly TimeSpan SampleInterval = TimeSpan.FromMinutes(1);
 
     private static readonly string[] ColumnLines =
     [
         "# columns: working-set private managed-heap gc-heap committed fragmented "
             + "gen2-size loh-size loh-frag poh-size gen0/1/2-collections",
-        "# then: native (private bytes less GC committed, not the managed heap) threads, OS handles, "
+        "# then: native (memory outside the GC's committed memory: private bytes less GC committed on "
+            + "Windows and macOS; on Linux, where private bytes are virtual, RssAnon less GC committed, "
+            + "with rssanon beside it), threads, OS handles, "
             + "GC handles (heard only after a collection), pinned objects, thread-pool threads, timers, "
             + "gdi/user objects (Windows), skia resource cache used/limit, font cache used/limit:entries",
         "# then: since the last sample, lines received, terminal renders, map redraws and native growth; "
@@ -68,6 +70,7 @@ public sealed class MemoryUsageLog : IAsyncDisposable
     // Guards the writer, the timer and the previous sample against the sampling
     // threadpool thread racing a toggle-driven open/close.
     private readonly object _gate = new();
+    private readonly object _sampling = new();
     private DebugLogWriter? _writer;
     private IDisposable? _timer, _baseline;
     private bool _broken, _disposed;
@@ -122,15 +125,16 @@ public sealed class MemoryUsageLog : IAsyncDisposable
     // the first interval elapses. Once _broken we stay closed for the session.
     private void SyncWriter()
     {
+        bool want = _diagnostics.AutoCollectLogs;
+        // Read before the lock: the names may reach the game data.
+        LogFileHeader.Session? session = want ? LogFileHeader.Read(_sources.Session) : null;
         lock (_gate)
         {
             if (_broken || _disposed) return;
-            bool want = _diagnostics.AutoCollectLogs;
-            if (want && _writer is null)
+            if (want && _writer is null && session is not null)
             {
                 try
                 {
-                    LogFileHeader.Session session = LogFileHeader.Read(_sources.Session);
                     _writer = new DebugLogWriter("memory", session, _sources.Now);
                     foreach (string line in ColumnLines) _writer.WriteLine(line);
                     _sessionLine = session.Line;
@@ -167,38 +171,63 @@ public sealed class MemoryUsageLog : IAsyncDisposable
         }
     }
 
-    // The _gate lock guards the writer swap, so no marshalling is needed. No-op
-    // while the writer is closed.
+    // The figures are read before _gate is taken: on Windows the read walks every
+    // process on the machine and takes Skia's cache locks, and the UI thread waits
+    // on _gate (the toggle, IsCollecting, CurrentPath). _gate is held only for the
+    // write. _sampling keeps the baseline and a tick from interleaving. No-op while
+    // the writer is closed.
     private void TakeSample()
     {
-        lock (_gate)
+        lock (_sampling)
         {
-            if (_writer is null) return;
-            try
+            DebugLogWriter? writer;
+            lock (_gate) writer = _writer;
+            if (writer is null) return;
+
+            DateTimeOffset now = _sources.Now();
+            Sample? sample = null;
+            string? unread = null;
+            try { sample = _sources.Read(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                DateTimeOffset now = _sources.Now();
-                Sample sample = _sources.Read();
-                // A character loaded or swapped since the header: the file says
-                // whose session the samples after it belong to.
-                string session = LogFileHeader.Read(_sources.Session).Line;
-                if (!string.Equals(session, _sessionLine, StringComparison.Ordinal))
-                {
-                    _writer.WriteLine("# now " + session);
-                    _sessionLine = session;
-                }
-                _writer.WriteLine(Format(sample, _previous is { } p ? (now - p.At, p.Sample) : null));
-                _previous = (now, sample);
-                _latest = $"native {ProcessResources.Mb(sample.Resources.NativeBytes)}, "
-                    + $"private {ProcessResources.Mb(sample.Resources.PrivateBytes)} at {now:HH:mm}";
+                // A figure that can't be read is a gap in the trail, not a reason to end it.
+                unread = ex.GetType().Name;
             }
-            catch
+            // A character loaded or swapped since the header: the file says whose
+            // session the samples after it belong to.
+            string session = LogFileHeader.Read(_sources.Session).Line;
+
+            lock (_gate)
             {
-                // Disk full / handle lost / permission flap. Stop sampling and stay
-                // silent: losing the trail is acceptable, wedging on it is not.
-                _broken = true;
-                _writer.Dispose();
-                _writer = null;
-                _latest = null;
+                // Closed, or closed and opened again, while the figures were read:
+                // they belong to no open file.
+                if (!ReferenceEquals(_writer, writer)) return;
+                try
+                {
+                    if (!string.Equals(session, _sessionLine, StringComparison.Ordinal))
+                    {
+                        writer.WriteLine("# now " + session);
+                        _sessionLine = session;
+                    }
+                    if (sample is null)
+                    {
+                        writer.WriteLine($"? figures not read ({unread})");
+                        return;
+                    }
+                    writer.WriteLine(Format(sample, _previous is { } p ? (now - p.At, p.Sample) : null));
+                    _previous = (now, sample);
+                    _latest = $"native {ProcessResources.Mb(sample.Resources.NativeBytes)}, "
+                        + $"private {ProcessResources.Mb(sample.Resources.PrivateBytes)} at {now:HH:mm}";
+                }
+                catch
+                {
+                    // Disk full / handle lost / permission flap. Stop sampling and stay
+                    // silent: losing the trail is acceptable, wedging on it is not.
+                    _broken = true;
+                    writer.Dispose();
+                    _writer = null;
+                    _latest = null;
+                }
             }
         }
     }
