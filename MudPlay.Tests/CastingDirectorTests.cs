@@ -1452,6 +1452,41 @@ public sealed class CastingDirectorTests
         Assert.Equal(new[] { "grhe", "grhe" }, h.CastsSent);
     }
 
+    // Report paradigm-20261023-001124, 00:11:17: the cosmic staff was used 139 ms before
+    // a round the client only projected, and the game counted it in that new round. A
+    // loop asking whether to step into a lair must read the slot as still spent until
+    // the round after; a cast made well inside the old round leaves no doubt.
+    [Theory]
+    [InlineData(139, true)]
+    [InlineData(2000, false)]
+    public void CastJustAheadOfAProjectedRound_SlotMayStillBeSpent(int msBeforeTheTick, bool doubted)
+    {
+        using CureHarness h = new();
+        DateTimeOffset start = new(2026, 10, 23, 4, 11, 12, 510, TimeSpan.Zero);
+        h.Now = start.UtcDateTime;
+        ManualTimers polls = new();
+        using TickEngine tick = new(h.Router, () => new DateTimeOffset(h.Now, TimeSpan.Zero), schedule: polls.Arm);
+        tick.CombatTickElapsed += () => h.Cast.OnCombatTick(tick.LastCombatTickWasPlaced);
+        tick.CombatTickElapsed += h.Director.NotifyRoundComplete;
+        h.Director.SetCombatTickSource(() => tick.LastCombatTickWasDamageDriven);
+        h.Director.SetCombatTickPlacement(() => tick.LastCombatTickWasPlaced);
+
+        h.Router.Dispatch(RoundLine("Your blades slash nasty pinion rat for 12 damage!"));
+        DateTime projected = (start + TickEngine.CombatTickInterval).UtcDateTime;
+        h.Now = projected.AddMilliseconds(-msBeforeTheTick);
+        h.Director.MarkBetweenRoundSlotUsed();
+
+        h.Now = projected;
+        polls.RunAll();
+        Assert.False(h.Director.BetweenRoundSlotUsed);
+        h.Now = projected.AddSeconds(2.1);              // the step into the lair
+        Assert.Equal(doubted, h.Director.BetweenRoundSlotMayBeSpent);
+
+        h.Now = projected + TickEngine.CombatTickInterval;
+        polls.RunAll();
+        Assert.False(h.Director.BetweenRoundSlotMayBeSpent);
+    }
+
     private static LineExtractor.EmittedLine RoundLine(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 

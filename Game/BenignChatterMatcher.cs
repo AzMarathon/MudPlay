@@ -85,7 +85,9 @@ public static partial class BenignChatterMatcher
 
     // Another player changing gear ("X wields / wears / removes <item>!"). Roster-gated: only a
     // KNOWN player's name qualifies, so a same-shaped monster / spell line ("The lich
-    // removes its own head!") can never be suppressed by mistake.
+    // removes its own head!") can never be suppressed by mistake. Unlike the rest of this
+    // class it also steers behaviour: RoomEntryWatcher's colour scan skips these lines, so
+    // a yellow item name that is also a monster's isn't read as an arrival.
     public static bool IsOtherPlayerGearSwap(string text, Func<string, bool> isKnownPlayer)
     {
         Match m = GearSwapRx().Match(text);
