@@ -546,6 +546,15 @@ public sealed class RoomGraphManager
         = new Dictionary<int, (int, long, int)>();
     public IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> LairSizeByMonster => _lairSizeByMonster;
 
+    // Per-monster placement: the rooms whose NPC field names the monster as their
+    // fixed resident, sorted by map then room. Built with the lair snapshot and for
+    // the same reason: the Monsters table's Placed in filter reads it off the UI thread,
+    // from its worker-thread build. The monster record's Placed In list reads it on the
+    // UI thread, so both share one placement source. Key = monster number.
+    private IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> _placedRoomsByMonster
+        = new Dictionary<int, IReadOnlyList<RoomKey>>();
+    public IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> PlacedRoomsByMonster => _placedRoomsByMonster;
+
     // Sailings a sea-captain dock at `room` offers, empty when the room is not a
     // dock. The boat router reads this to decide whether a `secure passage`
     // hop can shortcut a cross-realm route from here.
@@ -968,6 +977,8 @@ public sealed class RoomGraphManager
         _leversByRoom.Clear();
         _boatPassages.Clear();
         _castPocketEntrances.Clear();
+        _placedRoomsByMonster = new Dictionary<int, IReadOnlyList<RoomKey>>();
+        _lairSizeByMonster = new Dictionary<int, (int, long, int)>();
     }
 
     // Recognise placed guardian monsters whose greet dialogue opens a door on
@@ -1756,9 +1767,17 @@ public sealed class RoomGraphManager
     private void BuildSecondaryIndexes()
     {
         var lairSize = new Dictionary<int, (int Count, long SumMax, int MaxMax)>();
+        var placed = new Dictionary<int, List<RoomKey>>();
         foreach (Room room in _rooms.Values)
         {
             if (room.HasUnknownName) _unnamedInData.Add(room.Key);
+
+            if (room.Npc > 0)
+            {
+                if (!placed.TryGetValue(room.Npc, out List<RoomKey>? homes))
+                    placed[room.Npc] = homes = new List<RoomKey>();
+                homes.Add(room.Key);
+            }
 
             if (!_byName.TryGetValue(room.Name, out List<Room>? nameBucket))
             {
@@ -1788,6 +1807,14 @@ public sealed class RoomGraphManager
             }
         }
         _lairSizeByMonster = lairSize;
+
+        var placedSorted = new Dictionary<int, IReadOnlyList<RoomKey>>(placed.Count);
+        foreach ((int monster, List<RoomKey> homes) in placed)
+        {
+            homes.Sort(static (a, b) => a.Map != b.Map ? a.Map.CompareTo(b.Map) : a.Room.CompareTo(b.Room));
+            placedSorted[monster] = homes.ToArray();
+        }
+        _placedRoomsByMonster = placedSorted;
     }
 
     // One Rooms row: the typed room, the Action#N cells living in its exit slots,

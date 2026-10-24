@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.41**
+> **Version 3.185.44**
 > - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings
 <!-- current-version:end -->
 

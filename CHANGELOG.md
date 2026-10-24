@@ -1,8 +1,13 @@
 # Version history
 
-## 3.185.41
+## 3.185.44
 
 - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings
+
+## 3.185.43
+
+- Game Data Monsters filters by cash: any, drops cash or no cash, narrowed to chosen currencies
+- Game Data Monsters "Placed in" checkbox shows only monsters a room places
 
 ## 3.185.40
 
