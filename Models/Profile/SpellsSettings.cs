@@ -124,6 +124,24 @@ public sealed class SpellsSettings
     public string? WhenHpFullSpell { get; set; }
     public string? WhenMaFullSpell { get; set; }
 
+    // ----- Cast when full -------------------------------------------
+
+    // Any spell (not just a buff: a utility spell, one cast to train a skill, a mana
+    // burn) cast once out of combat when HP / mana comes up to full, the rest-max mark
+    // the Buff Watchdog's when-full buffs use (CastingDirector.TryCastWhenFull). Kept
+    // apart from the legacy WhenHpFullSpell / WhenMaFullSpell above: the profile
+    // migration folds those into buffs, and must never touch these.
+    public string? CastWhenHpFullSpell { get; set; }
+    public string? CastWhenMaFullSpell { get; set; }
+
+    // Who to cast it on, as typed after the cast code; blank = no target (self).
+    public string? CastWhenHpFullTarget { get; set; }
+    public string? CastWhenMaFullTarget { get; set; }
+
+    // Off = wait while a recovery rest is under way (casting ends a rest).
+    public bool CastWhenHpFullWhileResting { get; set; } = true;
+    public bool CastWhenMaFullWhileResting { get; set; } = true;
+
     // ----- Cures ----------------------------------------------------
 
     // Cure-paralyze / cure-hold spell — canonically freedom in stock MajorMUD.

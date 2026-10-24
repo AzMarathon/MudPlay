@@ -39,6 +39,8 @@ namespace MudPlay.Game.Spells;
 //     CombatSpellChooser; this director only casts the debuff through the shared
 //     in-between window (wired via SetCombatDebuffSource) so it competes against the
 //     survival casts above by the user's PriorityDebuffing rank. No-op until wired.
+//   - Cast when HP / mana full — not a ranked category: the round's cast goes to it
+//     only when nothing above is due (TryCastWhenFull).
 //
 // Every evaluation walks the priority list and picks the first candidate that's
 // actually ready to fire. The CastCoordinator's recent-cast cooldown handles "one
@@ -1096,6 +1098,8 @@ public sealed class CastingDirector : IDisposable
         _betweenRoundSlotUsedAt = DateTime.MinValue;
         _slotInDoubtSince = DateTime.MinValue;
         _pausedAt = null;
+        _hpFull.Reset();
+        _maFull.Reset();
     }
 
     // OUR OWN death wiped OUR buffs — drop the self timers (keyed "") + any pending self
@@ -1742,6 +1746,7 @@ public sealed class CastingDirector : IDisposable
         if (reason == CastFailureReason.NoTargets) return;
         if (reason == CastFailureReason.AlreadyCastThisRound)
             _betweenRoundSlotUsedAt = _now();
+        RearmWhenFullOnRefusal(reason, spell);
         // A party buff timed from its send (its caster line names no target) has no
         // landing to wait for, so the game's refusal is the only word that it never
         // went on: take the timer back. Same matching and staleness rule as the
@@ -2166,6 +2171,7 @@ public sealed class CastingDirector : IDisposable
     public string? Evaluate()
     {
         NoteHpReading();
+        NoteWhenFullDrops();
         // Ahead of every early return: this runs on each change of InCombat, which is
         // how the hold learns a fight began or ended even when nothing is to be cast.
         _lairHold?.Advance();
@@ -2530,7 +2536,11 @@ public sealed class CastingDirector : IDisposable
             return cand.Spell;
         }
 
-        return null;
+        // Nothing in the priority list is due: the round's cast is free for a
+        // cast-when-full slot. Mid-burst the settled pass decides instead.
+        return blessEnabled && !settling
+            ? TryCastWhenFull(spells, health, deferSneakMaintenance)
+            : null;
     }
 
     // A loop's lair-entry hold follows the buffs that go out: one standing outside a
@@ -3228,12 +3238,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (_readPartyBuffs?.Invoke() is not { } buffs) yield break;
 
-        // "When HP / MA full" fires at the REST-MAX target (the level we rest up to,
-        // HealthSettings.RestMaxHp / RestMaxMa read per the threshold mode), not literal
-        // 100% — so a buff meant for "topped off, ready for the next fight" triggers as
-        // soon as a recovery rest finishes.
-        int restMaxHp = PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp);
-        int restMaxMa = PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa);
+        (int restMaxHp, int restMaxMa) = FullMarks(health);
 
         // Party / member targets are only cast while actually in a party.
         bool inParty = _party?.IsInParty == true;
@@ -3288,8 +3293,8 @@ public sealed class CastingDirector : IDisposable
 
             // Per-slot conditions: the matching pool must be topped off to the rest-max
             // target for the "when full" slots.
-            if (slot.OnlyWhenHpFull && !(_state.MaxHp > 0 && _state.Hp >= restMaxHp)) continue;
-            if (slot.OnlyWhenMaFull && !(_state.MaxMa > 0 && _state.Ma >= restMaxMa)) continue;
+            if (slot.OnlyWhenHpFull && !HpAtFull(restMaxHp)) continue;
+            if (slot.OnlyWhenMaFull && !MaAtFull(restMaxMa)) continue;
 
             bool isItem = ItemCastToken.IsToken(slot.Spell);
             bool partyWide = _isPartyWideBuff?.Invoke(slot.Spell) == true;
@@ -3384,6 +3389,139 @@ public sealed class CastingDirector : IDisposable
         _log?.Info(LogCategory,
             $"party-buff sent spell={shortCode} target={target} — its cast line names no target, so the timer runs "
             + $"from the send: duration={info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - marginSec)}s.");
+    }
+
+    // ----- Cast when HP / mana full -------------------------------------
+
+    // "Full" is the rest-max target (HealthSettings.RestMaxHp / RestMaxMa read per the
+    // threshold mode), not literal 100%: a buff or spell meant for "topped off, ready
+    // for the next fight" goes out as soon as a recovery rest finishes. The Buff
+    // Watchdog's when-full buffs and the cast-when-full slots share it.
+    private (int Hp, int Ma) FullMarks(HealthSettings health) => (
+        PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp),
+        PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa));
+
+    private bool HpAtFull(int mark) => _state.MaxHp > 0 && _state.Hp >= mark;
+    private bool MaAtFull(int mark) => _state.MaxMa > 0 && _state.Ma >= mark;
+
+    // One cast-when-full slot's state. Client policy: the slot fires on the pool's
+    // way up to full, not for as long as it stays full, and re-arms only when the
+    // pool falls under the mark again. A spell that leaves the pool where it is (an
+    // HP-full utility spell) goes out once; a mana burn goes out each time mana refills.
+    private sealed class WhenFullSlot(string pool)
+    {
+        public string Pool { get; } = pool;
+        public bool Armed { get; set; } = true;
+        // The full mark the last decision pass worked out; a reading under it re-arms.
+        public int Mark { get; set; } = int.MaxValue;
+        public string? SentSpell { get; set; }
+        public DateTime? SentAt { get; set; }
+
+        public void Reset()
+        {
+            Armed = true;
+            Mark = int.MaxValue;
+            SentSpell = null;
+            SentAt = null;
+        }
+    }
+
+    private readonly WhenFullSlot _hpFull = new("HP");
+    private readonly WhenFullSlot _maFull = new("mana");
+
+    // Every reading counts toward the re-arm, not only the ones a decision pass gets
+    // to: a pool can dip and refill while the round's cast is spent.
+    private void NoteWhenFullDrops()
+    {
+        Rearm(_hpFull, _state.Hp);
+        Rearm(_maFull, _state.Ma);
+    }
+
+    private void Rearm(WhenFullSlot slot, int value)
+    {
+        if (slot.Armed || value >= slot.Mark) return;
+        slot.Armed = true;
+        _log?.Combat(LogCategory, $"cast when {slot.Pool} full re-armed — {slot.Pool} {value} is under the full mark {slot.Mark}.");
+    }
+
+    // The two slots' cast, when one is due: out of combat, the pool at full and the
+    // slot armed. Called only when nothing in the priority list is due, under the
+    // Auto-Bless switch the when-full buffs answer to.
+    private string? TryCastWhenFull(SpellsSettings spells, HealthSettings health, bool keepSneak)
+    {
+        (int hpMark, int maMark) = FullMarks(health);
+        _hpFull.Mark = hpMark;
+        _maFull.Mark = maMark;
+        return TryCastWhenFull(_hpFull, spells.CastWhenHpFullSpell, spells.CastWhenHpFullTarget,
+                   spells.CastWhenHpFullWhileResting, HpAtFull(hpMark), keepSneak)
+            ?? TryCastWhenFull(_maFull, spells.CastWhenMaFullSpell, spells.CastWhenMaFullTarget,
+                   spells.CastWhenMaFullWhileResting, MaAtFull(maMark), keepSneak);
+    }
+
+    private string? TryCastWhenFull(WhenFullSlot slot, string? spell, string? target, bool whileResting,
+        bool full, bool keepSneak)
+    {
+        string? code = spell?.Trim();
+        if (string.IsNullOrEmpty(code) || !full || _state.InCombat) return null;
+        // A different spell picked since the last cast hasn't gone out yet.
+        if (!slot.Armed && string.Equals(code, slot.SentSpell, StringComparison.OrdinalIgnoreCase)) return null;
+        // The slot takes a spell; an item token would go to the game as typed.
+        if (ItemCastToken.IsToken(code)) return null;
+        // Casting ends a rest (GAME_MECHANICS "Casting a spell interrupts resting /
+        // meditating"), so an unticked "Cast while resting" waits for the rest to end.
+        if (!whileResting && _isTriggeredRest?.Invoke() == true) return null;
+        // A loop at a lair's doorstep keeps the round's cast for its debuff and
+        // priority buffs; sneak keeping holds every in-between cast.
+        if (_lairHold is { BlockingBuffs: true } or { BlockingOrdinaryBuffs: true }) return null;
+        if (keepSneak) return null;
+        if (UnpayableCost(code) is not null) return null;
+
+        string? aim = string.IsNullOrWhiteSpace(target) ? null : target.Trim();
+        if (!_cast.TryCast(code, aim)) return null;
+        slot.Armed = false;
+        slot.SentSpell = code;
+        slot.SentAt = _now();
+        _log?.Info(LogCategory,
+            $"cast when {slot.Pool} full: {code} → {aim ?? "self"} (hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}, full mark {slot.Mark}).");
+        CastFired?.Invoke();
+        return code;
+    }
+
+    // A cast the game turned away never went off: the slot tries again while the pool
+    // is still full. Not for want of mana, which another try wouldn't change.
+    private void RearmWhenFullOnRefusal(CastFailureReason reason, string? spell)
+    {
+        if (reason is not (CastFailureReason.Fizzled or CastFailureReason.AlreadyCastThisRound
+                           or CastFailureReason.Interrupted)) return;
+        foreach (WhenFullSlot slot in new[] { _hpFull, _maFull })
+        {
+            if (slot.Armed || slot.SentAt is not { } at || _now() - at > PendingSelfBuffRejectionWindow) continue;
+            if (!string.Equals(spell, slot.SentSpell, StringComparison.OrdinalIgnoreCase)) continue;
+            slot.Armed = true;
+            _log?.Combat(LogCategory, $"cast when {slot.Pool} full: {spell} did not cast (reason={reason}) — re-armed.");
+        }
+    }
+
+    // Both slots as the engine holds them, for the bug report.
+    public IReadOnlyList<string> DescribeWhenFull()
+    {
+        SpellsSettings spells = _readSpells();
+        return new[]
+        {
+            Describe(_hpFull, spells.CastWhenHpFullSpell),
+            Describe(_maFull, spells.CastWhenMaFullSpell),
+        };
+
+        static string Describe(WhenFullSlot slot, string? spell)
+        {
+            string mark = slot.Mark == int.MaxValue ? "not worked out yet" : slot.Mark.ToString();
+            string state = slot.Armed
+                ? $"armed, fires when {slot.Pool} reaches the full mark ({mark})"
+                : $"fired {slot.SentSpell} at {slot.SentAt:HH:mm:ss} UTC, re-arms when {slot.Pool} drops under {mark}";
+            return string.IsNullOrWhiteSpace(spell)
+                ? $"{slot.Pool} full: (empty)"
+                : $"{slot.Pool} full: {spell.Trim()} — {state}";
+        }
     }
 
     // ----- Debuffing — sourced from the combat engine -----------------

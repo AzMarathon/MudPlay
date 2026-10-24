@@ -256,6 +256,55 @@
                 <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,2,0,4" TextWrapping="Wrap"
                            Text="Bless timing is set on each buff now: Buff Watchdog → edit a buff → Cast while resting / Cast during combat."/>
 
+                <!-- ============ Cast when full ============ -->
+                <!-- Any spell, not just a buff: CastingDirector casts it once out of
+                     combat as the pool comes up to full, and again only after the
+                     pool has dropped and refilled. -->
+                <TextBlock Classes="SectionHeader" Text="Cast when full"/>
+                <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
+                           Text="Any spell (a utility spell, one you're training, a mana burn), cast once out of combat each time HP or mana comes up to full: the Rest-max level on the Health tab. It goes out again only after the pool has dropped below full and refilled."/>
+                <Grid ColumnDefinitions="180,Auto,Auto,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cast when HP full"/>
+                    <AutoCompleteBox Grid.Row="0" Grid.Column="1"
+                                     Text="{Binding CastWhenHpFullSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CastWhenHpFullSpellUnlearned}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="200" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast once, out of combat, when HP comes up to the Health tab's Rest-max level; again only after HP has dropped below it. Unlike a Buff Watchdog buff ticked &quot;when HP full&quot;, nothing is timed or recast on expiry. Only goes out when no heal, cure or buff is due, under Auto-Bless."/>
+                    <TextBox Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Width="120"
+                             Text="{Binding CastWhenHpFullTarget, Mode=TwoWay}"
+                             PlaceholderText="Target (self)"
+                             ToolTip.Tip="Who to cast it on, as you'd type it after the spell code. Leave blank for a spell with no target or cast on yourself."/>
+                    <CheckBox Grid.Row="0" Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cast while resting"
+                              IsChecked="{Binding CastWhenHpFullWhileResting, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: cast even while a recovery rest is under way (casting ends the rest; it is taken up again). Unticked: wait until the rest is over."/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Cast when mana full"/>
+                    <AutoCompleteBox Grid.Row="1" Grid.Column="1"
+                                     Text="{Binding CastWhenMaFullSpell, Mode=TwoWay}"
+                                     Classes.unlearnedSpell="{Binding CastWhenMaFullSpellUnlearned}"
+                                     ItemsSource="{Binding SpellSuggestions}"
+                                     ValueMemberBinding="{ReflectionBinding Short}"
+                                     ItemFilter="{Binding SpellSuggestionFilter}"
+                                     ItemTemplate="{StaticResource SpellPickItem}"
+                                     PlaceholderText="Type code or name…"
+                                     Width="200" HorizontalAlignment="Left"
+                                     ToolTip.Tip="Cast once, out of combat, when mana comes up to the Health tab's Rest-max level; again each time mana has dropped below it and refilled, so a mana burn goes out on every refill. Only goes out when no heal, cure or buff is due, under Auto-Bless."/>
+                    <TextBox Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" Width="120"
+                             Text="{Binding CastWhenMaFullTarget, Mode=TwoWay}"
+                             PlaceholderText="Target (self)"
+                             ToolTip.Tip="Who to cast it on, as you'd type it after the spell code. Leave blank for a spell with no target or cast on yourself."/>
+                    <CheckBox Grid.Row="1" Grid.Column="3" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cast while resting"
+                              IsChecked="{Binding CastWhenMaFullWhileResting, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: cast even while a recovery rest is under way (casting ends the rest; it is taken up again). Unticked: wait until the rest is over."/>
+                </Grid>
+
                 <!-- ============ Ailment handling / coordination ============ -->
                 <!-- One "Ignore X" toggle per ailment. It's the single "I don't
                      care about this ailment" gate: checking it suppresses BOTH the

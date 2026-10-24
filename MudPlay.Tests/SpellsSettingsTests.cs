@@ -65,6 +65,26 @@ public sealed class SpellsSettingsTests
         Assert.False(dto.IgnoreDiseased);
     }
 
+    // The cast-when-full slots start empty with "Cast while resting" ticked, and a
+    // section saved before they existed reads the same way.
+    [Fact]
+    public void CastWhenFull_StartsEmpty_CastWhileResting_AlsoOnAnOlderSave()
+    {
+        foreach (SpellsSettings dto in new[]
+        {
+            new SpellsSettings(),
+            JsonSerializer.Deserialize<SpellsSettings>("""{"CureHoldsSpell":"free"}""")!,
+        })
+        {
+            Assert.Null(dto.CastWhenHpFullSpell);
+            Assert.Null(dto.CastWhenMaFullSpell);
+            Assert.Null(dto.CastWhenHpFullTarget);
+            Assert.Null(dto.CastWhenMaFullTarget);
+            Assert.True(dto.CastWhenHpFullWhileResting);
+            Assert.True(dto.CastWhenMaFullWhileResting);
+        }
+    }
+
     [Fact]
     public void Defaults_PrioritiesAreStrictlyMonotonic()
     {

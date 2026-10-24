@@ -1556,6 +1556,13 @@ public static class BugReportBuilder
             sb.Append($"- Stock tick inputs: {svc.DescribeStockManaRollContext()}\n");
         sb.Append('\n');
 
+        // The cast-when-full slots fire once per refill: "fired" with the pool still
+        // full is why one isn't going out again.
+        sb.Append("**Cast when full (CastingDirector)**\n\n");
+        foreach (string line in svc.CastDirector.DescribeWhenFull())
+            sb.Append($"- {line}\n");
+        sb.Append('\n');
+
         int shown = 0;
         void Group(string title, IEnumerable<(string Label, string? Code)> slots)
         {
@@ -1603,6 +1610,14 @@ public static class BugReportBuilder
             (CureLabel("poison", spells.CurePoisonAfterCombat), spells.CurePoisonSpell),
             (CureLabel("disease", spells.CureDiseaseAfterCombat), spells.CureDiseaseSpell),
             (CureLabel("blindness", spells.CureBlindnessAfterCombat), spells.CureBlindnessSpell),
+        });
+        static string WhenFullLabel(string pool, string? target, bool whileResting) =>
+            $"{pool} (target {(string.IsNullOrWhiteSpace(target) ? "self" : target.Trim())}"
+            + $"{(whileResting ? "" : "; waits out a rest")})";
+        Group("Cast when full", new (string, string?)[]
+        {
+            (WhenFullLabel("hp-full", spells.CastWhenHpFullTarget, spells.CastWhenHpFullWhileResting), spells.CastWhenHpFullSpell),
+            (WhenFullLabel("ma-full", spells.CastWhenMaFullTarget, spells.CastWhenMaFullWhileResting), spells.CastWhenMaFullSpell),
         });
         Group("Party heal", new (string, string?)[]
         {

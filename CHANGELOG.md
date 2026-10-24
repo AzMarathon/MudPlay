@@ -1,5 +1,9 @@
 # Version history
 
+## 3.185.45
+
+- Settings → Spells + Ailments gains "Cast when HP full" and "Cast when mana full": any spell, cast once each time the pool refills
+
 ## 3.185.44
 
 - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings
