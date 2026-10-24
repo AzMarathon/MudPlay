@@ -342,6 +342,47 @@ public sealed class MegaMudProfileImporterTests
         Assert.Equal(editable.Length, editable.Select(l => l.EditKey).Distinct().Count());
     }
 
+    // MegaMUD's "cast when HP / mana is full" commands fire once as the pool reaches
+    // full and again after it dips and refills (user, 2026-10-24): they land in the
+    // cast-when-full slots, a target after the code in the target box, and not as
+    // when-full buffs. Both are listed as carried over, and a review edit is re-read.
+    [Fact]
+    public void CastWhenFullCommands_LandInTheCastWhenFullSlots()
+    {
+        const string ini = """
+            [Spells]
+            HpFullCmd=lght
+            MaFullCmd=bles  raijin
+            """;
+        MegaMudImportPlan plan = MegaMudProfileImporter.Read(MegaMudIni.Parse(ini), "Cleric");
+        CharacterProfile Apply(Dictionary<string, string>? edits = null)
+        {
+            var made = new CharacterProfile();
+            string keyFile = Path.Combine(Path.GetTempPath(), "mudplay-megamud-import-" + Path.GetRandomFileName());
+            plan.ApplyTo(made, "Paradigm", false, new PasswordProtector(keyFile), edits);
+            try { File.Delete(keyFile); } catch (IOException) { /* best-effort */ }
+            return made;
+        }
+
+        CharacterProfile made = Apply();
+        SpellsSettings spells = Section<SpellsSettings>(made, "Spells");
+        Assert.Equal(("lght", (string?)null), (spells.CastWhenHpFullSpell, spells.CastWhenHpFullTarget));
+        Assert.Equal(("bles", "raijin"), (spells.CastWhenMaFullSpell, spells.CastWhenMaFullTarget));
+        Assert.True(spells.CastWhenHpFullWhileResting);        // no MegaMUD key for it: the default
+        Assert.True(spells.CastWhenMaFullWhileResting);
+        Assert.Null(spells.WhenHpFullSpell);
+        Assert.Null(spells.WhenMaFullSpell);
+        Assert.Empty(made.PartyBuffs?.Slots ?? new List<BuffSlot>());
+
+        MegaMudImportLine hp = plan.Lines.Single(l => l.Setting == "Cast when HP is full");
+        MegaMudImportLine ma = plan.Lines.Single(l => l.Setting == "Cast when mana is full");
+        Assert.Equal((MegaMudImportEdit.Text, "lght"), (hp.Edit, hp.Value));
+        Assert.Equal((MegaMudImportEdit.Text, "bles  raijin"), (ma.Edit, ma.Value));
+
+        SpellsSettings edited = Section<SpellsSettings>(Apply(new Dictionary<string, string> { [ma.EditKey] = "mmis golem" }), "Spells");
+        Assert.Equal(("mmis", "golem"), (edited.CastWhenMaFullSpell, edited.CastWhenMaFullTarget));
+    }
+
     [Fact]
     public void ValuesChangedInTheReview_AreWhatIsImported()
     {

@@ -4,6 +4,12 @@
 
 - Four starter GOTOs pointing at the wrong map corrected, existing favourites fixed on update
 
+## 3.185.45
+
+- Settings → Spells + Ailments gains "Cast when HP full" and "Cast when mana full": any spell, cast once each time the pool refills
+- Buff Watchdog's when-HP/MA-full buffs count "full" where the rest stops, Default-gear basis and gear caps included
+- MegaMUD profile import brings Cast-when-full commands into the new slots, target included
+
 ## 3.185.44
 
 - Spell combat's 'Ignore mana' checkboxes sit in their own column with the other per-profile settings

@@ -11,7 +11,7 @@ namespace MudPlay.ViewModels.Settings;
 // between-round casting categories (Emergency heal, Minor / Major party heal,
 // Downed-ally heal, Minor / Major self heal, Curing, Priority buffs, Buffing,
 // Debuffing). Middle sections name the heal / regen / cure
-// spells plus the mana-regen reroll config; the bottom section holds the
+// spells and the two cast-when-full slots; the bottom section holds the
 // ailment-handling toggles. Persists as the "Spells" entry in
 // CharacterProfile.Settings. The self-bless spell picks and their timing live in
 // the unified Buff Watchdog list (CharacterProfile.PartyBuffs), not here.
@@ -37,7 +37,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // The spell-priority order + the self-heal / HP-regen picks are PER COMBAT
     // PROFILE (they swap with the chip on the Combat tab); the rest of this tab
-    // (cures, ailment gates) stays per-character. Dirtiness + commit
+    // (cures, cast-when-full slots, ailment gates) stays per-character. Dirtiness + commit
     // are owned by the shared staging session so a Spells edit saves as one unit
     // with the Combat / Health tabs.
     public override bool IsDirty => _session.IsDirty;
@@ -78,6 +78,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Ailment handling", "Coordination",
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
         "Bless", "Self bless slots", "Buff Watchdog",
+        "Cast when full", "Cast when HP full", "Cast when mana full", "Cast while resting",
     };
 
     // ----- Category priority (1-10) ---------------------------------
@@ -147,6 +148,19 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _cureDiseaseAfterCombat;
     [ObservableProperty] private bool _cureBlindnessAfterCombat;
 
+    // ----- Cast when full -------------------------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CastWhenHpFullSpellUnlearned))]
+    private string? _castWhenHpFullSpell;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CastWhenMaFullSpellUnlearned))]
+    private string? _castWhenMaFullSpell;
+    [ObservableProperty] private string? _castWhenHpFullTarget;
+    [ObservableProperty] private string? _castWhenMaFullTarget;
+    [ObservableProperty] private bool _castWhenHpFullWhileResting = true;
+    [ObservableProperty] private bool _castWhenMaFullWhileResting = true;
+
     // Red-outline flags — the slot names a spell the character hasn't learned.
     // All pick from SpellSuggestions (spell-only). Re-raised on the name
     // change (attributes above) and on a spellbook change (OnSpellbookChanged).
@@ -158,6 +172,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     public bool CurePoisonSpellUnlearned    => IsSpellUnlearned(SpellSuggestions, CurePoisonSpell);
     public bool CureDiseaseSpellUnlearned   => IsSpellUnlearned(SpellSuggestions, CureDiseaseSpell);
     public bool CureBlindnessSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CureBlindnessSpell);
+    public bool CastWhenHpFullSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CastWhenHpFullSpell);
+    public bool CastWhenMaFullSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CastWhenMaFullSpell);
 
     // ----- Ailment handling / coordination --------------------------
     // Each "Ignore X" gate is the single per-ailment toggle: it suppresses BOTH the
@@ -318,6 +334,8 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(CurePoisonSpellUnlearned));
         OnPropertyChanged(nameof(CureDiseaseSpellUnlearned));
         OnPropertyChanged(nameof(CureBlindnessSpellUnlearned));
+        OnPropertyChanged(nameof(CastWhenHpFullSpellUnlearned));
+        OnPropertyChanged(nameof(CastWhenMaFullSpellUnlearned));
     }
 
     // The FULL Settings["Spells"] DTO from the current boxes — the per-character
@@ -351,6 +369,12 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CureDiseaseAfterCombat   = CureDiseaseAfterCombat,
         CureBlindnessAfterCombat = CureBlindnessAfterCombat,
 
+        CastWhenHpFullSpell        = NullIfBlank(CastWhenHpFullSpell),
+        CastWhenMaFullSpell        = NullIfBlank(CastWhenMaFullSpell),
+        CastWhenHpFullTarget       = NullIfBlank(CastWhenHpFullTarget),
+        CastWhenMaFullTarget       = NullIfBlank(CastWhenMaFullTarget),
+        CastWhenHpFullWhileResting = CastWhenHpFullWhileResting,
+        CastWhenMaFullWhileResting = CastWhenMaFullWhileResting,
 
         IgnorePoison    = IgnorePoison,
         IgnoreBlindness = IgnoreBlindness,
@@ -415,6 +439,12 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CureDiseaseAfterCombat   = dto.CureDiseaseAfterCombat;
         CureBlindnessAfterCombat = dto.CureBlindnessAfterCombat;
 
+        CastWhenHpFullSpell        = dto.CastWhenHpFullSpell;
+        CastWhenMaFullSpell        = dto.CastWhenMaFullSpell;
+        CastWhenHpFullTarget       = dto.CastWhenHpFullTarget;
+        CastWhenMaFullTarget       = dto.CastWhenMaFullTarget;
+        CastWhenHpFullWhileResting = dto.CastWhenHpFullWhileResting;
+        CastWhenMaFullWhileResting = dto.CastWhenMaFullWhileResting;
 
         IgnorePoison    = dto.IgnorePoison;
         IgnoreBlindness = dto.IgnoreBlindness;
@@ -450,6 +480,12 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     partial void OnCureDiseaseAfterCombatChanged(bool value)   => MarkDirty();
     partial void OnCureBlindnessAfterCombatChanged(bool value) => MarkDirty();
 
+    partial void OnCastWhenHpFullSpellChanged(string? value)       => MarkDirty();
+    partial void OnCastWhenMaFullSpellChanged(string? value)       => MarkDirty();
+    partial void OnCastWhenHpFullTargetChanged(string? value)      => MarkDirty();
+    partial void OnCastWhenMaFullTargetChanged(string? value)      => MarkDirty();
+    partial void OnCastWhenHpFullWhileRestingChanged(bool value)   => MarkDirty();
+    partial void OnCastWhenMaFullWhileRestingChanged(bool value)   => MarkDirty();
 
     partial void OnIgnorePoisonChanged(bool value)           => MarkDirty();
     partial void OnIgnoreBlindnessChanged(bool value)        => MarkDirty();
