@@ -82,7 +82,11 @@ public sealed class ConditionTrackerRosterTests
           { "Number": 822,  "Name": "terror", "Learnable": 0, "Learned From": "\u0000", "Casted By": "Monster #707" },
           { "Number": 1093, "Name": "web", "Learnable": 0, "Learned From": "\u0000", "Casted By": "Monster #867" },
           { "Number": 1141, "Name": "web", "Learnable": 0, "Learned From": "\u0000",
-            "Casted By": "Monster #622, Monster #929, Monster #898" }
+            "Casted By": "Monster #622, Monster #929, Monster #898" },
+          { "Number": 937, "Name": "gruesome curse", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Monster #191, Monster #385, Monster #836, Monster #844, Monster #850" },
+          { "Number": 1238, "Name": "gruesome curse", "Learnable": 0, "Learned From": "\u0000",
+            "Casted By": "Textblock #9577" }
         ]
         """;
 
@@ -98,7 +102,12 @@ public sealed class ConditionTrackerRosterTests
           { "Number": 867, "Name": "horned spider", "AttType-3": 1, "AttHitSpell-3": 1093, "Att%-3": 100 },
           { "Number": 622, "Name": "massive fanged spider", "MidSpell-0": 1141 },
           { "Number": 898, "Name": "arachnigoth", "MidSpell-0": 1141, "AttType-1": 1, "AttHitSpell-1": 1141, "Att%-1": 100 },
-          { "Number": 929, "Name": "crowned spider", "AttType-3": 1, "AttHitSpell-3": 1141, "Att%-3": 100 }
+          { "Number": 929, "Name": "crowned spider", "AttType-3": 1, "AttHitSpell-3": 1141, "Att%-3": 100 },
+          { "Number": 191, "Name": "huge gruesome creation", "AttType-1": 1, "AttHitSpell-1": 937, "Att%-1": 66 },
+          { "Number": 385, "Name": "old gypsy woman", "MidSpell-1": 937 },
+          { "Number": 836, "Name": "Ozrinom the Vampire Lord", "MidSpell-2": 937 },
+          { "Number": 844, "Name": "ancient gypsy woman", "MidSpell-1": 937 },
+          { "Number": 850, "Name": "Dark Mage", "MidSpell-2": 937 }
         ]
         """;
 
@@ -236,19 +245,35 @@ public sealed class ConditionTrackerRosterTests
         h.AssertToldLatchesWhatNotToldDoes();
     }
 
-    // The horned spider's follow line is made up.
+    // The gypsy woman's follow line is made up. Gruesome curse carries the Blindness
+    // ability (107) in the Spells data; the web cocoon this case used before carries
+    // only a hold, and its record no longer blinds.
     [Fact]
-    public void AHornedSpiderThatFollowedIn_BehindACrownedSpider_StillBlinds()
+    public void AGypsyWomanThatFollowedIn_BehindACrownedSpider_StillBlinds()
     {
         using Harness h = new("stock");
 
         h.Feed("Also here: crowned spider.",
-            "The horned spider scuttles after you!",
+            "The old gypsy woman shuffles after you!",
+            "A gruesome curse springs forth and you feel tainted!",
+            "You don't feel so good.");
+
+        Assert.Equal(MessageFlags.Blinded, h.Told.ActiveFlags);
+        h.AssertToldLatchesWhatNotToldDoes();
+    }
+
+    // The web cocoon is a hold and only a hold, as the Spells data has it (#1093:
+    // HoldPerson and Illumination, no Blindness or Confusion ability).
+    [Fact]
+    public void AWebCocoon_HoldsAndNothingElse()
+    {
+        using Harness h = new("stock");
+
+        h.Feed("Also here: horned spider.",
             "The spider quickly wraps you in a sticky cocoon!",
             "You are caught in a cocoon!");
 
-        Assert.Equal(
-            MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.MovementPrevented, h.Told.ActiveFlags);
+        Assert.Equal(MessageFlags.MovementPrevented, h.Told.ActiveFlags);
         h.AssertToldLatchesWhatNotToldDoes();
     }
 
@@ -318,7 +343,7 @@ public sealed class ConditionTrackerRosterTests
     [Theory]
     [InlineData("paradigm", "ancestral guardian", "You are deathly afraid!", MessageFlags.MovementPrevented)]
     [InlineData("stock", "monkey spirit", "You have gone mad!", MessageFlags.AttackPrevented)]
-    [InlineData("stock", "crowned spider", "You are caught in a cocoon!", MessageFlags.Blinded)]
+    [InlineData("stock", "crowned spider", "You don't feel so good.", MessageFlags.Blinded)]
     public void WithOnlyTheMilderSpellsCasterListed_AHoldAnAttackStopABlindness_StillLatches(
         string realm, string listed, string appliedLine, MessageFlags mustLatch)
     {

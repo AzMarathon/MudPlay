@@ -2706,6 +2706,8 @@ public sealed class AppServices
     // chips; our own state is owned by ConditionTracker, so without this our self
     // row never showed poison even though `par` and "You feel ill." did.
     public Game.Conditions.SelfAilmentChipResponder SelfAilmentChip { get; private set; } = null!;
+    // Our own latched blindness or hold dropped on outside proof that it is over.
+    public Game.Conditions.SelfAilmentProof SelfAilmentProofs { get; private set; } = null!;
 
     // Follower-disconnect pause bridge (leader side) — holds movement while a
     // dropped party follower is inside the reconnect grace window, so we don't
@@ -9646,7 +9648,7 @@ public sealed class AppServices
             LoopRunner.ReplanIfATollAheadIsClosed();
         };
 
-        Game.Conditions.SelfAilmentProof.Wire(RoomTracker, Conditions, Router, CureCastMatchers,
+        SelfAilmentProofs = new Game.Conditions.SelfAilmentProof(RoomTracker, Conditions, Router, CureCastMatchers,
             ownName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
 
         // Same reasoning as the condition reset above, for the attack-spell
@@ -13028,47 +13030,12 @@ public sealed class AppServices
             || s.Equals(e.RawName, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Cure-confirmation matchers for the party ailment tracker's chip-clear path.
-    // Built from game data (CureSpellIndex), NOT the local character's configured
-    // cure slots: a party-mate cures with their own class's spells, which the local
-    // character may never learn, so keying recognition on local config missed every
-    // cross-caster cure (a Priest's cure poison never cleared the member's chip
-    // until the next `par`). Each cure spell's CasterMessage (our cast) and
-    // WitnessMessage (another member's cast seen in the room) compile to matchers
-    // that pin the spell name + target, so a cure landing on a member clears that
-    // member's chip. Cached; dropped on a game-data set swap or a Messages edit, so
-    // either takes effect.
-    private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers()
-    {
-        if (_cureMatchers is { } cached) return cached;
-
-        List<Game.Conditions.CureCastMatcher> list = new();
-        foreach (Game.GameData.CureSpellIndex.CureSpell cure in _cureSpells.AllCures())
-        {
-            Models.GameData.MessageRecord? rec = FindSpellMessage(cure.Number, cure.Name);
-            if (rec is null) continue;
-            // Needs a caster matcher that pins {spellname}+{target}; a record whose
-            // cast line has no placeholder (a bare NPC-healer variant) is skipped.
-            if (Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage) is not { } caster) continue;
-            Game.Spells.CasterMessageMatcher? witness =
-                Game.Spells.CasterMessageMatcher.TryCreate(rec.WitnessMessage);
-            Game.Spells.CasterMessageMatcher? atUs =
-                Game.Spells.CasterMessageMatcher.TryCreate(rec.TargetMessage);
-            foreach (Models.GameData.MessageFlags ailment in CuredAilmentBits(cure.Cures))
-                list.Add(new Game.Conditions.CureCastMatcher(ailment, cure.Name, caster, witness, atUs));
-        }
-        return _cureMatchers = list;
-    }
-
-    // Split a spell's combined cured-flags value into the individual ailment bits the
-    // tracker clears — a heal+cure removes several at once, each its own matcher.
-    private static IEnumerable<Models.GameData.MessageFlags> CuredAilmentBits(Models.GameData.MessageFlags cured)
-    {
-        if ((cured & Models.GameData.MessageFlags.Poisoned) != 0) yield return Models.GameData.MessageFlags.Poisoned;
-        if ((cured & Models.GameData.MessageFlags.Diseased) != 0) yield return Models.GameData.MessageFlags.Diseased;
-        if ((cured & Models.GameData.MessageFlags.Blinded) != 0) yield return Models.GameData.MessageFlags.Blinded;
-        if ((cured & Models.GameData.MessageFlags.MovementPrevented) != 0) yield return Models.GameData.MessageFlags.MovementPrevented;
-    }
+    // Cure-confirmation matchers for the party ailment tracker's chip-clear path and
+    // our own blindness (SelfAilmentProof), built by CureCastMatcherBuilder from the
+    // game data. Cached; dropped on a game-data set swap or a Messages edit, so either
+    // takes effect.
+    private IReadOnlyList<Game.Conditions.CureCastMatcher> CureCastMatchers() =>
+        _cureMatchers ??= Game.Conditions.CureCastMatcherBuilder.Build(_cureSpells.AllCures(), FindSpellMessage);
 
     // Spell numbers that APPLY disease — the Diseased-flagged message records'
     // linked spells. Disease has no ability code of its own, so this is how a
