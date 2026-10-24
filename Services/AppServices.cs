@@ -985,7 +985,11 @@ public sealed class AppServices
     // question asked of a client that appears stuck, and without it a consumer
     // has to infer a dropped session from the absence of log traffic — which
     // looks identical to a client that's simply quiet.
-    public sealed record ConnectionSnapshot(bool Connected, bool Connecting, bool ReconnectPending);
+    //
+    // LastLoss is the last drop nobody asked for (null if none this session):
+    // whether the client noticed a dead link, and what it did about it.
+    public sealed record ConnectionSnapshot(bool Connected, bool Connecting, bool ReconnectPending,
+        ConnectionLoss? LastLoss = null);
 
     private Func<ConnectionSnapshot>? _connectionProvider;
 

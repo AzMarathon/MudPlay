@@ -840,7 +840,7 @@ public partial class MainWindowViewModel : ObservableObject
         // than the instance.
         AppServices.Current.SetEmulatorProvider(() => Emulator);
         AppServices.Current.SetConnectionProvider(() =>
-            new AppServices.ConnectionSnapshot(IsConnected, IsConnecting, IsReconnectPending));
+            new AppServices.ConnectionSnapshot(IsConnected, IsConnecting, IsReconnectPending, _lastConnectionLoss));
 
         // Live-screen watch for the character-creation stat box. It's drawn with
         // cursor positioning, so its marker row never completes as an emitted
@@ -3152,27 +3152,24 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConnectionLabel));
     }
 
-    // Distinguish a server-side carrier drop from a TCP-keepalive timeout.
-    // The connection was alive; now the socket died. If keepalive was
-    // enabled on the active BBS AND the wire was silent for longer than
-    // the configured idle window before the drop, attribute to
-    // DisconnectCause.NoResponse; otherwise DisconnectCause.CarrierLost.
-    // The threshold gets a small grace (+5s) so a server that responded
-    // just before the idle window closes doesn't get mis-classified as
-    // silent.
-    private DisconnectCause ClassifyServerSideDrop()
+    // The last connection that ended without anyone asking, for the bug report.
+    private ConnectionLoss? _lastConnectionLoss;
+
+    // What became of the redial after an unasked-for drop, once the cleanup and
+    // reactive schedulers have had their turn. With the matching Reconnect-when
+    // tick box off the terminal says so, or the drop would read as nothing more
+    // than a client still waiting on the game.
+    private string ReconnectOutcome(ConnectionLoss loss)
     {
+        if (_cleanupReconnectCts is not null) return "armed";
         BbsProfile? bbs = ResolveActiveBbs();
-        int idle = bbs?.NoResponseTimeoutSeconds ?? 0;
-        if (idle <= 0) return DisconnectCause.CarrierLost;
-
-        DateTimeOffset lastRead = _telnet?.LastDataReceived ?? DateTimeOffset.MinValue;
-        if (lastRead == DateTimeOffset.MinValue) return DisconnectCause.NoResponse;
-
-        double silentSeconds = (DateTimeOffset.UtcNow - lastRead).TotalSeconds;
-        return silentSeconds >= idle + 5
-            ? DisconnectCause.NoResponse
-            : DisconnectCause.CarrierLost;
+        if (bbs is null) return "not armed: no active BBS";
+        bool triggerOn = loss.WentSilent ? bbs.ReconnectOnNoResponse : bbs.ReconnectOnCarrierLost;
+        if (triggerOn) return "not armed: the redial budget was used up";
+        WriteTerminalStatus(loss.NotReconnectingLine, TerminalStatusKind.Error);
+        AppServices.Current.Log.Info("Reconnect",
+            $"Not redialing: '{loss.Trigger}' is off for this BBS.");
+        return $"not armed: '{loss.Trigger}' is off";
     }
 
     // ----- Reactive auto-reconnect (carrier-lost / failed-connect / no-response) ------
@@ -3530,8 +3527,9 @@ public partial class MainWindowViewModel : ObservableObject
         };
         client.Disconnected += () =>
         {
-            // Don't log here; DisconnectInternalAsync already did, and a
-            // server-initiated drop will fire this too.
+            // A drop we asked for was logged and announced by
+            // TearDownConnectionAsync; one we didn't is logged and announced below,
+            // once it has been told apart from the deliberate kinds.
             Dispatcher.UIThread.Post(() =>
             {
                 bool wasConnected = IsConnected;
@@ -3672,6 +3670,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // kind can't be left standing for the next.
                 SentExitCommand.Intent sentExit = AppServices.Current.SentExit.Consume();
                 string relogReason = "Remote @relog";
+                ConnectionLoss? unasked = null;
                 if (_userInitiatedDisconnect)
                 {
                     _userInitiatedDisconnect = false;
@@ -3702,7 +3701,14 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 else if (wasConnected)
                 {
-                    _lastDisconnectCause = ClassifyServerSideDrop();
+                    // Silence is judged against the idle window this connection
+                    // was opened with: a change in Settings applies from the next
+                    // connect, as the keepalive itself does.
+                    unasked = ConnectionLoss.Of(Host, Port, client.NoResponseTimeoutSeconds,
+                        client.LastDataReceived, client.EndedBecause, DateTimeOffset.Now);
+                    _lastDisconnectCause = unasked.WentSilent ? DisconnectCause.NoResponse : DisconnectCause.CarrierLost;
+                    AppServices.Current.Log.Warn("Telnet", unasked.LogLine);
+                    WriteTerminalStatus(unasked.TerminalLine, TerminalStatusKind.Error);
                     // An involuntary host-side drop must auto-enter on its
                     // reconnect. Clear any stale suppress-entry intent left by
                     // an earlier deliberate hangup so it can't carry across the
@@ -3766,6 +3772,7 @@ public partial class MainWindowViewModel : ObservableObject
                     TryScheduleCleanupReconnect();
                     if (_cleanupReconnectCts is null) TryScheduleReactiveReconnect();
                 }
+                if (unasked is not null) _lastConnectionLoss = unasked with { Reconnect = ReconnectOutcome(unasked) };
             });
         };
         // TelnetClient's Log event carries IAC negotiation trace lines;

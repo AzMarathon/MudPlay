@@ -68,6 +68,11 @@ public sealed class TelnetClient : IAsyncDisposable
     // timeout — long quiet stretch + dead socket = no response.
     public DateTimeOffset LastDataReceived { get; private set; } = DateTimeOffset.MinValue;
 
+    // Why the read loop ended, set before Disconnected is raised: the server
+    // closing the connection, or the socket error that ended it. A dropped link
+    // is otherwise silent, and which of the two it was tells a server hang-up
+    // from a link that died under us.
+    public string? EndedBecause { get; private set; }
 
     // Raised on the read-loop thread when display bytes arrive.
     public event Action<ReadOnlyMemory<byte>>? DataReceived;
@@ -255,6 +260,9 @@ public sealed class TelnetClient : IAsyncDisposable
 
     // ----- Read loop -----------------------------------------------------
 
+    public const string ServerClosed = "the server closed the connection";
+    public const string ClosedByClient = "closed by the client";
+
     private async Task ReadLoopAsync(CancellationToken ct)
     {
         var inBuf = new byte[16 * 1024];
@@ -264,7 +272,11 @@ public sealed class TelnetClient : IAsyncDisposable
             while (!ct.IsCancellationRequested && _stream is not null)
             {
                 int n = await _stream.ReadAsync(inBuf.AsMemory(0, inBuf.Length), ct);
-                if (n == 0) break; // Server closed the connection.
+                if (n == 0)
+                {
+                    EndedBecause = ServerClosed;
+                    break;
+                }
 
                 LastDataReceived = DateTimeOffset.UtcNow;
 
@@ -276,9 +288,9 @@ public sealed class TelnetClient : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) { }
-        catch (IOException) { }
-        catch (SocketException) { }
+        catch (OperationCanceledException) { EndedBecause = ClosedByClient; }
+        catch (IOException ex) { EndedBecause = ex.Message; }
+        catch (SocketException ex) { EndedBecause = ex.Message; }
         finally
         {
             Disconnected?.Invoke();

@@ -43,6 +43,9 @@ public static class BugReportContext
             Kv(sb, "Connection", (link.Connected ? "connected" : link.Connecting ? "connecting" : "not connected")
                 + (link.ReconnectPending ? ", a reconnect is pending" : string.Empty)
                 + (svc.InGameCapture.ConnectedAt is { } up ? $"; link up since {up:HH:mm:ss} ({BugReportHoldsAndWaits.Age(now - up)})" : string.Empty));
+            // "It sat there" may be a link that died: when, how long the server
+            // had been silent, what ended the read, and whether a redial was armed.
+            Kv(sb, "Last link drop", link.LastLoss?.Summary(now) ?? "(none this session that wasn't asked for)");
             Kv(sb, "In the game", svc.InGameCapture.InGameSince is { } entered
                 ? $"since {entered:HH:mm:ss} ({BugReportHoldsAndWaits.Age(now - entered)})"
                 : svc.InGameCapture.AtBoardMenu ? "no: at the board's menu" : "no");

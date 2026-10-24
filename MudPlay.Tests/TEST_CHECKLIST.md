@@ -793,6 +793,11 @@ How to keep it current:
 - Checks: applied/ends latching; shared-line narrowing by cast line; shadowing by a longer applied text or another spell's cast line; negated casts; flag-wide wear-off; stat readouts; fumble ActionFailed; hold lines; shipped-seed cases.
 - Why: stuck conditions (paradigm-20261011-165726, -20260904-214452, -20261002-120516).
 
+### ConnectionLossTests.cs
+- Covers: Net/TelnetClient's read-loop end (EndedBecause, LastDataReceived) on a loopback TcpListener; Services/ConnectionLoss.
+- Checks: a server closing the link reads as "the server closed the connection", a reset link carries its socket error; silence past the idle window plus 5 s is a no-response drop, inside it (or with keepalive off) a lost carrier; the terminal line states the silence only when it is 5 s or more; the not-reconnecting line names the matching Reconnect-when tick box; the bug-report summary carries the reconnect outcome.
+- Why: a link that dropped with auto-reconnect off left the last round box on screen and went unnoticed for 16 minutes (paradigm-20261022-074654).
+
 ### ConfirmServiceTests.cs
 - Covers: Services/ConfirmService; Models/Settings/ConfirmSettings.
 - Checks: every confirm returns true without a prompt when its flag is off; defaults are off.
