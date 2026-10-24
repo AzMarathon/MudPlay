@@ -25,10 +25,15 @@ internal sealed class DisposingCache<TKey, TValue>(int capacity)
     public int Count => _items.Count;
 
     public TValue GetOrAdd(TKey key, Func<TKey, TValue> create)
+        => GetOrAdd(key, create, static (k, c) => c(k));
+
+    // For a caller drawing on every frame: a static create plus state allocates
+    // nothing, where a lambda capturing the caller's locals would on every call.
+    public TValue GetOrAdd<TState>(TKey key, TState state, Func<TKey, TState, TValue> create)
     {
         if (_items.TryGetValue(key, out TValue? cached)) return cached;
         if (_items.Count >= capacity) Clear();
-        TValue value = create(key);
+        TValue value = create(key, state);
         _items[key] = value;
         return value;
     }

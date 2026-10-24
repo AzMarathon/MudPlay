@@ -68,7 +68,8 @@ internal sealed class CellRunText
             ushort index = ch == ' ' ? _spaceGlyph : GlyphFor(ch);
             if (index == 0 && ch != ' ')
             {
-                _fallback.GetOrAdd((ch, fgArgb), _ => new TextLayout(ch.ToString(), _typeface, _emSize, fg))
+                _fallback.GetOrAdd((ch, fgArgb), (_typeface, _emSize, fg),
+                        static (k, s) => new TextLayout(k.Ch.ToString(), s._typeface, s._emSize, s.fg))
                     .Draw(context, new Point(left + i * _cellW, top));
                 index = _spaceGlyph;
             }
@@ -87,6 +88,12 @@ internal sealed class CellRunText
             new Point(left, top + _baseline));
         context.DrawGlyphRun(fg, run);
     }
+
+    // A cached fallback layout must not be drawn by the render thread (replaying
+    // the last direct frame) and the UI thread (the zoom bitmap) at once: its native
+    // glyph run is not thread-safe. The owner calls this when it switches between
+    // the two, so each path draws layouts of its own.
+    public void ClearFallback() => _fallback.Clear();
 
     private ushort GlyphFor(char ch)
     {

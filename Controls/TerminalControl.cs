@@ -586,6 +586,10 @@ public sealed class TerminalControl : Control
             }
         }
 
+        // Crossing 1.0 moves the bitmap font between direct drawing and the zoom
+        // bitmap; see CellRunText.ClearFallback.
+        if ((fitX > 1.0 || fitY > 1.0) != (_fitScaleX > 1.0 || _fitScaleY > 1.0))
+            _text.ClearFallback();
         _fitScaleX = fitX;
         _fitScaleY = fitY;
     }

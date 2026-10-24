@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
@@ -146,7 +146,12 @@ public partial class RealmRankingsSectionView : UserControl
             _ => FontFamily.Default,
         };
 
+    // A TextLayout, disposed here, rather than a FormattedText, whose laid-out lines
+    // are never disposed and leave native glyph memory to the finalizer, rows × 6
+    // per column sizing.
     private static double Measure(string text, Typeface face, double fontSize)
-        => new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                             face, fontSize, Brushes.White).Width;
+    {
+        using TextLayout layout = new(text, face, fontSize, Brushes.White);
+        return layout.Width;
+    }
 }

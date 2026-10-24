@@ -1141,6 +1141,8 @@ public sealed class MapControl : Control
         double cxOld = (cursor.X - Bounds.Width  / 2 - _panX) / (TileWorldSize * zoomBefore);
         double cyOld = (cursor.Y - Bounds.Height / 2 - _panY) / (TileWorldSize * zoomBefore);
         _zoom = zoomAfter;
+        // Label sizes follow the zoom, so the old sizes' layouts are dropped here to
+        // keep the cache to one zoom's worth rather than wait for the cap.
         _labels.Clear();
         _panX = Math.Round(cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom);
         _panY = Math.Round(cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom);
@@ -3042,10 +3044,10 @@ public sealed class MapControl : Control
     // ----- Text labels ---------------------------------------------------
     // Every number and message the map draws, laid out once per text, face, size
     // and colour (see DisposingCache for why it is not a FormattedText per draw).
-    // Lair counts repeat a few numbers across many rooms and loop numbers run only
-    // as long as the loop, so the cache stays small; a zoom changes every size, so
-    // it starts over.
-    private const int LabelCacheCapacity = 1024;
+    // Lair counts repeat a few numbers across many rooms, but a loop numbers every
+    // room on it, and the cache empties itself when full: the cap leaves room for a
+    // loop of a few thousand rooms before a static redraw would start over.
+    private const int LabelCacheCapacity = 4096;
     private static readonly Typeface LabelFace = new("Inter", FontStyle.Normal, FontWeight.Bold);
     private static readonly Typeface MessageFace = new("Inter");
     private static readonly IBrush MessageBrush = new SolidColorBrush(Color.Parse("#888"));
