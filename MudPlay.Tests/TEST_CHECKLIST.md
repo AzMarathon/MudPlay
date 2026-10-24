@@ -1312,7 +1312,7 @@ How to keep it current:
 
 ### FavoritesStoreTests.cs
 - Covers: Services/FavoritesStore, Services/FavoriteCorrection
-- Checks: per-character copy of the old shared list; new characters get the bundled starters; Restore defaults; late game data; star toggle with a 10 cap; persistence on the profile; starter-GOTO corrections on load (star and folder kept, the user's own label left alone, the stale one dropped when the right room is already saved, applied once, Restore defaults afterwards adds no old or doubled room).
+- Checks: per-character copy of the old shared list; new characters get the bundled starters; Restore defaults; late game data; star toggle with a 10 cap; persistence on the profile; starter-GOTO corrections on load (star and folder kept, the user's own label left alone, the stale one dropped when the right room is already saved with its star carried over, applied once, made when game data arrives after the load, Restore defaults afterwards adds no old or doubled room).
 - Why: report paradigm-20261006-220135; user 2026-10-12; user 2026-10-24 (Narrow Ledge and three more starters at the wrong map).
 
 ### FlavorPrefixStoreTests.cs
@@ -2606,7 +2606,7 @@ How to keep it current:
 
 ### NavSeedBootstrapperTests.cs
 - Covers: Services/NavSeedBootstrapper
-- Checks: Seed ledger that adds new items and respects deletions; legacy-marker migration; revised loops with backup; Restore defaults; starter-GOTO corrections move the set's copy and its ledger key once, leave the user's own label alone, keep a deleted one deleted and drop the stale one when the right room is there.
+- Checks: Seed ledger that adds new items and respects deletions; legacy-marker migration; revised loops with backup; Restore defaults; starter-GOTO corrections move the set's copy and its ledger key once, leave the user's own label alone, keep a deleted one deleted and drop the stale one when the right room is there; a legacy-marker set is still corrected on migration.
 - Why: Never resurrecting loops or favourites the user deleted; user 2026-10-24 (a corrected starter must not be added beside the stale one).
 
 ### NavTreeBuilderTests.cs

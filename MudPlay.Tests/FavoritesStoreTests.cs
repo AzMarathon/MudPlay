@@ -254,13 +254,36 @@ public sealed class FavoritesStoreTests : IDisposable
         WriteStarters((16, 640, "Narrow Ledge", "Barren Hills"));
         WriteCorrections(("Narrow Ledge", 15, 640, 16, 640));
         WriteCharacterWith("Careful",
-            new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills"),
+            new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills") { Starred = true },
             new FavoriteRoom(16, 640, "the real ledge"));
 
         (_, FavoritesStore store) = LoadCharacter("Careful");
 
         FavoriteRoom only = Assert.Single(store.All);
         Assert.Equal((16, 640, "the real ledge"), (only.Map, only.Room, only.Label));
+        Assert.True(only.Starred);                               // the dropped one's star carried over
+    }
+
+    // A character loaded before any game data has its list but no realm to read
+    // corrections for; they are made once a set arrives.
+    [Fact]
+    public void CharacterLoadedBeforeAnyGameData_IsCorrectedWhenASetArrives()
+    {
+        WriteStarters((16, 640, "Narrow Ledge", "Barren Hills"));
+        WriteCorrections(("Narrow Ledge", 15, 640, 16, 640));
+        WriteCharacterWith("Early", new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills"));
+        ProfileService profile = TestProfiles.Service();
+        GameDataCache cache = new();
+        string? set = null;
+        FavoritesStore store = new(profile, cache, () => set, starterFile: _ => StarterFile);
+        profile.Load(_bbs, "Early");
+        Assert.True(store.IsFavorite(new RoomKey(15, 640)));
+
+        set = _setName;
+        cache.SwitchSet(_setName);
+
+        Assert.False(store.IsFavorite(new RoomKey(15, 640)));
+        Assert.True(store.IsFavorite(new RoomKey(16, 640)));
     }
 
     // A character from before per-character favourites copies the old shared list,

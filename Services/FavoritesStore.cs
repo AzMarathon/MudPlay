@@ -353,20 +353,14 @@ public sealed class FavoritesStore
             (profile.FavoriteCorrections ??= new()).Add(c.Id);
             changed = true;
 
-            List<FavoriteRoom> stale = list.Where(f => c.IsShipped(f.Map, f.Room, f.Label)).ToList();
-            if (stale.Count == 0) continue;
-            // A favourite already at the right room is the one kept: the stale one
-            // is dropped rather than doubled.
-            bool hadTarget = list.Any(f => f.Map == c.ToMap && f.Room == c.ToRoom);
-            bool haveTarget = hadTarget;
-            foreach (FavoriteRoom f in stale)
-            {
-                if (haveTarget) list.Remove(f);
-                else { f.Map = c.ToMap; f.Room = c.ToRoom; haveTarget = true; }
-            }
-            _log?.Info("Favorites", hadTarget
-                ? $"'{profile.Name}': dropped starter GOTO {c.Describe}, already a favourite at the corrected room"
-                : $"'{profile.Name}': corrected starter GOTO {c.Describe}");
+            FavoriteCorrection.Outcome outcome = c.ApplyTo(list,
+                f => new FavoriteCorrection.Entry(f.Map, f.Room, f.Label, f.Starred),
+                (f, map, room) => { f.Map = map; f.Room = room; },
+                f => f.Starred = true);
+            if (outcome != FavoriteCorrection.Outcome.None)
+                _log?.Info("Favorites", outcome == FavoriteCorrection.Outcome.Dropped
+                    ? $"'{profile.Name}': dropped starter GOTO {c.Describe}, already a favourite at the corrected room"
+                    : $"'{profile.Name}': corrected starter GOTO {c.Describe}");
         }
         return changed;
     }

@@ -265,6 +265,23 @@ public sealed class NavSeedBootstrapperTests : IDisposable
         Assert.Equal((16, 640, "the real ledge"), (only.Map, only.Room, only.Label));
     }
 
+    // A pre-ledger set adds nothing on migration, but its stale starter is still
+    // corrected in the same pass.
+    [Fact]
+    public void Migration_FromLegacyMarker_StillCorrectsAStaleStarter()
+    {
+        BundleFavorites((16, 640, "Narrow Ledge", "Barren Hills"), (1, 100, "Home", "Town"));
+        BundleCorrections(("Narrow Ledge", 15, 640, 16, 640));
+        WriteSetFavourites([new FavoriteRoom(15, 640, "Narrow Ledge", "Barren Hills")]);
+        File.WriteAllText(LegacyMarker, "realm=stock\n");
+
+        Apply();
+
+        FavoriteRoom only = Assert.Single(SetFavourites());     // nothing added
+        Assert.Equal((16, 640), (only.Map, only.Room));
+        Assert.False(File.Exists(LegacyMarker));
+    }
+
     // ----- Restore defaults (asked for by hand) -------------------------
 
     private string BundleLoops => Path.Combine(Bundle, "Loops");

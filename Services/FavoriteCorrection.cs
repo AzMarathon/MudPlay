@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace MudPlay.Services;
 
@@ -17,6 +18,11 @@ namespace MudPlay.Services;
 // ones: a room the user bookmarked under a label of their own is theirs.
 internal sealed record FavoriteCorrection(string Label, int FromMap, int FromRoom, int ToMap, int ToRoom)
 {
+    public enum Outcome { None, Moved, Dropped }
+
+    // One favourite as ApplyTo needs to see it, whatever form the list keeps it in.
+    public readonly record struct Entry(int Map, int Room, string? Label, bool Starred);
+
     public string Id => $"{FromMap}/{FromRoom}|{Label}>{ToMap}/{ToRoom}";
 
     public bool IsShipped(int map, int room, string? label) =>
@@ -30,4 +36,30 @@ internal sealed record FavoriteCorrection(string Label, int FromMap, int FromRoo
     // A file that won't parse throws (InvalidDataException), as a bad bundle should.
     public static IReadOnlyList<FavoriteCorrection> Load(string bundleDir) =>
         JsonStore.Load<List<FavoriteCorrection>>(Path.Combine(bundleDir, FileName)) ?? [];
+
+    // Move the shipped favourite in list to the corrected room. When the list already
+    // has a favourite there, that one is kept and the shipped one dropped, so the
+    // place isn't listed twice; a star on the dropped one carries over. Generic over
+    // the item so the set's file can stay JSON nodes, keeping fields this version
+    // doesn't know, while a character's list is FavoriteRooms.
+    public Outcome ApplyTo<T>(IList<T> list, Func<T, Entry> read, Action<T, int, int> move, Action<T> star)
+        where T : class?
+    {
+        List<T> stale = list.Where(f => read(f) is var e && IsShipped(e.Map, e.Room, e.Label)).ToList();
+        if (stale.Count == 0) return Outcome.None;
+        T? target = list.FirstOrDefault(f => read(f) is var e && e.Map == ToMap && e.Room == ToRoom);
+        Outcome outcome = target is null ? Outcome.Moved : Outcome.Dropped;
+        bool starred = stale.Any(f => read(f).Starred);
+        foreach (T f in stale)
+        {
+            if (target is null)
+            {
+                move(f, ToMap, ToRoom);
+                target = f;
+            }
+            else list.Remove(f);
+        }
+        if (starred) star(target!);
+        return outcome;
+    }
 }

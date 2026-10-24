@@ -13,7 +13,8 @@ namespace MudPlay.Services;
 // already-imported set on the next launch.
 //
 // Rules:
-//  - Additive: never overwrites an existing loop file or drops an existing favourite.
+//  - Additive: never overwrites an existing loop file or drops an existing favourite,
+//    save where a correction below says so.
 //  - Once-per-item (respects deletions): a per-set ledger records every item already
 //    OFFERED (loop relative-path + favourite key + folder name). An item in the ledger
 //    is never re-added — so a loop/GOTO the user deleted stays deleted — while a NEW
@@ -21,7 +22,7 @@ namespace MudPlay.Services;
 //  - Migration: a set seeded under the old binary .nav-seeded marker (pre-ledger)
 //    seeds its ledger with EVERYTHING currently bundled and adds nothing, so no
 //    already-shipped item — including ones the user deleted — is resurrected. Only
-//    genuinely-new future items land after that.
+//    genuinely-new future items land after that; corrections still apply.
 //  - Revised loops replace the copy: a bundled loop we corrected carries a revision
 //    number in the bundle's LoopRevisions.json. A set whose ledger holds an older
 //    revision gets the new file over its copy (the old one kept beside it as .bak),
@@ -71,7 +72,8 @@ public static class NavSeedBootstrapper
 
         // Pre-ledger set (old binary marker): treat everything currently bundled as
         // already-offered so nothing shipped before this feature — including the
-        // user's deletions — is re-added. Only future-new items land afterwards.
+        // user's deletions — is re-added. Only future-new items land afterwards. The
+        // pass below then adds nothing, but still makes the corrections.
         if (ledger is null && File.Exists(legacyMarker))
         {
             ledger = BuildLedgerFromBundle(bundle);
@@ -81,7 +83,6 @@ public static class NavSeedBootstrapper
                 $"Migrated set '{setName}' ({realm}) to nav-seed ledger — " +
                 $"{ledger.Loops.Count} loop(s) + {ledger.Favorites.Count} favourite(s) " +
                 "marked already-applied (no re-adds).");
-            return;
         }
 
         ledger ??= new NavSeedLedger();
@@ -250,24 +251,18 @@ public static class NavSeedBootstrapper
             ledger.Favorites = ledger.Favorites.Distinct(StringComparer.Ordinal).ToList();
 
             if (favs is null) continue;
-            List<JsonNode> stale = favs.OfType<JsonNode>()
-                .Where(f => c.IsShipped(NodeInt(f["Map"]), NodeInt(f["Room"]), f["Label"]?.ToString()))
-                .ToList();
-            if (stale.Count == 0) continue;
-            bool hadTarget = favs.Any(f => NodeInt(f?["Map"]) == c.ToMap && NodeInt(f?["Room"]) == c.ToRoom);
-            bool haveTarget = hadTarget;
-            foreach (JsonNode f in stale)
-            {
-                if (haveTarget) favs.Remove(f);
-                else { f["Map"] = c.ToMap; f["Room"] = c.ToRoom; haveTarget = true; }
-            }
+            FavoriteCorrection.Outcome outcome = c.ApplyTo(favs,
+                f => new FavoriteCorrection.Entry(NodeInt(f?["Map"]), NodeInt(f?["Room"]), f?["Label"]?.ToString(),
+                                                  bool.TryParse(f?["Starred"]?.ToString(), out bool starred) && starred),
+                (f, map, room) => { f!["Map"] = map; f["Room"] = room; },
+                f => f!["Starred"] = true);
+            if (outcome == FavoriteCorrection.Outcome.None) continue;
             fileChanged = true;
-            log?.Log(LogSeverity.Info, "NavSeed", hadTarget
+            log?.Log(LogSeverity.Info, "NavSeed", outcome == FavoriteCorrection.Outcome.Dropped
                 ? $"Set '{setName}': dropped starter GOTO {c.Describe} from the set's favourites, which have the corrected room."
                 : $"Set '{setName}': corrected starter GOTO {c.Describe} in the set's favourites.");
         }
-        if (fileChanged)
-            File.WriteAllText(favDest, cur!.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        if (fileChanged) JsonStore.Save(favDest, cur!);
         return true;
     }
 
@@ -324,8 +319,9 @@ public static class NavSeedBootstrapper
 
         // Only rewrite the set's file when we actually added something — this runs on
         // every activate, and an unchanged rewrite would churn the file needlessly.
-        if (added > 0 || foldersChanged)
-            File.WriteAllText(dst, cur.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        // Written atomically: this runs off the UI thread while a character's first
+        // load may be reading the file, and a half-written one reads as no list.
+        if (added > 0 || foldersChanged) JsonStore.Save(dst, cur);
         return added;
     }
 
@@ -371,12 +367,7 @@ public static class NavSeedBootstrapper
 
     private static void SaveLedger(string path, NavSeedLedger ledger)
     {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(ledger,
-                new JsonSerializerOptions { WriteIndented = true }));
-        }
+        try { JsonStore.Save(path, ledger); }
         catch { /* best-effort */ }
     }
 

@@ -3048,6 +3048,9 @@ public static class BugReportBuilder
             if (!string.IsNullOrWhiteSpace(f.Folder)) sb.Append("  (folder: ").Append(f.Folder).Append(')');
             sb.Append('\n');
         }
+        sb.Append('\n');
+        Kv(sb, "Starter GOTO corrections applied (this character)",
+            NamesOrNone(svc.Profile.Current?.FavoriteCorrections ?? []));
 
         // The loops and auto-lair setups are the game data's; which are favourites
         // is this character's (LoopFavoritesStore).
