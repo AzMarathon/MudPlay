@@ -32,14 +32,14 @@ public sealed class MonsterRelationshipRules
         _seed = seed;
     }
 
-    // The monsters a typed name stands for, by the rule the remote commands use for an
-    // item's, a loop's or an event's name: the monster's whole name wins outright;
-    // otherwise every monster whose name holds every typed word, in any order; and once
-    // more without apostrophes, which typed chat drops. The monsters in play are
-    // searched first and the rest only when none fits, so a placeholder record of the
-    // same name doesn't make a real monster ambiguous. Same-named monsters are separate
-    // records (a variant per area), so they stay several matches; `#<number>` names one
-    // of them, in play or not. Sorted by name, then number.
+    // The monsters a typed name stands for, by the rule the remote commands share for
+    // a name (RoomSearchService.FindAllByName): the whole name, then every typed word
+    // in any order, then the same without apostrophes. At each step a monster in play
+    // comes before one out of play (the Unobtainable list), so a placeholder record of
+    // a real monster's name doesn't make it ambiguous, and one out of play is still
+    // found when nothing in play fits. Same-named monsters are separate records (a
+    // variant per area), so they stay several matches; `#<number>` names one of them,
+    // in play or not. Sorted by name, then number.
     public IReadOnlyList<int> Find(string typed)
     {
         if (string.IsNullOrWhiteSpace(typed)) return Array.Empty<int>();
@@ -49,31 +49,16 @@ public sealed class MonsterRelationshipRules
                 && _catalog.Get(number) is not null
                 ? new[] { number }
                 : Array.Empty<int>();
-        IReadOnlyList<int> inPlay = FindAmong(_catalog.InPlay, query);
-        return inPlay.Count > 0 ? inPlay : FindAmong(_catalog.All, query);
-    }
-
-    private static IReadOnlyList<int> FindAmong(IEnumerable<MonsterCatalogEntry> monsters, string query)
-    {
-        List<MonsterCatalogEntry> candidates = monsters.Where(m => !string.IsNullOrWhiteSpace(m.Name)).ToList();
-        List<MonsterCatalogEntry> found = candidates
-            .Where(m => string.Equals(m.Name.Trim(), query, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (found.Count == 0)
-            found = candidates.Where(m => RoomSearchService.NameMatchesTokens(m.Name, query)).ToList();
-        if (found.Count == 0)
-        {
-            string bare = query.Replace("'", "");
-            found = candidates.Where(m => RoomSearchService.NameMatchesTokens(m.Name.Replace("'", ""), bare)).ToList();
-        }
-        return found
+        HashSet<int> inPlay = _catalog.InPlay.Select(m => m.Number).ToHashSet();
+        return RoomSearchService.FindAllByName(_catalog.All, m => m.Name, query, m => inPlay.Contains(m.Number))
             .OrderBy(m => m.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(m => m.Number)
             .Select(m => m.Number)
             .ToList();
     }
 
-    public string NameOf(int number) =>
-        _catalog.Get(number)?.Name ?? $"monster #{number.ToString(CultureInfo.InvariantCulture)}";
+    // The monster's name in the game data; empty when the record has none.
+    public string NameOf(int number) => _catalog.Get(number)?.Name.Trim() ?? string.Empty;
 
     // Only a named character has a tier of its own to hold the change.
     public bool CanChange => _resolver.CanWriteAt(SettingsTier.Character);
@@ -81,8 +66,17 @@ public sealed class MonsterRelationshipRules
     // The relationship as the engines read it: none set is Enemy.
     public MonsterRelationship Read(int number) => Resolve(number).Relationship ?? MonsterRelationship.Enemy;
 
-    // The tier the record's values come from, for the log.
-    public SettingsTier SourceOf(int number) => _resolver.GetGameDataSourceTier(Table, Id(number));
+    // The tier the Relationship itself comes from, for the log: the highest that
+    // holds one, or Defaults when none does (the installed seed, or no relationship
+    // set at all). Other fields of the record may come from other tiers.
+    public SettingsTier RelationshipSourceOf(int number)
+    {
+        foreach (SettingsTier tier in new[] { SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global })
+            if (_resolver.ReadGameDataAt(tier, Table, Id(number)) is { } held
+                && held[nameof(MonsterOverlay.Relationship)] is not null)
+                return tier;
+        return SettingsTier.Defaults;
+    }
 
     // Set the relationship at the character tier and return it as it now resolves.
     public MonsterRelationship Change(int number, MonsterRelationship relationship)
@@ -97,8 +91,7 @@ public sealed class MonsterRelationshipRules
         return Read(number);
     }
 
-    private MonsterOverlay Resolve(int number) =>
-        _resolver.ResolveGameData(Table, Id(number), _seed.GetOverlay(number));
+    private MonsterOverlay Resolve(int number) => _seed.Resolve(_resolver, number);
 
     private static string Id(int number) => number.ToString(CultureInfo.InvariantCulture);
 }

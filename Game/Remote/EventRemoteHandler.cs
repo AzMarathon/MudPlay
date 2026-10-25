@@ -279,25 +279,16 @@ public sealed class EventRemoteHandler : IDisposable
             .Select(g => (Label(g.First()), g.Select(e => _events.Events.IndexOf(e) + 1).ToList()))
             .ToList();
         string head = $"{AmbiguousOpening}{WireText.Shortened(typed)}' matches {found.Count}";
-
-        List<string> said = new();
-        int length = head.Length;
-        foreach ((string name, List<int> places) in names)
+        List<string> parts = names.Select(n =>
         {
-            string numbers = string.Join(", ", places.Take(MaxNumbersForAName))
-                + (places.Count > MaxNumbersForAName ? $" and {places.Count - MaxNumbersForAName} more" : "");
-            string part = $"'{name}' ({(places.Count == 1 ? "number" : "numbers")} {numbers})";
-            if (said.Count == MaxNamesInARefusal) break;
-            if (said.Count > 0 && length + 2 + part.Length > RefusalBudget) break;
-            said.Add(part);
-            length += 2 + part.Length;
-        }
-        string more = said.Count < names.Count ? $", +{names.Count - said.Count} more" : "";
+            string numbers = string.Join(", ", n.Places.Take(MaxNumbersForAName))
+                + (n.Places.Count > MaxNumbersForAName ? $" and {n.Places.Count - MaxNumbersForAName} more" : "");
+            return $"'{n.Name}' ({(n.Places.Count == 1 ? "number" : "numbers")} {numbers})";
+        }).ToList();
         string useANumber = names.Any(n => n.Places.Count > 1) ? "; use a number in place of the name" : "";
-        return $"{head}: {string.Join(", ", said)}{more}{useANumber}";
+        return WireText.Listed(head, parts, RefusalBudget) + useANumber;
     }
 
-    private const int MaxNamesInARefusal = 4;
     private const int MaxNumbersForAName = 4;
 
     // Room for the opening and the names in an ambiguity refusal, short of the

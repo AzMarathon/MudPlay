@@ -422,6 +422,8 @@ public sealed class LoopManager
     // every typed word, in any order ("godfrey bank" → "Bank of Godfrey Loop").
     // One result is a match; several are an ambiguity for the caller to report;
     // none is a miss.
+    // Not RoomSearchService.FindAllByName: the exact step here is the loop table's own
+    // key, which may differ from the name a loop file carries.
     public IReadOnlyList<Loop> FindByName(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<Loop>();

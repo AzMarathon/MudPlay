@@ -1936,15 +1936,15 @@ Reports or sets how your client treats one monster: its **Relationship**, the bo
 - `@relation dao lord friend`: set it. The word may be in any case: `Friend`, `FRIEND`.
 - `@relation #597 hangup`: name the monster by its number, as the Game Data Browser's Monsters table shows it.
 
-**How a name finds a monster.** The way `@auto-get` finds an item: a name that is a monster's whole name wins outright; otherwise a monster matches when its name holds **every typed word, in any order**, and failing that the same without apostrophes. The monsters in play are searched first, and the ones out of play (the Unobtainable list) only when none fits. Exactly one monster is used; none, or more than one, is refused. Monsters that share a name are separate records (a variant for each area), so a shared name is refused with each one's number: send the number in its place. The relationship is the **last** word, and only when there is a word before it, so a monster whose name ends in one of the five words is named by its number.
+**How a name finds a monster.** In three steps, the first that finds anything deciding: a monster's **whole name**; then every monster whose name holds **every typed word, in any order**; then the same without apostrophes, so `kobolds pet` finds *kobold's pet*. At each step the monsters in play come first, and the ones out of play (the Unobtainable list) count only when none in play fits. So a whole name wins over a word match, even when the whole name is a monster out of play. Exactly one monster is used; none, or more than one, is refused. Monsters that share a name are separate records (a variant for each area), so a shared name is refused with each one's number: send the number in its place. The relationship is the **last** word, and only when there is a word before it, so a monster whose name ends in one of the five words is named by its number.
 
 **Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
 
 | Reply | When |
 |---|---|
 | `dao lord (#597): Enemy` | Bare form: the relationship as your client reads it. A monster with none set reads `Enemy`. |
-| `dao lord (#597): Enemy -> Friend` | The relationship was changed. |
-| `dao lord (#597): already Friend` | It was already that. |
+| `dao lord (#597): Enemy -> Friend` | The relationship was changed. A monster with no name in the game data is shown by its number alone, `#90`. |
+| `dao lord (#597): already Friend` | It was already that. Nothing is saved, so a relationship the monster has for the realm or all characters is not copied to this character. |
 | `no monster named '<text>'` | **Refusal:** no monster's name fits. |
 | `monster name '<text>' matches 3: 'orc' #12, 'orc' #13, 'orc chief' #40` | **Refusal:** the name fits more than one monster. Up to four are given, fewer when the names are long, then `+5 more` for the rest. Nothing is changed. |
 | `bad relationship '<word>': use neutral, enemy, friend, flee or hangup` | **Refusal:** the name without its last word is a monster, and that word is no relationship. |
@@ -1955,10 +1955,10 @@ A bare `@relation` is refused with `usage: @relation <monster> [neutral|enemy|fr
 
 **Situations:**
 
-- **A change holds for this character.** It is kept at the character tier whenever the realm, all characters or the installed default say otherwise, so it holds over them. Setting it back to what lies below, with nothing for the realm or all characters saying otherwise, removes this character's relationship from the record, as the editor does. The record's other boxes go on reading as they did.
+- **A change holds for this character.** It is kept at the character tier, so it holds over whatever the realm or all characters say. A change back to the installed relationship (Enemy, for a monster installed with none), with nothing for the realm or all characters saying otherwise, removes this character's relationship from the record instead, as the editor does. The record's other boxes go on reading as they did.
 - **A Monster editor open meanwhile** shows the record as it was when it opened. Saved at the character tier, it writes its own Relationship box over the remote change.
 - **Master switch off:** ignored, no answer.
-- **On your own screen:** a change is written to the program log with the sender's name, the channel, the monster and its relationship before and after. The bug report's monster overrides list shows the record at the Character tier, and names who last set it by `@relation` this session.
+- **On your own screen:** a change is written to the program log with the sender's name, the channel, the monster and its relationship before and after. The bug report's monster overrides list shows the record at the Character tier and says who last set it by `@relation`, on which channel, and from what to what; a change that left no override is listed too. That list starts again when a character is loaded or the game-data set is switched.
 
 ### Health, rest and escape
 

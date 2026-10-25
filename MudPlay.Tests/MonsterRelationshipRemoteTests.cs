@@ -27,13 +27,18 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
 
     private readonly string _root;
     private readonly string _set = "relation-remote-" + Path.GetRandomFileName();
+    private readonly string _otherSet = "relation-remote-other-" + Path.GetRandomFileName();
     private readonly string _bbs = "relation-remote-" + Path.GetRandomFileName();
 
     public MonsterRelationshipRemoteTests()
     {
+        ScratchRoot.Require();
         _root = Path.Combine(Path.GetTempPath(), "mudplay-relation-remote-" + Path.GetRandomFileName());
-        Directory.CreateDirectory(Path.Combine(_root, _set));
-        File.WriteAllText(Path.Combine(_root, _set, "Monsters.json"), MonstersJson);
+        foreach (string set in new[] { _set, _otherSet })
+        {
+            Directory.CreateDirectory(Path.Combine(_root, set));
+            File.WriteAllText(Path.Combine(_root, set, "Monsters.json"), MonstersJson);
+        }
     }
 
     public void Dispose()
@@ -47,8 +52,8 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
     }
 
     // Two "orc" records (a variant per area) and an "orc chief"; a "hill giant" in play
-    // and an out-of-play one of the same name; a "frost giant" whose name holds an
-    // apostrophe-free word pair.
+    // and an out-of-play one of the same name; an out-of-play "cave bear" beside an
+    // in-play "cave bear cub"; a name with an apostrophe; a record with no name.
     private const string MonstersJson = """
         [
           { "Number": 597, "Name": "dao lord", "In Game": 1 },
@@ -58,7 +63,9 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
           { "Number": 50, "Name": "hill giant", "In Game": 1 },
           { "Number": 51, "Name": "hill giant", "In Game": 0 },
           { "Number": 70, "Name": "kobold's pet", "In Game": 1 },
-          { "Number": 80, "Name": "cave bear", "In Game": 0 }
+          { "Number": 80, "Name": "cave bear", "In Game": 0 },
+          { "Number": 81, "Name": "cave bear cub", "In Game": 1 },
+          { "Number": 90, "Name": "", "In Game": 1 }
         ]
         """;
 
@@ -66,6 +73,11 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
     {
         public required MessageRouter Router { get; init; }
         public required RemoteCommandManager Engine { get; init; }
+        public required ProfileService Profile { get; init; }
+        public required GameDataCache Cache { get; init; }
+        public required CombatManager Combat { get; init; }
+        // What the combat engine sent the game.
+        public List<string> Attacks { get; } = new();
         public required SettingsResolver Resolver { get; init; }
         public required AutoModeController Controller { get; init; }
         public required MonsterRelationshipHandler Handler { get; init; }
@@ -91,8 +103,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         }
 
         // What every engine that reads a relationship resolves (AppServices.ResolveMonsterOverlay).
-        public MonsterOverlay Overlay(int number) =>
-            Resolver.ResolveGameData("Monsters", number.ToString(), Seed.GetOverlay(number));
+        public MonsterOverlay Overlay(int number) => Seed.Resolve(Resolver, number);
 
         public SettingsTier TierOf(int number) => Resolver.GetGameDataSourceTier("Monsters", number.ToString());
 
@@ -101,6 +112,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         public void Dispose()
         {
             Watcher.Dispose();
+            Combat.Dispose();
             Classifier.Dispose();
             Handler.Dispose();
             Engine.Dispose();
@@ -143,11 +155,11 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         {
             BlockedByMasterSwitch = what => controller.Blocks("Remote commands", what),
         };
-        MonsterRelationshipHandler handler = new(engine, new MonsterRelationshipRules(resolver, catalog, seed), log,
-            now: () => new DateTimeOffset(Now));
+        MonsterRelationshipHandler handler = new(engine, new MonsterRelationshipRules(resolver, catalog, seed),
+            profile, cache, log, now: () => new DateTimeOffset(Now));
 
-        // The Flee / Hangup watch, reading relationships through the resolver as the
-        // client wires it.
+        // The combat engine and the Flee / Hangup watch, reading relationships as the
+        // client wires them (AppServices.ResolveMonsterOverlay).
         MonsterMessageStore monsters = new();
         foreach ((int number, string name) in new[] { (DaoLord, "dao lord"), (50, "hill giant") })
             monsters.Messages.Add(new MonsterMessageRecord(
@@ -157,7 +169,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         List<string> flees = new();
         MonsterRelationshipWatcher watcher = new(
             classifier,
-            resolveOverlay: n => resolver.ResolveGameData("Monsters", n.ToString(), seed.GetOverlay(n)),
+            resolveOverlay: n => seed.Resolve(resolver, n),
             hangUp: reason => { hangUps.Add(reason); return EscapeOutcome.Jumped; },
             flee: (reason, _) => { flees.Add(reason); return FleeOutcome.Started; },
             fleeInFlight: () => true,
@@ -168,13 +180,28 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
             describeRoom: () => "here",
             schedule: (_, _) => { },
             log: log);
+        CombatManager combat = new(router, classifier, monsters,
+            resolveOverlay: n => seed.Resolve(resolver, n),
+            party: party,
+            readSettings: () => new CombatSettings { NormalAttackCommand = "a" },
+            isEnabled: () => true,
+            readOwnGivenName: () => "Tester",
+            post: a => a(),
+            log: log);
+        combat.SetWeaponActuator((_, _, _) => { });
 
         Rig rig = new()
         {
-            Router = router, Engine = engine, Resolver = resolver, Controller = controller, Handler = handler,
+            Router = router, Engine = engine, Profile = profile, Cache = cache, Combat = combat,
+            Resolver = resolver, Controller = controller, Handler = handler,
             Seed = seed, Log = log, Classifier = classifier, Watcher = watcher, HangUps = hangUps, Flees = flees,
         };
         engine.SetWireSender(rig.Replies.Add);
+        combat.SetWireSender(b =>
+        {
+            string line = Encoding.Latin1.GetString(b).TrimEnd('\r');
+            if (line.Length > 0) rig.Attacks.Add(line);   // not the bare CR room refresh
+        });
         return rig;
     }
 
@@ -232,6 +259,20 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         Assert.Equal(SettingsTier.Defaults, r.TierOf(DaoLord));
     }
 
+    // A relationship the monster has from a lower tier isn't copied to this character:
+    // that would pin it here if the lower tier changed.
+    [Fact]
+    public void TheSameRelationship_FromAGlobalValue_IsNotPinnedForThisCharacter()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Monsters", "597",
+            new Dictionary<string, object> { ["Relationship"] = "Friend" });
+
+        Assert.Equal(Reply("dao lord (#597): already Friend"), r.Ask1("@relation dao lord friend"));
+        Assert.Equal(SettingsTier.Global, r.TierOf(DaoLord));
+        Assert.Null(r.Resolver.ReadGameDataAt(SettingsTier.Character, "Monsters", "597"));
+    }
+
     // A record the Monster editor saved for this character keeps every other field.
     [Fact]
     public void AChange_LeavesTheRecordsOtherFieldsAsTheyWere()
@@ -276,26 +317,60 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         Assert.Contains(r.Log.Snapshot(), e => e.Severity == LogSeverity.Info
             && e.Message.Contains("@relation from Friend on gangpath")
             && e.Message.Contains("dao lord (#597)")
-            && e.Message.Contains("Enemy (from the Defaults tier) -> Hangup"));
-        MonsterRelationshipHandler.RemoteChange change = Assert.IsType<MonsterRelationshipHandler.RemoteChange>(r.Handler.LastChange(DaoLord));
+            && e.Message.Contains("Enemy (set at the Defaults tier) -> Hangup"));
+        MonsterRelationshipHandler.RemoteChange change = r.Handler.Changes[DaoLord];
         Assert.Equal(("Friend", RemoteChannel.Gangpath, MonsterRelationship.Enemy, MonsterRelationship.Hangup),
             (change.Sender, change.Channel, change.From, change.To));
-        Assert.Null(r.Handler.LastChange(50));
+        Assert.False(r.Handler.Changes.ContainsKey(50));
+    }
+
+    // The log names the tier the relationship itself came from, not the record's
+    // highest tier.
+    [Fact]
+    public void TheLog_NamesTheTierTheRelationshipCameFrom()
+    {
+        using Rig r = Build();
+        r.Resolver.WriteGameDataAt(SettingsTier.Global, "Monsters", "597",
+            new Dictionary<string, object> { ["Relationship"] = "Neutral" });
+        r.Resolver.WriteGameDataAt(SettingsTier.Character, "Monsters", "597",
+            new Dictionary<string, object> { ["DontBackstab"] = true });
+
+        r.Ask("@relation dao lord friend");
+
+        Assert.Contains(r.Log.Snapshot(), e => e.Severity == LogSeverity.Info
+            && e.Message.Contains("Neutral (set at the Global tier) -> Friend"));
+    }
+
+    // A change is the loaded character's, in the loaded set: a profile load or a set
+    // switch starts the bug report's list again.
+    [Fact]
+    public void TheRemoteChanges_AreForgotten_OnAProfileLoad_AndASetSwitch()
+    {
+        using Rig r = Build();
+        r.Ask("@relation dao lord friend");
+        Assert.True(r.Handler.Changes.ContainsKey(DaoLord));
+        r.Profile.Load(_bbs, "Tester");
+        Assert.Empty(r.Handler.Changes);
+
+        r.Ask("@relation dao lord flee");
+        Assert.True(r.Handler.Changes.ContainsKey(DaoLord));
+        r.Cache.SwitchSet(_otherSet);
+        Assert.Empty(r.Handler.Changes);
     }
 
     // ----- What reads it -----------------------------------------------------------
 
     [Fact]
-    public void TheChange_ReachesCombatTargeting_AtOnce()
+    public void TheChange_ReachesTheCombatEngine_AtTheNextRoomDisplay()
     {
         using Rig r = Build();
-        Assert.True(MonsterEngagement.IsEngageable(r.Overlay(DaoLord)));
-
         r.Ask("@relation dao lord friend");
-        Assert.False(MonsterEngagement.IsEngageable(r.Overlay(DaoLord)));
+        r.Room("dao lord");
+        Assert.Empty(r.Attacks);
 
         r.Ask("@relation dao lord enemy");
-        Assert.True(MonsterEngagement.IsEngageable(r.Overlay(DaoLord)));
+        r.Room("dao lord");
+        Assert.Equal(new[] { "a dao lord" }, r.Attacks);
     }
 
     [Fact]
@@ -321,10 +396,12 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         using Rig r = Build();
         r.Ask("@relation dao lord flee");
 
+        // Built as MonsterRecordDialogService.OpenAsync builds it; the window itself
+        // needs the running app.
         MonsterEditDialogViewModel vm = new(
             wccNoStr: "597", mdbName: "dao lord", existing: r.Overlay(DaoLord),
             currentTier: r.TierOf(DaoLord), mdbInfo: Array.Empty<MdbInfoRow>(),
-            writableTiers: [SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global]);
+            writableTiers: r.Resolver.WritableTiers(), installedDefaults: r.Seed.GetOverlay(DaoLord));
 
         Assert.Equal(MonsterRelationship.Flee, vm.Relationship);
         Assert.Equal(SettingsTier.Character, vm.UseTier);
@@ -349,7 +426,26 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         using Rig r = Build();
 
         Assert.Equal(Reply("hill giant (#50): Enemy -> Neutral"), r.Ask1("@relation hill giant neutral"));
-        Assert.Equal(Reply("cave bear (#80): Enemy"), r.Ask1("@relation cave bear"));
+        Assert.Equal(Reply("cave bear cub (#81): Enemy"), r.Ask1("@relation cub bear"));
+    }
+
+    // A whole name wins over a word match, even one in play: exact names in play, then
+    // exact names among all monsters, then word matches.
+    [Fact]
+    public void AWholeNameOutOfPlay_WinsOverAWordMatchInPlay()
+    {
+        using Rig r = Build();
+
+        Assert.Equal(Reply("cave bear (#80): Enemy -> Friend"), r.Ask1("@relation cave bear friend"));
+        Assert.Equal(SettingsTier.Defaults, r.TierOf(81));
+    }
+
+    [Fact]
+    public void AMonsterWithNoName_IsLabelledByItsNumber()
+    {
+        using Rig r = Build();
+
+        Assert.Equal(Reply("#90: Enemy -> Friend"), r.Ask1("@relation #90 friend"));
     }
 
     [Fact]

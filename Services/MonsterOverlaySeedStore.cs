@@ -154,6 +154,12 @@ public sealed class MonsterOverlaySeedStore
     // Defaults-tier overlay for monsterNumber. Returns a blank MonsterOverlay
     // when the seed has no record for that monster (i.e. the monster's stock
     // values match the runtime defaults already — Enemy / Normal / no flags).
+    // The overlay every engine reads for a monster: this seed as the Defaults tier,
+    // under the Global / BBS / Character overrides.
+    public MonsterOverlay Resolve(SettingsResolver resolver, int monsterNumber) =>
+        resolver.ResolveGameData("Monsters",
+            monsterNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), GetOverlay(monsterNumber));
+
     public MonsterOverlay GetOverlay(int monsterNumber) =>
         _byNumber.TryGetValue(monsterNumber, out MonsterOverlay? overlay)
             ? overlay

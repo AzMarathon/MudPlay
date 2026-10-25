@@ -183,10 +183,8 @@ public static class GameDataOverrideApplier
         return true;
     }
 
-    // Serialized by its runtime type: the records saved here (ItemOverlay, MonsterOverlay)
-    // are game-data overlays, never settings sections.
-    private static JsonObject ToJson(object overlay) =>
-        JsonSerializer.SerializeToNode(overlay, overlay.GetType(), JsonStore.Options)!.AsObject();
+    private static JsonObject ToJson<T>(T overlay) where T : class =>
+        JsonSerializer.SerializeToNode(overlay, JsonStore.Options)!.AsObject();
 
     private static bool SameValue(JsonNode? a, JsonNode? b) =>
         (IsUnset(a) && IsUnset(b)) || JsonNode.DeepEquals(a, b);

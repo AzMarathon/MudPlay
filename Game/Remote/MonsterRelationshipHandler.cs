@@ -1,5 +1,6 @@
 using MudPlay.Game.Combat;
 using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Remote;
@@ -19,39 +20,54 @@ public sealed class MonsterRelationshipHandler : IDisposable
 
     private readonly RemoteCommandManager _engine;
     private readonly MonsterRelationshipRules _rules;
+    private readonly ProfileService _profile;
+    private readonly GameDataCache _gameData;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
     private readonly Dictionary<int, RemoteChange> _changes = new();
     private bool _disposed;
 
-    // The last change a remote command made to a monster this session, for the bug
-    // report: its tier list says where an override lives, not who put it there.
+    // The last change a remote command made to a monster, for the bug report: its
+    // tier list says where an override lives, not who put it there. Kept for the
+    // character and the game-data set it was made under; a profile load or a set
+    // switch starts the list again, since a monster's number means nothing outside
+    // its set and the change was saved for that character alone.
     public readonly record struct RemoteChange(
         DateTimeOffset At, string Sender, RemoteChannel Channel, MonsterRelationship From, MonsterRelationship To);
 
+    public IReadOnlyDictionary<int, RemoteChange> Changes => _changes;
+
     public MonsterRelationshipHandler(
-        RemoteCommandManager engine, MonsterRelationshipRules rules,
+        RemoteCommandManager engine, MonsterRelationshipRules rules, ProfileService profile, GameDataCache gameData,
         LogService? log = null, Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(gameData);
         _engine = engine;
         _rules = rules;
+        _profile = profile;
+        _gameData = gameData;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
         if (RemoteCommandCatalog.TryGetCategory(Command, out PlayerRemoteControls category))
             _engine.RegisterHandler(Command, category, Handle);
+        _profile.ProfileLoaded += OnProfileLoaded;
+        _gameData.ActiveSetChanged += OnActiveSetChanged;
     }
-
-    public RemoteChange? LastChange(int number) =>
-        _changes.TryGetValue(number, out RemoteChange change) ? change : null;
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _engine.UnregisterHandler(Command);
+        _profile.ProfileLoaded -= OnProfileLoaded;
+        _gameData.ActiveSetChanged -= OnActiveSetChanged;
     }
+
+    private void OnProfileLoaded(CharacterProfile _) => _changes.Clear();
+    private void OnActiveSetChanged(string? _) => _changes.Clear();
 
     private void Handle(RemoteCommandContext ctx)
     {
@@ -97,23 +113,27 @@ public sealed class MonsterRelationshipHandler : IDisposable
             ctx.Reply($"{label}: {before}");
             return;
         }
-
-        SettingsTier was = _rules.SourceOf(number);
-        MonsterRelationship after = _rules.Change(number, wanted);
-        if (after == before)
+        // Nothing is written for a value the monster already has: saving it would pin
+        // this character to a relationship it only had from a lower tier.
+        if (wanted == before)
         {
-            _log?.Debug(LogCategory, $"{Command} from {ctx.Sender}: {label} already {after}");
-            ctx.Reply($"{label}: already {after}");
+            _log?.Debug(LogCategory, $"{Command} from {ctx.Sender}: {label} already {before}");
+            ctx.Reply($"{label}: already {before}");
             return;
         }
+
+        SettingsTier was = _rules.RelationshipSourceOf(number);
+        MonsterRelationship after = _rules.Change(number, wanted);
         _changes[number] = new RemoteChange(_now(), ctx.Sender, ctx.Channel, before, after);
         _log?.Log(LogSeverity.Info, LogCategory,
             $"{Command} from {ctx.Sender} on {TransferChannels.NameOf(ctx.Channel)}: {label} relationship "
-            + $"{before} (from the {was} tier) -> {after}, saved for this character");
+            + $"{before} (set at the {was} tier) -> {after}, saved for this character");
         ctx.Reply($"{label}: {before} -> {after}");
     }
 
-    private string Label(int number) => $"{WireText.Ascii(_rules.NameOf(number))} (#{number})";
+    // "dao lord (#597)", or "#597" for a record with no name.
+    private string Label(int number) =>
+        _rules.NameOf(number) is { Length: > 0 } name ? $"{WireText.Ascii(name)} (#{number})" : $"#{number}";
 
     // The values the Monster editor's Relationship box offers, read by their names.
     // A number is not taken: the editor never shows one.
@@ -129,18 +149,21 @@ public sealed class MonsterRelationshipHandler : IDisposable
         return false;
     }
 
-    private static readonly string Choices =
-        string.Join(", ", Words[..^1]) + " or " + Words[^1];
-
     private static string[] Words =>
         Enum.GetValues<MonsterRelationship>().Select(r => r.ToString().ToLowerInvariant()).ToArray();
 
-    private static readonly string Usage = $"usage: {Command} <monster> [{string.Join('|', Words)}]";
+    // "neutral|enemy|friend|flee|hangup": the usage reply's and the @help entry's list.
+    public static string WordChoices => string.Join('|', Words);
+
+    private static readonly string Choices = string.Join(", ", Words[..^1]) + " or " + Words[^1];
+    private static readonly string Usage = $"usage: {Command} <monster> [{WordChoices}]";
     private const string NoCharacter = "no character loaded";
 
     // The refusal for a name that fits several monsters, each with the number that
     // names it alone: same-named monsters can't be told apart any other way.
     private string Ambiguous(string typed, IReadOnlyList<int> found) =>
         WireText.Listed($"monster name '{WireText.Shortened(typed)}' matches {found.Count}",
-            found.Select(number => $"'{WireText.Ascii(_rules.NameOf(number))}' #{number}").ToList());
+            found.Select(number => _rules.NameOf(number) is { Length: > 0 } name
+                ? $"'{WireText.Ascii(name)}' #{number}"
+                : $"#{number}").ToList());
 }

@@ -252,28 +252,13 @@ public sealed class EventManager : IDisposable
 
     private readonly Dictionary<ScheduledEvent, string> _lastSwitch = new();
 
-    // The events a typed name stands for, by the rule the remote @loop commands
-    // use for a loop's name (LoopManager.FindByName): a name that equals it wins
-    // outright; otherwise every event whose name holds every typed word, in any
-    // order; and once more without apostrophes, which typed chat drops. One result
-    // is a match, several an ambiguity for the caller to report, none a miss. An
-    // event with no name can't be named.
-    //
-    // The three steps are written out here and not shared with LoopManager: loops
-    // are keyed by name, one to a name, and events are a list that may hold two of
-    // a name, so the exact step differs. The word match itself is the shared one.
-    public IReadOnlyList<ScheduledEvent> FindByName(string query)
-    {
-        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<ScheduledEvent>();
-        string typed = query.Trim();
-        ScheduledEvent[] found = Events
-            .Where(e => string.Equals(e.Name?.Trim(), typed, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (found.Length > 0) return found;
-        found = Events.Where(e => RoomSearchService.NameMatchesTokens(e.Name, typed)).ToArray();
-        if (found.Length > 0) return found;
-        string bare = typed.Replace("'", "");
-        return Events.Where(e => RoomSearchService.NameMatchesTokens(e.Name?.Replace("'", ""), bare)).ToArray();
-    }
+    // The events a typed name stands for, by the rule the remote commands share
+    // (RoomSearchService.FindAllByName): a name that equals it wins outright;
+    // otherwise every event whose name holds every typed word, in any order; and
+    // once more without apostrophes. One result is a match, several an ambiguity for
+    // the caller to report, none a miss. An event with no name can't be named.
+    public IReadOnlyList<ScheduledEvent> FindByName(string query) =>
+        RoomSearchService.FindAllByName(Events, e => e.Name, query);
 
     // Switch one event on or off for `by` (who asked, for the log and the bug
     // report). Takes effect at once: the list raises a Replace carrying the same

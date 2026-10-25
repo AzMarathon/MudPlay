@@ -413,6 +413,7 @@ public sealed class SettingsSectionReadTests : IDisposable
         // Game-data records and their per-set override files.
         "MudPlay.Services.SettingsResolver::ResolveGameData",
         "MudPlay.Services.SettingsResolver::WriteGameDataAt",
+        "MudPlay.Services.GameDataOverrideApplier::ToJson",
         // The merge base built from a value in memory, never stored; the merged
         // section is read through SettingsSection.
         "MudPlay.Services.SettingsResolver::ToJsonObject",
