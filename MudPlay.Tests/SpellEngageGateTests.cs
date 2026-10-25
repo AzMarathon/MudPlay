@@ -664,6 +664,33 @@ public sealed class SpellEngageGateTests
         Assert.Equal(new[] { sent }, h.AllSent);
     }
 
+    // A configured spell a game-data gate keeps off the target is logged, once for the
+    // spell and target however many rounds pass, naming the spell it resolved to, the
+    // gate and the value: the report's blaze skip had left no trace in the log.
+    [Theory]
+    [InlineData(5, 56, "blazing light", "giant rat",
+        "normal spell 'blaz' (#5585) skipped for giant rat — targets undead only")]
+    [InlineData(13, 34, "blaze", "barrow wight",
+        "normal spell 'blaz' (#290) skipped for barrow wight — its level 20 is under the monster's spell immunity 30")]
+    public void DataGateSkip_IsLoggedOncePerSpellAndTarget(
+        int classNumber, int level, string learned, string monster, string line)
+    {
+        using Harness h = new(classNumber, level);
+        h.WieldFromGearSet("katana");
+        h.Ma = h.MaxMa = 100;
+        h.Spellbook.SetObtainedByNames(new[] { learned });
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "blaz" };
+
+        h.Server.Line($"Also here: {monster}.");
+        h.Server.Line("*Combat Engaged*");
+        h.Tick();
+        h.Tick();
+        h.Tick();
+
+        Assert.Equal($"a {monster}", h.AllSent.First());
+        Assert.Single(h.Logged, l => l == line);
+    }
+
     // After an attack spell, `*Combat Engaged*` is what says we're engaged (and in
     // line for the kill's exp); a spell that drew "no effect" instead leaves us not
     // engaged, and that spell is out for the monster. With the weapon unable to hurt
