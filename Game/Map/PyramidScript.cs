@@ -55,9 +55,10 @@ public static class PyramidScript
     public const int GoldenLionKeyItem = 1175;
     public const int FloatingKeyRoom = 2005;
 
-    // Firepit / Scorched Cavern landing range — a chance-cast scatter drops a
-    // failed climber into a random room here (12/1239-1278). Plus the desert
-    // secondary 12/335. Landing in either mid-climb means the climb failed.
+    // Firepit / Scorched Cavern landing range: when the first floor's timer runs
+    // out it teleports the party back down into this range (12/1239-1278), and
+    // dao scatter drops a climber at the desert room 12/335. Landing in either
+    // mid-climb means the climb failed.
     public const int FirepitLow = 1239;
     public const int FirepitHigh = 1278;
     public const int DesertScatterRoom = 335;
