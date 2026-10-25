@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.1
+
+- Paradigm's party invite messages recorded as the same as Stock's in the game-mechanics reference
+
 ## 3.186.0
 
 - New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
