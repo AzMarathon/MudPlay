@@ -609,4 +609,67 @@ public sealed class RoomEntryWatcherTests
 
         Assert.Single(h.Arrivals);
     }
+
+    // A monster's own appear line names nobody, and its yellow words name no monster
+    // ("mist of gold" is no monster's name), so neither the patterns nor the colour
+    // scan put the golden mist on the roster (report paradigm-20261025-011825; bytes
+    // as the wire sent them). The message table says the line is the golden mist's.
+    [Fact]
+    public void MonsterAppearLine_OnlyOneMonsterPrintsIt_PutsThatMonsterOnTheRoster()
+    {
+        using Harness h = new();
+        h.AddMonster(1046, "golden mist");
+        h.AddPlayer("Farmer");
+        ServerFeed feed = new(h.Router);
+        feed.Line("Also here: Farmer.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        feed.Raw("\u001b[0m\u001b[79D\u001b[K\u001b[1;33mA mist of gold appears in front of you!\r\n");
+
+        RoomEntryArrivalEvent arrival = Assert.Single(h.Arrivals);
+        Assert.Equal("golden mist", arrival.Name);
+        Assert.Contains(h.Classifier.Current!.Value.Entities, e => e.MonsterNumber == 1046);
+        Assert.True(h.Classifier.RosterIsWhole);
+    }
+
+    // A line worded as a monster already here coming to life names the one it
+    // becomes, but putting that one on the roster would leave whatever the room
+    // listed before beside it: the roster is marked short and the room asked for.
+    [Theory]
+    [InlineData("An unholy idol animates!", "unholy idol")]
+    [InlineData("The statue animates, and attacks!", "obsidian statue")]
+    [InlineData("The giant shrugs off his glacial prison, and bellows in rage!", "frost giant")]
+    public void MonsterAppearLine_WordedAsOneAlreadyHere_LeavesTheRosterShort(string line, string monster)
+    {
+        using Harness h = new();
+        h.AddMonster(900, monster);
+        h.AddPlayer("Farmer");
+        ServerFeed feed = new(h.Router);
+        feed.Line("Also here: Farmer.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        feed.Raw($"\u001b[1;33m{line}\r\n");
+
+        Assert.Empty(h.Arrivals);
+        Assert.DoesNotContain(h.Classifier.Current!.Value.Entities, e => e.MonsterNumber == 900);
+        Assert.False(h.Classifier.RosterIsWhole);
+    }
+
+    // A line several monsters print can't say which came: nobody is added, and the
+    // roster is known to be short of someone, so the room gets asked for.
+    [Fact]
+    public void MonsterAppearLine_SharedBySeveralMonsters_LeavesTheRosterShort()
+    {
+        using Harness h = new();
+        h.AddMonster(1080, "red sphere");
+        h.AddMonster(1081, "blue sphere");
+        h.AddPlayer("Farmer");
+        ServerFeed feed = new(h.Router);
+        feed.Line("Also here: Farmer.");
+
+        feed.Raw("\u001b[1;33mA hovering sphere appears out of thin air!\r\n");
+
+        Assert.Empty(h.Arrivals);
+        Assert.False(h.Classifier.RosterIsWhole);
+    }
 }

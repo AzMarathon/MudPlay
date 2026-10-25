@@ -3870,10 +3870,11 @@ public sealed partial class CombatManager : IDisposable
 
     // Pre-emptive sibling of OnCombatLine, keyed on a directionless spawn line
     // ("A slimeworm crashes through the ground into the room!"). RoomEntryWatcher's
-    // arrival parser only handles the "<name> <verb> in from <dir>" form — a spawn's
-    // free-form flavor carries no direction and no cleanly-parseable name, so nothing
-    // adds it to the roster and the mob stays invisible until it swings. That swing is
-    // what OnCombatLine currently recovers on, a full round late (the reported lag: a
+    // handler for the line runs first (a higher TieBreak) and puts a monster on the
+    // roster only for an appear line one monster prints; any other spawn's free-form
+    // flavor carries no direction and no cleanly-parseable name, so the mob stays off
+    // the roster and invisible until it swings. That swing is what OnCombatLine
+    // recovers on, a full round late (the reported lag: a
     // resting mage sat unengaged while ten slimeworms piled in, only engaging once the
     // first bite tripped the empty-room net). Firing the same bare-CR refresh on the
     // spawn line pulls the authoritative "Also here:" a round earlier, before the hit.

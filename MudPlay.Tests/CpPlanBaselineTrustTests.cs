@@ -88,6 +88,10 @@ public sealed class CpPlanBaselineTrustTests : IDisposable
     private CharacterPlanContext Resolve((GameDataCache GameData, ListedEffectCatalog Effects) set) =>
         CharacterPlanContext.Resolve(_stats, set.GameData, _inventory, set.Effects);
 
+    // The tab's note for a reading the grid works from directly.
+    private string? Note(CharacterPlanContext ctx) => CpAllocationSectionViewModel.DescribeReading(
+        ctx, new CpPlanInputs(ctx.Baseline, _stats.Cp, _stats.CpThroughLevel, Held: false));
+
     [Fact]
     public void ACleanScreen_IsTrusted()
     {
@@ -98,7 +102,7 @@ public sealed class CpPlanBaselineTrustTests : IDisposable
 
         Assert.True(ctx.BaselineTrusted);
         Assert.Equal(133, ctx.Baseline.Strength);
-        Assert.Null(CpAllocationSectionViewModel.DescribeReading(ctx));
+        Assert.Null(Note(ctx));
     }
 
     [Fact]
@@ -124,7 +128,7 @@ public sealed class CpPlanBaselineTrustTests : IDisposable
         CharacterPlanContext ctx = Resolve(set);
 
         Assert.False(ctx.BaselineTrusted);
-        Assert.Contains("Rows aren't checked", CpAllocationSectionViewModel.DescribeReading(ctx));
+        Assert.Contains("Rows aren't checked", Note(ctx));
     }
 
     [Fact]
@@ -140,7 +144,7 @@ public sealed class CpPlanBaselineTrustTests : IDisposable
 
         Assert.Equal(StatReadingState.Accounted, ctx.Reading.State);
         Assert.False(ctx.BaselineTrusted);
-        Assert.Contains("won't open `train stats`", CpAllocationSectionViewModel.DescribeReading(ctx));
+        Assert.Contains("won't open `train stats`", Note(ctx));
     }
 
     [Fact]
@@ -156,7 +160,7 @@ public sealed class CpPlanBaselineTrustTests : IDisposable
 
         Assert.Equal(StatReadingState.Unverified, ctx.Reading.State);
         Assert.False(ctx.BaselineTrusted);
-        Assert.Contains("No `stat` screen is on record", CpAllocationSectionViewModel.DescribeReading(ctx));
+        Assert.Contains("No `stat` screen is on record", Note(ctx));
     }
 
     [Fact]

@@ -8,9 +8,9 @@ public enum CpStat { Strength, Intellect, Willpower, Agility, Health, Charm }
 
 // Per-row result of CpPlanCalculator.Compute: the (possibly clamped) target
 // stats for the level plus its CP accounting. CpEarnedTotal is the cumulative
-// CP available by this level (starting unspent CP + all CP gained through it);
-// CpLeft is what remains after the plan's spending. Stats are clamped so CP Left
-// never goes negative (floored at 0).
+// CP available by this level (the unspent CP + the CP each level above the one
+// it was counted through grants); CpLeft is what remains after the plan's
+// spending. Stats are clamped so CP Left never goes negative (floored at 0).
 public readonly record struct CpRowResult(
     int Level,
     int Strength, int Intellect, int Willpower, int Agility, int Health, int Charm,
@@ -27,6 +27,11 @@ public readonly record struct CpRowResult(
 // range from the previous level's value to this level's
 // (CalcTotalCpCostForStatRange). A target below the previous value (you can't
 // untrain) clamps up to it; above the race max clamps down to it.
+//
+// The unspent CP already holds what every level up to cpThroughLevel granted
+// (GAME_MECHANICS "Where CP comes from"), so a row at or below it adds nothing:
+// only the levels above it bring CP of their own. A row for the level you stand
+// at is spent from the CP in hand.
 //
 // Affordability: a level can't spend more CP than it has (carryover + CP gained
 // that level), so when a row's targets would overspend, the cell the user just
@@ -58,6 +63,7 @@ public static class CpPlanCalculator
         CpPlanEntry raceMin,
         CpPlanEntry raceMax,
         int initialCp,
+        int cpThroughLevel,
         RealmType realm,
         CpStat? preferredTrim = null)
     {
@@ -76,7 +82,7 @@ public static class CpPlanCalculator
 
         foreach (CpPlanEntry row in rows)
         {
-            int gained = CharacterCalculator.CalcCpGainedAtLevel(row.Level);
+            int gained = row.Level > cpThroughLevel ? CharacterCalculator.CalcCpGainedAtLevel(row.Level) : 0;
             int available = carryover + gained;
 
             int[] target = ClampRowToBudget(
@@ -94,6 +100,12 @@ public static class CpPlanCalculator
 
         return results;
     }
+
+    // Each row as level, Total CP earned / CP Left, for the program log and bug report.
+    public static string Describe(IReadOnlyList<CpRowResult> results) =>
+        results.Count == 0
+            ? "(no rows)"
+            : string.Join(", ", results.Select(r => $"L{r.Level} {r.CpEarnedTotal}/{r.CpLeft}"));
 
     // Clamp one level's rowTargets to a spendable result: each stat to
     // [prev, raceMax] (can't untrain, can't exceed race max), then trimmed

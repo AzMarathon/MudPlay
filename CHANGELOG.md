@@ -5,6 +5,12 @@
 - New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
 - A shared monster name is refused with each one's number; `@relation #<number>` names one
 
+## 3.185.53
+
+- CP plan's CP Left no longer double-counts the current level's CP or shifts as a stat buff comes and goes
+- Monsters' own appear lines (golden mist's "A mist of gold appears in front of you!" and 31 others) are recognised as arrivals: straight onto the room list, or a room check
+- bug reports addressed: paradigm-20261025-010655, paradigm-20261025-011825
+
 ## 3.185.51
 
 - Settings tab Periodic Damage Room Spells renamed Room Spell Config
