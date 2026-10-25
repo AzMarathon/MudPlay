@@ -177,6 +177,7 @@ public sealed partial class StatParser : IDisposable
             Stats.Exp = 0;
             Stats.Lives = 0;
             Stats.Cp = 0;
+            Stats.CpThroughLevel = 0;
             Stats.ExpToNext = 0;
             Stats.LevelExpSpan = 0;
             Stats.LevelPercent = 0;
@@ -215,6 +216,7 @@ public sealed partial class StatParser : IDisposable
         Stats.Exp = snapshot.Exp;
         Stats.Lives = snapshot.Lives;
         Stats.Cp = snapshot.Cp;
+        Stats.CpThroughLevel = snapshot.CpThroughLevel ?? snapshot.Level;
         Stats.ExpToNext = snapshot.ExpToNext;
         Stats.LevelExpSpan = snapshot.LevelExpSpan;
         Stats.LevelPercent = snapshot.LevelPercent;
@@ -287,6 +289,7 @@ public sealed partial class StatParser : IDisposable
         Exp = Stats.Exp,
         Lives = Stats.Lives,
         Cp = Stats.Cp,
+        CpThroughLevel = Stats.CpThroughLevel,
         ExpToNext = Stats.ExpToNext,
         LevelExpSpan = Stats.LevelExpSpan,
         LevelPercent = Stats.LevelPercent,
@@ -535,7 +538,9 @@ public sealed partial class StatParser : IDisposable
         TryString(text, ClassRx(), "Class", v => Stats.Class = v);
 
         // Paired N/M fields.
-        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; _livesReadThisArm = true; BeginScreenMarks(); });
+        // The marks on record go before the new CP lands: a screen's CP is never read
+        // beside the last screen's marks, which vouch for the last screen's stats.
+        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { BeginScreenMarks(); Stats.Lives = a; Stats.Cp = b; _livesReadThisArm = true; });
         TryPair(text, HitsRx(),        "Hits",         (a, b) => { Stats.Hits = a; Stats.MaxHits = b; _hitsReadThisArm = true; });
         TryPair(text, KaiRx(),         "Kai",          (a, b) => { Stats.Kai  = a; Stats.MaxKai  = b; _poolReadThisArm = true; });
         TryPair(text, ManaRx(),        "Mana",         (a, b) => { Stats.Mana = a; Stats.MaxMana = b; _poolReadThisArm = true; });
@@ -753,7 +758,16 @@ public sealed partial class StatParser : IDisposable
         if (!m.Success) return;
         if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture, out int gained) || gained <= 0) return;
+        // The line comes after a train's success line, which moved Level on. With no
+        // such line since the CP was last counted, the success line was missed: Level
+        // is a level short, and the CP plan counts this CP again for the next level
+        // until a `stat` reads both.
+        if (Stats.Level == 0 || Stats.Level == Stats.CpThroughLevel)
+            _log?.Log(LogSeverity.Warn, "StatParser",
+                $"`You gain {gained} CPs` with no train line before it since the CP was counted through level "
+                + $"{Stats.CpThroughLevel} (level {Stats.Level}); counted anyway — the next `stat` settles it.");
         Stats.Cp += gained;
+        Stats.CpThroughLevel = Stats.Level;
         HasParsed = true;
         _log?.Log(LogSeverity.Info, "StatParser", $"Cp += {gained} → {Stats.Cp} (train CP-gain line).");
     }
@@ -900,6 +914,9 @@ public sealed partial class StatParser : IDisposable
         LastCaptureReadStealth = _stealthReadThisArm;
         LastCaptureReadPool = _poolReadThisArm;
         LastCaptureReadLives = _livesReadThisArm;
+        // The screen's CP and its Level were read together, so they agree whatever a
+        // train line did to either before it.
+        if (_livesReadThisArm) Stats.CpThroughLevel = Stats.Level;
         _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = _livesReadThisArm = false;
         PublishScreenMarks();
         CancelSettleClose();

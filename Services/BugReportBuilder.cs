@@ -2027,8 +2027,7 @@ public static class BugReportBuilder
     // for the effects that screen listed, and what couldn't be accounted for.
     private static void AppendPlanBaseline(StringBuilder sb, AppServices svc)
     {
-        var ctx = Game.Calculators.CharacterPlanContext.Resolve(
-            svc.PlayerStats, svc.GameData, svc.Inventory, svc.ListedEffects);
+        Game.Calculators.CpPlanInputs inputs = svc.CpPlanBaseline.Peek(out var ctx);
         sb.Append("\n**CP plan baseline (worked back from the last `stat` screen)**\n\n");
         if (!ctx.HasCharacter)
         {
@@ -2052,6 +2051,17 @@ public static class BugReportBuilder
         sb.Append("- effect lines on that screen: ").Append(s.ActiveEffects.Count == 0
             ? "(none)"
             : string.Join(" | ", s.ActiveEffects.Select(e => e.Timed ? e.Text + " (timed)" : e.Text))).Append('\n');
+        // What the CP Allocation grid is worked from, and the figures it shows, so a
+        // report of CP Left moving can be checked against both.
+        sb.Append("- grid worked from: ").Append(inputs.Held
+            ? "an earlier `stat` that could be worked back (the latest can't): "
+            : "the latest `stat`: ").Append(inputs.Describe())
+          .Append("; live CP ").Append(s.Cp).Append(" counted through level ").Append(s.CpThroughLevel)
+          .Append(", level ").Append(s.Level).Append('\n');
+        if (svc.Profile.Current?.CharacterPlan is { Count: > 0 } plan)
+            sb.Append("- grid as worked now (level earned/left): ").Append(Game.Calculators.CpPlanCalculator.Describe(
+                Game.Calculators.CpPlanCalculator.Compute(inputs.Baseline, plan, ctx.RaceMin, ctx.RaceMax,
+                    inputs.Cp, inputs.CpThroughLevel, ctx.Realm))).Append('\n');
         sb.Append("- plan row due at level ").Append(s.Level).Append(": ")
           .Append(Game.Calculators.CpPlanCalculator.RowDueAt(svc.Profile.Current?.CharacterPlan, s.Level) is { } due
               ? $"the level-{due.Level} row; something to apply with {s.Cp} CP: {(svc.AutoTrain.CanTrainNow ? "yes" : "no")}"

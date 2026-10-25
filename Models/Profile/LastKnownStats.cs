@@ -35,6 +35,9 @@ public sealed class LastKnownStats
     public long Exp { get; set; }
     public int Lives { get; set; }
     public int Cp { get; set; }
+    // The level whose training CP is counted in Cp (PlayerStats.CpThroughLevel).
+    // Null in snapshots saved before it was kept: Level stands in.
+    public int? CpThroughLevel { get; set; }
     public long ExpToNext { get; set; }
     public long LevelExpSpan { get; set; }
     public int LevelPercent { get; set; }
