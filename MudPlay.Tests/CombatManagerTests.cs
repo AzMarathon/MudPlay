@@ -73,6 +73,11 @@ public sealed class CombatManagerTests
         // combat manager's own handler for the line. Only with wireDeathWatcher.
         public MonsterDeathWatcher? Deaths { get; }
 
+        // The arrival watcher, wired as AppServices wires it (and built after the
+        // combat manager, so only the router's TieBreak puts its handler for a
+        // spawn line first). Only with wireRoomEntry.
+        public RoomEntryWatcher? RoomEntry { get; }
+
         // The one clock every component here reads; nothing waits on real time.
         // Each line fed in lands a millisecond after the one before (the game's
         // lines never share an instant), and a test that needs a round or a window
@@ -84,7 +89,7 @@ public sealed class CombatManagerTests
         // the router, stamped on the harness clock.
         public ServerFeed Server { get; }
 
-        public Harness(bool wireDeathWatcher = false)
+        public Harness(bool wireDeathWatcher = false, bool wireRoomEntry = false)
         {
             DefaultPatterns.Seed(Router);
             Server = new ServerFeed(Router, () => Clock.Now);
@@ -114,6 +119,7 @@ public sealed class CombatManagerTests
             Combat.SetDarkRoomProbe(() => Dark);
             Combat.SetAttackPreventedGate(() => AttackPrevented);
             Combat.SetFearGate(() => Feared);
+            if (wireRoomEntry) RoomEntry = new RoomEntryWatcher(Router, Classifier, Log, now: () => Clock.Now);
         }
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
@@ -185,6 +191,7 @@ public sealed class CombatManagerTests
         public void Dispose()
         {
             Combat.Dispose();
+            RoomEntry?.Dispose();
             Deaths?.Dispose();
             Classifier.Dispose();
         }
@@ -915,21 +922,36 @@ public sealed class CombatManagerTests
     // Report paradigm-20261025-011825: a golden mist came in with its own appear
     // line, "A mist of gold appears in front of you!" (message 3277), which no
     // arrival shape read. The client sat until the user's Enter re-drew the room.
-    // The monsters' appear lines from the message table now ask for the room too.
-    [Theory]
-    [InlineData("A mist of gold appears in front of you!", "golden mist")]
-    [InlineData("A hovering sphere appears out of thin air!", "red sphere")]
-    public void MonsterAppearLine_AsksForTheRoom_ThenEngages(string appear, string monster)
+    // Only the golden mist prints that line, so the arrival watcher puts it on the
+    // roster ahead of this handler, and it is attacked with no room asked for.
+    [Fact]
+    public void MonsterAppearLine_OneMonsterPrintsIt_IsAttackedFromTheRoster()
     {
-        using Harness h = new();
-        h.AddMonster(1046, monster);
+        using Harness h = new(wireRoomEntry: true);
+        h.AddMonster(1046, "golden mist");
 
-        h.Server.Line(appear);
+        h.Server.Line("A mist of gold appears in front of you!");
+
+        Assert.Equal(0, h.CrRefreshSends);
+        Assert.Equal("golden mist", h.Combat.CurrentTarget);
+        Assert.Equal("a golden mist", h.LastSent);
+    }
+
+    // A line four spheres share can't say which came: the roster stays short and
+    // the room is asked for.
+    [Fact]
+    public void MonsterAppearLine_SharedBySeveralMonsters_AsksForTheRoom_ThenEngages()
+    {
+        using Harness h = new(wireRoomEntry: true);
+        h.AddMonster(1080, "red sphere");
+        h.AddMonster(1081, "blue sphere");
+
+        h.Server.Line("A hovering sphere appears out of thin air!");
         Assert.Equal(1, h.CrRefreshSends);
 
-        h.Server.Line($"Also here: {monster}.");
-        Assert.Equal(monster, h.Combat.CurrentTarget);
-        Assert.Equal($"a {monster}", h.LastSent);
+        h.Server.Line("Also here: red sphere.");
+        Assert.Equal("red sphere", h.Combat.CurrentTarget);
+        Assert.Equal("a red sphere", h.LastSent);
     }
 
     // ----- dark-room CR-refresh suppression -----------------------------

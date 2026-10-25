@@ -6873,7 +6873,7 @@ public sealed class AppServices
         ListedEffects = new Game.Spells.ListedEffectCatalog(Messages, GameData);
         AutoTrain = new Game.AutoTrainManager(PlayerStats, Stats, GameData, Inventory, Profile, TrainerMenu,
             ListedEffects, Router, Log);
-        CpPlanBaseline = new Game.CpPlanBaseline(PlayerStats, GameData, Inventory, ListedEffects, Log);
+        CpPlanBaseline = new Game.CpPlanBaseline(PlayerStats, GameData, Inventory, ListedEffects, Profile, Log);
 
         // EquipmentManager + the @equip <set> handler. The engine
         // reads saved gear sets off the char profile, diffs against Inventory's

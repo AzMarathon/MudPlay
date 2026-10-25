@@ -37,6 +37,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private readonly TrainerWalkManager _trainerWalk;
     private readonly AutoTrainManager _autoTrain;
     private readonly CpPlanBaseline _planBaseline;
+    private readonly LogService? _log;
     private Control? _view;
     private bool _suppress;
     // The cell most recently edited by the user, so an overspend trims that cell
@@ -127,7 +128,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
                                         InventoryManager inventory, ProfileService profile,
                                         CpPlanState planState, TrainerWalkManager trainerWalk,
                                         AutoTrainManager autoTrain,
-                                        CpPlanBaseline planBaseline)
+                                        CpPlanBaseline planBaseline, LogService? log)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -138,6 +139,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         ArgumentNullException.ThrowIfNull(autoTrain);
         ArgumentNullException.ThrowIfNull(planBaseline);
         _planBaseline = planBaseline;
+        _log = log;
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -546,7 +548,15 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
                 CpPlanRowViewModel row = Rows[i];
                 // Write back the clamped target stats so the grid reflects
                 // race-max / can't-untrain limits the user may have typed past.
-                CpPlanEntry shown = RowToShow(row.ToEntry(), res, _baselineTrusted);
+                CpPlanEntry was = row.ToEntry();
+                CpPlanEntry shown = RowToShow(was, res, _baselineTrusted);
+                // A row the user didn't just edit, rewritten by the clamp, is a change to
+                // their saved plan they didn't make: say so. Once rewritten it fits, so
+                // this is said once per change.
+                if (_lastEditedStat is null && Describe(was) != Describe(shown))
+                    _log?.Info("CpPlan",
+                        $"CP plan row L{was.Level} clamped to the CP and stats of the latest `stat` "
+                        + $"({UnspentCp} CP counted through level {_cpThroughLevel}): {Describe(was)} → {Describe(shown)}.");
                 row.Strength = shown.Strength;
                 row.Intellect = shown.Intellect;
                 row.Willpower = shown.Willpower;
@@ -583,8 +593,11 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
             + $"level {_cpThroughLevel} ({(_baselineTrusted ? "trusted" : _inputsHeld ? "held from an earlier `stat`" : "not trusted")}): {grid}";
         if (line == _lastLoggedGrid) return;
         _lastLoggedGrid = line;
-        AppServices.CurrentOrNull?.Log.Debug("CpPlan", line);
+        _log?.Debug("CpPlan", line);
     }
+
+    private static string Describe(CpPlanEntry e) =>
+        $"STR {e.Strength} INT {e.Intellect} WIL {e.Willpower} AGL {e.Agility} HEA {e.Health} CHM {e.Charm}";
 
     // The stats a grid row should hold after a recalc: the clamped ones when the
     // baseline can be trusted, else the row as it stands. Clamping raises a target

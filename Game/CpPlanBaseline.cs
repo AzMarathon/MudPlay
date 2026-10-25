@@ -39,6 +39,7 @@ public sealed class CpPlanBaseline : IDisposable
     private readonly GameDataCache _gameData;
     private readonly InventoryManager _inventory;
     private readonly ListedEffectCatalog _listedEffects;
+    private readonly ProfileService _profile;
     private readonly LogService? _log;
 
     private sealed record Reading(string Name, CpPlanInputs Inputs);
@@ -46,41 +47,48 @@ public sealed class CpPlanBaseline : IDisposable
     private string? _lastLogged;
 
     public CpPlanBaseline(PlayerStats stats, GameDataCache gameData, InventoryManager inventory,
-                          ListedEffectCatalog listedEffects, LogService? log = null)
+                          ListedEffectCatalog listedEffects, ProfileService profile, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(listedEffects);
+        ArgumentNullException.ThrowIfNull(profile);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
         _listedEffects = listedEffects;
+        _profile = profile;
         _log = log;
         _stats.PropertyChanged += OnStatsChanged;
         _gameData.ActiveSetChanged += OnActiveSetChanged;
+        _profile.ProfileClosed += Forget;
+        _profile.ProfileLoaded += OnProfileLoaded;
     }
 
-    // Resolve the live plan context and the inputs the grid is worked from.
+    // Resolve the live plan context and the inputs the grid is worked from, keeping
+    // a trusted reading for later.
     public CpPlanInputs Resolve(out CharacterPlanContext ctx)
+    {
+        CpPlanInputs used = Choose(out ctx);
+        if (!ctx.HasCharacter) return used;
+        if (ctx.BaselineTrusted) _lastTrusted = new Reading(_stats.Name, used);
+        LogIfChanged(used, ctx);
+        return used;
+    }
+
+    // The same answer as Resolve, with nothing kept or logged: a bug report can be
+    // captured off the UI thread, by the crash reporter.
+    public CpPlanInputs Peek(out CharacterPlanContext ctx) => Choose(out ctx);
+
+    private CpPlanInputs Choose(out CharacterPlanContext ctx)
     {
         ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _listedEffects);
         var live = new CpPlanInputs(ctx.Baseline, _stats.Cp, _stats.CpThroughLevel, Held: false);
-        if (!ctx.HasCharacter) return live;
-
-        CpPlanInputs used;
-        if (ctx.BaselineTrusted)
-        {
-            _lastTrusted = new Reading(_stats.Name, live);
-            used = live;
-        }
-        else if (_lastTrusted is { } last && last.Name == _stats.Name)
-            used = last.Inputs with { Held = true };
-        else
-            used = live;
-
-        LogIfChanged(used, ctx);
-        return used;
+        if (!ctx.HasCharacter || ctx.BaselineTrusted) return live;
+        return _lastTrusted is { } last && last.Name == _stats.Name
+            ? last.Inputs with { Held = true }
+            : live;
     }
 
     private void LogIfChanged(CpPlanInputs used, CharacterPlanContext ctx)
@@ -103,8 +111,12 @@ public sealed class CpPlanBaseline : IDisposable
         if (e.PropertyName is { } name && ReadingFields.Contains(name)) Resolve(out _);
     }
 
-    // Another set can change the realm and the race bounds the baseline was floored at.
-    private void OnActiveSetChanged(string? _)
+    // Another set can change the realm and the race bounds the baseline was floored
+    // at, and another profile is another character: nothing held crosses either.
+    private void OnActiveSetChanged(string? _) => Forget();
+    private void OnProfileLoaded(Models.Profile.CharacterProfile _) => Forget();
+
+    private void Forget()
     {
         _lastTrusted = null;
         _lastLogged = null;
@@ -114,5 +126,7 @@ public sealed class CpPlanBaseline : IDisposable
     {
         _stats.PropertyChanged -= OnStatsChanged;
         _gameData.ActiveSetChanged -= OnActiveSetChanged;
+        _profile.ProfileClosed -= Forget;
+        _profile.ProfileLoaded -= OnProfileLoaded;
     }
 }

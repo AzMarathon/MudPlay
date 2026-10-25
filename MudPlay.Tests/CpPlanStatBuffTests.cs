@@ -30,6 +30,9 @@ public sealed class CpPlanStatBuffTests : IDisposable
     private readonly MessageStore _messages = new();
     private readonly GameDataCache _gameData;
     private readonly CpPlanBaseline _planBaseline;
+    private readonly ProfileService _profile = TestProfiles.Loaded();
+    private readonly LogService _log = new();
+    private readonly List<LogEntry> _logged = new();
 
     // The report's saved plan.
     private static readonly CpPlanEntry[] Plan =
@@ -59,9 +62,10 @@ public sealed class CpPlanStatBuffTests : IDisposable
         _gameData = new GameDataCache(_root);
         _gameData.SwitchSet("set");
         var effects = new ListedEffectCatalog(_messages, _gameData);
-        _parser = new StatParser(_stats);
+        _parser = new StatParser(_stats, _log);
         _parser.AttachLineExtractor(_feed.Lines);
-        _planBaseline = new CpPlanBaseline(_stats, _gameData, _inventory, effects);
+        _log.EntryAdded += e => _logged.Add(e);
+        _planBaseline = new CpPlanBaseline(_stats, _gameData, _inventory, effects, _profile, _log);
     }
 
     public void Dispose()
@@ -196,7 +200,51 @@ public sealed class CpPlanStatBuffTests : IDisposable
         _feed.Line("You gain 45 CPs");
         Assert.Equal(102, _stats.Cp);
         Assert.Equal(77, _stats.CpThroughLevel);
+        Assert.DoesNotContain(_logged, e => e.Severity == LogSeverity.Warn);
         Assert.Equal("L76 102/51, L77 102/3, L78 147/0, L79 192/7, L80 237/1", Grid());
+    }
+
+    [Fact]
+    public void ClosingTheProfile_DropsTheHeldReading()
+    {
+        FeedStat(76, 57, buffed: false);
+        _profile.Close();
+        FeedStat(76, 57, buffed: true);
+
+        CpPlanInputs inputs = _planBaseline.Resolve(out _);
+        Assert.False(inputs.Held);
+        Assert.Equal(70, inputs.Baseline.Willpower);
+    }
+
+    // The bug report reads the grid's inputs with Peek: the same answer, with nothing
+    // kept or logged, since a report can be captured off the UI thread.
+    [Fact]
+    public void Peek_GivesResolvesAnswer_AndLogsNothing()
+    {
+        FeedStat(76, 57, buffed: false);
+        FeedStat(76, 57, buffed: true);   // the cosmos line unknown: held
+        _logged.Clear();
+
+        CpPlanInputs peeked = _planBaseline.Peek(out _);
+
+        Assert.Empty(_logged);
+        Assert.True(peeked.Held);
+        Assert.Equal(_planBaseline.Resolve(out _).Describe(), peeked.Describe());
+    }
+
+    // A CP line counts the level the last train line moved to. With no train line
+    // since the CP was last counted, it can't say which level it is for, so it is
+    // counted and the log says so.
+    [Fact]
+    public void ACpLineWithNoTrainLineBeforeIt_IsWarned()
+    {
+        FeedStat(76, 57, buffed: false);
+        _logged.Clear();
+
+        _feed.Line("You gain 45 CPs");
+
+        Assert.Equal(102, _stats.Cp);
+        Assert.Contains(_logged, e => e.Severity == LogSeverity.Warn && e.Source == "StatParser");
     }
 
     [Fact]

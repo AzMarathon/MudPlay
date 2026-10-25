@@ -676,6 +676,14 @@ depraved murderer clubs Ironbar with their spiked club!`). The same limits
 apply: not while the combat engine is off, already has a target or the room is
 dark, and at most one re-display every few seconds.
 
+Some monsters arrive with an appear line of their own that names nobody (the
+golden mist's `A mist of gold appears in front of you!`, the spheres' `A
+hovering sphere appears out of thin air!`). MudPlay knows the game's lines of
+this kind and whose they are: a line only one monster prints puts that monster
+straight on the room list and it is fought at once; a line several monsters
+share, or one worded as a monster already here coming to life (`The statue
+animates, and attacks!`), re-displays the room first.
+
 ## The map and obstacles
 
 **Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target; a **Sys Gotos** list sits with them while the Sysop goto power is on), then **Walk here**, **Transfer Stash to Bank** (on a stash room only — see [Banking](#banking); **Stop Stash Transfer** while one runs), **I am here (set located)** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list) / **Remove from Go To**, **Use Teleport**, the room's up / down exits (jump the map a floor), **Center on Player**, **Center on this room** (redraws the map from that room as if you stood there: its floor bright, the floors above and below shadowed around it), **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, the toggles **Toggle: Avoid this room**, **Toggle: Stash room** and **Toggle: Roomba Room**, and **Add this room to Blacklist**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.

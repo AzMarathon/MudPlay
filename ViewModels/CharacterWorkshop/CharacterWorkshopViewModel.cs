@@ -131,7 +131,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         var planState = new CpPlanState();
         Sections.Add(new WorkshopGroupSectionViewModel(AutoTrainGroupId, "Auto-Train",
             new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk,
-                AppServices.Current.AutoTrain, AppServices.Current.CpPlanBaseline),
+                AppServices.Current.AutoTrain, AppServices.Current.CpPlanBaseline, AppServices.Current.Log),
             new LazyWorkshopSection(LevelProjectionSectionViewModel.SectionId, LevelProjectionSectionViewModel.SectionTitle,
                 () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses))));
 

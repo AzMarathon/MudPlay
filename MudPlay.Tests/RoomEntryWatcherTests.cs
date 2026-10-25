@@ -632,6 +632,29 @@ public sealed class RoomEntryWatcherTests
         Assert.True(h.Classifier.RosterIsWhole);
     }
 
+    // A line worded as a monster already here coming to life names the one it
+    // becomes, but putting that one on the roster would leave whatever the room
+    // listed before beside it: the roster is marked short and the room asked for.
+    [Theory]
+    [InlineData("An unholy idol animates!", "unholy idol")]
+    [InlineData("The statue animates, and attacks!", "obsidian statue")]
+    [InlineData("The giant shrugs off his glacial prison, and bellows in rage!", "frost giant")]
+    public void MonsterAppearLine_WordedAsOneAlreadyHere_LeavesTheRosterShort(string line, string monster)
+    {
+        using Harness h = new();
+        h.AddMonster(900, monster);
+        h.AddPlayer("Farmer");
+        ServerFeed feed = new(h.Router);
+        feed.Line("Also here: Farmer.");
+        Assert.True(h.Classifier.RosterIsWhole);
+
+        feed.Raw($"\u001b[1;33m{line}\r\n");
+
+        Assert.Empty(h.Arrivals);
+        Assert.DoesNotContain(h.Classifier.Current!.Value.Entities, e => e.MonsterNumber == 900);
+        Assert.False(h.Classifier.RosterIsWhole);
+    }
+
     // A line several monsters print can't say which came: nobody is added, and the
     // roster is known to be short of someone, so the room gets asked for.
     [Fact]

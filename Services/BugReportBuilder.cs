@@ -2022,7 +2022,7 @@ public static class BugReportBuilder
     // for the effects that screen listed, and what couldn't be accounted for.
     private static void AppendPlanBaseline(StringBuilder sb, AppServices svc)
     {
-        Game.Calculators.CpPlanInputs inputs = svc.CpPlanBaseline.Resolve(out var ctx);
+        Game.Calculators.CpPlanInputs inputs = svc.CpPlanBaseline.Peek(out var ctx);
         sb.Append("\n**CP plan baseline (worked back from the last `stat` screen)**\n\n");
         if (!ctx.HasCharacter)
         {

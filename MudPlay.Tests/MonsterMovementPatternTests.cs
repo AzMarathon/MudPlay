@@ -63,8 +63,8 @@ public sealed class MonsterMovementPatternTests
     // "%s" is printed as a direction or a name.
     [Theory]
     [InlineData("the north")]
+    [InlineData("the southwest")]
     [InlineData("nowhere")]
-    [InlineData("dustdevil")]
     public void SpawnArrival_MonsterAppearLines_ReadAsSpawnsOnly(string placeholder)
     {
         foreach (MonsterAppearLines.Entry entry in MonsterAppearLines.All)
@@ -73,6 +73,21 @@ public sealed class MonsterMovementPatternTests
             Assert.True(Matches(KnownPatterns.RoomSpawnArrival, line, out _), line);
             Assert.False(Matches(KnownPatterns.RoomEntryArrival, line, out _), line);
             Assert.Same(entry, MonsterAppearLines.Find(line));
+        }
+    }
+
+    // A random name stands in for `%s` only in a line no single monster name prints;
+    // in a named line the engine puts a direction there, so nothing else matches.
+    [Fact]
+    public void SpawnArrival_MonsterAppearLines_ANameFillsOnlyTheUnnamedLines()
+    {
+        foreach (MonsterAppearLines.Entry entry in MonsterAppearLines.All.Where(e => e.Text.Contains("%s")))
+        {
+            string line = entry.Text.Replace("%s", "dustdevil", StringComparison.Ordinal);
+            if (entry.MonsterName is null)
+                Assert.Same(entry, MonsterAppearLines.Find(line));
+            else
+                Assert.Null(MonsterAppearLines.Find(line));
         }
     }
 
