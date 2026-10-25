@@ -1969,10 +1969,11 @@ public sealed class PartyComebackManager : IDisposable
     // pruned past ReturnCrossesComeback as another is added.
     private readonly Dictionary<string, DateTimeOffset> _enteredAt = new(StringComparer.OrdinalIgnoreCase);
 
-    // Members invited ("You have invited X to follow you.", whoever sent the
-    // `invite`: the auto-invite on their return or the user's own) within
-    // ReturnCrossesComeback of re-entering, by when, until they follow us or
-    // their row goes.
+    // Members back from a dropped link (PartyManager.WasRecentlyPartied) invited
+    // ("You have invited X to follow you.", whoever sent the `invite`: the
+    // auto-invite on their return or the user's own) within ReturnCrossesComeback
+    // of re-entering, by when, until they follow us or their row goes. Pruned past
+    // ReturnCrossesComeback as another is added.
     private readonly Dictionary<string, DateTimeOffset> _invitedOnReturnAt = new(StringComparer.OrdinalIgnoreCase);
 
     // Members who followed us ("X started to follow you.") within
@@ -2000,12 +2001,26 @@ public sealed class PartyComebackManager : IDisposable
         _enteredAt[given] = now;
     }
 
+    // Only a member back from a dropped link arms the record: a player who logs in
+    // and is invited for the first time is no return, and their @comeback is judged
+    // as any request.
     private void OnInviteEcho(MatchResult result)
     {
         if (result.Groups.Count == 0 || GivenName(result.Groups[0]) is not { Length: > 0 } given) return;
         if (!_enteredAt.Remove(given, out DateTimeOffset entered)) return;
+        if (!_party.WasRecentlyPartied(given)) return;
         DateTimeOffset now = _now();
-        if (now - entered <= ReturnCrossesComeback) _invitedOnReturnAt[given] = now;
+        if (now - entered > ReturnCrossesComeback)
+        {
+            _log?.Debug(LogCategory,
+                $"{given} invited {(now - entered).TotalSeconds:0}s after re-entering the realm, past {ReturnCrossesComeback.TotalSeconds:0}s: not taken for their return");
+            return;
+        }
+        foreach (string stale in _invitedOnReturnAt.Where(kv => now - kv.Value > ReturnCrossesComeback).Select(kv => kv.Key).ToList())
+            _invitedOnReturnAt.Remove(stale);
+        _invitedOnReturnAt[given] = now;
+        _log?.Debug(LogCategory,
+            $"{given} invited {(now - entered).TotalSeconds:0}s after coming back from a dropped link: a @comeback crossing it is answered as on its way");
     }
 
     private void NoteFollowedOnReturn(string given)
@@ -2018,8 +2033,8 @@ public sealed class PartyComebackManager : IDisposable
     // The member asking to be fetched re-entered the realm, was invited (by us
     // or by hand) and followed, each within ReturnCrossesComeback of the step
     // before, asks within the same of that follow, we have not moved since, and
-    // their row still follows: the invite beat their
-    // @comeback, and nobody is left to fetch. The follow line after the re-entry is
+    // their row still follows: the invite beat their @comeback, and nobody is
+    // left to fetch. The follow line after the re-entry is
     // the game's word that they follow us; a row by itself can outlive a leave line
     // the client missed until the next `par`, and a move of ours since could have
     // left them at an exit. Taken for a request, a full party answered "my party
@@ -2039,16 +2054,20 @@ public sealed class PartyComebackManager : IDisposable
 
     // The member asking re-entered the realm and was invited a moment ago (by us
     // or by hand), and holds the [Invited] row that invite gave them, not
-    // following yet: their
-    // @comeback went out before they took it. The invite and the @join nag that
-    // follows it (AutoPartyManager) are what bring them, so nothing is walked and
-    // nothing is forgotten. They are answered AlreadyInProgress: their client
-    // reads it as coming (SaysComingOrLater) and waits on their follow, which ends
-    // that wait; it starts no `join` and no second invite.
+    // following yet: their @comeback went out before they took it. The invite and
+    // the @join nag that follows it (AutoPartyManager) are what bring them, so
+    // nothing is walked and nothing is forgotten. They are answered
+    // AlreadyInProgress: their client reads it as coming (SaysComingOrLater) and
+    // waits on their follow, which ends that wait; it starts no `join` and no
+    // second invite. Only while the party, less their own row, has a seat for
+    // them: Stock echoes an invite even when it found no slot (GAME_MECHANICS
+    // "Party commands: `invite`, `join` / `follow`, `leave`, `uninvite`, `disband
+    // party`"), and then no invite is on its way.
     private bool InvitedOnReturn(string given) =>
         _invitedOnReturnAt.TryGetValue(given, out DateTimeOffset at)
         && _now() - at <= ReturnCrossesComeback
         && MemberInParty(given) && !MemberFollowing(given)
+        && _party.State.Members.Count - 1 < MaxPartySize
         && !(_busy && SameName(given, _senderGiven));
 
     private void OnRosterChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)

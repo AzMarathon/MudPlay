@@ -1300,6 +1300,56 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal("Aunty", h.Comeback.RecoveringMember);
     }
 
+    // A player who logs in and is invited for the first time is no member back from
+    // a dropped link: the invite arms nothing, and their @comeback is judged as any
+    // request.
+    [Fact]
+    public void AFreshRecruit_InvitedByHandOnLoggingIn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Masta", "Thunder" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Newbie just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Newbie to follow you."));
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Newbie", "@comeback 1/3"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Equal("Newbie", h.Comeback.RecoveringMember);
+    }
+
+    // Stock echoes an invite even when the party had no slot for it: an echo into a
+    // party that is full without the asker's row is no invite on its way.
+    [Fact]
+    public void AnInviteEchoIntoAFullParty_IsNoInviteOnItsWay()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Fresh started to follow you."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Equal(7, h.PartyState.Members.Count);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Contains(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+    }
+
     [Fact]
     public void FullParty_AMemberAlreadyFollowingAgain_IsAnsweredTakenBack_NotForgotten()
     {
