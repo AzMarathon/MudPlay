@@ -105,6 +105,7 @@ public sealed class TriggerEngine
         ArgumentNullException.ThrowIfNull(log);
         _chat = chat;
         chat.EntryClassified += OnChatClassified;
+        chat.TextClassified += RememberClassified;
         chat.MoveLineKeptOut += OnMoveLineKeptOut;
         log.EntryAdded       += OnLogEntry;
     }

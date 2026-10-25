@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Group.Members","payload":{"leader":"Tester","members":[{"name":"Tester","class":"Warrior","membership":"member","rank":"front","hpPct":101,"manaPct":null,"manaType":null,"poisoned":false,"resting":false,"meditating":false,"here":true}]},"expect":{"reject":"schema"},"why":"par caps the percent at 100"}

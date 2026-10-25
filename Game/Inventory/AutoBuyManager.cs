@@ -39,7 +39,7 @@ namespace MudPlay.Game.Inventory;
 // Master switch: Auto Get Items (AutoActionDefaults.AutoGetItems). UI-thread only
 // (MessageRouter + LineExtractor both marshal upstream), so the pump state needs no
 // lock.
-public sealed class AutoBuyManager : IDisposable
+public sealed partial class AutoBuyManager : IDisposable
 {
     // LogService category — [AutoBuy] rows per queued / bought item.
     public const string LogCategory = "AutoBuy";
@@ -159,12 +159,18 @@ public sealed class AutoBuyManager : IDisposable
     {
         string text = line.Text.TrimEnd();
 
+        if (text == ShopHeader && _awaitingGmcpList) CancelGmcpRead();
         if (!_capturing)
         {
             if (text == ShopHeader)
             {
                 _capturing = true;
                 _body.Clear();
+                if (GmcpOwnsShop?.Invoke() == true)
+                {
+                    _awaitingGmcpList = true;
+                    RequestGmcpShop?.Invoke();
+                }
             }
             return;
         }
@@ -191,8 +197,9 @@ public sealed class AutoBuyManager : IDisposable
 
     private void FinishCapture()
     {
+        if (_awaitingGmcpList) return;
         _capturing = false;
-        IReadOnlyList<ShopListParser.StockRow> stock = ShopListParser.Parse(_body);
+        IReadOnlyList<ShopListParser.StockRow> stock = GmcpOwnsShop?.Invoke() == true ? _gmcpStock : ShopListParser.Parse(_body);
         _body.Clear();
         StockListed?.Invoke(stock);
 

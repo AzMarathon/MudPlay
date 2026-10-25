@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Room.Info","payload":"{}","expect":{"reject":"oversize"},"why":"over the 1 MiB server-to-client cap","length":1048577}

@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Char.Effects","payload":{"effects":[{"spell":30,"name":"bless","roundsLeft":12,"castLevel":12,"caster":null}]},"expect":{"reject":"schema"},"why":"castLevel was not a level; the field is magnitude"}

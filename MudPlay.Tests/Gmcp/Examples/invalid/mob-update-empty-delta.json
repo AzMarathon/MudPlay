@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Mob.Update","payload":{"uid":102,"room":"1,301","full":false},"expect":{"reject":"schema"},"why":"a delta carries at least one changed field"}

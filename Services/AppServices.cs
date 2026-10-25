@@ -11010,6 +11010,7 @@ public sealed class AppServices
         // of that profile.
         Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log);
         Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
+        Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
         LairTimers.GmcpEligibility = Gmcp.LairEligibility;
         PromptScanner.PromptObserved += Gmcp.ObservePrompt;
         Profile.ProfileClosed += Gmcp.Disconnected;

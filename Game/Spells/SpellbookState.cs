@@ -22,7 +22,7 @@ namespace MudPlay.Game.Spells;
 // from those names against the current class list on every list rebuild
 // (Reseed / a class change) — so obtained spells survive a data-set swap, which
 // previously only a full profile reload could repair.
-public sealed class SpellbookState
+public sealed partial class SpellbookState
 {
     private readonly KnownSpellCatalog _catalog;
     // Authoritative: obtained spells by canonical Name (survives data-set renumber).
@@ -296,6 +296,7 @@ public sealed class SpellbookState
     // and can't tell them apart.
     private void ComposeAvailable()
     {
+        if (_gmcpSpells is not null) { ComposeGmcpSpells(); return; }
         List<KnownSpell> list = new(_alignedSpells);
         if (_obtainedNames.Count > 0 && !ReferenceEquals(_classSpells, _alignedSpells))
         {

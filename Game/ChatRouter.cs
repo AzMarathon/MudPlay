@@ -17,7 +17,7 @@ namespace MudPlay.Game;
 // Lifetime: subscriptions live for the router's lifetime. The router is
 // app-singleton; Dispose unhooks every subscription for a router that is torn
 // down before the MessageRouter it listens to.
-public sealed class ChatRouter : IDisposable
+public sealed partial class ChatRouter : IDisposable
 {
     private readonly MessageRouter _router;
     private readonly Func<bool>? _isParadigmRealm;
@@ -380,6 +380,9 @@ public sealed class ChatRouter : IDisposable
     // it keeps its place in the conversation.
     private void Raise(ChatLogEntry entry)
     {
+        TextClassified?.Invoke(entry);
+        // Directed says still use text: contract 1.1.0 has no recipient-bearing say event.
+        if (entry.DirectedTo is null && GmcpOwnsChannel?.Invoke(entry.Channel) == true) return;
         ReleaseHeldSocials();
         EntryClassified?.Invoke(entry);
     }

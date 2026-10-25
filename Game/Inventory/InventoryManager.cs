@@ -338,6 +338,7 @@ public sealed partial class InventoryManager : IDisposable
     // coin isn't subtracted twice. A non-positive value is a no-op.
     public void NoteAutoDeposit(long copperValue)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         if (copperValue <= 0) return;
         lock (_lock)
         {
@@ -1042,25 +1043,31 @@ public sealed partial class InventoryManager : IDisposable
 
         lock (_lock)
         {
-            _copper = copper;
-            _silver = silver;
-            _gold = gold;
-            _platinum = platinum;
-            _runic = runic;
-            _wealthCopper = wealthCopper;
-            // The dump is the authoritative purse — any optimistic auto-deposit
-            // still awaiting its echo is now baked into this total, so drop the
-            // pending reconciliation to avoid suppressing a later real deposit.
-            _pendingDepositCopper = 0;
+            if (GmcpOwnsItems?.Invoke() != true)
+            {
+                _copper = copper;
+                _silver = silver;
+                _gold = gold;
+                _platinum = platinum;
+                _runic = runic;
+                _wealthCopper = wealthCopper;
+                // The dump is the authoritative purse — any optimistic auto-deposit
+                // still awaiting its echo is now baked into this total, so drop the
+                // pending reconciliation to avoid suppressing a later real deposit.
+                _pendingDepositCopper = 0;
+            }
             _curWeight = curWeight;
             _maxWeight = maxWeight;
             _percentage = percentage;
             _category = category;
-            _equipped = equipped;
-            _carried = NormalizeStacks(carried);
+            if (GmcpOwnsItems?.Invoke() != true)
+            {
+                _equipped = equipped;
+                _carried = NormalizeStacks(carried);
+                _keys = keys;
+            }
             _readiedLight = readiedLight;
             _litSinceRead = null;
-            _keys = keys;
             _loaded = true;
             _lastUpdated = DateTimeOffset.Now;
         }
@@ -1068,6 +1075,7 @@ public sealed partial class InventoryManager : IDisposable
         _log?.Debug(LogCategory,
             $"parsed: wealth={wealthCopper} copper, enc={curWeight}/{maxWeight} {category} [{percentage}%], worn={equipped.Count}, carried={carried.Count}, keys={keys.Count}"
             + (readiedLight is { } rl ? $", lit={rl.Name} (Readied/{rl.Readied})" : ""));
+        TextInventoryObserved?.Invoke(Snapshot);
         Changed?.Invoke();
         FullInventoryParsed?.Invoke();
     }
@@ -1122,6 +1130,7 @@ public sealed partial class InventoryManager : IDisposable
     // the first full 'i' establishes the real loadout.
     private void PatchEquipped(Func<List<EquippedItem>, bool> mutate)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         bool changed = false;
         lock (_lock)
         {
@@ -1168,6 +1177,7 @@ public sealed partial class InventoryManager : IDisposable
     // same publish-only-if-changed contract.
     private void PatchCarried(Func<List<string>, bool> mutate)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         bool changed = false;
         lock (_lock)
         {
@@ -1386,6 +1396,7 @@ public sealed partial class InventoryManager : IDisposable
     // dump lists them. Gated on a loaded baseline, as PatchCarried is.
     private void PatchKeyRing(string name, int delta)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         if (delta == 0) return;
         bool changed = false;
         lock (_lock)
@@ -1568,6 +1579,7 @@ public sealed partial class InventoryManager : IDisposable
 
     private void AdjustCurrency(string coinType, int amount)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         long oldCoins = TotalCoins();
 
         // Key on the denomination's noun (the trailing word), not its leading
@@ -1591,6 +1603,7 @@ public sealed partial class InventoryManager : IDisposable
 
     private void ApplyTransaction(long copperDelta)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         long oldCoins = TotalCoins();
 
         long wealth = Math.Max(0, _wealthCopper + copperDelta);
@@ -1611,6 +1624,7 @@ public sealed partial class InventoryManager : IDisposable
     // The caller verifies sufficiency per denomination before calling.
     private void ApplyBuyDeduction((int Copper, int Silver, int Gold, int Platinum, int Runic) paid)
     {
+        if (GmcpOwnsItems?.Invoke() == true) return;
         long oldCoins = TotalCoins();
 
         _copper = Math.Max(0, _copper - paid.Copper);

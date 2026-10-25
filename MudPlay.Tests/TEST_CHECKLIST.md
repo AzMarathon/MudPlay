@@ -1553,6 +1553,7 @@ How to keep it current:
 - Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
 ### GmcpIntegrationTests.cs
+- Milestone 2 extends the real session harness with inventory, shop, spellbook, effects, party, chat and ability owners; both chat and normal text lanes use the router.
 - Covers: GMCP integration through PromptParser, StatParser, RoomTracker, RoomEntityClassifier and their consumers.
 - Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence. Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
 - Why: negotiated data must reach existing automation models without creating competing writers or disabling unrelated text parsing.
@@ -1563,6 +1564,7 @@ How to keep it current:
 - Why: returning monsters and reconnects must reconstruct complete state before a package becomes authoritative. Fixtures are synthetic and do not certify the server.
 
 ### GmcpTransportTests.cs
+- Core.Hello advertises contract 1.1.0 and milestone-2 capability modules.
 - Covers: Net/TelnetClient and GMCP UTF-8 framing.
 - Checks: every fragmentation boundary, literal UTF-8, display/message ordering, malformed/oversize/unterminated recovery, larger incoming snapshots, escaped IAC, WONT/WILL transitions and real-socket Hello/Supports/recovery requests.
 - Why: GMCP frames must stay out of terminal text and survive arbitrary network reads.
@@ -4454,3 +4456,15 @@ How to keep it current:
 - Covers: ViewModels/CharacterWorkshop/WorkshopGroupSectionViewModel, LazyWorkshopSection
 - Checks: a group tab stands in for its selected sub-tab (Leaf, size, layout changes); a lazy sub-tab is built only on demand and disposed with the group.
 - Why: Workshop window sizing and deep links.
+
+### GmcpMilestone2StateTests.cs
+- Covers: tagged 1.1.0 examples, large synthetic snapshots, event lifetime, card resets, room-bound shops, usability invalidation, negative HP and present zero ability sources.
+- Run: `dotnet test --filter FullyQualifiedName~GmcpMilestone2StateTests` with a fresh scratch data root.
+
+### GmcpMilestone2IntegrationTests.cs
+- Covers: synthetic and captured milestone-2 wire replay into existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers and fresh shop reads.
+- Run: `dotnet test --filter FullyQualifiedName~GmcpIntegrationTests` with a fresh scratch data root; live scenarios skip unless configured.
+
+### GmcpMilestone2LiveTests.cs
+- Covers: isolated-host shadow comparisons and active inventory, item queries, party formation, buffs, repeated chat and actual shop stock.
+- Run: coordinate the host window in contract STATUS, then use `Gmcp/run-live.py` shadow filter followed by active filter. Disposable credentials enter through stdin/environment; raw login captures stay outside this repository.

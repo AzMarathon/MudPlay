@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run opt-in MudPlay tests through a passive wire recorder. Read disposable
-Gthief/Gsysop account-password pairs as JSON on stdin; never print them.
+Gthief/Gsysop/Gpriest account-password pairs as JSON on stdin; never print them.
 Full captures contain test login traffic: keep --evidence-dir outside the repository.
 """
 import argparse
@@ -75,6 +75,8 @@ def decode(chunks):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", type=Path, default=Path(tempfile.gettempdir()) / "mudplay-gmcp-live-evidence")
+    parser.add_argument("--filter", default="FullyQualifiedName~IsolatedHost_")
+    parser.add_argument("--server-commit", default="server-reported-unknown")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     evidence = args.evidence_dir.resolve()
@@ -128,12 +130,14 @@ def main():
                 worker.start()
 
     threading.Thread(target=accept, daemon=True).start()
-    env = dict(os.environ, MUDPLAY_DATA_ROOT=str(evidence / "data"), MUDPLAY_GMCP_HOST="127.0.0.1", MUDPLAY_GMCP_PORT=str(listener.getsockname()[1]),
+    env = dict(os.environ, MUDPLAY_DATA_ROOT=tempfile.mkdtemp(prefix="mudplay-gmcp-test-", dir=evidence), MUDPLAY_GMCP_HOST="127.0.0.1", MUDPLAY_GMCP_PORT=str(listener.getsockname()[1]),
                MUDPLAY_GMCP_ACCOUNT=accounts["Gthief"][0], MUDPLAY_GMCP_PASSWORD=accounts["Gthief"][1],
                MUDPLAY_GMCP_SYSOP_ACCOUNT=accounts["Gsysop"][0], MUDPLAY_GMCP_SYSOP_PASSWORD=accounts["Gsysop"][1])
+    if "Gpriest" in accounts:
+        env.update(MUDPLAY_GMCP_PRIEST_ACCOUNT=accounts["Gpriest"][0], MUDPLAY_GMCP_PRIEST_PASSWORD=accounts["Gpriest"][1])
     result = None
     try:
-        result = subprocess.run(["dotnet", "test", "MudPlay.Tests/MudPlay.Tests.csproj", "--no-restore", "--filter", "FullyQualifiedName~IsolatedHost_", "--logger", "console;verbosity=normal"], cwd=root, env=env, text=True, capture_output=True, timeout=240)
+        result = subprocess.run(["dotnet", "test", "MudPlay.Tests/MudPlay.Tests.csproj", "--no-restore", "--filter", args.filter, "--logger", "console;verbosity=normal"], cwd=root, env=env, text=True, capture_output=True, timeout=240)
     finally:
         stop.set()
         listener.close()
@@ -150,11 +154,11 @@ def main():
         for index, recording in enumerate(connections, 1):
             frames = decode(recording["chunks"])
             server = next((frame["msg"] for frame in frames if frame.get("pkg") == "Anomaly.Server"), {})
-            header = dict(recording=1, source="captured", contract="1.0.0", scenario="client-active-" + run + "-" + str(index),
-                          description="Actual MudPlay live integration through a passive wire recorder; connection " + str(index),
-                          server=dict(commit=server.get("build", "server-reported-unknown"), host="gmcp-inbound.patch"),
+            header = dict(recording=1, source="captured", contract=server.get("contract", "unknown"), scenario="client-active-" + run + "-" + str(index),
+                          description="Actual MudPlay live integration through a passive wire recorder; " + args.filter + "; connection " + str(index),
+                          server=dict(commit=args.server_commit, host="gmcp-inbound.patch"),
                           captured=datetime.datetime.now(datetime.timezone.utc).isoformat(), supersededBy=None,
-                          client=dict(version="3.186.0", workingTree=True), connectionEnded=recording["ended"], result="passed" if result and result.returncode == 0 else "failed")
+                          client=dict(version="3.187.0", workingTree=True, filter=args.filter), connectionEnded=recording["ended"], result="passed" if result and result.returncode == 0 else "failed")
             path = evidence / (header["scenario"] + ".jsonl")
             with path.open("x") as stream:
                 stream.write(json.dumps(header) + "\n")

@@ -225,7 +225,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
             if (!SpellBookCategoryClassifier.Matches(SelectedCategory, spell, _book.Level, ResolveChain)) continue;
             Rows.Add(new SpellBookRowViewModel(
                 spell, obtained, _book.Level, ResolveChain, _book.ResolveSpellName,
-                ResolveTextblockCasts, teachLevel, spellcasting, isParadigm, spellDamageBonus));
+                ResolveTextblockCasts, teachLevel, spellcasting, isParadigm, spellDamageBonus, _book.ServerSpell(spell.Number)));
         }
 
         // Cast-on-use items: a separate section, filtered by the same search

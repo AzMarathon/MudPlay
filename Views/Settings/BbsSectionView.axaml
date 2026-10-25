@@ -180,7 +180,10 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <Button Content="Refresh current server data" Command="{Binding RefreshGmcpCommand}" HorizontalAlignment="Left" Margin="0,6"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6">
+                        <Button Content="Refresh current server data" Command="{Binding RefreshGmcpCommand}"/>
+                        <Button Content="Inspect current server data" Command="{Binding InspectGmcpCommand}"/>
+                    </StackPanel>
 
                     <TextBlock Classes="GroupHeader" Text="Reconnect when"/>
 

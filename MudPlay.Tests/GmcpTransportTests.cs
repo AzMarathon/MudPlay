@@ -103,7 +103,7 @@ public sealed class GmcpTransportTests
         }
         string text = Encoding.UTF8.GetString(received.ToArray());
         Assert.Equal(new byte[] { 255, 253, 201 }, received.Take(3));
-        Assert.Contains("Core.Hello", text); Assert.Contains("\"contract\":\"1.0.0\"", text);
+        Assert.Contains("Core.Hello", text); Assert.Contains("\"contract\":\"1.1.0\"", text);
         Assert.Contains("Core.Supports.Set", text);
         await client.SendGmcpAsync("Anomaly.Request", new { package = "Anomaly.Mob.Info", uid = 102 });
         int requestLength = await stream.ReadAsync(buffer, timeout.Token);

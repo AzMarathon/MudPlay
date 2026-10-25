@@ -1,0 +1,1 @@
+{"pkg":"Core.Hello","payload":{"client":"MudPlay","version":"3.186.0"},"expect":{"reject":"schema"},"why":"the client names the contract version it was built for","dir":"c2s"}

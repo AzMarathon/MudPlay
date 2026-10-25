@@ -1,5 +1,11 @@
 # Version history
 
+## 3.187.0
+
+- Server inventory, shop stock, learned spells, effects, abilities and party formation
+- GMCP chat reaches history and triggers once per event
+- Inspect server snapshots and request item cards and usability in BBS settings
+
 ## 3.186.0
 
 - GMCP server data with per-package shadow and active modes in BBS settings

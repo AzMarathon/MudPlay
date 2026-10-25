@@ -1,0 +1,1 @@
+{"inv":[{"iid":5001,"num":175,"name":"torch","uses":240,"canUse":true,"cannotUseBecause":[]},{"iid":5002,"num":1048,"name":"gold key","uses":null,"canUse":true,"cannotUseBecause":[]}],"worn":[{"iid":5003,"num":14,"name":"chainmail hauberk","slot":"torso","canUse":true,"cannotUseBecause":[]}],"coins":{"runic":0,"platinum":0,"gold":12,"silver":3,"copper":40}}

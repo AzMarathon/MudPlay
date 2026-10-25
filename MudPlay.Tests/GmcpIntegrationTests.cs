@@ -12,7 +12,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-public sealed class GmcpIntegrationTests
+public sealed partial class GmcpIntegrationTests
 {
     private sealed class Session : IDisposable
     {
@@ -38,14 +38,26 @@ public sealed class GmcpIntegrationTests
         public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
         public GmcpIntegration Gmcp { get; }
         public TelnetClient Telnet { get; } = new();
+        public Game.Inventory.InventoryManager Inventory { get; }
+        public Game.Inventory.AutoBuyManager Shop { get; }
+        public Game.Spells.SpellbookState Book { get; }
+        public Game.Spells.SpellListParser SpellParser { get; }
+        public PartyManager Party { get; }
+        public ChatRouter Chat { get; }
+        public AbilBreakdownParser Abilities { get; }
+        public Game.Spells.CastCoordinator Cast { get; }
+        public Game.Spells.CastingDirector Director { get; }
+        public MessageRouter Router { get; }
         private readonly RoomDisplayParser _display;
         private readonly EncumbranceParser _encumbrance;
 
         public Session(bool active = true)
         {
             Directory.CreateDirectory(_root);
-            MessageRouter router = new(); DefaultPatterns.Seed(router);
+            MessageRouter router = new(); Router = router; DefaultPatterns.Seed(router);
             Feed.Lines.LineEmitted += router.Dispatch;
+            Feed.Lines.ChatLineEmitted += router.Dispatch;
+            Feed.Lines.ReadEnded += router.EndRead;
             Prompt = new(Scanner, Player);
             StatParser = new(Stats, Log, schedule: new ManualTimers().Arm);
             StatParser.AttachLineExtractor(Feed.Lines);
@@ -60,6 +72,15 @@ public sealed class GmcpIntegrationTests
             Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log);
             Stealth = new(router, Player, Log);
             Gmcp.BindConsumers(Conditions, Stealth, Hp);
+            Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase)); Inventory.AttachLineExtractor(Feed.Lines);
+            Shop = new(router, _ => null, _ => 0, () => false, Log); Shop.AttachLineExtractor(Feed.Lines);
+            Book = new(new Game.Spells.KnownSpellCatalog(cache));
+            SpellParser = new(Book, Log); SpellParser.AttachLineExtractor(Feed.Lines);
+            Party = new(router, new PartyState(), Log) { LocalCharacterName = "Tester" }; Party.AttachLineExtractor(Feed.Lines);
+            Chat = new(router, log: Log); Abilities = new(Log); Abilities.AttachLineExtractor(Feed.Lines);
+            Cast = new(router, Log);
+            Director = new(Player, Cast, () => new Models.Profile.SpellsSettings(), () => new Models.Profile.HealthSettings(), () => false, Log);
+            Gmcp.BindMilestone2(Inventory, Shop, Book, SpellParser, Party, Chat, Abilities, Director);
             Classifier.EntitiesObserved += Hp.NoteRoomEntities;
             _display = new(Feed.Lines, Tracker, Log) { GmcpOwnsRoom = () => Gmcp.State.Owns("Anomaly.Room.Info") };
             _display.RoomParsed += Gmcp.ObserveRoom;
@@ -89,6 +110,9 @@ public sealed class GmcpIntegrationTests
             int count = Telnet.Interpret(bytes, output);
             if (count > 0) Display(output.AsMemory(0, count));
         }
+        private static byte[] ServerPacket(string package, JsonElement payload) => new byte[] { 255, 250, 201 }
+            .Concat(Encoding.UTF8.GetBytes(package + " " + payload.GetRawText())).Concat(new byte[] { 255, 240 }).ToArray();
+
         public void Replay(string name)
         {
             foreach (JsonElement frame in GmcpStateTests.Frames(name))
@@ -96,7 +120,7 @@ public sealed class GmcpIntegrationTests
                 if (frame.GetProperty("dir").GetString() != "s2c") continue;
                 string? kind = frame.GetProperty("kind").GetString();
                 if (frame.TryGetProperty("raw", out JsonElement raw)) Wire(Convert.FromBase64String(raw.GetString()!));
-                else if (kind == "gmcp") Wire(GmcpProtocol.Frame(frame.GetProperty("pkg").GetString()!, frame.GetProperty("msg")));
+                else if (kind == "gmcp") Wire(ServerPacket(frame.GetProperty("pkg").GetString()!, frame.GetProperty("msg")));
                 else if (kind == "negotiation") Wire(new byte[] { 255, frame.GetProperty("telnet").GetString()!.Contains("WONT", StringComparison.Ordinal) ? (byte)252 : (byte)251, 201 });
                 else if (kind == "text") Text(frame.GetProperty("text").GetString()! + "\r\n");
             }
@@ -111,7 +135,7 @@ public sealed class GmcpIntegrationTests
                 if (frame.TryGetProperty("raw", out JsonElement raw)) { Wire(Convert.FromBase64String(raw.GetString()!)); continue; }
                 string? kind = frame.GetProperty("kind").GetString();
                 if (kind == "text") Text(frame.GetProperty("text").GetString()!);
-                else if (kind == "gmcp") Wire(GmcpProtocol.Frame(frame.GetProperty("pkg").GetString()!, frame.GetProperty("msg")));
+                else if (kind == "gmcp") Wire(ServerPacket(frame.GetProperty("pkg").GetString()!, frame.GetProperty("msg")));
                 else if (kind == "negotiation")
                 {
                     string[] tokens = frame.GetProperty("telnet").GetString()!.Split(' ');
@@ -124,6 +148,7 @@ public sealed class GmcpIntegrationTests
 
         public void Dispose()
         {
+            Director.Dispose(); Cast.Dispose(); Inventory.Dispose(); Shop.Dispose(); SpellParser.Dispose(); Party.Dispose(); Chat.Dispose(); Abilities.Dispose();
             Conditions.Dispose(); Stealth.Dispose();
             _display.Dispose(); _encumbrance.Dispose(); Combat.Dispose(); Classifier.Dispose(); StatParser.Dispose(); Prompt.Dispose();
             Directory.Delete(_root, recursive: true);

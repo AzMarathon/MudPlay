@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.0**
-> - GMCP server data with per-package shadow and active modes in BBS settings
-> - Scoped text fallback and monster identity recovery across room changes and reconnects
-> - Live server vitals, stats, conditions, rooms, occupants and exact monster HP
+> **Version 3.187.0**
+> - Server inventory, shop stock, learned spells, effects, abilities and party formation
+> - GMCP chat reaches history and triggers once per event
+> - Inspect server snapshots and request item cards and usability in BBS settings
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

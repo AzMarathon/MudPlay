@@ -51,7 +51,7 @@ namespace MudPlay.Game.Spells;
 // HealthManager's passive rest has its own switch (AutoRest). When
 // the spell pickers on the Spells tab are empty, the engine no-ops without further
 // checks.
-public sealed class CastingDirector : IDisposable
+public sealed partial class CastingDirector : IDisposable
 {
     // LogService category — appears as [CastDirector] rows per evaluation +
     // decision.
@@ -1539,10 +1539,11 @@ public sealed class CastingDirector : IDisposable
     // thread (same thread every _activeUntil write runs on), so no lock is needed.
     public IReadOnlyList<ActiveBuffTimer> SnapshotActiveBuffs()
     {
-        List<ActiveBuffTimer> list = new(_activeUntil.Count);
+        List<ActiveBuffTimer> list = GmcpOwnsEffects?.Invoke() == true ? new(GmcpTimers?.Invoke() ?? Array.Empty<ActiveBuffTimer>()) : new(_activeUntil.Count);
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
         {
             bool ours = kv.Key.Target.Length == 0;
+            if (ours && GmcpOwnsEffects?.Invoke() == true) continue;
             (DateTime Until, bool Restored, DateTime RanOnUntil) mark = default;
             bool carried = ours && IsCarried(kv.Key.Short, out mark);
             list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
@@ -1558,7 +1559,7 @@ public sealed class CastingDirector : IDisposable
     // is armed and hasn't run out. The auto-light engine asks before casting its
     // room-light spell, a slot this director never maintains itself.
     public bool IsSelfBuffUp(string shortCode)
-        => !string.IsNullOrWhiteSpace(shortCode)
+        => GmcpOwnsEffects?.Invoke() == true ? GmcpSelfEffect?.Invoke(shortCode).Present == true : !string.IsNullOrWhiteSpace(shortCode)
            && _activeUntil.TryGetValue(("", shortCode.Trim()), out (DateTime Until, int MarginSec, int TotalSec) t)
            && t.Until > _now();
 
@@ -1570,6 +1571,13 @@ public sealed class CastingDirector : IDisposable
     // due changes nothing.
     private bool IsRecastDue(string targetKey, string spellShort)
     {
+        if (targetKey.Length == 0 && GmcpOwnsEffects?.Invoke() == true && GmcpSelfEffect is not null)
+        {
+            (bool present, DateTime? until) = GmcpSelfEffect(spellShort);
+            if (_pendingSelfBuffShort == spellShort && _now() - _pendingSelfBuffArmedAt < PendingSelfBuffRejectionWindow) return false;
+            int margin = _activeUntil.TryGetValue(("", spellShort), out var previous) ? previous.MarginSec : DefaultRecastMarginSec;
+            return !present || until is { } end && (end - _now()).TotalSeconds <= EffectiveMargin("", spellShort, margin);
+        }
         if (targetKey.Length == 0 && _drawPendingUntil.TryGetValue(spellShort, out DateTime waitEnds)
             && _now() < waitEnds)
             return false;

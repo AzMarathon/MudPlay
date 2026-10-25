@@ -27,6 +27,8 @@ namespace MudPlay.Game.Spells;
 // "You have no spells." / "You have no powers." clears the obtained set outright.
 public sealed class SpellListParser : IDisposable
 {
+    public Func<bool>? GmcpOwnsSpells { get; set; }
+    public event Action<IReadOnlyList<string>>? TextSpellsObserved;
     private readonly SpellbookState _book;
     private readonly LogService? _log;
     private LineExtractor? _lines;
@@ -82,6 +84,7 @@ public sealed class SpellListParser : IDisposable
 
     private void HandleLine(string text, bool isPromptLine)
     {
+        if (GmcpOwnsSpells?.Invoke() == true) { _state = State.Idle; _namesThisBlock.Clear(); return; }
         // The prompt is the universal "server done responding" marker —
         // close any open block on it (same shape as WhoListParser).
         if (isPromptLine)
@@ -105,6 +108,7 @@ public sealed class SpellListParser : IDisposable
             _namesThisBlock.Clear();
             _state = State.Idle;
             _book.ClearObtained();
+            TextSpellsObserved?.Invoke(Array.Empty<string>());
             _log?.Info("SpellListParser", "spell list empty — obtained set cleared");
             return;
         }
@@ -160,6 +164,7 @@ public sealed class SpellListParser : IDisposable
         }
 
         _book.SetObtainedByNames(_namesThisBlock);
+        TextSpellsObserved?.Invoke(_namesThisBlock.ToArray());
         _log?.Info("SpellListParser", $"spell list complete — {_namesThisBlock.Count} spell(s) obtained");
         _log?.Log(LogSeverity.Debug, "SpellListParser", $"obtained spells: {string.Join(", ", _namesThisBlock)}");
         _namesThisBlock.Clear();

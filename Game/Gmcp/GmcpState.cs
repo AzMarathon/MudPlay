@@ -6,8 +6,16 @@ namespace MudPlay.Game.Gmcp;
 // Accessed on the session's dispatcher, in the same order as terminal bytes.
 public sealed class GmcpState
 {
-    public const string ContractVersion = "1.0.0";
+    public const string ContractVersion = GmcpProtocol.ContractVersion;
     private readonly Dictionary<string, JsonElement> _snapshots = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, JsonElement> _itemCards = new();
+    private readonly Dictionary<int, JsonElement> _itemUsability = new();
+    private bool _communicationReady;
+    public IReadOnlyDictionary<int, JsonElement> ItemCards => _itemCards;
+    public IReadOnlyDictionary<int, JsonElement> ItemUsability => _itemUsability;
+    public event Action<JsonElement>? Communication;
+    public bool OwnsCommunication => Compatible && InSession && _communicationReady && Mode("Anomaly.Comm.Line") == GmcpMode.Active;
+    private bool HasMilestone2 => Version.TryParse(ServerContract, out Version? version) && version >= new Version(1, 1, 0);
     private readonly Dictionary<long, JsonElement> _static = new();
     private readonly Dictionary<long, JsonElement> _live = new();
     private readonly Dictionary<string, GmcpMode> _modes = new(StringComparer.Ordinal);
@@ -76,7 +84,7 @@ public sealed class GmcpState
         {
             switch (value.GetProperty("scope").GetString())
             {
-                case "all": ClearAll(); InSession = value.GetProperty("reason").GetString() != "leave"; break;
+                case "all": ClearAll(); InSession = value.GetProperty("reason").GetString() != "leave"; _communicationReady = InSession && HasMilestone2; break;
                 case "package": Invalidate(value.GetProperty("package").GetString()!); break;
                 case "room": ClearRoom(); CurrentRoom = value.GetProperty("room").GetString(); break;
             }
@@ -85,6 +93,25 @@ public sealed class GmcpState
         }
         if (!InSession) return;
         if (value.TryGetProperty("room", out JsonElement room) && room.GetString() != CurrentRoom) return;
+        if (package == "Anomaly.Comm.Line")
+        {
+            // A reset or malformed event latches text ownership until a new session.
+            // Events have no baseline that can safely arbitrate a mid-message switch.
+            if (_communicationReady) Communication?.Invoke(value.Clone());
+            return;
+        }
+        if (package is "Anomaly.Items.Detail" or "Anomaly.Items.Usable" && !value.GetProperty("num").TryGetInt32(out _))
+        {
+            Invalidate(package);
+            Diagnostic?.Invoke($"Rejected {package}: item number exceeds the supported range.");
+            Changed?.Invoke(package);
+            return;
+        }
+        if (package == "Anomaly.Items.Detail") _itemCards[value.GetProperty("num").GetInt32()] = value.Clone();
+        if (package == "Anomaly.Items.Usable") _itemUsability[value.GetProperty("num").GetInt32()] = value.Clone();
+        if ((package.StartsWith("Anomaly.Char.", StringComparison.Ordinal) || package is "Anomaly.Items.List" or "Anomaly.Spells.List" or "Anomaly.Shop.List")
+            && (!_snapshots.TryGetValue(package, out JsonElement previous) || !JsonElement.DeepEquals(previous, value)))
+            _itemUsability.Clear();
         if (package == "Anomaly.Mob.Info") _static[value.GetProperty("uid").GetInt64()] = value.Clone();
         else if (package == "Anomaly.Mob.Update")
         {
@@ -130,6 +157,10 @@ public sealed class GmcpState
 
     private void Invalidate(string family)
     {
+        if (family.StartsWith("Anomaly.Char", StringComparison.Ordinal) || family == "Anomaly.Items.List") _itemUsability.Clear();
+        if (family is "Anomaly.Items" or "Anomaly.Items.Detail") _itemCards.Clear();
+        if (family is "Anomaly.Items" or "Anomaly.Items.Usable") _itemUsability.Clear();
+        if (family is "Anomaly.Comm" or "Anomaly.Comm.Line") _communicationReady = false;
         foreach (string key in _snapshots.Keys.Where(k => k == family || k.StartsWith(family + ".", StringComparison.Ordinal)).ToArray()) _snapshots.Remove(key);
         if (family == "Anomaly.Mob" || family == "Anomaly.Mob.Info") { _static.Clear(); _live.Clear(); }
         if (family == "Anomaly.Mob.Update") _live.Clear();
@@ -138,9 +169,9 @@ public sealed class GmcpState
 
     private void ClearRoom()
     {
-        foreach (string key in _snapshots.Keys.Where(k => k.StartsWith("Anomaly.Room.", StringComparison.Ordinal)).ToArray()) _snapshots.Remove(key);
+        foreach (string key in _snapshots.Keys.Where(k => (k.StartsWith("Anomaly.Room.", StringComparison.Ordinal) || k.StartsWith("Anomaly.Shop.", StringComparison.Ordinal))).ToArray()) _snapshots.Remove(key);
         _live.Clear();
     }
 
-    private void ClearAll(bool newSession = true) { if (newSession) SessionGeneration++; _snapshots.Clear(); _static.Clear(); _live.Clear(); CurrentRoom = null; }
+    private void ClearAll(bool newSession = true) { if (newSession) SessionGeneration++; _snapshots.Clear(); _itemCards.Clear(); _itemUsability.Clear(); _communicationReady = false; _static.Clear(); _live.Clear(); CurrentRoom = null; }
 }

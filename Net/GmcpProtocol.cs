@@ -5,10 +5,10 @@ namespace MudPlay.Net;
 
 internal static class GmcpProtocol
 {
-    public const string ContractVersion = "1.0.0";
+    public const string ContractVersion = "1.1.0";
     public const int MaxOutgoingBodyBytes = 8192;
     public const int MaxIncomingBodyBytes = 1024 * 1024;
-    public static readonly string[] Supports = ["Anomaly.Char 1", "Anomaly.Room 1", "Anomaly.Mob 1"];
+    public static readonly string[] Supports = ["Anomaly.Char 1", "Anomaly.Room 1", "Anomaly.Mob 1", "Anomaly.Items 1", "Anomaly.Shop 1", "Anomaly.Spells 1", "Anomaly.Group 1", "Anomaly.Comm 1"];
     private static readonly UTF8Encoding Utf8 = new(false, true);
 
     public static byte[] Frame(string package, object payload)

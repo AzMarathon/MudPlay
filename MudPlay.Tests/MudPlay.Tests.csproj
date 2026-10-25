@@ -23,6 +23,7 @@
     <ProjectReference Include="..\MudPlay.csproj" />
     <None Update="Gmcp/Recordings/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Gmcp/Captured/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Gmcp/Examples/**/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

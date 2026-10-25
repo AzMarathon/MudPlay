@@ -101,6 +101,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [RelayCommand]
     private async Task RefreshGmcp() => await AppServices.Current.Gmcp.RefreshAsync();
 
+    [RelayCommand]
+    private void InspectGmcp() => new Views.GmcpDataWindow { DataContext = new GmcpDataViewModel(AppServices.Current.Gmcp) }.Show();
+
     public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } = Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
 
     // Max-redials / redial-pause tickers grey out while InfiniteRetries forces

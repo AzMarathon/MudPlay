@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Nonsense","payload":{},"expect":{"reject":"unknown-package"},"why":"not in the contract"}

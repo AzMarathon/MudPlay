@@ -23,6 +23,8 @@ public sealed partial class PartyMember : ObservableObject
     // Player name as it appears in the `par` table and chat lines.
     [ObservableProperty] [field: Owner(typeof(PartyManager))] private string _name = string.Empty;
 
+    [ObservableProperty] [field: Owner(typeof(PartyManager))] private bool _here;
+
     // Class string (e.g. "Mage", "Cleric"). Empty until first `par`
     // observation — follows-you doesn't disclose class.
     [ObservableProperty]
@@ -44,7 +46,7 @@ public sealed partial class PartyMember : ObservableObject
     [NotifyPropertyChangedFor(nameof(MaRichDisplay))]
     private int _baselineMp;
 
-    // Current HP as a percentage (0–100) of BaselineHp. Updated by every `par` poll.
+    // Current HP as a percentage of BaselineHp; a dropped ally may be negative. Updated by every `par` poll.
     [ObservableProperty]
     [field: Owner(typeof(PartyManager))]
     [NotifyPropertyChangedFor(nameof(HpRichDisplay))]

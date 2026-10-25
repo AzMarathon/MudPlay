@@ -6,7 +6,7 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Gmcp;
 
-public sealed class GmcpIntegration
+public sealed partial class GmcpIntegration
 {
     private readonly PromptParser _player;
     private readonly StatParser _stats;
@@ -48,7 +48,7 @@ public sealed class GmcpIntegration
     public async Task RefreshAsync()
     {
         if (_send is null || !State.Compatible || !State.InSession) return;
-        foreach (string package in Packages.Where(p => p != "Anomaly.Mob"))
+        foreach (string package in Packages.Where(p => p is not ("Anomaly.Mob" or "Anomaly.Comm.Line" or "Anomaly.Items.Detail" or "Anomaly.Items.Usable")))
             await _send("Anomaly.Request", new { package });
         if (State.Snapshot("Anomaly.Room.Occupants") is { } occupants)
             foreach (JsonElement monster in occupants.GetProperty("mobs").EnumerateArray())
@@ -56,7 +56,7 @@ public sealed class GmcpIntegration
     }
     private bool _occupantsApplied;
     public GmcpState State { get; } = new();
-    public static readonly string[] Packages = ["Anomaly.Char.Vitals", "Anomaly.Char.Status", "Anomaly.Char.Stats", "Anomaly.Room.Info", "Anomaly.Room.Occupants", "Anomaly.Room.Lair", "Anomaly.Mob"];
+    public static readonly string[] Packages = ["Anomaly.Char.Vitals", "Anomaly.Char.Status", "Anomaly.Char.Stats", "Anomaly.Room.Info", "Anomaly.Room.Occupants", "Anomaly.Room.Lair", "Anomaly.Mob", "Anomaly.Items.List", "Anomaly.Items.Detail", "Anomaly.Items.Usable", "Anomaly.Shop.List", "Anomaly.Spells.List", "Anomaly.Char.Effects", "Anomaly.Char.Abilities", "Anomaly.Group.Members", "Anomaly.Comm.Line"];
 
     public GmcpIntegration(PromptParser player, StatParser stats, RoomGraphManager graph, RoomTracker tracker,
         RoomEntityClassifier classifier, CombatStateTracker combat, EncumbranceParser encumbrance, LogService log)
@@ -72,6 +72,7 @@ public sealed class GmcpIntegration
         classifier.TextObserved += ObserveOccupants;
         State.Diagnostic += message => log.Warn("GMCP", message);
         State.Changed += Apply;
+        State.Communication += OnCommunication;
     }
 
     private bool OwnsOccupants() => State.Owns("Anomaly.Room.Occupants")
@@ -82,7 +83,11 @@ public sealed class GmcpIntegration
         foreach (string package in Packages) State.SetMode(package, modes.GetValueOrDefault(package, GmcpMode.Shadow));
     }
 
-    public void Receive(GmcpMessage message) => State.Receive(message);
+    public void Receive(GmcpMessage message)
+    {
+        State.Receive(message);
+        if (message.Package is "Anomaly.Items.List" or "Anomaly.Shop.List" or "Anomaly.Session.Reset") RequestMissingCards();
+    }
     public void Disconnected() => State.Disconnected();
 
     private void Apply(string package)
@@ -112,6 +117,7 @@ public sealed class GmcpIntegration
         string applying = package;
         try
         {
+            ApplyMilestone2(package, ref applying);
             if ((package == "*" || package == "Anomaly.Char.Vitals") && State.Owns("Anomaly.Char.Vitals"))
             {
                 applying = "Anomaly.Char.Vitals";

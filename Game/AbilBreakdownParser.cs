@@ -20,14 +20,17 @@ public readonly record struct AbilContribution(string Source, int Value);
 // the reroll threshold.
 public sealed record AbilBreakdown(
     int Code,
-    IReadOnlyList<AbilContribution> Contributions)
+    IReadOnlyList<AbilContribution> Contributions,
+    int? EffectiveTotal = null,
+    string Aggregation = "sum")
 {
-    // Sum of every per-source contribution, the same figure as the server's
-    // `total:` line when it prints one.
+    // The server supplies an effective total and aggregation in active mode.
+    // Text fallback retains its existing sum of source contributions.
     public int Total
     {
         get
         {
+            if (EffectiveTotal is { } effective) return effective;
             int sum = 0;
             foreach (AbilContribution c in Contributions) sum += c.Value;
             return sum;
@@ -104,6 +107,7 @@ public sealed partial class AbilBreakdownParser : IDisposable
 
     private void HandleLine(string text, bool isPromptLine)
     {
+        if (GmcpOwnsAbilities?.Invoke() == true) { _pending.Clear(); _pendingTotal = false; return; }
         // The prompt is the universal end-of-response marker; close any block.
         if (isPromptLine)
         {

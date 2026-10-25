@@ -60,8 +60,13 @@ internal static class GmcpContract
                 if (schema.TryGetProperty("properties", out JsonElement properties) && properties.TryGetProperty(property.Name, out JsonElement field) && !Matches(field, property.Value)) return false;
             }
         }
-        if (value.ValueKind == JsonValueKind.Array && schema.TryGetProperty("items", out JsonElement item) && value.EnumerateArray().Any(v => !Matches(item, v))) return false;
+        if (value.ValueKind == JsonValueKind.Array)
+        {
+            if (schema.TryGetProperty("items", out JsonElement item) && value.EnumerateArray().Any(v => !Matches(item, v))) return false;
+            if (schema.TryGetProperty("maxItems", out JsonElement maxItems) && value.GetArrayLength() > maxItems.GetInt32()) return false;
+        }
         if (value.ValueKind == JsonValueKind.Number && schema.TryGetProperty("minimum", out JsonElement min) && value.GetInt64() < min.GetInt64()) return false;
+        if (value.ValueKind == JsonValueKind.Number && schema.TryGetProperty("maximum", out JsonElement max) && value.GetInt64() > max.GetInt64()) return false;
         if (value.ValueKind == JsonValueKind.String && schema.TryGetProperty("pattern", out JsonElement pattern)
             && !Regex.IsMatch(value.GetString()!, pattern.GetString()!, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100))) return false;
         return true;

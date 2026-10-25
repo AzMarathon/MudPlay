@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.ViewModels;
@@ -22,7 +23,8 @@ public sealed class SpellBookRowViewModel
         int teachLevel = 0,
         int spellcasting = 0,
         bool isParadigm = false,
-        int spellDamageBonus = 0)
+        int spellDamageBonus = 0,
+        JsonElement? serverRead = null)
     {
         Number = spell.Number;
         Short = spell.Short;
@@ -42,13 +44,24 @@ public sealed class SpellBookRowViewModel
             : "—";
         SuccessTooltip = BuildSuccessTooltip(spellcasting, spell.Formula.Diff, SpellCastChance.Cap(isKai, isParadigm), success);
 
-        Mana = SpellCalculator.ManaCost(spell.Formula);
+        Mana = serverRead is { } reading ? reading.GetProperty("cost").GetInt32() : SpellCalculator.ManaCost(spell.Formula);
         ManaText = Mana.ToString();
         EffectText = SpellEffectFormatter.Format(
             spell.Formula, level, resolveChain, resolveSpellName, resolveTextblockCasts,
             spellDamageBonus: spellDamageBonus,
             realm: isParadigm ? Game.RealmType.ParaMud : Game.RealmType.Stock);
-        FormulaText = BuildFormula(spell.Formula);
+        if (serverRead is { } server)
+        {
+            List<string> bands = new();
+            foreach (string field in new[] { "damage", "heal" })
+                if (server.GetProperty(field).ValueKind == JsonValueKind.Object)
+                {
+                    JsonElement band = server.GetProperty(field);
+                    bands.Add($"{field}: {band.GetProperty("min").GetInt32()}–{band.GetProperty("max").GetInt32()}");
+                }
+            if (bands.Count > 0) EffectText = string.Join("; ", bands) + " (before target resists)";
+        }
+        FormulaText = serverRead is null ? BuildFormula(spell.Formula) : "Live server values for this character; damage and healing are before target resists.";
     }
 
     // The spell's Spells.Number — used to look up the item that teaches it.

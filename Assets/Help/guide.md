@@ -5088,6 +5088,13 @@ Activate both **Room.Occupants** and **Mob** to use server-provided monsters for
 **Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
 
 
+Contract **1.1.0** also supplies inventory and worn items, shop stock, learned spells, active effects, abilities and party formation. Item and shop usability is the server's current reading. Spell damage and healing bands are **before target resistances**. Effect magnitude is the value of the effect, not a caster level; an unknown caster stays unknown. Party HP can be negative when someone is down.
+
+**Inspect server data…** opens a read-only view of current snapshots. Enter an item number and choose **Item card** for static information or **Item usability** for the character's current eligibility. Cards survive room changes and are cleared on a full reset or item-card reset. Usability responses are discarded when relevant character or inventory readings change. A shop's data expires when you leave its room; outside a shop its current reading is empty. Automatic buying still starts only after an explicit `list` readout.
+
+**Comm.Line** carries individual chat events. Active mode routes one copy to chat history and triggers while normal text remains in the terminal. Repeated identical messages remain separate messages; refresh and mode changes never replay them. Directed says continue through text because contract 1.1.0 does not carry their directed recipient. Following a communication reset or malformed event, text handles chat until the next full session reset so the source cannot switch halfway through a message.
+
+
 Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Move to BBS*).
 
 To make each setting's persistence level obvious, the tab is split into three banner-headed sections:

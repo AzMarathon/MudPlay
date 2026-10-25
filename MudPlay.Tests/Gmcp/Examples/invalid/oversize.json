@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Request","payload":"{}","expect":{"reject":"oversize"},"why":"over the 8 KB inbound (client-to-server) cap","length":9000,"dir":"c2s"}

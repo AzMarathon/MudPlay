@@ -46,4 +46,6 @@ public enum ChatChannel
     // window renders these as a horizontal rule. ChatLogEntry.Message carries
     // the ISO date string ("2026-05-08").
     DaySeparator,
+    // Structured party chat shares the local conversation filter.
+    Party,
 }
