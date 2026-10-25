@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.0**
-> - New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
-> - A shared monster name is refused with each one's number; `@relation #<number>` names one
-> - A leader also recognises a member it invited back by hand after a reconnect
+> **Version 3.186.1**
+> - Paradigm's party invite messages recorded as the same as Stock's in the game-mechanics reference
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.
