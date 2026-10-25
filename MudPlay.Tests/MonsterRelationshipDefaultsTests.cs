@@ -12,15 +12,18 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// A monster the shipped seed leaves without a relationship takes one from its
+// A monster the shipped seed doesn't know takes its relationship from its
 // Monsters-table Align (user, 2026-10-25): any good a Friend, Neutral a Neutral,
-// any evil an Enemy; a missing or unknown Align stays Enemy. A seed entry applies
-// only to the monster of its own name. The set and the seed are written to the
-// scratch data root and loaded as the client loads them, on the set switch.
+// any evil an Enemy; a missing or unknown Align stays Enemy. A monster the seed
+// knows with no relationship stays Enemy ("keep the seed's enemies as enemy", user,
+// 2026-10-25). A seed entry counts only for the monster of its own name. The set
+// and the seed are written to the scratch data root and loaded as the client loads
+// them, on the set switch.
 public sealed class MonsterRelationshipDefaultsTests : IDisposable
 {
     private const int WhiteStag = 9001, Unicorn = 9002, Hermit = 9003, Bandit = 9004, ChaosImp = 9005,
-        SeededGuard = 9006, Spellbreaker = 9007, Faceless = 9008, OddThing = 9009, Sprite = 9010;
+        SeededGuard = 9006, Spellbreaker = 9007, Faceless = 9008, OddThing = 9009, Sprite = 9010,
+        TemplePriest = 9011, Wanderer = 9012;
 
     private readonly string _set = "relation-defaults-" + Path.GetRandomFileName();
     private readonly string _bbs = "relation-defaults-" + Path.GetRandomFileName();
@@ -49,7 +52,8 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
 
     // One monster of each Align, a seeded one whose seed says otherwise, one whose
     // number the seed gives to another monster, one seeded with a location and no
-    // relationship, and two with no Align the rule knows.
+    // relationship, a Good one the seed knows by name alone, one whose seed entry
+    // has no name, and two with no Align the rule knows.
     private static string MonstersJson(int whiteStagAlign) => $$"""
         [
           { "Number": 9001, "Name": "white stag", "Align": {{whiteStagAlign}}, "In Game": 1 },
@@ -61,7 +65,9 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
           { "Number": 9007, "Name": "amethyst spellbreaker", "Align": 3, "In Game": 1 },
           { "Number": 9008, "Name": "faceless thing", "In Game": 1 },
           { "Number": 9009, "Name": "odd thing", "Align": 9, "In Game": 1 },
-          { "Number": 9010, "Name": "glade sprite", "Align": 0, "In Game": 1 }
+          { "Number": 9010, "Name": "glade sprite", "Align": 0, "In Game": 1 },
+          { "Number": 9011, "Name": "temple priest", "Align": 0, "In Game": 1 },
+          { "Number": 9012, "Name": "nameless wanderer", "Align": 1, "In Game": 1 }
         ]
         """;
 
@@ -69,7 +75,9 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
         [
           { "Number": 9006, "Name": "Seeded Guard ", "Relationship": "Friend" },
           { "Number": 9007, "Name": "elite amethyst guardian", "Relationship": "Enemy", "Priority": "High", "Region": "Crystal Caves" },
-          { "Number": 9010, "Name": "glade sprite", "Region": "Glade" }
+          { "Number": 9010, "Name": "glade sprite", "Region": "Glade" },
+          { "Number": 9011, "Name": "temple priest" },
+          { "Number": 9012, "Name": "", "Relationship": "Neutral" }
         ]
         """;
 
@@ -118,7 +126,7 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
         MonsterMessageStore monsters = new();
         foreach ((int number, string name) in new[]
                  { (WhiteStag, "white stag"), (Unicorn, "unicorn"), (Hermit, "hermit"), (Bandit, "bandit"),
-                   (ChaosImp, "chaos imp"), (Faceless, "faceless thing") })
+                   (ChaosImp, "chaos imp"), (Faceless, "faceless thing"), (TemplePriest, "temple priest") })
             monsters.Messages.Add(new MonsterMessageRecord(
                 Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
         RoomEntityClassifier classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), log);
@@ -182,6 +190,34 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
 
         Assert.Equal(MonsterRelationship.Friend, r.Relationship(SeededGuard));   // Evil by Align
         Assert.Equal("the seed", r.Seed.RelationshipSourceOf(r.Resolver, SeededGuard));
+        Assert.Equal(MonsterRelationship.Neutral, r.Relationship(Wanderer));     // a blank seed name isn't checked
+    }
+
+    // The seed lists every monster of its reference set; one it holds no relationship
+    // for was a plain Enemy there, and stays one whatever its alignment.
+    [Fact]
+    public void AMonsterTheSeedKnowsWithNoRelationship_StaysEnemy_AndIsFought()
+    {
+        using Rig r = Build();
+
+        Assert.Null(r.Relationship(TemplePriest));                                // Good by Align
+        Assert.Equal(MonsterRelationship.Enemy, r.Rules.Read(TemplePriest));
+        Assert.Equal("the seed, none set", r.Seed.RelationshipSourceOf(r.Resolver, TemplePriest));
+
+        r.Room("white stag, temple priest");
+        Assert.Equal(new[] { "a temple priest" }, r.Attacks);
+    }
+
+    // A realm with no seed knows no monster: every one takes its alignment.
+    [Fact]
+    public void WithNoSeed_EveryMonsterTakesItsAlignment()
+    {
+        File.Delete(_seedFile);
+        using Rig r = Build();
+
+        Assert.Equal(MonsterRelationship.Enemy, r.Relationship(SeededGuard));
+        Assert.Equal(MonsterRelationship.Friend, r.Relationship(TemplePriest));
+        Assert.Equal(MonsterRelationship.Friend, r.Relationship(Sprite));
     }
 
     [Fact]
@@ -194,15 +230,17 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
         Assert.Null(overlay.Priority);
         Assert.Null(overlay.Region);
         Assert.DoesNotContain("Crystal Caves", r.Seed.LocationSuggestions.Regions);
+        Assert.Equal("its alignment, Neutral; seed entry skipped (name differs)",
+            r.Seed.RelationshipSourceOf(r.Resolver, Spellbreaker));
     }
 
     [Fact]
-    public void ASeedEntryWithNoRelationship_KeepsItsLocation_AndTakesTheAlignmentsRelationship()
+    public void ASeedEntryWithNoRelationship_KeepsItsLocation_AndNoRelationshipFromTheAlignment()
     {
         using Rig r = Build();
 
         MonsterOverlay overlay = r.Seed.GetOverlay(Sprite);
-        Assert.Equal(MonsterRelationship.Friend, overlay.Relationship);
+        Assert.Null(overlay.Relationship);                                       // Good by Align
         Assert.Equal("Glade", overlay.Region);
         Assert.Contains("Glade", r.Seed.LocationSuggestions.Regions);
     }
@@ -265,11 +303,12 @@ public sealed class MonsterRelationshipDefaultsTests : IDisposable
 
         LogEntry info = Assert.Single(r.Log.Snapshot(), e => e.Severity == LogSeverity.Info
             && e.Message.StartsWith("Monster relationships for", StringComparison.Ordinal));
-        Assert.Contains("1 from the seed, 7 from alignment (3 friend / 2 neutral / 2 enemy), "
+        Assert.Contains("2 from the seed, 2 known to the seed with none set (Enemy), "
+            + "6 from alignment (2 friend / 2 neutral / 2 enemy), "
             + "2 with no alignment (Enemy), 1 seed entries skipped (name differs)", info.Message);
         Assert.Contains(r.Log.Snapshot(), e => e.Severity == LogSeverity.Debug
             && e.Message.Contains("#9007 seed 'elite amethyst guardian', set 'amethyst spellbreaker'"));
-        Assert.Contains("7 from alignment", r.Seed.RelationshipSummary);
+        Assert.Contains("6 from alignment", r.Seed.RelationshipSummary);
     }
 
     // A re-import that changes a monster's alignment changes which monsters are

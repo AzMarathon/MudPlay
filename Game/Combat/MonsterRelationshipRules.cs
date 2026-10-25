@@ -74,10 +74,10 @@ public sealed class MonsterRelationshipRules
     // Set the relationship at the character tier and return it as it now resolves.
     public MonsterRelationship Change(int number, MonsterRelationship relationship)
     {
-        // The installed default (the seed's, or the alignment's) is compared as the
-        // engines read it, so setting Enemy on a monster with no relationship installed,
-        // and nothing below saying otherwise, leaves this character no override rather
-        // than a copy of the default.
+        // The installed default (the seed's, or the alignment's for a monster the
+        // seed doesn't know) is compared as the engines read it, so setting Enemy on a
+        // monster with no relationship installed, and nothing below saying otherwise,
+        // leaves this character no override rather than a copy of the default.
         MonsterOverlay seed = _seed.GetOverlay(number);
         MonsterOverlay installed = seed with { Relationship = seed.Relationship ?? MonsterRelationship.Enemy };
         GameDataOverrideApplier.ApplyFieldsAt(_resolver, Table, Id(number), SettingsTier.Character,

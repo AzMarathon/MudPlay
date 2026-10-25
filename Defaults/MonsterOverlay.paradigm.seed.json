@@ -14728,5 +14728,177 @@
     "Landmass": "Mainland",
     "Region": "Ancient Fortress",
     "Area": "Ancient Treasury"
+  },
+  {
+    "Number": 70,
+    "Name": "warlock mercenary"
+  },
+  {
+    "Number": 79,
+    "Name": "hardened practice dummy"
+  },
+  {
+    "Number": 496,
+    "Name": "depraved murderer"
+  },
+  {
+    "Number": 524,
+    "Name": "tetraraptor"
+  },
+  {
+    "Number": 632,
+    "Name": "parasite"
+  },
+  {
+    "Number": 661,
+    "Name": "blood hawk"
+  },
+  {
+    "Number": 791,
+    "Name": "roc"
+  },
+  {
+    "Number": 812,
+    "Name": "sdfsdfsfs"
+  },
+  {
+    "Number": 871,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 908,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 910,
+    "Name": "Mayor Delanon"
+  },
+  {
+    "Number": 1017,
+    "Name": "Mandrake the Songweaver"
+  },
+  {
+    "Number": 1064,
+    "Name": "marble knight"
+  },
+  {
+    "Number": 1096,
+    "Name": "orc lieutenant"
+  },
+  {
+    "Number": 1097,
+    "Name": "orc warrior"
+  },
+  {
+    "Number": 1098,
+    "Name": "orc fanatic"
+  },
+  {
+    "Number": 1099,
+    "Name": "guard captain"
+  },
+  {
+    "Number": 1100,
+    "Name": "elite guard"
+  },
+  {
+    "Number": 1101,
+    "Name": "dark cleric"
+  },
+  {
+    "Number": 1102,
+    "Name": "dark mage"
+  },
+  {
+    "Number": 1103,
+    "Name": "dark assassin"
+  },
+  {
+    "Number": 1104,
+    "Name": "dark warrior"
+  },
+  {
+    "Number": 1105,
+    "Name": "adolescent red dragon"
+  },
+  {
+    "Number": 1106,
+    "Name": "young red dragon"
+  },
+  {
+    "Number": 1108,
+    "Name": "adolescent green dragon"
+  },
+  {
+    "Number": 1109,
+    "Name": "young green dragon"
+  },
+  {
+    "Number": 1112,
+    "Name": "duergar warrior"
+  },
+  {
+    "Number": 1113,
+    "Name": "giant rat 100"
+  },
+  {
+    "Number": 1114,
+    "Name": "giant rat 150"
+  },
+  {
+    "Number": 1115,
+    "Name": "giant rat 200"
+  },
+  {
+    "Number": 1139,
+    "Name": "townsman"
+  },
+  {
+    "Number": 1140,
+    "Name": "townswoman"
+  },
+  {
+    "Number": 1180,
+    "Name": "gentleman"
+  },
+  {
+    "Number": 1186,
+    "Name": "dracolich"
+  },
+  {
+    "Number": 1228,
+    "Name": "illithid"
+  },
+  {
+    "Number": 1229,
+    "Name": "illithid psion"
+  },
+  {
+    "Number": 1230,
+    "Name": "ulitharid champion"
+  },
+  {
+    "Number": 1231,
+    "Name": "mindwitness"
+  },
+  {
+    "Number": 1232,
+    "Name": "elite ulitharid guard"
+  },
+  {
+    "Number": 1233,
+    "Name": "Elder Mind"
+  },
+  {
+    "Number": 2202,
+    "Name": "black orc comander"
+  },
+  {
+    "Number": 2250,
+    "Name": "fire giant warrior"
+  },
+  {
+    "Number": 2401,
+    "Name": "vampire magus"
   }
 ]

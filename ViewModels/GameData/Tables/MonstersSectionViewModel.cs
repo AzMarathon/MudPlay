@@ -405,8 +405,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // (Char → BBS → Global → realm seed) — the exact resolution OpenEditAsync and the
     // combat engine use — so the Relationship + Toggles columns reflect how the runtime
     // actually treats it. The seed's Defaults tier already carries the relationship a
-    // monster takes from its alignment; one with neither resolves to no Relationship,
-    // read as Enemy per MonsterEngagement's engage-by-default rule.
+    // monster the seed doesn't know takes from its alignment; one with none resolves
+    // to no Relationship, read as Enemy per MonsterEngagement's engage-by-default rule.
     private MonsterOverlay ResolveMonsterOverlay(GameRow element)
     {
         string wcc = ReadInt(element, "Number").ToString(Inv);

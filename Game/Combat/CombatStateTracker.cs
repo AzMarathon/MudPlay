@@ -903,12 +903,12 @@ public sealed class CombatStateTracker : IDisposable
         return MonsterEngagement.IsEngageable(overlay, userEngaged);
     }
 
-    // On-sight attacker: an Enemy-relationship monster (an evil-aligned one the seed
-    // leaves untagged, or one with no relationship at all). These hit us every round
-    // we share the room, so they block resting. A Neutral — even a KillOnSight one we
-    // intend to fight — never attacks first, so it is NOT an attacking hostile (it
-    // only hits back once we engage it, which the InCombat flag then reflects).
-    // Backs HasHostileMonster / the rest-block.
+    // On-sight attacker: an Enemy-relationship monster (one the seed knows with none
+    // set, an evil-aligned one it doesn't know, or one with no relationship at all).
+    // These hit us every round we share the room, so they block resting. A Neutral —
+    // even a KillOnSight one we intend to fight — never attacks first, so it is NOT an
+    // attacking hostile (it only hits back once we engage it, which the InCombat flag
+    // then reflects). Backs HasHostileMonster / the rest-block.
     private bool IsAttackingHostile(RoomEntity e)
     {
         if (e.MonsterNumber is not int n) return true;   // unknown → assume enemy (fail-safe)

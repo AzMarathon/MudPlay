@@ -2,10 +2,11 @@
 
 ## 3.186.3
 
-- Unseeded monsters now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy
+- Monsters the shipped list doesn't know (a custom realm's own) now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy
+- The shipped list now names every Stock 1.11p and Paradigm 1.9.1 monster, so the ones it sets nothing for stay Enemy
 - A shipped monster default applies only when its name matches the set's monster of that number
 - Bug report and `@relation` log say where a monster's relationship came from
-- Saved Simulator area rankings are dropped once, since which monsters get fought changed
+- Saved Simulator area rankings on custom-realm sets are dropped once, since which monsters get fought changed
 
 ## 3.186.1
 

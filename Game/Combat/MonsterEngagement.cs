@@ -30,7 +30,7 @@ public static class MonsterEngagement
     public static bool IsEngageable(MonsterOverlay? overlay, bool userEngagedInstance)
         => userEngagedInstance || IsEngageable(overlay);
 
-    // The relationship a monster the shipped seed leaves without one takes from its
+    // The relationship a monster the shipped seed doesn't know takes from its
     // Monsters-table Align (Client policy, user 2026-10-25; GAME_MECHANICS "Monster
     // `Align` values and your alignment-title ladder"): any good is a Friend, Neutral
     // a Neutral, any evil (Neutral Evil included) an Enemy. Null for a value outside
