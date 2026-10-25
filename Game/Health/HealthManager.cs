@@ -557,7 +557,7 @@ public sealed class HealthManager : IDisposable
             : _restHere?.Invoke() ?? default;
 
     // Wire the damaging-room probe: the name of the spell on the room we stand in
-    // when it bars resting (Settings → Periodic Damage Room Spells) and no counter
+    // when it bars resting (Settings → Room Spell Config) and no counter
     // is worn or held against it, else null. It is asked afresh each time, so a
     // change saved in Settings is in effect at the next check. No rest or meditate
     // is started in such a room (user, 2026-10-09: "we

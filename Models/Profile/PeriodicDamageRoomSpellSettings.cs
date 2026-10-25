@@ -1,6 +1,6 @@
 namespace MudPlay.Models.Profile;
 
-// Per-character "Periodic Damage Room Spells" settings. Stored as the
+// Per-character "Room Spell Config" settings. Stored as the
 // "PeriodicDamageRoomSpells" entry in CharacterProfile.Settings, the tier the Health
 // tab's rest settings live on: HealthManager's rest rule reads both for the loaded
 // character.
@@ -13,7 +13,9 @@ public sealed class PeriodicDamageRoomSpellSettings
     // .BarsRestingByDefault: barred where the damage comes every tick). A spell that
     // isn't listed follows the default, so a game-data update that reads a spell
     // differently carries over to every character that never touched it. A number
-    // the loaded game data doesn't list is kept as it is.
+    // the loaded game data doesn't list is kept as it is, and does nothing: a spell
+    // the list leaves out (RoomSpellDamageIndex.LeftOffBecause) never bars resting,
+    // whatever was stored for it (RoomSpellDamageIndex.BarsResting).
     public Dictionary<int, bool> BarsResting { get; set; } = new();
 
     // Put on a carried item that negates a room's spell before stepping into the

@@ -5,7 +5,7 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.Settings;
 
-// One room spell in Settings → Periodic Damage Room Spells: what it does, what
+// One room spell in Settings → Room Spell Config: what it does, what
 // counters it, how many rooms carry it, and the Bars resting tick box.
 public sealed partial class PeriodicDamageRoomSpellRowViewModel : ObservableObject
 {

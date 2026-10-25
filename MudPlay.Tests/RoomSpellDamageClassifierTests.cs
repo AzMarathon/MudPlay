@@ -90,13 +90,14 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void TableThatDamagesWhateverIsRolled_Damages()
     {
-        // The ice cavern's slide: the roll only picks where you land.
-        Spell(1144, 9407, 9407, (TextBlock, 0));
-        Block(9407, "failitem 191:failitem 930:random 9408\n");
-        Block(9408, "96:message 2979:teleport 287 10:message 2980:cast 1142\n100:message 2979:teleport 297 10:message 2980:cast 1142\n");
+        // Made up: the roll only picks which spell hurts.
+        Spell(9050, 0, 0, (TextBlock, 9750));
+        Block(9750, "failitem 191:random 9751\n");
+        Block(9751, "50:cast 754\n100:cast 1142\n");
+        Spell(754, 10, 20, (Damage, 0));
         Spell(1142, 50, 60, (Damage, 0));
 
-        Assert.Equal(RoomSpellDamage.EveryTick, Classify(1144));
+        Assert.Equal(RoomSpellDamage.EveryTick, Classify(9050));
     }
 
     // ----- on a roll: a rest there still recovers ---------------------------
@@ -144,24 +145,30 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void CastBehindAlignment_IsConditional()
     {
-        // White forest noise burns the evil-aligned only.
-        Spell(1079, 0, 0, (TextBlock, 9443));
-        Block(9443, "evilaligned -50:goodaligned 39:teleport 1641 17\nevilaligned 40:teleport 1641 17:cast 1135\n");
+        // Church check burns the evil-aligned only, with no monster about.
+        Spell(1147, 0, 0, (TextBlock, 9444), (DescMsg, 66));
+        Block(9444, "nomonsters:evilaligned 40:cast 1135\n");
         Spell(1135, 50, 100, (Damage, 0));
 
-        Assert.Equal(RoomSpellDamage.Conditional, Classify(1079));
+        Assert.Equal(RoomSpellDamage.Conditional, Classify(1147));
+    }
+
+    // Made up, in the cavern floor's shape, with a damage spell that moves no one
+    // (Paradigm's own fall below also teleports, and is not read: ATeleportingSpellsOwnDamage_IsNotRead).
+    private void LevelCappedRoll()
+    {
+        Spell(9052, 10167, 10167, (TextBlock, 0));
+        Block(10167, "random 10168\n");
+        Block(10168, "85:addevil 0\n100:maxlevel 19:cast 9053\n");
+        Spell(9053, 2290, 2298, (Damage, 35));
     }
 
     [Fact]
     public void CastBehindALevelCapOnARoll_IsConditional()
     {
-        // The cavern floor gives way under a character of level 19 or less.
-        Spell(5788, 10167, 10167, (TextBlock, 0));
-        Block(10167, "random 10168\n");
-        Block(10168, "85:addevil 0\n100:maxlevel 19:cast 5786\n");
-        Spell(5786, 2290, 2298, (Damage, 35));
+        LevelCappedRoll();
 
-        Assert.Equal(RoomSpellDamage.Conditional, Classify(5788));
+        Assert.Equal(RoomSpellDamage.Conditional, Classify(9052));
     }
 
     [Fact]
@@ -184,6 +191,85 @@ public sealed class RoomSpellDamageClassifierTests
         Spell(754, 10, 20, (Damage, 0));
 
         Assert.Equal(RoomSpellDamage.EveryTick, Classify(9021));
+    }
+
+    // ----- damage that only comes with a move out of the room ----------------
+
+    [Fact]
+    public void IceSlide_DamageAfterTheTeleport_IsNotRead()
+    {
+        // Without the rope the slide drops you down and ice fall hurts you there:
+        // every band of the table moves you first.
+        Spell(1144, 9407, 9407, (TextBlock, 0), (DescMsg, 66));
+        Block(9407, "failitem 191:failitem 930:random 9408\n");
+        Block(9408, "96:message 2979:teleport 287 10:message 2980:cast 1142\n100:message 2979:teleport 297 10:message 2980:cast 1142\n");
+        Spell(1142, 50, 60, (Damage, 0));
+
+        RoomSpellDamageReading r = Read(1144);
+        Assert.Equal(RoomSpellDamage.None, r.Kind);
+        Assert.True(r.OnlyWithAMove);
+        Assert.Null(r.Gap);
+    }
+
+    [Fact]
+    public void ATeleportingSpellsOwnDamage_IsNotRead()
+    {
+        // Paradigm's cavern floor: fall below carries TeleportRoom and a flat 35.
+        Spell(5788, 10167, 10167, (TextBlock, 0));
+        Block(10167, "random 10168\n");
+        Block(10168, "85:addevil 0\n100:maxlevel 19:cast 5786\n");
+        Spell(5786, 2290, 2298, (140, 0), (141, 12), (Damage, 35), (144, 0));
+
+        RoomSpellDamageReading r = Read(5788);
+        Assert.Equal(RoomSpellDamage.None, r.Kind);
+        Assert.True(r.OnlyWithAMove);
+    }
+
+    [Fact]
+    public void DamageBeforeAMove_GoesWithIt_UnlessAStepBetweenCanStopTheLine()
+    {
+        // Made up: the first line hurts and then moves you with nothing between; the
+        // second can stop on its level check after the damage, leaving you hurt and
+        // in the room.
+        Spell(9056, 0, 0, (TextBlock, 9756));
+        Block(9756, "cast 754:teleport 100 1\n");
+        Spell(9057, 0, 0, (TextBlock, 9757));
+        Block(9757, "cast 754:maxlevel 10:teleport 100 1\n");
+        Spell(754, 10, 20, (Damage, 0));
+
+        Assert.Equal(RoomSpellDamage.None, Classify(9056));
+        Assert.True(Read(9056).OnlyWithAMove);
+        Assert.Equal(RoomSpellDamage.EveryTick, Classify(9057));
+    }
+
+    [Fact]
+    public void ATableWithDamageBothWays_IsReadByTheDamageThatStays()
+    {
+        // Made up: half the ticks hurt you where you stand, the other half move you
+        // and hurt you there.
+        Spell(9058, 0, 0, (TextBlock, 9758));
+        Block(9758, "random 9759\n");
+        Block(9759, "50:cast 754\n100:teleport 100 1:cast 1142\n");
+        Spell(754, 10, 20, (Damage, 0));
+        Spell(1142, 50, 60, (Damage, 0));
+
+        RoomSpellDamageReading r = Read(9058);
+        Assert.Equal(RoomSpellDamage.OnARoll, r.Kind);
+        Assert.Equal(50, r.ChancePercent);
+        Assert.Equal("10–20", RoomSpellDamageText.Damage(r));
+        Assert.False(r.OnlyWithAMove);
+    }
+
+    [Fact]
+    public void ATeleportWithNoDamage_IsNone_AndNotSaidToMove()
+    {
+        // The thief filter turns the wrong class away and hurts no one.
+        Spell(1325, 0, 0, (TextBlock, 4241), (144, 0), (DescMsg, 66));
+        Block(4241, "class 1:teleport 2982 17\nclass 2:teleport 2982 17\n");
+
+        RoomSpellDamageReading r = Read(1325);
+        Assert.Equal(RoomSpellDamage.None, r.Kind);
+        Assert.False(r.OnlyWithAMove);
     }
 
     // ----- no damage ---------------------------------------------------------
@@ -278,17 +364,17 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void Reading_ASpellATextblockCasts_StillGrowsWithTheCharactersLevel()
     {
-        // Ice fall behind the cracked pit: cast from the textblock, which rolls it
-        // at the character's own level.
-        Spell(1213, 0, 0, (TextBlock, 4077));
-        Block(4077, "failitem 930:failitem 191:message 2979:teleport 1524 7:message 2980:cast 1142\n");
+        // Made up: ice fall cast from a textblock, which rolls it at the character's
+        // own level (the cracked pit casts it so, but only after a teleport).
+        Spell(9054, 0, 0, (TextBlock, 9754));
+        Block(9754, "failitem 930:failitem 191:message 2979:cast 1142\n");
         _spells[1142] = new SpellFormulaInput
         {
             Number = 1142, MinBase = 50, MaxBase = 60, Cap = 65, MinInc = 4, MinIncLVLs = 1, MaxInc = 7, MaxIncLVLs = 1,
             Abilities = [new SpellAbility(Damage, 0)],
         };
 
-        Assert.Equal("50–60, more with level", RoomSpellDamageText.Damage(Read(1213)));
+        Assert.Equal("50–60, more with level", RoomSpellDamageText.Damage(Read(9054)));
     }
 
     [Fact]
@@ -304,13 +390,14 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void Reading_ATextblockSpellsBaseValues_AreNoDamageRange()
     {
-        // The ice cavern keeps its block's number in MinBase / MaxBase.
-        Spell(1144, 9407, 9407, (TextBlock, 0));
+        // Made up, in the ice cavern's encoding: the block's number in MinBase /
+        // MaxBase, and a table whose bands hurt where you stand.
+        Spell(9055, 9407, 9407, (TextBlock, 0));
         Block(9407, "failitem 191:failitem 930:random 9408\n");
-        Block(9408, "96:message 2979:teleport 287 10:message 2980:cast 1142\n100:message 2979:teleport 297 10:message 2980:cast 1142\n");
+        Block(9408, "96:message 2979:cast 1142\n100:message 2980:cast 1142\n");
         Spell(1142, 50, 60, (Damage, 0));
 
-        RoomSpellDamageReading r = Read(1144);
+        RoomSpellDamageReading r = Read(9055);
         Assert.Equal((50, 60), (r.MinDamage, r.MaxDamage));
         Assert.Equal("every tick", RoomSpellDamageText.How(r));
     }
@@ -349,14 +436,11 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void Reading_ACondition_IsNamed_WithTheRollBehindIt()
     {
-        // The cavern floor: a fixed 35 from the slot's own value, level 19 or under,
-        // 15 ticks in a hundred.
-        Spell(5788, 10167, 10167, (TextBlock, 0));
-        Block(10167, "random 10168\n");
-        Block(10168, "85:addevil 0\n100:maxlevel 19:cast 5786\n");
-        Spell(5786, 2290, 2298, (140, 0), (141, 12), (Damage, 35));
+        // A fixed 35 from the slot's own value, level 19 or under, 15 ticks in a
+        // hundred.
+        LevelCappedRoll();
 
-        RoomSpellDamageReading r = Read(5788);
+        RoomSpellDamageReading r = Read(9052);
         Assert.Equal(new[] { "maxlevel 19" }, r.Conditions);
         Assert.Equal("35", RoomSpellDamageText.Damage(r));
         Assert.Equal("only if level 19 or under, then on a roll: 15% of ticks", RoomSpellDamageText.How(r));
@@ -365,11 +449,11 @@ public sealed class RoomSpellDamageClassifierTests
     [Fact]
     public void Reading_AConditionWithNoWordingOnRecord_IsShownAsTheDataWritesIt()
     {
-        Spell(1079, 0, 0, (TextBlock, 9443));
-        Block(9443, "evilaligned -50:goodaligned 39:teleport 1641 17\nevilaligned 40:teleport 1641 17:cast 1135\n");
+        Spell(1147, 0, 0, (TextBlock, 9444));
+        Block(9444, "nomonsters:evilaligned 40:cast 1135\n");
         Spell(1135, 50, 100, (Damage, 0));
 
-        Assert.Equal("only if `evilaligned 40`", RoomSpellDamageText.How(Read(1079)));
+        Assert.Equal("only if no monster in the room and `evilaligned 40`", RoomSpellDamageText.How(Read(1147)));
     }
 
     [Fact]

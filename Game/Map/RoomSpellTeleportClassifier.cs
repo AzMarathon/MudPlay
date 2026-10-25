@@ -53,8 +53,13 @@ public static class RoomSpellTeleportClassifier
         "checkskill", "flag", "test_tournament", "roomitem", "failroomitem", "clearitem",
     };
 
-    // RoomSpellDamageClassifier reads the same steps for what gates a room's damage.
+    // RoomSpellDamageClassifier reads the same steps for what gates a room's damage,
+    // and the same moves for the damage that only comes with one.
     internal static bool IsConditionStep(string verb) => ConditionVerbs.Contains(verb);
+
+    // `teleport <room> <map>`, and the named forms (`teleport_sewers`) that pick a
+    // room of their area.
+    internal static bool IsTeleportStep(string verb) => verb.StartsWith("teleport", StringComparison.OrdinalIgnoreCase);
 
     // spellOf resolves a spell number to its record, textblock a TBInfo number to
     // its entry; either returns null for a number the set doesn't have. gap names
@@ -180,9 +185,7 @@ public static class RoomSpellTeleportClassifier
                 if (words.Length == 0) continue;
                 string verb = words[0];
 
-                // `teleport <room> <map>`, and the named forms (`teleport_sewers`)
-                // that pick a room of their area.
-                if (verb.StartsWith("teleport", StringComparison.OrdinalIgnoreCase))
+                if (IsTeleportStep(verb))
                     reach = reach.With(new Reach(gates.Teleport, Unrolled: !rolledHere));
                 else if (Is(verb, "cast"))
                     reach = reach.With(Spell(Number(words, 1), gates, depth + 1).Past(rolledHere));

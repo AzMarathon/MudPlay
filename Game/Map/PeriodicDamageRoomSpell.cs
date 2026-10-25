@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace MudPlay.Game.Map;
 
-// One line of Settings → Periodic Damage Room Spells: a room spell of the loaded
+// One line of Settings → Room Spell Config: a room spell of the loaded
 // game data that does damage, what was read of it, what counters it (in words, ""
 // when the data has no counter) and the rooms that carry it.
 public sealed record PeriodicDamageRoomSpell(

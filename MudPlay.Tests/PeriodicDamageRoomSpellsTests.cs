@@ -11,7 +11,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Settings → Periodic Damage Room Spells: the index behind it (which room spells
+// Settings → Room Spell Config: the index behind it (which room spells
 // damage, which rooms carry them, what bars a rest by default and after the user's
 // choice) and the tab's own bookkeeping (only the spells set away from the default
 // are stored, another data set's choices are kept, the empty states, the log line
@@ -59,15 +59,20 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
         ]
         """;
 
-    private RoomSpellDamageIndex NewIndex(out System.Action<string?> switchTo, LogService? log = null)
-    {
-        string dir = Path.Combine(_root, "one");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Rooms.json"), "[" + string.Join(",",
+    private RoomSpellDamageIndex NewIndex(out System.Action<string?> switchTo, LogService? log = null) =>
+        NewIndex("one", Spells, TBInfo, out switchTo, log,
             RoomRow(16, 1, "Lava Tube", 526), RoomRow(16, 2, "Lava Tube", 526), RoomRow(6, 3, "Lava Tube", 526),
-            RoomRow(7, 4, "Fungus Cave", 1205), RoomRow(1, 5, "Inn", 484), RoomRow(1, 6, "Street", 0)) + "]");
-        File.WriteAllText(Path.Combine(dir, "Spells.json"), Spells);
-        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), TBInfo);
+            RoomRow(7, 4, "Fungus Cave", 1205), RoomRow(1, 5, "Inn", 484), RoomRow(1, 6, "Street", 0));
+
+    private RoomSpellDamageIndex NewIndex(
+        string set, string spells, string tbinfoJson, out System.Action<string?> switchTo, LogService? log,
+        params string[] rooms)
+    {
+        string dir = Path.Combine(_root, set);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), "[" + string.Join(",", rooms) + "]");
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), spells);
+        File.WriteAllText(Path.Combine(dir, "TBInfo.json"), tbinfoJson);
 
         GameDataCache cache = new(_root);
         TBInfoStore tbinfo = new(cache);
@@ -123,6 +128,171 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
         Assert.False(index.BarsResting(526, Chosen));
         Assert.True(index.BarsResting(1205, Chosen));
         Assert.False(index.BarsResting(484, Chosen));
+    }
+
+    // ----- what is left off: damage that only comes with a move out ----------
+
+    // As the game data has them: the thief filter (turns the wrong class away, no
+    // damage), the ice slide without the rope (dropped down the slide, hurt there),
+    // magma heat (hurts where you stand), and a made-up spell whose table does both.
+    private const string MovingSpells = """
+        [
+          { "Number": 1325, "Name": "thief  filter", "MinBase": 0, "MaxBase": 0, "Abil-0": 148, "AbilVal-0": 4241, "Abil-1": 144, "AbilVal-1": 0 },
+          { "Number": 1144, "Name": "ice cavern level 1", "MinBase": 9407, "MaxBase": 9407, "Abil-0": 148, "AbilVal-0": 0, "Abil-1": 115, "AbilVal-1": 66 },
+          { "Number": 1142, "Name": "ice fall", "MinBase": 50, "MaxBase": 60, "Abil-0": 1, "AbilVal-0": 0 },
+          { "Number": 526, "Name": "magma heat", "MinBase": 30, "MaxBase": 60, "Abil-0": 1, "AbilVal-0": 0 },
+          { "Number": 9058, "Name": "made-up pit", "MinBase": 0, "MaxBase": 0, "Abil-0": 148, "AbilVal-0": 9758 },
+          { "Number": 754, "Name": "silver river", "MinBase": 10, "MaxBase": 20, "Abil-0": 1, "AbilVal-0": 0 }
+        ]
+        """;
+
+    private const string MovingTBInfo = """
+        [
+          { "Number": 4241, "LinkTo": 0, "Action": "class 1:teleport 2982 17\nclass 2:teleport 2982 17\n" },
+          { "Number": 9407, "LinkTo": 0, "Action": "failitem 191:failitem 930:random 9408\n" },
+          { "Number": 9408, "LinkTo": 0, "Action": "96:message 2979:teleport 287 10:message 2980:cast 1142\n100:message 2979:teleport 297 10:message 2980:cast 1142\n" },
+          { "Number": 9758, "LinkTo": 0, "Action": "random 9759\n" },
+          { "Number": 9759, "LinkTo": 0, "Action": "50:cast 754\n100:teleport 100 1:cast 1142\n" }
+        ]
+        """;
+
+    private RoomSpellDamageIndex MovingIndex(LogService? log = null)
+    {
+        RoomSpellDamageIndex index = NewIndex("moving", MovingSpells, MovingTBInfo, out System.Action<string?> switchTo, log,
+            RoomRow(17, 1, "Training Hall", 1325), RoomRow(10, 276, "Ice Cavern", 1144), RoomRow(10, 277, "Ice Cavern", 1144),
+            RoomRow(16, 1, "Lava Tube", 526), RoomRow(3, 1, "Pit", 9058));
+        switchTo("moving");
+        return index;
+    }
+
+    [Fact]
+    public void Index_LeavesOutATeleportOnlyFilter()
+    {
+        RoomSpellDamageIndex index = MovingIndex();
+
+        Assert.False(index.Readings.ContainsKey(1325));
+        Assert.Equal(RoomSpellDamage.None, index.ClassOf(1325));
+    }
+
+    [Fact]
+    public void Index_LeavesOutDamageThatComesWithATeleport_AndLogsIt()
+    {
+        LogService log = new();
+        List<string> info = new();
+        log.EntryAdded += e => { if (e.Severity == LogSeverity.Info) info.Add(e.Message); };
+        RoomSpellDamageIndex index = MovingIndex(log);
+
+        Assert.False(index.Readings.ContainsKey(1144));
+        Assert.Empty(index.RoomsOf(1144));
+        Assert.Single(info, l => l == "Room spell(s) that damage left off the list, so they never bar a rest: "
+            + "ice cavern level 1 #1144 (its damage only comes with a move out of the room).");
+        Assert.Equal("its damage only comes with a move out of the room", index.LeftOffBecause(1144));
+        Assert.Null(index.LeftOffBecause(526));
+    }
+
+    [Fact]
+    public void Index_ListsDamageThatLandsWithoutATeleport()
+    {
+        RoomSpellDamageIndex index = MovingIndex();
+
+        Assert.Equal(RoomSpellDamage.EveryTick, index.ClassOf(526));
+        Assert.Equal((30, 60), (index.Readings[526].MinDamage, index.Readings[526].MaxDamage));
+    }
+
+    [Fact]
+    public void Index_ListsASpellWithBothKinds_ByTheDamageThatStays()
+    {
+        RoomSpellDamageIndex index = MovingIndex();
+
+        RoomSpellDamageReading pit = index.Readings[9058];
+        Assert.Equal(RoomSpellDamage.OnARoll, pit.Kind);
+        Assert.Equal((10, 20, 50), (pit.MinDamage, pit.MaxDamage, pit.ChancePercent));
+        Assert.Equal(new[] { 526, 9058 }, index.Readings.Keys.Order());
+    }
+
+    [Fact]
+    public void Index_AStoredChoiceForASpellLeftOut_BarsNothing_AndTheTabKeepsIt()
+    {
+        RoomSpellDamageIndex index = MovingIndex();
+        // Ticked when the ice slide was still listed.
+        Dictionary<int, bool> chosen = new() { [1144] = true };
+        Assert.False(index.BarsResting(1144, () => chosen));
+
+        Tab tab = new();
+        CharacterProfile profile = tab.Profile.LoadDefaultProfile();
+        profile.Settings = new()
+        {
+            [PeriodicDamageRoomSpellSettings.TabKey] = JsonSerializer.SerializeToElement(
+                new PeriodicDamageRoomSpellSettings { BarsResting = { [1144] = true } }),
+        };
+        tab.Listed.Clear();
+        tab.Listed.AddRange(index.Readings.Select(e => new PeriodicDamageRoomSpell(
+            e.Key, e.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), e.Value, string.Empty, index.RoomsOf(e.Key))));
+        using PeriodicDamageRoomSpellsSectionViewModel vm = tab.Open();
+
+        Assert.DoesNotContain(vm.Spells, r => r.Number == 1144);
+        vm.Spells[0].BarsResting = !vm.Spells[0].BarsResting;
+        vm.Apply();
+        Assert.True(tab.Stored()[1144]);
+    }
+
+    // ----- kept off by the user: the class filters, the Great Pyramid's traps --
+
+    // The spellcaster filter's shard trap and the pyramid's level 2 traps, cut down
+    // from the game data: both damage a character who stays. Spell 9800 is made up.
+    private static string KeptOffSpells(string name692) => $$"""
+        [
+          { "Number": 1337, "Name": "spellcaster filter", "MinBase": -50, "MaxBase": 5, "Abil-0": 148, "AbilVal-0": 4244 },
+          { "Number": 1343, "Name": "crimson shard", "MinBase": 5, "MaxBase": 10, "Abil-0": 1, "AbilVal-0": 0 },
+          { "Number": 692, "Name": "{{name692}}", "MinBase": 1239, "MaxBase": 1278, "Abil-0": 148, "AbilVal-0": 2519, "Abil-1": 157, "AbilVal-1": 0, "Abil-2": 115, "AbilVal-2": 66 },
+          { "Number": 693, "Name": "darts", "MinBase": 10, "MaxBase": 30, "Abil-0": 1, "AbilVal-0": 0 },
+          { "Number": 526, "Name": "magma heat", "MinBase": 30, "MaxBase": 60, "Abil-0": 1, "AbilVal-0": 0 }
+        ]
+        """;
+
+    private const string KeptOffTBInfo = """
+        [
+          { "Number": 4244, "LinkTo": 0, "Action": "class 1:teleport 2982 17\nclass 5:testskill wisdom 30 4269:addevil 0\n" },
+          { "Number": 4269, "LinkTo": 0, "Action": "random 4270\n" },
+          { "Number": 4270, "LinkTo": 0, "Action": "10:checkitem 1947:cast 1343\n100:price 0\n" },
+          { "Number": 2519, "LinkTo": 0, "Action": "random 2520\n" },
+          { "Number": 2520, "LinkTo": 0, "Action": "90:addexp 0\n100:testskill traps 20 2701:message 2090\n" },
+          { "Number": 2701, "LinkTo": 0, "Action": "cast 693\n" }
+        ]
+        """;
+
+    private RoomSpellDamageIndex KeptOffIndex(string set, string name692, LogService? log = null)
+    {
+        RoomSpellDamageIndex index = NewIndex(set, KeptOffSpells(name692), KeptOffTBInfo, out System.Action<string?> switchTo, log,
+            RoomRow(17, 2982, "Training Hall", 1337), RoomRow(12, 1921, "Great Pyramid", 692), RoomRow(16, 1, "Lava Tube", 526));
+        switchTo(set);
+        return index;
+    }
+
+    [Fact]
+    public void Index_LeavesOutTheClassFiltersAndThePyramidTraps_ThoughTheyDamage_AndSaysWhy()
+    {
+        LogService log = new();
+        List<string> info = new();
+        log.EntryAdded += e => { if (e.Severity == LogSeverity.Info) info.Add(e.Message); };
+        RoomSpellDamageIndex index = KeptOffIndex("kept", "cleanup 2", log);
+
+        Assert.Equal(new[] { 526 }, index.Readings.Keys);
+        Assert.False(index.BarsResting(692, () => new Dictionary<int, bool> { [692] = true }));
+        Assert.Equal("a Great Pyramid trap", index.LeftOffBecause(692));
+        Assert.Equal("a class filter, which moves the wrong class out of the area", index.LeftOffBecause(1337));
+        Assert.Single(info, l => l == "Room spell(s) that damage left off the list, so they never bar a rest: "
+            + "cleanup 2 #692 (a Great Pyramid trap); "
+            + "spellcaster filter #1337 (a class filter, which moves the wrong class out of the area).");
+    }
+
+    [Fact]
+    public void Index_ListsAnotherSetsSpellOfTheSameNumber()
+    {
+        RoomSpellDamageIndex index = KeptOffIndex("other", "acid rain");
+
+        Assert.Equal(new[] { 526, 692 }, index.Readings.Keys.Order());
+        Assert.Null(index.LeftOffBecause(692));
     }
 
     // ----- the tab -----------------------------------------------------------
@@ -191,7 +361,7 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
         Assert.Equal(new Dictionary<int, bool> { [526] = false, [1205] = true }, tab.Stored());
         Assert.False(vm.IsDirty);
         Assert.Equal("1 of 2 bar resting; 2 changed from the default", vm.Summary);
-        Assert.Single(tab.Info, l => l == "Periodic Damage Room Spells: magma heat (#526) no longer bars resting; "
+        Assert.Single(tab.Info, l => l == "Room Spell Config: magma heat (#526) no longer bars resting; "
             + "fungus spell (#1205) now bars resting. In effect from the next rest decision.");
 
         // Back to the default: the entry goes, so a later change of the default reaches this character.
@@ -306,7 +476,7 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
         PeriodicDamageRoomSpellRowViewModel magma = Assert.Single(vm.Spells);
         Assert.False(magma.BarsResting);    // the tick the user cleared is still cleared
         Assert.True(vm.IsDirty);
-        Assert.Single(tab.Info, l => l == "Periodic Damage Room Spells: unsaved change(s) dropped for fungus spell (#1205) — the game data changed.");
+        Assert.Single(tab.Info, l => l == "Room Spell Config: unsaved change(s) dropped for fungus spell (#1205) — the game data changed.");
 
         vm.Apply();
         Assert.Equal(new Dictionary<int, bool> { [526] = false }, tab.Stored());
@@ -325,7 +495,7 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
 
         Assert.True(vm.Spells[0].BarsResting);
         Assert.False(vm.IsDirty);
-        Assert.Single(tab.Info, l => l.StartsWith("Periodic Damage Room Spells: unsaved change(s) dropped for magma heat (#526)"));
+        Assert.Single(tab.Info, l => l.StartsWith("Room Spell Config: unsaved change(s) dropped for magma heat (#526)"));
     }
 
     [Fact]

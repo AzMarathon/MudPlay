@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.50
+
+- Settings tab Periodic Damage Room Spells renamed Room Spell Config
+- Room spells whose damage only comes with moving you out (the ice slide), the class filters and the Great Pyramid traps left off the resting list, never bar a rest
+
 ## 3.185.48
 
 - Expanding a quest in the Player Workshop no longer crashes the client

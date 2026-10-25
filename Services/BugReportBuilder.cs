@@ -1125,7 +1125,7 @@ public static class BugReportBuilder
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
-        Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
+        Kv(sb, "Room spells changed from the default (Room Spell Config)", RoomSpellRestChoices(svc));
         Kv(sb, "Wear a room-spell counter before stepping in (setting)",
             ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(svc.Profile.Current)
                 .WearCounterBeforeEntering ? "on" : "off");
@@ -3368,7 +3368,9 @@ public static class BugReportBuilder
         if (svc.RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return "(no room spell here, or the room isn't placed)";
         string spell = $"{svc.SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell"} (#{here.Spell})";
         if (!svc.RoomSpellDamage.Readings.TryGetValue(here.Spell, out Game.Map.RoomSpellDamageReading? reading))
-            return $"{spell}: no damage in the game data";
+            return svc.RoomSpellDamage.LeftOffBecause(here.Spell) is { } why
+                ? $"{spell}: left off Room Spell Config ({why}) — rests as normal"
+                : $"{spell}: no damage in the game data";
         string does = $"{spell}: {Game.Map.RoomSpellDamageText.Damage(reading)} damage, "
             + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName, svc.SpellCatalog.GetSpellNameByNumber);
         if (!svc.RoomSpellBarsResting(here.Spell))
@@ -3403,8 +3405,8 @@ public static class BugReportBuilder
         return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
-    // The room spells whose Bars resting box (Settings → Periodic Damage Room
-    // Spells) the character has set away from the default, as stored.
+    // The room spells whose Bars resting box (Settings → Room Spell Config) the
+    // character has set away from the default, as stored.
     private static string RoomSpellRestChoices(AppServices svc)
     {
         Dictionary<int, bool> chosen = ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel

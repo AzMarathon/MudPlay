@@ -5,7 +5,7 @@ using MudPlay.ViewModels.GameData.Edit;
 namespace MudPlay.ViewModels.Settings;
 
 // The rooms of one map that share a name, under a spell picked in Settings →
-// Periodic Damage Room Spells. Lines holds their links a few to a line, so the list
+// Room Spell Config. Lines holds their links a few to a line, so the list
 // that shows them lays out only the lines in view.
 public sealed class RoomAreaViewModel
 {

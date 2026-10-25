@@ -2927,8 +2927,8 @@ How to keep it current:
 
 ### PeriodicDamageRoomSpellsTests.cs
 - Covers: Services/RoomSpellDamageIndex, ViewModels/Settings/PeriodicDamageRoomSpellsSectionViewModel
-- Checks: classifies damaging room spells and their rooms; whether a spell bars resting by default or by the user's choice; the tab stores only deltas, keeps other sets' choices, logs saves, handles empty states and game-data or profile changes, the wear-counter box, and the rooms-by-area list.
-- Why: user, 2026-10-10 (an on-roll spell doesn't bar resting).
+- Checks: classifies damaging room spells and their rooms; whether a spell bars resting by default or by the user's choice; which spells the list leaves out (a teleport-only filter, damage that comes with a teleport) and keeps (damage without one, a spell with both, read by the damage that stays), with the log line naming those left out and why; the spellcaster filter and the Great Pyramid's level 2 traps kept off though they damage, and another set's spell of the same number but another name listed; a stored choice for a left-out spell bars nothing and is kept on save; the tab stores only deltas, keeps other sets' choices, logs saves, handles empty states and game-data or profile changes, the wear-counter box, and the rooms-by-area list.
+- Why: user, 2026-10-10 (an on-roll spell doesn't bar resting); user, 2026-10-24 (Settings → Room Spell Config lists no spell whose damage only comes with a move out of the room, no class filter and no Great Pyramid trap).
 
 ### PlayerDatabaseTests.cs
 - Covers: Services/PlayerDatabase, PlayerObservation
@@ -3388,8 +3388,8 @@ How to keep it current:
 
 ### RoomSpellDamageClassifierTests.cs
 - Covers: Game/Map/RoomSpellDamageClassifier, RoomSpellDamageText, Services/RoomSpellDamageIndex.BarsRestingByDefault
-- Checks: Whether a room's own spell damages every tick, on a roll, only under a condition, after a timer, or not at all, through EndCasts, textblocks, roll tables, skill tests and buff checks. Also the settings-tab text for damage range and how, and missing-block gaps.
-- Why: "No rest is started in a room whose own spell does damage". User, 2026-10-10 (set damage of chaos storm and drowning); report `paradigm-20260728-201619` (Paradigm desert).
+- Checks: Whether a room's own spell damages every tick, on a roll, only under a condition, after a timer, or not at all, through EndCasts, textblocks, roll tables, skill tests and buff checks. Damage that only comes with a move is not read (a `teleport` step before or after it on the line with no step between that can stop the line, a spell carrying TeleportRoom), and a table with damage both ways is read by the bands that stay. Also the settings-tab text for damage range and how, and missing-block gaps.
+- Why: "No rest is started in a room whose own spell does damage". User, 2026-10-10 (set damage of chaos storm and drowning); report `paradigm-20260728-201619` (Paradigm desert); user, 2026-10-24 (the ice slide's damage lands after it moves you).
 
 ### RoomSpellTeleportClassifierTests.cs
 - Covers: Game/Map/RoomSpellTeleportClassifier
