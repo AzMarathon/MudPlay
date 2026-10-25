@@ -86,4 +86,25 @@ public sealed class SpellAttackTypeIndexTests : IDisposable
         SpellAttackTypeIndex s = NewIndex();
         Assert.Equal(-1, s.AttackType(castCode));
     }
+
+    // `blaz` is the Druid's blaze (#290: level 20, fire, any target) and the Priest's
+    // blazing light (#5585: level 56, magic, undead only), as Paradigm 1.9.1 has them.
+    // Asked with the character's own spell, that record answers; the code-wide answer
+    // (the Priest's record, read for a Druid in report paradigm-20261024-195420) is
+    // only the fallback for a code the character has no spell for.
+    [Fact]
+    public void SharedCastCode_TheCharactersOwnSpellAnswers()
+    {
+        const string json = """
+            [
+              { "Number": 290,  "Name": "blaze",         "Short": "blaz", "ReqLevel": 20, "AttType": 1, "Abil-0": 17, "Learnable": 1 },
+              { "Number": 5567, "Name": "blazing comet", "Short": "blaz", "ReqLevel": 50, "AttType": 4, "Abil-0": 1,  "Learnable": 0 },
+              { "Number": 5585, "Name": "blazing light", "Short": "blaz", "ReqLevel": 56, "AttType": 4, "Abil-0": 17, "Abil-1": 23, "Learnable": 1 }
+            ]
+            """;
+        SpellAttackTypeIndex s = NewIndex(json: json);
+        Assert.Equal(1, s.AttackType("blaz", 290));
+        Assert.Equal(4, s.AttackType("blaz", 5585));
+        Assert.Equal(4, s.AttackType("blaz"));
+    }
 }

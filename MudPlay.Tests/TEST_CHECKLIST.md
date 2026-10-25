@@ -2184,8 +2184,8 @@ How to keep it current:
 
 ### LoopSimulatorTests.cs
 - Covers: Game/Simulation/LoopSimulator, SimCharacterBuilder, LoopSimSummary
-- Checks: lair respawn clocks (Stock room clock vs Paradigm slots), deaths end runs, rest/run/hang-up triggers, spells/buffs/debuffs/rerolls, procs and burns, death summons and caps, sneak backstab, alignment sparing, dodge at the floor.
-- Why: reports paradigm-20260930-114254, -20261004-024314, -20261014-121847.
+- Checks: lair respawn clocks (Stock room clock vs Paradigm slots), deaths end runs, rest/run/hang-up triggers, spells/buffs/debuffs/rerolls, procs and burns, death summons and caps, sneak backstab, alignment sparing, dodge at the floor. A cast-code several classes share (`blaz`) is gated by the character's own learned spell, so a Druid's blaze is cast at a living monster.
+- Why: reports paradigm-20260930-114254, -20261004-024314, -20261014-121847, paradigm-20261024-195420.
 
 ### LoopUnpaidCrossingTests.cs
 - Covers: Game/Map/LoopRunner (tolls), Services/MovementFilter, MovementRefusalDetector, OwedPurseRead
@@ -3750,8 +3750,8 @@ How to keep it current:
 
 ### SpellAttackTypeIndexTests.cs
 - Covers: Game/Combat/SpellAttackTypeIndex
-- Checks: Looks up a cast code's AttType case-insensitively. Fails open to -1 for unknown codes, blank codes, or a missing AttType column.
-- Why: The resist guard (CombatSpellGates) reads it; a wrong element would skip or waste attack spells.
+- Checks: Looks up a cast code's AttType case-insensitively. Fails open to -1 for unknown codes, blank codes, or a missing AttType column. On a shared cast code (`blaz`) the character's own spell number answers; the code-wide answer is the fallback.
+- Why: The resist guard (CombatSpellGates) reads it; a wrong element would skip or waste attack spells. Report `paradigm-20261024-195420` (a Druid's blaze read as the Priest's blazing light).
 
 ### SpellBookCategoryClassifierTests.cs
 - Covers: Game/Spells/SpellBookCategoryClassifier
@@ -3799,10 +3799,10 @@ How to keep it current:
 - Why: The game-data spell record's effect tree (sea-crossing shape).
 
 ### SpellEngageGateTests.cs
-- Covers: Game/Combat/CombatManager (JudgeEngage, CanEngageMonster, the give-up set, the no-mana re-announce) + CombatSpellChooser.EngagingAttackSpell, CombatStateTracker (the walker gate), CastCoordinator, PartyManager, EquipmentWeaponSync, SpellbookState and the game-data indexes over a real set on disk, driven through a `ServerFeed`
-- Checks: a spell typed as the attack command (`mmis`) with a weapon below the monster's magic in the Default gear set casts under every action order (Ermias's case), as does the spell in the attack-spell slot, and one typed after `cast` / `c`; a spell command under the monster's spell immunity is walked past. A spell command with a plain alternate (`mmis`, `a`) fights a monster only the weapon hurts: `a` after the spell's "no effect", or straight away when game data shows the spell can't land, and never walks past it; a per-monster physical override counts as the normal attack. A room attack as the only spell casts when the room meets its Min enemies, is walked past below it, and engages a monster whose spell immunity is over its level; an undead-only room attack with no undead here engages only in a party. A spell the monster resists outright engages it in a party (slot or attack command), not solo, and a spell that does damage goes first. A spell the chooser wouldn't cast (a type it can't affect, Max casts 0) doesn't make the monster engageable. A weapon below the monster's magic with no spell is Unkillable and walked past, the `cannot attack` line and the bug report's room assessment naming why. A target given up on when its cast cap ran out isn't re-picked in the room. "Fire regardless of current mana": in a party a spell short of its reserve, its cost or any mana is cast, solo or unticked it waits (StuckOnMana, no write-off); a refusal for mana latches no cast block and the spell goes again the next round; Max casts still caps it; an unticked refusal latches as before. An attack spell's cast counts as engaged only on `*Combat Engaged*`, not on `Your spell has no effect on …`, and after that "no effect" with the weapon unable too, nothing is swung: the monster is written off and the room re-read.
+- Covers: Game/Combat/CombatManager (JudgeEngage, CanEngageMonster, the give-up set, the no-mana re-announce, the data-gate skip log) + CombatSpellChooser.EngagingAttackSpell, CombatStateTracker (the walker gate), CastCoordinator, PartyManager, EquipmentWeaponSync, SpellbookState and the game-data indexes over a real set on disk, driven through a `ServerFeed`
+- Checks: a spell typed as the attack command (`mmis`) with a weapon below the monster's magic in the Default gear set casts under every action order (Ermias's case), as does the spell in the attack-spell slot, and one typed after `cast` / `c`; a spell command under the monster's spell immunity is walked past. A spell command with a plain alternate (`mmis`, `a`) fights a monster only the weapon hurts: `a` after the spell's "no effect", or straight away when game data shows the spell can't land, and never walks past it; a per-monster physical override counts as the normal attack. A room attack as the only spell casts when the room meets its Min enemies, is walked past below it, and engages a monster whose spell immunity is over its level; an undead-only room attack with no undead here engages only in a party. A spell the monster resists outright engages it in a party (slot or attack command), not solo, and a spell that does damage goes first. A spell the chooser wouldn't cast (a type it can't affect, Max casts 0) doesn't make the monster engageable. The shared cast code `blaz` (every Paradigm 1.9.1 record) is judged by the character's own learned spell: a level-34 Druid's blaze is cast at a living monster and kept off an undead one spell immune below 30, a Priest's blazing light the other way round. A spell a game-data gate keeps off the target is logged once for that spell and target over several rounds, naming the resolved spell number, the gate and its value (undead only; level 20 under spell immunity 30). A weapon below the monster's magic with no spell is Unkillable and walked past, the `cannot attack` line and the bug report's room assessment naming why. A target given up on when its cast cap ran out isn't re-picked in the room. "Fire regardless of current mana": in a party a spell short of its reserve, its cost or any mana is cast, solo or unticked it waits (StuckOnMana, no write-off); a refusal for mana latches no cast block and the spell goes again the next round; Max casts still caps it; an unticked refusal latches as before. An attack spell's cast counts as engaged only on `*Combat Engaged*`, not on `Your spell has no effect on …`, and after that "no effect" with the weapon unable too, nothing is swung: the monster is written off and the room re-read.
 - Time: one `ManualClock` read by the classifier, combat manager, cast coordinator, party manager and state tracker; Tick() is a 5 s round. Nothing waits on real time; no private member is reached by reflection. Combat-level logging is on, so its lines can be read.
-- Why: Ermias's report (no report file): a monster his weapon couldn't hit but MMIS could was never attacked until he took the weapon out of the Equipment Manager. User rulings 2026-10-23 on what engages a monster, the solo fully resisted spell, and "Fire regardless of current mana".
+- Why: Ermias's report (no report file): a monster his weapon couldn't hit but MMIS could was never attacked until he took the weapon out of the Equipment Manager. User rulings 2026-10-23 on what engages a monster, the solo fully resisted spell, and "Fire regardless of current mana". Report `paradigm-20261024-195420` (a Druid's `blaz` judged by the Priest's undead-only blazing light, so plasma bolt went out every round instead).
 
 ### SpellGrowthFormatterTests.cs
 - Covers: Game/Spells/SpellGrowthFormatter
@@ -3821,8 +3821,8 @@ How to keep it current:
 
 ### SpellReqLevelIndexTests.cs
 - Covers: Game/Combat/SpellReqLevelIndex
-- Checks: Cast code → ReqLevel lookup, case-insensitive; a missing column gives 0; unknown fails open to -1; on a duplicate cast code the learnable row wins regardless of order.
-- Why: Report `paradigm-20260819-195419` (blood skeleton wrongly read as Unkillable via SpellImmu).
+- Checks: Cast code → ReqLevel lookup, case-insensitive; a missing column gives 0; unknown fails open to -1; on a duplicate cast code the learnable row wins regardless of order. On a code two classes learn (`blaz`), the character's own spell number answers.
+- Why: Report `paradigm-20260819-195419` (blood skeleton wrongly read as Unkillable via SpellImmu); report `paradigm-20261024-195420` (a Druid's blaze shown and gated at blazing light's level 56).
 
 ### SpellShortIndexTests.cs
 - Covers: Game/Combat/SpellShortIndex
@@ -3831,8 +3831,8 @@ How to keep it current:
 
 ### SpellTargetTypeIndexTests.cs
 - Covers: Game/Combat/SpellTargetTypeIndex
-- Checks: cast-code → UndeadOnly / AnimalsOnly / LivingOnly from abilities 23/80/108 in any Abil slot; case-insensitive; unknown or blank → Any (fails open)
-- Why: the attack-spell cascade skips spells the target's type makes useless
+- Checks: cast-code → UndeadOnly / AnimalsOnly / LivingOnly from abilities 23/80/108 in any Abil slot; case-insensitive; unknown or blank → Any (fails open); on a shared code (`blaz`) the character's own untagged spell reads Any though another class's twin is undead only
+- Why: the attack-spell cascade skips spells the target's type makes useless; report `paradigm-20261024-195420` (a Druid's blaze skipped at every living monster)
 
 ### SpellTextBlockTests.cs
 - Covers: Game/Spells/SpellTextBlock

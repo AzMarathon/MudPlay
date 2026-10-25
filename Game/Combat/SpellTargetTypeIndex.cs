@@ -16,8 +16,11 @@ namespace MudPlay.Game.Combat;
 //   23 = AffectsUndeadOnly, 80 = AffectsAnimalsOnly, 108 = AffectsLivingOnly.
 // A spell carrying none affects every class (SpellTargetType.Any). Keyed by Short (the
 // cast-code the combat slots store), mirroring SpellAttackTypeIndex's lazy build / cache /
-// drop-on-set-switch lifecycle. Unknown cast-code → Any (fail-open: no data ⇒ don't
-// pre-empt; the reactive "no effect" line stays the backstop).
+// drop-on-set-switch lifecycle and SpellReqLevelIndex's own-spell-first lookup: a code
+// shared across classes (`blaz` is the druid's blaze AND the priest's undead-only blazing
+// light) answers for the character's own spell, never for another class's twin. Unknown
+// cast-code → Any (fail-open: no data ⇒ don't pre-empt; the reactive "no effect" line
+// stays the backstop).
 public sealed class SpellTargetTypeIndex
 {
     private const int AffectsUndeadOnly = 23;
@@ -26,28 +29,32 @@ public sealed class SpellTargetTypeIndex
     private const int AbilitySlots = 10;
 
     private readonly GameDataCache _cache;
-    private Dictionary<string, SpellTargetType>? _byShort;
+    private Maps? _maps;
 
     public SpellTargetTypeIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byShort = null;
+        _cache.ActiveSetChanged += _ => _maps = null;
     }
 
     // The spell's target-class restriction, or Any when the cast-code is unknown or carries
-    // no targeting tag — fail-open.
-    public SpellTargetType TargetType(string? castCode)
+    // no targeting tag — fail-open. spellNumber is the character's own spell for the
+    // code, when known.
+    public SpellTargetType TargetType(string? castCode, int? spellNumber = null)
     {
+        Maps maps = Build();
+        if (spellNumber is { } n && maps.ByNumber.TryGetValue(n, out SpellTargetType own)) return own;
         if (string.IsNullOrWhiteSpace(castCode)) return SpellTargetType.Any;
-        return Build().TryGetValue(castCode.Trim(), out SpellTargetType t) ? t : SpellTargetType.Any;
+        return maps.ByShort.TryGetValue(castCode.Trim(), out SpellTargetType t) ? t : SpellTargetType.Any;
     }
 
-    private Dictionary<string, SpellTargetType> Build()
+    private Maps Build()
     {
-        if (_byShort is { } cached) return cached;
+        if (_maps is { } cached) return cached;
 
         Dictionary<string, SpellTargetType> map = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<int, SpellTargetType> byNumber = new();
         GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
@@ -68,8 +75,15 @@ public sealed class SpellTargetTypeIndex
                     if (c == AffectsAnimalsOnly) { type = SpellTargetType.AnimalsOnly; break; }
                     if (c == AffectsLivingOnly)  { type = SpellTargetType.LivingOnly;  break; }
                 }
-                // Only the restricted spells are stored — the common "affects all" case is
-                // the map's absence, so an unknown cast-code reads as Any.
+                // Every numbered spell is kept, so an own spell with no tag reads as Any
+                // instead of falling through to the code-wide answer.
+                if (row.TryGetProperty("Number", out GameValue numEl)
+                    && numEl.ValueKind == JsonValueKind.Number
+                    && numEl.TryGetInt32(out int number))
+                    byNumber.TryAdd(number, type);
+
+                // By code only the restricted spells are stored — the common "affects
+                // all" case is the map's absence, so an unknown cast-code reads as Any.
                 if (type != SpellTargetType.Any)
                     map[code.Trim()] = type;
             }
@@ -77,9 +91,13 @@ public sealed class SpellTargetTypeIndex
 
         // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
-        _byShort = map;
-        return map;
+        Maps built = new(map, byNumber);
+        _maps = built;
+        return built;
     }
+
+    private sealed record Maps(
+        Dictionary<string, SpellTargetType> ByShort, Dictionary<int, SpellTargetType> ByNumber);
 }
 
 // Which monster life-class a spell can affect. Any = no restriction (affects living,

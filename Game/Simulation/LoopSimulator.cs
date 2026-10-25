@@ -376,15 +376,19 @@ public static class LoopSimulator
             HashSet<CombatSpellAction>? all = null;
             foreach (IReadOnlySet<CombatSpellAction>? set in new[]
             {
-                CombatSpellGates.LevelBlocked(_world.MonsterMagic, _world.SpellReqLevel, number, single, normal, alt),
-                CombatSpellGates.ResistBlocked(_world.MonsterResist, _world.SpellAttackType, number, normal, alt),
-                CombatSpellGates.TargetTypeBlocked(_world.SpellTargetType, _world.MonsterLife, number, normal, alt),
+                CombatSpellGates.LevelBlocked(_world.MonsterMagic, _world.SpellReqLevel, number, single, normal, alt, OwnSpell),
+                CombatSpellGates.ResistBlocked(_world.MonsterResist, _world.SpellAttackType, number, normal, alt, OwnSpell),
+                CombatSpellGates.TargetTypeBlocked(_world.SpellTargetType, _world.MonsterLife, number, normal, alt, OwnSpell),
             })
                 if (set is not null) (all ??= new HashSet<CombatSpellAction>()).UnionWith(set);
             return all;
         }
 
         private bool Fighting => Here().Mobs.Any(m => m.Alive && m.Fightable);
+
+        // The character's learned spell for a cast-code, from the frozen spell list (the
+        // run is off the UI thread, so never the live spell book).
+        private int? OwnSpell(string code) => _ch.Spells.TryGetValue(code, out SimSpell? s) ? s.Number : null;
 
         // ----- The round ---------
 
@@ -500,9 +504,9 @@ public static class LoopSimulator
                 MaxMana: _ch.MaxMana,
                 BackstabPending: _stabPending,
                 SpellsAvailable: ma > 0,
-                LevelBlockedActions: CombatSpellGates.LevelBlocked(_world.MonsterMagic, _world.SpellReqLevel, number, singleEff, normalEff, altEff),
-                ResistBlockedActions: CombatSpellGates.ResistBlocked(_world.MonsterResist, _world.SpellAttackType, number, normalEff, altEff),
-                TargetTypeBlockedActions: CombatSpellGates.TargetTypeBlocked(_world.SpellTargetType, _world.MonsterLife, number, normalEff, altEff),
+                LevelBlockedActions: CombatSpellGates.LevelBlocked(_world.MonsterMagic, _world.SpellReqLevel, number, singleEff, normalEff, altEff, OwnSpell),
+                ResistBlockedActions: CombatSpellGates.ResistBlocked(_world.MonsterResist, _world.SpellAttackType, number, normalEff, altEff, OwnSpell),
+                TargetTypeBlockedActions: CombatSpellGates.TargetTypeBlocked(_world.SpellTargetType, _world.MonsterLife, number, normalEff, altEff, OwnSpell),
                 TargetDontBackstab: o.DontBackstab ?? false,
                 OverrideAttackSpell: atk,
                 OverrideAttackMaxCasts: atkCap,

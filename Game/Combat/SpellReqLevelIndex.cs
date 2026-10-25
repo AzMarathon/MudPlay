@@ -15,6 +15,11 @@ namespace MudPlay.Game.Combat;
 // not the spell's display Name — see CastCoordinator.TryCast. ReqLevel is a
 // top-level integer column on each Spells row.
 //
+// A cast-code can belong to several spells of different classes, so the caller
+// passes the character's own spell for the code (its Spells.Number, from the
+// spell book) whenever it knows it, and that record answers. The code-wide
+// answer is the fallback for a code the character has no spell for.
+//
 // Mirrors SeeHiddenIndex / MonsterMagicIndex: built lazily by scanning the raw
 // Spells table, cached, and dropped on game-data set switch. Unknown cast-code →
 // -1 (fail-open: the caller treats "no data" as "don't block the configured
@@ -22,28 +27,32 @@ namespace MudPlay.Game.Combat;
 public sealed class SpellReqLevelIndex
 {
     private readonly GameDataCache _cache;
-    private Dictionary<string, int>? _byShort;
+    private Maps? _maps;
 
     public SpellReqLevelIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byShort = null;
+        _cache.ActiveSetChanged += _ => _maps = null;
     }
 
     // The spell's ReqLevel, or -1 when the cast-code is unknown (no Spells row
-    // with that Short) — fail-open.
-    public int ReqLevel(string? castCode)
+    // with that Short) — fail-open. spellNumber is the character's own spell for
+    // the code, when known.
+    public int ReqLevel(string? castCode, int? spellNumber = null)
     {
+        Maps maps = Build();
+        if (spellNumber is { } n && maps.ByNumber.TryGetValue(n, out int own)) return own;
         if (string.IsNullOrWhiteSpace(castCode)) return -1;
-        return Build().TryGetValue(castCode.Trim(), out int level) ? level : -1;
+        return maps.ByShort.TryGetValue(castCode.Trim(), out int level) ? level : -1;
     }
 
-    private Dictionary<string, int> Build()
+    private Maps Build()
     {
-        if (_byShort is { } cached) return cached;
+        if (_maps is { } cached) return cached;
 
         Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<int, int> byNumber = new();
         HashSet<string> learnedKeys = new(StringComparer.OrdinalIgnoreCase);
         GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
@@ -60,6 +69,11 @@ public sealed class SpellReqLevelIndex
                     && lvlEl.ValueKind == JsonValueKind.Number
                     && lvlEl.TryGetInt32(out int parsed))
                     reqLevel = parsed;
+
+                if (row.TryGetProperty("Number", out GameValue numEl)
+                    && numEl.ValueKind == JsonValueKind.Number
+                    && numEl.TryGetInt32(out int number))
+                    byNumber.TryAdd(number, reqLevel);
 
                 // A cast-code often maps to SEVERAL rows — the player-learnable spell
                 // plus monster/item/textblock-triggered variants of the same short
@@ -85,9 +99,12 @@ public sealed class SpellReqLevelIndex
             }
         }
 
-        // Folded into the map — the cache may drop the Spells table.
+        // Folded into the maps — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
-        _byShort = map;
-        return map;
+        Maps built = new(map, byNumber);
+        _maps = built;
+        return built;
     }
+
+    private sealed record Maps(Dictionary<string, int> ByShort, Dictionary<int, int> ByNumber);
 }

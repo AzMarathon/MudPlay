@@ -123,6 +123,14 @@ public sealed partial class CombatManager
     public void SetSpellManaCost(Func<string, int?> manaCostOf)
         => _spellManaCost = manaCostOf ?? throw new ArgumentNullException(nameof(manaCostOf));
 
+    // The character's own spell (Spells.Number) for a cast-code, from the spell book.
+    // The game-data gates judge a shared code by that record (CombatSpellGates). Until
+    // wired they fall back to the code-wide answer.
+    private Func<string, int?>? _ownSpell;
+
+    public void SetOwnSpellLookup(Func<string, int?> ownSpell)
+        => _ownSpell = ownSpell ?? throw new ArgumentNullException(nameof(ownSpell));
+
     // Opt into deterministic magic-eligibility gating. monsterMagic supplies each
     // monster's Magical / SpellImmu levels, itemMagic supplies each weapon's
     // HitMagic level, spellReqLevel supplies each spell's ReqLevel, and the pair
@@ -1622,10 +1630,12 @@ public sealed partial class CombatManager
     // Shared by the initial cast decision (DispatchRoundAction, passed enemyCount
     // from the candidate build), the per-round heartbeat (OnCombatTick, counting
     // the live observation) and the engage gate (EngageContext), which may ask at
-    // a full pool (mana) and before any room is on record (obs null).
+    // a full pool (mana) and before any room is on record (obs null). The engage
+    // gate asks about monsters it may never fight, so it doesn't log data-gate skips.
     private CombatSpellContext BuildContext(
         CombatSettings settings, RoomEntitiesObservation? obs, string target,
-        int enemyCount, int monsterNumber, (int Ma, int MaxMa)? mana = null)
+        int enemyCount, int monsterNumber, (int Ma, int MaxMa)? mana = null,
+        bool logGateSkips = true)
     {
         (int ma, int maxMa) = mana ?? _readMana!();
         (string? attackOverride, int? attackCap) = AttackOverrideFor(monsterNumber, ma, maxMa, settings.SpellManaThresholdMode);
@@ -1646,7 +1656,7 @@ public sealed partial class CombatManager
         IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(monsterNumber, singleEff, normalEff, altEff);
         if (roomAttackHeld) levelBlocked = WithRoomScopedHeld(levelBlocked, singleEff, normalEff, altEff);
 
-        return new CombatSpellContext(
+        CombatSpellContext ctx = new(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
             Mana:                ma,
@@ -1679,6 +1689,8 @@ public sealed partial class CombatManager
             ManaCostOf:          _spellManaCost,
             InParty:             _party.IsInParty,
             RoomAttacksNoDamage: RoomAttacksThatDamageNothing(settings, obs, monsterNumber));
+        if (logGateSkips) LogDataGateSkips(ctx, settings, target, monsterNumber, normalEff, altEff);
+        return ctx;
     }
 
     // Resolve the drain spell's two live gates for a target: whether HP has fallen
@@ -1946,7 +1958,7 @@ public sealed partial class CombatManager
         if (_monsterMagic is not null && _spellReqLevel is not null)
         {
             int immu = _monsterMagic.SpellImmunity(monsterNumber);
-            int req = _spellReqLevel.ReqLevel(code);
+            int req = _spellReqLevel.ReqLevel(code, _ownSpell?.Invoke(code));
             if (immu > 0 && req >= 0 && req < immu)
             {
                 why = $"its level {req} is under the monster's spell immunity {immu}";
@@ -2059,15 +2071,94 @@ public sealed partial class CombatManager
     // active, else the configured slot.
     private IReadOnlySet<CombatSpellAction>? LevelBlockedFor(
         int monsterNumber, string? singleCode, string? normalCode, string? altCode) =>
-        CombatSpellGates.LevelBlocked(_monsterMagic, _spellReqLevel, monsterNumber, singleCode, normalCode, altCode);
+        CombatSpellGates.LevelBlocked(_monsterMagic, _spellReqLevel, monsterNumber, singleCode, normalCode, altCode, _ownSpell);
 
     private IReadOnlySet<CombatSpellAction>? ResistBlockedFor(
         int monsterNumber, string? normalCode, string? altCode) =>
-        CombatSpellGates.ResistBlocked(_monsterResist, _spellAttackType, monsterNumber, normalCode, altCode);
+        CombatSpellGates.ResistBlocked(_monsterResist, _spellAttackType, monsterNumber, normalCode, altCode, _ownSpell);
 
     private IReadOnlySet<CombatSpellAction>? TargetTypeBlockedFor(
         int monsterNumber, string? normalCode, string? altCode) =>
-        CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode);
+        CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode, _ownSpell);
+
+    // ----- Data-gate skip log ---------
+    // The chooser passes over a spell a game-data gate keeps off the target in
+    // silence, so a configured slot that never fires left no trace in the log
+    // (report paradigm-20261024-195420: blaze skipped every round, plasma bolt sent
+    // instead). Each such skip is logged once per spell and target; the memory starts
+    // over on a new target, when the room's fight is over, and on leaving the room.
+    private string? _gateSkipTarget;
+    private readonly HashSet<CombatSpellAction> _gateSkipsLogged = new();
+
+    private void ResetGateSkipLog()
+    {
+        _gateSkipTarget = null;
+        _gateSkipsLogged.Clear();
+    }
+
+    private void LogDataGateSkips(
+        in CombatSpellContext ctx, CombatSettings settings, string target, int monsterNumber,
+        string? normalCode, string? altCode)
+    {
+        if (_log is null) return;
+        if (!string.Equals(_gateSkipTarget, target, StringComparison.OrdinalIgnoreCase))
+        {
+            _gateSkipTarget = target;
+            _gateSkipsLogged.Clear();
+        }
+        LogGateSkip(ctx, CombatSpellAction.NormalAttackSpell, "normal", normalCode, target, monsterNumber);
+        LogGateSkip(ctx, CombatSpellAction.AlternateAttackSpell, "alternate", altCode, target, monsterNumber);
+        LogGateSkip(ctx, CombatSpellAction.MultiAttack, "multi", NullIfBlank(settings.MultiAttackSpell.SpellName), target, monsterNumber);
+        LogGateSkip(ctx, CombatSpellAction.MultiAttack2, "multi 2", NullIfBlank(settings.MultiAttack2Spell.SpellName), target, monsterNumber);
+    }
+
+    private void LogGateSkip(
+        in CombatSpellContext ctx, CombatSpellAction action, string label, string? code,
+        string target, int monsterNumber)
+    {
+        if (code is null || _gateSkipsLogged.Contains(action)) return;
+        int? own = _ownSpell?.Invoke(code);
+        if (DataGateSkipReason(ctx, action, code, own, monsterNumber) is not { } why) return;
+        _gateSkipsLogged.Add(action);
+        string number = own is { } n ? $" (#{n})" : string.Empty;
+        _log?.Combat(LogCategory, $"{label} spell '{code}'{number} skipped for {target} — {why}");
+    }
+
+    // Which game-data gate keeps this spell off the target, with the value it read,
+    // or null when none does. The level is re-read rather than taken from the
+    // context's set, which also carries room attacks held by a room spell.
+    private string? DataGateSkipReason(
+        in CombatSpellContext ctx, CombatSpellAction action, string code, int? own, int monsterNumber)
+    {
+        if (ctx.LevelBlockedActions?.Contains(action) == true
+            && _monsterMagic is not null && _spellReqLevel is not null)
+        {
+            int immu = _monsterMagic.SpellImmunity(monsterNumber);
+            int req = _spellReqLevel.ReqLevel(code, own);
+            if (req >= 0 && req < immu) return $"its level {req} is under the monster's spell immunity {immu}";
+        }
+        if (ctx.ResistBlockedActions?.Contains(action) == true
+            && _spellAttackType?.AttackType(code, own) is { } attType and >= 0)
+        {
+            string element = Game.GameData.LookupEnums.FormatSpellAttackType(
+                attType.ToString(System.Globalization.CultureInfo.InvariantCulture)) ?? $"element {attType}";
+            int percent = _monsterResist?.ResistPercent(monsterNumber, MonsterResistIndex.ElementalResistCode(attType)) ?? 100;
+            return $"resists {element} {percent}%";
+        }
+        if (ctx.TargetTypeBlockedActions?.Contains(action) == true && _spellTargetType is not null)
+            return TargetTypeText(_spellTargetType.TargetType(code, own));
+        if (ctx.RoomAttacksNoDamage?.Contains(action) == true)
+            return "targets undead only, and no undead here";
+        return null;
+    }
+
+    private static string TargetTypeText(SpellTargetType type) => type switch
+    {
+        SpellTargetType.UndeadOnly => "targets undead only",
+        SpellTargetType.LivingOnly => "targets living only",
+        SpellTargetType.AnimalsOnly => "targets animals only",
+        _ => "can't affect this kind of monster",
+    };
 
     // Can the engine act on this monster this round. Consumed, via the delegate
     // AppServices injects, by CombatStateTracker (the walker gate), and asks
@@ -2236,7 +2327,7 @@ public sealed partial class CombatManager
     private CombatSpellContext EngageContext(
         CombatSettings settings, RoomEntitiesObservation? obs, string target, int enemyCount,
         int monsterNumber, (int Ma, int MaxMa)? mana) =>
-        BuildContext(settings, obs, target, enemyCount, monsterNumber, mana)
+        BuildContext(settings, obs, target, enemyCount, monsterNumber, mana, logGateSkips: false)
             with { WeaponIneffective = true, BackstabPending = false };
 
     // A full pool: the max when it's known, else enough for any spell (a max of 0
@@ -2273,7 +2364,7 @@ public sealed partial class CombatManager
         void Check(string? code, CombatSpellAction action)
         {
             if (NullIfBlank(code) is not { } c) return;
-            if (_spellTargetType.TargetType(c) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
+            if (_spellTargetType.TargetType(c, _ownSpell?.Invoke(c)) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
             (set ??= new HashSet<CombatSpellAction>()).Add(action);
         }
         Check(settings.MultiAttackSpell.SpellName, CombatSpellAction.MultiAttack);
