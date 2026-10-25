@@ -771,8 +771,8 @@ How to keep it current:
 
 ### ComebackRequesterTests.cs
 - Covers: Game/Remote/ComebackRequester (with FollowMoveObserver, MovementRefusalDetector, PartyManager, TooHeavyWaitSignal).
-- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); Stock self-`join`.
-- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609.
+- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); a leader's `got you` after we already follow again starts no join, wait or give-up; Stock self-`join`.
+- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609; paradigm-20261025-114837.
 
 ### CommandHistoryNavigatorTests.cs
 - Covers: Services/CommandHistoryNavigator.
@@ -1636,8 +1636,8 @@ How to keep it current:
 
 ### HealthManagerTests.cs
 - Covers: Game/Health/HealthManager
-- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
-- Why: many paradigm-/stock- reports cited inline; user rulings 2026-09/10
+- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; a follower below its mana floor whose leader was lost (PartyManager + PartyRestSync on a feed) sends its @wait once `par` names the leader; freezing the gate while gear swaps change max mana.
+- Why: many paradigm-/stock- reports cited inline (paradigm-20261025-114837 for the lost leader); user rulings 2026-09/10
 
 ### HealthSettingsTests.cs
 - Covers: Models/Profile/HealthSettings
@@ -2731,8 +2731,8 @@ How to keep it current:
 
 ### PartyComebackManagerTests.cs
 - Covers: Game/Remote/PartyComebackManager (+ walker, loop, lair, PartyManager)
-- Checks: @comeback and @where recovery; full-party and distance gates; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget.
-- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*).
+- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite is answered `got you - resuming` once following, `comeback already in progress` while still [Invited], with no @forget either way; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
+- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837).
 
 ### PartyDeathRosterCleanupTests.cs
 - Covers: Game/PartyDeathRosterCleanup
@@ -2791,8 +2791,8 @@ How to keep it current:
 
 ### PartyManagerTests.cs
 - Covers: Game/PartyManager, Game/PartyMember display props
-- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; Stock "listed with" state.
-- Why: Roster correctness; stock-20260801-002423.
+- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
+- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to).
 
 ### PartyPathItemGateTests.cs
 - Covers: Game/Map/PartyPathItemGate, PartyHandOverMemory
@@ -2816,13 +2816,13 @@ How to keep it current:
 
 ### PartyRejoinCoordinatorTests.cs
 - Covers: Game/Remote/PartyRejoinCoordinator
-- Checks: Remembered leader; @comeback on reconnect, with the room when confirmed; window; kill switch.
-- Why: paradigm-20260928-074527; dark-room reconnect.
+- Checks: Remembered leader; @comeback on reconnect, with the room when confirmed; window; kill switch; no @comeback once the game says we follow the leader again since the connect (a follow from before the drop still asks).
+- Why: paradigm-20260928-074527; dark-room reconnect; paradigm-20261025-114837.
 
 ### PartyRestSyncTests.cs
 - Covers: Game/PartyRestSync
-- Checks: a follower's @wait / @ok to the leader by given name (never solo or as leader); one @wait per held reason set and an @ok only when the last reason clears; reason notes (bare health unless a pool is named, explicit notes win); Resend; HeldReasons; a stuck reason suppresses later oks; the gang heal request; IsPaused and its Changed event.
-- Why: the party pause protocol: the leader must hold for every follower reason and resume only once all clear.
+- Checks: a follower's @wait / @ok to the leader by given name (never solo or as leader); one @wait per held reason set and an @ok only when the last reason clears; reason notes (bare health unless a pool is named, explicit notes win); Resend; HeldReasons; a stuck reason suppresses later oks; a @wait asked while following a leader the client can't name is kept, warned once and sent when the leader is named, and not sent once released or after leaving the party; a restored leader is told a hold from before the loss and gets an @ok asked for meanwhile, another leader gets neither; a kept wait named with the master switch off goes out on its resync; the gang heal request; IsPaused and its Changed event.
+- Why: the party pause protocol: the leader must hold for every follower reason and resume only once all clear; paradigm-20261025-114837 (every @wait dropped silently while the leader's name was lost).
 
 ### PartySettingsDefaultsTests.cs
 - Covers: Models/Profile/PartySettings, BuffSlot

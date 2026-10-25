@@ -10673,6 +10673,9 @@ public sealed class AppServices
         };
         // Hydrate the crash-survivable memory on every profile load / swap.
         Profile.ProfileLoaded += p => PartyRejoin.HydrateRememberedLeader(p.PendingReconnectLeader);
+        // A follow the game reports since the connect means the rejoin happened
+        // without a @comeback (the leader's invite beat it).
+        Party.FollowingLeader += PartyRejoin.NoteFollowing;
 
         // Leader-side reconnect party reform (mirror of PartyRejoin). No
         // crash-survivable memory: the reform recovers an in-process reconnect

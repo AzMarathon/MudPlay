@@ -115,6 +115,9 @@ public sealed partial class PartyManager : IDisposable
     // and follows nobody (ListedWithLeader): its rows are recorded, not applied.
     private bool _parListedOnly;
     private DateTimeOffset _parFollowingLineAt = DateTimeOffset.MinValue;
+    private string? _parFollowingName;
+    // The leader the open block's "You are following X." named, read at its end.
+    private string? _parSaidLeader;
     // The following line and the header are one reply; this only has to span them.
     private static readonly TimeSpan ParFollowingLineWindow = TimeSpan.FromSeconds(2);
 
@@ -390,7 +393,7 @@ public sealed partial class PartyManager : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.PartyStopsFollowing, OnStopsFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyLeftBehind,     OnLeftBehind));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouInvited,     OnYouInvited));
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   _ => _parFollowingLineAt = _now()));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   OnParFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyHeader,         OnParHeader));
         // Disconnect / death / reconnect grace window. We watch every "X just
         // disconnected" / "X just entered the Realm" line because a party
@@ -694,6 +697,37 @@ public sealed partial class PartyManager : IDisposable
         FollowingLeader?.Invoke(leaderName);
     }
 
+    // "You are following X." — the line a follower's `par` opens with: the game's
+    // own word on whom we follow. The block it opens reads it at its end
+    // (RestoreLeaderFromPar).
+    private void OnParFollowing(MatchResult result)
+    {
+        _parFollowingLineAt = _now();
+        _parFollowingName = result.Groups.Count > 0 && result.Groups[0] is { Length: > 0 } name ? name : null;
+    }
+
+    // A `par` that opened with "You are following X." puts back a leader the client
+    // lost while still following: a @forget from the leader (ForgetReconnectMember)
+    // takes the leader's row and name, the next `par` lists them again as a plain
+    // member, and with no leader name nothing addressed to the leader goes out, a
+    // @wait included (report paradigm-20261025-114837). Read at the block's end, as
+    // its rows are what say we are in a party, and only for a leader the rows
+    // list. Only fills a missing leader: who leads is otherwise the join and leave
+    // lines' to say. FollowingLeader isn't raised: the game started no follow, so
+    // the ailment announces aren't made again; PartyRestSync tells the leader a
+    // wait still held (TellRestoredLeader).
+    private void RestoreLeaderFromPar()
+    {
+        string? said = _parSaidLeader;
+        _parSaidLeader = null;
+        if (said is null) return;
+        if (!State.IsInParty || State.SelfIsLeader || !string.IsNullOrEmpty(State.LeaderName)) return;
+        if (!_parBlockNames.Any(n => GivenNameOf(n).Equals(said, StringComparison.OrdinalIgnoreCase))) return;
+        State.LeaderName = said;
+        AddOrTouchMember(said).IsLeader = true;
+        _log?.Info("Party", $"`par` says we follow {said}, and who leads had been lost: {said} is our leader again");
+    }
+
     // The master switch (true = off): off, no rank command and no re-invite of a
     // returning member goes out. Invite and Uninvite themselves are not gated
     // here: their callers are.
@@ -928,6 +962,8 @@ public sealed partial class PartyManager : IDisposable
         // leader can't be an [Invited] row, and nothing in the block makes us lead.
         bool saysFollowing = _now() - _parFollowingLineAt <= ParFollowingLineWindow;
         _parFollowingLineAt = DateTimeOffset.MinValue;
+        _parSaidLeader = saysFollowing ? _parFollowingName : null;
+        _parFollowingName = null;
         _parFollowing = saysFollowing || _parFollowedLeader is not null;
         if (saysFollowing)
         {
@@ -1559,6 +1595,7 @@ public sealed partial class PartyManager : IDisposable
             return;
         }
         ReconcileMissingFromPar();
+        RestoreLeaderFromPar();
         _parBlockNames.Clear();
         if (read) ParReplyRead?.Invoke();
     }
