@@ -4458,7 +4458,7 @@ How to keep it current:
 - Why: Workshop window sizing and deep links.
 
 ### GmcpMilestone2StateTests.cs
-- Covers: tagged 1.1.0 examples, large synthetic snapshots, event lifetime, card resets, room-bound shops, usability invalidation, negative HP and present zero ability sources.
+- Covers: tagged 1.1.0 examples, large synthetic snapshots, event lifetime, card resets, room-bound shops, usability invalidation (kept through vitals ticks, dropped on a level or alignment change), negative HP and present zero ability sources.
 - Run: `dotnet test --filter FullyQualifiedName~GmcpMilestone2StateTests` with a fresh scratch data root.
 
 ### GmcpMilestone2IntegrationTests.cs

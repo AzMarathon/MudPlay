@@ -99,10 +99,23 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     public bool HasSelection => SelectedBbsName is not null;
 
     [RelayCommand]
-    private async Task RefreshGmcp() => await AppServices.Current.Gmcp.RefreshAsync();
+    private async Task RefreshGmcp()
+    {
+        try { await AppServices.Current.Gmcp.RefreshAsync(); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or ObjectDisposedException)
+        { AppServices.Current.Log.Warn("GMCP", $"Refresh failed: {ex.Message}"); }
+    }
+
+    private Views.GmcpDataWindow? _gmcpDataWindow;
 
     [RelayCommand]
-    private void InspectGmcp() => new Views.GmcpDataWindow { DataContext = new GmcpDataViewModel(AppServices.Current.Gmcp) }.Show();
+    private void InspectGmcp()
+    {
+        if (_gmcpDataWindow is { } open) { DialogService.RaiseOrClose(open); return; }
+        _gmcpDataWindow = new Views.GmcpDataWindow { DataContext = new GmcpDataViewModel(AppServices.Current.Gmcp) };
+        _gmcpDataWindow.Closed += (_, _) => _gmcpDataWindow = null;
+        _gmcpDataWindow.Show();
+    }
 
     public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } = Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
 

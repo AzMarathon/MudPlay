@@ -109,8 +109,8 @@ public sealed class GmcpState
         }
         if (package == "Anomaly.Items.Detail") _itemCards[value.GetProperty("num").GetInt32()] = value.Clone();
         if (package == "Anomaly.Items.Usable") _itemUsability[value.GetProperty("num").GetInt32()] = value.Clone();
-        if ((package.StartsWith("Anomaly.Char.", StringComparison.Ordinal) || package is "Anomaly.Items.List" or "Anomaly.Spells.List" or "Anomaly.Shop.List")
-            && (!_snapshots.TryGetValue(package, out JsonElement previous) || !JsonElement.DeepEquals(previous, value)))
+        // A usability answer turns stale only when level or alignment moves; vitals ticks and inventory changes leave it valid.
+        if (package is "Anomaly.Char.Vitals" or "Anomaly.Char.Status" && UsabilityInput(package, value) != UsabilityInput(package, Snapshot(package)))
             _itemUsability.Clear();
         if (package == "Anomaly.Mob.Info") _static[value.GetProperty("uid").GetInt64()] = value.Clone();
         else if (package == "Anomaly.Mob.Update")
@@ -166,6 +166,10 @@ public sealed class GmcpState
         if (family == "Anomaly.Mob.Update") _live.Clear();
         if (family == "Anomaly.Room") { ClearRoom(); CurrentRoom = null; }
     }
+
+    private static string? UsabilityInput(string package, JsonElement? value) => value is not { } v ? null
+        : package == "Anomaly.Char.Vitals" ? v.GetProperty("level").GetRawText()
+        : $"{v.GetProperty("alignment").GetString()}/{v.GetProperty("evilPoints").GetRawText()}";
 
     private void ClearRoom()
     {

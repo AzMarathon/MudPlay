@@ -165,7 +165,7 @@ public sealed partial class GmcpIntegration
                 _hp?.NotifyGmcpChanged();
             }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException or ArgumentException)
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException or ArgumentException or KeyNotFoundException)
         {
             _log.Warn("GMCP", $"Cannot apply {applying}: {ex.Message}; returning affected state to text.");
             State.SetMode(applying, GmcpMode.Off);

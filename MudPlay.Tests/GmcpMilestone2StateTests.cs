@@ -75,6 +75,28 @@ public sealed class GmcpMilestone2StateTests
     }
 
     [Fact]
+    public void Usability_SurvivesVitalsTicks_AndExpiresOnLevelOrAlignment()
+    {
+        GmcpState state = Enter();
+        JsonElement Changed(string example, string field, System.Text.Json.Nodes.JsonNode value)
+        {
+            System.Text.Json.Nodes.JsonObject node = System.Text.Json.Nodes.JsonNode.Parse(Example(example).GetRawText())!.AsObject();
+            node[field] = value;
+            return JsonSerializer.SerializeToElement(node);
+        }
+        state.Receive(new("Anomaly.Char.Vitals", Example("Anomaly.Char.Vitals")));
+        state.Receive(new("Anomaly.Char.Status", Example("Anomaly.Char.Status")));
+        state.Receive(new("Anomaly.Items.Usable", Example("Anomaly.Items.Usable")));
+        state.Receive(new("Anomaly.Char.Vitals", Changed("Anomaly.Char.Vitals", "hp", 1)));
+        Assert.Single(state.ItemUsability);
+        state.Receive(new("Anomaly.Char.Vitals", Changed("Anomaly.Char.Vitals", "level", 99)));
+        Assert.Empty(state.ItemUsability);
+        state.Receive(new("Anomaly.Items.Usable", Example("Anomaly.Items.Usable")));
+        state.Receive(new("Anomaly.Char.Status", Changed("Anomaly.Char.Status", "evilPoints", 250)));
+        Assert.Empty(state.ItemUsability);
+    }
+
+    [Fact]
     public void NegativePartyHealthAndZeroAbilities_ArePreserved()
     {
         GmcpState state = Enter();
