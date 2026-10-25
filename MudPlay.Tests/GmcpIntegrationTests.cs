@@ -340,6 +340,9 @@ public sealed partial class GmcpIntegrationTests
         int answers = 0; session.Tracker.MoveConfirmed += () => answers++;
         session.Tracker.NoteMoveSent(Direction.N);
         session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        // Between the reset and the arriving room the position is still known; an Unknown here sends the walker into an rm resync each step.
+        Assert.NotEqual(RoomConfidence.Unknown, session.Tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), session.Tracker.State.CurrentRoom!.Key);
         Dictionary<string, JsonElement> room = GmcpStateTests.Frames("01-handshake").First(f => f.TryGetProperty("pkg", out JsonElement package) && package.GetString() == "Anomaly.Room.Info")
             .GetProperty("msg").EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         room["room"] = JsonSerializer.SerializeToElement("1,2");

@@ -104,12 +104,15 @@ public sealed partial class GmcpIntegration
             _generation = State.SessionGeneration;
             _graph.ClearGmcpRooms();
         }
-        if (_roomApplied && !State.Owns("Anomaly.Room.Info"))
+        // A scoped room reset is the server's "entering a new room": the arriving room's snapshot follows and answers the pending move.
+        // Dropping the position here would read as a lost location mid-step and send the walker into an rm resync on every step.
+        bool roomArriving = State.Compatible && State.InSession && State.CurrentRoom is not null && State.Snapshot("Anomaly.Room.Info") is null;
+        if (_roomApplied && !State.Owns("Anomaly.Room.Info") && !(roomArriving && State.Mode("Anomaly.Room.Info") == GmcpMode.Active))
         {
             _roomApplied = false;
             _tracker.InvalidateGmcpRoom();
         }
-        if (_occupantsApplied && !OwnsOccupants())
+        if (_occupantsApplied && !OwnsOccupants() && !(roomArriving && State.Mode("Anomaly.Room.Occupants") == GmcpMode.Active))
         {
             _occupantsApplied = false;
             _classifier.NoteGameLeft();

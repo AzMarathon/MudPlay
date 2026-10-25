@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.1
+
+- Active GMCP rooms no longer send `rm` on every step
+
 ## 3.187.0
 
 - Server inventory, shop stock, learned spells, effects, abilities and party formation

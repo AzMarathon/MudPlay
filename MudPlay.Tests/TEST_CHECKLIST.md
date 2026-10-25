@@ -1555,7 +1555,7 @@ How to keep it current:
 ### GmcpIntegrationTests.cs
 - Milestone 2 extends the real session harness with inventory, shop, spellbook, effects, party, chat and ability owners; both chat and normal text lanes use the router.
 - Covers: GMCP integration through PromptParser, StatParser, RoomTracker, RoomEntityClassifier and their consumers.
-- Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence. Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
+- Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, a per-step room reset keeping the known position (no `rm` resync), combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence. Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
 - Why: negotiated data must reach existing automation models without creating competing writers or disabling unrelated text parsing.
 
 ### GmcpStateTests.cs
