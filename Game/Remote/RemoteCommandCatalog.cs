@@ -25,7 +25,8 @@ namespace MudPlay.Game.Remote;
 //   - ExecuteCommands — @do passthrough, bulk inventory actions (@get-all /
 //     @drop-all / @deposit-all), and gear sets (@equip <set> [update], @equip-all).
 //   - HangupDisconnect — @hangup / @relog.
-//   - AlterSettings — auto-* toggles, @settings. Note: @reset also sits in this
+//   - AlterSettings — auto-* toggles, @settings, and the per-record changes for this
+//     character (@auto-get <item>, @relation <monster>). Note: @reset also sits in this
 //     category in the catalog, but its actual home is the session-stats tracker
 //     (it zeroes the live tracking metrics — exp earned per hour, combat round
 //     observations, etc.); the AlterSettings categorisation is just
@@ -172,6 +173,11 @@ public static class RemoteCommandCatalog
             ["@settings"]     = PlayerRemoteControls.AlterSettings,
             ["@reset"]        = PlayerRemoteControls.AlterSettings,
             ["@profile"]      = PlayerRemoteControls.AlterSettings,   // swap the active casting spell profile
+            // A monster's relationship (Enemy / Neutral / Friend / Flee / Hangup), set for
+            // this character: a change to whom we fight, like @atkprio / @atkorder, saved
+            // to a game-data record for this character, like @auto-get <item>. Handler
+            // lives in MonsterRelationshipHandler.cs.
+            ["@relation"]     = PlayerRemoteControls.AlterSettings,
             // The character's Events (Settings → Events): listed, and one switched
             // on or off. Reading how the client is set up needs the same grant as
             // changing it, as @settings and a bare @profile do. AlterSettings for
@@ -298,6 +304,7 @@ public static class RemoteCommandCatalog
             ["@settings"]     = new("@settings", "reports every engine's on/off state"),
             ["@reset"]        = new("@reset", "zeroes your Session Stats counters"),
             ["@profile"]      = new("@profile [n|name]", "swaps your active combat profile; bare reports the roster"),
+            ["@relation"]     = new($"@relation <monster> [{MonsterRelationshipHandler.WordChoices}]", "a monster's relationship: bare reports it, a relationship sets it for this character; #<number> names one of several same-named monsters"),
             ["@events"]       = new("@events", "lists your Events (Settings > Events) by number and name, each on or off; 'target missing' marks one switched off because its loop or Auto-Lair setup is gone"),
             ["@event"]        = new("@event <name|number> [on|off]", "one of your Events, by name (its words in any order) or by its number in @events: bare says whether it is on, when it fires and what it does; on/off (or enable/disable) switches it"),
             ["@divert"]       = new("@divert [player]", "forwards your incoming telepaths to another player; bare stops"),

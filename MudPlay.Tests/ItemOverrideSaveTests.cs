@@ -315,7 +315,7 @@ public sealed class ItemOverrideSaveTests : IDisposable
         string file = AppPaths.OverrideFile(SettingsTier.Character, "Tester", "Items", _set, _bbs);
         File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(1));
 
-        GameDataOverrideApplier.ApplyItemAt(_resolver, Id, SettingsTier.Character,
+        GameDataOverrideApplier.ApplyFieldsAt(_resolver, "Items", Id, SettingsTier.Character,
             new ItemOverlay { AutoCollect = true }, seed, new[] { "AutoCollect" });
 
         SettingsResolver fresh = new(new SettingsService(), _boards, _profile, () => _cache.ActiveSet);

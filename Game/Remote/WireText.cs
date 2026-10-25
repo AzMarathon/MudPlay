@@ -48,6 +48,28 @@ public static class WireText
         return plain.Length <= NameCap ? plain : plain[..(NameCap - 3)].TrimEnd() + "...";
     }
 
+    // An ambiguity refusal: head, then as many of parts as fit one telepath, four at
+    // most, and how many more there are ("head: 'a', 'b', +3 more"). budget is the room
+    // for head and the parts, short of the game's limit on one telepath by the braces,
+    // the "/<player> " it is addressed with and the count of the parts left out.
+    public static string Listed(string head, IReadOnlyList<string> parts, int budget = ListBudget)
+    {
+        List<string> said = new();
+        int length = head.Length;
+        foreach (string part in parts)
+        {
+            if (said.Count == MaxListed) break;
+            if (said.Count > 0 && length + 2 + part.Length > budget) break;
+            said.Add(part);
+            length += 2 + part.Length;
+        }
+        string more = said.Count < parts.Count ? $", +{parts.Count - said.Count} more" : "";
+        return $"{head}: {string.Join(", ", said)}{more}";
+    }
+
+    private const int MaxListed = 4;
+    private const int ListBudget = 170;
+
     private static bool IsPlain(char c) => c is >= ' ' and <= '~';
 
     private static string Spell(char c) => c switch

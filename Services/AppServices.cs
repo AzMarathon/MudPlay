@@ -601,6 +601,11 @@ public sealed class AppServices
     // character profile's Combat section.
     public Game.Remote.AttackTargetingRemoteHandler AttackTargeting { get; }
 
+    // @relation <monster> [relationship] — a player with Alter settings reports, or
+    // sets for this character, how we treat a monster. Needs the monster catalogue,
+    // so it is built after it.
+    public Game.Remote.MonsterRelationshipHandler MonsterRelation { get; }
+
     // @kill <target> remote command — a party member asks us to
     // engage a named monster. Retargets Combat (forcing an
     // engage even with master auto-attack off) and stays silent on success.
@@ -6084,6 +6089,9 @@ public sealed class AppServices
         MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
         // Room tooltips and room panels leave out what the Unobtainable list holds.
         MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
+        MonsterRelation = new Game.Remote.MonsterRelationshipHandler(
+            RemoteCommands, new Game.Combat.MonsterRelationshipRules(Resolver, MonsterCatalog, MonsterOverlaySeed),
+            Profile, GameData, Log);
         // A room spell's damage is no part of a fight, told by the spell on the room
         // we stand in and by which wordings are a monster's attack spell
         // (OffRoundDamageLines). One test for everything that would otherwise take
@@ -12090,10 +12098,7 @@ public sealed class AppServices
     // simulation and the lair-fight ETA predicate — so the engageable decision
     // can't diverge on the same room state.
     private Models.GameData.MonsterOverlay ResolveMonsterOverlay(int number) =>
-        Resolver.ResolveGameData<Models.GameData.MonsterOverlay>(
-            "Monsters",
-            number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            MonsterOverlaySeed.GetOverlay(number));
+        MonsterOverlaySeed.Resolve(Resolver, number);
 
     // Seconds per room the character walks right now, with lagSeconds of lag on
     // Paradigm: the server move timer from live encumbrance and gear quickness there;

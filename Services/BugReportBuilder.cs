@@ -1223,7 +1223,7 @@ public static class BugReportBuilder
 
         sb.Append("Per-monster overlay deltas in the active game-data set — effective overlay (realm seed + tier overrides merged), tagged with the tier that owns each record (")
           .Append(records.Count).Append(")\n\n");
-        if (records.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+        if (records.Count == 0) sb.Append("_(none)_\n");
 
         foreach ((int n, string id) in records)
         {
@@ -1235,6 +1235,9 @@ public static class BugReportBuilder
             List<string> parts = new();
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
             if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            // The tier says where the override lives; a remote command is who put it there.
+            if (svc.MonsterRelation.Changes.TryGetValue(n, out Game.Remote.MonsterRelationshipHandler.RemoteChange remote))
+                parts.Add(RemoteRelationChange(remote));
             if (o.Priority is { } prio) parts.Add($"priority {prio}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
                 parts.Add($"debuff {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
@@ -1253,8 +1256,21 @@ public static class BugReportBuilder
               .Append(string.Join(", ", parts)).Append('\n');
         }
 
+        // A remote change that left no override (set back to what lies below) is not
+        // in the list above, and is still what the monster was last told to be.
+        HashSet<int> listed = records.Select(r => r.Number).ToHashSet();
+        foreach ((int n, Game.Remote.MonsterRelationshipHandler.RemoteChange remote) in
+                 svc.MonsterRelation.Changes.Where(c => !listed.Contains(c.Key)).OrderBy(c => c.Key))
+            sb.Append("- #").Append(n).Append(' ').Append(svc.GameData.FindNameByNumber("Monsters", n) ?? "(unknown)")
+              .Append(" [no override] — ").Append(RemoteRelationChange(remote)).Append('\n');
+
         return sb.ToString();
     }
+
+    private static string RemoteRelationChange(Game.Remote.MonsterRelationshipHandler.RemoteChange remote) =>
+        $"relationship last set by @relation from {remote.Sender} on "
+        + $"{Game.Remote.TransferChannels.NameOf(remote.Channel)} at {remote.At.ToLocalTime():HH:mm:ss} "
+        + $"({remote.From} -> {remote.To})";
 
     // Per-character combat outcomes actually seen against a monster (Monster
     // Intel's "Your Observations") — the personal counterpart to the MDB-sourced

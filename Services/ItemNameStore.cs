@@ -128,6 +128,8 @@ public sealed class ItemNameStore
     // FindByName gives them, so an engine that resolves the name meets the same
     // record. One result is a match, several an ambiguity for the caller to
     // report, none a miss. Sorted by name.
+    // Not RoomSearchService.FindAllByName: the exact step is FindByName's (articles,
+    // counts, a plural), and same-named records collapse to one Number.
     public IReadOnlyList<int> FindAllByName(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<int>();

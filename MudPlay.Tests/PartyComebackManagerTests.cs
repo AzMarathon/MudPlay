@@ -1215,8 +1215,139 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Aunty just disconnected!!!."));
         h.Router.Dispatch(Line("Aunty just entered the Realm."));
         Assert.Contains(h.PartyWire, b => Encoding.Latin1.GetString(b) == "invite Aunty\r");
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
         h.Router.Dispatch(Line("Aunty started to follow you."));
         Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
+    // The same return with auto-invite off: the user types `invite Aunty`, and the
+    // game's echo of it is what the leader reads, as it reads the auto-invite's.
+    private static void MemberBackFromADroppedLink_InvitedByHand(Harness h)
+    {
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        Assert.DoesNotContain(h.PartyWire, b => Encoding.Latin1.GetString(b).StartsWith("invite", StringComparison.Ordinal));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
+    [Fact]
+    public void FullParty_InvitedBackByHand_FollowThenComeback_IsAnsweredTakenBack()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink_InvitedByHand(h);
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+        now += TimeSpan.FromSeconds(6);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains("got you - resuming", h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    [Fact]
+    public void FullParty_InvitedBackByHand_ComebackThenFollow_IsAnsweredInProgress()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink_InvitedByHand(h);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+    }
+
+    // An invite long after the re-entry isn't the return's: the request is judged
+    // as any other.
+    [Fact]
+    public void FullParty_InvitedByHandLongAfterTheReturn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        now += TimeSpan.FromMinutes(1);
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/3"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
+    }
+
+    // A player who logs in and is invited for the first time is no member back from
+    // a dropped link: the invite arms nothing, and their @comeback is judged as any
+    // request.
+    [Fact]
+    public void AFreshRecruit_InvitedByHandOnLoggingIn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Masta", "Thunder" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Newbie just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Newbie to follow you."));
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Newbie", "@comeback 1/3"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Equal("Newbie", h.Comeback.RecoveringMember);
+    }
+
+    // Stock echoes an invite even when the party had no slot for it: an echo into a
+    // party that is full without the asker's row is no invite on its way.
+    [Fact]
+    public void AnInviteEchoIntoAFullParty_IsNoInviteOnItsWay()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Fresh started to follow you."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Equal(7, h.PartyState.Members.Count);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Contains(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
     }
 
     [Fact]
@@ -1296,7 +1427,7 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Aunty just disconnected!!!."));
         h.Router.Dispatch(Line("Aunty just entered the Realm."));
         h.Router.Dispatch(Line("You have invited Aunty to follow you."));
-        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && m.IsInvited);
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && m.IsInvited);  // the auto-invite's echo
         Assert.Equal(6, h.PartyState.Members.Count);
         now += TimeSpan.FromSeconds(2);
 

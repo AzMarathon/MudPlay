@@ -1,5 +1,11 @@
 # Version history
 
+## 3.186.0
+
+- New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
+- A shared monster name is refused with each one's number; `@relation #<number>` names one
+- A leader also recognises a member it invited back by hand after a reconnect
+
 ## 3.185.54
 
 - A follower's @wait reaches the leader again after a reconnect left the client unsure who leads

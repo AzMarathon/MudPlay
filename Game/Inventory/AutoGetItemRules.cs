@@ -8,7 +8,7 @@ namespace MudPlay.Game.Inventory;
 // name typed in chat and read or changed for the loaded character.
 //
 // A change is saved at the "only for this character" tier by the rule the Game
-// Data item editor saves by (GameDataOverrideApplier.ApplyItemAt), for the asked
+// Data item editor saves by (GameDataOverrideApplier.ApplyFieldsAt), for the asked
 // fields alone: each holds for this character whatever a lower tier says, and
 // every other field resolves as it did. The editor shows it at that tier, and
 // AutoGetItemsManager, which resolves an item's rules on every survey, acts on it
@@ -64,7 +64,7 @@ public sealed class AutoGetItemRules
             wanted = wanted with { MaxToGet = max?.ToString(CultureInfo.InvariantCulture) };
             fields.Add(nameof(ItemOverlay.MaxToGet));
         }
-        GameDataOverrideApplier.ApplyItemAt(_resolver, Id(number), SettingsTier.Character, wanted, seed, fields);
+        GameDataOverrideApplier.ApplyFieldsAt(_resolver, Table, Id(number), SettingsTier.Character, wanted, seed, fields);
         return Read(number);
     }
 

@@ -322,6 +322,37 @@ public sealed class RoomSearchService
         return AllTokensMatch(name, TokenizeNeedle(needle.Trim()));
     }
 
+    // The records a name typed in chat stands for, by the rule the remote commands
+    // share for an event's or a monster's name, in three steps, the first that finds
+    // anything deciding: a name equal to what was typed (case-insensitive, trimmed);
+    // every name holding every typed word, in any order (NameMatchesTokens); the same
+    // without apostrophes, which typed chat drops. Within a step the records
+    // `preferred` holds come first: when any of them fits, the others are not
+    // returned. One result is a match, several an ambiguity for the caller to report,
+    // none a miss. A record with no name never matches.
+    public static IReadOnlyList<T> FindAllByName<T>(
+        IEnumerable<T> records, Func<T, string?> nameOf, string? query, Func<T, bool>? preferred = null)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return Array.Empty<T>();
+        string typed = query.Trim();
+        string bare = typed.Replace("'", "");
+        List<T> all = records.ToList();
+        Func<T, bool>[] steps =
+        {
+            r => string.Equals(nameOf(r)?.Trim(), typed, StringComparison.OrdinalIgnoreCase),
+            r => NameMatchesTokens(nameOf(r), typed),
+            r => NameMatchesTokens(nameOf(r)?.Replace("'", ""), bare),
+        };
+        foreach (Func<T, bool> step in steps)
+        {
+            List<T> found = all.Where(step).ToList();
+            if (found.Count == 0) continue;
+            if (preferred is not null && found.Where(preferred).ToList() is { Count: > 0 } first) return first;
+            return found;
+        }
+        return Array.Empty<T>();
+    }
+
     // First letter of each whitespace-or-punctuation-delimited word, uppercased.
     // "Frozen Cavern, Cave Opening" → "FCCO".
     public static string ExtractAcronym(string text)

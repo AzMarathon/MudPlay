@@ -160,7 +160,7 @@ How to keep it current:
 - Why: Reports `paradigm-20260815-130733`, `paradigm-20260826-132742`, `paradigm-20260827-125103`, `paradigm-20260914-154019`, `paradigm-20260915-061646`, `paradigm-20260915-124359`, `paradigm-20260916-104923`, `paradigm-20260924-113530`, `paradigm-20260929-115648`, `paradigm-20261008-202210` and `paradigm-20261015-202943`. Also the user's 2026-10-09 ruling on gear that comes back to the pack, and GAME_MECHANICS "Gear swaps interrupt resting, not meditating". Guards against gear thrash and against fighting in rest gear.
 
 ### AutoGetItemRemoteTests.cs
-- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyItemAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
+- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyFieldsAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
 - Checks: the report reads every tier and says *cannot be taken*; `on` / `off` / `max <n>` / `max none` (either order) are saved at the character tier, never Global, and the auto-get engine then collects the item, leaves it, and stops at the max (held copies counted; `max 0` takes none); off holds over a Global or realm tick, on holds when a Global tick it matched is removed, and a change leaves every other field resolving as before; a change back to the installed defaults clears the character override, unless a lower tier would show through; a seeded item reads the stock seed and returns to it; the log line names the sender. Names: exact (with an article) wins, words in any order, apostrophes left out, two records of one name are one item, a name holding `on` or `max` still works; several matches are refused with the names. A lone `on` / `off` / bare `@auto-get` is still the engine toggle and an item change leaves it alone. A first word of `on` / `off` toggles the engine whatever follows; fields the command doesn't name stay unwritten, and a value the character tier holds for another field survives. An item editor open while `@auto-get` changes the item keeps that change on OK, with Use moved to another tier too, and the editor's value wins for a box changed in both. Refusals (no item, ambiguous, bad, over-9999 or missing max, no name, no named character, no Alter settings) carry their reason, are silent with Warn off, and go back on the channel the command came in on; a success is answered with Warn off; the Auto-All switch off ignores the command unanswered.
 - Why: a party member flags an item for auto-get, or sets its max, remotely for this character (user, 2026-10-17).
 
@@ -1246,7 +1246,7 @@ How to keep it current:
 - Why: reports paradigm-20261009-185106 and -220128; user decisions 2026-10-10.
 
 ### EventRemoteHandlerTests.cs
-- Covers: Game/Remote/EventRemoteHandler (@events/@event), EventManager.FindByName/SetEnabled, EventsSectionViewModel/EventEditDialogViewModel follow
+- Covers: Game/Remote/EventRemoteHandler (@events/@event), EventManager.FindByName/SetEnabled (over RoomSearchService.FindAllByName), WireText.Listed for the ambiguity refusal, EventsSectionViewModel/EventEditDialogViewModel follow
 - Checks: list/inspect/switch by name or number; nothing secret leaks; refusals and permissions; Warn/master switch; local API; replies fit one telepath; the open tab/editor follow; persistence; reply-line recognition.
 - Why: remote control of events must not reveal what they send.
 
@@ -1811,7 +1811,7 @@ How to keep it current:
 - Why: item name resolution
 
 ### ItemOverrideSaveTests.cs
-- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyItemAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
+- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyFieldsAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
 - Checks: a character-tier untick over a Global tick is off; a record set back to its installed defaults over a differing Global still yields the defaults, holding only the boxes that differ below; set back with nothing below it clears the override; one box changed leaves the others resolving as before; only changed boxes are saved, so a character save doesn't copy a Global value up and a Global save doesn't copy a character's value down; a realm record set back to its defaults clears; the batch editor saves only its chosen fields, its off over a realm tick is off, back to defaults clears, and its Auto-sell off turns a Global sell detour off too. A save builds on the override file as it stands on disk, not a copy cached before another client changed it. Use moved to another tier copies the shown values there, and OK on the same tier with nothing changed saves nothing. A save that fails to reach the disk leaves the cached record as the file has it. The tiers not saved at are never written.
 - Why: an untick at the character tier left a Global tick showing, and a record set back to its defaults didn't return to them (user, 2026-10-17).
 
@@ -2489,6 +2489,11 @@ How to keep it current:
 - Checks: hits/misses/no-effect attributed per monster, own negated buffs aren't misses, retraction, landed hit retires physical no-effect.
 - Why: report paradigm-20260910-214553; user 2026-10-17.
 
+### MonsterRelationshipRemoteTests.cs
+- Covers: Game/Remote/MonsterRelationshipHandler (`@relation`), Game/Combat/MonsterRelationshipRules, Services/RoomSearchService.FindAllByName, Services/MonsterOverlaySeedStore.Resolve, Services/GameDataOverrideApplier.ApplyFieldsAt on the Monsters table (with RemoteCommandManager, SettingsResolver, MonsterCatalog, RoomEntityClassifier, CombatManager and MonsterRelationshipWatcher), driven through ChatLines and the reply wire. Calls ScratchRoot.Require: it deletes its BBS folder through AppPaths.
+- Checks: the bare form reports the relationship as the engines read it (none set is Enemy, a Global value shows through) and writes nothing; a change (any case) is saved at the character tier, Relationship alone, never Global, keeps the record's other fields, holds over a Global value, and set back to the installed default clears the override; the same value is answered `already` and writes nothing, so a Global value isn't pinned for the character. The Info log names sender, channel, monster, both values and the tier the relationship itself came from; the handler keeps the last remote change for the bug report and forgets it on a profile load and a set switch. The change reaches the combat engine (no swing at a Friend, a swing at an Enemy) and the Hangup and Flee watch at the next room display, and the Monster editor, built as its open path builds it, opens on it. Names: words in any order, apostrophes left out, exact names in play, then exact names out of play, then word matches; `#<number>` picks one of same-named monsters, and a record with no name is labelled `#<number>`. Refusals (no monster, unknown number, ambiguous with numbers, bad relationship word, bare command, no named character, no Alter settings) carry their reason and are silent with Warn off, the permission denial included; a success is answered with Warn off; replies go back on the channel the command came in on; the Auto-All switch off ignores it unanswered.
+- Why: a party member sets how this character treats a monster by remote command (user, 2026-10-25), gated at Alter settings with `@auto-get <item>` and `@atkprio`.
+
 ### MonsterRelationshipWatcherTests.cs
 - Covers: Game/Combat/MonsterRelationshipWatcher (with HealthManager)
 - Checks: Hangup/Flee monsters answered once per sighting, the minute after a reconnect, what holds it (switches, menu, PvP), fight-back when no run is coming, end-to-end through HealthManager.
@@ -2731,7 +2736,7 @@ How to keep it current:
 
 ### PartyComebackManagerTests.cs
 - Covers: Game/Remote/PartyComebackManager (+ walker, loop, lair, PartyManager)
-- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite is answered `got you - resuming` once following, `comeback already in progress` while still [Invited], with no @forget either way; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
+- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite (the auto-invite's or one typed by hand) is answered `got you - resuming` once following, `comeback already in progress` while still [Invited] (not for a fresh recruit invited on logging in, nor for an invite echoed into a party already full without the asker's row), with no @forget either way; an invite long after the re-entry isn't the return's; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
 - Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837).
 
 ### PartyDeathRosterCleanupTests.cs
@@ -3226,7 +3231,7 @@ How to keep it current:
 
 ### RemoteCommandCatalogTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog, PlayerEditDialogViewModel tips
-- Checks: command → permission category; removed commands; bang stripping; help coverage; tooltips list commands.
+- Checks: command → permission category (`@relation` at Alter settings); removed commands; bang stripping; help coverage; tooltips list commands, and only the Alter settings tooltip warns that `@relation` can set Hangup or Flee.
 - Why: the permissions grid must match handlers.
 
 ### RemoteCommandCheckOrderTests.cs
