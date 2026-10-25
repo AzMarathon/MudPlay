@@ -3134,6 +3134,17 @@ How one damage spell cast against a monster is worked out.
 - **`AffectsUndeadOnly` (code 23)** — only affects monsters with `Undead != 0`.
 - **`AffectsAnimalsOnly` (code 80)** — only affects monsters with the Animal flag (e.g. `charm animal`).
 - **No tag** — affects all monster types (e.g. `magic missile`).
+- **A Short cast-code can be shared by several classes' spells; the character casts its own class's
+  learnable one** *([OBSERVED] 2026-10-24, Anomaly game data, Spells #290 and #5585; Realm: Anomaly)*.
+  `blaz` is the Druid's `blaze` (#290: Magery 3, level 20, fire, no tag) **and** the Priest's
+  `blazing light` (#5585: Magery 2, level 56, no element, `AffectsUndeadOnly` 23), plus item / monster
+  variants (#159, #420, #5274, #5567, all Learnable 0). A Druid's `blaz` lands on a living monster; a
+  Priest's draws `Your spell has no effect on <monster>.` So a spell's tag, element and level belong to
+  the row the caster's class learns, never to every row with that Short.
+  - **Client use:** `CastCodeRows` (behind `SpellTargetTypeIndex`, `SpellAttackTypeIndex`,
+    `SpellReqLevelIndex`) resolves a code to the spell book's row (`SpellbookState.FindByCastCode`);
+    with no row to pick by, learnable rows that disagree fail open. Anomaly player report by gossip,
+    2026-10-24 (no report file).
 
 **Charm / enslave family** *([CONFIRMED] except where noted)*
 - **All charm-type control spells share the same base ability, `Enslave` (code 6); they differ by

@@ -64,4 +64,41 @@ public sealed class SpellTargetTypeIndexTests : IDisposable
     [InlineData("   ")]
     public void TargetType_NullOrBlank_IsAny(string? castCode)
         => Assert.Equal(SpellTargetType.Any, NewIndex().TargetType(castCode));
+
+    // Anomaly's `blaz`: a Druid's blaze (#290, fire, level 20), a Priest's blazing light
+    // (#5585, no element, undead only, level 56) and an item-cast blazing inferno (#159).
+    private const string SharedBlazJson = """
+        [
+          { "Number": 290,  "Name": "blaze",           "Short": "blaz", "ReqLevel": 20, "Learnable": 1, "Magery": 3, "AttType": 1, "Abil-0": 17 },
+          { "Number": 5585, "Name": "blazing light",   "Short": "blaz", "ReqLevel": 56, "Learnable": 1, "Magery": 2, "AttType": 4, "Abil-0": 17, "Abil-1": 23 },
+          { "Number": 159,  "Name": "blazing inferno", "Short": "blaz", "ReqLevel": 0,  "Learnable": 0, "Magery": 0, "AttType": 1, "Abil-0": 17 }
+        ]
+        """;
+
+    // A code two classes share is the caster's own spell: the Druid's blaze affects all,
+    // the Priest's blazing light only undead. With no spell book row to pick by, the
+    // learnable rows disagree and the code isn't pre-empted.
+    [Theory]
+    [InlineData(290, SpellTargetType.Any)]
+    [InlineData(5585, SpellTargetType.UndeadOnly)]
+    [InlineData(null, SpellTargetType.Any)]
+    public void SharedCastCode_ResolvesToTheCastersSpell(int? casterSpell, SpellTargetType expected)
+    {
+        SpellTargetTypeIndex s = NewIndex(json: SharedBlazJson);
+        s.SetCasterSpell(_ => casterSpell);
+        Assert.Equal(expected, s.TargetType("blaz"));
+    }
+
+    // A learnable spell's restriction isn't lifted by an item variant that affects all.
+    [Fact]
+    public void LearnableRestriction_BeatsAnUnrestrictedItemVariant()
+    {
+        const string json = """
+            [
+              { "Number": 18,  "Name": "turn undead", "Short": "turn", "Learnable": 1, "Abil-0": 23 },
+              { "Number": 900, "Name": "turn (item)", "Short": "turn", "Learnable": 0, "Abil-0": 17 }
+            ]
+            """;
+        Assert.Equal(SpellTargetType.UndeadOnly, NewIndex(json: json).TargetType("turn"));
+    }
 }

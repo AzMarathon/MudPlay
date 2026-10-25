@@ -15,9 +15,11 @@ namespace MudPlay.Game.Combat;
 // Encoded as MajorMUD ability slots on the Spells row (per GameData.AbilityNames):
 //   23 = AffectsUndeadOnly, 80 = AffectsAnimalsOnly, 108 = AffectsLivingOnly.
 // A spell carrying none affects every class (SpellTargetType.Any). Keyed by Short (the
-// cast-code the combat slots store), mirroring SpellAttackTypeIndex's lazy build / cache /
-// drop-on-set-switch lifecycle. Unknown cast-code → Any (fail-open: no data ⇒ don't
-// pre-empt; the reactive "no effect" line stays the backstop).
+// cast-code the combat slots store) and resolved to the caster's own spell (CastCodeRows:
+// "blaz" is a Druid's blaze but a Priest's undead-only blazing light), mirroring
+// SpellAttackTypeIndex's lazy build / cache / drop-on-set-switch lifecycle. Unknown or
+// ambiguous cast-code → Any (fail-open: no data ⇒ don't pre-empt; the reactive "no
+// effect" line stays the backstop).
 public sealed class SpellTargetTypeIndex
 {
     private const int AffectsUndeadOnly = 23;
@@ -26,28 +28,33 @@ public sealed class SpellTargetTypeIndex
     private const int AbilitySlots = 10;
 
     private readonly GameDataCache _cache;
-    private Dictionary<string, SpellTargetType>? _byShort;
+    private CastCodeRows<SpellTargetType>? _rows;
+    private Func<string, int?>? _casterSpell;
 
     public SpellTargetTypeIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byShort = null;
+        _cache.ActiveSetChanged += _ => _rows = null;
     }
+
+    // The Spells.Number the character casts for a cast-code (their spell book's row), or
+    // null when it holds none.
+    public void SetCasterSpell(Func<string, int?> casterSpell) => _casterSpell = casterSpell;
 
     // The spell's target-class restriction, or Any when the cast-code is unknown or carries
     // no targeting tag — fail-open.
     public SpellTargetType TargetType(string? castCode)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return SpellTargetType.Any;
-        return Build().TryGetValue(castCode.Trim(), out SpellTargetType t) ? t : SpellTargetType.Any;
+        return Build().TryGet(castCode, _casterSpell, out SpellTargetType t) ? t : SpellTargetType.Any;
     }
 
-    private Dictionary<string, SpellTargetType> Build()
+    private CastCodeRows<SpellTargetType> Build()
     {
-        if (_byShort is { } cached) return cached;
+        if (_rows is { } cached) return cached;
 
-        Dictionary<string, SpellTargetType> map = new(StringComparer.OrdinalIgnoreCase);
+        CastCodeRows<SpellTargetType> map = new();
         GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
@@ -68,16 +75,15 @@ public sealed class SpellTargetTypeIndex
                     if (c == AffectsAnimalsOnly) { type = SpellTargetType.AnimalsOnly; break; }
                     if (c == AffectsLivingOnly)  { type = SpellTargetType.LivingOnly;  break; }
                 }
-                // Only the restricted spells are stored — the common "affects all" case is
-                // the map's absence, so an unknown cast-code reads as Any.
-                if (type != SpellTargetType.Any)
-                    map[code.Trim()] = type;
+                // An item / monster variant only counts when it restricts: with no learnable
+                // row, any restricted variant tags the code, as before.
+                map.Add(row, code, type, keepUnlearnable: type != SpellTargetType.Any);
             }
         }
 
         // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
-        _byShort = map;
+        _rows = map;
         return map;
     }
 }

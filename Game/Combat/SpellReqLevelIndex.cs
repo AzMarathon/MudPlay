@@ -16,35 +16,40 @@ namespace MudPlay.Game.Combat;
 // top-level integer column on each Spells row.
 //
 // Mirrors SeeHiddenIndex / MonsterMagicIndex: built lazily by scanning the raw
-// Spells table, cached, and dropped on game-data set switch. Unknown cast-code →
-// -1 (fail-open: the caller treats "no data" as "don't block the configured
-// spell").
+// Spells table, cached, and dropped on game-data set switch. A code shared by
+// several rows resolves to the caster's own spell (CastCodeRows). Unknown or
+// ambiguous cast-code → -1 (fail-open: the caller treats "no data" as "don't block
+// the configured spell").
 public sealed class SpellReqLevelIndex
 {
     private readonly GameDataCache _cache;
-    private Dictionary<string, int>? _byShort;
+    private CastCodeRows<int>? _rows;
+    private Func<string, int?>? _casterSpell;
 
     public SpellReqLevelIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byShort = null;
+        _cache.ActiveSetChanged += _ => _rows = null;
     }
 
+    // The Spells.Number the character casts for a cast-code (their spell book's row), or
+    // null when it holds none.
+    public void SetCasterSpell(Func<string, int?> casterSpell) => _casterSpell = casterSpell;
+
     // The spell's ReqLevel, or -1 when the cast-code is unknown (no Spells row
-    // with that Short) — fail-open.
+    // with that Short) or ambiguous — fail-open.
     public int ReqLevel(string? castCode)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return -1;
-        return Build().TryGetValue(castCode.Trim(), out int level) ? level : -1;
+        return Build().TryGet(castCode, _casterSpell, out int level) ? level : -1;
     }
 
-    private Dictionary<string, int> Build()
+    private CastCodeRows<int> Build()
     {
-        if (_byShort is { } cached) return cached;
+        if (_rows is { } cached) return cached;
 
-        Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<string> learnedKeys = new(StringComparer.OrdinalIgnoreCase);
+        CastCodeRows<int> map = new();
         GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
@@ -72,22 +77,15 @@ public sealed class SpellReqLevelIndex
                 // monster look immune to it, so the engine gave up on undead it could
                 // actually have hit (report paradigm-20260819-195419). Mirrors
                 // CombatSpellIndex's fix for the same duplicate-Short disease (report
-                // paradigm-20260814-210613): once a Learnable row has set a code's
-                // level, later non-learnable duplicates for that code are ignored.
-                string key = code.Trim();
-                bool learnable = row.TryGetProperty("Learnable", out GameValue learnEl)
-                    && learnEl.ValueKind == JsonValueKind.Number
-                    && learnEl.TryGetInt32(out int learnVal) && learnVal != 0;
-
-                if (learnedKeys.Contains(key) && !learnable) continue;
-                map[key] = reqLevel;
-                if (learnable) learnedKeys.Add(key);
+                // paradigm-20260814-210613): a Learnable row's level beats every
+                // non-learnable duplicate (CastCodeRows).
+                map.Add(row, code, reqLevel);
             }
         }
 
         // Folded into the map — the cache may drop the Spells table.
         _cache.EvictTable("Spells");
-        _byShort = map;
+        _rows = map;
         return map;
     }
 }

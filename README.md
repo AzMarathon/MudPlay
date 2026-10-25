@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.48**
-> - Expanding a quest in the Player Workshop no longer crashes the client
-> - Quest-step and chat links are now hot-text in the line, same look and click; no longer reachable with Tab
+> **Version 3.185.49**
+> - Attack spell no longer skipped when another class's spell shares its cast code (a Druid's `blaz` read as the Priest's undead-only blazing light)
+> - A shared cast code's element and spell-immunity level now come from the spell your class casts too
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

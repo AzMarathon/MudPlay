@@ -16,32 +16,38 @@ namespace MudPlay.Game.Combat;
 //
 // Keyed by Short because the combat spell slots (CombatSpellSlot.SpellName) store
 // the cast-code, not the display Name — matches SpellReqLevelIndex, whose lazy
-// build / cache / drop-on-set-switch lifecycle this mirrors. Unknown cast-code →
-// -1 (fail-open: the caller treats "no data" as "don't pre-empt").
+// build / cache / drop-on-set-switch lifecycle this mirrors. A code shared by several
+// rows resolves to the caster's own spell (CastCodeRows). Unknown or ambiguous
+// cast-code → -1 (fail-open: the caller treats "no data" as "don't pre-empt").
 public sealed class SpellAttackTypeIndex
 {
     private readonly GameDataCache _cache;
-    private Dictionary<string, int>? _byShort;
+    private CastCodeRows<int>? _rows;
+    private Func<string, int?>? _casterSpell;
 
     public SpellAttackTypeIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
-        _cache.ActiveSetChanged += _ => _byShort = null;
+        _cache.ActiveSetChanged += _ => _rows = null;
     }
+
+    // The Spells.Number the character casts for a cast-code (their spell book's row), or
+    // null when it holds none.
+    public void SetCasterSpell(Func<string, int?> casterSpell) => _casterSpell = casterSpell;
 
     // The spell's AttType (0–6), or -1 when the cast-code is unknown — fail-open.
     public int AttackType(string? castCode)
     {
         if (string.IsNullOrWhiteSpace(castCode)) return -1;
-        return Build().TryGetValue(castCode.Trim(), out int type) ? type : -1;
+        return Build().TryGet(castCode, _casterSpell, out int type) ? type : -1;
     }
 
-    private Dictionary<string, int> Build()
+    private CastCodeRows<int> Build()
     {
-        if (_byShort is { } cached) return cached;
+        if (_rows is { } cached) return cached;
 
-        Dictionary<string, int> map = new(StringComparer.OrdinalIgnoreCase);
+        CastCodeRows<int> map = new();
         GameTable? doc = _cache.GetTable("Spells");
         if (doc is not null)
         {
@@ -56,8 +62,7 @@ public sealed class SpellAttackTypeIndex
                 if (typeEl.ValueKind != JsonValueKind.Number) continue;
                 if (!typeEl.TryGetInt32(out int attType)) continue;
 
-                // Last writer wins on duplicate cast-codes (rare in game data).
-                map[code.Trim()] = attType;
+                map.Add(row, code, attType);
             }
         }
 
@@ -65,7 +70,7 @@ public sealed class SpellAttackTypeIndex
         // (SpellReqLevelIndex evicts the same table; whichever builds second just
         // triggers a one-time reload via GetTable.)
         _cache.EvictTable("Spells");
-        _byShort = map;
+        _rows = map;
         return map;
     }
 }

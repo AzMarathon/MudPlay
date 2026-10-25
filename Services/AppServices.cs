@@ -6099,6 +6099,13 @@ public sealed class AppServices
         SpellTargetType = new Game.Combat.SpellTargetTypeIndex(GameData);
         Combat.SetDrainEligibility(MonsterLife, SpellTargetType);
 
+        // A cast-code several classes share is judged by the spell this character casts:
+        // a Druid's "blaz" is blaze, a Priest's is the undead-only blazing light.
+        Func<string, int?> casterSpell = code => Spellbook.FindByCastCode(code)?.Number;
+        SpellReqLevel.SetCasterSpell(casterSpell);
+        SpellAttackType.SetCasterSpell(casterSpell);
+        SpellTargetType.SetCasterSpell(casterSpell);
+
         // Per-monster spell overrides store a Spell.Number; the engine casts the
         // Short. Wire the resolver so the chooser can substitute a numbered
         // override in place of the global Combat-tab cast-code slot.

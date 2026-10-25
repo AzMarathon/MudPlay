@@ -111,4 +111,28 @@ public sealed class SpellReqLevelIndexTests : IDisposable
         SpellReqLevelIndex s = NewIndex(json: json);
         Assert.Equal(9, s.ReqLevel("xyz"));
     }
+
+    // Anomaly's `blaz`: a Druid's blaze (#290, fire, level 20), a Priest's blazing light
+    // (#5585, no element, undead only, level 56) and an item-cast blazing inferno (#159).
+    private const string SharedBlazJson = """
+        [
+          { "Number": 290,  "Name": "blaze",           "Short": "blaz", "ReqLevel": 20, "Learnable": 1, "Magery": 3, "AttType": 1, "Abil-0": 17 },
+          { "Number": 5585, "Name": "blazing light",   "Short": "blaz", "ReqLevel": 56, "Learnable": 1, "Magery": 2, "AttType": 4, "Abil-0": 17, "Abil-1": 23 },
+          { "Number": 159,  "Name": "blazing inferno", "Short": "blaz", "ReqLevel": 0,  "Learnable": 0, "Magery": 0, "AttType": 1, "Abil-0": 17 }
+        ]
+        """;
+
+    // Two learnable spells share the code: the caster's own spell's level counts (the
+    // Druid's blaze 20, the Priest's blazing light 56). Unresolved, it's unknown
+    // (fail-open) rather than whichever row came last.
+    [Theory]
+    [InlineData(290, 20)]
+    [InlineData(5585, 56)]
+    [InlineData(null, -1)]
+    public void SharedCastCode_ResolvesToTheCastersSpell(int? casterSpell, int expected)
+    {
+        SpellReqLevelIndex s = NewIndex(json: SharedBlazJson);
+        s.SetCasterSpell(_ => casterSpell);
+        Assert.Equal(expected, s.ReqLevel("blaz"));
+    }
 }

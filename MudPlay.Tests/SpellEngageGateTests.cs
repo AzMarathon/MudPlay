@@ -49,7 +49,8 @@ public sealed class SpellEngageGateTests
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
         private MonsterOverlay Overlay(int number) => Overlays.TryGetValue(number, out MonsterOverlay? o) ? o : new MonsterOverlay();
 
-        public Harness()
+        // classNumber 12 is a Mage, 13 a Druid, 14 a Priest; 0 no class seen yet.
+        public Harness(int classNumber = 12, int level = 20)
         {
             _root = Path.Combine(Path.GetTempPath(), "mudplay-spell-engage-" + Path.GetRandomFileName());
             WriteGameData(Path.Combine(_root, "alpha"));
@@ -70,7 +71,7 @@ public sealed class SpellEngageGateTests
             Cast = new CastCoordinator(Router, Log, now: () => Clock.Now);
             Cast.SetWireSender(b => Sent.Add(b));
             Spellbook = new SpellbookState(new KnownSpellCatalog(cache));
-            Spellbook.Refresh(12, 20);
+            Spellbook.Refresh(classNumber, level);
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: Overlay,
                 party: Party,
@@ -92,9 +93,18 @@ public sealed class SpellEngageGateTests
             Combat.SetAutoNukeGate(() => true);
             Combat.SetCombatSpellCaster(Cast, () => (Ma, MaxMa));
             Combat.SetSpellManaCost(Spellbook.ManaCostOf);
+            // The spell indexes judge a shared cast-code by the spell book's row, as
+            // AppServices wires them.
+            Func<string, int?> casterSpell = code => Spellbook.FindByCastCode(code)?.Number;
+            SpellReqLevelIndex reqLevel = new(cache);
+            SpellAttackTypeIndex attackType = new(cache);
+            SpellTargetTypeIndex targetType = new(cache);
+            reqLevel.SetCasterSpell(casterSpell);
+            attackType.SetCasterSpell(casterSpell);
+            targetType.SetCasterSpell(casterSpell);
             Combat.SetMagicEligibility(new MonsterMagicIndex(cache), new ItemMagicIndex(cache),
-                new SpellReqLevelIndex(cache), new MonsterResistIndex(cache), new SpellAttackTypeIndex(cache));
-            Combat.SetDrainEligibility(new MonsterLifeIndex(cache), new SpellTargetTypeIndex(cache));
+                reqLevel, new MonsterResistIndex(cache), attackType);
+            Combat.SetDrainEligibility(new MonsterLifeIndex(cache), targetType);
             Combat.SetWeaponActuator((_, _, _) => { }, readWornWeapon: () => WornWeapon);
             Combat.SetCarriedCheck(_ => true);
             Tracker.SetActionabilityGate(n => Combat.CanEngageMonster(n));
@@ -107,18 +117,26 @@ public sealed class SpellEngageGateTests
             AddMonster(505, "iron golem");
             AddMonster(506, "lich lord");
             AddMonster(507, "flame wraith");
+            AddMonster(508, "manscorpion shaman");
+            AddMonster(509, "risen corpse");
         }
 
         // A katana with hit magic 3; monsters needing 4 (the rat, slime and golem need
         // none; the warden's and golem's spell immunity is 5, the lich's 20, and the
         // wraith resists fire 100%); a Mage's magic missile (level 1, cost 3), dancing
         // blades (a room attack, level 11, cost 26), turn undead (undead only) and
-        // fireball (fire, cost 4) and holy wave (an undead-only room attack).
+        // fireball (fire, cost 4) and holy wave (an undead-only room attack). Anomaly's
+        // shared `blaz`: a Druid's blaze (fire, level 20), a Priest's blazing light
+        // (undead only, level 56) and an item-cast blazing inferno; stone bolt (level 15,
+        // any class). The manscorpion shaman is living, the risen corpse undead; both need
+        // magic 4 and have spell immunity 15.
         private static void WriteGameData(string dir)
         {
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "Classes.json"), """
-                [ { "Number": 12, "Name": "Mage", "MageryType": 1, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 } ]
+                [ { "Number": 12, "Name": "Mage", "MageryType": 1, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 },
+                  { "Number": 13, "Name": "Druid", "MageryType": 3, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 },
+                  { "Number": 14, "Name": "Priest", "MageryType": 2, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Items.json"), """
                 [ { "Number": 1, "Name": "katana", "Abil-0": 28, "AbilVal-0": 3 } ]
@@ -131,7 +149,9 @@ public sealed class SpellEngageGateTests
                   { "Number": 504, "Name": "acid slime" },
                   { "Number": 505, "Name": "iron golem", "Abil-0": 139, "AbilVal-0": 5 },
                   { "Number": 506, "Name": "lich lord", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 20 },
-                  { "Number": 507, "Name": "flame wraith", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 5, "AbilVal-1": 100 } ]
+                  { "Number": 507, "Name": "flame wraith", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 5, "AbilVal-1": 100 },
+                  { "Number": 508, "Name": "manscorpion shaman", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 15 },
+                  { "Number": 509, "Name": "risen corpse", "Undead": 1, "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 15 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Spells.json"), """
                 [ { "Number": 1, "Name": "magic missile", "Short": "mmis", "ReqLevel": 1, "ManaCost": 3,
@@ -143,7 +163,15 @@ public sealed class SpellEngageGateTests
                   { "Number": 3, "Name": "fireball", "Short": "fbal", "ReqLevel": 1, "ManaCost": 4,
                     "Targets": 8, "AttType": 1, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 },
                   { "Number": 41, "Name": "holy wave", "Short": "hwav", "ReqLevel": 3, "ManaCost": 10,
-                    "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 } ]
+                    "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 },
+                  { "Number": 290, "Name": "blaze", "Short": "blaz", "ReqLevel": 20, "ManaCost": 8,
+                    "Targets": 8, "AttType": 1, "Magery": 3, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 },
+                  { "Number": 5585, "Name": "blazing light", "Short": "blaz", "ReqLevel": 56, "ManaCost": 20,
+                    "Targets": 8, "AttType": 4, "Magery": 2, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17, "Abil-1": 23 },
+                  { "Number": 159, "Name": "blazing inferno", "Short": "blaz", "ReqLevel": 0, "ManaCost": 0,
+                    "Targets": 8, "AttType": 1, "Magery": 0, "Learnable": 0, "Abil-0": 17 },
+                  { "Number": 6, "Name": "stone bolt", "Short": "ston", "ReqLevel": 15, "ManaCost": 5,
+                    "Targets": 8, "AttType": 2, "Magery": 0, "Learnable": 1, "Abil-0": 17 } ]
                 """);
         }
 
@@ -621,5 +649,29 @@ public sealed class SpellEngageGateTests
         Assert.Equal(new[] { "mmis bog wight", "" }, refused.AllSent);
         Assert.Null(refused.Combat.CurrentTarget);
         Assert.Contains("attack spell mmis: drew \"no effect\" on this monster this room", refused.CannotAttackLine);
+    }
+
+    // Anomaly, 2026-10-24: a Druid with `blaz` as the attack spell and stone bolt as the
+    // alternate. `blaz` is also a Priest's undead-only blazing light, and every row with
+    // the code was read as one spell, so the Druid's blaze was skipped as unable to
+    // affect a living manscorpion shaman and the alternate cast instead. The Druid casts
+    // blaze; a Priest casts blazing light, which a living monster rules out and an undead
+    // one doesn't; with no class seen yet the code is ambiguous and isn't pre-empted.
+    [Theory]
+    [InlineData(13, "manscorpion shaman", "blaz manscorpion shaman")]
+    [InlineData(14, "manscorpion shaman", "ston manscorpion shaman")]
+    [InlineData(14, "risen corpse", "blaz risen corpse")]
+    [InlineData(0, "manscorpion shaman", "blaz manscorpion shaman")]
+    public void SharedCastCode_IsJudgedByTheSpellTheCharactersClassCasts(int classNumber, string monster, string sent)
+    {
+        using Harness h = new(classNumber, level: 60);
+        h.WieldFromGearSet("katana");
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "blaz" };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "ston" };
+
+        h.Server.Line($"Also here: {monster}.");
+
+        Assert.Equal(new[] { sent }, h.AllSent);
+        Assert.True(h.WalkerHeld);
     }
 }

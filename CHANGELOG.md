@@ -1,5 +1,10 @@
 # Version history
 
+## 3.185.49
+
+- Attack spell no longer skipped when another class's spell shares its cast code (a Druid's `blaz` read as the Priest's undead-only blazing light)
+- A shared cast code's element and spell-immunity level now come from the spell your class casts too
+
 ## 3.185.48
 
 - Expanding a quest in the Player Workshop no longer crashes the client
