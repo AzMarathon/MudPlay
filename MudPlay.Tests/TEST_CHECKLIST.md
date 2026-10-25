@@ -719,10 +719,10 @@ How to keep it current:
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line), fed as bytes through a `ServerFeed`.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line, the monsters' own appear lines from the message table such as the golden mist's), fed as bytes through a `ServerFeed`.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
 - Spells: the harness resolves the character's spells by cast code as the spell book does (`SpellsByCode`, empty unless a test adds one), so a spell typed as the attack command (`harm`) is recognised as a spell.
-- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
+- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021, paradigm-20261025-011825); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
@@ -2476,7 +2476,7 @@ How to keep it current:
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)
-- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't.
+- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't; every `MonsterAppearLines` entry, its `%s` as a direction or a name, reads as a spawn arrival and never as a directional one, and only as a whole line (report paradigm-20261025-011825).
 - Why: missed arrivals/departures confuse targeting.
 
 ### MonsterObservationCastLineTests.cs
@@ -3328,8 +3328,8 @@ How to keep it current:
 
 ### RoomEntryWatcherTests.cs
 - Covers: Game/Combat/RoomEntryWatcher
-- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned.
-- Why: reports paradigm-20260928-230226 and paradigm-20261020-203400 (`elfu removes shadow`).
+- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned; a monster's own appear line puts the one monster that prints it on the roster (`A mist of gold appears in front of you!`), and one several monsters share leaves the roster short, both fed through ServerFeed.
+- Why: reports paradigm-20260928-230226, paradigm-20261020-203400 (`elfu removes shadow`) and paradigm-20261025-011825 (the golden mist).
 
 ### RoomExitParseTests.cs
 - Covers: Game/Map/RoomExit.TryParseWire, FormatLevelGate, CastsOnWalk

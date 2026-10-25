@@ -57,6 +57,32 @@ public sealed class MonsterMovementPatternTests
     public void SpawnArrival_StockAppearLines(string line)
         => Assert.True(Matches(KnownPatterns.RoomSpawnArrival, line, out _));
 
+    // The monsters' own appear lines carried from the message table (report
+    // paradigm-20261025-011825) are spawn arrivals, and only that: one the directional
+    // pattern also read would put a monster on the roster and call it short at once.
+    // "%s" is printed as a direction or a name.
+    [Theory]
+    [InlineData("the north")]
+    [InlineData("nowhere")]
+    [InlineData("dustdevil")]
+    public void SpawnArrival_MonsterAppearLines_ReadAsSpawnsOnly(string placeholder)
+    {
+        foreach (MonsterAppearLines.Entry entry in MonsterAppearLines.All)
+        {
+            string line = entry.Text.Replace("%s", placeholder, StringComparison.Ordinal);
+            Assert.True(Matches(KnownPatterns.RoomSpawnArrival, line, out _), line);
+            Assert.False(Matches(KnownPatterns.RoomEntryArrival, line, out _), line);
+            Assert.Same(entry, MonsterAppearLines.Find(line));
+        }
+    }
+
+    [Theory]
+    [InlineData("Bob says \"A mist of gold appears in front of you!\"")]
+    [InlineData("A mist of gold appears in front of you! Run!")]
+    [InlineData("A halo appears over your head!")]
+    public void SpawnArrival_MonsterAppearLines_OnlyWholeLines(string line)
+        => Assert.False(Matches(KnownPatterns.RoomSpawnArrival, line, out _));
+
     [Theory]
     [InlineData("A shimmering portal appears in the wall.")]
     [InlineData("The orc creeps out of the room to north.")]

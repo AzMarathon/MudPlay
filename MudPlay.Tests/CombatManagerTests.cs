@@ -912,6 +912,26 @@ public sealed class CombatManagerTests
         Assert.Equal("a mana wraith", h.LastSent);
     }
 
+    // Report paradigm-20261025-011825: a golden mist came in with its own appear
+    // line, "A mist of gold appears in front of you!" (message 3277), which no
+    // arrival shape read. The client sat until the user's Enter re-drew the room.
+    // The monsters' appear lines from the message table now ask for the room too.
+    [Theory]
+    [InlineData("A mist of gold appears in front of you!", "golden mist")]
+    [InlineData("A hovering sphere appears out of thin air!", "red sphere")]
+    public void MonsterAppearLine_AsksForTheRoom_ThenEngages(string appear, string monster)
+    {
+        using Harness h = new();
+        h.AddMonster(1046, monster);
+
+        h.Server.Line(appear);
+        Assert.Equal(1, h.CrRefreshSends);
+
+        h.Server.Line($"Also here: {monster}.");
+        Assert.Equal(monster, h.Combat.CurrentTarget);
+        Assert.Equal($"a {monster}", h.LastSent);
+    }
+
     // ----- dark-room CR-refresh suppression -----------------------------
 
     [Fact]
