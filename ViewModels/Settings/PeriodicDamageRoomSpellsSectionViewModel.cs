@@ -9,7 +9,7 @@ using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
 
-// "Periodic Damage Room Spells" tab: which room spells keep a rest from starting.
+// "Room Spell Config" tab: which room spells keep a rest from starting.
 // One line per room spell of the loaded game data that does damage
 // (AppServices.PeriodicDamageRoomSpells), with a Bars resting tick box; picking a
 // line lists its rooms, each a link to the map.
@@ -46,7 +46,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     partial void OnWearCounterBeforeEnteringChanged(bool value) => OnRowChanged();
 
     public override string Id => SectionId;
-    public override string Title => "Periodic Damage Room Spells";
+    public override string Title => "Room Spell Config";
     public override bool IsDirty => _dirty;
 
     protected override Control BuildView() => new PeriodicDamageRoomSpellsSectionView { DataContext = this };
@@ -56,6 +56,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         get
         {
             yield return Title;
+            // The tab's old name, so a search for it still finds the tab.
+            yield return "Periodic damage room spells";
             yield return "Bars resting";
             yield return "Room spell";
             yield return "Rest";
@@ -218,7 +220,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         OnPropertyChanged(nameof(EmptyReason));
         if (dropped.Count > 0 && why is not null)
             _log?.Info("Settings",
-                $"Periodic Damage Room Spells: unsaved change(s) dropped for {string.Join(", ", dropped)} — {why}.");
+                $"Room Spell Config: unsaved change(s) dropped for {string.Join(", ", dropped)} — {why}.");
     }
 
     // What the row's box is with nothing pending: the stored choice, else the default.
@@ -259,12 +261,12 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         UpdateSummary();
         if (changes.Count > 0)
             _log?.Info("Health",
-                $"Periodic Damage Room Spells: {string.Join("; ", changes)}. In effect from the next rest decision.");
+                $"Room Spell Config: {string.Join("; ", changes)}. In effect from the next rest decision.");
         if (wearChanged)
         {
             _log?.Info("Equipment", WearCounterBeforeEntering
-                ? "Periodic Damage Room Spells: a carried item that negates a room's spell is now put on before stepping in, and at once in such a room."
-                : "Periodic Damage Room Spells: a carried item that negates a room's spell is no longer put on, and routes no longer count one that isn't worn. One already on is given back as usual.");
+                ? "Room Spell Config: a carried item that negates a room's spell is now put on before stepping in, and at once in such a room."
+                : "Room Spell Config: a carried item that negates a room's spell is no longer put on, and routes no longer count one that isn't worn. One already on is given back as usual.");
             _wearSettingSaved?.Invoke();
         }
     }

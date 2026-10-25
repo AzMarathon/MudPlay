@@ -6050,7 +6050,7 @@ public sealed class HealthManagerTests
     [Fact]
     public void DamagingRoom_SpellUntickedWhileStandingThere_RestsAtTheNextCheck()
     {
-        // Settings → Periodic Damage Room Spells: the probe answers from the saved
+        // Settings → Room Spell Config: the probe answers from the saved
         // choice each time, so unticking the spell needs no room change.
         using Harness h = new();
         string? hurting = MagmaHeat;

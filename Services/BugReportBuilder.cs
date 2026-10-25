@@ -1125,7 +1125,7 @@ public static class BugReportBuilder
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
-        Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
+        Kv(sb, "Room spells changed from the default (Room Spell Config)", RoomSpellRestChoices(svc));
         Kv(sb, "Wear a room-spell counter before stepping in (setting)",
             ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(svc.Profile.Current)
                 .WearCounterBeforeEntering ? "on" : "off");
@@ -1646,27 +1646,34 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // "code → #num name [learned] ReqLevel=X Energy=Y Mana=Z" for one slot's cast-
-    // code, resolved against the active set. Unknowns render as "?" (fail-open in
-    // the engine) rather than a sentinel number.
+    // "code → #num name [learned] ReqLevel=X Energy=Y Mana=Z Element=E Targets=T" for
+    // one slot's cast-code, resolved against the active set. ReqLevel, Element and
+    // Targets are what the combat gates judge the code by. Unknowns render as "?"
+    // (fail-open in the engine) rather than a sentinel number.
     private static string SpellResolutionLine(AppServices svc, string label, string code)
     {
         // The character's own spell for the code first: several spells can share one
         // (a priest's three word spells), and the set-wide index knows only the first.
-        int? number = svc.Spellbook.FindByCastCode(code)?.Number ?? svc.SpellShort.NumberByShort(code);
+        int? own = svc.Spellbook.FindByCastCode(code)?.Number;
+        int? number = own ?? svc.SpellShort.NumberByShort(code);
         string head = $"{label}: `{code}`";
         if (number is not { } n)
             return $"{head} → (no Spells row with this short-code)";
 
         string name = svc.GameData.FindNameByNumber("Spells", n) ?? "(unnamed)";
         bool learned = svc.Spellbook.IsObtained(n);
-        int req = svc.SpellReqLevel.ReqLevel(code);
+        int req = svc.SpellReqLevel.ReqLevel(code, own);
         int? energy = svc.SpellCatalog.GetFormulaByNumber(n)?.EnergyCost;
         int? mana = svc.Spellbook.ManaCostOf(code);
+        int attType = svc.SpellAttackType.AttackType(code, own);
+        string element = attType < 0 ? "?"
+            : Game.GameData.LookupEnums.FormatSpellAttackType(attType.ToString()) ?? attType.ToString();
         return $"{head} → #{n} {name} [{(learned ? "learned" : "NOT learned")}]"
              + $" ReqLevel={(req < 0 ? "?" : req.ToString())}"
              + $" Energy={(energy is { } e ? e.ToString() : "?")}"
-             + $" Mana={(mana is { } m ? m.ToString() : "?")}";
+             + $" Mana={(mana is { } m ? m.ToString() : "?")}"
+             + $" Element={element}"
+             + $" Targets={svc.SpellTargetType.TargetType(code, own)}";
     }
 
     // A unified buff slot's targeting + condition summary for the report label —
@@ -3368,7 +3375,9 @@ public static class BugReportBuilder
         if (svc.RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return "(no room spell here, or the room isn't placed)";
         string spell = $"{svc.SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell"} (#{here.Spell})";
         if (!svc.RoomSpellDamage.Readings.TryGetValue(here.Spell, out Game.Map.RoomSpellDamageReading? reading))
-            return $"{spell}: no damage in the game data";
+            return svc.RoomSpellDamage.LeftOffBecause(here.Spell) is { } why
+                ? $"{spell}: left off Room Spell Config ({why}) — rests as normal"
+                : $"{spell}: no damage in the game data";
         string does = $"{spell}: {Game.Map.RoomSpellDamageText.Damage(reading)} damage, "
             + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName, svc.SpellCatalog.GetSpellNameByNumber);
         if (!svc.RoomSpellBarsResting(here.Spell))
@@ -3403,8 +3412,8 @@ public static class BugReportBuilder
         return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
-    // The room spells whose Bars resting box (Settings → Periodic Damage Room
-    // Spells) the character has set away from the default, as stored.
+    // The room spells whose Bars resting box (Settings → Room Spell Config) the
+    // character has set away from the default, as stored.
     private static string RoomSpellRestChoices(AppServices svc)
     {
         Dictionary<int, bool> chosen = ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel
@@ -3412,7 +3421,9 @@ public static class BugReportBuilder
         if (chosen.Count == 0) return "(none: every spell follows its default)";
         return string.Join("; ", chosen.OrderBy(static c => c.Key).Select(c =>
             $"{svc.SpellCatalog.GetSpellNameByNumber(c.Key) ?? "not in the loaded game data"} (#{c.Key}) "
-            + (c.Value ? "bars resting" : "doesn't bar resting")));
+            + (svc.RoomSpellDamage.LeftOffBecause(c.Key) is { } why
+                ? $"(left off Room Spell Config: {why}; ignored)"
+                : c.Value ? "bars resting" : "doesn't bar resting")));
     }
 
     // The item worn in a given inventory slot (e.g. "Weapon Hand"), or null when

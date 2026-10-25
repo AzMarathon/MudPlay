@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace MudPlay.Game.Map;
 
-// A RoomSpellDamageReading in the words Settings → Periodic Damage Room Spells and
+// A RoomSpellDamageReading in the words Settings → Room Spell Config and
 // the bug report show: how much the spell does and how the damage comes.
 public static class RoomSpellDamageText
 {

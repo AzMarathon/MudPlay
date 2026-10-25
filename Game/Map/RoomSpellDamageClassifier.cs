@@ -25,9 +25,19 @@ namespace MudPlay.Game.Map;
 //     reason to keep a good character from resting in it.
 // The spell takes the strongest of its paths, and the reading describes those.
 //
+// Damage that only comes with a move out of the room is not read: it never lands on
+// a character who stays, so it is no reason to keep one from resting there, and the
+// game moves whoever it hits anyway (the ice slide drops you down the slide and hurts
+// you there). A move is a `teleport` step on the path's line, or a spell that
+// teleports by its own TeleportRoom ability, the moves RoomSpellTeleportClassifier
+// reads. Damage on the line after the move lands in the room moved to; damage before
+// it comes with the move unless a step between them can stop the line. A spell with
+// damage both ways is read by the damage that stays (GAME_MECHANICS "Resting in a
+// room whose spell does damage").
+//
 // The same chain RoomSpellTeleportClassifier walks, asked a different question (which
 // gates count, and what a roll does to the answer), so it walks the chain itself and
-// shares that classifier's list of condition steps and RoomSummonParser's table
+// shares that classifier's condition and teleport steps and RoomSummonParser's table
 // reader.
 public static class RoomSpellDamageClassifier
 {
@@ -68,7 +78,7 @@ public static class RoomSpellDamageClassifier
         ArgumentNullException.ThrowIfNull(textblock);
         var walk = new Walk(spell, spellOf, textblock);
         List<Hit> hits = walk.Spell(spell, [], 0);
-        if (hits.Count == 0) return RoomSpellDamageReading.NoDamage(walk.Gap);
+        if (hits.Count == 0) return RoomSpellDamageReading.NoDamage(walk.Gap) with { OnlyWithAMove = walk.LeftWithAMove };
 
         RoomSpellDamage kind = hits.Max(static h => h.Kind);
         List<Hit> strongest = hits.Where(h => h.Kind == kind).ToList();
@@ -121,6 +131,17 @@ public static class RoomSpellDamageClassifier
 
         public string? Gap { get; private set; }
 
+        // Some damage was found that only comes with a move out of the room.
+        public bool LeftWithAMove { get; private set; }
+
+        // Takes off the hits from index from on, which come with a move.
+        private void LeaveWithTheMove(List<Hit> hits, int from)
+        {
+            if (hits.Count <= from) return;
+            LeftWithAMove = true;
+            hits.RemoveRange(from, hits.Count - from);
+        }
+
         public List<Hit> Spell(int number, string[] conditions, int depth)
         {
             if (number <= 0) return [];
@@ -172,6 +193,8 @@ public static class RoomSpellDamageClassifier
                 }
             }
             _spells.Remove(number);
+            // Whatever such a spell does lands with the character moved out.
+            if (TBInfoCastTeleportResolver.IsTeleportSpell(spell)) LeaveWithTheMove(hits, 0);
             return hits;
         }
 
@@ -189,8 +212,8 @@ public static class RoomSpellDamageClassifier
         }
 
         // A block rolled as a d100 table: one line runs, picked by the roll. A table
-        // that damages whatever is rolled is no roll (the ice slide always drops you;
-        // the roll only picks where).
+        // that damages in the room whatever is rolled is no roll; the roll only picks
+        // how. A band whose damage comes with a move damages no one who stays.
         private List<Hit> Table(int block, string[] conditions, int depth)
         {
             if (!Enter(table: true, block, depth, out string action)) return [];
@@ -218,15 +241,23 @@ public static class RoomSpellDamageClassifier
         }
 
         // One line's steps, left to right. Only what comes before a cast gates it.
+        // A move on the line takes with it the damage read since the last step that
+        // could have stopped the line, and the rest of the line runs in another room.
         private List<Hit> Steps(IEnumerable<string> steps, string[] conditions, int depth)
         {
             var hits = new List<Hit>();
+            int sinceGate = 0;
+            int? movedAt = null;
             foreach (string step in steps)
             {
                 string[] words = step.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (words.Length == 0) continue;
                 string verb = words[0];
 
+                if (movedAt is null && (RoomSpellTeleportClassifier.IsTeleportStep(verb)
+                    || (Is(verb, "cast") && spellOf(Number(words, 1)) is { } cast
+                        && TBInfoCastTeleportResolver.IsTeleportSpell(cast))))
+                    movedAt = sinceGate;
                 if (Is(verb, "cast"))
                     hits.AddRange(Spell(Number(words, 1), conditions, depth + 1));
                 else if (Is(verb, "random"))
@@ -243,6 +274,7 @@ public static class RoomSpellDamageClassifier
                         int buff = Number(words, 1);
                         foreach (Hit hit in Spell(followOn, conditions, depth + 1))
                             hits.Add(hit with { FollowOn = followOn, WithoutBuff = buff });
+                        sinceGate = hits.Count;
                         continue;
                     }
                     hits.AddRange(Lines(absent, conditions, depth + 1));
@@ -256,16 +288,27 @@ public static class RoomSpellDamageClassifier
                         hits.Add(new Hit(
                             conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
                             0, 0, 0, false, 1, false, conditions));
+                    // The block runs instead of the rest of the line.
+                    sinceGate = hits.Count;
                 }
                 else if (Is(verb, "testskill"))
-                    // `testskill <skill> [<modifier>] <failTextblock>`: the block runs on a miss.
+                {
+                    // `testskill <skill> [<modifier>] <failTextblock>`: the block runs
+                    // on a miss, the rest of the line on a pass.
                     hits.AddRange(Past(
                         Lines(Number(words, words.Length - 1), conditions, depth + 1), 1, skillTest: true));
+                    sinceGate = hits.Count;
+                }
                 else if (Is(verb, "failitem"))
-                    continue;
+                    sinceGate = hits.Count;
                 else if (RoomSpellTeleportClassifier.IsConditionStep(verb))
+                {
                     conditions = [.. conditions, string.Join(' ', words)];
+                    sinceGate = hits.Count;
+                }
             }
+            // Read on past the move only to say what it took along.
+            if (movedAt is int from) LeaveWithTheMove(hits, from);
             return hits;
         }
 

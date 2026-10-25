@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace MudPlay.Game.Map;
 
 // What RoomSpellDamageClassifier read of one room spell: how its damage comes, how
-// much, and what it hangs on. Settings → Periodic Damage Room Spells lists these.
+// much, and what it hangs on. Settings → Room Spell Config lists these.
 //
 // MinDamage / MaxDamage span the damage spells behind Kind, as their records give
 // them (a room's spell is rolled between the record's two base values, GAME_MECHANICS
@@ -37,6 +37,10 @@ public sealed record RoomSpellDamageReading(
     // want of. Paradigm's desert: desert damage #712, without waterskin #711.
     public int FollowOnSpell { get; init; }
     public int FollowOnWithoutBuff { get; init; }
+
+    // No damage for one who stays in the room, and damage that comes along with
+    // moving the character out (the ice slide): not listed, and said so in the log.
+    public bool OnlyWithAMove { get; init; }
 
     // The damage a timer started by the spell ends in, soonest first; empty for a
     // spell with no such timer.

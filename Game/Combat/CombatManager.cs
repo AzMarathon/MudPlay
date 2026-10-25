@@ -2774,6 +2774,7 @@ public sealed partial class CombatManager : IDisposable
         // room's survivors. The genuine physical-room-change reset (which clears that
         // cap) lives in NotePreMove.
         _spellChooser.ResetForRosterClear();
+        ResetGateSkipLog();
     }
 
     // Player death: the corpse room and whatever comes after (recovery walk,
@@ -2906,6 +2907,7 @@ public sealed partial class CombatManager : IDisposable
         // own first cast (and re-derives the marker).
         _roomChannelSpell = null;
         _spellChooser.ResetForNewRoom();
+        ResetGateSkipLog();
         // Leaving the room ends our commitment to it — the next room re-earns
         // the "Kill all engaged" hold by meeting the engage window again.
         _committedToRoom = false;

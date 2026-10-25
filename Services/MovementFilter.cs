@@ -546,7 +546,7 @@ public sealed class MovementFilter : IRoomFilter
 
     // Whether a carried item that negates a room's spell counts for a route: it
     // works only while worn, so it counts when it is on or when the client will
-    // put it on before the step (Settings → Periodic Damage Room Spells, and not
+    // put it on before the step (Settings → Room Spell Config, and not
     // with the master switch off). Unset, every carried one counts.
     public Func<int, bool>? NegatingItemUsableProbe { get; set; }
 

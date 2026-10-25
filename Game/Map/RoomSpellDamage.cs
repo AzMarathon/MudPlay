@@ -6,7 +6,8 @@ namespace MudPlay.Game.Map;
 // that damages on every cast breaks a rest again and again. In order of strength.
 public enum RoomSpellDamage
 {
-    // Nothing the spell can reach does damage.
+    // Nothing the spell can reach damages a character who stays in the room: there
+    // is no damage, or it only comes with a move out (the ice slide).
     None,
 
     // The damage hangs on something about the character or the room that the client
@@ -26,6 +27,6 @@ public enum RoomSpellDamage
     // The spell damages every time it is cast, unless a counter is held (a raft, a
     // buff, an item that negates the spell). Whether the character has the counter
     // is RoomHazardIndex's to say. With AfterATimer, the classes that bar resting
-    // unless the user says otherwise (Settings → Periodic Damage Room Spells).
+    // unless the user says otherwise (Settings → Room Spell Config).
     EveryTick,
 }

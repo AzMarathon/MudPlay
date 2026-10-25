@@ -5534,6 +5534,7 @@ public sealed class AppServices
         // spell whose slot has MinManaPerCast=0 still won't be cast below its real
         // mana cost (report paradigm-20260820-082741).
         Combat.SetSpellManaCost(Spellbook.ManaCostOf);
+        Combat.SetOwnSpellLookup(code => Spellbook.FindByCastCode(code)?.Number);
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
@@ -13880,7 +13881,7 @@ public sealed class AppServices
         && here.Entities.Any(e => e.MonsterNumber is { } number && MonsterCatalog.Get(number)?.CastLevelFor(spell) > 0);
 
     // The spell on the room we stand in, when it keeps a rest from starting: it is
-    // set to bar resting (Settings → Periodic Damage Room Spells; by default the
+    // set to bar resting (Settings → Room Spell Config; by default the
     // spells that damage on every tick) and nothing worn or held counters it
     // (RoomHazardIndex). Null in a room that isn't placed, so an unknown room rests
     // as it always did.
@@ -13902,8 +13903,8 @@ public sealed class AppServices
     public bool RoomSpellCounteredNow(int spell) =>
         RoomHazards.HazardForSpell(spell) is { } hazard && hazard.IsCounteredNow(IsItemWorn, IsItemCarried);
 
-    // The damaging room spells of the loaded game data, for Settings → Periodic
-    // Damage Room Spells: every tick first, then by how many rooms carry each.
+    // The damaging room spells of the loaded game data, for Settings → Room Spell
+    // Config: every tick first, then by how many rooms carry each.
     public IReadOnlyList<Game.Map.PeriodicDamageRoomSpell> PeriodicDamageRoomSpells() =>
         RoomSpellDamage.Readings
             .Select(entry => new Game.Map.PeriodicDamageRoomSpell(
@@ -13952,7 +13953,7 @@ public sealed class AppServices
     private readonly Dictionary<int, bool> _negatorUsable = new();
     private long _negatorUsableSince;
 
-    // The setting was saved on the Periodic Damage Room Spells tab: routes are
+    // The setting was saved on the Room Spell Config tab: routes are
     // planned on the new answer, and a counter needed in the room stood in goes on.
     public void NoteCounterWearSettingSaved()
     {
