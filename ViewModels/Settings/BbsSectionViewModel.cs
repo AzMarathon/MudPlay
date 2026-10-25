@@ -72,7 +72,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        "BBS", "Host", "Port", "Telnet", "Redial", "Cleanup", "Reconnect",
+        "GMCP", "Server data", "Shadow", "BBS", "Host", "Port", "Telnet", "Redial", "Cleanup", "Reconnect",
         "Status bar", "Marquee", "Status bar row", "Custom text",
         "Sysop", "Sys Goto", "Terminal", "Cols", "Rows", "NAWS", "Connection",
         "Game entry command", "Game exit command", "Enter realm", "Logoff",
@@ -97,6 +97,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private string? _selectedBbsName;
 
     public bool HasSelection => SelectedBbsName is not null;
+
+    [RelayCommand]
+    private async Task RefreshGmcp() => await AppServices.Current.Gmcp.RefreshAsync();
+
+    public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } = Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
 
     // Max-redials / redial-pause tickers grey out while InfiniteRetries forces
     // its own count + pause; the XAML binds their IsEnabled here.
@@ -385,6 +390,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         ArgumentNullException.ThrowIfNull(display);
         ArgumentNullException.ThrowIfNull(globalSettings);
         _bbsStore = bbsStore;
+        foreach (GmcpPackageOption option in GmcpPackages) option.PropertyChanged += (_, _) => { PushToCache(); Dirty(); };
         _profile = profile;
         _passwords = passwords;
         _display = display;
@@ -783,6 +789,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         InfiniteRetries = profile.InfiniteRetries;
         CleanupPeriodMinutes = profile.CleanupPeriodMinutes;
         NoResponseTimeoutSeconds = profile.NoResponseTimeoutSeconds;
+        foreach (GmcpPackageOption option in GmcpPackages) option.Mode = profile.GmcpModes?.GetValueOrDefault(option.Package, Game.Gmcp.GmcpMode.Shadow) ?? Game.Gmcp.GmcpMode.Shadow;
         ReconnectOnFailedConnect = profile.ReconnectOnFailedConnect;
         ReconnectOnCarrierLost = profile.ReconnectOnCarrierLost;
         ReconnectOnNoResponse = profile.ReconnectOnNoResponse;
@@ -1168,6 +1175,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         InfiniteRetries = defaults.InfiniteRetries;
         CleanupPeriodMinutes = defaults.CleanupPeriodMinutes;
         NoResponseTimeoutSeconds = defaults.NoResponseTimeoutSeconds;
+        foreach (GmcpPackageOption option in GmcpPackages) option.Mode = Game.Gmcp.GmcpMode.Shadow;
         ReconnectOnFailedConnect = defaults.ReconnectOnFailedConnect;
         ReconnectOnCarrierLost = defaults.ReconnectOnCarrierLost;
         ReconnectOnNoResponse = defaults.ReconnectOnNoResponse;
@@ -1222,6 +1230,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         profile.InfiniteRetries = InfiniteRetries;
         profile.CleanupPeriodMinutes = CleanupPeriodMinutes;
         profile.NoResponseTimeoutSeconds = NoResponseTimeoutSeconds;
+        profile.GmcpModes = GmcpPackages.ToDictionary(p => p.Package, p => p.Mode);
         profile.ReconnectOnFailedConnect = ReconnectOnFailedConnect;
         profile.ReconnectOnCarrierLost = ReconnectOnCarrierLost;
         profile.ReconnectOnNoResponse = ReconnectOnNoResponse;

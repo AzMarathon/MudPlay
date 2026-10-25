@@ -60,8 +60,8 @@ public sealed partial class PlayerStats : ObservableObject
     // Kai — present for Mystic / Monk-family classes. Mutually exclusive with Mana.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _kai;
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _maxKai;
-    // Current armour class — left half of Armour Class: N/M (current is
-    // reduced by damage to gear, etc.).
+    // The stat screen's Armour Class: AC/DR pair. MaxArmourClass is the legacy
+    // property name for the right-hand damage-resistance value.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _armourClass;
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _maxArmourClass;
 

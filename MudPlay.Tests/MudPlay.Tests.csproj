@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MudPlay.csproj" />
+    <None Update="Gmcp/Recordings/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Gmcp/Captured/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

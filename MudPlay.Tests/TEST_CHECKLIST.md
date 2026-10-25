@@ -1552,6 +1552,22 @@ How to keep it current:
 - Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds; infernal darkness (both seeds) and Stock's sandstorm are not blindness, a gruesome curse is (checked against the Spells data, 2026-10-23).
 - Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
+### GmcpIntegrationTests.cs
+- Covers: GMCP integration through PromptParser, StatParser, RoomTracker, RoomEntityClassifier and their consumers.
+- Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence. Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
+- Why: negotiated data must reach existing automation models without creating competing writers or disabling unrelated text parsing.
+
+### GmcpStateTests.cs
+- Covers: Game/Gmcp/GmcpState and embedded contract checks.
+- Checks: contract replay sequences, static/live cache lifetimes, stale-room rejection, full baselines versus deltas, package resets, incompatible versions and disconnects.
+- Why: returning monsters and reconnects must reconstruct complete state before a package becomes authoritative. Fixtures are synthetic and do not certify the server.
+
+### GmcpTransportTests.cs
+- Covers: Net/TelnetClient and GMCP UTF-8 framing.
+- Checks: every fragmentation boundary, literal UTF-8, display/message ordering, malformed/oversize/unterminated recovery, larger incoming snapshots, escaped IAC, WONT/WILL transitions and real-socket Hello/Supports/recovery requests.
+- Why: GMCP frames must stay out of terminal text and survive arbitrary network reads.
+- Named seam: TelnetClient.Interpret is the read loop's incremental decoder; direct chunk feeding makes every fragmentation boundary deterministic rather than depending on TCP packet coalescing.
+
 ### GotoHistoryStoreTests.cs
 - Covers: Game/Map/GotoHistoryStore
 - Checks: newest-first, promote, cap 10, write-back as "map/room", ignored with no profile, hydrate.
@@ -2085,6 +2101,11 @@ How to keep it current:
 - Covers: ViewModels/GameData/Tables/LocationFilters, CategoryFilter
 - Checks: Landmass → Region → Area narrowing, "(not set)", reload keeps picks, commit-then-filter, clear.
 - Why: Monsters tab location filters.
+
+### LiveGmcpFactAttribute.cs
+- Covers: opt-in isolated-host test discovery.
+- Checks: live account-dependent integration is skipped unless disposable test credentials are supplied through the environment.
+- Why: normal test runs must not connect to a user's realm or store credentials in source.
 
 ### LogDiagnosticsTests.cs
 - Covers: Services/LogService, LogDiagnosticState, Models/Settings LogDiagnosticsSettings

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.186.0
+
+- GMCP server data with per-package shadow and active modes in BBS settings
+- Scoped text fallback and monster identity recovery across room changes and reconnects
+- Live server vitals, stats, conditions, rooms, occupants and exact monster HP
+
 ## 3.185.51
 
 - Settings tab Periodic Damage Room Spells renamed Room Spell Config

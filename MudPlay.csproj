@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.185.51</Version>
+    <Version>3.186.0</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -80,6 +80,7 @@
          syncs the read-only ones into Global (users who only swap the exe used to
          keep stale seeds forever — the loose Defaults/ folder never updated). -->
     <EmbeddedResource Include="Defaults\*.seed.json" />
+    <EmbeddedResource Include="Game/Gmcp/Schemas/*.json" />
   </ItemGroup>
 
   <!-- nav-seed (starter Loops + Favorites) is a directory tree whose .loop filenames

@@ -104,8 +104,11 @@ public sealed class LairTimerStore : IDisposable
     // timer + clock start. Convenience for the scheduler. Returns null when
     // respawn time isn't known OR the room has no clock start this session
     // (in which case the scheduler should treat it as "ready now").
+    public Func<RoomKey, (bool Known, DateTimeOffset? EligibleAt)>? GmcpEligibility { get; set; }
+
     public DateTimeOffset? NextReadyAt(RoomKey key, int? overrideRespawnSeconds = null)
     {
+        if (GmcpEligibility?.Invoke(key) is { Known: true } server) return server.EligibleAt;
         int? respawn = overrideRespawnSeconds ?? DefaultRespawnSeconds(key);
         if (respawn is not int seconds) return null;
         DateTimeOffset? start = ClockStart(key);

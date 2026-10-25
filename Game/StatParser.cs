@@ -31,6 +31,15 @@ public sealed partial class StatParser : IDisposable
     private bool _disposed;
 
     public PlayerStats Stats { get; }
+    public Func<bool>? GmcpOwnsVitals { get; set; }
+    public Func<bool>? GmcpOwnsStats { get; set; }
+
+    private bool GmcpOwnsField(string field) => field switch
+    {
+        "Hits" or "Kai" or "Mana" or "Level" or "Exp" => GmcpOwnsVitals?.Invoke() == true,
+        "Lives/CP" or "Name" or "Race" or "Class" => false,
+        _ => GmcpOwnsStats?.Invoke() == true
+    };
 
     // Window after observing outbound stat during which incoming lines are
     // scanned.
@@ -262,7 +271,7 @@ public sealed partial class StatParser : IDisposable
 
     private void ForgetScreenMarks()
     {
-        Stats.ModifiedMarksRead = false;
+        if (GmcpOwnsStats?.Invoke() != true) Stats.ModifiedMarksRead = false;
         Stats.ModifiedStats = StatSet.None;
         Stats.ActiveEffects = Array.Empty<StatusEffectLine>();
     }
@@ -596,6 +605,7 @@ public sealed partial class StatParser : IDisposable
     private void TryStat(string text, CellAttributes[]? attributes, Regex rx, string field,
                          StatSet stat, Action<int> set)
     {
+        if (GmcpOwnsField(field)) return;
         Match m = rx.Match(text);
         if (!m.Success) return;
         if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
@@ -637,6 +647,7 @@ public sealed partial class StatParser : IDisposable
     // commit atomically on a successful match.
     private void TryExpLine(string text)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return;
         Match m = ExpLineRx().Match(text);
         if (!m.Success) return;
         System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Integer;
@@ -688,6 +699,7 @@ public sealed partial class StatParser : IDisposable
     // Stats.Exp, so this accrual lives here rather than in a consumer.
     private void OnExperienceGainLine(string text)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return;
         Match m = ExpGainRx().Match(text);
         if (!m.Success) return;
         if (!long.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
@@ -722,6 +734,7 @@ public sealed partial class StatParser : IDisposable
     // exp)" rather than the old level's leftover to-next.
     private void OnTrainSuccessLine(string text)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return;
         int newLevel;
         Match stock = TrainAttainLevelRx().Match(text);
         if (stock.Success &&
@@ -782,6 +795,7 @@ public sealed partial class StatParser : IDisposable
     // poolMax 0, which ApplyStatScreenMax ignores. Returns true on a commit.
     private bool TryHealthCommandLine(string text)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return false;
         Match m = HealthCommandRx().Match(text);
         if (!m.Success) return false;
         System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Integer;
@@ -833,6 +847,7 @@ public sealed partial class StatParser : IDisposable
 
     private void TryInt(string text, Regex rx, string field, Action<int> set)
     {
+        if (GmcpOwnsField(field)) return;
         Match m = rx.Match(text);
         if (!m.Success) return;
         if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
@@ -846,6 +861,7 @@ public sealed partial class StatParser : IDisposable
     // Long sibling of TryInt — for Exp, whose Paradigm value passes int32.
     private void TryLong(string text, Regex rx, string field, Action<long> set)
     {
+        if (GmcpOwnsField(field)) return;
         Match m = rx.Match(text);
         if (!m.Success) return;
         if (!long.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
@@ -858,6 +874,7 @@ public sealed partial class StatParser : IDisposable
 
     private void TryPair(string text, Regex rx, string field, Action<int, int> set)
     {
+        if (GmcpOwnsField(field)) return;
         Match m = rx.Match(text);
         if (!m.Success) return;
         System.Globalization.NumberStyles ns = System.Globalization.NumberStyles.Integer;
@@ -917,11 +934,11 @@ public sealed partial class StatParser : IDisposable
     {
         if (!_headerReadThisArm) return;
         bool whole = _statsReadThisArm == StatSet.All;
-        Stats.ModifiedStats = whole ? _modifiedThisArm : StatSet.None;
+        if (GmcpOwnsStats?.Invoke() != true) Stats.ModifiedStats = whole ? _modifiedThisArm : StatSet.None;
         Stats.ActiveEffects = whole && _effectsThisArm.Count > 0
             ? _effectsThisArm.ToArray()
             : Array.Empty<StatusEffectLine>();
-        Stats.ModifiedMarksRead = whole && _marksKnownThisArm == StatSet.All;
+        if (GmcpOwnsStats?.Invoke() != true) Stats.ModifiedMarksRead = whole && _marksKnownThisArm == StatSet.All;
         if (Stats.ModifiedStats != StatSet.None)
             _log?.Log(LogSeverity.Debug, "StatParser",
                 $"Stat screen marks {Stats.ModifiedStats} as modified; {Stats.ActiveEffects.Count} effect line(s) listed.");

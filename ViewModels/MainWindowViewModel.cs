@@ -1263,6 +1263,8 @@ public partial class MainWindowViewModel : ObservableObject
         // relocalize after a random teleport. RoomParsed fires before the
         // tracker consumes the observation, so a look-peek (which the tracker
         // drops) still reaches the solver.
+        _roomDisplayParser.GmcpOwnsRoom = () => AppServices.Current.Gmcp.State.Owns("Anomaly.Room.Info");
+        _roomDisplayParser.RoomParsed += AppServices.Current.Gmcp.ObserveRoom;
         _roomDisplayParser.RoomParsed += AppServices.Current.MazeSolver.OnRoomObserved;
         // Same feed drives the pyramid solver's F3 door-state reads and its scatter
         // (room-name) fail detection.
@@ -3431,6 +3433,13 @@ public partial class MainWindowViewModel : ObservableObject
         RefreshBbsBindings();
     }
 
+    private static async Task RefreshTextAfterGmcpAsync(TelnetClient client)
+    {
+        try { await client.SendTextAsync("look\r\n"); }
+        catch (Exception ex) when (ex is System.IO.IOException or System.Net.Sockets.SocketException or ObjectDisposedException)
+        { AppServices.Current.Log.Warn("GMCP", $"Text resync failed: {ex.Message}"); }
+    }
+
     private TelnetClient BuildTelnetClient()
     {
         BbsProfile? activeBbs = ResolveActiveBbs();
@@ -3439,11 +3448,29 @@ public partial class MainWindowViewModel : ObservableObject
             Cols = Emulator.Screen.Cols,
             Rows = Emulator.Screen.Rows,
             TerminalType = "ansi-bbs",
+            ClientVersion = AppInfo.Version,
             NoResponseTimeoutSeconds = activeBbs?.NoResponseTimeoutSeconds ?? 0,
         };
 
         // Telnet client events fire on a background thread. Marshal anything
         // that touches UI state through the dispatcher so bindings stay safe.
+        AppServices.Current.Gmcp.Disconnected();
+        AppServices.Current.Gmcp.Configure(activeBbs?.GmcpModes ?? new());
+        AppServices.Current.Gmcp.SetSender((package, payload) => client.SendGmcpAsync(package, payload));
+        client.GmcpReceived += message => Dispatcher.UIThread.Post(() =>
+        {
+            if (ReferenceEquals(_telnet, client)) AppServices.Current.Gmcp.Receive(message);
+        });
+        client.GmcpNegotiated += enabled =>
+        {
+            if (!enabled) Dispatcher.UIThread.Post(() =>
+            {
+                if (!ReferenceEquals(_telnet, client)) return;
+                bool wasActive = Game.Gmcp.GmcpIntegration.Packages.Any(AppServices.Current.Gmcp.State.Owns);
+                AppServices.Current.Gmcp.Disconnected();
+                if (wasActive && client.EndedBecause is null) _ = RefreshTextAfterGmcpAsync(client);
+            });
+        };
         client.DataReceived += data =>
         {
             // Copy out of the rented buffer because the emitter may reuse it

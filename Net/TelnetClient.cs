@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using static MudPlay.Net.TelnetProtocol;
@@ -42,7 +43,13 @@ public sealed class TelnetClient : IAsyncDisposable
     // Sub-negotiation accumulator (used when we see IAC SB ... IAC SE).
     private InterpretState _state;
     private int _sbLen;
-    private readonly byte[] _sbBuf = new byte[256];
+    private byte[] _sbBuf = new byte[4096];
+    private bool _sbOverflow;
+    private volatile bool _gmcpEnabled;
+    public bool GmcpEnabled { get => _gmcpEnabled; private set => _gmcpEnabled = value; }
+    public string ClientVersion { get; set; } = "unknown";
+    public event Action<GmcpMessage>? GmcpReceived;
+    public event Action<bool>? GmcpNegotiated;
 
     // Terminal type string sent in response to TERM-TYPE SEND.
     public string TerminalType { get; set; } = "ansi-bbs";
@@ -191,6 +198,23 @@ public sealed class TelnetClient : IAsyncDisposable
         }
     }
 
+    public Task SendGmcpAsync(string package, object payload, CancellationToken ct = default)
+        => GmcpEnabled ? WriteRawAsync(GmcpProtocol.Frame(package, payload), ct) : Task.CompletedTask;
+
+    private async Task BeginGmcpAsync()
+    {
+        try
+        {
+            await WriteRawAsync(new byte[] { IAC, DO, OptGmcp }).ConfigureAwait(false);
+            await SendGmcpAsync("Core.Hello", new { client = "MudPlay", version = ClientVersion, contract = GmcpProtocol.ContractVersion }).ConfigureAwait(false);
+            await SendGmcpAsync("Core.Supports.Set", GmcpProtocol.Supports).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
+        {
+            Log?.Invoke($"GMCP handshake failed: {ex.Message}");
+        }
+    }
+
     // Convenience: send a string as Latin-1 (8-bit "ANSI") bytes.
     public Task SendTextAsync(string text, CancellationToken ct = default)
         => SendAsync(Encoding.Latin1.GetBytes(text), ct);
@@ -293,6 +317,8 @@ public sealed class TelnetClient : IAsyncDisposable
         catch (SocketException ex) { EndedBecause = ex.Message; }
         finally
         {
+            GmcpEnabled = false;
+            GmcpNegotiated?.Invoke(false);
             Disconnected?.Invoke();
         }
     }
@@ -309,7 +335,7 @@ public sealed class TelnetClient : IAsyncDisposable
     // copying display bytes to output and dispatching DO/DONT/WILL/WONT and
     // SB/SE blocks as they're found. Returns the number of display bytes
     // written.
-    private int Interpret(ReadOnlySpan<byte> input, Span<byte> output)
+    internal int Interpret(ReadOnlySpan<byte> input, byte[] output)
     {
         int outLen = 0;
         foreach (byte b in input)
@@ -324,12 +350,13 @@ public sealed class TelnetClient : IAsyncDisposable
                 case InterpretState.GotIac:
                     // IAC IAC = literal 0xFF byte in the data stream.
                     if (b == IAC) { output[outLen++] = IAC; _state = InterpretState.Normal; }
-                    else if (b == SB) { _sbLen = 0; _state = InterpretState.InSb; }
+                    else if (b == SB) { _sbLen = 0; _sbOverflow = false; _state = InterpretState.InSb; }
                     else if (b is DO or DONT or WILL or WONT) { _pendingCmd = b; _state = InterpretState.GotCmd; }
                     else { _state = InterpretState.Normal; } // ignore unknown IAC <X>
                     break;
 
                 case InterpretState.GotCmd:
+                    if (outLen > 0) { DataReceived?.Invoke(output.AsMemory(0, outLen)); outLen = 0; }
                     HandleNegotiation(_pendingCmd, b);
                     _state = InterpretState.Normal;
                     break;
@@ -337,17 +364,40 @@ public sealed class TelnetClient : IAsyncDisposable
                 case InterpretState.InSb:
                     // Bytes inside SB ... SE accumulate into _sbBuf until an IAC SE.
                     if (b == IAC) _state = InterpretState.GotIacInSb;
-                    else if (_sbLen < _sbBuf.Length) _sbBuf[_sbLen++] = b;
+                    else AccumulateSubNegotiation(b);
                     break;
 
                 case InterpretState.GotIacInSb:
-                    if (b == IAC) { if (_sbLen < _sbBuf.Length) _sbBuf[_sbLen++] = IAC; _state = InterpretState.InSb; }
-                    else if (b == SE) { HandleSubNegotiation(); _state = InterpretState.Normal; }
-                    else { _state = InterpretState.Normal; } // malformed — drop it
+                    if (b == IAC) { AccumulateSubNegotiation(IAC); _state = InterpretState.InSb; }
+                    else if (b == SE)
+                    {
+                        if (outLen > 0) { DataReceived?.Invoke(output.AsMemory(0, outLen)); outLen = 0; }
+                        if (!_sbOverflow) HandleSubNegotiation();
+                        _state = InterpretState.Normal;
+                    }
+                    else
+                    {
+                        Log?.Invoke("Malformed telnet subnegotiation discarded.");
+                        if (b == SB) { _sbLen = 0; _sbOverflow = false; _state = InterpretState.InSb; }
+                        else if (b is DO or DONT or WILL or WONT) { _pendingCmd = b; _state = InterpretState.GotCmd; }
+                        else { _sbOverflow = true; _state = InterpretState.InSb; }
+                    }
                     break;
             }
         }
         return outLen;
+    }
+
+    private void AccumulateSubNegotiation(byte value)
+    {
+        if (_sbLen == _sbBuf.Length && _sbLen < GmcpProtocol.MaxIncomingBodyBytes + 1)
+            Array.Resize(ref _sbBuf, Math.Min(_sbBuf.Length * 2, GmcpProtocol.MaxIncomingBodyBytes + 1));
+        if (_sbLen < _sbBuf.Length) _sbBuf[_sbLen++] = value;
+        else if (!_sbOverflow)
+        {
+            _sbOverflow = true;
+            Log?.Invoke("Oversize telnet subnegotiation discarded.");
+        }
     }
 
     // React to a DO/DONT/WILL/WONT request. We say yes only to the small
@@ -355,6 +405,25 @@ public sealed class TelnetClient : IAsyncDisposable
     private void HandleNegotiation(byte cmd, byte opt)
     {
         Log?.Invoke($"RX: {CmdName(cmd)} {OptName(opt)}");
+
+        if (opt == OptGmcp)
+        {
+            if (cmd == WILL && !GmcpEnabled)
+            {
+                GmcpEnabled = true;
+                GmcpNegotiated?.Invoke(true);
+                _ = BeginGmcpAsync();
+            }
+            else if (cmd == WONT)
+            {
+                bool wasEnabled = GmcpEnabled;
+                GmcpEnabled = false;
+                GmcpNegotiated?.Invoke(false);
+                if (wasEnabled) SendCommand(DONT, opt);
+            }
+            else if (cmd == DO) SendCommand(WONT, opt);
+            return;
+        }
 
         // DO/DONT target *our* behavior; WILL/WONT target the server's.
         bool isLocal = cmd is DO or DONT;
@@ -396,6 +465,13 @@ public sealed class TelnetClient : IAsyncDisposable
     {
         if (_sbLen < 1) return;
         byte opt = _sbBuf[0];
+        if (opt == OptGmcp && GmcpEnabled)
+        {
+            try { GmcpReceived?.Invoke(GmcpProtocol.Parse(_sbBuf.AsSpan(1, _sbLen - 1))); }
+            catch (Exception ex) when (ex is JsonException or DecoderFallbackException)
+            { Log?.Invoke($"Invalid GMCP message discarded: {ex.Message}"); }
+            return;
+        }
         if (opt == OptTermType && _sbLen >= 2 && _sbBuf[1] == SubTermSend)
         {
             var name = Encoding.ASCII.GetBytes(TerminalType);
@@ -435,6 +511,7 @@ public sealed class TelnetClient : IAsyncDisposable
         OptSupGa => "SUP-GA",
         OptTermType => "TERM-TYPE",
         OptNaws => "NAWS",
+        OptGmcp => "GMCP",
         _ => $"opt{b}",
     };
 }

@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.51**
-> - Settings tab Periodic Damage Room Spells renamed Room Spell Config
-> - Room spells whose damage only comes with moving you out (the ice slide), the class filters and the Great Pyramid traps left off the resting list, never bar a rest
-> - A spell code two classes share (Druid blaze / Priest blazing light, `blaz`) is judged by the character's own spell, so a Druid casts blaze again
-> - Program log notes when a game-data gate keeps a configured combat spell off a target
+> **Version 3.186.0**
+> - GMCP server data with per-package shadow and active modes in BBS settings
+> - Scoped text fallback and monster identity recovery across room changes and reconnects
+> - Live server vitals, stats, conditions, rooms, occupants and exact monster HP
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

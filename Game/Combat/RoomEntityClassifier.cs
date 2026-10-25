@@ -95,6 +95,17 @@ public sealed class RoomEntityClassifier : IDisposable
     // Fires after each successful "Also here:" parse. Subscribers run on the
     // MessageRouter's marshalled thread.
     public event Action<RoomEntitiesObservation>? EntitiesObserved;
+    public event Action<RoomEntitiesObservation>? TextObserved;
+    public Func<bool>? GmcpOwnsOccupants { get; set; }
+
+    public void ApplyGmcp(IReadOnlyList<RoomEntity> entities)
+    {
+        RoomEntitiesObservation observation = new("", entities, _now());
+        if (Current is { } current && current.Entities.SequenceEqual(entities)) return;
+        Current = observation;
+        SetRosterWhole(true);
+        EntitiesObserved?.Invoke(observation);
+    }
 
     // Last observation parsed, or null when no "Also here:" line has been seen
     // this session.
@@ -274,6 +285,8 @@ public sealed class RoomEntityClassifier : IDisposable
         }
 
         RoomEntitiesObservation obs = new(rawFirst, entities, _now());
+        TextObserved?.Invoke(obs);
+        if (GmcpOwnsOccupants?.Invoke() == true) return;
         Current = obs;
         _lastAlsoHereAt = obs.At;
         SetRosterWhole(true);
@@ -304,6 +317,8 @@ public sealed class RoomEntityClassifier : IDisposable
         }
 
         RoomEntitiesObservation obs = new(rawLine, entities, _now());
+        TextObserved?.Invoke(obs);
+        if (GmcpOwnsOccupants?.Invoke() == true) return;
         Current = obs;
         _lastAlsoHereAt = obs.At;
         SetRosterWhole(true);
@@ -358,6 +373,7 @@ public sealed class RoomEntityClassifier : IDisposable
     // click-to-fix) see the arrival line rather than the stale Also-Here.
     public void AppendArrivalEntity(RoomEntity entity, string rawWireLine)
     {
+        if (GmcpOwnsOccupants?.Invoke() == true) return;
         IReadOnlyList<RoomEntity> baseEntities = Current is { } cur
             ? cur.Entities
             : Array.Empty<RoomEntity>();
@@ -585,6 +601,7 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private void OnRoomTrackerStateChanged(RoomTransition transition)
     {
+        if (GmcpOwnsOccupants?.Invoke() == true) return;
         // Only act on true location changes — confidence-only flips
         // (Located ↔ Lost without a real room swap) don't qualify.
         if (transition.PreviousRoom is null) return;     // initial location set
@@ -759,6 +776,7 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private bool RemoveEntity(string monsterName, EntityKind kind, RoomObservationSource source)
     {
+        if (GmcpOwnsOccupants?.Invoke() == true) return false;
         if (string.IsNullOrWhiteSpace(monsterName)) return false;
         if (Current is not { } cur) return false;
 

@@ -32,6 +32,8 @@ public sealed class MonsterHpTracker
     private readonly LogService? _log;
 
     private List<Instance> _room = new();
+    public Func<long, MonsterHpRead?>? GmcpRead { get; set; }
+    private MonsterHpRead? Live(Instance monster) => monster.RuntimeId is { } uid ? GmcpRead?.Invoke(uid) : null;
 
     // Raised when an instance's estimate moves on damage, with its name — the status
     // bar re-reads the looked-at target.
@@ -80,6 +82,15 @@ public sealed class MonsterHpTracker
         foreach (RoomEntity e in obs.Entities)
         {
             if (e.Kind != EntityKind.Monster || e.MonsterNumber is not int number) continue;
+            if (e.RuntimeId is { } uid)
+            {
+                Instance? retained = _room.FirstOrDefault(i => i.RuntimeId == uid);
+                if (retained is not null) { next.Add(retained); continue; }
+                int? liveMax = GmcpRead?.Invoke(uid)?.MaxHp;
+                if ((liveMax ?? _maxHp(number)) is { } maximum)
+                    next.Add(new Instance(e.RawName, e.ResolvedName, maximum, _regen(number)) { RuntimeId = uid });
+                continue;
+            }
             if (old.TryGetValue(e.RawName, out Queue<Instance>? q) && q.Count > 0)
             {
                 next.Add(q.Dequeue());
@@ -89,6 +100,16 @@ public sealed class MonsterHpTracker
             next.Add(new Instance(e.RawName, e.ResolvedName, max, _regen(number)));
         }
         _room = next;
+    }
+
+    public void NotifyGmcpChanged()
+    {
+        foreach (Instance monster in _room)
+            if (Live(monster) is { } live && monster.LastGmcpHp != live.BestGuess)
+            {
+                monster.LastGmcpHp = live.BestGuess;
+                EstimateChanged?.Invoke(monster.Name);
+            }
     }
 
     // A damage line the round ledger read. Damage to a monster lands on the first of
@@ -127,14 +148,14 @@ public sealed class MonsterHpTracker
     {
         if (First(name) is not { } i) return null;
         Advance(i, _now());
-        return (i.Id, i.Hp);
+        return (i.Id, Live(i)?.BestGuess ?? i.Hp);
     }
 
     // Every tracked monster in the room, in "Also here:" order — what a room spell hits.
     public IReadOnlyList<(int Id, string Name, int Hp)> RoomMonsters()
     {
         DateTimeOffset now = _now();
-        return _room.Select(i => { Advance(i, now); return (i.Id, i.Name, i.Hp); }).ToList();
+        return _room.Select(i => { Advance(i, now); return (i.Id, i.Name, Live(i)?.BestGuess ?? i.Hp); }).ToList();
     }
 
     // The running estimate for the first monster of this name, or null when there's
@@ -143,7 +164,7 @@ public sealed class MonsterHpTracker
     {
         if (First(name) is not { } i) return null;
         Advance(i, _now());
-        return i.Hp;
+        return Live(i)?.BestGuess ?? i.Hp;
     }
 
     // A `look` read the first monster of this name at band: the band is the truth, so
@@ -151,6 +172,7 @@ public sealed class MonsterHpTracker
     public MonsterHpRead? OnLook(string name, MonsterHpEstimate band)
     {
         if (First(name) is not { } i || band.Mortal) return null;
+        if (Live(i) is { } live) return live;
         DateTimeOffset now = _now();
         Advance(i, now);
         int before = i.Hp;
@@ -215,6 +237,8 @@ public sealed class MonsterHpTracker
 
     private sealed class Instance(string name, string baseName, int maxHp, int regen)
     {
+        public long? RuntimeId { get; init; }
+        public int? LastGmcpHp;
         public int Id { get; } = System.Threading.Interlocked.Increment(ref _nextId);
         public string Name { get; } = name;
         public string BaseName { get; } = baseName;

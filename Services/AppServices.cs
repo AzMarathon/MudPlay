@@ -372,6 +372,7 @@ public sealed class AppServices
     // Sole writer of the state's HP / MA / position / mana-type fields
     // (the single-writer IL scan enforces this).
     public Game.PromptParser Player { get; }
+    public Game.Gmcp.GmcpIntegration Gmcp { get; }
 
     // Client-side terminal line buffer. Routes user keystrokes through
     // a local 254-char accumulator that only flushes to the wire on
@@ -11007,6 +11008,12 @@ public sealed class AppServices
         // Once, with the version that stopped the default profile being written: it
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
+        Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log);
+        Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
+        LairTimers.GmcpEligibility = Gmcp.LairEligibility;
+        PromptScanner.PromptObserved += Gmcp.ObservePrompt;
+        Profile.ProfileClosed += Gmcp.Disconnected;
+
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
 
         // Startup profile priority: a --profile launch argument wins over the

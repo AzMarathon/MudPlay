@@ -111,8 +111,11 @@ public sealed class RoomGraphManager
 
     // Direct lookup by primary key. Returns null when the key doesn't resolve
     // in the active set's graph.
-    public Room? GetRoom(RoomKey key) =>
-        _rooms.TryGetValue(key, out Room? room) ? room : null;
+    private readonly Dictionary<RoomKey, Room> _gmcpRooms = new();
+    public Room? GetRoom(RoomKey key) => _gmcpRooms.TryGetValue(key, out Room? live) ? live
+        : _rooms.TryGetValue(key, out Room? room) ? room : null;
+    public void SetGmcpRoom(Room room) => _gmcpRooms[room.Key] = room;
+    public void ClearGmcpRooms() => _gmcpRooms.Clear();
 
     // A remote lever/switch sitting in one room that governs an exit in another.
     // ControlledRoom + Direction name the exit it operates; Commands are the

@@ -15,8 +15,8 @@ namespace MudPlay.Game.Conditions;
 //
 // User-extensible by design: the user defines what lines map to what condition
 // effects via the Game Data Browser → Messages tab. No hardcoded ailment names
-// live in this class — every flag bit comes from a record's Flags value, which
-// means a realm with a unique status effect "Cursed" just needs a Messages-tab
+// live in the text matching — flags come from the records or an authoritative
+// server status. A realm with a unique status effect "Cursed" needs a Messages-tab
 // entry, not engine code.
 //
 // Matching is case-sensitive substring containment — verbatim text from the
@@ -157,6 +157,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     [ObservableProperty]
     [field: Owner(typeof(ConditionTracker))]
     private MessageFlags _activeFlags;
+    private MessageFlags? _gmcpFlags;
+    private const MessageFlags GmcpMask = MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.Poisoned | MessageFlags.Diseased;
+    public void ApplyGmcpFlags(MessageFlags? flags) { if (_gmcpFlags == flags) return; _gmcpFlags = flags; RecomputeFlags(); }
 
     // ----- Per-flag computed helpers — keep CastingDirector & friends
     // readable without sprinkling .HasFlag() everywhere.
@@ -344,7 +347,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _expiresAt.Clear();
         if (_active.Count == 0) return;
         _active.Clear();
-        ActiveFlags = MessageFlags.None;
+        RecomputeFlags();
         _log?.Info(LogCategory, $"all conditions cleared ({reason})");
     }
 
@@ -1151,6 +1154,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (!_active.Contains(r.Id)) continue;
             flags |= r.Flags;
         }
+        if (_gmcpFlags is { } known) flags = (flags & ~GmcpMask) | (known & GmcpMask);
         if (flags == ActiveFlags) return;
         ActiveFlags = flags;
     }

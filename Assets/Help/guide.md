@@ -5073,6 +5073,21 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
+### Live server data (GMCP)
+
+On servers that offer the Anomaly GMCP contract, MudPlay can receive character and room data alongside the normal terminal text. Other servers continue to use text parsing.
+
+In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. Changes apply on the next connection:
+
+- **Off:** use text for that package without shadow comparisons.
+- **Shadow** (default): keep using text and compare the fields both sources carry. Differences appear under **GMCP shadow** in the program log. Extra server information, such as hidden exits or exact monster HP, is not compared with text that never reports it.
+- **Active:** use a valid server snapshot for that package. Until the snapshot arrives, or after its scoped reset, text parsing resumes for that package. An incompatible contract or GMCP being disabled restores text parsing.
+
+Activate both **Room.Occupants** and **Mob** to use server-provided monsters for targeting. The client waits for each listed monster's static information and complete live baseline before using the roster. Returning to a room reuses static information but requires fresh live state. **Mob** active mode also supplies exact HP to the existing monster HP readouts.
+
+**Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
+
+
 Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Move to BBS*).
 
 To make each setting's persistence level obvious, the tab is split into three banner-headed sections:

@@ -23,6 +23,8 @@ public sealed class PromptParser : IDisposable
 {
     private readonly WirePromptScanner _scanner;
     private bool _disposed;
+    public Func<bool>? GmcpOwnsVitals { get; set; }
+    public Func<bool>? GmcpOwnsStatus { get; set; }
 
     public PlayerState State { get; }
 
@@ -37,22 +39,25 @@ public sealed class PromptParser : IDisposable
 
     private void OnPromptObserved(PromptObservation obs)
     {
-        State.Hp = obs.Hp;
-        if (obs.Hp > State.MaxHp) State.MaxHp = obs.Hp;
-
-        State.ManaType = obs.ManaType;
-        if (obs.ManaType == ManaType.None)
+        if (GmcpOwnsVitals?.Invoke() != true)
         {
-            State.Ma = 0;
-            State.MaxMa = 0;
-        }
-        else
-        {
-            State.Ma = obs.Mana;
-            if (obs.Mana > State.MaxMa) State.MaxMa = obs.Mana;
-        }
+            State.Hp = obs.Hp;
+            if (obs.Hp > State.MaxHp) State.MaxHp = obs.Hp;
 
-        State.Position = obs.Position;
+            State.ManaType = obs.ManaType;
+            if (obs.ManaType == ManaType.None)
+            {
+                State.Ma = 0;
+                State.MaxMa = 0;
+            }
+            else
+            {
+                State.Ma = obs.Mana;
+                if (obs.Mana > State.MaxMa) State.MaxMa = obs.Mana;
+            }
+
+        }
+        if (GmcpOwnsStatus?.Invoke() != true) State.Position = obs.Position;
         State.HasPromptData = true;
     }
 
@@ -65,6 +70,7 @@ public sealed class PromptParser : IDisposable
     // failed / absent parse can't wipe an already-learned max.
     public void ApplyStatScreenMax(int maxHp, int maxMa)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return;
         if (maxHp > 0) State.MaxHp = maxHp;
         // A no-mana class (ManaType.None — warriors, ninjas) has no live mana
         // pool, yet its stat / exp screen can list a latent MaxMana (a Ninja reads
@@ -110,9 +116,23 @@ public sealed class PromptParser : IDisposable
     // pool at 0 so an unexpected combination of deltas can't go negative.
     public void ApplyEquipmentMaxDelta(int hpDelta, int maDelta)
     {
+        if (GmcpOwnsVitals?.Invoke() == true) return;
         if (hpDelta != 0) State.MaxHp = Math.Max(0, State.MaxHp + hpDelta);
         if (maDelta != 0) State.MaxMa = Math.Max(0, State.MaxMa + maDelta);
     }
+
+    public void ApplyGmcpVitals(int hp, int maxHp, int mana, int maxMana, ManaType manaType)
+    {
+        State.Hp = hp;
+        State.MaxHp = maxHp;
+        State.Ma = mana;
+        State.MaxMa = maxMana;
+        State.ManaType = manaType;
+        State.HasPromptData = true;
+    }
+
+    public void ApplyGmcpPosition(bool resting, bool meditating)
+        => State.Position = meditating ? PlayerPosition.Meditating : resting ? PlayerPosition.Resting : PlayerPosition.Standing;
 
     public void Dispose()
     {

@@ -171,6 +171,10 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         foreach (RoomTooltipBuilder.RoomMonsterRef m in rm.Lair)
             LairMonsters.Add(MakeMonsterLink(m.Id, m.Name, note: null));
         LairRegen = RoomTooltipBuilder.FormatLairRegen(rm.LairMax, room.Delay, _services.GameData.ActiveRealm);
+        if (_services.Gmcp.LairEligibility(room.Key) is { Known: true } eligibility)
+            LairRegen = eligibility.EligibleAt is { } deadline
+                ? $"Spawn eligible after {deadline.ToLocalTime():HH:mm:ss} (not guaranteed)"
+                : "Spawn eligibility: no timer available";
 
         // Obvious exits — one clickable row per exit, same ordering + hint as the
         // map tooltip. Clicking re-roots the map on the neighbour and refreshes

@@ -1031,6 +1031,7 @@ public sealed class CombatStateTracker : IDisposable
 
     private void OnAnyCombatLine(MatchResult match)
     {
+        if (GmcpOwnsStatus?.Invoke() == true) return;
         if (_isNotCombatLine?.Invoke(match.Text) == true) return;
         // A damage/miss line is proof the fight is live — refresh the
         // watchdog's activity stamp so it never fires mid-fight.
@@ -1058,9 +1059,17 @@ public sealed class CombatStateTracker : IDisposable
     // `break` would do anything — HealthManager's flee skips it when we're not
     // swinging (a `break` then only draws "Your command had no effect.").
     public bool IsServerEngaged { get; private set; }
+    public Func<bool>? GmcpOwnsStatus { get; set; }
+    public void ApplyGmcpCombat(bool combat)
+    {
+        IsServerEngaged = combat;
+        _state.InCombat = combat;
+        if (combat) _lastCombatActivityAt = _now();
+    }
 
     private void OnCombatStatus(MatchResult match)
     {
+        if (GmcpOwnsStatus?.Invoke() == true) return;
         // (?<status>Engaged|Off) capture in DefaultPatterns.
         if (match.Groups.Count == 0) return;
         string status = match.Groups[0];

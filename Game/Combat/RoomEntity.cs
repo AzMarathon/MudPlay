@@ -37,4 +37,5 @@ public readonly record struct RoomEntity(
     string RawName,
     string ResolvedName,
     EntityKind Kind,
-    int? MonsterNumber);
+    int? MonsterNumber,
+    long? RuntimeId = null);
