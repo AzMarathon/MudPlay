@@ -33,6 +33,11 @@ public sealed partial class PlayerStats : ObservableObject
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _lives;
     // Character points available to spend — the other half of Lives/CP: N/M.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _cp;
+    // The level whose training CP is already counted in Cp: the level on the `stat`
+    // screen that read Cp, or the level a train's CP-gain line was added at. A `train`
+    // moves Level on its success line, but its CP reaches Cp only on its own line
+    // (Paradigm) or on the next `stat` (Stock), so the two can stand a level apart.
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private int _cpThroughLevel;
 
     // Exp still needed to hit the next level — the first N in the exp
     // command's output line ("Exp needed for next level: N (M) [P%]").

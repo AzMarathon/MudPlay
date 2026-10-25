@@ -616,6 +616,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
   - a reading that puts nothing on the stat can't be the marked one and is dropped. One whose modifiers cancel is dropped on Stock (the mark is current ≠ trained), and leaves the stat unexplained on Paradigm, where that isn't confirmed;
   - with no marks on record (a snapshot saved before they were kept) worn gear comes off the shown value, as before the marks were read.
 - **Client policy:** the CP plan is rewritten, pruned or typed from the `stat` figures only on a reading whose marked stats are all explained, and on Stock only when no stat is marked at all (`CharacterPlanContext.BaselineTrusted`). That rule was written while what a Stock cast adds was `[NEEDS CONFIRMATION]` (settled 2026-10-09, the *amount a Stock cast adds* bullet in this topic), and Stock refuses `train stats` with a stat altered anyway.
+- **Client policy:** while the latest reading isn't one of those, the plan grid's Total CP earned and CP Left are worked from the last one this session that was, with that reading's CP and level (`CpPlanBaseline`; report `paradigm-20261025-010655`, CP Left moving as a cosmic staff's INT/WIL buff came and went).
 
 ### Another player looking at you
 *Status: CONFIRMED 2026-07-20 (user)*
@@ -1185,6 +1186,9 @@ How a character is named, how it earns and spends character points (CP), how exp
 - **Per-level training gain formula (level ≥ 2):** `((level - 1) / 10) * 5 + 10` (integer division).
 - **Total CP on reaching a level, spending none:** `BaseCP + Σ gains(2..level)`.
 - **A level-10 character who spent nothing has 190 CP** (100 base + 9×10). Confirmed by a level-10 Kang who trained straight to 190 spent.
+
+**Client use:**
+- `CpPlanCalculator.Compute` adds no CP for a plan row at or below the level the unspent CP was counted through (`PlayerStats.CpThroughLevel`: the level on the `stat` screen that read the CP, or the level a `You gain N CPs` line came at), since that CP already holds each level's gain up to it; each row above it adds its own level's gain. Report `paradigm-20261025-010655`: at level 76 with 57 CP the level-76 row was credited 45 more, showing 102 earned and 51 left where 57 and 6 were true.
 
 ### What CP costs to spend
 *Status: CONFIRMED · Realm: differs*

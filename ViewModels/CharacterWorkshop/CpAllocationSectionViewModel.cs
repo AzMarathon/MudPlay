@@ -17,7 +17,8 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // CP ALLOCATION section — the editable per-level character-point plan. The
 // baseline is the live raw-base stats (the `stat` screen's values with whatever
-// it marked as modified worked back out, and a note when that can't be done);
+// it marked as modified worked back out, and a note when that can't be done, in
+// which case the grid stays on the last reading that could: CpPlanBaseline);
 // each grid row is a planned future level whose target STR/INT/WIL/AGL/HEA/CHM
 // the user edits, with Total CP earned / CP Left recomputed live via
 // CpPlanCalculator (race-min cost curve, race-max clamp, cumulative carryover).
@@ -35,7 +36,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private readonly CpPlanState _planState;
     private readonly TrainerWalkManager _trainerWalk;
     private readonly AutoTrainManager _autoTrain;
-    private readonly Game.Spells.ListedEffectCatalog _listedEffects;
+    private readonly CpPlanBaseline _planBaseline;
     private Control? _view;
     private bool _suppress;
     // The cell most recently edited by the user, so an overspend trims that cell
@@ -110,6 +111,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     // Captured on RefreshBaseline; inputs to the recalc.
     private CpPlanEntry _baseline = new();
+    private int _cpThroughLevel;
+    private bool _inputsHeld;
     private CpPlanEntry _raceMin = new();
     private CpPlanEntry _raceMax = new();
     private RealmType _realm;
@@ -124,7 +127,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
                                         InventoryManager inventory, ProfileService profile,
                                         CpPlanState planState, TrainerWalkManager trainerWalk,
                                         AutoTrainManager autoTrain,
-                                        Game.Spells.ListedEffectCatalog listedEffects)
+                                        CpPlanBaseline planBaseline)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -133,8 +136,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         ArgumentNullException.ThrowIfNull(planState);
         ArgumentNullException.ThrowIfNull(trainerWalk);
         ArgumentNullException.ThrowIfNull(autoTrain);
-        ArgumentNullException.ThrowIfNull(listedEffects);
-        _listedEffects = listedEffects;
+        ArgumentNullException.ThrowIfNull(planBaseline);
+        _planBaseline = planBaseline;
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -460,20 +463,24 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private void RefreshBaseline()
     {
-        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _listedEffects);
+        CpPlanInputs inputs = _planBaseline.Resolve(out CharacterPlanContext ctx);
         HasCharacter = ctx.HasCharacter;
         _baselineTrusted = ctx.BaselineTrusted;
         _baselineKnownOff = ctx.HasCharacter && !ctx.BaselineTrusted
             && ctx.Reading.State != StatReadingState.Unverified;
-        BaselineNote = DescribeReading(ctx);
+        BaselineNote = DescribeReading(ctx, inputs);
         if (!ctx.HasCharacter) return;
 
-        _baseline = ctx.Baseline;
+        // While the reading can't be worked back, these are the last one's that could
+        // (CpPlanBaseline), so a buff coming and going doesn't move the grid.
+        _baseline = inputs.Baseline;
+        _cpThroughLevel = inputs.CpThroughLevel;
+        _inputsHeld = inputs.Held;
         _raceMin = ctx.RaceMin;
         _raceMax = ctx.RaceMax;
         _realm = ctx.Realm;
 
-        UnspentCp = _stats.Cp;
+        UnspentCp = inputs.Cp;
         _lastEditedStat = null;   // baseline-driven recompute, not a cell edit
         RefreshStatTips();
         RecalcGrid();
@@ -483,21 +490,24 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     // the grid and for training here. Stock won't open the trainer while a stat is
     // altered; Paradigm will, and its form shows the real values whatever the
     // baseline says. Nothing is said for a mark that is only worn gear.
-    internal static string? DescribeReading(CharacterPlanContext ctx)
+    internal static string? DescribeReading(CharacterPlanContext ctx, CpPlanInputs inputs)
     {
         if (!ctx.HasCharacter) return null;
+        string held = inputs.Held
+            ? $" CP Left and Total CP earned stay as of the last `stat` that could be worked back ({inputs.Describe()})."
+            : string.Empty;
         if (ctx.Reading.State == StatReadingState.Unverified)
             return "No `stat` screen is on record that says whether these stats were read with a buff up. "
-                 + "Rows aren't checked against your stats until one is read.";
+                 + "Rows aren't checked against your stats until one is read." + held;
         if (ctx.Reading.Describe() is not { } said) return null;
         if (ctx.Realm == RealmType.Stock)
             return said + " The game won't open `train stats` while a stat is altered: Train now and Apply this "
                         + "level read `stat` again first, and wait for it to show the stats back to normal. "
-                        + "Rows aren't checked against your stats meanwhile.";
+                        + "Rows aren't checked against your stats meanwhile." + held;
         return ctx.BaselineTrusted
             ? said
             : said + " Rows aren't checked against your stats until a `stat` is read without it; Train now and "
-                   + "Apply this level take the real values from the trainer screen.";
+                   + "Apply this level take the real values from the trainer screen." + held;
     }
 
     // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
@@ -524,7 +534,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
         List<CpPlanEntry> entries = Rows.Select(r => r.ToEntry()).ToList();
         IReadOnlyList<CpRowResult> results = CpPlanCalculator.Compute(
-            _baseline, entries, _raceMin, _raceMax, UnspentCp, _realm, _lastEditedStat);
+            _baseline, entries, _raceMin, _raceMax, UnspentCp, _cpThroughLevel, _realm, _lastEditedStat);
+        LogGridIfChanged(results);
 
         _suppress = true;
         try
@@ -558,6 +569,21 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
             .Select(r => new CpPlanEntry(
                 r.Level, r.Strength, r.Intellect, r.Willpower, r.Agility, r.Health, r.Charm))
             .ToList());
+    }
+
+    // The grid recomputes on every stat change, exp gains included, so only a change
+    // in what it shows is logged.
+    private string? _lastLoggedGrid;
+
+    private void LogGridIfChanged(IReadOnlyList<CpRowResult> results)
+    {
+        string grid = CpPlanCalculator.Describe(results);
+        string line = $"CP plan grid from STR {_baseline.Strength} INT {_baseline.Intellect} WIL {_baseline.Willpower} "
+            + $"AGL {_baseline.Agility} HEA {_baseline.Health} CHM {_baseline.Charm}, {UnspentCp} CP counted through "
+            + $"level {_cpThroughLevel} ({(_baselineTrusted ? "trusted" : _inputsHeld ? "held from an earlier `stat`" : "not trusted")}): {grid}";
+        if (line == _lastLoggedGrid) return;
+        _lastLoggedGrid = line;
+        AppServices.CurrentOrNull?.Log.Debug("CpPlan", line);
     }
 
     // The stats a grid row should hold after a recalc: the clamped ones when the

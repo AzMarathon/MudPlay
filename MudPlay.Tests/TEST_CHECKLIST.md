@@ -858,13 +858,18 @@ How to keep it current:
 
 ### CpPlanBaselineTrustTests.cs
 - Covers: Game/Calculators/CharacterPlanContext, StatParser marks, ListedEffectCatalog, CpAllocationSectionViewModel, Game/Train/AlteredStatsWait.
-- Checks: when a `stat` baseline is trusted (Paradigm buffs explained, Stock any mark not); an untrusted baseline never rewrites a row; the bounded altered-stats wait.
+- Checks: when a `stat` baseline is trusted (Paradigm buffs explained, Stock any mark not), and the tab's note for each reading; an untrusted baseline never rewrites a row; the bounded altered-stats wait.
 - Why: rows being rewritten or pruned on buffed stats.
 
 ### CpPlanCalculatorTests.cs
 - Covers: Game/Calculators/CpPlanCalculator.
 - Checks: CP cost and carry-over, clamping, overspend trim (edited cell first), ClampRowToBudget.
 - Why: CP plan math.
+
+### CpPlanStatBuffTests.cs
+- Covers: Game/CpPlanBaseline, Game/Calculators/CpPlanCalculator (the CP counted through a level), StatParser (CpThroughLevel, the header's marks, train and CP-gain lines, Hydrate), with Paradigm `stat` screens fed as coloured bytes through a `ServerFeed`.
+- Checks: report `paradigm-20261025-010655`'s plan at level 76 with 57 CP reads 57/6, 102/3, 147/0, 192/7, 237/1 (the level-76 row is spent from the CP in hand); the same grid with the cosmos buff up, after it fizzles, and with its line unknown (held on the last clean `stat`, not priced from INT 200 / WIL 70); with no clean reading yet the latest figures stand; no state while a `stat` prints prices the new CP against the last screen's stats; a `train` line keeps the grid until its `You gain N CPs` lands; a snapshot saved without the counted level counts through its own level.
+- Why: report `paradigm-20261025-010655` (CP Left 51 at level 76, and CP Left moving as the cosmic staff's buff came and went).
 
 ### CpPlanStateTests.cs
 - Covers: ViewModels/CharacterWorkshop/CpPlanState.

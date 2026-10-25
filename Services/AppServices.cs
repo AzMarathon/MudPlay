@@ -1080,6 +1080,10 @@ public sealed class AppServices
     // stats, by the message catalogue and the Spells table.
     public Game.Spells.ListedEffectCatalog ListedEffects { get; }
 
+    // What the CP plan grid is worked from, kept on the last `stat` that could be
+    // worked back to trained stats while a buff makes the latest one unreadable.
+    public Game.CpPlanBaseline CpPlanBaseline { get; }
+
     // Trainer-walk coordinator: resolves the nearest allowed, level-appropriate
     // trainer, walks there, trains, and applies the CP plan. Backs the CP
     // Allocation tab's Train Now + the armed auto-train.
@@ -6869,6 +6873,7 @@ public sealed class AppServices
         ListedEffects = new Game.Spells.ListedEffectCatalog(Messages, GameData);
         AutoTrain = new Game.AutoTrainManager(PlayerStats, Stats, GameData, Inventory, Profile, TrainerMenu,
             ListedEffects, Router, Log);
+        CpPlanBaseline = new Game.CpPlanBaseline(PlayerStats, GameData, Inventory, ListedEffects, Log);
 
         // EquipmentManager + the @equip <set> handler. The engine
         // reads saved gear sets off the char profile, diffs against Inventory's
