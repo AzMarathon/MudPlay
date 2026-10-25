@@ -1228,6 +1228,11 @@ public static class BugReportBuilder
             List<string> parts = new();
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
             if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            // The tier says where the override lives; a remote command is who put it there.
+            if (svc.MonsterRelation.LastChange(n) is { } remote)
+                parts.Add($"relationship last set by @relation from {remote.Sender} on "
+                    + $"{Game.Remote.TransferChannels.NameOf(remote.Channel)} at {remote.At.ToLocalTime():HH:mm:ss} "
+                    + $"({remote.From} -> {remote.To})");
             if (o.Priority is { } prio) parts.Add($"priority {prio}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
                 parts.Add($"debuff {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");

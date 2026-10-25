@@ -1,5 +1,10 @@
 # Version history
 
+## 3.186.0
+
+- New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
+- A shared monster name is refused with each one's number; `@relation #<number>` names one
+
 ## 3.185.51
 
 - Settings tab Periodic Damage Room Spells renamed Room Spell Config

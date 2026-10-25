@@ -1114,7 +1114,7 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@relation`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
@@ -1166,7 +1166,7 @@ In the reply tables of the command topics, a row that begins **Refusal:** is sen
 
 **Plain characters only.** Every reply is sent in plain ASCII, which is all the game's line carries safely. Where a reply has to carry a name with something else in it (a loop you named with a long dash, say), that character is spelled plainly (`-`) or, failing that, sent as `?`.
 
-**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@event` switching an event, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
+**On the receiving side** nothing pops up. A plain query leaves no trace but the reply itself, which shows in your terminal as the telepath or say your client sent. A command that makes your client act shows there too, as whatever it sent to the game. Commands that change something are written to the program log with the sender's name (`@do`, `@kill`, the `@auto-…` toggles, `@atkprio`, `@atkorder`, `@relation` setting a relationship, `@event` switching an event, `@reset`, `@dupe`, `@get-stash`, a loop send, a `&@` relay). A refused command is logged only with Debug diagnostics on.
 
 ### Commands that never answer
 
@@ -1225,6 +1225,7 @@ One row per command. **Needs** is the box the sender must have ticked on your Pl
 | `@atkprio` | `@atkprio` · `@atkprio 1` · `@atkprio 2` · `@atkprio 3 <player>` | Alter settings | Reports or sets your Target Priority. |
 | `@atkorder` | `@atkorder` · `@atkorder 1` to `@atkorder 5` · `@atkorder 4 <player>` | Alter settings | Reports or sets your Attack Order. |
 | `@profile` | `@profile` · `@profile <number>` · `@profile <name>` | Alter settings | Reports your combat profiles, or switches to one. |
+| `@relation` | `@relation <monster>` · `@relation <monster> <relationship>` · the same with `#<number>` for the name | Alter settings | A monster's relationship: reports it, or sets it for this character. |
 | `@health` | `@health` | Query health/status, or party member | HP, mana, and whether you are resting. |
 | `@status` | `@status` | Query health/status, or party member | What you are doing, where, and your ailments. |
 | `@lives` | `@lives` | Query health/status, or party member | Lives left. |
@@ -1916,6 +1917,40 @@ Reports your combat profiles, or switches to one. See **Combat profiles (quick-s
 
 - **On your own screen:** every switch prints the same summary in your terminal, with a long dash after the profile and dots between the slots. The copy sent to the asker uses a hyphen and commas (see **Plain characters only**).
 - **Master switch off:** ignored, no answer.
+
+#### @relation
+
+Reports or sets how your client treats one monster: its **Relationship**, the box under *Fighting it* in the monster's Game Data record. The values are the ones that box offers, **Enemy**, **Neutral**, **Friend**, **Flee** and **Hangup**, and they act as described in *What each Relationship does* under Game Data → the monster record. A change is saved **only for this character**, the same as picking that tier in the record's **Use** and saving, and it takes effect at once: the next round's targeting and the next room you see go by it.
+
+**Forms:**
+
+- `@relation dao lord`: report the monster's relationship. Nothing changes.
+- `@relation dao lord friend`: set it. The word may be in any case: `Friend`, `FRIEND`.
+- `@relation #597 hangup`: name the monster by its number, as the Game Data Browser's Monsters table shows it.
+
+**How a name finds a monster.** The way `@auto-get` finds an item: a name that is a monster's whole name wins outright; otherwise a monster matches when its name holds **every typed word, in any order**, and failing that the same without apostrophes. The monsters in play are searched first, and the ones out of play (the Unobtainable list) only when none fits. Exactly one monster is used; none, or more than one, is refused. Monsters that share a name are separate records (a variant for each area), so a shared name is refused with each one's number: send the number in its place. The relationship is the **last** word, and only when there is a word before it, so a monster whose name ends in one of the five words is named by its number.
+
+**Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
+
+| Reply | When |
+|---|---|
+| `dao lord (#597): Enemy` | Bare form: the relationship as your client reads it. A monster with none set reads `Enemy`. |
+| `dao lord (#597): Enemy -> Friend` | The relationship was changed. |
+| `dao lord (#597): already Friend` | It was already that. |
+| `no monster named '<text>'` | **Refusal:** no monster's name fits. |
+| `monster name '<text>' matches 3: 'orc' #12, 'orc' #13, 'orc chief' #40` | **Refusal:** the name fits more than one monster. Up to four are given, fewer when the names are long, then `+5 more` for the rest. Nothing is changed. |
+| `bad relationship '<word>': use neutral, enemy, friend, flee or hangup` | **Refusal:** the name without its last word is a monster, and that word is no relationship. |
+| `no character loaded` | **Refusal:** a change was asked for with no named character loaded. A report is still answered. |
+| the Failure message | **Refusal:** the sender doesn't hold Alter settings. |
+
+A bare `@relation` is refused with `usage: @relation <monster> [neutral|enemy|friend|flee|hangup]`.
+
+**Situations:**
+
+- **A change holds for this character.** It is kept at the character tier whenever the realm, all characters or the installed default say otherwise, so it holds over them. Setting it back to what lies below, with nothing for the realm or all characters saying otherwise, removes this character's relationship from the record, as the editor does. The record's other boxes go on reading as they did.
+- **A Monster editor open meanwhile** shows the record as it was when it opened. Saved at the character tier, it writes its own Relationship box over the remote change.
+- **Master switch off:** ignored, no answer.
+- **On your own screen:** a change is written to the program log with the sender's name, the channel, the monster and its relationship before and after. The bug report's monster overrides list shows the record at the Character tier, and names who last set it by `@relation` this session.
 
 ### Health, rest and escape
 
@@ -4085,6 +4120,8 @@ Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a m
 - **Friend** — never attacked on sight. If it attacks you, self-defense fights back.
 - **Flee** — never attacked on sight. MudPlay runs from it as soon as that monster is seen in your room by name, when a walk or loop is running. When no run can start, it is left alone unless it attacks, and then it is fought back. Two monsters ship set to Flee: the **gigantic black ooze** and the **huge gruesome creation**. See *How Flee works* below, which also says how to turn it off.
 - **Hangup** — MudPlay hangs up as soon as that monster is seen in your room by name. No monster ships set to Hangup; it only applies to the ones you set.
+
+A player you grant **Alter settings** can also report or set a monster's relationship for this character by remote command: see **@relation** under *Remote @-commands*.
 
 **How Hangup works.**
 

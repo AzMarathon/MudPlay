@@ -83,7 +83,7 @@ public sealed class RemoteCommandCatalogTests
     public void RemovedFromCatalog(string cmd)
         => Assert.False(RemoteCommandCatalog.TryGetCategory(cmd, out _));
 
-    // ===== Toggle Settings (12 auto-* + @settings + @reset + @atkprio + @atkorder) =====
+    // ===== Toggle Settings (12 auto-* + @settings + @reset + @atkprio + @atkorder + @relation) =====
 
     [Theory]
     [InlineData("@atkprio")]
@@ -101,6 +101,7 @@ public sealed class RemoteCommandCatalogTests
     [InlineData("@auto-search")]
     [InlineData("@settings")]
     [InlineData("@reset")]
+    [InlineData("@relation")]
     public void AlterSettings_TogglesAndState(string cmd)
         => Assert.Equal(PlayerRemoteControls.AlterSettings, Lookup(cmd));
 
@@ -265,6 +266,7 @@ public sealed class RemoteCommandCatalogTests
     [InlineData(PlayerRemoteControls.ExecuteCommands,   "@get-all")]
     [InlineData(PlayerRemoteControls.AlterSettings,     "@auto-combat")]
     [InlineData(PlayerRemoteControls.AlterSettings,     "@reset")]
+    [InlineData(PlayerRemoteControls.AlterSettings,     "@relation")]
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@hangup")]
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@relog")]
     [InlineData(PlayerRemoteControls.SysopCommands,     "@suicide")]

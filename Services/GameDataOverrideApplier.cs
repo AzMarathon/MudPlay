@@ -16,7 +16,8 @@ namespace MudPlay.Services;
 //     the row back toward Def instead of writing a no-op override).
 //   * otherwise → WriteGameDataAt stores the delta at the chosen tier.
 //
-// Items save field by field instead (ApplyItemAsync / ApplyItemAt).
+// Items save field by field instead (ApplyItemAsync / ApplyFieldsAt), and so does a
+// remote command that sets one field of a record (@auto-get <item>, @relation).
 //
 // Returns true when something changed so the caller reloads its table.
 public static class GameDataOverrideApplier
@@ -52,7 +53,7 @@ public static class GameDataOverrideApplier
     }
 
     // An item record saved from the item editor or the batch editor: the
-    // installed-defaults reset as above, otherwise ApplyItemAt over the fields the
+    // installed-defaults reset as above, otherwise ApplyFieldsAt over the fields the
     // user changed.
     //
     // openedAs is the record as the item editor opened on it, given when the user
@@ -75,7 +76,7 @@ public static class GameDataOverrideApplier
             return await ResetAsync(resolver, confirm, ItemsTable, recordId);
         if (openedAs is not null)
             fields = fields.Union(ShownFields(resolver, recordId, tier, wanted, installedDefaults, openedAs)).ToList();
-        ApplyItemAt(resolver, recordId, tier, wanted, installedDefaults, fields);
+        ApplyFieldsAt(resolver, ItemsTable, recordId, tier, wanted, installedDefaults, fields);
         return true;
     }
 
@@ -111,7 +112,7 @@ public static class GameDataOverrideApplier
         return changed;
     }
 
-    // Save an item so that `tier` yields `wanted` for each field in `fields`, and
+    // Save a record so that `tier` yields `wanted` for each field in `fields`, and
     // leave the tier's other fields as they are (user, 2026-10-17). Per field:
     //   * the wanted value is the installed default, and the tiers below give the
     //     installed default too → the tier holds nothing for it;
@@ -125,13 +126,14 @@ public static class GameDataOverrideApplier
     //
     // Unset, false and blank count as the same value: the engines read a missing
     // flag as off and a blank count as none.
-    public static void ApplyItemAt(
+    public static void ApplyFieldsAt<T>(
         SettingsResolver resolver,
+        string table,
         string recordId,
         SettingsTier tier,
-        ItemOverlay wanted,
-        ItemOverlay installedDefaults,
-        IReadOnlyCollection<string> fields)
+        T wanted,
+        T installedDefaults,
+        IReadOnlyCollection<string> fields) where T : class
     {
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(wanted);
@@ -143,8 +145,8 @@ public static class GameDataOverrideApplier
 
         JsonObject want = ToJson(wanted);
         JsonObject defaults = ToJson(installedDefaults);
-        JsonObject below = resolver.ResolveGameDataBelow(ItemsTable, recordId, installedDefaults, tier);
-        JsonObject held = resolver.ReadGameDataAt(tier, ItemsTable, recordId) ?? new JsonObject();
+        JsonObject below = resolver.ResolveGameDataBelow(table, recordId, installedDefaults, tier);
+        JsonObject held = resolver.ReadGameDataAt(tier, table, recordId) ?? new JsonObject();
 
         foreach ((string field, JsonNode? value) in want)
         {
@@ -162,9 +164,9 @@ public static class GameDataOverrideApplier
         }
 
         if (held.Count == 0)
-            resolver.ClearGameDataAt(tier, ItemsTable, recordId);
+            resolver.ClearGameDataAt(tier, table, recordId);
         else
-            resolver.WriteGameDataAt(tier, ItemsTable, recordId, held);
+            resolver.WriteGameDataAt(tier, table, recordId, held);
     }
 
     private static async Task<bool> ResetAsync(
@@ -181,8 +183,10 @@ public static class GameDataOverrideApplier
         return true;
     }
 
-    private static JsonObject ToJson(ItemOverlay overlay) =>
-        JsonSerializer.SerializeToNode(overlay, JsonStore.Options)!.AsObject();
+    // Serialized by its runtime type: the records saved here (ItemOverlay, MonsterOverlay)
+    // are game-data overlays, never settings sections.
+    private static JsonObject ToJson(object overlay) =>
+        JsonSerializer.SerializeToNode(overlay, overlay.GetType(), JsonStore.Options)!.AsObject();
 
     private static bool SameValue(JsonNode? a, JsonNode? b) =>
         (IsUnset(a) && IsUnset(b)) || JsonNode.DeepEquals(a, b);
