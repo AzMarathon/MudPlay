@@ -104,6 +104,8 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         coord.PersistLeader = leader => persisted.Add(leader);
         List<byte[]> coordWire = new();
         coord.SetWireSender(coordWire.Add);
+        // As the client wires it: the game's follow line since the connect.
+        mgr.FollowingLeader += coord.NoteFollowing;
 
         f = new Fixture
         {
@@ -203,6 +205,40 @@ public sealed class PartyRejoinCoordinatorTests : IDisposable
         Assert.Equal("/MudPlay @comeback 1/1", f.Sent().Single());
         f.RoomWait.RunAll();
         Assert.Single(f.CoordWire);   // the wait was cancelled
+    }
+
+    // Report paradigm-20261025-114837: the leader's invite on our return landed
+    // while we waited for our room, and we followed. Nothing is left to ask, and a
+    // leader that took the @comeback for a new request (a full party on an older
+    // version) answered it with a @forget.
+    [Fact]
+    public void FollowedTheLeaderAgain_DuringTheRoomWait_SendsNoComeback()
+    {
+        var f = Setup();
+        f.Coord.HydrateRememberedLeader("Ironbar");
+        f.Coord.Arm();
+
+        f.EnterGame();
+        f.Router.Dispatch(Line("You are now following Ironbar."));
+        f.Tracker.SetLocated(new RoomKey(1, 1));
+        f.RoomWait.RunAll();
+
+        Assert.Empty(f.CoordWire);
+    }
+
+    // Our party state outlives a dropped link, so only the game's follow line since
+    // this connect counts: a follow from before the drop still asks.
+    [Fact]
+    public void FollowedBeforeTheDrop_StillSendsComeback()
+    {
+        var f = Setup();
+        f.Router.Dispatch(Line("You are now following Ironbar."));
+        f.Coord.Arm();
+
+        f.Tracker.SetLocated(new RoomKey(1, 1));
+        f.EnterGame();
+
+        Assert.Equal("/Ironbar @comeback 1/1", f.Sent().Single());
     }
 
     [Fact]

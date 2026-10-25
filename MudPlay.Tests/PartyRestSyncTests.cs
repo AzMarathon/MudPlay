@@ -295,6 +295,163 @@ public sealed class PartyRestSyncTests
         Assert.Equal("/Leader @wait\r", LastWire(wire));
     }
 
+    // ===== Following a leader the client can't name (report paradigm-20261025-114837) =====
+    // The leader's @forget took the leader's name while the follow went on, and
+    // every @wait after it was dropped without a word. Kept instead, warned once,
+    // and sent the moment the leader is named again.
+
+    private static (PartyRestSync sync, PartyState party, List<byte[]> wire, LogService log) FollowingNobodyNamed()
+    {
+        PartyState party = new();
+        LogService log = new();
+        PartyRestSync sync = new(party, log);
+        List<byte[]> wire = new();
+        sync.SetWireSender(wire.Add);
+        party.IsInParty = true;
+        return (sync, party, wire, log);
+    }
+
+    private static int WaitWarnings(LogService log) =>
+        log.Snapshot().Count(e => e.Severity == LogSeverity.Warn && e.Message.Contains("@wait for Health not sent"));
+
+    [Fact]
+    public void LeaderUnknown_TheWaitIsKept_AndWarnedOncePerLoss()
+    {
+        var (sync, party, wire, log) = FollowingNobodyNamed();
+
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+
+        Assert.Empty(wire);
+        Assert.Equal(WaitReason.Health, sync.WaitOwedForUnknownLeader);
+        Assert.Equal(1, WaitWarnings(log));
+    }
+
+    [Fact]
+    public void LeaderUnknown_TheKeptWaitGoesOutWhenTheLeaderIsNamed()
+    {
+        var (sync, party, wire, _) = FollowingNobodyNamed();
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+
+        party.LeaderName = "Ironbar";
+
+        Assert.Equal("/Ironbar @wait (mana's too low)\r", LastWire(wire));
+        Assert.Single(wire);
+        Assert.Null(sync.WaitOwedForUnknownLeader);
+        sync.RequestOk(WaitReason.Health);
+        Assert.Equal("/Ironbar @ok\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void LeaderUnknown_AWaitReleasedMeanwhileIsNotSentLater()
+    {
+        var (sync, party, wire, _) = FollowingNobodyNamed();
+        sync.RequestWait(WaitReason.Health, resend: true);
+        sync.RequestOk(WaitReason.Health);
+
+        party.LeaderName = "Ironbar";
+
+        Assert.Empty(wire);
+        Assert.Null(sync.WaitOwedForUnknownLeader);
+    }
+
+    [Fact]
+    public void LeaderUnknown_LeavingThePartyDropsTheKeptWait()
+    {
+        var (sync, party, wire, _) = FollowingNobodyNamed();
+        sync.RequestWait(WaitReason.Health, resend: true);
+
+        party.IsInParty = false;
+        party.IsInParty = true;
+        party.LeaderName = "Ironbar";
+
+        Assert.Empty(wire);
+    }
+
+    // The leader's name lost and put back while we still follow: a reason held
+    // from before the loss asks only once, so the restored leader is told again,
+    // and an @ok asked for meanwhile reaches the leader who was told @wait.
+
+    private static (PartyRestSync sync, PartyState party, List<byte[]> wire) FollowingIronbar()
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Ironbar";
+        return (sync, party, wire);
+    }
+
+    [Fact]
+    public void AHoldFromBeforeTheLoss_IsToldToTheRestoredLeader()
+    {
+        var (sync, party, wire) = FollowingIronbar();
+        sync.RequestWait(WaitReason.Held);
+        party.LeaderName = null;
+
+        party.LeaderName = "Ironbar";
+
+        Assert.Equal(new[] { $"/Ironbar @wait {PartyRestSync.HeldNote}\r", $"/Ironbar @wait {PartyRestSync.HeldNote}\r" },
+                     wire.Select(b => Encoding.Latin1.GetString(b)).ToArray());
+    }
+
+    [Fact]
+    public void AnOkAskedWhileTheLeaderIsUnknown_GoesOutWhenTheyAreNamedAgain()
+    {
+        var (sync, party, wire) = FollowingIronbar();
+        sync.RequestWait(WaitReason.Health, note: PartyRestSync.ManaNote);
+        party.LeaderName = null;
+        sync.RequestOk(WaitReason.Health);
+        Assert.Single(wire);
+
+        party.LeaderName = "Ironbar";
+
+        Assert.Equal("/Ironbar @ok\r", LastWire(wire));
+        Assert.Equal(2, wire.Count);
+    }
+
+    [Fact]
+    public void AnOkKeptForTheLostLeader_IsNotSentToAnotherOne()
+    {
+        var (sync, party, wire) = FollowingIronbar();
+        sync.RequestWait(WaitReason.Health);
+        party.LeaderName = null;
+        sync.RequestOk(WaitReason.Health);
+
+        party.LeaderName = "Masta";
+
+        Assert.Single(wire);
+    }
+
+    // A follow the game reports (a new leader, nothing lost) is AilmentSyncEngine's
+    // to tell; nothing is repeated here.
+    [Fact]
+    public void FollowingAnotherLeader_WithAHoldHeld_RepeatsNothing()
+    {
+        var (sync, party, wire) = FollowingIronbar();
+        sync.RequestWait(WaitReason.Held);
+
+        party.LeaderName = "Masta";
+
+        Assert.Single(wire);
+    }
+
+    [Fact]
+    public void AKeptWait_NamedWithTheMasterSwitchOff_GoesOutWhenItIsBackOn()
+    {
+        var (sync, party, wire, _) = FollowingNobodyNamed();
+        sync.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        bool off = true;
+        sync.MasterSwitchOff = () => off;
+
+        party.LeaderName = "Ironbar";
+        Assert.Empty(wire);
+
+        off = false;
+        sync.ResyncAfterMasterSwitch();
+
+        Assert.Equal("/Ironbar @wait (mana's too low)\r", LastWire(wire));
+        Assert.Null(sync.WaitOwedForUnknownLeader);
+    }
+
     // ===== RequestHeal — follower flee-substitute broadcast =====
 
     [Fact]

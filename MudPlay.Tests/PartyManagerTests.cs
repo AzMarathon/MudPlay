@@ -1164,6 +1164,90 @@ public sealed class PartyManagerTests
         Assert.Contains(p.State.Members, m => m.IsSelf);
     }
 
+    // ===== A leader lost while following (report paradigm-20261025-114837) =====
+    // The leader's @forget (ForgetReconnectMember) took the leader's row and name
+    // while the follow went on: the next `par` listed them as a plain member, and
+    // with no leader name the follower's @wait had nobody to go to. The line a
+    // follower's `par` opens with names the leader, and puts them back.
+
+    private void ParOfIronbarsParty()
+    {
+        _feed.Line("You are following Ironbar.");
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
+        {
+            "  Ironbar                       (Ninja)               [H:100%]  - Frontrank",
+            "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+            "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+        });
+        _feed.Prompt("[HP=411/MA=113]:");
+    }
+
+    [Fact]
+    public void ALeaderLostWhileFollowing_IsPutBackByTheNextPar()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Ironbar.");
+        ParOfIronbarsParty();
+        p.ForgetReconnectMember("Ironbar");
+        Assert.True(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+
+        ParOfIronbarsParty();
+
+        Assert.Equal("Ironbar", p.State.LeaderName);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.True(p.State.Members.Single(m => m.Name == "Ironbar").IsLeader);
+    }
+
+    // The par rows are what make a client that counted itself solo a member again;
+    // the opening line, read at the block's end, gives it the leader too.
+    [Fact]
+    public void AParNamingTheLeader_GivesASoloClientItsLeader()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        Assert.False(p.State.IsInParty);
+
+        ParOfIronbarsParty();
+
+        Assert.True(p.State.IsInParty);
+        Assert.Equal("Ironbar", p.State.LeaderName);
+        Assert.False(p.State.SelfIsLeader);
+    }
+
+    // A leader the block's rows don't list isn't taken from its opening line.
+    [Fact]
+    public void AParNamingALeaderItsRowsLeaveOut_RestoresNothing()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Ironbar.");
+        ParOfIronbarsParty();
+        p.ForgetReconnectMember("Ironbar");
+
+        _feed.Line("You are following Ironbar.");
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
+        {
+            "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+            "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+        });
+        _feed.Prompt("[HP=411/MA=113]:");
+
+        Assert.Null(p.State.LeaderName);
+    }
+
+    // Who leads is the join line's to say; the par line only fills a missing name.
+    [Fact]
+    public void AParNamingSomeoneElse_LeavesAKnownLeaderAlone()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Masta.");
+
+        ParOfIronbarsParty();
+
+        Assert.Equal("Masta", p.State.LeaderName);
+    }
+
     // ===== Mystic / monk kai bracket ([K:N%]) parses like mana =====
     // A Mystic party member's secondary resource is kai, rendered [K:N%] — not
     // [M:N%]. The par-row regex must accept both letters. Before it did, a

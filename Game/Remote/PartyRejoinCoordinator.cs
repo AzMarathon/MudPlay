@@ -158,8 +158,17 @@ public sealed class PartyRejoinCoordinator : IDisposable
     {
         _armed = true;
         _roomConfirmedSinceArm = false;
+        _followedSinceArm = null;
         CancelRoomWait();
     }
+
+    // The leader the game said we follow ("You are now following X.") since this
+    // connect, by given name. Our party state outlives a dropped link, so only
+    // the game's line says the rejoin has already happened.
+    private string? _followedSinceArm;
+
+    // We started following leader (PartyManager.FollowingLeader).
+    public void NoteFollowing(string leader) => _followedSinceArm = GivenNameOf(leader);
 
     // Force-accept predicate for AutoPartyManager: true when name is the leader
     // we're remembering across a reconnect, so their re-invite is auto-followed
@@ -298,6 +307,17 @@ public sealed class PartyRejoinCoordinator : IDisposable
 
     private void SendComeback(string leader)
     {
+        // The leader's invite can land before our @comeback goes out (it is sent
+        // as we re-enter, and we wait for our room): we follow them again, and
+        // nothing is left to ask. Asked anyway, a full party's leader took it for a
+        // new request and answered with a @forget, which took the leader off our
+        // roster while we followed (report paradigm-20261025-114837); a leader on
+        // an older version still does.
+        if (_followedSinceArm is { } followed && followed.Equals(leader, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Info(LogCategory, $"Reconnected and already following {leader} again — no @comeback needed.");
+            return;
+        }
         // Asked again here: the send can come seconds after the prompt that
         // armed it (the wait for our room), and the master switch may have gone
         // off in between.

@@ -1352,7 +1352,7 @@ public sealed class HealthManager : IDisposable
             _partyWaitSignaled = true;
             _lastWaitResentAt = _now();
             if (_isPartyFollower?.Invoke() == true)
-                _log?.Info(LogCategory, "dropped below a rest floor while following — asking the leader to @wait");
+                _log?.Info(LogCategory, "dropped below a rest floor while following — @wait for the leader (Party logs whether it went out)");
             _requestPartyWait?.Invoke();
         }
         // Never release while a recovery gate is still held — below a rest floor is
@@ -3085,7 +3085,7 @@ public sealed class HealthManager : IDisposable
             && _now() - _lastWaitResentAt >= WaitResendInterval)
         {
             _lastWaitResentAt = _now();
-            _log?.Info(LogCategory, "moved while still recovering — the leader isn't waiting; re-sending @wait");
+            _log?.Info(LogCategory, "moved while still recovering — the leader isn't waiting; @wait again (Party logs whether it went out)");
             _requestPartyWait?.Invoke();
         }
 
