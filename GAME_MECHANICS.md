@@ -2559,10 +2559,16 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **Lawful is permanent.** *([CONFIRMED] 2026-09-27, user.)* A lawful character can't engage in evil acts and can never shed the flag — only rerolling a new character gets rid of it.
 - **The finer evil titles (Villain / Fiend) matter mainly for item-equip gating** on items in that range — a separate system from the exit gate.
 - **Gear uses its own buckets:** on Stock, Seedy wears gear as Neutral (see *Items, inventory & equipment → Item wear restrictions (ability-code flags)*). The "Evil bucket" above is for aggro.
+- **Client policy** *(user, 2026-10-25)*: **a monster the shipped overlay seed leaves without a relationship takes its default relationship from its `Align`.** The user: "for monsters outside the seed, we should set their relationship based on their alignment": any form of good → `Friend`, any form of neutral → `Neutral`, any evil → `Enemy`.
+  - `0` Good and `4` Lawful Good → `Friend`; `3` Neutral → `Neutral`; `1` Evil, `2` Chaotic Evil, `5` Neutral Evil and `6` Lawful Evil → `Enemy`. A missing `Align`, or one outside 0–6, stays `Enemy`.
+  - It is the Defaults tier: a seeded relationship wins over it, and a Global / BBS / Character override wins over both.
+  - A seed entry counts only for the monster of its own name: its `Name` must match the set's name for that number (case-insensitive, trimmed). Otherwise the whole entry (relationship, priority, DontBackstab, location labels) is left out and the set's monster falls to its `Align`. *(Client policy, 2026-10-25: a set that renumbers puts a different monster there, e.g. Anomaly 0.56's #2170 is `amethyst spellbreaker` where the Paradigm seed's #2170 is `elite amethyst guardian`.)*
+  - Nothing here says how the game treats the monster; it only sets how the client does. The aggro rule is *Monster aggression — who opens on you unprovoked*.
 
 **Client use:**
 - `AlignmentBucket` collapses the ladder to Good / Neutral / Evil for item filtering (`ItemEquipFilter.GearBucketForWord`: Seedy → Neutral on Stock); the criminal / guard layer needs the finer title.
 - `AlignmentBands` keeps one value per title — where it takes over — for the exit gates; only their order matters there.
+- `MonsterEngagement.DefaultForAlignment` maps `Align` to the default relationship; `MonsterOverlaySeedStore.Load` applies it, with the seed's name check, to every monster of the active set once per set load, so combat, the room assessment, the Monster editor's installed defaults, the Monsters table, `@relation` and the Simulator all read it (the policy above, user 2026-10-25). `MonsterOverlaySeedStore.RelationshipSourceOf` names where a relationship came from for the bug report and the `@relation` log.
 
 ### Monster aggression — who opens on you unprovoked
 *Status: CONFIRMED (Layer 1 alignment auto-aggro; Layer 2 criminal/guard behaviour; guard identification)*
@@ -2603,7 +2609,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **A monster that *does* open on you unprovoked is an enemy, not a neutral** — e.g. storm giants; see *Monster aggression — who opens on you unprovoked*.
 
 **Client use:**
-- The per-monster overlay `Relationship` (`Enemy` / `Neutral` / `Friend` / `Flee` / `Hangup`) drives auto-combat. `Enemy` = engage on sight; `Neutral` = leave alone.
+- The per-monster overlay `Relationship` (`Enemy` / `Neutral` / `Friend` / `Flee` / `Hangup`) drives auto-combat. `Enemy` = engage on sight; `Neutral` = leave alone. A monster the seed leaves without one takes its default from its `Align` (*Monster `Align` values and your alignment-title ladder*, Client policy 2026-10-25).
 - **Client policy** *(user, 2026-10-09)*: **a monster whose overlay `Relationship` is `Hangup` draws a hang-up as soon as it is seen in the room by name.** The user: "under the 'fighting it' where we set monsters to friend enemy or neutral, there is a hangup option, so if that isn't working, we need to make it work... and what it does if set, if we see that monster by name, it hangs up the client".
   - `MonsterRelationshipWatcher` reads `RoomEntityClassifier.EntitiesObserved` ahead of the combat tracker and engine, so the exit command is on the wire before they can start a fight in the room. Seen = on the roster: the `Also here:` line, an arrival line that names the monster, or in a dark room the attack line `DarkRoomCombatWatcher` reads the name from. A room display with no names (dark, blind) and a `look` into the next room are not sightings.
   - It calls `HealthManager.HangUpForMonster`, which is the escape the low-HP trigger takes (`ExecuteEscape`: the wimpy jump when the health settings swap it in, else the exit command and the carrier drop) and reports which went out (`EscapeOutcome`). Disable Hangups stops all of it, the wimpy jump included. What a board makes of the hang-up is in *Wire, prompt & command output → Hang-up / lost carrier*.

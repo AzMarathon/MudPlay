@@ -224,7 +224,7 @@ public sealed class RankingStampTests : IDisposable
         Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave"), Record(2, "Fen") }));
         Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave"), Record(2, "Marsh", MonsterAttackPriority.High) }));
         Assert.NotEqual(made, MonsterOverlaySeedStore.StampOf(new[] { Record(1, "Cave") }));
-        Assert.Equal("none", new MonsterOverlaySeedStore().ContentStamp);
+        Assert.Equal("none", new MonsterOverlaySeedStore(new GameDataCache(_dir)).ContentStamp);
     }
 
     [Fact]

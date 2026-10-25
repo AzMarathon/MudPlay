@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.1**
-> - Paradigm's party invite messages recorded as the same as Stock's in the game-mechanics reference
+> **Version 3.186.3**
+> - Unseeded monsters now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy
+> - A shipped monster default applies only when its name matches the set's monster of that number
+> - Bug report and `@relation` log say where a monster's relationship came from
+> - Saved Simulator area rankings are dropped once, since which monsters get fought changed
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -63,27 +63,21 @@ public sealed class MonsterRelationshipRules
     // Only a named character has a tier of its own to hold the change.
     public bool CanChange => _resolver.CanWriteAt(SettingsTier.Character);
 
-    // The relationship as the engines read it: none set is Enemy.
+    // The relationship as the engines read it: a monster given none by an override,
+    // the seed or its alignment reads Enemy.
     public MonsterRelationship Read(int number) => Resolve(number).Relationship ?? MonsterRelationship.Enemy;
 
-    // The tier the Relationship itself comes from, for the log: the highest that
-    // holds one, or Defaults when none does (the installed seed, or no relationship
-    // set at all). Other fields of the record may come from other tiers.
-    public SettingsTier RelationshipSourceOf(int number)
-    {
-        foreach (SettingsTier tier in new[] { SettingsTier.Character, SettingsTier.Bbs, SettingsTier.Global })
-            if (_resolver.ReadGameDataAt(tier, Table, Id(number)) is { } held
-                && held[nameof(MonsterOverlay.Relationship)] is not null)
-                return tier;
-        return SettingsTier.Defaults;
-    }
+    // Where the Relationship itself comes from, for the log: an override tier, the
+    // seed or the monster's alignment.
+    public string RelationshipSourceOf(int number) => _seed.RelationshipSourceOf(_resolver, number);
 
     // Set the relationship at the character tier and return it as it now resolves.
     public MonsterRelationship Change(int number, MonsterRelationship relationship)
     {
-        // The installed default is compared as the engines read it, so setting Enemy on a
-        // monster with no relationship installed, and nothing below saying otherwise,
-        // leaves this character no override rather than a copy of the default.
+        // The installed default (the seed's, or the alignment's) is compared as the
+        // engines read it, so setting Enemy on a monster with no relationship installed,
+        // and nothing below saying otherwise, leaves this character no override rather
+        // than a copy of the default.
         MonsterOverlay seed = _seed.GetOverlay(number);
         MonsterOverlay installed = seed with { Relationship = seed.Relationship ?? MonsterRelationship.Enemy };
         GameDataOverrideApplier.ApplyFieldsAt(_resolver, Table, Id(number), SettingsTier.Character,

@@ -3952,10 +3952,11 @@ public sealed class AppServices
         FlavorPrefixes = new FlavorPrefixStore(Log);
         GameData.ActiveSetChanged += FlavorPrefixes.Load;
         // Realm-flavored seed for the per-monster overlay (Defaults
-        // tier). Switching sets reads the new Info.Legit and reloads
-        // the matching realm's seed; runtime consumers retrieve
-        // baselines via MonsterOverlaySeed.GetOverlay(number).
-        MonsterOverlaySeed = new MonsterOverlaySeedStore(Log);
+        // tier), with each unseeded monster's relationship taken from its
+        // alignment. Switching sets reads the new Info.Legit, reloads the
+        // matching realm's seed and walks the set's Monsters table; runtime
+        // consumers retrieve baselines via MonsterOverlaySeed.GetOverlay(number).
+        MonsterOverlaySeed = new MonsterOverlaySeedStore(GameData, Log);
         GameData.ActiveSetChanged += MonsterOverlaySeed.Load;
         // Realm-flavored seed for the per-item overlay (Defaults tier).
         // Parallel of MonsterOverlaySeed — same Info.Legit-driven realm

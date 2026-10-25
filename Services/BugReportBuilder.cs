@@ -398,6 +398,7 @@ public static class BugReportBuilder
         Kv(sb, "Game data: long text damaged by an old import",
             svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
         Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());
+        Kv(sb, "Game data: monster relationship defaults", svc.MonsterOverlaySeed.RelationshipSummary);
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
         if (svc.Profile.Current is { StateUnverified: true })
@@ -1234,7 +1235,7 @@ public static class BugReportBuilder
 
             List<string> parts = new();
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
-            if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            if (o.Relationship is not null) parts.Add(RelationshipLabel(svc, n));
             // The tier says where the override lives; a remote command is who put it there.
             if (svc.MonsterRelation.Changes.TryGetValue(n, out Game.Remote.MonsterRelationshipHandler.RemoteChange remote))
                 parts.Add(RemoteRelationChange(remote));
@@ -1297,6 +1298,7 @@ public static class BugReportBuilder
                 : "no weapon swings");
             if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
             if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
+            parts.Add(RelationshipLabel(svc, o.MonsterNumber));
 
             sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
               .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
@@ -1304,6 +1306,13 @@ public static class BugReportBuilder
 
         return sb.ToString();
     }
+
+    // "relationship Friend (from its alignment, Good)": the relationship the engines
+    // read for the monster and where it comes from (an override tier, the seed, the
+    // monster's alignment, or none of them, which reads Enemy).
+    private static string RelationshipLabel(AppServices svc, int monsterNumber) =>
+        $"relationship {svc.MonsterOverlaySeed.Resolve(svc.Resolver, monsterNumber).Relationship ?? Models.GameData.MonsterRelationship.Enemy}"
+        + $" (from {svc.MonsterOverlaySeed.RelationshipSourceOf(svc.Resolver, monsterNumber)})";
 
     // "151 (disrupt)" — an override stores a Spell.Number; annotate it with the
     // Spells-table display name so a triager needn't cross-reference the id.
@@ -1432,6 +1441,7 @@ public static class BugReportBuilder
             string name = svc.GameData.FindNameByNumber("Monsters", r.MonsterNumber) ?? r.Species;
             sb.Append("- #").Append(r.MonsterNumber).Append(' ').Append(name)
               .Append(" — **").Append(r.Assessment).Append("**")
+              .Append(", ").Append(RelationshipLabel(svc, r.MonsterNumber))
               .Append(", Magical ").Append(Lvl(r.Magical))
               .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
               .Append(", attack hit magic normal=").Append(Lvl(r.NormalWeaponHit))

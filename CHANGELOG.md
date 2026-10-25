@@ -1,5 +1,12 @@
 # Version history
 
+## 3.186.3
+
+- Unseeded monsters now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy
+- A shipped monster default applies only when its name matches the set's monster of that number
+- Bug report and `@relation` log say where a monster's relationship came from
+- Saved Simulator area rankings are dropped once, since which monsters get fought changed
+
 ## 3.186.1
 
 - Paradigm's party invite messages recorded as the same as Stock's in the game-mechanics reference
