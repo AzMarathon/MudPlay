@@ -1,5 +1,11 @@
 # Version history
 
+## 3.185.53
+
+- CP plan's CP Left no longer double-counts the current level's CP or shifts as a stat buff comes and goes
+- Monsters arriving with their own appear line (golden mist's "A mist of gold appears in front of you!" and 32 others) now trigger a room check
+- bug reports addressed: paradigm-20261025-010655, paradigm-20261025-011825
+
 ## 3.185.51
 
 - Settings tab Periodic Damage Room Spells renamed Room Spell Config
