@@ -1540,6 +1540,31 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(15), Waiting(h));
     }
 
+    // Report paradigm-20261025-114837: the leader re-invited us before our @comeback
+    // reached it, and a leader that finds us already following answers it as a
+    // pickup done. Following again has ended the wait on it, so the answer starts
+    // nothing: no join, no long wait, no follow given up.
+    [Fact]
+    public void FollowingAgain_TheLeadersTakenBackAnswer_SettlesNothingMore()
+    {
+        using Harness h = NewFollower();
+        List<string> givenUp = new();
+        h.Requester.FollowGivenUp = (leader, _) => givenUp.Add(leader);
+        h.Feed("You can't seem to move anywhere!");
+        h.Feed("You are no longer following Boss.");
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        int sent = h.Sent;
+
+        h.Feed("You are now following Boss.");
+        h.Feed("Boss telepaths: {got you - resuming}");
+        LapseTheWait(h);
+
+        Assert.Equal(sent, h.Sent);
+        Assert.Null(Waiting(h));
+        Assert.Empty(givenUp);
+        Assert.False(h.Requester.IsLeaderWeAsked("Boss"));
+    }
+
     // The leader's own constants are among them: what it sends is what we read.
     [Fact]
     public void TheLeadersOwnAnswers_AreRecognised()

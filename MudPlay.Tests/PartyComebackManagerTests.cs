@@ -1200,6 +1200,62 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(new[] { "/Ironbar @wait (mana's too low)\r" }, wire);
     }
 
+    // Report paradigm-20261025-114837, the leader's side: a member back from a
+    // dropped link was invited as they re-entered and followed at once, and their
+    // client's own @comeback came in after. The party of six was full with them in
+    // it, and the request was declined with a @forget that took us off their
+    // roster as their leader. Followed a moment ago and still following, they are
+    // answered as taken back.
+    private static void MemberBackFromADroppedLink(Harness h)
+    {
+        h.Party.LocalCharacterName = "Ironbar";
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        Assert.Contains(h.PartyWire, b => Encoding.Latin1.GetString(b) == "invite Aunty\r");
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
+    [Fact]
+    public void FullParty_AMemberAlreadyFollowingAgain_IsAnsweredTakenBack_NotForgotten()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        now += TimeSpan.FromSeconds(6);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains("got you - resuming", h.LastReply);
+        Assert.True(PartyComebackManager.SaysComingOrLater("got you - resuming"));
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // Long after the return and the follow, the row alone isn't taken for proof: a
+    // leave line the client missed leaves one behind until the next `par`, and
+    // such a member does need fetching. The request is judged as any other.
+    [Fact]
+    public void FullParty_ARequestLongAfterTheReturn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        now += TimeSpan.FromMinutes(5);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains("my party is full", h.LastReply);
+    }
+
     // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
 
     // One step through a gated exit left both followers behind, and with nobody

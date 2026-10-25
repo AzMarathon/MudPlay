@@ -1790,7 +1790,7 @@ Both are taken on any channel remote commands are read on.
 | `coming to your location for pickup` | A room was named, it is within reach, and the walk has started. Also when you were already backtracking for them and they now name their room. |
 | `backtracking up to <n> room(s) to find you` | No room was named. You walk back along your own path, up to **Return distance (rooms)**. |
 | `found you - re-inviting <name>` | You reached them. On Paradigm the invite goes out with it. On Stock a member still on your member list is told to join (`@join`) and invited only if that doesn't bring them back (see **How they come back differs by realm** under Settings → Party). |
-| `got you - resuming` | They follow you again. What you were doing is put back. |
+| `got you - resuming` | They follow you again. What you were doing is put back. Also when they came back into the game, followed your invite and only then asked: nobody is left to fetch. |
 | `got you - waiting for your @ok` | They follow again, and they were left behind because they couldn't move. Your client also telepaths them `@waiting`. |
 | `got you - your last @ok was too early, waiting the full <n>s` | The same, when their last `@ok` came just before they failed to move. |
 | `follow timed out - resuming anyway` | They never followed after the invite. |
@@ -1824,6 +1824,7 @@ Both are taken on any channel remote commands are read on.
 
 - **What the pickup does to your own movement.** Your loop, Auto-Lair or walk-to is stopped for the walk back and started again afterwards. An `I can't yet` is a wait, not a no: a MudPlay follower's client keeps waiting on it.
 - **A party of six, on Stock:** a member an exit left behind is still on your member list, so their own place is not counted as taken when they ask. (Before, a full party answered its own left-behind member `my party is full`.)
+- **Back from a dropped link and already following.** Your client invites a member the moment they come back into the game, and theirs sends its own `@comeback` a few seconds later. If they followed your invite in between, the request is answered `got you - resuming` and nothing else happens. (Before, a party of six answered it `my party is full` and sent `@forget`, which made their client lose track of who leads while they still followed you.)
 - **`@forget` clears both sides.** Each drops the other from its roster memory, so the leader stops inviting them on sight and the follower stops asking.
 - **Answers to a pickup the leader started by itself** (a member the game dropped, or one who came back into the game) go by telepath. Answers to a `@comeback` go on the channel it came in on.
 - **`@forget` and `@waiting` always go by telepath,** whatever channel the `@comeback` came in on. They are commands, and every client that hears one acts on it: said aloud or gangpathed, a leader's `@forget` would make every follower in earshot drop that leader.

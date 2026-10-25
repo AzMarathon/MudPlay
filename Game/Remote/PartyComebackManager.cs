@@ -277,6 +277,7 @@ public sealed class PartyComebackManager : IDisposable
 
         _walker.Event += OnWalkEvent;
         _party.MemberFollowConfirmed += OnMemberFollowConfirmed;
+        _party.State.Members.CollectionChanged += OnRosterChanged;
         // Path B trigger: PartyManager owns reconnect detection and raises this
         // for a dropped member re-entering inside the grace window while we lead —
         // fired before it clears its own grace entry, so there's no race.
@@ -327,6 +328,7 @@ public sealed class PartyComebackManager : IDisposable
             _engine.ComebackEligibility = null;
         _walker.Event -= OnWalkEvent;
         _party.MemberFollowConfirmed -= OnMemberFollowConfirmed;
+        _party.State.Members.CollectionChanged -= OnRosterChanged;
         _party.MemberReturned -= OnMemberReturned;
         _party.MemberLeftBehind -= OnMemberLeftBehind;
         _tracker.StateChanged -= OnRoomChanged;
@@ -349,6 +351,13 @@ public sealed class PartyComebackManager : IDisposable
         if (ctx.Args.Count > 0 && RoomKey.TryParseWire(ctx.Args[0], out RoomKey parsed))
             target = parsed;
         string given = GivenName(ctx.Sender);
+        if (JustFollowedUs(given))
+        {
+            _log?.Info(LogCategory,
+                $"{given} asked to be fetched{(target is { } at ? $" from {at.Map}/{at.Room}" : "")}, but came back from a dropped link and followed us {(_now() - _followedOnReturnAt[given]).TotalSeconds:0}s ago — nothing to fetch, answered as taken back");
+            ctx.Reply($"{GotYou} - resuming");
+            return;
+        }
         if (TrainTripOn)
         {
             // The trip's own walk is not stopped for anyone (user, 2026-10-10:
@@ -911,6 +920,7 @@ public sealed class PartyComebackManager : IDisposable
     private void OnMemberReturned(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
+        _returnedAt[given] = _now();
         if (MasterOff) return;
         if (_busy) return;                 // a recovery is already running
         if (MemberInParty(given)) return;  // already back with us
@@ -1830,6 +1840,7 @@ public sealed class PartyComebackManager : IDisposable
         ForgetOnSight(GivenName(name));
         ForgetJoinAsked(GivenName(name));
         _seenFollowingAt[GivenName(name)] = _now();
+        NoteFollowedOnReturn(GivenName(name));
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
@@ -1940,6 +1951,58 @@ public sealed class PartyComebackManager : IDisposable
     // Wraps a telepath reply to the probed member in the same { } meta-braces the
     // engine's SendReply uses, so path-B narration reads like any @-command answer.
     private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{WireText.Ascii(msg)}}}");
+
+    // Members back from a dropped link (PartyManager.MemberReturned), by when they
+    // re-entered the realm, until they follow us.
+    private readonly Dictionary<string, DateTimeOffset> _returnedAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members who followed us ("X started to follow you.") right after re-entering
+    // the realm, by when, forgotten as their row leaves the roster.
+    private readonly Dictionary<string, DateTimeOffset> _followedOnReturnAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // How long the re-entry, our invite, their follow and their client's own
+    // @comeback take between them. We invite the moment they re-enter, and their
+    // client sends the @comeback once its room confirms, a few seconds into the
+    // game (PartyRejoinCoordinator.RoomWait).
+    private static readonly TimeSpan ReturnCrossesComeback = TimeSpan.FromSeconds(30);
+
+    private void NoteFollowedOnReturn(string given)
+    {
+        if (!_returnedAt.Remove(given, out DateTimeOffset returned)) return;
+        DateTimeOffset now = _now();
+        if (now - returned <= ReturnCrossesComeback) _followedOnReturnAt[given] = now;
+    }
+
+    // The member asking to be fetched re-entered the realm, followed our invite a
+    // moment ago, and still follows: the invite beat their @comeback, and nobody
+    // is left to fetch. Only that crossing is read this way: a row by itself can
+    // outlive a leave line the client missed until the next `par`. Taken for a
+    // request, a full party answered "my party is full" with a @forget, and the
+    // @forget took us off their roster as their leader while they still followed,
+    // so no @wait of theirs reached us after (report paradigm-20261025-114837).
+    // They are answered as a member whose pickup is done: GotYou is one of the
+    // answers their client reads as coming (SaysComingOrLater), and, unlike
+    // FoundYou, starts no `join` of theirs; their own follow has already ended
+    // their wait on us. The same on both realms: leaving the game takes a player
+    // off every list, so the follow line after the re-entry is the game's word.
+    // Not while we are already fetching them.
+    private bool JustFollowedUs(string given) =>
+        _followedOnReturnAt.TryGetValue(given, out DateTimeOffset at)
+        && _now() - at <= ReturnCrossesComeback
+        && MemberFollowing(given)
+        && !(_busy && SameName(given, _senderGiven));
+
+    private void OnRosterChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _followedOnReturnAt.Clear();
+            return;
+        }
+        if (e.Action is not (System.Collections.Specialized.NotifyCollectionChangedAction.Remove
+            or System.Collections.Specialized.NotifyCollectionChangedAction.Replace) || e.OldItems is null) return;
+        foreach (PartyMember m in e.OldItems) _followedOnReturnAt.Remove(GivenName(m.Name));
+    }
 
     // On our list as following us (an [Invited] row is on the list and isn't).
     private bool MemberFollowing(string given)

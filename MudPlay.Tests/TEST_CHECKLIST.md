@@ -771,8 +771,8 @@ How to keep it current:
 
 ### ComebackRequesterTests.cs
 - Covers: Game/Remote/ComebackRequester (with FollowMoveObserver, MovementRefusalDetector, PartyManager, TooHeavyWaitSignal).
-- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); Stock self-`join`.
-- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609.
+- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); a leader's `got you` after we already follow again starts no join, wait or give-up; Stock self-`join`.
+- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609; paradigm-20261025-114837.
 
 ### CommandHistoryNavigatorTests.cs
 - Covers: Services/CommandHistoryNavigator.
@@ -2726,7 +2726,7 @@ How to keep it current:
 
 ### PartyComebackManagerTests.cs
 - Covers: Game/Remote/PartyComebackManager (+ walker, loop, lair, PartyManager)
-- Checks: @comeback and @where recovery; full-party and distance gates; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
+- Checks: @comeback and @where recovery; full-party and distance gates; a member who came back into the game and followed our invite before their @comeback is answered `got you - resuming` with no @forget, while a request long after the return is judged as any other; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
 - Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837).
 
 ### PartyDeathRosterCleanupTests.cs
