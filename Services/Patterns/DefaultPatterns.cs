@@ -527,6 +527,9 @@ public static class DefaultPatterns
         // Paradigm's Manaspring Source prints "A figure materializes from within the
         // swirling mana!" as its room spell summons; a mana wraith brought that way
         // has no arrival line of its own (report paradigm-20261022-174021).
+        // Last, the monsters' own appear lines none of the shapes above read, taken
+        // from the message table ("A mist of gold appears in front of you!", report
+        // paradigm-20261025-011825): MonsterAppearLines.
         yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
             @"^(?:(?!You )[A-Z][^:""]* into the room"
           + @"|As the Champion of Blood falls, a tower of fire whirls about his body"
@@ -538,7 +541,8 @@ public static class DefaultPatterns
           + @"|crawls out of the .+ corpse|steps out of the shadows|slithers out of the dark pool"
           + @"|arises from its place of rest|rises from its rest"
           // A monster that followed us in: "A sand worm crawls after you!".
-          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$");
+          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$"
+          + "|" + MonsterAppearLines.Alternation);
 
         // Reactive look-back — another player `look`ed at us. Wording is
         // user-confirmed (not in any imported game-data table); keyed on the
