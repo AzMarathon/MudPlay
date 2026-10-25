@@ -293,6 +293,10 @@ public sealed class PartyComebackManager : IDisposable
         _classifier.EntitiesObserved += OnEntitiesObserved;
         // Path B reply: the probed member's @where answer arrives as a telepath.
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
+        // A member back from a dropped link, as the lines show it, however the
+        // invite went out: by AutoPartyManager / PartyManager, or typed by hand.
+        _subs.Add(router.Subscribe(KnownPatterns.PlayerEnters, OnPlayerEntersRealm));
+        _subs.Add(router.Subscribe(KnownPatterns.PartyYouInvited, OnInviteEcho));
 
         if (!RemoteCommandCatalog.TryGetCategory("@comeback", out Models.GameData.PlayerRemoteControls category))
             throw new InvalidOperationException("RemoteCommandCatalog missing entry for '@comeback'.");
@@ -928,7 +932,6 @@ public sealed class PartyComebackManager : IDisposable
     private void OnMemberReturned(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
-        NoteReturned(given);
         if (MasterOff) return;
         if (_busy) return;                 // a recovery is already running
         if (MemberInParty(given)) return;  // already back with us
@@ -1962,44 +1965,60 @@ public sealed class PartyComebackManager : IDisposable
     // engine's SendReply uses, so path-B narration reads like any @-command answer.
     private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{WireText.Ascii(msg)}}}");
 
-    // Members back from a dropped link (PartyManager.MemberReturned), by when they
-    // re-entered the realm, until they follow us or their row goes. Entries older
-    // than ReturnCrossesComeback are pruned as another is added.
-    private readonly Dictionary<string, DateTimeOffset> _returnedAt = new(StringComparer.OrdinalIgnoreCase);
+    // Players by when they last re-entered the realm ("X just entered the Realm."),
+    // pruned past ReturnCrossesComeback as another is added.
+    private readonly Dictionary<string, DateTimeOffset> _enteredAt = new(StringComparer.OrdinalIgnoreCase);
 
-    // Members who followed us ("X started to follow you.") right after re-entering
-    // the realm: when, and how many moves of ours had been made by then. Forgotten
-    // as their row leaves the roster.
+    // Members invited ("You have invited X to follow you.", whoever sent the
+    // `invite`: the auto-invite on their return or the user's own) within
+    // ReturnCrossesComeback of re-entering, by when, until they follow us or
+    // their row goes.
+    private readonly Dictionary<string, DateTimeOffset> _invitedOnReturnAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members who followed us ("X started to follow you.") within
+    // ReturnCrossesComeback of that invite: when, and how many moves of ours had
+    // been made by then. Forgotten as their row leaves the roster.
     private readonly Dictionary<string, (DateTimeOffset At, int Moves)> _followedOnReturn = new(StringComparer.OrdinalIgnoreCase);
 
     // Room changes of ours (OnRoomChanged), to tell whether we have moved since a
     // member's follow.
     private int _ownMoves;
 
-    // How long the re-entry, our invite, their follow and their client's own
-    // @comeback take between them. We invite the moment they re-enter, and their
-    // client sends the @comeback once its room confirms, a few seconds into the
-    // game (PartyRejoinCoordinator.RoomWait). A client-side bound, not the game's.
+    // How long each step of a return takes after the one before: the re-entry,
+    // our invite, their follow, their client's own @comeback. An auto-invite goes
+    // the moment they re-enter, and their client sends the @comeback at its first
+    // prompt or once its room confirms (PartyRejoinCoordinator.RoomWait). A
+    // client-side bound, not the game's.
     private static readonly TimeSpan ReturnCrossesComeback = TimeSpan.FromSeconds(30);
 
-    private void NoteReturned(string given)
+    private void OnPlayerEntersRealm(MatchResult result)
     {
+        if (result.Groups.Count == 0 || GivenName(result.Groups[0]) is not { Length: > 0 } given) return;
         DateTimeOffset now = _now();
-        foreach (string stale in _returnedAt.Where(kv => now - kv.Value > ReturnCrossesComeback).Select(kv => kv.Key).ToList())
-            _returnedAt.Remove(stale);
-        _returnedAt[given] = now;
+        foreach (string stale in _enteredAt.Where(kv => now - kv.Value > ReturnCrossesComeback).Select(kv => kv.Key).ToList())
+            _enteredAt.Remove(stale);
+        _enteredAt[given] = now;
+    }
+
+    private void OnInviteEcho(MatchResult result)
+    {
+        if (result.Groups.Count == 0 || GivenName(result.Groups[0]) is not { Length: > 0 } given) return;
+        if (!_enteredAt.Remove(given, out DateTimeOffset entered)) return;
+        DateTimeOffset now = _now();
+        if (now - entered <= ReturnCrossesComeback) _invitedOnReturnAt[given] = now;
     }
 
     private void NoteFollowedOnReturn(string given)
     {
-        if (!_returnedAt.Remove(given, out DateTimeOffset returned)) return;
+        if (!_invitedOnReturnAt.Remove(given, out DateTimeOffset invited)) return;
         DateTimeOffset now = _now();
-        if (now - returned <= ReturnCrossesComeback) _followedOnReturn[given] = (now, _ownMoves);
+        if (now - invited <= ReturnCrossesComeback) _followedOnReturn[given] = (now, _ownMoves);
     }
 
-    // The member asking to be fetched re-entered the realm, followed our invite
-    // within ReturnCrossesComeback, asks within the same of that follow, we have
-    // not moved since, and their row still follows: the invite beat their
+    // The member asking to be fetched re-entered the realm, was invited (by us
+    // or by hand) and followed, each within ReturnCrossesComeback of the step
+    // before, asks within the same of that follow, we have not moved since, and
+    // their row still follows: the invite beat their
     // @comeback, and nobody is left to fetch. The follow line after the re-entry is
     // the game's word that they follow us; a row by itself can outlive a leave line
     // the client missed until the next `par`, and a move of ours since could have
@@ -2018,15 +2037,16 @@ public sealed class PartyComebackManager : IDisposable
         && MemberFollowing(given)
         && !(_busy && SameName(given, _senderGiven));
 
-    // The member asking re-entered the realm a moment ago and holds the [Invited]
-    // row our invite on their return gave them, not following yet: their
+    // The member asking re-entered the realm and was invited a moment ago (by us
+    // or by hand), and holds the [Invited] row that invite gave them, not
+    // following yet: their
     // @comeback went out before they took it. The invite and the @join nag that
     // follows it (AutoPartyManager) are what bring them, so nothing is walked and
     // nothing is forgotten. They are answered AlreadyInProgress: their client
     // reads it as coming (SaysComingOrLater) and waits on their follow, which ends
     // that wait; it starts no `join` and no second invite.
     private bool InvitedOnReturn(string given) =>
-        _returnedAt.TryGetValue(given, out DateTimeOffset at)
+        _invitedOnReturnAt.TryGetValue(given, out DateTimeOffset at)
         && _now() - at <= ReturnCrossesComeback
         && MemberInParty(given) && !MemberFollowing(given)
         && !(_busy && SameName(given, _senderGiven));
@@ -2036,7 +2056,7 @@ public sealed class PartyComebackManager : IDisposable
         if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
         {
             _followedOnReturn.Clear();
-            _returnedAt.Clear();
+            _invitedOnReturnAt.Clear();
             return;
         }
         if (e.Action is not (System.Collections.Specialized.NotifyCollectionChangedAction.Remove
@@ -2044,7 +2064,7 @@ public sealed class PartyComebackManager : IDisposable
         foreach (PartyMember m in e.OldItems)
         {
             _followedOnReturn.Remove(GivenName(m.Name));
-            _returnedAt.Remove(GivenName(m.Name));
+            _invitedOnReturnAt.Remove(GivenName(m.Name));
         }
     }
 
