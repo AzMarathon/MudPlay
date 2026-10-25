@@ -3421,7 +3421,9 @@ public static class BugReportBuilder
         if (chosen.Count == 0) return "(none: every spell follows its default)";
         return string.Join("; ", chosen.OrderBy(static c => c.Key).Select(c =>
             $"{svc.SpellCatalog.GetSpellNameByNumber(c.Key) ?? "not in the loaded game data"} (#{c.Key}) "
-            + (c.Value ? "bars resting" : "doesn't bar resting")));
+            + (svc.RoomSpellDamage.LeftOffBecause(c.Key) is { } why
+                ? $"(left off Room Spell Config: {why}; ignored)"
+                : c.Value ? "bars resting" : "doesn't bar resting")));
     }
 
     // The item worn in a given inventory slot (e.g. "Weapon Hand"), or null when

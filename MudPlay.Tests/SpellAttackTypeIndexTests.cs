@@ -107,4 +107,19 @@ public sealed class SpellAttackTypeIndexTests : IDisposable
         Assert.Equal(4, s.AttackType("blaz", 5585));
         Assert.Equal(4, s.AttackType("blaz"));
     }
+
+    // An own spell whose record has no AttType reads as unknown, not as its twin's.
+    [Fact]
+    public void SharedCastCode_AnOwnSpellWithNoAttType_IsUnknown_NotItsTwins()
+    {
+        const string json = """
+            [
+              { "Number": 290,  "Name": "blaze",         "Short": "blaz", "ReqLevel": 20 },
+              { "Number": 5585, "Name": "blazing light", "Short": "blaz", "ReqLevel": 56, "AttType": 4 }
+            ]
+            """;
+        SpellAttackTypeIndex s = NewIndex(json: json);
+        Assert.Equal(-1, s.AttackType("blaz", 290));
+        Assert.Equal(4, s.AttackType("blaz"));
+    }
 }

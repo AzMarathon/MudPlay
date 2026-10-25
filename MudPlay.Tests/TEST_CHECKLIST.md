@@ -3750,7 +3750,7 @@ How to keep it current:
 
 ### SpellAttackTypeIndexTests.cs
 - Covers: Game/Combat/SpellAttackTypeIndex
-- Checks: Looks up a cast code's AttType case-insensitively. Fails open to -1 for unknown codes, blank codes, or a missing AttType column. On a shared cast code (`blaz`) the character's own spell number answers; the code-wide answer is the fallback.
+- Checks: Looks up a cast code's AttType case-insensitively. Fails open to -1 for unknown codes, blank codes, or a missing AttType column. On a shared cast code (`blaz`) the character's own spell number answers, -1 when its record has no AttType rather than its twin's; the code-wide answer is the fallback.
 - Why: The resist guard (CombatSpellGates) reads it; a wrong element would skip or waste attack spells. Report `paradigm-20261024-195420` (a Druid's blaze read as the Priest's blazing light).
 
 ### SpellBookCategoryClassifierTests.cs

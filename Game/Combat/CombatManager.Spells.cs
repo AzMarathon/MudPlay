@@ -2085,10 +2085,12 @@ public sealed partial class CombatManager
     // The chooser passes over a spell a game-data gate keeps off the target in
     // silence, so a configured slot that never fires left no trace in the log
     // (report paradigm-20261024-195420: blaze skipped every round, plasma bolt sent
-    // instead). Each such skip is logged once per spell and target; the memory starts
-    // over on a new target, when the room's fight is over, and on leaving the room.
+    // instead). Each such skip is logged once per slot, cast code and target, so an
+    // override that switches a slot's code mid-target still has its skip logged; the
+    // memory starts over on a new target, when the room's fight is over, and on
+    // leaving the room.
     private string? _gateSkipTarget;
-    private readonly HashSet<CombatSpellAction> _gateSkipsLogged = new();
+    private readonly HashSet<(CombatSpellAction Action, string Code)> _gateSkipsLogged = new();
 
     private void ResetGateSkipLog()
     {
@@ -2116,12 +2118,14 @@ public sealed partial class CombatManager
         in CombatSpellContext ctx, CombatSpellAction action, string label, string? code,
         string target, int monsterNumber)
     {
-        if (code is null || _gateSkipsLogged.Contains(action)) return;
+        if (code is null || _log is null) return;
+        (CombatSpellAction, string) key = (action, code.Trim().ToLowerInvariant());
+        if (_gateSkipsLogged.Contains(key)) return;
         int? own = _ownSpell?.Invoke(code);
         if (DataGateSkipReason(ctx, action, code, own, monsterNumber) is not { } why) return;
-        _gateSkipsLogged.Add(action);
+        _gateSkipsLogged.Add(key);
         string number = own is { } n ? $" (#{n})" : string.Empty;
-        _log?.Combat(LogCategory, $"{label} spell '{code}'{number} skipped for {target} — {why}");
+        _log.Combat(LogCategory, $"{label} spell '{code}'{number} skipped for {target} — {why}");
     }
 
     // Which game-data gate keeps this spell off the target, with the value it read,

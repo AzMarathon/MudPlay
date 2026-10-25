@@ -57,14 +57,18 @@ public sealed class SpellAttackTypeIndex
                 string? code = shortEl.GetString();
                 if (string.IsNullOrWhiteSpace(code)) continue;
 
-                if (!row.TryGetProperty("AttType", out GameValue typeEl)) continue;
-                if (typeEl.ValueKind != JsonValueKind.Number) continue;
-                if (!typeEl.TryGetInt32(out int attType)) continue;
+                int attType = row.TryGetProperty("AttType", out GameValue typeEl)
+                    && typeEl.ValueKind == JsonValueKind.Number
+                    && typeEl.TryGetInt32(out int t) ? t : -1;
 
+                // Every numbered spell is kept, so an own spell with no AttType reads
+                // as unknown instead of falling through to another class's twin.
                 if (row.TryGetProperty("Number", out GameValue numEl)
                     && numEl.ValueKind == JsonValueKind.Number
                     && numEl.TryGetInt32(out int number))
                     byNumber.TryAdd(number, attType);
+
+                if (attType < 0) continue;
 
                 // Last writer wins on duplicate cast-codes: only a code the
                 // character has no spell for reads this.
