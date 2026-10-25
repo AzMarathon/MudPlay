@@ -9,6 +9,7 @@ using MudPlay.Game.Simulation;
 using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
+using MudPlay.Services;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -236,6 +237,54 @@ public sealed class LoopSimulatorTests
 
         Assert.True(run.Casts.GetValueOrDefault("blst") > 0);
         Assert.Equal(run.Casts["blst"], run.Kills);
+    }
+
+    // A cast-code several classes share is judged by the character's own learned
+    // spell, as the live engine does: a Druid's `blaz` is blaze (#290, fire), not the
+    // Priest's undead-only blazing light (#5585) that once read it as unable to touch
+    // a living monster (report paradigm-20261024-195420). Records as Paradigm 1.9.1
+    // has them.
+    [Fact]
+    public void SharedCastCode_IsJudgedByTheCharactersOwnSpell()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-sim-blaz-" + Path.GetRandomFileName());
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "alpha"));
+            File.WriteAllText(Path.Combine(root, "alpha", "Spells.json"), """
+                [ { "Number": 290, "Name": "blaze", "Short": "blaz", "ReqLevel": 20, "EnergyCost": 1000, "ManaCost": 8,
+                    "Targets": 8, "AttType": 1, "Magery": 3, "Abil-0": 17, "Learnable": 1 },
+                  { "Number": 5585, "Name": "blazing light", "Short": "blaz", "ReqLevel": 56, "EnergyCost": 250, "ManaCost": 12,
+                    "Targets": 8, "AttType": 4, "Magery": 2, "MageryLVL": 3, "Abil-0": 17, "Abil-1": 23, "Learnable": 1 } ]
+                """);
+            GameDataCache cache = new(root);
+            cache.SwitchSet("alpha");
+            SimWorld world = World(Mob(5, hp: 100, exp: 10)) with
+            {
+                SpellReqLevel = new SpellReqLevelIndex(cache),
+                SpellAttackType = new SpellAttackTypeIndex(cache),
+                SpellTargetType = new SpellTargetTypeIndex(cache),
+                MonsterLife = new MonsterLifeIndex(cache),
+            };
+            var combat = new CombatSettings();
+            combat.NormalAttackSpell.SpellName = "blaz";
+            var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["blaz"] = new SimSpell("blaz", 290, ManaPerCast: 8, FiresPerRound: 1, CastChance: 100,
+                    MinDamagePerRound: 500, MaxDamagePerRound: 500, UsesMagicResist: false, TypeOfResists: 0,
+                    AttType: 1, MinHeal: 0, MaxHeal: 0),
+            };
+
+            LoopSimRun run = LoopSimulator.Run(Character(damage: 0, combat: combat, spells: spells, maxMana: 1000),
+                new[] { Lair(1, 1, 60, 5), Empty(2) }, world, secondsPerStep: 1, hours: 0.5, seed: 1);
+
+            Assert.True(run.Casts.GetValueOrDefault("blaz") > 0);
+            Assert.Equal(run.Casts["blaz"], run.Kills);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup of the temp set */ }
+        }
     }
 
     [Fact]

@@ -123,6 +123,14 @@ public sealed partial class CombatManager
     public void SetSpellManaCost(Func<string, int?> manaCostOf)
         => _spellManaCost = manaCostOf ?? throw new ArgumentNullException(nameof(manaCostOf));
 
+    // The character's own spell (Spells.Number) for a cast-code, from the spell book.
+    // The game-data gates judge a shared code by that record (CombatSpellGates). Until
+    // wired they fall back to the code-wide answer.
+    private Func<string, int?>? _ownSpell;
+
+    public void SetOwnSpellLookup(Func<string, int?> ownSpell)
+        => _ownSpell = ownSpell ?? throw new ArgumentNullException(nameof(ownSpell));
+
     // Opt into deterministic magic-eligibility gating. monsterMagic supplies each
     // monster's Magical / SpellImmu levels, itemMagic supplies each weapon's
     // HitMagic level, spellReqLevel supplies each spell's ReqLevel, and the pair
@@ -1946,7 +1954,7 @@ public sealed partial class CombatManager
         if (_monsterMagic is not null && _spellReqLevel is not null)
         {
             int immu = _monsterMagic.SpellImmunity(monsterNumber);
-            int req = _spellReqLevel.ReqLevel(code);
+            int req = _spellReqLevel.ReqLevel(code, _ownSpell?.Invoke(code));
             if (immu > 0 && req >= 0 && req < immu)
             {
                 why = $"its level {req} is under the monster's spell immunity {immu}";
@@ -2059,15 +2067,15 @@ public sealed partial class CombatManager
     // active, else the configured slot.
     private IReadOnlySet<CombatSpellAction>? LevelBlockedFor(
         int monsterNumber, string? singleCode, string? normalCode, string? altCode) =>
-        CombatSpellGates.LevelBlocked(_monsterMagic, _spellReqLevel, monsterNumber, singleCode, normalCode, altCode);
+        CombatSpellGates.LevelBlocked(_monsterMagic, _spellReqLevel, monsterNumber, singleCode, normalCode, altCode, _ownSpell);
 
     private IReadOnlySet<CombatSpellAction>? ResistBlockedFor(
         int monsterNumber, string? normalCode, string? altCode) =>
-        CombatSpellGates.ResistBlocked(_monsterResist, _spellAttackType, monsterNumber, normalCode, altCode);
+        CombatSpellGates.ResistBlocked(_monsterResist, _spellAttackType, monsterNumber, normalCode, altCode, _ownSpell);
 
     private IReadOnlySet<CombatSpellAction>? TargetTypeBlockedFor(
         int monsterNumber, string? normalCode, string? altCode) =>
-        CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode);
+        CombatSpellGates.TargetTypeBlocked(_spellTargetType, _monsterLife, monsterNumber, normalCode, altCode, _ownSpell);
 
     // Can the engine act on this monster this round. Consumed, via the delegate
     // AppServices injects, by CombatStateTracker (the walker gate), and asks
@@ -2273,7 +2281,7 @@ public sealed partial class CombatManager
         void Check(string? code, CombatSpellAction action)
         {
             if (NullIfBlank(code) is not { } c) return;
-            if (_spellTargetType.TargetType(c) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
+            if (_spellTargetType.TargetType(c, _ownSpell?.Invoke(c)) != SpellTargetType.UndeadOnly || AnyUndeadHere()) return;
             (set ??= new HashSet<CombatSpellAction>()).Add(action);
         }
         Check(settings.MultiAttackSpell.SpellName, CombatSpellAction.MultiAttack);

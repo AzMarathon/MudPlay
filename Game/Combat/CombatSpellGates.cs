@@ -8,6 +8,12 @@ namespace MudPlay.Game.Combat;
 // rounds) and the loop simulator so both make the same pick against the same
 // monster. Every gate fails open when an index is missing or a value is unknown,
 // leaving the reactive "no effect" line as the backstop.
+//
+// ownSpell maps a cast-code to the character's own spell for it (its Spells.Number),
+// so a code several classes share is judged by the record this character casts:
+// `blaz` is the druid's blaze (level 20, fire) and the priest's blazing light (level
+// 56, undead only), and judging a druid's blaze by the priest's record refused it
+// against every living monster (report paradigm-20261024-195420).
 public static class CombatSpellGates
 {
     // A per-monster override slot (Spell.Number + optional cast count + optional mana
@@ -38,7 +44,8 @@ public static class CombatSpellGates
     // configured slot), so an override is gated on its own ReqLevel.
     public static IReadOnlySet<CombatSpellAction>? LevelBlocked(
         MonsterMagicIndex? monsterMagic, SpellReqLevelIndex? spellReqLevel,
-        int monsterNumber, string? singleCode, string? normalCode, string? altCode)
+        int monsterNumber, string? singleCode, string? normalCode, string? altCode,
+        Func<string, int?>? ownSpell)
     {
         if (monsterMagic is null || spellReqLevel is null) return null;
         int immu = monsterMagic.SpellImmunity(monsterNumber);
@@ -48,7 +55,7 @@ public static class CombatSpellGates
         void Check(string? code, CombatSpellAction action)
         {
             if (string.IsNullOrWhiteSpace(code)) return;
-            int req = spellReqLevel.ReqLevel(code);
+            int req = spellReqLevel.ReqLevel(code, ownSpell?.Invoke(code));
             if (req < 0 || req >= immu) return;
             (blocked ??= new HashSet<CombatSpellAction>()).Add(action);
         }
@@ -64,7 +71,7 @@ public static class CombatSpellGates
     // resist still lands damage and doesn't block.
     public static IReadOnlySet<CombatSpellAction>? ResistBlocked(
         MonsterResistIndex? monsterResist, SpellAttackTypeIndex? spellAttackType,
-        int monsterNumber, string? normalCode, string? altCode)
+        int monsterNumber, string? normalCode, string? altCode, Func<string, int?>? ownSpell)
     {
         if (monsterResist is null || spellAttackType is null) return null;
 
@@ -72,7 +79,7 @@ public static class CombatSpellGates
         void Check(string? code, CombatSpellAction action)
         {
             if (string.IsNullOrWhiteSpace(code)) return;
-            int attType = spellAttackType.AttackType(code);
+            int attType = spellAttackType.AttackType(code, ownSpell?.Invoke(code));
             if (attType < 0) return;
             int elemCode = MonsterResistIndex.ElementalResistCode(attType);
             if (elemCode < 0) return;
@@ -89,7 +96,7 @@ public static class CombatSpellGates
     // a nonliving construct (report paradigm-20260922-082559).
     public static IReadOnlySet<CombatSpellAction>? TargetTypeBlocked(
         SpellTargetTypeIndex? spellTargetType, MonsterLifeIndex? monsterLife,
-        int monsterNumber, string? normalCode, string? altCode)
+        int monsterNumber, string? normalCode, string? altCode, Func<string, int?>? ownSpell)
     {
         if (spellTargetType is null || monsterLife is null) return null;
 
@@ -97,7 +104,7 @@ public static class CombatSpellGates
         void Check(string? code, CombatSpellAction action)
         {
             if (string.IsNullOrWhiteSpace(code)) return;
-            SpellTargetType targetType = spellTargetType.TargetType(code);
+            SpellTargetType targetType = spellTargetType.TargetType(code, ownSpell?.Invoke(code));
             if (targetType == SpellTargetType.Any) return;
             if (monsterLife.CanAffect(monsterNumber, targetType)) return;
             (blocked ??= new HashSet<CombatSpellAction>()).Add(action);

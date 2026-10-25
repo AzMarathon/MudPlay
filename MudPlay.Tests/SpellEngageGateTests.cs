@@ -49,7 +49,7 @@ public sealed class SpellEngageGateTests
         public Dictionary<int, MonsterOverlay> Overlays { get; } = new();
         private MonsterOverlay Overlay(int number) => Overlays.TryGetValue(number, out MonsterOverlay? o) ? o : new MonsterOverlay();
 
-        public Harness()
+        public Harness(int classNumber = 12, int level = 20)
         {
             _root = Path.Combine(Path.GetTempPath(), "mudplay-spell-engage-" + Path.GetRandomFileName());
             WriteGameData(Path.Combine(_root, "alpha"));
@@ -70,7 +70,7 @@ public sealed class SpellEngageGateTests
             Cast = new CastCoordinator(Router, Log, now: () => Clock.Now);
             Cast.SetWireSender(b => Sent.Add(b));
             Spellbook = new SpellbookState(new KnownSpellCatalog(cache));
-            Spellbook.Refresh(12, 20);
+            Spellbook.Refresh(classNumber, level);
             Combat = new CombatManager(Router, Classifier, Monsters,
                 resolveOverlay: Overlay,
                 party: Party,
@@ -92,6 +92,7 @@ public sealed class SpellEngageGateTests
             Combat.SetAutoNukeGate(() => true);
             Combat.SetCombatSpellCaster(Cast, () => (Ma, MaxMa));
             Combat.SetSpellManaCost(Spellbook.ManaCostOf);
+            Combat.SetOwnSpellLookup(code => Spellbook.FindByCastCode(code)?.Number);
             Combat.SetMagicEligibility(new MonsterMagicIndex(cache), new ItemMagicIndex(cache),
                 new SpellReqLevelIndex(cache), new MonsterResistIndex(cache), new SpellAttackTypeIndex(cache));
             Combat.SetDrainEligibility(new MonsterLifeIndex(cache), new SpellTargetTypeIndex(cache));
@@ -107,18 +108,25 @@ public sealed class SpellEngageGateTests
             AddMonster(505, "iron golem");
             AddMonster(506, "lich lord");
             AddMonster(507, "flame wraith");
+            AddMonster(509, "barrow wight");
         }
 
         // A katana with hit magic 3; monsters needing 4 (the rat, slime and golem need
         // none; the warden's and golem's spell immunity is 5, the lich's 20, and the
         // wraith resists fire 100%); a Mage's magic missile (level 1, cost 3), dancing
         // blades (a room attack, level 11, cost 26), turn undead (undead only) and
-        // fireball (fire, cost 4) and holy wave (an undead-only room attack).
+        // fireball (fire, cost 4) and holy wave (an undead-only room attack). Every
+        // record sharing the cast-code `blaz` in Paradigm 1.9.1 (the user's Anomaly set
+        // carries the same spells): the Druid's blaze (#290, level 20, fire), the
+        // Priest's blazing light (#5585, level 56, undead only) and four records no
+        // class learns. The barrow wight is undead, spell immune below level 30.
         private static void WriteGameData(string dir)
         {
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "Classes.json"), """
-                [ { "Number": 12, "Name": "Mage", "MageryType": 1, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 } ]
+                [ { "Number": 12, "Name": "Mage", "MageryType": 1, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 3 },
+                  { "Number": 5, "Name": "Priest", "MageryType": 2, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 2 },
+                  { "Number": 13, "Name": "Druid", "MageryType": 3, "MageryLVL": 3, "ArmourType": 1, "CombatLVL": 2 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Items.json"), """
                 [ { "Number": 1, "Name": "katana", "Abil-0": 28, "AbilVal-0": 3 } ]
@@ -131,7 +139,8 @@ public sealed class SpellEngageGateTests
                   { "Number": 504, "Name": "acid slime" },
                   { "Number": 505, "Name": "iron golem", "Abil-0": 139, "AbilVal-0": 5 },
                   { "Number": 506, "Name": "lich lord", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 139, "AbilVal-1": 20 },
-                  { "Number": 507, "Name": "flame wraith", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 5, "AbilVal-1": 100 } ]
+                  { "Number": 507, "Name": "flame wraith", "Abil-0": 28, "AbilVal-0": 4, "Abil-1": 5, "AbilVal-1": 100 },
+                  { "Number": 509, "Name": "barrow wight", "Undead": 1, "Abil-0": 139, "AbilVal-0": 30 } ]
                 """);
             File.WriteAllText(Path.Combine(dir, "Spells.json"), """
                 [ { "Number": 1, "Name": "magic missile", "Short": "mmis", "ReqLevel": 1, "ManaCost": 3,
@@ -143,7 +152,26 @@ public sealed class SpellEngageGateTests
                   { "Number": 3, "Name": "fireball", "Short": "fbal", "ReqLevel": 1, "ManaCost": 4,
                     "Targets": 8, "AttType": 1, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 17 },
                   { "Number": 41, "Name": "holy wave", "Short": "hwav", "ReqLevel": 3, "ManaCost": 10,
-                    "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 } ]
+                    "Targets": 12, "AttType": 4, "Magery": 1, "MageryLVL": 1, "Learnable": 1, "Abil-0": 23 },
+                  { "Number": 159, "Name": "blazing inferno", "Short": "blaz", "ReqLevel": 0, "EnergyCost": 1000,
+                    "Targets": 12, "AttType": 1, "Magery": 0, "MageryLVL": 0, "Abil-0": 17, "Abil-1": 120, "AbilVal-1": 123,
+                    "Learnable": 0, "Casted By": "Item #425" },
+                  { "Number": 290, "Name": "blaze", "Short": "blaz", "ReqLevel": 20, "EnergyCost": 1000, "ManaCost": 8,
+                    "MinBase": 22, "MaxBase": 10, "Diff": -40, "Targets": 8, "AttType": 1, "Magery": 3, "MageryLVL": 0,
+                    "Cap": 28, "Abil-0": 17, "Learnable": 1, "Learned From": "Item #551", "Classes": "(*)" },
+                  { "Number": 420, "Name": "blazing comet", "Short": "blaz", "ReqLevel": 0, "EnergyCost": 0,
+                    "Targets": 8, "AttType": 4, "Magery": 0, "MageryLVL": 0, "Abil-0": 17, "Learnable": 0,
+                    "Casted By": "Monster #537" },
+                  { "Number": 5274, "Name": "starblast", "Short": "blaz", "ReqLevel": 0, "EnergyCost": 0,
+                    "Targets": 8, "AttType": 4, "Magery": 0, "MageryLVL": 0, "Abil-0": 1, "Learnable": 0,
+                    "Casted By": "Item #2224" },
+                  { "Number": 5567, "Name": "blazing comet", "Short": "blaz", "ReqLevel": 50, "EnergyCost": 0,
+                    "Targets": 8, "AttType": 4, "Magery": 0, "MageryLVL": 0, "Abil-0": 1, "Learnable": 0,
+                    "Casted By": "Spell #5566" },
+                  { "Number": 5585, "Name": "blazing light", "Short": "blaz", "ReqLevel": 56, "EnergyCost": 250, "ManaCost": 12,
+                    "MinBase": 20, "MaxBase": 55, "Diff": -135, "Targets": 8, "AttType": 4, "Magery": 2, "MageryLVL": 3,
+                    "Cap": 85, "Abil-0": 17, "Abil-1": 23, "Abil-2": 120, "AbilVal-2": 9417, "Learnable": 1,
+                    "Learned From": "Item #3684", "Classes": "(*)" } ]
                 """);
         }
 
@@ -592,6 +620,48 @@ public sealed class SpellEngageGateTests
             Assert.Contains(h.Logged, l => l.StartsWith("casting hwav at bog wight for no damage", StringComparison.Ordinal));
         else
             Assert.Contains("it can damage nothing here", h.CannotAttackLine);
+    }
+
+    // Thunder, a level-34 Druid, with `blaz` as his normal attack spell and blaze
+    // learned. The code is shared, and the gates judged it by the Priest's blazing
+    // light: undead only, so blaze was skipped at every living monster and the
+    // round went to the next rung (report paradigm-20261024-195420: plasma bolt
+    // every round, blaze never). They judge his own blaze, level 20 and fire: cast
+    // at the living rat, and kept off the barrow wight, whose spell immunity of 30
+    // blazing light's level 56 had cleared.
+    [Theory]
+    [InlineData("giant rat", "blaz giant rat")]
+    [InlineData("barrow wight", "a barrow wight")]
+    public void DruidsBlaz_IsJudgedByBlaze_NotThePriestsBlazingLight(string monster, string sent)
+    {
+        using Harness h = new(classNumber: 13, level: 34);
+        h.WieldFromGearSet("katana");
+        h.Spellbook.SetObtainedByNames(new[] { "blaze" });
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "blaz" };
+
+        h.Server.Line($"Also here: {monster}.");
+
+        Assert.Equal(290, h.Spellbook.FindByCastCode("blaz")?.Number);
+        Assert.Equal(new[] { sent }, h.AllSent);
+    }
+
+    // The same code for a Priest who learned blazing light is judged by that spell:
+    // skipped at the living rat, cast at the undead wight its level 56 clears.
+    [Theory]
+    [InlineData("giant rat", "a giant rat")]
+    [InlineData("barrow wight", "blaz barrow wight")]
+    public void PriestsBlaz_IsJudgedByBlazingLight(string monster, string sent)
+    {
+        using Harness h = new(classNumber: 5, level: 56);
+        h.WieldFromGearSet("katana");
+        h.Ma = h.MaxMa = 100;
+        h.Spellbook.SetObtainedByNames(new[] { "blazing light" });
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "blaz" };
+
+        h.Server.Line($"Also here: {monster}.");
+
+        Assert.Equal(5585, h.Spellbook.FindByCastCode("blaz")?.Number);
+        Assert.Equal(new[] { sent }, h.AllSent);
     }
 
     // After an attack spell, `*Combat Engaged*` is what says we're engaged (and in

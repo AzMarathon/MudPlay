@@ -5534,6 +5534,7 @@ public sealed class AppServices
         // spell whose slot has MinManaPerCast=0 still won't be cast below its real
         // mana cost (report paradigm-20260820-082741).
         Combat.SetSpellManaCost(Spellbook.ManaCostOf);
+        Combat.SetOwnSpellLookup(code => Spellbook.FindByCastCode(code)?.Number);
         // Auto-Bless auto-engine gate — when off, the Buffing category is
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));

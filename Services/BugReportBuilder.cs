@@ -1646,27 +1646,34 @@ public static class BugReportBuilder
         return sb.ToString();
     }
 
-    // "code → #num name [learned] ReqLevel=X Energy=Y Mana=Z" for one slot's cast-
-    // code, resolved against the active set. Unknowns render as "?" (fail-open in
-    // the engine) rather than a sentinel number.
+    // "code → #num name [learned] ReqLevel=X Energy=Y Mana=Z Element=E Targets=T" for
+    // one slot's cast-code, resolved against the active set. ReqLevel, Element and
+    // Targets are what the combat gates judge the code by. Unknowns render as "?"
+    // (fail-open in the engine) rather than a sentinel number.
     private static string SpellResolutionLine(AppServices svc, string label, string code)
     {
         // The character's own spell for the code first: several spells can share one
         // (a priest's three word spells), and the set-wide index knows only the first.
-        int? number = svc.Spellbook.FindByCastCode(code)?.Number ?? svc.SpellShort.NumberByShort(code);
+        int? own = svc.Spellbook.FindByCastCode(code)?.Number;
+        int? number = own ?? svc.SpellShort.NumberByShort(code);
         string head = $"{label}: `{code}`";
         if (number is not { } n)
             return $"{head} → (no Spells row with this short-code)";
 
         string name = svc.GameData.FindNameByNumber("Spells", n) ?? "(unnamed)";
         bool learned = svc.Spellbook.IsObtained(n);
-        int req = svc.SpellReqLevel.ReqLevel(code);
+        int req = svc.SpellReqLevel.ReqLevel(code, own);
         int? energy = svc.SpellCatalog.GetFormulaByNumber(n)?.EnergyCost;
         int? mana = svc.Spellbook.ManaCostOf(code);
+        int attType = svc.SpellAttackType.AttackType(code, own);
+        string element = attType < 0 ? "?"
+            : Game.GameData.LookupEnums.FormatSpellAttackType(attType.ToString()) ?? attType.ToString();
         return $"{head} → #{n} {name} [{(learned ? "learned" : "NOT learned")}]"
              + $" ReqLevel={(req < 0 ? "?" : req.ToString())}"
              + $" Energy={(energy is { } e ? e.ToString() : "?")}"
-             + $" Mana={(mana is { } m ? m.ToString() : "?")}";
+             + $" Mana={(mana is { } m ? m.ToString() : "?")}"
+             + $" Element={element}"
+             + $" Targets={svc.SpellTargetType.TargetType(code, own)}";
     }
 
     // A unified buff slot's targeting + condition summary for the report label —
