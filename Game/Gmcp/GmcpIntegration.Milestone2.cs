@@ -107,15 +107,16 @@ public sealed partial class GmcpIntegration
         if (package == "Anomaly.Char.Effects") _effectsObserved = DateTime.UtcNow;
     }
 
-    private (bool Present, DateTime? Until) SelfEffect(string code)
+    private (bool? Present, DateTime? Until) SelfEffect(string code)
     {
-        if (State.Snapshot("Anomaly.Char.Effects") is not { } effects || _book is null) return (false, null);
-        HashSet<int> ids = _book.Available.Where(s => s.Short.Equals(code, StringComparison.OrdinalIgnoreCase)).Select(s => s.Number).ToHashSet();
+        if (string.IsNullOrWhiteSpace(code) || State.Snapshot("Anomaly.Char.Effects") is not { } effects || _book is null) return (null, null);
+        HashSet<int> ids = _book.Available.Where(s => s.Short.Equals(code.Trim(), StringComparison.OrdinalIgnoreCase)).Select(s => s.Number).ToHashSet();
+        if (ItemCastToken.TryResolve(code, _book.GetCastItems(), out ClassCastItem item) && !item.IsDraw && item.SpellNumber > 0) ids.Add(item.SpellNumber);
+        if (ids.Count == 0) return (null, null);
         foreach (JsonElement effect in effects.GetProperty("effects").EnumerateArray())
         {
             int id = effect.GetProperty("spell").GetInt32();
-            string name = effect.GetProperty("name").GetString()!;
-            if (!ids.Contains(id) && !_book.Available.Any(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && s.Short.Equals(code, StringComparison.OrdinalIgnoreCase))) continue;
+            if (!ids.Contains(id)) continue;
             return (true, effect.GetProperty("roundsLeft").ValueKind == JsonValueKind.Null ? null : _effectsObserved.AddSeconds(effect.GetProperty("roundsLeft").GetInt32() * 3L));
         }
         return (false, null);

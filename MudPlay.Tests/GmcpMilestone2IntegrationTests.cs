@@ -290,4 +290,16 @@ public sealed partial class GmcpIntegrationTests
         Assert.False(s.Gmcp.State.Owns("Anomaly.Items.List"));
     }
 
+    [Fact]
+    public void UnmappedItemBuff_KeepsExistingTrackingInsteadOfBeingDeclaredAbsent()
+    {
+        using Session s = new(); EnterMilestone2(s);
+        s.Director.SetBuffDurationSources(_ => ("", 60L), _ => null);
+        s.Director.SetItemCastSource(_ => 60L, _ => true);
+        s.Director.NoteManualBuffCast("#test relic");
+        s.Send("Anomaly.Char.Effects", new { effects = Array.Empty<object>() });
+        Assert.True(s.Director.IsSelfBuffUp("#test relic"));
+        Assert.Contains(s.Director.SnapshotActiveBuffs(), timer => timer.Short == "#test relic" && timer.TotalSec == 60);
+    }
+
 }

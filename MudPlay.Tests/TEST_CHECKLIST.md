@@ -4462,7 +4462,7 @@ How to keep it current:
 - Run: `dotnet test --filter FullyQualifiedName~GmcpMilestone2StateTests` with a fresh scratch data root.
 
 ### GmcpMilestone2IntegrationTests.cs
-- Covers: synthetic and captured milestone-2 wire replay into existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers and fresh shop reads.
+- Covers: synthetic and captured milestone-2 wire replay into existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers, unmapped item-buff fallback, inspector requests/errors, oversized item IDs and fresh shop reads.
 - Run: `dotnet test --filter FullyQualifiedName~GmcpIntegrationTests` with a fresh scratch data root; live scenarios skip unless configured.
 
 ### GmcpMilestone2LiveTests.cs
