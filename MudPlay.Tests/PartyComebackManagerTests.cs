@@ -1158,6 +1158,48 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
+    // Report paradigm-20261025-114837, the follower's side: back from a dropped link
+    // and already following again, its @comeback found the leader's party full,
+    // and the leader's @forget took the leader's name off the follower's roster
+    // while the follow went on. The @wait asked for after it is kept, and the next
+    // `par`, which names the leader, sends it.
+    [Fact]
+    public void LeadersForget_WhileWeStillFollow_TheNextParNamesTheLeader_AndTheKeptWaitGoesOut()
+    {
+        using Harness h = NewHarness();
+        h.Party.LocalCharacterName = "Aunty";
+        ServerFeed feed = new(h.Router);
+        h.Party.AttachLineExtractor(feed.Lines);
+        using PartyRestSync rest = new(h.PartyState);
+        List<string> wire = new();
+        rest.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b)));
+        void Par()
+        {
+            feed.Line("You are following Ironbar.");
+            feed.Line("The following people are in your travel party:");
+            feed.Rows(new[]
+            {
+                "  Ironbar                       (Ninja)               [H:100%]  - Frontrank",
+                "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+                "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+            });
+            feed.Prompt("[HP=411/MA=113]:");
+        }
+        feed.Line("You are now following Ironbar.");
+        Par();
+
+        ChatLines.Hear(h.Router, Telepath("Ironbar", "@forget"));
+        Assert.True(h.PartyState.IsInParty);
+        Assert.Null(h.PartyState.LeaderName);
+        rest.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        Assert.Empty(wire);
+
+        Par();
+
+        Assert.Equal("Ironbar", h.PartyState.LeaderName);
+        Assert.Equal(new[] { "/Ironbar @wait (mana's too low)\r" }, wire);
+    }
+
     // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
 
     // One step through a gated exit left both followers behind, and with nobody

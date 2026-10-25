@@ -791,6 +791,11 @@ public static class BugReportBuilder
         Kv(sb, "Our @wait reasons held (no @ok until all clear)", svc.PartyRest.HeldReasons.Count == 0
             ? "(none)"
             : string.Join(", ", svc.PartyRest.HeldReasons));
+        // Following with no leader name, a @wait has nobody to go to: "the party
+        // didn't stop for my rest" turns on whether one is stuck here.
+        Kv(sb, "Our @wait kept for a leader we can't name", svc.PartyRest.WaitOwedForUnknownLeader is { } owedWait
+            ? $"{owedWait}: following, but who leads isn't known; it goes out once a `par` names the leader"
+            : "(none)");
         Kv(sb, "Ailment told again on following a leader",
             svc.AilmentSync.LastFollowAnnounce ?? "(not this session)");
         Kv(sb, "Party @wait holding for", svc.PartyEssentials.WaitingMembers.Count == 0

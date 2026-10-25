@@ -1766,6 +1766,7 @@ The hold signals. A member who can't move sends `@wait`; `@ok` says they can aga
 - **Ignore @wait when leading** (Settings → Party): while you lead, a follower's `@wait` is dropped.
 - **An `@ok` that came too early.** If a follower was left behind a moment after sending `@ok`, your client stops trusting their `@ok` for that wait and sits out the whole wait time.
 - **Master switch off:** `@wait` and `@ok` are still noted, but no hold is raised. When the switch comes back on you hold for whoever last asked. `@waiting` is ignored.
+- **Following, but your client has lost who leads** (a leader's `@forget` can do it while you still follow): your `@wait` is kept rather than sent, and the program log warns once. The next `par` names the leader again (`You are following <leader>.`), and the kept `@wait` goes out then. The bug report shows a kept one in its Party section.
 
 #### @comeback and @forget
 

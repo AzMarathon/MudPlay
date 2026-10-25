@@ -85,8 +85,9 @@ public sealed class PartyRestSync : IDisposable
     // the party leader on the 0→non-empty transition. If another reason already
     // holds the wait, this only records the new reason and sends nothing (the
     // leader is already paused). No-ops on the wire when solo, when we're the
-    // leader, when there's no leader yet, or when no wire-sender is bound — but
-    // the reason is still tracked so a later RequestOk balances. Idempotent at
+    // leader, or when no wire-sender is bound — but the reason is still tracked so
+    // a later RequestOk balances. Following a leader the client can't name, the
+    // @wait is kept until it can (OweWait). Idempotent at
     // the protocol level — the receiving leader's PartyEssentialHandlers.OnWait
     // dedupes via a HashSet so repeat sends don't double-count.
     //
@@ -105,10 +106,65 @@ public sealed class PartyRestSync : IDisposable
         string? why = note ?? DefaultNote(reason);
         _notes[reason] = why;
         if (!resend && (!added || !wasEmpty)) return;
+        if (FollowingAnUnknownLeader())
+        {
+            OweWait(reason, why);
+            return;
+        }
         if (!CanSignal()) return;
+        SendWait(reason, why);
+    }
+
+    private void SendWait(WaitReason reason, string? why)
+    {
         Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
         _leaderHolds = true;
+        _owedWait = null;
         _log?.Info(LogCategory, $"sent @wait for {reason}" + (why is null ? "" : $" {why}"));
+    }
+
+    // A @wait asked for while we follow a leader whose name the client has lost:
+    // there is nobody to telepath it to, so it is kept and sent the moment the
+    // leader is known again (PartyManager reads it back off `par`). Warned once
+    // per loss, not per ask: the health engine re-asks on every room it is dragged
+    // through.
+    private (WaitReason Reason, string? Note)? _owedWait;
+
+    // The reason of the @wait that is waiting on a leader to send it to, for the
+    // bug report.
+    public WaitReason? WaitOwedForUnknownLeader => _owedWait?.Reason;
+
+    private bool FollowingAnUnknownLeader() =>
+        _party.IsInParty && !_party.SelfIsLeader && string.IsNullOrEmpty(_party.LeaderName)
+        && MasterSwitchOff?.Invoke() != true;
+
+    private void OweWait(WaitReason reason, string? why)
+    {
+        bool first = _owedWait is null;
+        _owedWait = (reason, why);
+        if (first)
+            _log?.Warn(LogCategory,
+                $"@wait for {reason} not sent: following, but the client doesn't know who leads; it goes out once a `par` names the leader");
+    }
+
+    // The leader is known again: the @wait held for it goes out, for the reason it
+    // was asked for or, once that one has cleared, for one still held.
+    private void SendOwedWait()
+    {
+        if (_owedWait is not { } owed) return;
+        if (!_party.IsInParty || _party.SelfIsLeader || _waitReasons.Count == 0)
+        {
+            _owedWait = null;
+            return;
+        }
+        if (!CanSignal()) return;
+        if (_waitReasons.Contains(owed.Reason))
+        {
+            SendWait(owed.Reason, owed.Note);
+            return;
+        }
+        WaitReason held = _waitReasons.First();
+        SendWait(held, _notes.GetValueOrDefault(held));
     }
 
     // The master switch (true = off). Off, no hold is telepathed: no @wait and no
@@ -160,13 +216,19 @@ public sealed class PartyRestSync : IDisposable
 
     private void OnPartyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(PartyState.IsInParty) or nameof(PartyState.LeaderName)
-            or nameof(PartyState.SelfIsLeader))
-            _leaderHolds = false;
+        if (e.PropertyName is not (nameof(PartyState.IsInParty) or nameof(PartyState.LeaderName)
+            or nameof(PartyState.SelfIsLeader)))
+            return;
+        _leaderHolds = false;
+        SendOwedWait();
     }
 
     // A new character: nothing of the last one's is owed to anyone.
-    public void ForgetLeaderHold() => _leaderHolds = false;
+    public void ForgetLeaderHold()
+    {
+        _leaderHolds = false;
+        _owedWait = null;
+    }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
     // party leader only on the non-empty→0 transition (the LAST reason
@@ -183,6 +245,7 @@ public sealed class PartyRestSync : IDisposable
     {
         if (!_waitReasons.Remove(reason)) return;
         _notes.Remove(reason);
+        if (_waitReasons.Count == 0) _owedWait = null;
         if (_waitReasons.Count > 0)
         {
             _log?.Info(LogCategory,
