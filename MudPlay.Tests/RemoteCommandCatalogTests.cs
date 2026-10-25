@@ -297,4 +297,18 @@ public sealed class RemoteCommandCatalogTests
         Assert.Contains("Ticked grants", tip);
         Assert.Contains("Unticked denies", tip);
     }
+
+    // Alter settings carries @relation, which can make the client hang up or run
+    // (user, 2026-10-25): its box says so, and no other box does.
+    [Fact]
+    public void AlterSettingsTooltip_WarnsOfHangupAndFlee()
+    {
+        ViewModels.GameData.Edit.PlayerEditDialogViewModel vm = new(
+            new PlayerRecord("Test", string.Empty, null, null, null, null, null, null,
+                             DateTime.UtcNow, DateTime.UtcNow));
+
+        Assert.Contains("Careful: @relation can set a monster to Hangup or Flee.", vm.RcAlterSettingsTip);
+        Assert.DoesNotContain("Careful", vm.RcHangupDisconnectTip);
+        Assert.DoesNotContain("Careful", vm.RcExecuteCommandsTip);
+    }
 }

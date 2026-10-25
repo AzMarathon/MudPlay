@@ -1122,11 +1122,13 @@ Your client goes through these checks in this order. The first one that stops a 
 | Move player | `@goto`, `@loop`, `@loop send`, `@lair`, `@stop`, `@rego` |
 | Execute commands | `@do`, `@kill`, `@heal`, `@trap`, `@train`, `@equip`, `@get-all`, `@get-stash`, `@drop-all`, `@hide-all`, `@deposit-all`, and relaying a `&@` command |
 | Hangup/disconnect | `@hangup`, `@relog` |
-| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@relation`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset` |
+| Alter settings | `@auto-all`, the eleven `@auto-…` toggles, `@auto-get <item>`, `@relation`, `@settings`, `@atkprio`, `@atkorder`, `@profile`, `@events`, `@event`, `@reset`. **Careful:** with `@relation` the holder can make your client hang up or run from a monster (see below). |
 | Divert conversations | `@divert` |
 | Elevated Commands | `@suicide`, `@dupe` |
 
 A player your client has never seen has no box ticked, so every command in the table is refused. The Players batch editor's **Set all permissions** ticks or clears all sixteen for the selected players.
+
+**What Alter settings allows through `@relation`.** A player who holds **Alter settings** can set any monster to **Hangup**, and your client then disconnects whenever that monster appears, or to **Flee**, and your client runs from it. Only grant Alter settings to players you trust with that. See **@relation**.
 
 **What Alter settings allows through your events.** A player who holds **Alter settings** can switch your events on and off with `@event`, and an event switched on does whatever you defined it to do: walk somewhere, run a loop or Auto-Lair, make a bank trip, send a command. Sent as commands of their own, those would need **Move player** or **Execute commands**. The holder can't define an event or change what one does, only switch on and off the ones you made. See **@events and @event**.
 
@@ -1939,6 +1941,8 @@ Reports or sets how your client treats one monster: its **Relationship**, the bo
 **How a name finds a monster.** In three steps, the first that finds anything deciding: a monster's **whole name**; then every monster whose name holds **every typed word, in any order**; then the same without apostrophes, so `kobolds pet` finds *kobold's pet*. At each step the monsters in play come first, and the ones out of play (the Unobtainable list) count only when none in play fits. So a whole name wins over a word match, even when the whole name is a monster out of play. Exactly one monster is used; none, or more than one, is refused. Monsters that share a name are separate records (a variant for each area), so a shared name is refused with each one's number: send the number in its place. The relationship is the **last** word, and only when there is a word before it, so a monster whose name ends in one of the five words is named by its number.
 
 **Who may send it:** a player with **Alter settings**, on any channel remote commands are read on.
+
+**Grant it with care.** That player can set a monster to **Hangup**, and your client disconnects whenever the monster appears, or to **Flee**, and your client runs from it. Only grant Alter settings to players you trust with that. No other permission is asked for either.
 
 | Reply | When |
 |---|---|

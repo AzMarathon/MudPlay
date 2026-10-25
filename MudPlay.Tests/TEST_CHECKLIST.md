@@ -3231,7 +3231,7 @@ How to keep it current:
 
 ### RemoteCommandCatalogTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog, PlayerEditDialogViewModel tips
-- Checks: command → permission category (`@relation` at Alter settings); removed commands; bang stripping; help coverage; tooltips list commands.
+- Checks: command → permission category (`@relation` at Alter settings); removed commands; bang stripping; help coverage; tooltips list commands, and only the Alter settings tooltip warns that `@relation` can set Hangup or Flee.
 - Why: the permissions grid must match handlers.
 
 ### RemoteCommandCheckOrderTests.cs
