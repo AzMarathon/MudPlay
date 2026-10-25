@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.185.53**
-> - CP plan's CP Left no longer double-counts the current level's CP or shifts as a stat buff comes and goes
-> - Monsters' own appear lines (golden mist's "A mist of gold appears in front of you!" and 31 others) are recognised as arrivals: straight onto the room list, or a room check
+> **Version 3.185.54**
+> - A follower's @wait reaches the leader again after a reconnect left the client unsure who leads
+> - A leader answers a reconnected member's @comeback "got you" when they already followed its invite, instead of "party is full" and @forget
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

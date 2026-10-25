@@ -1,5 +1,11 @@
 # Version history
 
+## 3.185.54
+
+- A follower's @wait reaches the leader again after a reconnect left the client unsure who leads
+- A leader answers a reconnected member's @comeback "got you" when they already followed its invite, instead of "party is full" and @forget
+- bug reports addressed: paradigm-20261025-114837
+
 ## 3.185.53
 
 - CP plan's CP Left no longer double-counts the current level's CP or shifts as a stat buff comes and goes
