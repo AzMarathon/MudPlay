@@ -711,14 +711,18 @@ public sealed partial class PartyManager : IDisposable
     // takes the leader's row and name, the next `par` lists them again as a plain
     // member, and with no leader name nothing addressed to the leader goes out, a
     // @wait included (report paradigm-20261025-114837). Read at the block's end, as
-    // its rows are what say we are in a party. Only fills a missing leader: who
-    // leads is otherwise the join and leave lines' to say.
+    // its rows are what say we are in a party, and only for a leader the rows
+    // list. Only fills a missing leader: who leads is otherwise the join and leave
+    // lines' to say. FollowingLeader isn't raised: the game started no follow, so
+    // the ailment announces aren't made again; PartyRestSync tells the leader a
+    // wait still held (TellRestoredLeader).
     private void RestoreLeaderFromPar()
     {
         string? said = _parSaidLeader;
         _parSaidLeader = null;
         if (said is null) return;
         if (!State.IsInParty || State.SelfIsLeader || !string.IsNullOrEmpty(State.LeaderName)) return;
+        if (!_parBlockNames.Any(n => GivenNameOf(n).Equals(said, StringComparison.OrdinalIgnoreCase))) return;
         State.LeaderName = said;
         AddOrTouchMember(said).IsLeader = true;
         _log?.Info("Party", $"`par` says we follow {said}, and who leads had been lost: {said} is our leader again");
@@ -1575,7 +1579,6 @@ public sealed partial class PartyManager : IDisposable
         if (_parListedOnly)
         {
             _parListedOnly = false;
-            _parSaidLeader = null;
             if (read && ListedWithLeader is { } leader)
             {
                 bool stillListed = false;
@@ -1592,9 +1595,8 @@ public sealed partial class PartyManager : IDisposable
             return;
         }
         ReconcileMissingFromPar();
+        RestoreLeaderFromPar();
         _parBlockNames.Clear();
-        if (read) RestoreLeaderFromPar();
-        _parSaidLeader = null;
         if (read) ParReplyRead?.Invoke();
     }
 

@@ -1241,9 +1241,10 @@ public sealed class PartyComebackManagerTests : IDisposable
 
     // Long after the return and the follow, the row alone isn't taken for proof: a
     // leave line the client missed leaves one behind until the next `par`, and
-    // such a member does need fetching. The request is judged as any other.
+    // such a member does need fetching. The request is judged as any other, and
+    // their own row isn't counted against the party.
     [Fact]
-    public void FullParty_ARequestLongAfterTheReturn_IsJudgedAsAnyRequest()
+    public void FullParty_ARequestLongAfterTheReturn_IsJudgedAsAnyRequest_TheirSeatNotCounted()
     {
         using Harness h = NewHarness();
         DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
@@ -1251,10 +1252,68 @@ public sealed class PartyComebackManagerTests : IDisposable
         MemberBackFromADroppedLink(h);
         now += TimeSpan.FromMinutes(5);
 
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/3"));
+
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
+        Assert.False(Sent(h, "@forget"));
+    }
+
+    // A move of ours since their follow could have left them at an exit, so the
+    // request is judged as any other, even a moment after the follow.
+    [Fact]
+    public void FullParty_AFollowOnReturn_ThenAMoveOfOurs_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        now += TimeSpan.FromSeconds(6);
+
         ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
 
-        Assert.Contains("my party is full", h.LastReply);
+        Assert.DoesNotContain("got you", h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
     }
+
+    // The other ordering: their client's @comeback (sent at its first prompt, its
+    // room already confirmed) comes in after our invite on their return and before
+    // they take it. Their row is the [Invited] one the invite gave them: it isn't
+    // counted against them, and the invite and its @join nag are what bring them,
+    // so they are answered as a pickup under way, with no @forget and no walk.
+    [Fact]
+    public void FullParty_AMemberInvitedOnReturn_NotYetFollowing_IsAnsweredInProgress_ThenFollows()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && m.IsInvited);
+        Assert.Equal(6, h.PartyState.Members.Count);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
 
     // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
 
@@ -2275,8 +2334,11 @@ public sealed class PartyComebackManagerTests : IDisposable
         for (int i = 1; i <= 5; i++) SeatFollower(h, $"Member{i}");
     }
 
+    // The asking member's own row is their seat on Paradigm too, whatever it reads
+    // (report paradigm-20261025-114837: a member invited on their return was told
+    // the party was full by the row the invite gave them).
     [Fact]
-    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowCounts_PartyIsFull()
+    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowIsTheirSeat_TheyAreFetched()
     {
         using Harness h = NewHarness();
         SeatSix(h, "Tank");
@@ -2284,9 +2346,9 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         ChatLines.Hear(h.Router, Telepath("Tank", "@comeback 1/3"));
 
-        Assert.Contains("my party is full", h.LastReply);
-        Assert.True(Sent(h, "/Tank @forget"));
-        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.False(Sent(h, "/Tank @forget"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
     }
 
     // On Stock the member an exit turned away is still on our list: the sixth row

@@ -1215,6 +1215,27 @@ public sealed class PartyManagerTests
         Assert.False(p.State.SelfIsLeader);
     }
 
+    // A leader the block's rows don't list isn't taken from its opening line.
+    [Fact]
+    public void AParNamingALeaderItsRowsLeaveOut_RestoresNothing()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Ironbar.");
+        ParOfIronbarsParty();
+        p.ForgetReconnectMember("Ironbar");
+
+        _feed.Line("You are following Ironbar.");
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
+        {
+            "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+            "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+        });
+        _feed.Prompt("[HP=411/MA=113]:");
+
+        Assert.Null(p.State.LeaderName);
+    }
+
     // Who leads is the join line's to say; the par line only fills a missing name.
     [Fact]
     public void AParNamingSomeoneElse_LeavesAKnownLeaderAlone()
