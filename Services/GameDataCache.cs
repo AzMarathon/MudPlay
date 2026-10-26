@@ -117,6 +117,9 @@ public sealed partial class GameDataCache
     // whenever the set's tables are dropped for re-reading, so a result built from
     // the old ones is never kept. Guarded by the _tables lock.
     private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
+    // The strings this load's builders keep; a new pool with each switch or reload
+    // (StringPool).
+    private StringPool _strings = new();
     private long _generation;
     private long _derivedForgets;
 
@@ -210,6 +213,16 @@ public sealed partial class GameDataCache
     // construction), every SwitchSet emits an Info entry naming the outgoing +
     // incoming set so the user can verify swap success in the program log.
     public LogService? Log { get; set; }
+
+    // The current load's string pool. A builder that keeps a string it read from this
+    // load's tables keeps it through here, so the room graph, the indexes and TBInfo
+    // share one copy of each text. A table's own reads are not pooled: most of what is
+    // read is looked at once and dropped (an exit cell parsed into a RoomExit, a cell
+    // the Game Data browser draws), and pooled it would stay for the whole load.
+    public StringPool Strings
+    {
+        get { lock (_tables) return _strings; }
+    }
     // Times table parses for the performance log; set once by AppServices.
     public PerformanceMonitor? Performance { get; set; }
 
@@ -320,16 +333,19 @@ public sealed partial class GameDataCache
         if (Log is null) return;
         string? set;
         (string Table, long Bytes)[] held;
+        int pooled;
         lock (_tables)
         {
             set = ActiveSet;
             held = _tables.Select(t => (t.Key, t.Value.ResidentBytes)).OrderBy(t => t.Key, StringComparer.Ordinal).ToArray();
+            pooled = _strings.Count;
         }
         if (set is null || held.Length == 0) return;
         static string Mb(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
         Log.Log(LogSeverity.Info, "GameData",
             $"Tables held for '{set}': {string.Join(", ", held.Select(t => $"{t.Table} {Mb(t.Bytes)} MB"))} "
             + $"({Mb(held.Sum(t => t.Bytes))} MB in all).");
+        Log.Log(LogSeverity.Debug, "GameData", $"Strings pooled for '{set}' after its rebuild: {pooled} distinct texts.");
     }
 
     // Re-ingest the active set's tables from disk AND notify consumers. This is
@@ -803,6 +819,7 @@ public sealed partial class GameDataCache
         lock (_tables)
         {
             _derived.Clear();
+            _strings = new StringPool();
             Interlocked.Increment(ref _generation);
             _tables.Clear();
             _failedTables.Clear();

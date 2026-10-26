@@ -3013,10 +3013,15 @@ public sealed class AppServices
         if (Services.Update.UpdatePlatform.IsSelfContainedInstall())
             foreach (string line in Services.Update.RetiredFiles.Clean())
                 Log.Info("Update", line);
-        // Background memory hygiene. CombatTracker is bound later in construction;
-        // the combat-active probe is lazy and the first periodic tick is minutes
-        // out, so it's always assigned before the Func is ever invoked.
-        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles);
+        // Background memory hygiene. CombatTracker and the movement engines are bound
+        // later in construction; the probes are lazy and the first tick is half a
+        // minute out, so they're always assigned before a Func is ever invoked. Busy:
+        // a fight, a walk, loop or Auto-Lair (running or paused), or an errand driving
+        // the walker; an idle compaction's pause waits for none of them.
+        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles,
+            isEngineBusy: () => PlayerState is { InCombat: true } || CombatTracker.HasEngageableHostiles
+                || MovementControl.IsActive || ErrandHasTheWalker,
+            Activity);
         // Late-bind the cache's log sink so SwitchSet emits the swap
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
@@ -3026,6 +3031,20 @@ public sealed class AppServices
         // The Program Log switches are global: applied here, before any character,
         // so Auto-collect logs captures the session from launch.
         ApplyLogDiagnostics(Settings.Current.LogDiagnostics ?? new Models.Settings.LogDiagnosticsSettings());
+        // Where the assemblies load from, so a log or bug report can tell a Windows
+        // client running unpacked (shared pages) from one mapping them out of the exe.
+        // After the switches above, so an auto-collected program log carries it.
+        Services.Update.BundleExtraction.Layout bundle = Services.Update.BundleExtraction.Current();
+        Log.Info("Startup", "program: " + Services.Update.BundleExtraction.Describe(bundle));
+        // Older versions' unpacked copies, off the UI thread: a folder of them is
+        // hundreds of files.
+        if (bundle == Services.Update.BundleExtraction.Layout.Extracted && OperatingSystem.IsWindows()
+            && Services.Update.UpdatePlatform.IsSelfContainedInstall())
+            _ = Task.Run(() =>
+            {
+                foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
+                    Log.Info("Update", line);
+            });
         Profile = new ProfileService();
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
         // audit (load / swap / close / re-home) rides the always-on Info stream.

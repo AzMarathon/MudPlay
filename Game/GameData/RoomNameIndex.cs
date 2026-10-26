@@ -37,6 +37,8 @@ public static class RoomNameIndex
         GameTable? rooms = gameData.GetTable("Rooms");
         if (rooms is null) return index;
 
+        // The room graph keeps the same names: one copy serves both.
+        StringPool strings = gameData.Strings;
         foreach (GameRow el in rooms.Rows)
         {
             int map = el.TryGetProperty("Map Number", out GameValue m) && m.ValueKind == JsonValueKind.Number
@@ -45,7 +47,7 @@ public static class RoomNameIndex
                 && r.TryGetInt32(out int rv) ? rv : 0;
             if (map <= 0 || room <= 0) continue;
             index[(map, room)] = el.TryGetProperty("Name", out GameValue n) && n.ValueKind == JsonValueKind.String
-                ? n.GetString() ?? string.Empty : string.Empty;
+                ? strings.Get(n.GetString()) ?? string.Empty : string.Empty;
         }
         if (!wasLoaded) gameData.EvictTable("Rooms");
         return index;
