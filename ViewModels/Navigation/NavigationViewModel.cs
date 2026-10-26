@@ -1539,6 +1539,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public bool HasGotoHistory => GotoHistoryRows.Count > 0;
 
+    private bool _contextRecentRebuildQueued;
+
     private void RefreshGotoHistory()
     {
         GotoHistoryRows.Clear();
@@ -1548,7 +1550,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             GotoHistoryRows.Add(new GotoHistoryRowViewModel(key, $"{name} {key.Map}/{key.Room}"));
         }
         OnPropertyChanged(nameof(HasGotoHistory));
-        RebuildContextRecentDestinations();
+
+        // Picking a recent destination records it, so this runs inside the menu click:
+        // rebuilding now detaches the clicked item before Avalonia's close-on-click
+        // walks up from it to the menu, and the menu stays open.
+        if (_contextRecentRebuildQueued) return;
+        _contextRecentRebuildQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _contextRecentRebuildQueued = false;
+            RebuildContextRecentDestinations();
+        });
     }
 
     // Walk-to sub-lists for the map's room right-click menu: the starred GOTO
