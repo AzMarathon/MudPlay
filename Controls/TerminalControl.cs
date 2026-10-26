@@ -311,6 +311,7 @@ public sealed class TerminalControl : Control
                 }
             }
             else _splash.Resize(cols, rows);
+            _splash.SetSuspended(_windowMinimized);
             _splash.Start();
         }
         else if (_splash is { } sp)
@@ -451,6 +452,7 @@ public sealed class TerminalControl : Control
         {
             _windowActive = win.IsActive;
             _windowMinimized = win.WindowState == WindowState.Minimized;
+            _splash?.SetSuspended(_windowMinimized);
             win.Activated += OnHostActivated;
             win.Deactivated += OnHostDeactivated;
             win.PropertyChanged += OnHostPropertyChanged;
@@ -506,6 +508,8 @@ public sealed class TerminalControl : Control
         if (e.Property != Window.WindowStateProperty) return;
         bool wasMinimized = _windowMinimized;
         _windowMinimized = (WindowState)e.NewValue! == WindowState.Minimized;
+        // The splash animates only where it can be seen.
+        _splash?.SetSuspended(_windowMinimized);
         // Restored from minimized while output arrived in the meantime — repaint
         // once now so the grid reflects everything buffered while hidden.
         if (wasMinimized && !_windowMinimized && _dirtyWhileHidden)

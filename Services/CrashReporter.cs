@@ -139,12 +139,15 @@ public static class CrashReporter
     }
 
     // Where a crash or hang report lands: the Desktop, or, for a headless or
-    // service account that reports none, the app's own folder, so the report
-    // still lands somewhere.
+    // service account that reports none, the program's own folder, so the report
+    // still lands somewhere. The executable's folder, not AppContext.BaseDirectory: a
+    // Windows build runs unpacked in the temp folder (BundleExtraction).
     internal static string ReportFolder()
     {
         string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        return string.IsNullOrEmpty(desktop) ? AppContext.BaseDirectory : desktop;
+        return string.IsNullOrEmpty(desktop)
+            ? Update.UpdatePlatform.InstallDirectory() ?? AppContext.BaseDirectory
+            : desktop;
     }
 
     // The log file a report's reader should ask for alongside it.

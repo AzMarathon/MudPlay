@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -661,10 +660,11 @@ public sealed class RoomGraphManager
         // freeze. The results are folded in below in row order, as a plain loop would
         // have. All the readers share is the text they keep: a realm has fifteen
         // rooms to a name, and lair tags and exit hints repeat as much, so each is
-        // kept once for the build.
+        // kept through the load's string pool, which RoomNameIndex keeps its names
+        // through too.
         GameRow[] rows = doc.Rows.ToArray();
         RowRead[] read = new RowRead[rows.Length];
-        ConcurrentDictionary<string, string> texts = new();
+        StringPool texts = _cache.Strings;
         Parallel.For(0, rows.Length,
             static () => new RoomExitSet.Builder(),
             (i, _, exits) =>
@@ -1823,8 +1823,8 @@ public sealed class RoomGraphManager
         Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
 
     // exits belongs to the reading thread and is empty before and after each row;
-    // texts is the one thing the readers share (see Shared).
-    private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, ConcurrentDictionary<string, string> texts)
+    // texts is the one thing the readers share.
+    private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, StringPool texts)
     {
         if (!TryReadInt(row, "Map Number", out int map)) return default;
         if (!TryReadInt(row, "Room Number", out int roomNumber)) return default;
@@ -1836,7 +1836,7 @@ public sealed class RoomGraphManager
         // those — keep them in the graph as null-name so the tracker
         // can learn the real name on first observation. Render through
         // Room.DisplayName for any user-facing label.
-        string name = Shared(texts, TryReadString(row, "Name") ?? string.Empty);
+        string name = texts.Get(TryReadString(row, "Name") ?? string.Empty);
 
         int cmd = TryReadIntOrZero(row, "CMD");
 
@@ -1867,7 +1867,7 @@ public sealed class RoomGraphManager
                 // paradigm-20260729-221044). The real promotion runs in the instance
                 // pass PromoteCmdTeleportExits, which can see _tbinfo and only promotes
                 // exits whose CMD chain genuinely teleports to the exit's target.
-                if (exit.RawHint is { } hint) exit = exit with { RawHint = Shared(texts, hint) };
+                if (exit.RawHint is { } hint) exit = exit with { RawHint = texts.Get(hint) };
                 exits.Set(dir, exit);
                 mask |= 1u << (int)dir;
             }
@@ -1892,7 +1892,7 @@ public sealed class RoomGraphManager
         }
 
         string? lairRaw = TryReadString(row, "Lair");
-        lairRaw = lairRaw is null || IsLairSentinel(lairRaw) ? null : Shared(texts, lairRaw);
+        lairRaw = lairRaw is null || IsLairSentinel(lairRaw) ? null : texts.Get(lairRaw);
 
         Room room = new()
         {
@@ -1910,11 +1910,6 @@ public sealed class RoomGraphManager
         };
         return new RowRead(room, actions, modBucket);
     }
-
-    // The one string the build keeps for this text. Which reader's copy that is
-    // depends on who got there first; the copies read the same.
-    private static string Shared(ConcurrentDictionary<string, string> texts, string text) =>
-        texts.GetOrAdd(text, text);
 
     // MDB exports the empty cell as either a NUL, a literal blank, or
     // whitespace. Treat any of those as "no lair".

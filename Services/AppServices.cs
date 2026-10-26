@@ -1584,6 +1584,12 @@ public sealed class AppServices
     // trip, a sell detour, a trainer or funding trip, a token route, a party pickup, a
     // path-item / light / drop detour, a maze or pyramid solve, a Roomba sweep. Its
     // walks aren't the user's, so their ends aren't the user's walk ending.
+    // A fight, a walk, loop or Auto-Lair (running or paused), or an errand driving the
+    // walker: what an idle memory compaction's pause waits for. UI thread, where the
+    // engines' state lives.
+    public bool FightingMovingOrOnAnErrand =>
+        PlayerState.InCombat || CombatTracker.HasEngageableHostiles || MovementControl.IsActive || ErrandHasTheWalker;
+
     public bool ErrandHasTheWalker =>
         AutoDeposit.IsRerouting || SellDetour.IsDetouring
         || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy
@@ -3015,8 +3021,9 @@ public sealed class AppServices
                 Log.Info("Update", line);
         // Background memory hygiene. CombatTracker is bound later in construction;
         // the combat-active probe is lazy and the first periodic tick is minutes
-        // out, so it's always assigned before the Func is ever invoked.
-        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles);
+        // out, so it's always assigned before the Func is ever invoked. The idle
+        // compaction is sampled on the heartbeat (wired with the engines, below).
+        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles, Activity);
         // Late-bind the cache's log sink so SwitchSet emits the swap
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
@@ -3026,6 +3033,28 @@ public sealed class AppServices
         // The Program Log switches are global: applied here, before any character,
         // so Auto-collect logs captures the session from launch.
         ApplyLogDiagnostics(Settings.Current.LogDiagnostics ?? new Models.Settings.LogDiagnosticsSettings());
+        // Where the assemblies load from, so a log or bug report can tell a Windows
+        // client running unpacked (shared pages) from one mapping them out of the exe.
+        // After the switches above, so an auto-collected program log carries it.
+        Services.Update.BundleExtraction.Layout bundle = Services.Update.BundleExtraction.Current();
+        Log.Info("Startup", "program: " + Services.Update.BundleExtraction.Describe(bundle));
+        // Older versions' unpacked copies, off the UI thread: a folder of them is
+        // hundreds of files.
+        if (bundle == Services.Update.BundleExtraction.Layout.Extracted && OperatingSystem.IsWindows()
+            && Services.Update.UpdatePlatform.IsSelfContainedInstall())
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
+                        Log.Info("Update", line);
+                }
+                // Fire and forget: nothing awaits it, so a fault would otherwise be lost.
+                catch (Exception ex)
+                {
+                    Log.Warn("Update", $"removing older versions' unpacked copies failed: {ex.Message}");
+                }
+            });
         Profile = new ProfileService();
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
         // audit (load / swap / close / re-home) rides the always-on Info stream.
@@ -8904,6 +8933,10 @@ public sealed class AppServices
         // events.
         NavWatcher = new Game.Map.NavFolderWatcher(Loops, Lairs, NavFolders, Log);
         Tick.HeartbeatElapsed += NavWatcher.OnHeartbeat;
+        Tick.HeartbeatElapsed += () => Memory.OnHeartbeat(FightingMovingOrOnAnErrand);
+        // Its system watcher holds a handle on the Loops folder (on Windows, one that
+        // keeps the folder from being renamed): let it go as the program log is.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => NavWatcher.Dispose();
 
         // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
         // a copy/move changed in the active set: the loop/lair caches alone when

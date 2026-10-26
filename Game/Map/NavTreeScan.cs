@@ -64,11 +64,6 @@ internal sealed class NavTreeScan
         HashSet<string> folders = new(StringComparer.Ordinal);
         if (!Directory.Exists(full)) return new NavTreeScan(full, false, files, folders);
 
-        StringComparison casing = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
-            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        // A sub-folder that can't be opened must fail the walk, not be skipped: skipped,
-        // its loops would read as deleted by another client.
-        EnumerationOptions options = new() { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false };
         // Read straight off the directory entries: this runs over a tree of hundreds
         // of files, so a file that doesn't match is never stat'ed and none gets a
         // FileInfo.
@@ -76,10 +71,10 @@ internal sealed class NavTreeScan
             full,
             (ref FileSystemEntry e) => e.IsDirectory
                 ? (e.ToFullPath(), null, default)
-                : (e.ToFullPath(), SuffixOf(e.FileName, suffixes, casing), new FileMark(e.LastWriteTimeUtc.UtcTicks, e.Length)),
-            options)
+                : (e.ToFullPath(), SuffixOf(e.FileName, suffixes), new FileMark(e.LastWriteTimeUtc.UtcTicks, e.Length)),
+            Options)
         {
-            ShouldIncludePredicate = (ref FileSystemEntry e) => e.IsDirectory || SuffixOf(e.FileName, suffixes, casing) is not null,
+            ShouldIncludePredicate = (ref FileSystemEntry e) => e.IsDirectory || SuffixOf(e.FileName, suffixes) is not null,
         };
         try
         {
@@ -96,10 +91,66 @@ internal sealed class NavTreeScan
         return new NavTreeScan(full, true, files, folders);
     }
 
-    private static string? SuffixOf(ReadOnlySpan<char> name, string[] suffixes, StringComparison casing)
+    // One number for everything a Walk of root would list: each folder's path and
+    // each file's path, write time and length. Two signatures differ whenever two
+    // walks would, bar a 64-bit collision, so a tree whose signature is unchanged
+    // need not be walked. Made with no string per entry: it is the cheap check the
+    // watcher runs every minute in every client. Null when the tree can't be walked
+    // to the end (the root missing, a folder that can't be opened), which Walk
+    // reports as an incomplete scan.
+    public static long? Signature(string root, params string[] suffixes)
+    {
+        string full = Path.GetFullPath(root);
+        if (!Directory.Exists(full)) return null;
+        FileSystemEnumerable<ulong> entries = new(
+            full,
+            (ref FileSystemEntry e) => e.IsDirectory
+                ? Mix((uint)string.GetHashCode(e.Directory), (uint)string.GetHashCode(e.FileName), 0, -1)
+                : Mix((uint)string.GetHashCode(e.Directory), (uint)string.GetHashCode(e.FileName),
+                    e.LastWriteTimeUtc.UtcTicks, e.Length),
+            Options)
+        {
+            ShouldIncludePredicate = (ref FileSystemEntry e) => e.IsDirectory || SuffixOf(e.FileName, suffixes) is not null,
+        };
+        ulong sum = 0, count = 0;
+        try
+        {
+            // A sum, so the order the file system lists entries in doesn't matter.
+            foreach (ulong entry in entries)
+            {
+                sum += entry;
+                count++;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        return (long)(sum ^ SplitMix(count));
+    }
+
+    private static ulong Mix(uint folder, uint name, long ticks, long length) =>
+        SplitMix(((ulong)folder << 32 | name) ^ SplitMix((ulong)ticks ^ SplitMix((ulong)length)));
+
+    private static ulong SplitMix(ulong x)
+    {
+        x += 0x9E3779B97F4A7C15UL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9UL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBUL;
+        return x ^ (x >> 31);
+    }
+
+    // A sub-folder that can't be opened must fail the walk, not be skipped: skipped,
+    // its loops would read as deleted by another client.
+    private static readonly EnumerationOptions Options = new() { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false };
+
+    private static readonly StringComparison Casing = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private static string? SuffixOf(ReadOnlySpan<char> name, string[] suffixes)
     {
         foreach (string suffix in suffixes)
-            if (name.EndsWith(suffix, casing)) return suffix;
+            if (name.EndsWith(suffix, Casing)) return suffix;
         return null;
     }
 }

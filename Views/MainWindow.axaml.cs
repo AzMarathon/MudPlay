@@ -141,6 +141,18 @@ public partial class MainWindow : Window
         WatchToolbarWidth(TopToolbarItems);
         WatchToolbarWidth(BottomToolbarItems);
 
+        // A minimized client is one nobody is looking at: a good moment to hand the
+        // heap's free space back (MemoryMaintenance decides whether it may). The
+        // observable opens with the current state, which is no minimizing.
+        WindowState? windowState = null;
+        this.GetObservable(WindowStateProperty)
+            .Subscribe(new AnonymousObserver<WindowState>(state =>
+            {
+                if (windowState is { } was && was != WindowState.Minimized && state == WindowState.Minimized)
+                    AppServices.Current.Memory.OnMainWindowMinimized(AppServices.Current.FightingMovingOrOnAnErrand);
+                windowState = state;
+            }));
+
         // Subscribe to VM PropertyChanged so we can react to IsConnected.
         // Hooking via DataContextChanged covers the case where the VM is
         // swapped at runtime — even though today it's set once in App.

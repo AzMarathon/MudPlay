@@ -541,6 +541,12 @@ How to keep it current:
 - Checks: ReplaceAll raises one Reset.
 - Why: the O(n²) startup fix.
 
+### BundleExtractionTests.cs
+- Covers: Services/Update/BundleExtraction
+- Checks: the startup clean-up removes other versions' unpacked folders beside this client's own (a full one with a sub-folder, one an earlier clean-up got part way through, and pre-3.186.9 natives-only ones: all three native libraries, or Skia alone) and leaves this client's own, a natives-only one holding an extra file or a sub-folder, one with only the ANGLE library, a natives-only one read within the hour, a natives-only one outside the host's extraction folder, a folder that isn't MudPlay's, and, once the one-time pass for pre-3.186.9 folders has marked itself done (only after a run that left none: not while one was in use), a natives-only folder that turns up later; a client that finds another holding the pass's lock skips the pass, one not named like a bundle id, another Avalonia app's, one unpacked within the hour, and the target of a link (a link inside a removed folder goes as a link); it touches nothing when the extraction base (DOTNET_BUNDLE_EXTRACT_BASE_DIR) sits above the install so the extraction folder is the install folder, or when this client's folder isn't in the host's extraction folder; the layout is told apart (inside the program, unpacked, not single-file, run by the dotnet host).
+- Why: a Windows build unpacks itself per version into the temp folder so its clients share the assemblies' pages; old versions' copies would pile up, and the clean-up must touch nothing else (RAM pass, 2026-10-25). On the Linux test host a mapped file can still be opened exclusively, so "a running client holds it" is stood in for by the test holding the file open with no sharing.
+- Named seam: BundleExtraction.Current's optional base folder and process path, and CleanOld's optional `exePath`, `extractBase`, `nowUtc` and `doneMarker`: the three layouts, the extraction folder's place, the hour's age and the one-time pass's marker have to be checked without being a Windows install or setting the process's environment.
+
 ### CarriedStealthPenaltyTests.cs
 - Covers: Game/Stealth/CarriedStealthPenalty
 - Checks: hopeless-sneak verdict from carried items vs the stealth reading and the user threshold.
@@ -1411,6 +1417,11 @@ How to keep it current:
 - Checks: copy/move of loops, messages and record overrides across tiers; validation; active-set reload with what changed; delete set; replaced-set reporting.
 - Why: Manage Sets operations.
 
+### GameDataStringPoolTests.cs
+- Covers: Services/StringPool through GameDataCache.Strings, with Game/Map/RoomGraphManager, Game/GameData/RoomNameIndex and Game/Combat/MonsterCatalog on a fixture set read by the real loader
+- Checks: every room name, lair tag, exit hint and attack name reads exactly as System.Text.Json reads the file (case, doubled and trailing spaces, an accent, a character past the BMP, an empty name, the NUL lair sentinel); a repeated text is one string across rooms, the room graph and the room-name index, and across monsters' attacks; texts differing only in case or whitespace stay apart; a set switch starts a new pool and the rebuilt structures share its strings, not the old set's.
+- Why: the structures built from a loaded set held thousands of copies of the same names, about 2.4 MB a client (RAM pass, 2026-10-25); pooling must lose no text and must not keep an old set's strings alive.
+
 ### GameDataSwitchEndsHeldRunsTests.cs
 - Covers: Game/Map/MovementController.StopForGameDataChange with EventManager, PartyComebackManager
 - Checks: an event waiting at the switch is ended without going back; the user's stop still reads as the user's; a pick-up waiting for its member is cancelled.
@@ -1699,6 +1710,11 @@ How to keep it current:
 - Covers: (test helper) builds huge "You notice … here." floor lines and a matching Items table
 - Checks: n/a
 - Why: paradigm-20261009-164508 (floor lines over 2,000 characters)
+
+### IdleCompactionPolicyTests.cs
+- Covers: Services/IdleCompactionPolicy (the decision MemoryMaintenance's idle and minimized compactions follow)
+- Checks: no idle compaction in the first half hour, then one after five stable minutes; a fight, walk or errand restarts the five minutes; more game lines than a quiet room brings hold it to the next quiet sample, a handful don't; at most once per interval; a pause over the bound doubles the interval up to its ceiling and a fast one puts it back; on minimize it runs at once unless something is fighting or moving, not twice within two minutes, and after a slow pause not before the longer interval.
+- Why: a compacting collection stops the client for tens of milliseconds, so it must never land during a fight, a walk or a burst of game output, and must back off on a client whose heap compacts slowly (RAM pass, 2026-10-25).
 
 ### InGameCaptureTests.cs
 - Covers: Game/InGameCapture, CaptureWindow, TranscriptSnapshot.Tail
@@ -2153,9 +2169,9 @@ How to keep it current:
 
 ### LoopOutsideChangeTests.cs
 - Covers: Game/Map/NavFolderWatcher, LoopManager, LairManager, NavFolderManager
-- Checks: another client's loop/lair writes, deletes, moves seen on the second beat; own writes not echoed; unreadable files and folders handled; running loops keep their copy; walk and parse run off the UI thread.
-- Why: two clients sharing a set's Loops folder.
-- Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
+- Checks: another client's loop/lair writes, deletes, moves seen on the second beat; own writes not echoed; unreadable files and folders handled; running loops keep their copy; walk and parse run off the UI thread. The whole-tree check walks only a changed tree; a change the system tells of is walked on the first quiet beat after a burst and read on the next; a watcher that lost track is followed by a walk and restarted at the next check; with no change notification the check alone still finds a change and the fallback is logged once; a loop file written straight into a real folder is taken in by the app's own FileSystemWatcher with no check due (or the test says it skipped when the system can't start one). A set taken up is walked on its first beat; changes told without end are walked after a few beats anyway; a change told on a check's beat is walked then; a watcher that finishes starting after the set changed is stopped unused; a Loops folder deleted and made again is watched again.
+- Why: two clients sharing a set's Loops folder; following it by notification instead of a full rescan every 3 s in every client (RAM pass, 2026-10-25), with nothing on the folder done on the UI thread and no change lost to a busy folder or a first minute (review of #1135).
+- Named seam: NavFolderWatcher.InFlight, WatchStarting and the internal constructor taking the check interval, the walk, the signature check, the read, the hand-back to the UI thread and the change-notification factory: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done, and drives the system's notification by hand except in the one test on a real folder.
 
 ### LoopReconnectRestartRoomTests.cs
 - Covers: Game/Map/LoopRunner's restart after a reconnect through Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate; the runner's and the resolver's timers on ManualTimers), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.

@@ -1,5 +1,13 @@
 # Version history
 
+## 3.186.9
+
+- Startup splash stops animating while the window is minimized
+- Loops folder followed by change notification plus a check every minute, instead of a full rescan every 3 s
+- Game-data names, lair tags and attack names kept once per set instead of once per index
+- Windows build runs its assemblies unpacked, so clients share them; older versions' unpacked copies removed
+- Idle clients, and minimized ones, compact their memory now and then
+
 ## 3.186.4
 
 - Picking a Recent destination from the Navigation map's or the terminal's right-click menu now closes the menu
