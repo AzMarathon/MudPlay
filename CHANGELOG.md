@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.4
+
+- Picking a Recent destination from the Navigation map's or the terminal's right-click menu now closes the menu
+
 ## 3.186.3
 
 - Monsters the shipped list doesn't know (a custom realm's own) now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy

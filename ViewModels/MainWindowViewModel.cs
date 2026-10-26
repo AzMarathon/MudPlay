@@ -1129,7 +1129,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Recent GOTO destinations flyout, refreshed on every recorded walk (and
         // on profile swap, which GotoHistoryStore fires Changed for).
         RebuildRecentDestinationsMenu();
-        AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
+        AppServices.Current.GotoHistory.Changed += QueueRecentDestinationsRebuild;
 
         // Sys Goto flyout, rebuilt on profile load (character/BBS swap) and on any
         // profile mutation (a credentials edit fires ProfileMutated) so toggling the
@@ -5640,6 +5640,22 @@ public partial class MainWindowViewModel : ObservableObject
     // Drives the shared separator below both walk-to flyouts — shown when either
     // Favorites or Recent destinations has rows.
     public bool HasWalkFlyouts => _hasFavorites || _hasRecentDestinations;
+
+    private bool _recentDestinationsRebuildQueued;
+
+    // Picking a recent destination records it, so Changed fires inside the menu click:
+    // rebuilding then detaches the clicked item before Avalonia's close-on-click walks
+    // up from it to the menu, and the menu stays open.
+    private void QueueRecentDestinationsRebuild()
+    {
+        if (_recentDestinationsRebuildQueued) return;
+        _recentDestinationsRebuildQueued = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _recentDestinationsRebuildQueued = false;
+            RebuildRecentDestinationsMenu();
+        });
+    }
 
     private void RebuildRecentDestinationsMenu()
     {
