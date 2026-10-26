@@ -660,8 +660,8 @@ public sealed class RoomGraphManager
         // freeze. The results are folded in below in row order, as a plain loop would
         // have. All the readers share is the text they keep: a realm has fifteen
         // rooms to a name, and lair tags and exit hints repeat as much, so each is
-        // kept through the load's string pool, which the room-name and spawn
-        // indexes keep theirs through too.
+        // kept through the load's string pool, which RoomNameIndex keeps its names
+        // through too.
         GameRow[] rows = doc.Rows.ToArray();
         RowRead[] read = new RowRead[rows.Length];
         StringPool texts = _cache.Strings;

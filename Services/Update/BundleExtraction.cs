@@ -20,7 +20,7 @@ namespace MudPlay.Services.Update;
 //
 // Each version unpacks to a folder of its own, and nothing removes the old ones, so
 // at startup a Windows client removes the folders of other versions that no running
-// client uses (CleanOld).
+// client uses (CleanOld), within the host's extraction folder for this program only.
 public static class BundleExtraction
 {
     public enum Layout
@@ -39,14 +39,13 @@ public static class BundleExtraction
     public static readonly TimeSpan MinimumAge = TimeSpan.FromHours(1);
 
     private const string MainAssembly = "MudPlay.dll";
-    // Loaded by every client that has opened its window, from its own extraction
-    // folder, and a loaded DLL can't be deleted on Windows: the first file removed,
-    // so a folder a running client uses goes no further.
-    private const string NativeProbe = "libSkiaSharp.dll";
-    // A folder holding any of these is one of MudPlay's: the builds before this one
-    // unpacked only the two native libraries, and a folder an earlier clean-up got
-    // part way through has lost its probe.
-    private static readonly string[] OurFiles = [NativeProbe, "libHarfBuzzSharp.dll", MainAssembly];
+    // What a client of a version maps from its folder as it starts, earliest first: the
+    // runtime's own library before any of the app runs, the app, the native renderer as
+    // the window opens. A file Windows has mapped can't be opened for writing, so one
+    // that refuses an exclusive open marks a folder in use. Left uncovered: a client
+    // whose host has found the folder and not yet mapped the first of them, a few
+    // milliseconds of its start; MinimumAge keeps a folder unpacked just now out of it.
+    private static readonly string[] InUseProbes = ["System.Private.CoreLib.dll", MainAssembly, "libSkiaSharp.dll", "libHarfBuzzSharp.dll"];
 
     // This process. baseDirectory and processPath default to the running program's.
     public static Layout Current(string? baseDirectory = null, string? processPath = null)
@@ -68,36 +67,75 @@ public static class BundleExtraction
         _ => "not a single-file build (assemblies loaded from beside the program)",
     };
 
-    // At startup on Windows, when this client runs Extracted: delete the extraction
-    // folders other versions of the program left beside its own. currentFolder is this
-    // client's (AppContext.BaseDirectory). Only folders that hold MudPlay's own files
-    // and are at least MinimumAge old are touched, and one whose files a running
-    // client holds stays: its first file can't be deleted. Returns a line per folder
-    // removed or left, for the program log.
-    public static IReadOnlyList<string> CleanOld(string currentFolder, DateTime? nowUtc = null)
+    // The folder the .NET host unpacks every version of this program into:
+    // <DOTNET_BUNDLE_EXTRACT_BASE_DIR, else the temp folder's .net>\<program name>.
+    public static string ExtractionParent(string exePath, string? extractBase) =>
+        Path.Combine(extractBase ?? Path.Combine(Path.GetTempPath(), ".net"), Path.GetFileNameWithoutExtension(exePath));
+
+    // At startup on Windows, when this client runs Extracted: delete the folders other
+    // versions of the program unpacked beside its own. Nothing is touched unless this
+    // client's folder is a bundle folder directly in the host's extraction folder for
+    // this program, and that folder holds neither the program nor its folder. A
+    // candidate must be a plain folder (no link), named like a bundle id, holding
+    // MudPlay.dll, at least MinimumAge old and with none of its first-mapped files in
+    // use; a link inside one is removed, never followed. currentFolder is this client's
+    // (AppContext.BaseDirectory); exePath and extractBase default to the program and
+    // DOTNET_BUNDLE_EXTRACT_BASE_DIR. Returns a line per folder removed or left, or why
+    // nothing was looked at, for the program log.
+    public static IReadOnlyList<string> CleanOld(string currentFolder, string? exePath = null, string? extractBase = null,
+        DateTime? nowUtc = null)
     {
         DateTime now = nowUtc ?? DateTime.UtcNow;
         var lines = new List<string>();
+        exePath ??= Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath) || Path.GetDirectoryName(Path.GetFullPath(exePath)) is not { Length: > 0 } exeDir)
+            return lines;
+        extractBase ??= Environment.GetEnvironmentVariable("DOTNET_BUNDLE_EXTRACT_BASE_DIR") is { Length: > 0 } set ? set : null;
+        string parent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(ExtractionParent(exePath, extractBase)));
         string current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(currentFolder));
-        if (Path.GetDirectoryName(current) is not { Length: > 0 } parent) return lines;
-        string[] folders;
+
+        if (!LooksLikeBundleId(Path.GetFileName(current)) || !SameFolder(Path.GetDirectoryName(current), parent))
+        {
+            lines.Add($"older unpacked copies not looked for: this client runs from {current}, not from a bundle folder in {parent}");
+            return lines;
+        }
+        if (AtOrUnder(exeDir, parent) || AtOrUnder(parent, exeDir))
+        {
+            lines.Add($"older unpacked copies not looked for: the extraction folder {parent} and the program's folder {exeDir} overlap");
+            return lines;
+        }
+        DirectoryInfo[] folders;
         // A folder we can't list must not stop startup.
-        try { folders = Directory.GetDirectories(parent); }
+        try
+        {
+            DirectoryInfo parentInfo = new(parent);
+            if (parentInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                lines.Add($"older unpacked copies not looked for: {parent} is a link");
+                return lines;
+            }
+            folders = parentInfo.GetDirectories();
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return lines; }
 
-        foreach (string folder in folders)
+        foreach (DirectoryInfo folder in folders)
         {
-            if (SameFolder(folder, current)) continue;
-            string name = Path.GetFileName(folder);
+            string name = folder.Name;
+            if (SameFolder(folder.FullName, current) || !LooksLikeBundleId(name)) continue;
             try
             {
-                DirectoryInfo info = new(folder);
-                // A link could point anywhere; an extraction is a plain folder.
-                if (info.LinkTarget is not null) continue;
-                if (!OurFiles.Any(f => File.Exists(Path.Combine(folder, f)))) continue;
-                if (now - info.CreationTimeUtc < MinimumAge || now - info.LastWriteTimeUtc < MinimumAge) continue;
-                File.Delete(Path.Combine(folder, NativeProbe));
-                Directory.Delete(folder, recursive: true);
+                // A link could point anywhere; an unpacked copy is a plain folder.
+                if (folder.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                FileInfo main = new(Path.Combine(folder.FullName, MainAssembly));
+                if (!main.Exists) continue;
+                if (now - folder.CreationTimeUtc < MinimumAge || now - folder.LastWriteTimeUtc < MinimumAge
+                    || now - main.LastAccessTimeUtc < MinimumAge) continue;
+                if (InUseProbes.FirstOrDefault(p => !OpensExclusively(Path.Combine(folder.FullName, p))) is { } held)
+                {
+                    lines.Add($"left {name} in {parent} for now: a running client holds its {held}");
+                    continue;
+                }
+                DeleteTree(folder);
                 lines.Add($"removed {name} from {parent} (an earlier version's unpacked copy)");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -108,9 +146,53 @@ public static class BundleExtraction
         return lines;
     }
 
+    // The .NET host names a bundle's folder with 12 characters of a base64url hash.
+    private static bool LooksLikeBundleId(string name) =>
+        name.Length == 12 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
+    // True when path can be opened for writing with no sharing: nothing has it open or
+    // mapped. A file that isn't there holds nothing.
+    private static bool OpensExclusively(string path)
+    {
+        if (!File.Exists(path)) return true;
+        try
+        {
+            using FileStream probe = new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    // Everything in folder, a link inside it removed as the link (never its target), and
+    // MudPlay.dll last, so a clean-up cut short leaves a folder the next one still knows
+    // for MudPlay's.
+    private static void DeleteTree(DirectoryInfo folder)
+    {
+        foreach (FileSystemInfo entry in folder.EnumerateFileSystemInfos())
+        {
+            if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint)) entry.Delete();
+            else if (entry is DirectoryInfo sub) DeleteTree(sub);
+            else if (entry.Name != MainAssembly) entry.Delete();
+        }
+        File.Delete(Path.Combine(folder.FullName, MainAssembly));
+        folder.Delete();
+    }
+
+    private static bool AtOrUnder(string path, string folder)
+    {
+        string p = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        string f = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        return SameFolder(p, f) || p.StartsWith(f + Path.DirectorySeparatorChar, PathComparison);
+    }
+
     private static bool SameFolder(string? a, string? b) =>
         a is not null && b is not null
         && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
-            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)), PathComparison);
+
+    private static StringComparison PathComparison =>
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

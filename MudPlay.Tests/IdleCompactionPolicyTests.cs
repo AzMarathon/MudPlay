@@ -57,12 +57,22 @@ public sealed class IdleCompactionPolicyTests
     }
 
     [Fact]
-    public void ALineFromTheGame_HoldsItForTheNextQuietSample()
+    public void ABurstOfGameLines_HoldsItForTheNextQuietSample()
     {
         _now += IdleCompactionPolicy.MinUptime;
         for (int i = 0; i < 10; i++) Sample();
-        Assert.False(Sample(newLines: 3));   // five stable minutes, but a line came
+        // Five stable minutes, but more came than a quiet room brings.
+        Assert.False(Sample(newLines: IdleCompactionPolicy.QuietLines + 1));
         Assert.True(Sample());
+    }
+
+    // Gossip and people passing on a busy board never stop for half a minute.
+    [Fact]
+    public void AHandfulOfGameLines_StillCountsAsQuiet()
+    {
+        _now += IdleCompactionPolicy.MinUptime;
+        for (int i = 0; i < 10; i++) Sample(newLines: 2);
+        Assert.True(Sample(newLines: IdleCompactionPolicy.QuietLines));
     }
 
     [Fact]

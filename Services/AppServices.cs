@@ -1584,6 +1584,12 @@ public sealed class AppServices
     // trip, a sell detour, a trainer or funding trip, a token route, a party pickup, a
     // path-item / light / drop detour, a maze or pyramid solve, a Roomba sweep. Its
     // walks aren't the user's, so their ends aren't the user's walk ending.
+    // A fight, a walk, loop or Auto-Lair (running or paused), or an errand driving the
+    // walker: what an idle memory compaction's pause waits for. UI thread, where the
+    // engines' state lives.
+    public bool FightingMovingOrOnAnErrand =>
+        PlayerState.InCombat || CombatTracker.HasEngageableHostiles || MovementControl.IsActive || ErrandHasTheWalker;
+
     public bool ErrandHasTheWalker =>
         AutoDeposit.IsRerouting || SellDetour.IsDetouring
         || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy
@@ -3013,15 +3019,11 @@ public sealed class AppServices
         if (Services.Update.UpdatePlatform.IsSelfContainedInstall())
             foreach (string line in Services.Update.RetiredFiles.Clean())
                 Log.Info("Update", line);
-        // Background memory hygiene. CombatTracker and the movement engines are bound
-        // later in construction; the probes are lazy and the first tick is half a
-        // minute out, so they're always assigned before a Func is ever invoked. Busy:
-        // a fight, a walk, loop or Auto-Lair (running or paused), or an errand driving
-        // the walker; an idle compaction's pause waits for none of them.
-        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles,
-            isEngineBusy: () => PlayerState is { InCombat: true } || CombatTracker.HasEngageableHostiles
-                || MovementControl.IsActive || ErrandHasTheWalker,
-            Activity);
+        // Background memory hygiene. CombatTracker is bound later in construction;
+        // the combat-active probe is lazy and the first periodic tick is minutes
+        // out, so it's always assigned before the Func is ever invoked. The idle
+        // compaction is sampled on the heartbeat (wired with the engines, below).
+        Memory = new MemoryMaintenance(Log, GameData, () => CombatTracker.HasEngageableHostiles, Activity);
         // Late-bind the cache's log sink so SwitchSet emits the swap
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
@@ -3042,8 +3044,16 @@ public sealed class AppServices
             && Services.Update.UpdatePlatform.IsSelfContainedInstall())
             _ = Task.Run(() =>
             {
-                foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
-                    Log.Info("Update", line);
+                try
+                {
+                    foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
+                        Log.Info("Update", line);
+                }
+                // Fire and forget: nothing awaits it, so a fault would otherwise be lost.
+                catch (Exception ex)
+                {
+                    Log.Warn("Update", $"removing older versions' unpacked copies failed: {ex.Message}");
+                }
             });
         Profile = new ProfileService();
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
@@ -8923,6 +8933,10 @@ public sealed class AppServices
         // events.
         NavWatcher = new Game.Map.NavFolderWatcher(Loops, Lairs, NavFolders, Log);
         Tick.HeartbeatElapsed += NavWatcher.OnHeartbeat;
+        Tick.HeartbeatElapsed += () => Memory.OnHeartbeat(FightingMovingOrOnAnErrand);
+        // Its system watcher holds a handle on the Loops folder (on Windows, one that
+        // keeps the folder from being renamed): let it go as the program log is.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => NavWatcher.Dispose();
 
         // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
         // a copy/move changed in the active set: the loop/lair caches alone when

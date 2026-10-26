@@ -149,7 +149,7 @@ public partial class MainWindow : Window
             .Subscribe(new AnonymousObserver<WindowState>(state =>
             {
                 if (windowState is { } was && was != WindowState.Minimized && state == WindowState.Minimized)
-                    AppServices.Current.Memory.OnMainWindowMinimized();
+                    AppServices.Current.Memory.OnMainWindowMinimized(AppServices.Current.FightingMovingOrOnAnErrand);
                 windowState = state;
             }));
 

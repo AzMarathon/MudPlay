@@ -214,9 +214,9 @@ public sealed partial class GameDataCache
     // incoming set so the user can verify swap success in the program log.
     public LogService? Log { get; set; }
 
-    // The current load's string pool. A builder that keeps a string it read from this
-    // load's tables keeps it through here, so the room graph, the indexes and TBInfo
-    // share one copy of each text. A table's own reads are not pooled: most of what is
+    // The current load's string pool. The room graph, RoomNameIndex and MonsterCatalog
+    // keep the strings they read from this load's tables through here, so they share
+    // one copy of each text. A table's own reads are not pooled: most of what is
     // read is looked at once and dropped (an exit cell parsed into a RoomExit, a cell
     // the Game Data browser draws), and pooled it would stay for the whole load.
     public StringPool Strings

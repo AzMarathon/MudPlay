@@ -6,8 +6,9 @@ namespace MudPlay.Services;
 // it:
 //
 //  - Idle: the client has been up a while (MinUptime), nothing has fought, moved or
-//    run an errand for StableFor, no game line arrived since the last sample (a cast
-//    or a fight would bring some), and the last compaction is Interval old.
+//    run an errand for StableFor, no more than QuietLines game lines arrived since the
+//    last sample (a cast burst or a fight brings more), and the last compaction is
+//    Interval old.
 //  - Minimized: once as the main window goes down, when nothing is fighting or
 //    moving, and not again within MinimizedSpacing.
 //
@@ -23,6 +24,10 @@ public sealed class IdleCompactionPolicy
     public static readonly TimeSpan MaxInterval = TimeSpan.FromHours(4);
     public static readonly TimeSpan MinimizedSpacing = TimeSpan.FromMinutes(2);
     public static readonly TimeSpan PauseBound = TimeSpan.FromMilliseconds(150);
+    // Game lines a sample may bring and still count as quiet: a connected client on a
+    // busy board hears gossip and people passing all the time, while a fight or a cast
+    // brings more (and a fight is busy anyway).
+    public const int QuietLines = 10;
 
     private readonly DateTimeOffset _startedAt;
     private DateTimeOffset? _stableSince;
@@ -39,7 +44,7 @@ public sealed class IdleCompactionPolicy
     // received. True when an idle compaction is due now.
     public bool Sample(DateTimeOffset now, bool busy, long lines)
     {
-        bool quiet = _lines >= 0 && lines == _lines;
+        bool quiet = _lines >= 0 && lines - _lines <= QuietLines;
         _lines = lines;
         if (busy)
         {

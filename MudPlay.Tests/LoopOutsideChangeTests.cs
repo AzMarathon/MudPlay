@@ -21,7 +21,13 @@ public sealed class LoopOutsideChangeTests : IDisposable
 {
     private readonly string _setName = "test-outside-" + Guid.NewGuid().ToString("N").Substring(0, 12);
 
-    public LoopOutsideChangeTests() => Directory.CreateDirectory(Folder);
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+    public LoopOutsideChangeTests(Xunit.Abstractions.ITestOutputHelper output)
+    {
+        _output = output;
+        Directory.CreateDirectory(Folder);
+    }
 
     private readonly List<NavFolderWatcher> _watchers = new();
 
@@ -87,7 +93,7 @@ public sealed class LoopOutsideChangeTests : IDisposable
                 read: job => Task.FromResult(job()),
                 post: action => action(),
                 startWatching: systemNotification ? null
-                    : notificationFails is { } fails ? (_, _, _) => throw fails
+                    : notificationFails is { } fails ? (_, _, _) => Task.FromException<IDisposable>(fails)
                     : c.System.Start);
         if (watch) _watchers.Add(c.Watcher);
         return c;
@@ -105,12 +111,12 @@ public sealed class LoopOutsideChangeTests : IDisposable
 
         public int Started { get; private set; }
 
-        public IDisposable Start(string root, Action changed, Action broken)
+        public Task<IDisposable> Start(string root, Action changed, Action broken)
         {
             Started++;
             _changed = changed;
             _broken = broken;
-            return new Stop(this);
+            return Task.FromResult<IDisposable>(new Stop(this));
         }
 
         public void TellChanged() => _changed?.Invoke();
@@ -158,6 +164,7 @@ public sealed class LoopOutsideChangeTests : IDisposable
         {
             c.Watcher.OnHeartbeat();
             await c.Watcher.InFlight;
+            await c.Watcher.WatchStarting;
         }
     }
 
@@ -626,23 +633,42 @@ public sealed class LoopOutsideChangeTests : IDisposable
     {
         Client mine = NewClient(pollEvery: 3);
 
-        await Beat(mine, 2);
-        Assert.Equal(0, mine.Walks);
+        await Beat(mine);               // the set is taken up: walked once at once
+        Assert.Equal(1, mine.Walks);
+        await Beat(mine);
+        Assert.Equal(1, mine.Walks);
         await Beat(mine);               // the first check walks: nothing to compare with yet
-        Assert.Equal(1, mine.Walks);
+        Assert.Equal(2, mine.Walks);
         await Beat(mine, 3);            // checked, unchanged: not walked
-        Assert.Equal(1, mine.Walks);
+        Assert.Equal(2, mine.Walks);
         Assert.NotNull(mine.Watcher.LastCheckAt);
 
         NewLoops().Save(NewLoop("Late"));
         await Beat(mine, 2);
-        Assert.Equal(1, mine.Walks);
-        await Beat(mine);               // third beat: the check sees the change
         Assert.Equal(2, mine.Walks);
+        await Beat(mine);               // third beat: the check sees the change
+        Assert.Equal(3, mine.Walks);
         Assert.Null(mine.Loops.Get("Late"));
         await Beat(mine);               // confirms on the very next beat
-        Assert.Equal(3, mine.Walks);
+        Assert.Equal(4, mine.Walks);
         Assert.NotNull(mine.Loops.Get("Late"));
+    }
+
+    // The first walk is the baseline the folder list compares with: taken a minute in,
+    // a folder another client made meanwhile would be taken for one that was always
+    // there.
+    [Fact]
+    public async Task ASetTakenUp_IsWalkedOnTheFirstBeat_NotAtTheFirstCheck()
+    {
+        Client mine = NewClient(pollEvery: 1000);
+        await Beat(mine);
+        Assert.Equal(1, mine.Walks);
+
+        Directory.CreateDirectory(Path.Combine(Folder, "Fresh"));
+        mine.System.TellChanged();
+        await Beat(mine, 3);
+
+        Assert.Equal(1, mine.FolderEvents);
     }
 
     // ----- change notification --------------------------------------
@@ -651,24 +677,124 @@ public sealed class LoopOutsideChangeTests : IDisposable
     public async Task AChangeTold_IsWalkedOnTheFirstQuietBeat_AndReadOnTheNext()
     {
         Client mine = NewClient(pollEvery: 1000);
-        await Beat(mine);               // the set is taken up and its folder watched
+        await Beat(mine);               // the set is taken up, walked and its folder watched
         Assert.Equal(1, mine.System.Started);
+        Assert.Equal(1, mine.Walks);
 
         NewLoops().Save(NewLoop("Told"));
         mine.System.TellChanged();
         await Beat(mine);               // told this beat: wait for a quiet one
-        Assert.Equal(0, mine.Walks);
+        Assert.Equal(1, mine.Walks);
         mine.System.TellChanged();      // a burst goes on
         await Beat(mine);
-        Assert.Equal(0, mine.Walks);
-        await Beat(mine);               // quiet: walked, the change seen
         Assert.Equal(1, mine.Walks);
+        await Beat(mine);               // quiet: walked, the change seen
+        Assert.Equal(2, mine.Walks);
         Assert.Null(mine.Loops.Get("Told"));
         await Beat(mine);               // confirmed and read
-        Assert.Equal(2, mine.Walks);
+        Assert.Equal(3, mine.Walks);
         Assert.NotNull(mine.Loops.Get("Told"));
         await Beat(mine, 5);            // nothing more told, no check due: no walk
+        Assert.Equal(3, mine.Walks);
+    }
+
+    // A sync tool or a long copy touches the folder every second: the walk can't wait
+    // for a quiet beat that never comes.
+    [Fact]
+    public async Task ChangesThatNeverStop_AreWalkedAfterAFewBeatsAnyway()
+    {
+        Client mine = NewClient(pollEvery: 1000);
+        await Beat(mine);
+        NewLoops().Save(NewLoop("Busy"));
+
+        for (int i = 0; i < 4; i++)
+        {
+            mine.System.TellChanged();
+            await Beat(mine);
+        }
+        Assert.Equal(1, mine.Walks);
+        mine.System.TellChanged();
+        await Beat(mine);
         Assert.Equal(2, mine.Walks);
+        mine.System.TellChanged();
+        await Beat(mine);               // confirmation isn't held up by the churn
+        Assert.NotNull(mine.Loops.Get("Busy"));
+    }
+
+    [Fact]
+    public async Task AChangeToldOnTheChecksBeat_IsWalkedThen_NotPutOffPastIt()
+    {
+        Client mine = NewClient(pollEvery: 3);
+        await Beat(mine, 2);
+        int walks = mine.Walks;
+        NewLoops().Save(NewLoop("OnTheBeat"));
+        mine.System.TellChanged();
+        await Beat(mine);               // the check's beat
+
+        Assert.Equal(walks + 1, mine.Walks);
+    }
+
+    // The set switched while its watcher was still starting: the watcher it made is
+    // stopped, not kept watching the old set's folder.
+    [Fact]
+    public async Task AWatcherThatFinishesStartingAfterTheSetChanged_IsStoppedUnused()
+    {
+        LogService log = new();
+        RoomGraphManager graph = new(new GameDataCache());
+        LoopManager loops = new(new BfsMapper(graph), graph, log);
+        LairManager lairs = new(log);
+        loops.LoadAll(_setName);
+        lairs.LoadAll(_setName);
+        NavFolderManager folders = new(loops, lairs, log);
+        TaskCompletionSource<IDisposable> starting = new();
+        StopCounter first = new();
+        int starts = 0;
+        using NavFolderWatcher watcher = new(loops, lairs, folders, log, 1000,
+            walk: root => Task.FromResult(NavTreeScan.Walk(root, LoopManager.LoopFileSuffix, LairManager.LairFileSuffix)),
+            signature: InlineSignature, read: job => Task.FromResult(job()), post: action => action(),
+            startWatching: (_, _, _) => ++starts == 1 ? starting.Task : Task.FromResult<IDisposable>(new StopCounter()));
+
+        watcher.OnHeartbeat();
+        await watcher.InFlight;
+        Task firstStart = watcher.WatchStarting;
+        Assert.False(firstStart.IsCompleted);
+        Directory.CreateDirectory(AppPaths.GameDataSetLoopsFolder(_setName + "-away"));
+        loops.LoadAll(_setName + "-away");
+        lairs.LoadAll(_setName + "-away");
+        watcher.OnHeartbeat();
+        await watcher.InFlight;
+        starting.SetResult(first);
+        await firstStart;
+        await watcher.WatchStarting;
+
+        Assert.Equal(1, first.Stopped);
+        Assert.Equal(2, starts);
+        Assert.StartsWith("change notification", watcher.Mode);
+    }
+
+    // A watcher on a folder that was deleted watches nothing, even once a folder of that
+    // name is made again: it is stopped, and started afresh once the folder is back.
+    [Fact]
+    public async Task ALoopsFolderDeletedAndMadeAgain_IsWatchedAgain()
+    {
+        Client mine = NewClient(pollEvery: 2);
+        await Beat(mine, 2);
+        Assert.Equal(1, mine.System.Started);
+
+        Directory.Delete(Folder, recursive: true);
+        await Beat(mine, 2);
+        Assert.Contains("the folder went", mine.Watcher.Mode);
+
+        Directory.CreateDirectory(Folder);
+        await Beat(mine, 2);
+        Assert.Equal(2, mine.System.Started);
+        Assert.StartsWith("change notification", mine.Watcher.Mode);
+    }
+
+    private sealed class StopCounter : IDisposable
+    {
+        public int Stopped { get; private set; }
+        public void Dispose() => Stopped++;
     }
 
     [Fact]
@@ -676,11 +802,12 @@ public sealed class LoopOutsideChangeTests : IDisposable
     {
         Client mine = NewClient(pollEvery: 4);
         await Beat(mine);
+        Assert.Equal(1, mine.Walks);
         NewLoops().Save(NewLoop("Lost"));
         mine.System.TellBroken();       // an overflow: whatever changed went untold
 
         await Beat(mine);               // stopped, the tree walked
-        Assert.Equal(1, mine.Walks);
+        Assert.Equal(2, mine.Walks);
         Assert.Contains("checked every 4 s", mine.Watcher.Mode);
         await Beat(mine);
         Assert.NotNull(mine.Loops.Get("Lost"));
@@ -715,6 +842,13 @@ public sealed class LoopOutsideChangeTests : IDisposable
     {
         Client mine = NewClient(pollEvery: 1_000_000, systemNotification: true);
         await Beat(mine);
+        // A machine out of inotify instances (or with none) can't run this check; that
+        // is the system's limit, not the watcher's fault, and the check covers it.
+        if (mine.Watcher.Mode.Contains("change notification unavailable", StringComparison.Ordinal))
+        {
+            _output.WriteLine($"skipped: the system's change notification can't be started here ({mine.Watcher.Mode})");
+            return;
+        }
         Assert.StartsWith("change notification", mine.Watcher.Mode);
 
         Directory.CreateDirectory(Path.Combine(Folder, "Dropped"));
@@ -723,7 +857,7 @@ public sealed class LoopOutsideChangeTests : IDisposable
         DateTime giveUp = DateTime.UtcNow + TimeSpan.FromSeconds(20);
         while (mine.Loops.Get("Hand") is null && DateTime.UtcNow < giveUp)
         {
-            await Task.Delay(100);
+            await Task.Delay(25);
             await Beat(mine);
         }
 
@@ -936,7 +1070,9 @@ public sealed class LoopOutsideChangeTests : IDisposable
             return done.Task;
         };
         ToldWatcher system = new();
-        using NavFolderWatcher watcher = new(loops, lairs, folders, log, 1, walk, signature, read, post, system.Start);
+        // Started on a pool thread, as the app's own is.
+        using NavFolderWatcher watcher = new(loops, lairs, folders, log, 1, walk, signature, read, post,
+            (root, changed, broken) => Task.Run(() => system.Start(root, changed, broken)));
 
         List<bool> parsedOnHeartbeat = new();
         log.EntryAdded += entry =>
