@@ -138,7 +138,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
             profile.LoadDefaultProfile();
         }
         SettingsResolver resolver = new(new SettingsService(), boards, profile, () => cache.ActiveSet);
-        MonsterOverlaySeedStore seed = new();
+        MonsterOverlaySeedStore seed = new(cache);
 
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -317,7 +317,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         Assert.Contains(r.Log.Snapshot(), e => e.Severity == LogSeverity.Info
             && e.Message.Contains("@relation from Friend on gangpath")
             && e.Message.Contains("dao lord (#597)")
-            && e.Message.Contains("Enemy (set at the Defaults tier) -> Hangup"));
+            && e.Message.Contains("Enemy (from no seed or alignment) -> Hangup"));
         MonsterRelationshipHandler.RemoteChange change = r.Handler.Changes[DaoLord];
         Assert.Equal(("Friend", RemoteChannel.Gangpath, MonsterRelationship.Enemy, MonsterRelationship.Hangup),
             (change.Sender, change.Channel, change.From, change.To));
@@ -338,7 +338,7 @@ public sealed class MonsterRelationshipRemoteTests : IDisposable
         r.Ask("@relation dao lord friend");
 
         Assert.Contains(r.Log.Snapshot(), e => e.Severity == LogSeverity.Info
-            && e.Message.Contains("Neutral (set at the Global tier) -> Friend"));
+            && e.Message.Contains("Neutral (from the Global tier) -> Friend"));
     }
 
     // A change is the loaded character's, in the loaded set: a profile load or a set

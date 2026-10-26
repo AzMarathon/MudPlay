@@ -20,8 +20,8 @@ namespace MudPlay.Game.Combat;
 // Target selection — single source of truth across the engine:
 //   1. Classifier filters Also-Here to EntityKind.Monster.
 //   2. Each monster's MonsterOverlay is resolved via MonsterOverlaySeedStore
-//      (Defaults tier) merged with SettingsResolver.ResolveGameData (Global /
-//      BBS / Char overrides).
+//      (Defaults tier: the realm seed, else the monster's alignment) merged with
+//      SettingsResolver.ResolveGameData (Global / BBS / Char overrides).
 //   3. Engageable per MonsterEngagement: Enemy, a KillOnSight Neutral, or an
 //      instance the user hand-engaged.
 //   4. Engageable list is sorted by MonsterAttackPriority (First=0 highest,

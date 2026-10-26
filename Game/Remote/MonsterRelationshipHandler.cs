@@ -122,12 +122,12 @@ public sealed class MonsterRelationshipHandler : IDisposable
             return;
         }
 
-        SettingsTier was = _rules.RelationshipSourceOf(number);
+        string was = _rules.RelationshipSourceOf(number);
         MonsterRelationship after = _rules.Change(number, wanted);
         _changes[number] = new RemoteChange(_now(), ctx.Sender, ctx.Channel, before, after);
         _log?.Log(LogSeverity.Info, LogCategory,
             $"{Command} from {ctx.Sender} on {TransferChannels.NameOf(ctx.Channel)}: {label} relationship "
-            + $"{before} (set at the {was} tier) -> {after}, saved for this character");
+            + $"{before} (from {was}) -> {after}, saved for this character");
         ctx.Reply($"{label}: {before} -> {after}");
     }
 

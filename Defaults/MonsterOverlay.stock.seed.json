@@ -1,5 +1,49 @@
 [
   {
+    "Number": 1,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 2,
+    "Name": "lashworm"
+  },
+  {
+    "Number": 3,
+    "Name": "filthbug"
+  },
+  {
+    "Number": 4,
+    "Name": "carrion beast"
+  },
+  {
+    "Number": 5,
+    "Name": "acid slime"
+  },
+  {
+    "Number": 6,
+    "Name": "orc rogue"
+  },
+  {
+    "Number": 7,
+    "Name": "kobold thief"
+  },
+  {
+    "Number": 8,
+    "Name": "cave worm"
+  },
+  {
+    "Number": 10,
+    "Name": "thug"
+  },
+  {
+    "Number": 11,
+    "Name": "skeleton"
+  },
+  {
+    "Number": 12,
+    "Name": "zombie"
+  },
+  {
     "Number": 13,
     "Name": "guardsman",
     "Relationship": "Friend",
@@ -10,6 +54,34 @@
     "Name": "guardsman",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 15,
+    "Name": "shade"
+  },
+  {
+    "Number": 16,
+    "Name": "ghoul"
+  },
+  {
+    "Number": 17,
+    "Name": "wight"
+  },
+  {
+    "Number": 18,
+    "Name": "orc sentry"
+  },
+  {
+    "Number": 19,
+    "Name": "orc lieutenant"
+  },
+  {
+    "Number": 20,
+    "Name": "mercenary"
+  },
+  {
+    "Number": 21,
+    "Name": "half-ogre bodyguard"
   },
   {
     "Number": 22,
@@ -54,6 +126,14 @@
     "Priority": "High"
   },
   {
+    "Number": 29,
+    "Name": "dark cultist"
+  },
+  {
+    "Number": 30,
+    "Name": "grey spider"
+  },
+  {
     "Number": 31,
     "Name": "mummy",
     "Relationship": "Enemy",
@@ -64,6 +144,26 @@
     "Name": "bounty hunter",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 33,
+    "Name": "dark cleric"
+  },
+  {
+    "Number": 34,
+    "Name": "dark priest"
+  },
+  {
+    "Number": 35,
+    "Name": "dark paladin"
+  },
+  {
+    "Number": 36,
+    "Name": "hellhound"
+  },
+  {
+    "Number": 37,
+    "Name": "tentacled abomination"
   },
   {
     "Number": 38,
@@ -120,10 +220,30 @@
     "Priority": "High"
   },
   {
+    "Number": 48,
+    "Name": "dark goblin archer"
+  },
+  {
+    "Number": 49,
+    "Name": "bandit"
+  },
+  {
+    "Number": 50,
+    "Name": "wild dog"
+  },
+  {
+    "Number": 51,
+    "Name": "forest spider"
+  },
+  {
     "Number": 52,
     "Name": "giant spider",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 53,
+    "Name": "dark goblin"
   },
   {
     "Number": 54,
@@ -132,10 +252,22 @@
     "Priority": "Normal"
   },
   {
+    "Number": 55,
+    "Name": "black orc"
+  },
+  {
+    "Number": 56,
+    "Name": "dire wolf"
+  },
+  {
     "Number": 57,
     "Name": "slime beast",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 58,
+    "Name": "half-ogre warrior"
   },
   {
     "Number": 59,
@@ -168,11 +300,23 @@
     "Priority": "High"
   },
   {
+    "Number": 64,
+    "Name": "death dog"
+  },
+  {
+    "Number": 65,
+    "Name": "skeletal warrior"
+  },
+  {
     "Number": 66,
     "Name": "moaning spirit",
     "Relationship": "Enemy",
     "Priority": "Normal",
     "DontBackstab": true
+  },
+  {
+    "Number": 67,
+    "Name": "huge tiger beetle"
   },
   {
     "Number": 68,
@@ -191,6 +335,14 @@
     "Name": "warlock mercenary",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 71,
+    "Name": "giant bat"
+  },
+  {
+    "Number": 72,
+    "Name": "gelatinous cube"
   },
   {
     "Number": 73,
@@ -229,6 +381,10 @@
     "Priority": "High"
   },
   {
+    "Number": 79,
+    "Name": "hardened practice dummy"
+  },
+  {
     "Number": 80,
     "Name": "cave bear",
     "Relationship": "Enemy",
@@ -251,6 +407,10 @@
     "Name": "warrior spirit",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 84,
+    "Name": "fire lizard"
   },
   {
     "Number": 85,
@@ -337,6 +497,18 @@
     "Priority": "High"
   },
   {
+    "Number": 99,
+    "Name": "fire elemental"
+  },
+  {
+    "Number": 100,
+    "Name": "frost serpent"
+  },
+  {
+    "Number": 101,
+    "Name": "two-headed hydra"
+  },
+  {
     "Number": 102,
     "Name": "gypsy spirit",
     "Relationship": "Friend",
@@ -367,10 +539,30 @@
     "Priority": "High"
   },
   {
+    "Number": 107,
+    "Name": "roc hatchling"
+  },
+  {
     "Number": 108,
     "Name": "ice sorceress",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 109,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 110,
+    "Name": "stone golem"
+  },
+  {
+    "Number": 111,
+    "Name": "minotaur"
+  },
+  {
+    "Number": 112,
+    "Name": "giant snake"
   },
   {
     "Number": 113,
@@ -385,10 +577,50 @@
     "Priority": "High"
   },
   {
+    "Number": 115,
+    "Name": "vampire rosebush"
+  },
+  {
+    "Number": 116,
+    "Name": "archer bush"
+  },
+  {
+    "Number": 117,
+    "Name": "animated tree"
+  },
+  {
+    "Number": 118,
+    "Name": "carnivorous plant"
+  },
+  {
+    "Number": 119,
+    "Name": "wood golem"
+  },
+  {
+    "Number": 120,
+    "Name": "earth elemental"
+  },
+  {
+    "Number": 121,
+    "Name": "dark druid"
+  },
+  {
     "Number": 122,
     "Name": "high druid",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 123,
+    "Name": "black orc captain"
+  },
+  {
+    "Number": 124,
+    "Name": "black orc shaman"
+  },
+  {
+    "Number": 125,
+    "Name": "dark goblin warlock"
   },
   {
     "Number": 126,
@@ -439,6 +671,142 @@
     "Priority": "Normal"
   },
   {
+    "Number": 134,
+    "Name": "black fungus tree"
+  },
+  {
+    "Number": 135,
+    "Name": "giant toad"
+  },
+  {
+    "Number": 136,
+    "Name": "shambling mound"
+  },
+  {
+    "Number": 137,
+    "Name": "winged horror"
+  },
+  {
+    "Number": 138,
+    "Name": "swamp serpent"
+  },
+  {
+    "Number": 139,
+    "Name": "giant ant"
+  },
+  {
+    "Number": 140,
+    "Name": "bola spider"
+  },
+  {
+    "Number": 141,
+    "Name": "serpentkin hunter"
+  },
+  {
+    "Number": 142,
+    "Name": "dark cultist"
+  },
+  {
+    "Number": 143,
+    "Name": "dark cleric"
+  },
+  {
+    "Number": 144,
+    "Name": "dark priest"
+  },
+  {
+    "Number": 145,
+    "Name": "dark paladin"
+  },
+  {
+    "Number": 146,
+    "Name": "dark warrior"
+  },
+  {
+    "Number": 147,
+    "Name": "dark warlock"
+  },
+  {
+    "Number": 148,
+    "Name": "dark assassin"
+  },
+  {
+    "Number": 149,
+    "Name": "dark mage"
+  },
+  {
+    "Number": 150,
+    "Name": "elite guard"
+  },
+  {
+    "Number": 151,
+    "Name": "guard captain"
+  },
+  {
+    "Number": 152,
+    "Name": "mutant"
+  },
+  {
+    "Number": 153,
+    "Name": "earth elemental"
+  },
+  {
+    "Number": 154,
+    "Name": "winged horror"
+  },
+  {
+    "Number": 155,
+    "Name": "giant rattlesnake"
+  },
+  {
+    "Number": 156,
+    "Name": "bola spider"
+  },
+  {
+    "Number": 157,
+    "Name": "giant ant"
+  },
+  {
+    "Number": 158,
+    "Name": "serpentkin hunter"
+  },
+  {
+    "Number": 159,
+    "Name": "obsidian demon"
+  },
+  {
+    "Number": 160,
+    "Name": "magma man"
+  },
+  {
+    "Number": 161,
+    "Name": "flame elemental"
+  },
+  {
+    "Number": 162,
+    "Name": "fire bat"
+  },
+  {
+    "Number": 163,
+    "Name": "greater hellhound"
+  },
+  {
+    "Number": 164,
+    "Name": "pyro jelly"
+  },
+  {
+    "Number": 165,
+    "Name": "serpentkin hunter"
+  },
+  {
+    "Number": 166,
+    "Name": "serpentkin warrior"
+  },
+  {
+    "Number": 167,
+    "Name": "serpentkin shaman"
+  },
+  {
     "Number": 168,
     "Name": "serpentkin chieftain",
     "Relationship": "Enemy",
@@ -449,6 +817,18 @@
     "Name": "serpentkin witchdoctor",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 170,
+    "Name": "glowing worm"
+  },
+  {
+    "Number": 171,
+    "Name": "crystalline spider"
+  },
+  {
+    "Number": 172,
+    "Name": "glittering ooze"
   },
   {
     "Number": 173,
@@ -511,6 +891,14 @@
     "Priority": "Low"
   },
   {
+    "Number": 183,
+    "Name": "young red dragon"
+  },
+  {
+    "Number": 184,
+    "Name": "adolescent red dragon"
+  },
+  {
     "Number": 185,
     "Name": "adult red dragon",
     "Relationship": "Enemy",
@@ -553,6 +941,10 @@
     "Priority": "Normal"
   },
   {
+    "Number": 192,
+    "Name": "giant bat"
+  },
+  {
     "Number": 193,
     "Name": "practice dummy",
     "Relationship": "Neutral",
@@ -563,6 +955,10 @@
     "Name": "Kotar Bloodthorn",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 195,
+    "Name": "red dragon hatchling"
   },
   {
     "Number": 196,
@@ -589,10 +985,22 @@
     "Priority": "High"
   },
   {
+    "Number": 201,
+    "Name": "roc"
+  },
+  {
     "Number": 202,
     "Name": "nomadic tribesman",
     "Relationship": "Enemy",
     "Priority": "First"
+  },
+  {
+    "Number": 203,
+    "Name": "grey wolf"
+  },
+  {
+    "Number": 204,
+    "Name": "grey guardian wolf"
   },
   {
     "Number": 205,
@@ -607,6 +1015,10 @@
     "Priority": "Normal"
   },
   {
+    "Number": 207,
+    "Name": "nomadic huntsman"
+  },
+  {
     "Number": 208,
     "Name": "nomadic shaman",
     "Relationship": "Enemy",
@@ -617,6 +1029,14 @@
     "Name": "large yeti",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 210,
+    "Name": "nomadic chieftan"
+  },
+  {
+    "Number": 211,
+    "Name": "ice golem"
   },
   {
     "Number": 212,
@@ -649,16 +1069,88 @@
     "Priority": "High"
   },
   {
+    "Number": 217,
+    "Name": "elite orc guard"
+  },
+  {
     "Number": 218,
     "Name": "orc warleader",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 219,
+    "Name": "displacer beast"
+  },
+  {
+    "Number": 220,
+    "Name": "manticore"
+  },
+  {
+    "Number": 221,
+    "Name": "gargoyle"
+  },
+  {
+    "Number": 222,
+    "Name": "gorgon"
+  },
+  {
+    "Number": 223,
+    "Name": "harpy"
+  },
+  {
+    "Number": 224,
+    "Name": "gnoll scout"
+  },
+  {
+    "Number": 225,
+    "Name": "gnoll axeman"
+  },
+  {
+    "Number": 226,
+    "Name": "hill centaur"
+  },
+  {
+    "Number": 227,
+    "Name": "brigand"
+  },
+  {
+    "Number": 228,
+    "Name": "dark monk"
+  },
+  {
+    "Number": 229,
+    "Name": "ankheg"
+  },
+  {
     "Number": 230,
     "Name": "bombardier beetle",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 231,
+    "Name": "carrion crawler"
+  },
+  {
+    "Number": 232,
+    "Name": "umber hulk"
+  },
+  {
+    "Number": 233,
+    "Name": "mermex hunter"
+  },
+  {
+    "Number": 234,
+    "Name": "mermex warrior"
+  },
+  {
+    "Number": 235,
+    "Name": "mermex worker"
+  },
+  {
+    "Number": 236,
+    "Name": "mermex royal guard"
   },
   {
     "Number": 237,
@@ -689,6 +1181,10 @@
     "Name": "giant pulsating cocoon",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 242,
+    "Name": "cocoon"
   },
   {
     "Number": 243,
@@ -781,10 +1277,22 @@
     "Priority": "High"
   },
   {
+    "Number": 258,
+    "Name": "dark monk"
+  },
+  {
     "Number": 259,
     "Name": "drunken brawler",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 260,
+    "Name": "cutpurse"
+  },
+  {
+    "Number": 261,
+    "Name": "depraved murderer"
   },
   {
     "Number": 262,
@@ -799,10 +1307,22 @@
     "Priority": "High"
   },
   {
+    "Number": 264,
+    "Name": "fungus lizard"
+  },
+  {
+    "Number": 265,
+    "Name": "vampire bat"
+  },
+  {
     "Number": 266,
     "Name": "silverfish",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 267,
+    "Name": "dragonfish"
   },
   {
     "Number": 268,
@@ -817,10 +1337,50 @@
     "Priority": "High"
   },
   {
+    "Number": 270,
+    "Name": "quickling"
+  },
+  {
+    "Number": 271,
+    "Name": "imp"
+  },
+  {
+    "Number": 272,
+    "Name": "bloodbear"
+  },
+  {
+    "Number": 273,
+    "Name": "killer bee"
+  },
+  {
+    "Number": 274,
+    "Name": "huorn"
+  },
+  {
+    "Number": 275,
+    "Name": "pixie"
+  },
+  {
+    "Number": 276,
+    "Name": "leprechaun"
+  },
+  {
+    "Number": 277,
+    "Name": "grizzly bear"
+  },
+  {
     "Number": 278,
     "Name": "ancient willow",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 279,
+    "Name": "huorn"
+  },
+  {
+    "Number": 280,
+    "Name": "huorn"
   },
   {
     "Number": 281,
@@ -895,6 +1455,58 @@
     "Priority": "High"
   },
   {
+    "Number": 293,
+    "Name": "war dog"
+  },
+  {
+    "Number": 294,
+    "Name": "hobgoblin"
+  },
+  {
+    "Number": 295,
+    "Name": "half-ogre guard"
+  },
+  {
+    "Number": 296,
+    "Name": "ogre grunt"
+  },
+  {
+    "Number": 297,
+    "Name": "ogre-mage"
+  },
+  {
+    "Number": 298,
+    "Name": "white dragon serpent"
+  },
+  {
+    "Number": 299,
+    "Name": "black dragon serpent"
+  },
+  {
+    "Number": 300,
+    "Name": "green dragon serpent"
+  },
+  {
+    "Number": 301,
+    "Name": "blue dragon serpent"
+  },
+  {
+    "Number": 302,
+    "Name": "red dragon serpent"
+  },
+  {
+    "Number": 303,
+    "Name": "lamia"
+  },
+  {
+    "Number": 304,
+    "Name": "twisted one"
+  },
+  {
+    "Number": 305,
+    "Name": "small gibbering horror"
+  },
+  {
     "Number": 306,
     "Name": "gibbering horror",
     "Relationship": "Enemy",
@@ -907,10 +1519,18 @@
     "Priority": "Last"
   },
   {
+    "Number": 308,
+    "Name": "ghost"
+  },
+  {
     "Number": 309,
     "Name": "crimson mist",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 310,
+    "Name": "shadowraith"
   },
   {
     "Number": 311,
@@ -961,16 +1581,48 @@
     "Priority": "High"
   },
   {
+    "Number": 319,
+    "Name": "cave lizard"
+  },
+  {
+    "Number": 320,
+    "Name": "mutant spider"
+  },
+  {
     "Number": 321,
     "Name": "mind flayer",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 322,
+    "Name": "dark-elf hunter"
+  },
+  {
+    "Number": 323,
+    "Name": "drider"
+  },
+  {
+    "Number": 324,
+    "Name": "hordeling"
+  },
+  {
+    "Number": 325,
+    "Name": "nexus hunter"
+  },
+  {
+    "Number": 326,
+    "Name": "planar storm"
+  },
+  {
     "Number": 327,
     "Name": "terror beast",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 328,
+    "Name": "behemoth"
   },
   {
     "Number": 329,
@@ -997,6 +1649,22 @@
     "Priority": "High"
   },
   {
+    "Number": 333,
+    "Name": "dark-elf hunter"
+  },
+  {
+    "Number": 334,
+    "Name": "dark-elf soldier"
+  },
+  {
+    "Number": 335,
+    "Name": "dark-elf faithkeeper"
+  },
+  {
+    "Number": 336,
+    "Name": "dark-elf citizen"
+  },
+  {
     "Number": 337,
     "Name": "dark-elf nobleman",
     "Relationship": "Enemy",
@@ -1007,6 +1675,14 @@
     "Name": "dark-elf servant",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 339,
+    "Name": "dark-elf warlock"
+  },
+  {
+    "Number": 340,
+    "Name": "dark-elf priestess"
   },
   {
     "Number": 341,
@@ -1057,16 +1733,32 @@
     "Priority": "High"
   },
   {
+    "Number": 349,
+    "Name": "slime serpent"
+  },
+  {
+    "Number": 350,
+    "Name": "dark-elf royal guard"
+  },
+  {
     "Number": 351,
     "Name": "guardian beast",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 352,
+    "Name": "slaver"
+  },
+  {
     "Number": 353,
     "Name": "slaver leader",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 354,
+    "Name": "guard dog"
   },
   {
     "Number": 355,
@@ -1085,6 +1777,18 @@
     "Name": "dark-elf emissary",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 358,
+    "Name": "wererat"
+  },
+  {
+    "Number": 359,
+    "Name": "wererat shaman"
+  },
+  {
+    "Number": 360,
+    "Name": "wererat champion"
   },
   {
     "Number": 361,
@@ -1135,6 +1839,10 @@
     "Priority": "Normal"
   },
   {
+    "Number": 369,
+    "Name": "fallen angel"
+  },
+  {
     "Number": 370,
     "Name": "Timelord",
     "Relationship": "Friend",
@@ -1153,6 +1861,10 @@
     "Priority": "High"
   },
   {
+    "Number": 373,
+    "Name": "shard creature"
+  },
+  {
     "Number": 374,
     "Name": "metallic monstrosity",
     "Relationship": "Enemy",
@@ -1169,6 +1881,22 @@
     "Name": "wild dog",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 377,
+    "Name": "wild dog"
+  },
+  {
+    "Number": 378,
+    "Name": "bandit"
+  },
+  {
+    "Number": 379,
+    "Name": "warlock bandit"
+  },
+  {
+    "Number": 380,
+    "Name": "bandit leader"
   },
   {
     "Number": 381,
@@ -1217,6 +1945,22 @@
     "Name": "catoblepas",
     "Relationship": "Neutral",
     "Priority": "High"
+  },
+  {
+    "Number": 389,
+    "Name": "swamp leech"
+  },
+  {
+    "Number": 390,
+    "Name": "crocodile"
+  },
+  {
+    "Number": 391,
+    "Name": "giant crocodile"
+  },
+  {
+    "Number": 392,
+    "Name": "swamp troll"
   },
   {
     "Number": 393,
@@ -1279,16 +2023,40 @@
     "Priority": "High"
   },
   {
+    "Number": 403,
+    "Name": "centipede"
+  },
+  {
+    "Number": 404,
+    "Name": "kobold"
+  },
+  {
+    "Number": 405,
+    "Name": "kobold warrior"
+  },
+  {
     "Number": 406,
     "Name": "kobold king",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 407,
+    "Name": "barrow wight"
+  },
+  {
+    "Number": 408,
+    "Name": "tortured spirit"
+  },
+  {
     "Number": 409,
     "Name": "spectral knight",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 410,
+    "Name": "spore zombie"
   },
   {
     "Number": 411,
@@ -1303,10 +2071,18 @@
     "Priority": "Normal"
   },
   {
+    "Number": 413,
+    "Name": "dark-elf harvester"
+  },
+  {
     "Number": 414,
     "Name": "water spirit",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 415,
+    "Name": "salamander"
   },
   {
     "Number": 416,
@@ -1429,10 +2205,30 @@
     "Priority": "Normal"
   },
   {
+    "Number": 436,
+    "Name": "troglodyte"
+  },
+  {
+    "Number": 437,
+    "Name": "troglodyte leader"
+  },
+  {
     "Number": 438,
     "Name": "rock eater",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 439,
+    "Name": "margoyle"
+  },
+  {
+    "Number": 440,
+    "Name": "white scorpion"
+  },
+  {
+    "Number": 441,
+    "Name": "black pudding"
   },
   {
     "Number": 442,
@@ -1471,10 +2267,30 @@
     "Priority": "High"
   },
   {
+    "Number": 448,
+    "Name": "Kai Master"
+  },
+  {
+    "Number": 449,
+    "Name": "quaggoth"
+  },
+  {
+    "Number": 450,
+    "Name": "quaggoth thonot"
+  },
+  {
+    "Number": 451,
+    "Name": "quaggoth jald"
+  },
+  {
     "Number": 452,
     "Name": "huge obsidian golem",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 453,
+    "Name": "stone elemental"
   },
   {
     "Number": 454,
@@ -1483,10 +2299,38 @@
     "Priority": "High"
   },
   {
+    "Number": 455,
+    "Name": "duergar warrior"
+  },
+  {
     "Number": 456,
     "Name": "duergar lord",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 457,
+    "Name": "dwarf warrior"
+  },
+  {
+    "Number": 458,
+    "Name": "dwarf warrior"
+  },
+  {
+    "Number": 459,
+    "Name": "brain eater"
+  },
+  {
+    "Number": 460,
+    "Name": "shapeshifter"
+  },
+  {
+    "Number": 461,
+    "Name": "winged demon"
+  },
+  {
+    "Number": 462,
+    "Name": "rotting monstrosity"
   },
   {
     "Number": 463,
@@ -1513,10 +2357,50 @@
     "Priority": "High"
   },
   {
+    "Number": 467,
+    "Name": "purple slime"
+  },
+  {
+    "Number": 468,
+    "Name": "green slime"
+  },
+  {
+    "Number": 469,
+    "Name": "red slime"
+  },
+  {
+    "Number": 470,
+    "Name": "azure slime"
+  },
+  {
     "Number": 471,
     "Name": "white jelly",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 472,
+    "Name": "zombie cat"
+  },
+  {
+    "Number": 473,
+    "Name": "rotworm"
+  },
+  {
+    "Number": 474,
+    "Name": "leprous outcast"
+  },
+  {
+    "Number": 475,
+    "Name": "dark dabbler"
+  },
+  {
+    "Number": 476,
+    "Name": "thief"
+  },
+  {
+    "Number": 477,
+    "Name": "smuggler"
   },
   {
     "Number": 478,
@@ -1525,10 +2409,30 @@
     "Priority": "High"
   },
   {
+    "Number": 479,
+    "Name": "half-orc sentry"
+  },
+  {
+    "Number": 480,
+    "Name": "orc warrior"
+  },
+  {
+    "Number": 481,
+    "Name": "orc shaman"
+  },
+  {
     "Number": 482,
     "Name": "black orc boss",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 483,
+    "Name": "worker ant"
+  },
+  {
+    "Number": 484,
+    "Name": "soldier ant"
   },
   {
     "Number": 485,
@@ -1543,10 +2447,34 @@
     "Priority": "High"
   },
   {
+    "Number": 487,
+    "Name": "dark apprentice"
+  },
+  {
+    "Number": 488,
+    "Name": "dark monk"
+  },
+  {
+    "Number": 489,
+    "Name": "dark mystic"
+  },
+  {
     "Number": 490,
     "Name": "dread mystic",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 491,
+    "Name": "flesh golem"
+  },
+  {
+    "Number": 492,
+    "Name": "zombie"
+  },
+  {
+    "Number": 493,
+    "Name": "ju-ju zombie"
   },
   {
     "Number": 494,
@@ -1555,10 +2483,38 @@
     "Priority": "High"
   },
   {
+    "Number": 495,
+    "Name": "crazed lunatic"
+  },
+  {
+    "Number": 496,
+    "Name": "depraved murderer"
+  },
+  {
+    "Number": 497,
+    "Name": "twisted guard"
+  },
+  {
+    "Number": 498,
+    "Name": "insane mage"
+  },
+  {
     "Number": 499,
     "Name": "old man",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 500,
+    "Name": "foul creation"
+  },
+  {
+    "Number": 501,
+    "Name": "chaos demonling"
+  },
+  {
+    "Number": 502,
+    "Name": "abomination"
   },
   {
     "Number": 503,
@@ -1579,16 +2535,36 @@
     "Priority": "High"
   },
   {
+    "Number": 506,
+    "Name": "duergar captain"
+  },
+  {
     "Number": 507,
     "Name": "practice dummy",
     "Relationship": "Neutral",
     "Priority": "Normal"
   },
   {
+    "Number": 508,
+    "Name": "Tyrannosaur"
+  },
+  {
+    "Number": 509,
+    "Name": "tetraraptor"
+  },
+  {
     "Number": 510,
     "Name": "ruby guardian",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 511,
+    "Name": "zapsalis"
+  },
+  {
+    "Number": 512,
+    "Name": "pteranodon"
   },
   {
     "Number": 513,
@@ -1603,10 +2579,22 @@
     "Priority": "High"
   },
   {
+    "Number": 515,
+    "Name": "deinodon"
+  },
+  {
     "Number": 516,
     "Name": "amber guardian",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 517,
+    "Name": "horned demon"
+  },
+  {
+    "Number": 518,
+    "Name": "flaming mammoth"
   },
   {
     "Number": 519,
@@ -1633,16 +2621,36 @@
     "Priority": "High"
   },
   {
+    "Number": 523,
+    "Name": "deinonychus"
+  },
+  {
+    "Number": 524,
+    "Name": "tetraraptor"
+  },
+  {
     "Number": 525,
     "Name": "amethyst guardian",
     "Relationship": "Friend",
     "Priority": "High"
   },
   {
+    "Number": 526,
+    "Name": "disenchanter"
+  },
+  {
+    "Number": 527,
+    "Name": "eradicator"
+  },
+  {
     "Number": 528,
     "Name": "onyx guardian",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 529,
+    "Name": "demonhunter"
   },
   {
     "Number": 530,
@@ -1657,6 +2665,10 @@
     "Priority": "High"
   },
   {
+    "Number": 532,
+    "Name": "Inquisitor Fulgore"
+  },
+  {
     "Number": 533,
     "Name": "flaming zombie",
     "Relationship": "Enemy",
@@ -1667,6 +2679,14 @@
     "Name": "gold guardian",
     "Relationship": "Friend",
     "Priority": "High"
+  },
+  {
+    "Number": 535,
+    "Name": "flaming waist"
+  },
+  {
+    "Number": 536,
+    "Name": "flaming torso"
   },
   {
     "Number": 537,
@@ -1687,16 +2707,36 @@
     "Priority": "Normal"
   },
   {
+    "Number": 540,
+    "Name": "Vashti"
+  },
+  {
+    "Number": 541,
+    "Name": "Vasili"
+  },
+  {
     "Number": 542,
     "Name": "burnt witchunter",
     "Relationship": "Neutral",
     "Priority": "Normal"
   },
   {
+    "Number": 543,
+    "Name": "Cygani"
+  },
+  {
+    "Number": 544,
+    "Name": "platinum knight"
+  },
+  {
     "Number": 545,
     "Name": "Old Mother Woodard",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 546,
+    "Name": "Farmer Woodard"
   },
   {
     "Number": 547,
@@ -1795,6 +2835,14 @@
     "Priority": "Normal"
   },
   {
+    "Number": 564,
+    "Name": "rakshasha"
+  },
+  {
+    "Number": 565,
+    "Name": "rakshasha rukh"
+  },
+  {
     "Number": 566,
     "Name": "rakshasha sage",
     "Relationship": "Enemy",
@@ -1813,10 +2861,34 @@
     "Priority": "High"
   },
   {
+    "Number": 569,
+    "Name": "saracen raider"
+  },
+  {
+    "Number": 570,
+    "Name": "saracen leader"
+  },
+  {
     "Number": 571,
     "Name": "giant roc",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 572,
+    "Name": "black asp"
+  },
+  {
+    "Number": 573,
+    "Name": "giant scorpion"
+  },
+  {
+    "Number": 574,
+    "Name": "sandworm"
+  },
+  {
+    "Number": 575,
+    "Name": "dustdevil"
   },
   {
     "Number": 576,
@@ -1825,10 +2897,18 @@
     "Priority": "Normal"
   },
   {
+    "Number": 577,
+    "Name": "saracen zealot"
+  },
+  {
     "Number": 578,
     "Name": "saracen high priest",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 579,
+    "Name": "spiny tentacle"
   },
   {
     "Number": 580,
@@ -1841,6 +2921,26 @@
     "Name": "stomach lining",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 582,
+    "Name": "jackal-headed warrior"
+  },
+  {
+    "Number": 583,
+    "Name": "falcon-headed warrior"
+  },
+  {
+    "Number": 584,
+    "Name": "serpent-headed warrior"
+  },
+  {
+    "Number": 585,
+    "Name": "undead priest"
+  },
+  {
+    "Number": 586,
+    "Name": "manscorpion"
   },
   {
     "Number": 587,
@@ -1861,10 +2961,22 @@
     "Priority": "High"
   },
   {
+    "Number": 590,
+    "Name": "hydra head"
+  },
+  {
     "Number": 591,
     "Name": "wraith",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 592,
+    "Name": "shade"
+  },
+  {
+    "Number": 593,
+    "Name": "spectre"
   },
   {
     "Number": 594,
@@ -1909,6 +3021,10 @@
     "Priority": "High"
   },
   {
+    "Number": 601,
+    "Name": "saracen raider"
+  },
+  {
     "Number": 602,
     "Name": "saracen commander",
     "Relationship": "Enemy",
@@ -1927,6 +3043,46 @@
     "Priority": "Normal"
   },
   {
+    "Number": 605,
+    "Name": "Argak the Grey"
+  },
+  {
+    "Number": 606,
+    "Name": "Choira Pyromancer"
+  },
+  {
+    "Number": 607,
+    "Name": "Lallim Whitemane"
+  },
+  {
+    "Number": 608,
+    "Name": "Sharh'Kur"
+  },
+  {
+    "Number": 609,
+    "Name": "Argak the Grey"
+  },
+  {
+    "Number": 610,
+    "Name": "Choira Pyromancer"
+  },
+  {
+    "Number": 611,
+    "Name": "Lallim Whitemane"
+  },
+  {
+    "Number": 612,
+    "Name": "Sharh'Kur"
+  },
+  {
+    "Number": 614,
+    "Name": "tasloi villager"
+  },
+  {
+    "Number": 615,
+    "Name": "tasloi hunter"
+  },
+  {
     "Number": 616,
     "Name": "tasloi chief",
     "Relationship": "Enemy",
@@ -1939,16 +3095,40 @@
     "Priority": "High"
   },
   {
+    "Number": 618,
+    "Name": "giant wasp"
+  },
+  {
     "Number": 619,
     "Name": "tasloi shaman",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 620,
+    "Name": "wild spider"
+  },
+  {
+    "Number": 621,
+    "Name": "trained spider"
+  },
+  {
     "Number": 622,
     "Name": "massive fanged spider",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 623,
+    "Name": "tasloi warrior"
+  },
+  {
+    "Number": 624,
+    "Name": "hanging cocoon"
+  },
+  {
+    "Number": 625,
+    "Name": "electric eel"
   },
   {
     "Number": 626,
@@ -1963,10 +3143,42 @@
     "Priority": "Normal"
   },
   {
+    "Number": 628,
+    "Name": "giant crab"
+  },
+  {
     "Number": 629,
     "Name": "river ray",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 630,
+    "Name": "spider crab"
+  },
+  {
+    "Number": 631,
+    "Name": "lantern fish"
+  },
+  {
+    "Number": 632,
+    "Name": "parasite"
+  },
+  {
+    "Number": 633,
+    "Name": "crimson priest"
+  },
+  {
+    "Number": 634,
+    "Name": "giant war dog"
+  },
+  {
+    "Number": 635,
+    "Name": "tunnel horror"
+  },
+  {
+    "Number": 636,
+    "Name": "tentacled mass"
   },
   {
     "Number": 637,
@@ -1987,10 +3199,26 @@
     "Priority": "Normal"
   },
   {
+    "Number": 640,
+    "Name": "stone giant shaman"
+  },
+  {
+    "Number": 641,
+    "Name": "stone giant"
+  },
+  {
     "Number": 642,
     "Name": "stone giant chieftain",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 643,
+    "Name": "giant skeleton"
+  },
+  {
+    "Number": 644,
+    "Name": "pyrotrice"
   },
   {
     "Number": 645,
@@ -1999,16 +3227,32 @@
     "Priority": "High"
   },
   {
+    "Number": 646,
+    "Name": "hill giant"
+  },
+  {
     "Number": 647,
     "Name": "hill giant chieftan",
     "Relationship": "Enemy",
     "Priority": "First"
   },
   {
+    "Number": 648,
+    "Name": "devourer"
+  },
+  {
     "Number": 649,
     "Name": "aged earth dragon",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 650,
+    "Name": "cockatrice"
+  },
+  {
+    "Number": 651,
+    "Name": "slimeworm"
   },
   {
     "Number": 652,
@@ -2047,10 +3291,34 @@
     "Priority": "Normal"
   },
   {
+    "Number": 658,
+    "Name": "massive cocoon"
+  },
+  {
+    "Number": 659,
+    "Name": "gorilla"
+  },
+  {
+    "Number": 660,
+    "Name": "gorilla"
+  },
+  {
+    "Number": 661,
+    "Name": "blood hawk"
+  },
+  {
+    "Number": 662,
+    "Name": "leafling"
+  },
+  {
     "Number": 663,
     "Name": "insect swarm",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 664,
+    "Name": "whipvine"
   },
   {
     "Number": 665,
@@ -2059,10 +3327,86 @@
     "Priority": "High"
   },
   {
+    "Number": 666,
+    "Name": "dae asp"
+  },
+  {
+    "Number": 667,
+    "Name": "shadow frog"
+  },
+  {
     "Number": 668,
     "Name": "jeweled viper",
     "Relationship": "Enemy",
     "Priority": "Last"
+  },
+  {
+    "Number": 669,
+    "Name": "silver cobra"
+  },
+  {
+    "Number": 670,
+    "Name": "grall"
+  },
+  {
+    "Number": 671,
+    "Name": "moss zombie"
+  },
+  {
+    "Number": 672,
+    "Name": "whipvine"
+  },
+  {
+    "Number": 673,
+    "Name": "tasloi scout"
+  },
+  {
+    "Number": 674,
+    "Name": "hanging cocoon"
+  },
+  {
+    "Number": 675,
+    "Name": "hanging cocoon"
+  },
+  {
+    "Number": 676,
+    "Name": "magma golem"
+  },
+  {
+    "Number": 677,
+    "Name": "fire toad"
+  },
+  {
+    "Number": 678,
+    "Name": "pyrogoyle"
+  },
+  {
+    "Number": 679,
+    "Name": "lava imp"
+  },
+  {
+    "Number": 680,
+    "Name": "greater salamander"
+  },
+  {
+    "Number": 681,
+    "Name": "pyrimera"
+  },
+  {
+    "Number": 682,
+    "Name": "flame elemental"
+  },
+  {
+    "Number": 683,
+    "Name": "fire knight"
+  },
+  {
+    "Number": 685,
+    "Name": "giant efreeti"
+  },
+  {
+    "Number": 686,
+    "Name": "sand crab"
   },
   {
     "Number": 687,
@@ -2099,6 +3443,10 @@
     "Name": "giant river turtle",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 693,
+    "Name": "behemoth hellhound"
   },
   {
     "Number": 694,
@@ -2149,6 +3497,10 @@
     "Priority": "High"
   },
   {
+    "Number": 702,
+    "Name": "bone warrior"
+  },
+  {
     "Number": 703,
     "Name": "ancestral guardian",
     "Relationship": "Enemy",
@@ -2159,6 +3511,10 @@
     "Name": "crane spirit",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 705,
+    "Name": "flesh ripper"
   },
   {
     "Number": 706,
@@ -2183,6 +3539,22 @@
     "Name": "amazon queen",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 710,
+    "Name": "sahuagin shaman"
+  },
+  {
+    "Number": 711,
+    "Name": "sahuagin"
+  },
+  {
+    "Number": 712,
+    "Name": "sahuagin warrior"
+  },
+  {
+    "Number": 713,
+    "Name": "coral lobster"
   },
   {
     "Number": 714,
@@ -2263,10 +3635,30 @@
     "Priority": "High"
   },
   {
+    "Number": 727,
+    "Name": "orc lieutenant"
+  },
+  {
+    "Number": 728,
+    "Name": "orc warrior"
+  },
+  {
+    "Number": 729,
+    "Name": "orc fanatic"
+  },
+  {
     "Number": 730,
     "Name": "orc trainee",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 731,
+    "Name": "nanati"
+  },
+  {
+    "Number": 732,
+    "Name": "nanati"
   },
   {
     "Number": 733,
@@ -2275,16 +3667,48 @@
     "Priority": "High"
   },
   {
+    "Number": 734,
+    "Name": "nanati deathweaver"
+  },
+  {
+    "Number": 735,
+    "Name": "nanati bladesman"
+  },
+  {
     "Number": 736,
     "Name": "nanati shadow",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 737,
+    "Name": "dark assassin"
+  },
+  {
+    "Number": 738,
+    "Name": "dark stalker"
+  },
+  {
+    "Number": 739,
+    "Name": "dark nightblade"
+  },
+  {
     "Number": 740,
     "Name": "master assassin",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 741,
+    "Name": "yeti"
+  },
+  {
+    "Number": 742,
+    "Name": "ice golem"
+  },
+  {
+    "Number": 743,
+    "Name": "ice wraith"
   },
   {
     "Number": 744,
@@ -2323,6 +3747,14 @@
     "Priority": "High"
   },
   {
+    "Number": 752,
+    "Name": "orc warrior"
+  },
+  {
+    "Number": 753,
+    "Name": "orc fanatic"
+  },
+  {
     "Number": 754,
     "Name": "orc trainee",
     "Relationship": "Enemy",
@@ -2347,16 +3779,80 @@
     "Priority": "Normal"
   },
   {
+    "Number": 758,
+    "Name": "skeleton"
+  },
+  {
+    "Number": 759,
+    "Name": "zombie"
+  },
+  {
+    "Number": 760,
+    "Name": "shade"
+  },
+  {
+    "Number": 761,
+    "Name": "ghoul"
+  },
+  {
+    "Number": 762,
+    "Name": "wight"
+  },
+  {
+    "Number": 763,
+    "Name": "skeletal warrior"
+  },
+  {
+    "Number": 764,
+    "Name": "moaning spirit"
+  },
+  {
     "Number": 765,
     "Name": "banshee",
     "Relationship": "Enemy",
     "Priority": "First"
   },
   {
+    "Number": 766,
+    "Name": "ghost"
+  },
+  {
+    "Number": 767,
+    "Name": "shadowraith"
+  },
+  {
+    "Number": 768,
+    "Name": "barrow wight"
+  },
+  {
+    "Number": 769,
+    "Name": "zombie cat"
+  },
+  {
+    "Number": 770,
+    "Name": "undead priest"
+  },
+  {
+    "Number": 771,
+    "Name": "tortured spirit"
+  },
+  {
+    "Number": 772,
+    "Name": "ju-ju zombie"
+  },
+  {
     "Number": 773,
     "Name": "necromancer",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 774,
+    "Name": "giant skeleton"
+  },
+  {
+    "Number": 775,
+    "Name": "bone warrior"
   },
   {
     "Number": 776,
@@ -2413,6 +3909,10 @@
     "Priority": "Normal"
   },
   {
+    "Number": 785,
+    "Name": "troll"
+  },
+  {
     "Number": 786,
     "Name": "black cat",
     "Relationship": "Neutral",
@@ -2441,6 +3941,10 @@
     "Name": "gravedigger",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 791,
+    "Name": "roc"
   },
   {
     "Number": 792,
@@ -2497,6 +4001,30 @@
     "Priority": "Normal"
   },
   {
+    "Number": 801,
+    "Name": "ogre zombie"
+  },
+  {
+    "Number": 802,
+    "Name": "rabid dire wolf"
+  },
+  {
+    "Number": 803,
+    "Name": "boneless zombie"
+  },
+  {
+    "Number": 804,
+    "Name": "skeletal acid beast"
+  },
+  {
+    "Number": 805,
+    "Name": "scarab swarm"
+  },
+  {
+    "Number": 806,
+    "Name": "weeping apparition"
+  },
+  {
     "Number": 807,
     "Name": "wolfman",
     "Relationship": "Enemy",
@@ -2527,10 +4055,22 @@
     "Priority": "First"
   },
   {
+    "Number": 812,
+    "Name": "sdfsdfsfs"
+  },
+  {
     "Number": 813,
     "Name": "rotting beholder",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 814,
+    "Name": "skeletal steed"
+  },
+  {
+    "Number": 815,
+    "Name": "dark treant"
   },
   {
     "Number": 816,
@@ -2551,10 +4091,26 @@
     "Priority": "High"
   },
   {
+    "Number": 819,
+    "Name": "black rosebush"
+  },
+  {
+    "Number": 820,
+    "Name": "clawed beast man"
+  },
+  {
     "Number": 821,
     "Name": "groaning cloud",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 822,
+    "Name": "scythe skeleton"
+  },
+  {
+    "Number": 823,
+    "Name": "bone snake"
   },
   {
     "Number": 824,
@@ -2563,10 +4119,30 @@
     "Priority": "Low"
   },
   {
+    "Number": 825,
+    "Name": "drooling blood ghoul"
+  },
+  {
+    "Number": 826,
+    "Name": "spirit assassin"
+  },
+  {
+    "Number": 827,
+    "Name": "bone warrior"
+  },
+  {
     "Number": 828,
     "Name": "wraith",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 829,
+    "Name": "flesh golem"
+  },
+  {
+    "Number": 830,
+    "Name": "spectre"
   },
   {
     "Number": 831,
@@ -2575,16 +4151,40 @@
     "Priority": "Normal"
   },
   {
+    "Number": 832,
+    "Name": "vampire bat"
+  },
+  {
+    "Number": 833,
+    "Name": "vampire magus"
+  },
+  {
+    "Number": 834,
+    "Name": "vampire acolyte"
+  },
+  {
+    "Number": 835,
+    "Name": "vampire elder"
+  },
+  {
     "Number": 836,
     "Name": "Ozrinom the Vampire Lord",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 837,
+    "Name": "Death Mist of Ozrinom"
+  },
+  {
     "Number": 838,
     "Name": "gremlin",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 839,
+    "Name": "Scarecrow"
   },
   {
     "Number": 840,
@@ -2603,6 +4203,10 @@
     "Name": "chicken",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 843,
+    "Name": "death chicken"
   },
   {
     "Number": 844,
@@ -2732,10 +4336,46 @@
     "Priority": "Normal"
   },
   {
+    "Number": 866,
+    "Name": "vampire minion"
+  },
+  {
+    "Number": 867,
+    "Name": "horned spider"
+  },
+  {
+    "Number": 868,
+    "Name": "animated book"
+  },
+  {
+    "Number": 869,
+    "Name": "animated book"
+  },
+  {
+    "Number": 870,
+    "Name": "animated book"
+  },
+  {
+    "Number": 871,
+    "Name": "giant rat"
+  },
+  {
     "Number": 872,
     "Name": "dirty fisherman",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 873,
+    "Name": "tsunami squid"
+  },
+  {
+    "Number": 874,
+    "Name": "pirate ghost"
+  },
+  {
+    "Number": 875,
+    "Name": "first mate"
   },
   {
     "Number": 876,
@@ -2750,10 +4390,18 @@
     "Priority": "High"
   },
   {
+    "Number": 878,
+    "Name": "animated sword"
+  },
+  {
     "Number": 879,
     "Name": "darken beast",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 880,
+    "Name": "sea hag"
   },
   {
     "Number": 881,
@@ -2768,10 +4416,22 @@
     "Priority": "High"
   },
   {
+    "Number": 883,
+    "Name": "canimera"
+  },
+  {
+    "Number": 884,
+    "Name": "daggerweed"
+  },
+  {
     "Number": 885,
     "Name": "stitched zombie",
     "Relationship": "Enemy",
     "Priority": "Last"
+  },
+  {
+    "Number": 886,
+    "Name": "fiery skull"
   },
   {
     "Number": 887,
@@ -2786,10 +4446,54 @@
     "Priority": "Low"
   },
   {
+    "Number": 889,
+    "Name": "severed leg"
+  },
+  {
+    "Number": 890,
+    "Name": "severed arm"
+  },
+  {
+    "Number": 891,
+    "Name": "severed head"
+  },
+  {
+    "Number": 892,
+    "Name": "giant locust"
+  },
+  {
+    "Number": 893,
+    "Name": "Warmonger of Blood"
+  },
+  {
+    "Number": 894,
+    "Name": "gremlin witchdoctor"
+  },
+  {
+    "Number": 895,
+    "Name": "stranglevine"
+  },
+  {
+    "Number": 896,
+    "Name": "skeletal parrot"
+  },
+  {
+    "Number": 897,
+    "Name": "animated knight"
+  },
+  {
     "Number": 898,
     "Name": "arachnigoth",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 899,
+    "Name": "deformed mutant"
+  },
+  {
+    "Number": 900,
+    "Name": "blood skeleton"
   },
   {
     "Number": 901,
@@ -2798,10 +4502,18 @@
     "Priority": "Normal"
   },
   {
+    "Number": 902,
+    "Name": "animated chains"
+  },
+  {
     "Number": 903,
     "Name": "dread planewalker",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 904,
+    "Name": "crimson mist"
   },
   {
     "Number": 905,
@@ -2816,10 +4528,22 @@
     "Priority": "High"
   },
   {
+    "Number": 908,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 910,
+    "Name": "Mayor Delanon"
+  },
+  {
     "Number": 911,
     "Name": "Aeriana the Pure",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 912,
+    "Name": "mammoth rot worm"
   },
   {
     "Number": 913,
@@ -2832,6 +4556,10 @@
     "Name": "Madame Madison",
     "Relationship": "Friend",
     "Priority": "Normal"
+  },
+  {
+    "Number": 915,
+    "Name": "ivory golem"
   },
   {
     "Number": 916,
@@ -2876,10 +4604,30 @@
     "Priority": "Normal"
   },
   {
+    "Number": 923,
+    "Name": "giant locust"
+  },
+  {
     "Number": 924,
     "Name": "stitched zombie",
     "Relationship": "Enemy",
     "Priority": "Last"
+  },
+  {
+    "Number": 925,
+    "Name": "bone warrior"
+  },
+  {
+    "Number": 926,
+    "Name": "bone warrior"
+  },
+  {
+    "Number": 927,
+    "Name": "bone warrior"
+  },
+  {
+    "Number": 928,
+    "Name": "wraith knight"
   },
   {
     "Number": 929,
@@ -2912,16 +4660,44 @@
     "Priority": "High"
   },
   {
+    "Number": 934,
+    "Name": "Lord Feyr"
+  },
+  {
     "Number": 935,
     "Name": "stitched zombie",
     "Relationship": "Enemy",
     "Priority": "Last"
   },
   {
+    "Number": 936,
+    "Name": "gnaj zombie"
+  },
+  {
     "Number": 937,
     "Name": "mind flayer magus",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 938,
+    "Name": "white assassin"
+  },
+  {
+    "Number": 939,
+    "Name": "red worm"
+  },
+  {
+    "Number": 940,
+    "Name": "purple worm"
+  },
+  {
+    "Number": 941,
+    "Name": "white worm"
+  },
+  {
+    "Number": 942,
+    "Name": "black worm"
   },
   {
     "Number": 943,
@@ -2942,6 +4718,14 @@
     "Priority": "Normal"
   },
   {
+    "Number": 946,
+    "Name": "wraith spider"
+  },
+  {
+    "Number": 947,
+    "Name": "gnaj golem"
+  },
+  {
     "Number": 948,
     "Name": "halfling prisoner",
     "Relationship": "Neutral",
@@ -2952,6 +4736,42 @@
     "Name": "Gnaj the Creator",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 950,
+    "Name": "green demonling"
+  },
+  {
+    "Number": 951,
+    "Name": "green demonling"
+  },
+  {
+    "Number": 952,
+    "Name": "blue demonling"
+  },
+  {
+    "Number": 953,
+    "Name": "red demonling"
+  },
+  {
+    "Number": 954,
+    "Name": "flaming mammoth"
+  },
+  {
+    "Number": 955,
+    "Name": "horned demon"
+  },
+  {
+    "Number": 956,
+    "Name": "vision"
+  },
+  {
+    "Number": 957,
+    "Name": "shadow spectre"
+  },
+  {
+    "Number": 958,
+    "Name": "astral shade"
   },
   {
     "Number": 959,
@@ -2966,16 +4786,64 @@
     "Priority": "Normal"
   },
   {
+    "Number": 962,
+    "Name": "bugbear"
+  },
+  {
+    "Number": 963,
+    "Name": "bugbear captain"
+  },
+  {
+    "Number": 964,
+    "Name": "ogre"
+  },
+  {
+    "Number": 965,
+    "Name": "wyvern"
+  },
+  {
+    "Number": 966,
+    "Name": "bugbear berserker"
+  },
+  {
+    "Number": 967,
+    "Name": "dark goblin archer"
+  },
+  {
+    "Number": 968,
+    "Name": "dark goblin"
+  },
+  {
+    "Number": 969,
+    "Name": "mutant spider"
+  },
+  {
+    "Number": 970,
+    "Name": "dark-elf assassin"
+  },
+  {
     "Number": 971,
     "Name": "dark-elf mage",
     "Relationship": "Enemy",
     "Priority": "High"
   },
   {
+    "Number": 972,
+    "Name": "dark-elf faithkeeper"
+  },
+  {
     "Number": 973,
     "Name": "baby black dragon",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 974,
+    "Name": "young black dragon"
+  },
+  {
+    "Number": 975,
+    "Name": "adolescent black dragon"
   },
   {
     "Number": 976,
@@ -2988,6 +4856,14 @@
     "Name": "baby white dragon",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 978,
+    "Name": "young white dragon"
+  },
+  {
+    "Number": 979,
+    "Name": "adolescent white dragon"
   },
   {
     "Number": 980,
@@ -3020,16 +4896,40 @@
     "Priority": "Low"
   },
   {
+    "Number": 985,
+    "Name": "young blue dragon"
+  },
+  {
+    "Number": 986,
+    "Name": "adolescent blue dragon"
+  },
+  {
     "Number": 987,
     "Name": "blue dragon hatchling",
     "Relationship": "Enemy",
     "Priority": "Low"
   },
   {
+    "Number": 988,
+    "Name": "Ebon Blade manhunter"
+  },
+  {
+    "Number": 989,
+    "Name": "Ebon Blade assassin"
+  },
+  {
     "Number": 990,
     "Name": "baby green dragon",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 991,
+    "Name": "young green dragon"
+  },
+  {
+    "Number": 992,
+    "Name": "adolescent green dragon"
   },
   {
     "Number": 993,
@@ -3086,6 +4986,10 @@
     "Priority": "Normal"
   },
   {
+    "Number": 1002,
+    "Name": "ancient tapestry"
+  },
+  {
     "Number": 1003,
     "Name": "shredded tapestry",
     "Relationship": "Neutral",
@@ -3108,6 +5012,10 @@
     "Name": "Nahr",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 1007,
+    "Name": "bone warrior"
   },
   {
     "Number": 1009,
@@ -3152,6 +5060,14 @@
     "Priority": "High"
   },
   {
+    "Number": 1016,
+    "Name": "Great Hydra"
+  },
+  {
+    "Number": 1017,
+    "Name": "Mandrake the Songweaver"
+  },
+  {
     "Number": 1019,
     "Name": "inquisitor",
     "Relationship": "Enemy",
@@ -3176,6 +5092,10 @@
     "Priority": "High"
   },
   {
+    "Number": 1023,
+    "Name": "Aderem"
+  },
+  {
     "Number": 1024,
     "Name": "inquisitor",
     "Relationship": "Enemy",
@@ -3194,10 +5114,42 @@
     "Priority": "Normal"
   },
   {
+    "Number": 1027,
+    "Name": "beautiful woman"
+  },
+  {
+    "Number": 1028,
+    "Name": "handsome man"
+  },
+  {
+    "Number": 1029,
+    "Name": "massive hydra head"
+  },
+  {
+    "Number": 1030,
+    "Name": "Azrandimon"
+  },
+  {
+    "Number": 1031,
+    "Name": "darken beast"
+  },
+  {
+    "Number": 1032,
+    "Name": "Lorzina"
+  },
+  {
     "Number": 1033,
     "Name": "demon imp",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 1034,
+    "Name": "ancient sand dragon"
+  },
+  {
+    "Number": 1035,
+    "Name": "fallen angel"
   },
   {
     "Number": 1036,
@@ -3206,16 +5158,56 @@
     "Priority": "High"
   },
   {
+    "Number": 1037,
+    "Name": "Dao Lord"
+  },
+  {
+    "Number": 1038,
+    "Name": "great green dragon"
+  },
+  {
     "Number": 1039,
     "Name": "giant roc",
     "Relationship": "Neutral",
     "Priority": "Normal"
   },
   {
+    "Number": 1040,
+    "Name": "Darken Beast Lord"
+  },
+  {
     "Number": 1041,
     "Name": "Lord of the Hunt",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 1044,
+    "Name": "silver warrior"
+  },
+  {
+    "Number": 1045,
+    "Name": "marble archer"
+  },
+  {
+    "Number": 1046,
+    "Name": "golden mist"
+  },
+  {
+    "Number": 1048,
+    "Name": "spiked juggernaut"
+  },
+  {
+    "Number": 1049,
+    "Name": "Devil Fiend"
+  },
+  {
+    "Number": 1050,
+    "Name": "Demoness"
+  },
+  {
+    "Number": 1051,
+    "Name": "fanged demon"
   },
   {
     "Number": 1052,
@@ -3260,10 +5252,46 @@
     "Priority": "High"
   },
   {
+    "Number": 1059,
+    "Name": "cloaked figure"
+  },
+  {
+    "Number": 1060,
+    "Name": "cloaked figure"
+  },
+  {
+    "Number": 1061,
+    "Name": "cloaked figure"
+  },
+  {
+    "Number": 1062,
+    "Name": "cloaked figure"
+  },
+  {
     "Number": 1063,
     "Name": "old thief",
     "Relationship": "Neutral",
     "Priority": "Normal"
+  },
+  {
+    "Number": 1064,
+    "Name": "marble knight"
+  },
+  {
+    "Number": 1065,
+    "Name": "white guardsman"
+  },
+  {
+    "Number": 1066,
+    "Name": "white knight"
+  },
+  {
+    "Number": 1067,
+    "Name": "white bishop"
+  },
+  {
+    "Number": 1068,
+    "Name": "white marble golem"
   },
   {
     "Number": 1069,
@@ -3278,6 +5306,22 @@
     "Priority": "High"
   },
   {
+    "Number": 1071,
+    "Name": "black guardsman"
+  },
+  {
+    "Number": 1072,
+    "Name": "black knight"
+  },
+  {
+    "Number": 1073,
+    "Name": "black bishop"
+  },
+  {
+    "Number": 1074,
+    "Name": "black marble golem"
+  },
+  {
     "Number": 1075,
     "Name": "black queen",
     "Relationship": "Enemy",
@@ -3290,10 +5334,42 @@
     "Priority": "High"
   },
   {
+    "Number": 1077,
+    "Name": "disenchanter"
+  },
+  {
+    "Number": 1078,
+    "Name": "eradicator"
+  },
+  {
+    "Number": 1079,
+    "Name": "demonhunter"
+  },
+  {
+    "Number": 1080,
+    "Name": "red sphere"
+  },
+  {
+    "Number": 1081,
+    "Name": "blue sphere"
+  },
+  {
+    "Number": 1082,
+    "Name": "green sphere"
+  },
+  {
+    "Number": 1083,
+    "Name": "yellow sphere"
+  },
+  {
     "Number": 1084,
     "Name": "Nahr",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 1085,
+    "Name": "black guardsman"
   },
   {
     "Number": 1086,
@@ -3320,10 +5396,18 @@
     "Priority": "High"
   },
   {
+    "Number": 1090,
+    "Name": "dae asp"
+  },
+  {
     "Number": 1091,
     "Name": "jeweled viper",
     "Relationship": "Enemy",
     "Priority": "Last"
+  },
+  {
+    "Number": 1092,
+    "Name": "silver cobra"
   },
   {
     "Number": 1093,
@@ -3344,10 +5428,62 @@
     "Priority": "High"
   },
   {
+    "Number": 1096,
+    "Name": "orc lieutenant"
+  },
+  {
+    "Number": 1097,
+    "Name": "orc warrior"
+  },
+  {
+    "Number": 1098,
+    "Name": "orc fanatic"
+  },
+  {
+    "Number": 1099,
+    "Name": "guard captain"
+  },
+  {
+    "Number": 1100,
+    "Name": "elite guard"
+  },
+  {
+    "Number": 1101,
+    "Name": "dark cleric"
+  },
+  {
+    "Number": 1102,
+    "Name": "dark mage"
+  },
+  {
+    "Number": 1103,
+    "Name": "dark assassin"
+  },
+  {
+    "Number": 1104,
+    "Name": "dark warrior"
+  },
+  {
+    "Number": 1105,
+    "Name": "adolescent red dragon"
+  },
+  {
+    "Number": 1106,
+    "Name": "young red dragon"
+  },
+  {
     "Number": 1107,
     "Name": "baby red dragon",
     "Relationship": "Enemy",
     "Priority": "Low"
+  },
+  {
+    "Number": 1108,
+    "Name": "adolescent green dragon"
+  },
+  {
+    "Number": 1109,
+    "Name": "young green dragon"
   },
   {
     "Number": 1110,
@@ -3360,5 +5496,33 @@
     "Name": "duergar captain",
     "Relationship": "Enemy",
     "Priority": "High"
+  },
+  {
+    "Number": 1112,
+    "Name": "duergar warrior"
+  },
+  {
+    "Number": 1113,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 1114,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 1115,
+    "Name": "giant rat"
+  },
+  {
+    "Number": 1116,
+    "Name": ""
+  },
+  {
+    "Number": 1117,
+    "Name": "saracen raider"
+  },
+  {
+    "Number": 1118,
+    "Name": "saracen leader"
   }
 ]
