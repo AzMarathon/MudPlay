@@ -300,4 +300,67 @@ public sealed class ConversationViewModelTests
             Assert.False(row.Look.EmotesEnabled);
         }
     }
+
+    // The backlog a profile load replays from its character's talk log
+    // (SessionLogService, opened as the profile loads) is what the window opens on: a
+    // row per line, in the log's order, reading as the line was written
+    // (Hang-20261026-215238 opened on 2,000 of them). A rebuild of the whole list
+    // asks to scroll once, to the newest row, not once per row.
+    [Fact]
+    public void TalkLogBacklog_OpensAsOneRowPerLine_InOrder_AndARebuildScrollsOnce()
+    {
+        ScratchRoot.Require();
+        string board = "convo-test-" + Guid.NewGuid().ToString("N");
+        const string character = "Backlog";
+        ChatChannel[] channels = { ChatChannel.Gossip, ChatChannel.Local, ChatChannel.TelepathIncoming,
+                                   ChatChannel.Gangpath, ChatChannel.Broadcast, ChatChannel.Yell, ChatChannel.Social };
+        string talkLog = Path.Combine(AppPaths.LogsDir, $"{character}.{board}.talk.log");
+        try
+        {
+            ProfileService profile = TestProfiles.Loaded();
+            profile.SaveAs(board, character);
+            List<string> log = new();
+            for (int i = 0; i < 2_000; i++)
+            {
+                ChatChannel channel = channels[i % channels.Length];
+                string? speaker = channel == ChatChannel.Social ? null : $"Speaker{i % 7}";
+                string message = $"line {i}: see https://example.org/{i} :)";
+                log.Add(SessionLogService.FormatChatLine(new ChatLogEntry(T0.AddSeconds(i), channel, speaker, message, message)));
+            }
+            Directory.CreateDirectory(AppPaths.LogsDir);
+            File.WriteAllLines(talkLog, log);
+
+            (MessageRouter router, ChatHistoryStore history) = NewStore();
+            ChatRouter chat = new(router);
+            using SessionLogService sessionLog = new(profile, chat, history, new Game.Cash.TransactionHistoryTracker(),
+                                                     new LogService(), () => new TalkSettings());
+            using ConversationViewModel vm = NewViewModel(history);
+
+            Assert.Equal(2_000, vm.Rows.Count);
+            for (int i = 0; i < 2_000; i++)
+            {
+                ConversationRowViewModel row = vm.Rows[i];
+                ChatChannel channel = channels[i % channels.Length];
+                Assert.Equal(channel, row.Entry.Channel);
+                Assert.Equal($"line {i}: see https://example.org/{i} :)", row.MessageText);
+                Assert.Equal(T0.AddSeconds(i).ToLocalTime().ToString("HH:mm:ss"), row.TimestampText);
+                Assert.Equal(channel == ChatChannel.Social ? "" : $"Speaker{i % 7}:", row.SpeakerText);
+            }
+
+            List<ConversationRowViewModel> scrolledTo = new();
+            vm.ScrollToRowRequested += scrolledTo.Add;
+            vm.SearchText = "line";   // every line matches: the whole list again
+            Assert.Equal(2_000, vm.Rows.Count);
+            Assert.Same(vm.Rows[^1], Assert.Single(scrolledTo));
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(talkLog)) File.Delete(talkLog);
+                if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+            }
+            catch (IOException) { /* best-effort temp cleanup */ }
+        }
+    }
 }

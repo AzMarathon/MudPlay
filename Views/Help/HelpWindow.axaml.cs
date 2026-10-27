@@ -3,7 +3,7 @@ using MudPlay.Views;
 
 namespace MudPlay.Views.Help;
 
-public partial class HelpWindow : Window
+public partial class HelpWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     public HelpWindow()
     {

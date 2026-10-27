@@ -384,14 +384,19 @@ public static class BugReportBuilder
 
     // ----- Section builders ----------------------------------------------
 
+    // The active set as a report names it: whether its build is still put off (the
+    // startup draft's), or why there is none. Read off the UI thread by a hang report.
+    public static string ActiveSetLabel(AppServices svc) => svc.GameData.ActiveSet is { } set
+        ? svc.GameData.BuildDeferred ? $"{set} (not built yet: the unnamed draft hasn't needed it)" : set
+        : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)";
+
     private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now)
     {
         StringBuilder sb = new();
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
-            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Active game-data set", ActiveSetLabel(svc));
         Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
             ? "available"
             : "none (no BBS, or the realm's name can't be a folder)");
@@ -680,14 +685,15 @@ public static class BugReportBuilder
             .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
         string twoInOneLand = string.Join("; ", odd.Where(o => !o.Exception)
             .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
-        int contradicted = svc.StandardListContradictions.Count;
+        (int contradicted, bool marked, bool unsaved) = svc.StandardListContradictions.Standing();
         return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
             + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
             + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
             + $"this board's deaths have contradicted the standard list: {contradicted}"
-            + (svc.StandardListContradictions.Marked
+            + (unsaved ? " (not yet written to bbs.json)" : "")
+            + (marked
                 ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
                   + "and pointing the realm at another set starts afresh)"
                 : contradicted > 0

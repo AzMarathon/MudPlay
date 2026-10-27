@@ -146,6 +146,13 @@ public sealed partial class GameDataCache
     // Name of the active set, or null when nothing is selected.
     public string? ActiveSet { get; private set; }
 
+    // True while the active set's build is put off (SwitchSet with deferBuild): its
+    // name is ActiveSet and its tables read on demand as ever, but ActiveSetChanged
+    // has not fired for it, so no store or index has been built from it yet.
+    // BuildDeferredSet fires it. Written under the _tables lock.
+    public bool BuildDeferred => Volatile.Read(ref _buildDeferred);
+    private bool _buildDeferred;
+
     // Formula family the active set targets, derived from its Info table:
     // Legit == 2 → RealmType.ParaMud (GreaterMUD / Paradigm), anything else →
     // RealmType.Stock. Returns RealmType.Stock when no set is active or the Info
@@ -280,7 +287,11 @@ public sealed partial class GameDataCache
     // cache assumes the caller knows what they're doing (e.g. a profile points at
     // a set that hasn't been imported yet, so the user can see the mismatch in
     // the UI rather than silently falling back).
-    public void SwitchSet(string? setName)
+    //
+    // deferBuild makes setName the active set without building anything from it
+    // (BuildDeferred), for a session that may never need it. A later SwitchSet to
+    // the same name without deferBuild, a reload, or BuildDeferredSet builds it.
+    public void SwitchSet(string? setName, bool deferBuild = false)
     {
         // Normalize empty → null so the event payload is consistent.
         if (string.IsNullOrWhiteSpace(setName)) setName = null;
@@ -300,27 +311,69 @@ public sealed partial class GameDataCache
         // lookup between them resolved the old set's file under the count of the new
         // load and left that table in place for the whole of it. The handlers run
         // after the lock is let go: they call back into the cache.
-        string? outgoing;
+        string? outgoing = null;
+        bool same, deferred = false;
         lock (_tables)
         {
-            if (string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase)) return;
-            outgoing = ActiveSet;
-            EvictAll();
-            ActiveSet = setName;
+            same = string.Equals(ActiveSet, setName, StringComparison.OrdinalIgnoreCase);
+            if (same && (deferBuild || !_buildDeferred)) return;
+            if (!same)
+            {
+                outgoing = ActiveSet;
+                // Put off only while nothing is built from another set: the stores
+                // still holding one must hear that it went.
+                deferred = deferBuild && setName is not null && (outgoing is null || _buildDeferred);
+                EvictAll();
+                ActiveSet = setName;
+                Volatile.Write(ref _buildDeferred, deferred);
+            }
+        }
+        // The set already chosen, its build put off: built now, as a load of it.
+        if (same)
+        {
+            BuildDeferredSet("switched to without putting it off");
+            return;
         }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
             {
                 (null, null)       => "No active game data set.",
+                (null, not null) when deferred
+                                   => $"Chose game data set '{setName}'; it is built when first needed.",
                 (null, not null)   => $"Loaded game data set '{setName}'.",
                 (not null, null)   => $"Unloaded game data set '{outgoing}' (no set active).",
+                (not null, not null) when deferred
+                                   => $"Chose game data set '{setName}' over '{outgoing}'; it is built when first needed.",
                 (not null, not null) => $"Swapped game data set '{outgoing}' → '{setName}'.",
             });
-        // Every store and index rebuilds for the new set here, on this thread: a
-        // known long operation (PerformanceMonitor.MeasureLong).
-        using (Performance?.MeasureLong("game-data set switch", setName ?? "(none)"))
+        if (deferred) return;
+        RaiseActiveSetChanged("game-data set switch", setName);
+    }
+
+    // Build the active set when its build was put off (SwitchSet with deferBuild),
+    // on this thread. True when it built; false when nothing was put off. why: what
+    // needed it, for the log.
+    public bool BuildDeferredSet(string why)
+    {
+        string? set;
+        lock (_tables)
         {
-            ActiveSetChanged?.Invoke(setName);
+            if (!_buildDeferred) return false;
+            Volatile.Write(ref _buildDeferred, false);
+            set = ActiveSet;
+        }
+        Log?.Log(LogSeverity.Info, "GameData", $"Building game data set '{set}', put off until it was needed: {why}.");
+        RaiseActiveSetChanged("game-data set switch", set);
+        return true;
+    }
+
+    // Every store and index rebuilds for the set here, on this thread: a known long
+    // operation (PerformanceMonitor.MeasureLong).
+    private void RaiseActiveSetChanged(string operation, string? set)
+    {
+        using (Performance?.MeasureLong(operation, set ?? "(none)"))
+        {
+            ActiveSetChanged?.Invoke(set);
             LogTablesHeld();
         }
     }
@@ -365,6 +418,8 @@ public sealed partial class GameDataCache
             set = ActiveSet;
             if (set is null) return;
             EvictAll();
+            // A reload builds the set, whether or not its build was put off.
+            Volatile.Write(ref _buildDeferred, false);
             // Drop any still-unclaimed background prewarm for this set, running or
             // done — it predates the re-import, so claiming it later would hand back
             // stale tables. (Startup prewarm entries are normally claimed long before
@@ -384,11 +439,7 @@ public sealed partial class GameDataCache
             }
         }
         Log?.Log(LogSeverity.Info, "GameData", $"Re-ingested game data set '{set}'.");
-        using (Performance?.MeasureLong("game-data set reload", set))
-        {
-            ActiveSetChanged?.Invoke(set);
-            LogTablesHeld();
-        }
+        RaiseActiveSetChanged("game-data set reload", set);
     }
 
     // Lazy-load (or return the cached) table tableName of the active set. Returns

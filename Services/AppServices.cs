@@ -3074,7 +3074,7 @@ public sealed class AppServices
                 ("Character", Profile.CurrentProfileName ?? "(none loaded)"),
                 ("BBS", Profile.CurrentBbsName ?? "(none)"),
                 ("Realm", BugReportBuilder.RealmLabel(GameData.ActiveRealm)),
-                ("Active game-data set", GameData.ActiveSet ?? "(none)"),
+                ("Active game-data set", BugReportBuilder.ActiveSetLabel(this)),
                 ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
                 ("Log to send with this", CrashReporter.LogToSend()),
             ],
@@ -10890,8 +10890,9 @@ public sealed class AppServices
             (from, room) => Game.Map.WalkReach.OnItsMap(RoomGraph, from, room));
         RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
         StandardListContradictions = new Game.Recovery.StandardListContradictions(
-            () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
-            () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
+            ResolveActiveRealm, () => GameData.ActiveSet, Bbs.Save, Log);
+        Profile.ProfileLoaded += _ => StandardListContradictions.RetryUnsaved();
+        InGameCapture.InGameChanged += inGame => { if (inGame) StandardListContradictions.RetryUnsaved(); };
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
             RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
             RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
@@ -11089,6 +11090,20 @@ public sealed class AppServices
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
+
+        // A launch that comes up on the unnamed draft chooses its game-data set but
+        // builds nothing from it until something needs it (BuildDeferredGameData):
+        // most such launches go straight on to load a character on another set, and
+        // the draft's build (seconds, with a room graph, loops and indexes) was
+        // thrown away (Hang-20261026-215238). Not in the launch that loads what the
+        // default profile held before its reset: that draft may hold a room, which
+        // only a built room graph can place.
+        _deferDraftGameDataBuild = defaultProfileBeforeReset is null;
+        // Once per process: a class handler outlives the instance that adds it.
+        if (Interlocked.Exchange(ref s_windowOpenHooked, 1) == 0)
+            Avalonia.Controls.Window.WindowOpenedEvent.AddClassHandler<Avalonia.Controls.Window>(
+                (window, _) => CurrentOrNull?.OnWindowOpenedForGameData(window),
+                Avalonia.Interactivity.RoutingStrategies.Direct);
 
         // Startup profile priority: a --profile launch argument wins over the
         // "Auto-load last profile" setting, which wins over a blank draft. The CLI
@@ -16722,8 +16737,34 @@ public sealed class AppServices
     {
         string? outer = _gameDataSwitchCause;
         _gameDataSwitchCause = because;
-        try { GameData.SwitchSet(ProfileGameDataSet()); }
+        // Only the startup draft puts the build off; the first named profile ends it.
+        bool defer = _deferDraftGameDataBuild && Profile.CurrentProfileName is null;
+        if (!defer) _deferDraftGameDataBuild = false;
+        try { GameData.SwitchSet(ProfileGameDataSet(), deferBuild: defer); }
         finally { _gameDataSwitchCause = outer; }
+    }
+
+    // While the startup draft's game-data build is put off (see the startup profile
+    // load). UI thread.
+    private bool _deferDraftGameDataBuild;
+
+    // Build the startup draft's game-data set now, when its build was put off: the
+    // draft is about to need it (a connect, a window that shows game data, typing at
+    // the terminal or opening its menu, a local API request). A no-op once built. UI
+    // thread.
+    public void BuildDeferredGameData(string why)
+    {
+        _deferDraftGameDataBuild = false;
+        if (!GameData.BuildDeferred) return;
+        GameData.BuildDeferredSet(why);
+    }
+
+    private static int s_windowOpenHooked;
+
+    private void OnWindowOpenedForGameData(Avalonia.Controls.Window window)
+    {
+        if (!GameData.BuildDeferred || window is IShowsNoGameData) return;
+        BuildDeferredGameData($"the {window.GetType().Name} opened");
     }
 
     // Set while a profile event is switching the set, for the stop that switch makes.
