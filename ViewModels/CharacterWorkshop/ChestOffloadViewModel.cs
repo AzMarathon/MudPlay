@@ -186,6 +186,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
     private void RebuildContainers(InventorySnapshot snap)
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload containers");
         Containers.Clear();
         foreach (string token in snap.CarriedItems)
         {
@@ -209,6 +210,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // moves survive. Simulated chests keep their own view.
     private void OnChestsChanged()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload list changed");
         SayLootToRoom = _chests.SayLootToRoom;   // a profile swap brings its own setting
         if (!_simulating) RebuildLoot();
     }
@@ -275,6 +277,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private void ReconcileConfirmed(string name, int count, ChestOpenTracker.Departure how)
     {
         if (_simulating || count <= 0) return;
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload reconcile", name);
         string did = how.ToString().ToLowerInvariant();
         if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
         {
@@ -327,7 +330,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // Shared by the real inventory diff and the "Simulate Chest" test button.
     private void RenderLoot(IReadOnlyList<(string Name, int Count)> gains)
     {
-
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload render");
         // A shop can serve several rooms; take the first (kept as a field so the
         // "sell elsewhere" popup and item moves can look shops up later). UI thread.
         _shopRoom = new Dictionary<int, Room>();
@@ -444,6 +447,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
             long started = Stopwatch.GetTimestamp();
             IReadOnlyList<(int Shop, int? Steps)> trip = await Task.Run(() =>
             {
+                using PerformanceMonitor.Scope? timed = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload trip");
                 Func<RoomKey, RoomKey, int?> memo = _bfs.DistanceMemo(_movement);
                 return ChestOffloadPlanner.RouteShops(here, shops, (a, b) =>
                 {
@@ -478,6 +482,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
     private void ApplyRoute(RoomKey here, IReadOnlyList<(int Shop, int? Steps)> trip)
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("Chest Offload trip applied");
         _lastTrip.Clear();
         int at = 0;
         foreach ((int shop, int? steps) in trip)

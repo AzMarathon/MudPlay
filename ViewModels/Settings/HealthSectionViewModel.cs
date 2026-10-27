@@ -348,7 +348,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     // ticker's lower bound matches where the game actually kills the character.
     private static int TryGetDeathFloor()
     {
-        try { return AppServices.Current.ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25; }
+        try { return AppServices.Current.PeekActiveRealm()?.Realm.PlayerDiesAtHp ?? -25; }
         catch { return -25; }    // design-time
     }
 

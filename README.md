@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.15**
-> - Editing a loop-builder step's action no longer crashes the client when the builder closed while the editor was open
-> - Live edits from the running-loop rail, and a loop editor's "Restart now", are dropped if that run has ended meanwhile
+> **Version 3.186.16**
+> - Route searches several times faster, with far less memory churn, most of all on Windows
+> - Chest Offload's shop trip worked out about 13× faster
+> - BBS settings read for a check (PvP, death floor, coin name) are parsed again only when bbs.json changes
+> - Hang reports and the program log now name a slow room-change, inventory or Chest Offload step
+> - Background route searches no longer risk corrupting the room-spell counter check
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

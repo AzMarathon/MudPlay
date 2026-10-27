@@ -136,7 +136,7 @@ public sealed class MovementFilter : IRoomFilter
     // Whether the crosser holds an item gate's item as far as crossing goes.
     // perMember is an Item / Ticket exit, where a party short of copies doesn't.
     public bool HoldsGateItem(int itemId, bool perMember) =>
-        ItemCarriedProbe?.Invoke(itemId) == true
+        Carries?.Invoke(itemId) == true
         && !(perMember && PartyShortOfItemProbe?.Invoke(itemId) == true);
 
     // True once an inventory dump has parsed. Until then the item / hazard
@@ -226,6 +226,145 @@ public sealed class MovementFilter : IRoomFilter
     // The counter items a walk will obtain on its own for entering a hazard room.
     // Wired by AppServices to the same list the walk-start announce posts needs for.
     public Func<RoomKey, IReadOnlyList<int>>? HazardProvisionProbe { get; set; }
+
+    // ----- One search's readings ---------------------------------------------
+    // A search asks about every exit it weighs, tens of thousands of them for a
+    // search of the whole map, and some of what the gates read is dear to ask:
+    // whether a bare lock may be bashed reads the BBS's realm settings (bbs.json,
+    // from disk, each time), and whether an item is carried matches the whole pack
+    // by name. Asked per exit, one search of a Paradigm map read bbs.json some 650
+    // times and allocated over 100 MB, half a second and more on Windows (report
+    // paradigm-20261026-201217). None of these readings changes while a search
+    // runs, so BfsMapper opens each search (BeginSearch) and they are read once in
+    // it, on the thread it runs on. What a scope or flag of this filter sets (the
+    // gate suspensions, the toll warm-up's) is still read as it stands.
+    [ThreadStatic] private static SearchReadings? t_search;
+
+    private SearchReadings? Search => t_search is { } open && ReferenceEquals(open.Owner, this) ? open : null;
+
+    // Opens this thread's search, or joins the one open: a nested search (a way out
+    // of the lake's rooms, a memo's fallback) reads what its outer one read. Null
+    // while another filter's search is open on this thread, which this one then
+    // leaves alone and reads live.
+    public IDisposable? BeginSearch()
+    {
+        if (t_search is { } open)
+        {
+            if (!ReferenceEquals(open.Owner, this)) return null;
+            open.Depth++;
+            return open;
+        }
+        return t_search = new SearchReadings(this);
+    }
+
+    private sealed class SearchReadings(MovementFilter owner) : IDisposable
+    {
+        public readonly MovementFilter Owner = owner;
+        public int Depth = 1;
+        public bool? InventoryKnown;
+        public bool? BareLockTrialsAllowed;
+        public int? MaxBash;
+        public (bool Read, int? Value) Strength, Picklocks, Level, ClassNumber, RaceNumber;
+        public (bool Read, (int Low, int High)? Value) PartyLevelBounds;
+        public (bool Read, long? Value) Wealth;
+        public (bool Read, RoomKey? Value) StandingRoom;
+        public IReadOnlyList<int?>? Alignments;
+        public Func<int, bool>? Carries, NegatorUsable;
+
+        public void Dispose()
+        {
+            if (--Depth == 0 && ReferenceEquals(t_search, this)) t_search = null;
+        }
+    }
+
+    // An item answer per item for the search: the probe is a scan of the pack.
+    private static Func<int, bool> Memoised(Func<int, bool> probe)
+    {
+        Dictionary<int, bool> known = new();
+        return id =>
+        {
+            if (!known.TryGetValue(id, out bool answer)) known[id] = answer = probe(id);
+            return answer;
+        };
+    }
+
+    // Each reading below is asked of its provider once a search, or every time
+    // outside one. Written out rather than through a shared helper taking the read
+    // as a lambda: a lambda over this filter is a new object on every call, and
+    // these are asked per exit.
+    private int? Strength()
+    {
+        if (Search is not { } s) return StrengthProvider?.Invoke();
+        if (!s.Strength.Read) s.Strength = (true, StrengthProvider?.Invoke());
+        return s.Strength.Value;
+    }
+
+    private int? Picklocks()
+    {
+        if (Search is not { } s) return PicklocksProvider?.Invoke();
+        if (!s.Picklocks.Read) s.Picklocks = (true, PicklocksProvider?.Invoke());
+        return s.Picklocks.Value;
+    }
+
+    private int MaxBash() => Search is { } s ? s.MaxBash ??= ReadMaxBash() : ReadMaxBash();
+
+    private int ReadMaxBash() => MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+
+    private int? Level()
+    {
+        if (Search is not { } s) return LevelProvider?.Invoke();
+        if (!s.Level.Read) s.Level = (true, LevelProvider?.Invoke());
+        return s.Level.Value;
+    }
+
+    private (int Low, int High)? PartyLevelBounds()
+    {
+        if (Search is not { } s) return PartyLevelBoundsProvider?.Invoke();
+        if (!s.PartyLevelBounds.Read) s.PartyLevelBounds = (true, PartyLevelBoundsProvider?.Invoke());
+        return s.PartyLevelBounds.Value;
+    }
+
+    private int? ClassNumber()
+    {
+        if (Search is not { } s) return ClassNumberProvider?.Invoke();
+        if (!s.ClassNumber.Read) s.ClassNumber = (true, ClassNumberProvider?.Invoke());
+        return s.ClassNumber.Value;
+    }
+
+    private int? RaceNumber()
+    {
+        if (Search is not { } s) return RaceNumberProvider?.Invoke();
+        if (!s.RaceNumber.Read) s.RaceNumber = (true, RaceNumberProvider?.Invoke());
+        return s.RaceNumber.Value;
+    }
+
+    private long? Wealth()
+    {
+        if (Search is not { } s) return WealthProvider?.Invoke();
+        if (!s.Wealth.Read) s.Wealth = (true, WealthProvider?.Invoke());
+        return s.Wealth.Value;
+    }
+
+    private RoomKey? StandingRoom()
+    {
+        if (Search is not { } s) return StandingRoomProbe?.Invoke();
+        if (!s.StandingRoom.Read) s.StandingRoom = (true, StandingRoomProbe?.Invoke());
+        return s.StandingRoom.Value;
+    }
+
+    private IReadOnlyList<int?>? PartyAlignments() =>
+        Search is { } s ? s.Alignments ??= PartyAlignmentsProvider?.Invoke() : PartyAlignmentsProvider?.Invoke();
+
+    // Whether the crosser holds an item, as ItemCarriedProbe answers; null while unwired.
+    private Func<int, bool>? Carries =>
+        ItemCarriedProbe is not { } probe ? null
+        : Search is { } s ? s.Carries ??= Memoised(probe)
+        : probe;
+
+    private Func<int, bool>? NegatorUsable =>
+        NegatingItemUsableProbe is not { } probe ? null
+        : Search is { } s ? s.NegatorUsable ??= Memoised(probe)
+        : probe;
 
     // Read-only snapshot of the currently-avoided room keys.
     public IReadOnlyCollection<RoomKey> Avoided => _avoided;
@@ -317,7 +456,7 @@ public sealed class MovementFilter : IRoomFilter
         // Suspended — UNLESS this exit gates on an item we're keeping closed to probe
         // whether it's genuinely required (then fall through to the live check).
         if (AcquirableGatesSuspended && !ExitGatesOnAny(in exit, KeptClosedGateItems)) return false;
-        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
+        if (!InventoryKnown || Carries is not { } carries) return false;
 
         // An exit whose spell teleports the crosser on, and to the side routes are
         // planned through only when they have an item: without it the step still
@@ -381,7 +520,7 @@ public sealed class MovementFilter : IRoomFilter
             // Its key is then what the route picker offers to fetch, as for a door
             // its pick can't open: a pick at poor odds counts as none, the way such a
             // lock was the key or nothing before the pick was known to work there.
-            if (PicklocksProvider?.Invoke() is not { } picks) return true;
+            if (Picklocks() is not { } picks) return true;
             return DoorPolicy.PickChancePercent(DoorPolicy.BareKeyLockPickRequirement, picks) < DoorPolicy.PoorPickChancePercent;
         }
         return !CanOpenByStat(in exit);
@@ -406,9 +545,9 @@ public sealed class MovementFilter : IRoomFilter
     // door to the traversal-time FSM rather than route around an unknown build.
     private bool CanOpenByStat(in RoomExit exit)
     {
-        if (StrengthProvider?.Invoke() is not { } strength) return true;
-        if (PicklocksProvider?.Invoke() is not { } picks) return true;
-        int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+        if (Strength() is not { } strength) return true;
+        if (Picklocks() is not { } picks) return true;
+        int maxBash = MaxBash();
         (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return DoorPolicy.IsAchievable(req, canBash, strength, picks, maxBash);
     }
@@ -424,11 +563,11 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0)
         {
             if (AcquirableGatesSuspended && !ExitGatesOnAny(in exit, KeptClosedGateItems)) return false;
-            if (InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
+            if (InventoryKnown && Carries?.Invoke(exit.KeyItemId) == true) return false;
         }
-        if (StrengthProvider?.Invoke() is not { } strength) return false;
-        if (PicklocksProvider?.Invoke() is not { } picks) return false;
-        int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+        if (Strength() is not { } strength) return false;
+        if (Picklocks() is not { } picks) return false;
+        int maxBash = MaxBash();
         (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return DoorPolicy.IsPoorOddsPick(req, canBash, strength, picks, maxBash);
     }
@@ -445,9 +584,9 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
         if (UnpickableDoorProbe?.Invoke(from, exit.Target) != true) return false;
         if (HeldOpenProbe?.Invoke(from, exit.Target) == true) return false;
-        if (exit.KeyItemId > 0 && InventoryKnown && ItemCarriedProbe?.Invoke(exit.KeyItemId) == true) return false;
-        if (StrengthProvider?.Invoke() is not { } strength) return false;
-        int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+        if (exit.KeyItemId > 0 && InventoryKnown && Carries?.Invoke(exit.KeyItemId) == true) return false;
+        if (Strength() is not { } strength) return false;
+        int maxBash = MaxBash();
         (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         return !DoorPolicy.IsAchievable(req, canBash, strength, playerPicklocks: 0, maxBash);
     }
@@ -464,7 +603,10 @@ public sealed class MovementFilter : IRoomFilter
     // → it may.
     public Func<bool>? BareLockTrialsAllowedProbe { get; set; }
 
-    private bool BareLockTrialsAllowed => BareLockTrialsAllowedProbe?.Invoke() ?? true;
+    private bool BareLockTrialsAllowed =>
+        Search is { } s ? s.BareLockTrialsAllowed ??= ReadBareLockTrialsAllowed() : ReadBareLockTrialsAllowed();
+
+    private bool ReadBareLockTrialsAllowed() => BareLockTrialsAllowedProbe?.Invoke() ?? true;
 
     // A bare lock the handler would only try a bash at, where it may not: planned as
     // the key exit it may be, so its key is what the route picker offers.
@@ -473,7 +615,7 @@ public sealed class MovementFilter : IRoomFilter
         && !exit.BareLockAnsweredAsDoor && !BareLockTrialsAllowed;
 
     public int DoorRuleStamp => HashCode.Combine(
-        StrengthProvider?.Invoke(), PicklocksProvider?.Invoke(), MaxBashableStrengthProvider?.Invoke(),
+        Strength(), Picklocks(), MaxBash(),
         BareLockBookVersionProvider?.Invoke(), HeldOpenVersionProvider?.Invoke(), BareLockTrialsAllowed);
 
     public string? DescribeDoorRefusal(in RoomExit exit)
@@ -481,13 +623,13 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return null;
         bool shut = exit.Hint == RoomExitHint.Door ? IsImpassableDoorBlocked(in exit) : IsItemGateBlocked(in exit);
         if (!shut && !IsPoorOddsDoor(in exit)) return null;
-        if (StrengthProvider?.Invoke() is not { } strength || PicklocksProvider?.Invoke() is not { } picks)
+        if (Strength() is not { } strength || Picklocks() is not { } picks)
             return exit.IsBareKeyLock
                 ? $"needs its key (item {exit.KeyItemId}), not carried, or a pick: "
                   + (BareLockBashNotCountedOn(in exit) ? "no bash is tried on a PvP realm until it has answered as a door" : "it is a key exit")
                   + " (no stat screen read)"
                 : null;
-        int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
+        int maxBash = MaxBash();
         (int req, bool canBash) = DoorPolicy.PlannedOpeners(in exit, BareLockTrialsAllowed);
         string odds = DoorPolicy.DescribeOdds(req, canBash, strength, picks, maxBash,
             exit.IsBareKeyLock ? exit.BareLockBash : null, bareLockBashTried: !BareLockBashNotCountedOn(in exit));
@@ -515,15 +657,15 @@ public sealed class MovementFilter : IRoomFilter
         // own legs either (user, 2026-10-10: nobody loops those rooms). Nothing
         // carried changes that, so it doesn't wait for the inventory to be read.
         if (!HazardCounterProtects(hazard)) return true;
-        if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
-        if (!AcquirableGatesSuspended) return !hazard.IsSatisfiedBy(carries, NegatingItemUsableProbe);
+        if (!InventoryKnown || Carries is not { } carries) return false;
+        if (!AcquirableGatesSuspended) return !hazard.IsSatisfiedBy(carries, NegatorUsable);
         if (!KeepsUncounteredHazards) return false;
 
         // Planning through gates with uncountered hazards kept: the room opens only
         // when what is carried plus what the walk will obtain covers it. An item
         // the walk fetches is worn on the same terms as one already in the pack.
         IReadOnlyList<int> arranged = HazardProvisionProbe?.Invoke(exit.Target) ?? Array.Empty<int>();
-        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id), NegatingItemUsableProbe);
+        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id), NegatorUsable);
     }
 
     // The room the character stands in, when the tracker is sure of it.
@@ -538,7 +680,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool SharesHazardStoodIn(in RoomExit exit)
     {
         if (AcquirableGatesSuspended || Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
-        if (StandingRoomProbe?.Invoke() is not { } here) return false;
+        if (StandingRoom() is not { } here) return false;
         if (Hazards.HazardForSpell(spellOf(here)) is not { } mine || !HazardCounterProtects(mine)) return false;
         if (Hazards.HazardForSpell(spellOf(exit.Target)) is not { } theirs || !HazardCounterProtects(theirs)) return false;
         return ReferenceEquals(mine, theirs) || mine.ProtectingItems.Intersect(theirs.ProtectingItems).Any();
@@ -588,8 +730,8 @@ public sealed class MovementFilter : IRoomFilter
     private ClosedRoomTerms TermsOf(RoomHazardIndex.RoomHazard hazard) => new(
         hazard.CounterHolderMinLevel,
         hazard.ProtectingItems,
-        LevelMet: LevelProvider?.Invoke() is { } level && level >= hazard.CounterHolderMinLevel,
-        ItemHeld: InventoryKnown && ItemCarriedProbe is { } carries && hazard.IsSatisfiedBy(carries));
+        LevelMet: Level() is { } level && level >= hazard.CounterHolderMinLevel,
+        ItemHeld: InventoryKnown && Carries is { } carries && hazard.IsSatisfiedBy(carries));
 
     public bool MayCrossClosedRooms()
     {
@@ -606,7 +748,10 @@ public sealed class MovementFilter : IRoomFilter
     public bool TeleportsOnArrival(RoomKey room) =>
         RoomEntrySpellProbe?.Invoke(room) is > 0 and int spell && SpellTeleportsAtRandomProbe?.Invoke(spell) == true;
 
-    private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;
+    private bool InventoryKnown =>
+        Search is { } s ? s.InventoryKnown ??= ReadInventoryKnown() : ReadInventoryKnown();
+
+    private bool ReadInventoryKnown() => InventoryReadyProbe?.Invoke() == true;
 
     // Suspends the four acquirable gates for a single planning pass so a caller
     // can compute the route the crosser WOULD take with every gate item in hand
@@ -686,7 +831,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsClassGateBlocked(in RoomExit exit)
     {
         if (!exit.HasClassGate) return false;
-        if (ClassNumberProvider?.Invoke() is { } myClass) return myClass != exit.ClassGate;
+        if (ClassNumber() is { } myClass) return myClass != exit.ClassGate;
 
         // Class unknown (stat screen not parsed yet — e.g. just after login). A class
         // gate NEVER opens for the wrong class, so for a class-gated TELEPORT — a
@@ -704,7 +849,7 @@ public sealed class MovementFilter : IRoomFilter
     // a class-gated cardinal: an unparsed character walks up and halts on the
     // game's own refusal rather than being routed around on a guess.
     private bool IsRaceGateBlocked(in RoomExit exit)
-        => exit.HasRaceGate && RaceNumberProvider?.Invoke() is { } myRace && myRace != exit.RaceGate;
+        => exit.HasRaceGate && RaceNumber() is { } myRace && myRace != exit.RaceGate;
 
     // An "(Alignment: X to Y)" exit admits only crossers whose alignment value is
     // inside [X, Y]. Whole-party: block (route around) when ANY member whose
@@ -716,7 +861,7 @@ public sealed class MovementFilter : IRoomFilter
     private bool IsAlignmentGateBlocked(in RoomExit exit)
     {
         if (exit.AlignmentGate is not { } gate) return false;
-        if (PartyAlignmentsProvider?.Invoke() is not { Count: > 0 } aligns) return false;
+        if (PartyAlignments() is not { Count: > 0 } aligns) return false;
         foreach (int? a in aligns)
             if (a is int v && !Game.Calculators.AlignmentBands.Admits(gate, v)) return true;
         return false;
@@ -741,14 +886,14 @@ public sealed class MovementFilter : IRoomFilter
     {
         if (minLevel <= 0 && maxLevel <= 0) return false;
 
-        if (!_partyLevelGateSuspended && PartyLevelBoundsProvider?.Invoke() is { } bounds)
+        if (!_partyLevelGateSuspended && PartyLevelBounds() is { } bounds)
         {
             if (minLevel > 0 && bounds.Low < minLevel) return true;
             if (maxLevel > 0 && bounds.High > maxLevel) return true;
             return false;
         }
 
-        if (LevelProvider?.Invoke() is not { } level) return false;  // level unknown → don't gate
+        if (Level() is not { } level) return false;  // level unknown → don't gate
         return LevelIgnoringFilter.OutsideLevelWindow(level, minLevel, maxLevel);
     }
 
@@ -866,7 +1011,7 @@ public sealed class MovementFilter : IRoomFilter
 
     // Our own coin free for a toll or fare: the record less what a trip has set
     // aside. Null while the record isn't known.
-    private long? SparePurse() => WealthProvider?.Invoke() is { } wealth ? wealth - Math.Max(0, ReservedCopper) : null;
+    private long? SparePurse() => Wealth() is { } wealth ? wealth - Math.Max(0, ReservedCopper) : null;
 
     // Whether a refusal keeps this exit closed as things stand.
     private bool IsRefusedCrossing(in RoomExit exit)

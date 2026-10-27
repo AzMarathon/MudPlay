@@ -165,10 +165,6 @@ public sealed class RoomSpellCounterWear
     public Func<bool>? MasterSwitchOff { get; set; }
     public Func<bool>? MasterSwitchIsOff { get; set; }
 
-    // Raised when what WillWear answers may have changed, so a caller that keeps
-    // the answers (the route planner's memo) can drop them.
-    public event Action? UsabilityChanged;
-
     public RoomSpellCounterWear(
         EquipmentManager equipment,
         MovementCoordinator coordinator,
@@ -398,7 +394,6 @@ public sealed class RoomSpellCounterWear
         if (_shelved.Count > 0)
         {
             _shelved.Clear();
-            UsabilityChanged?.Invoke();
         }
         Recheck();
     }
@@ -415,7 +410,6 @@ public sealed class RoomSpellCounterWear
         _log?.Info(LogCategory, $"{Owner}: {why} — {_refused.Count} refused item(s) will be tried again");
         _refused.Clear();
         _saidUnwearable.Clear();
-        UsabilityChanged?.Invoke();
         Recheck();
     }
 
@@ -453,7 +447,6 @@ public sealed class RoomSpellCounterWear
             _shelved.Remove(id);
             Confirm(late);
             _log?.Info(LogCategory, $"{Owner}: '{late.Name}' went on after all — its slot is held until it is no longer needed");
-            UsabilityChanged?.Invoke();
         }
     }
 
@@ -502,7 +495,6 @@ public sealed class RoomSpellCounterWear
             .Select(static kv => kv.Key).ToList();
         if (freed.Count == 0) return;
         foreach (int id in freed) _shelved.Remove(id);
-        UsabilityChanged?.Invoke();
     }
 
     private bool SharePlaces(int item, int other) =>
@@ -525,7 +517,6 @@ public sealed class RoomSpellCounterWear
         _saidRestoreHeld.Clear();
         _stepHeldOut = false;
         if (_pending is not null) EndPending("another character was loaded");
-        UsabilityChanged?.Invoke();
     }
 
     private bool IsOn(int id)
@@ -585,7 +576,6 @@ public sealed class RoomSpellCounterWear
                     $"{Owner}: '{wear.Name}' isn't in the pack — going on with {spell} uncountered; it is looked for again at the next full inventory read",
             });
         }
-        UsabilityChanged?.Invoke();
         if (ReferenceEquals(_pending, wear)) EndPending("the wear came to nothing");
     }
 
@@ -629,7 +619,6 @@ public sealed class RoomSpellCounterWear
                 _log?.Info(LogCategory,
                     $"{Owner}: '{pick.Name}' would negate {spell} in {room.Key}, but it can't be put on (not in the pack as read) — going on uncountered");
                 _shelved[pick.Id] = SlotWearAnswer.NotInPack;
-                UsabilityChanged?.Invoke();
                 return false;
         }
         _owned[pick.Id] = new Owned(pick.Name, null, room.Spell);
@@ -699,7 +688,6 @@ public sealed class RoomSpellCounterWear
             _log?.Info(LogCategory,
                 $"{Owner}: no answer to the wear of '{wear.Name}' in {AnswerCap.TotalSeconds:0}s — going on; "
                 + "it isn't tried again until the inventory is next read in full");
-            UsabilityChanged?.Invoke();
             EndPending("no answer in time");
             _schedule(LateAnswerWindow, () =>
             {
