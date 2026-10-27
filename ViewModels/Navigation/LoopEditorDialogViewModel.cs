@@ -510,10 +510,20 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
                 // adopts the new name too); No → leave the runner on the in-memory
                 // pre-edit version — name and path both stay as they're actually
                 // running, and a later Run picks up the new disk version.
+                Loop? asked = runner.CurrentLoop;
                 bool restart = await confirm.ConfirmAsync(
                     "Apply to running loop?",
                     "You edited the loop that's currently running. Restart the runner with the new version now?",
                     yesLabel: "Restart now");
+                // The prompt is modeless: a Yes for a run that has since stopped, or
+                // been replaced, would restart a loop the user ended or end the one
+                // they started.
+                if (restart && !ReferenceEquals(runner.CurrentLoop, asked))
+                {
+                    AppServices.CurrentOrNull?.Log.Debug("Loops",
+                        $"restart of loop '{_original.Name}' with its edit dropped: the run it was asked for has ended");
+                    restart = false;
+                }
                 // A restart is a start: with the master switch off it is refused
                 // (with the notice) and the runner stays on the version it holds.
                 if (restart && !AppServices.Current.RefuseStartForMasterSwitch("Loop"))
