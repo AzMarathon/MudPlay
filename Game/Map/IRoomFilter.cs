@@ -41,6 +41,13 @@ public interface IRoomFilter
 {
     bool IsAvoided(RoomKey key);
 
+    // Opened by BfsMapper around each search it runs, and disposed when the search
+    // is over: a filter whose answers rest on readings that are dear to ask reads
+    // each once for the search (Services.MovementFilter). A search inside another
+    // shares the outer one's. A filter that wraps another passes it on. Default:
+    // nothing to hold.
+    IDisposable? BeginSearch() => null;
+
     // True when the exit's movement restriction (e.g. a Form-A
     // (Level: MIN to MAX) gate) excludes the player, making the exit
     // non-traversable for path planning. Default implementation never

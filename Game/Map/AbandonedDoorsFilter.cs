@@ -25,6 +25,7 @@ public sealed class AbandonedDoorsFilter : IRoomFilter
         || (_inner?.IsExitRefused(from, in exit) ?? false);
 
     public bool IsAvoided(RoomKey key) => _inner?.IsAvoided(key) ?? false;
+    public IDisposable? BeginSearch() => _inner?.BeginSearch();
     public bool IsExitHeldOpen(RoomKey from, in RoomExit exit) => _inner?.IsExitHeldOpen(from, in exit) ?? false;
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
     public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;

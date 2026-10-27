@@ -4152,10 +4152,10 @@ public sealed class AppServices
         GameData.ActiveSetChanged += set => Quests.OnActiveSetChanged(set, ActiveRealmFolder());
         Tick.HeartbeatElapsed += () => Quests.TakeInOutsideChanges();
         Emotes = new EmoteStore(log: Log);
-        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Profile.ProfileClosed += () => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Profile.ProfileClosed += () => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
         Tick.HeartbeatElapsed += () => Emotes.TakeInOutsideChanges();
 
         // Boss catalog — the realm's list (seed + the realm's overlay); timer values
@@ -4252,7 +4252,7 @@ public sealed class AppServices
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
         // when the active set rebuilds.
-        RoomTracker = new Game.Map.RoomTracker(RoomGraph, Log);
+        RoomTracker = new Game.Map.RoomTracker(RoomGraph, Log, performance: Performance);
         RoomGraph.GraphReloaded += () => RoomTracker.OnGraphReloaded();
 
         // Shared engine-level recovery gate. The walker and the loop runner
@@ -4408,7 +4408,7 @@ public sealed class AppServices
 
         // BFS pathfinding + planar layout. Layout
         // cache invalidates on every graph reload.
-        Bfs = new Game.Map.BfsMapper(RoomGraph, Log);
+        Bfs = new Game.Map.BfsMapper(RoomGraph, Log, Performance);
         RoomGraph.GraphReloaded += Bfs.OnGraphReloaded;
         // Pre-warm the layout on a thread-pool task so the user
         // doesn't pay the BFS cost on the UI thread when they first
@@ -4601,7 +4601,7 @@ public sealed class AppServices
         // ahead of them: they ask it about the room inside their own handlers.
         PvpRoom = new Game.Pvp.PvpRoomSafety(
             Router, RoomClassifier,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             classOf: ResolveKnownPlayerClass,
             levelOf: given => Players.Find(given)?.Level,
@@ -4792,7 +4792,7 @@ public sealed class AppServices
             readParty: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal),
             log: Log,
-            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
+            readDeathFloor: () => PeekActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
 
         // Mid-room arrival watcher. Subscribes to the
         // RoomEntryArrival pattern + appends to the classifier so the
@@ -4807,7 +4807,7 @@ public sealed class AppServices
         PvpRoom.SetPartySplit(PartySplit);
         PvpAttacks = new Game.Pvp.PvpAttackWatcher(
             Router, RoomClassifier, PvpRoom, Players, PartyState, PartySplit,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             flipFriends: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp")
                 .FlipFriendToEnemyIfAttacked,
             ownGivenName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
@@ -4842,10 +4842,10 @@ public sealed class AppServices
             PartyState.Members.Any(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase))
             || Players.Find(name) is not null);
         RoundDamage.Attributed += line => RecentFoes.Note(line.Sides);
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("recent foes", t =>
         {
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) RecentFoes.Clear();
-        };
+        });
         // Boss-timer auto-start. MUST be the FIRST MonsterDied subscriber: it reads
         // the engaged target name (CombatManager.CurrentTarget) live, and a later
         // subscriber (the roster-resync below) clears it via NoteUnattributedDeath.
@@ -5189,7 +5189,7 @@ public sealed class AppServices
             // Per-realm negative-HP death floor: keeps the emergency
             // hangup firing through the bleeding-out window down to the
             // point the character actually dies.
-            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25,
+            readDeathFloor: () => PeekActiveRealm()?.Realm.PlayerDiesAtHp ?? -25,
             log: Log,
             // Emergency hangup drops the carrier on purpose — flag it so the
             // reactive-reconnect path doesn't immediately dial back in.
@@ -5373,7 +5373,7 @@ public sealed class AppServices
         // Server-side resting state clears on move; drop our latch
         // too so the next threshold breach actually fires `rest`
         // again instead of skipping it on a stale _restInFlight.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("health", t =>
         {
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
             if (t.PreviousRoom is null || t.NewRoom is null)
@@ -5388,18 +5388,18 @@ public sealed class AppServices
             Health.NoteRoomChanged(t.NewRoom.Key);
             // A move retries any party-buff targets we'd backed off as hidden.
             CastDirector.NoteRoomChanged();
-        };
+        });
 
         // Item-boss Grab-All: walking into a room that holds a Grab-All *item* boss
         // (a box, not a monster) fires a blind `get` for it — item bosses never die,
         // so they're grabbed on entry instead of on death. Separate handler with a
         // looser guard so it fires on the very first room entry too (a teleport-in).
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("item boss grab", t =>
         {
             if (t.NewRoom is not { } nr) return;
             if (t.PreviousRoom is { } pr && pr.Key.Equals(nr.Key)) return;
             FireItemBossGrabOnEntry(nr.Key);
-        };
+        });
 
         // CastCoordinator. Subscribes to spell-failure
         // patterns directly; tick-clears its block latch + cooldown via
@@ -5436,7 +5436,7 @@ public sealed class AppServices
                 inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
                 blinded: Conditions.IsBlinded,
                 RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster,
-                pvpRealm: ResolveActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
+                pvpRealm: PeekActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
         Conditions.SetCastReach(CastReach);
         Conditions.CasterNamed += RoomClassifier.NoteCasterNamed;
         // Watches the same wire for lines neither the message catalogue above nor any
@@ -5646,7 +5646,7 @@ public sealed class AppServices
             log: Log);
         SneakGuard.SetWireSender(cmd => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(cmd + "\r")));
         Tick.HeartbeatElapsed += SneakGuard.Poll;
-        RoomTracker.StateChanged += _ => SneakGuard.Poll();
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("sneak guard", _ => SneakGuard.Poll());
         Profile.ProfileLoaded += _ => SneakGuard.Reset();
         // In-between spells (heals included, per the user) wait on the same rule;
         // debuffs have their own backstab gate (CombatSpellChooser.WouldBackstab). A
@@ -5937,10 +5937,10 @@ public sealed class AppServices
             onAttack: Combat.NoteUserAttack,
             isExitCommandHere: IsExitCommandHere);
         Combat.UserBreakHoldNotice += text => WriteTerminalNotice($"[{text}]");
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("combat", t =>
         {
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) Combat.NoteRoomLeft(RoomTracker.LastMoveSentAt);
-        };
+        });
         Profile.ProfileLoaded += _ => Combat.ClearUserBreakHold("another profile was loaded");
         // The room read a held monster's silent round asked for is sent from here
         // when another re-display's cooldown held it back.
@@ -6307,7 +6307,7 @@ public sealed class AppServices
         // CastingSpellTarget, and only one is live at a time.
         CombatTracker.SetAttackInFlightGate(
             () => Combat.CurrentTarget is not null || Combat.CastingSpellTarget is not null);
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("stealth", t =>
         {
             if (t.PreviousRoom is null || t.NewRoom is null) return;
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
@@ -6317,7 +6317,7 @@ public sealed class AppServices
             // here and at rest once StealthManager.HideDwell has passed. The other
             // chance, whatever was walking it stopping, is wired with the dwell below.
             Stealth.NoteIdleOpportunity();
-        };
+        });
 
         // DeathRecoveryManager. Aggregates the profile's
         // DeathHistory list (written by DeathDetector ->
@@ -6350,7 +6350,8 @@ public sealed class AppServices
             // A light whose record is Retain After Uses stays in the pack when it
             // burns out; any other is gone.
             staysWhenSpent: name => ItemNames.FindByName(name) is int number
-                && Game.Inventory.ItemChargeMeta.Read(GameData, number) is { Recharges: true });
+                && Game.Inventory.ItemChargeMeta.Read(GameData, number) is { Recharges: true },
+            performance: Performance);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         // Something in the pack that takes Stealth to nothing (a log raft) stands
         // Auto-Sneak down until it is gone, instead of `sn` being resent into a
@@ -6372,7 +6373,7 @@ public sealed class AppServices
             if (Stats.LastCaptureReadStealth) CarriedStealth.NoteStealthRead();
             Stealth.NoteCarriedChanged();
         };
-        Inventory.Changed += () => Stealth.NoteCarriedChanged();
+        Inventory.Changed += PerformanceMonitor.Named("stealth carried", () => Stealth.NoteCarriedChanged());
         Func<IReadOnlyList<Game.Quests.QuestBonus>?> regenQuestBonuses = () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
             Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog);
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData, regenQuestBonuses);
@@ -6417,10 +6418,10 @@ public sealed class AppServices
                 return (totals.PlusMaxHp, totals.PlusMaxMana);
             },
             Player.ApplyEquipmentMaxDelta);
-        Inventory.Changed += () =>
+        Inventory.Changed += PerformanceMonitor.Named("equipment maxima", () =>
         {
             if (Inventory.IsLoaded) equipmentMaxSync.OnEquippedItemsChanged(Inventory.Snapshot.EquippedItems);
-        };
+        });
         Profile.ProfileLoaded += _ => equipmentMaxSync.Reset();
         GameData.ActiveSetChanged += _ => equipmentMaxSync.Reset();
 
@@ -6482,11 +6483,11 @@ public sealed class AppServices
                 Conditions.IsConfused, Conditions.IsMovementPrevented);
             HiddenSearch.OnBlindnessChanged();
         };
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("time analysis", t =>
         {
             if (t.NewRoom is not null && !ReferenceEquals(t.NewRoom, t.PreviousRoom))
                 TimeAnalysis.NoteRoomChanged();
-        };
+        });
         // In-game gate: the first prompt of the session arms accrual (idempotent
         // — subsequent prompts no-op), so BBS-menu / login time never counts.
         // Same WirePromptScanner the EventScheduler uses for its in-game latch.
@@ -6628,7 +6629,7 @@ public sealed class AppServices
         // live (via ResolveActiveRealm) and re-reads on profile / realm swap. Injected
         // into every cash parser / command builder so a board-renamed runic word
         // is matched on the wire and sent back on outgoing get/drop/hide commands.
-        Currency = new Game.Cash.CurrencyNaming(() => ResolveActiveRealm()?.Realm.RunicCurrencyName);
+        Currency = new Game.Cash.CurrencyNaming(() => PeekActiveRealm()?.Realm.RunicCurrencyName);
         // Program Log → "Log session statistics". The block is built when one is
         // due, so the trackers it reads only have to exist by then.
         SessionStatsLog = new SessionStatsLog(LogDiagnostics, () => InGameCapture.InGame, SessionStatsBlock, Log);
@@ -6764,7 +6765,7 @@ public sealed class AppServices
 
         // Fill in charges for any carried charged item we don't know yet, whenever the
         // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
-        Inventory.Changed += () => ItemCharges.EnsureChargesKnown();
+        Inventory.Changed += PerformanceMonitor.Named("item charges", () => ItemCharges.EnsureChargesKnown());
 
         // An item the game shows gone comes off what is held at once, ahead of the next
         // `i`: a key the door handler found missing or used up, an item a charge look
@@ -6782,10 +6783,10 @@ public sealed class AppServices
         RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
         BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
         Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
-        Movement.BareLockTrialsAllowedProbe = () => ResolveActiveRealm()?.Realm.PvpEnabled != true;
+        Movement.BareLockTrialsAllowedProbe = () => PeekActiveRealm()?.Realm.PvpEnabled != true;
         Door.SetBareLockBook(BareKeyLocks,
             word => Game.Map.BashTargetWord.NamesSomeoneIn(RoomClassifier, word),
-            pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);
+            pvpOn: () => PeekActiveRealm()?.Realm.PvpEnabled == true);
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
 
@@ -6987,7 +6988,7 @@ public sealed class AppServices
             readOther: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other"),
             equipment: Equipment,
             log: Log);
-        RoomTracker.StateChanged += t => LocationEquip.OnRoomChanged(t.NewRoom);
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("location equip", t => LocationEquip.OnRoomChanged(t.NewRoom));
         Profile.ProfileLoaded += _ => LocationEquip.OnProfileSwapped();
 
         // Room-spell counters: an item that negates a room's spell only works worn
@@ -7024,24 +7025,22 @@ public sealed class AppServices
             log: Log);
         // A wear the locked send gate would drop is not claimed and not waited for.
         Equipment.SetSendGateProbe(() => EngineGate.IsLocked);
-        CounterWear.UsabilityChanged += () => _negatorUsable.Clear();
         // Confirmed rooms only, as the gear sets' own room hook has it: a restore
         // acted on a predicted or doubtful room could take the counter off in lava.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("counter wear", t =>
         {
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
                 CounterWear.OnArrived(arrived.Key);
-        };
+        });
         Profile.ProfileLoaded += _ => CounterWear.Reset();
         // Standing in such a room already: the counter goes on when it turns up in
         // the pack, when the pack is first read, and when commands held back (a
         // password prompt, the trainer form) go out again. A restore that waited
         // for a kept sneak is decided again when the sneak ends.
-        Inventory.Changed += () =>
+        Inventory.Changed += PerformanceMonitor.Named("counter wear", () =>
         {
-            _negatorUsable.Clear();
             CounterWear.Recheck();
-        };
+        });
         Inventory.FullInventoryParsed += CounterWear.NoteInventoryRead;
         EngineGate.Released += CounterWear.Recheck;
         SneakGuard.Released += CounterWear.Recheck;
@@ -7455,11 +7454,11 @@ public sealed class AppServices
         Inventory.GiveRefused += CorpseHandoff.OnGiveRefused;
         Inventory.CoinGiveMisaimed += CorpseHandoff.OnCoinGiveRefused;
         Inventory.CoinGiveLackedCoins += CorpseHandoff.OnCoinGiveRefused;
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("corpse hand-off", t =>
         {
             if (t.NewRoom is not null && t.PreviousRoom is not null && !t.PreviousRoom.Key.Equals(t.NewRoom.Key))
                 CorpseHandoff.NoteRoomChanged();
-        };
+        });
 
         // Paradigm (ParaMud) accepts one counted action per item — the loot engines
         // batch a pile into a single get/drop/hide/sell/buy N <item>; Stock can only
@@ -7674,11 +7673,11 @@ public sealed class AppServices
         // A hide the room had no room for is sent again on arriving somewhere
         // else. Only a confirmed room counts: a pending move still shows the room
         // being left, and a suspect reading may not be a move at all.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("auto-discard", t =>
         {
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
                 AutoDiscard.OnRoomEntered(arrived.Key);
-        };
+        });
         // The engine's commands go into the pacer under its own tags and with its
         // own last-moment check, so it can take back what is still waiting when
         // the rules change under them; nothing else in the queue is its to take.
@@ -7944,13 +7943,13 @@ public sealed class AppServices
         // fetched for, in every pack that crossed with the leader's move. A kept
         // one has the party list asked instead. The room changes here only on the
         // display that confirms the move, never on the move being sent.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("party path-item gate", t =>
         {
             if (t.PreviousRoom is not { } from || t.NewRoom is not { } to || from.Key.Equals(to.Key)) return;
             foreach (Game.Map.RoomExit exit in from.Exits.Values)
                 if (exit.KeyItemId > 0 && exit.Target.Equals(to.Key))
                     PartyPathItemGate.OnGateCrossed(exit.KeyItemId);
-        };
+        });
         // The line that refuses a give ends the wait for the one that confirms it.
         Inventory.GiveRefused += PartyHandOvers.OnGiveRefused;
 
@@ -7963,14 +7962,14 @@ public sealed class AppServices
         // the walker is constructed (see below).
         // An item the party is short of stays forced though the leader holds a copy:
         // the copies still to come are for the members.
-        Inventory.Changed += () => Fetch?.DropCovered(
-            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id));
+        Inventory.Changed += PerformanceMonitor.Named("forced obtain", () => Fetch?.DropCovered(
+            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id)));
 
         // Registered AFTER the forced-obtain draining handler above so the set is
         // fully emptied before this checks it: once the route counter lands (found on
         // the floor or bought), the forced set drains → flip auto-search back off if
         // WE turned it on for a "search en route" pick.
-        Inventory.Changed += () => RestoreRouteSearchAutoSearchIfDone("counter obtained");
+        Inventory.Changed += PerformanceMonitor.Named("route-search auto-search", () => RestoreRouteSearchAutoSearchIfDone("counter obtained"));
 
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
@@ -8102,7 +8101,7 @@ public sealed class AppServices
         // this lambda only ever runs long after the constructor finishes and
         // GhSweep is assigned, the same forward-reference pattern AutoSearch /
         // AutoGetItems / GroundItems / Cash above already rely on.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("room engines", t =>
         {
             // Same-room refresh (resync CR re-display) — not a genuine change; skip.
             if (t.NewRoom is not null && t.PreviousRoom is not null
@@ -8110,23 +8109,23 @@ public sealed class AppServices
             // AutoSearch hears every genuine change INCLUDING a null room (death →
             // respawn-pending), so it can key its owed search and clear a search
             // deferred in the room we died in (report paradigm-20260820-090736).
-            AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            using (Performance.Measure("room engine", "auto-search")) AutoSearch.OnRoomChanged(t.NewRoom?.Key);
             // A buy queue is for the shop it was read in; a death leaves that room too.
-            AutoBuy.OnRoomChanged();
+            using (Performance.Measure("room engine", "auto-buy")) AutoBuy.OnRoomChanged();
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
-            AutoGetItems.OnRoomChanged();
-            FloorCheck.OnRoomChanged();
-            GroundItems.OnRoomChanged();
-            Cash.OnRoomChanged();
-            GhSweep.OnRoomChanged(t);
+            using (Performance.Measure("room engine", "auto-get")) AutoGetItems.OnRoomChanged();
+            using (Performance.Measure("room engine", "floor check")) FloorCheck.OnRoomChanged();
+            using (Performance.Measure("room engine", "ground items")) GroundItems.OnRoomChanged();
+            using (Performance.Measure("room engine", "cash")) Cash.OnRoomChanged();
+            using (Performance.Measure("room engine", "Roomba")) GhSweep.OnRoomChanged(t);
             // Pass-through stash runs here — ahead of LoopRunner's StateChanged
             // handler — so its `hide` reaches the wire before the loop's next move
             // (else the coins hide in the NEXT room; report paradigm-20260819-054200).
-            AutoDeposit?.OnRoomEntered(t);
+            using (Performance.Measure("room engine", "auto-deposit")) AutoDeposit?.OnRoomEntered(t);
             // Auto-sell in a shop room that trades a flagged item — here, ahead of the
             // movement engines, so its Selling gate is up before the next step.
-            AutoSell.OnRoomEntered(t.NewRoom.Shop);
-        };
+            using (Performance.Measure("room engine", "auto-sell")) AutoSell.OnRoomEntered(t.NewRoom.Shop);
+        });
 
         Walker = new Game.Map.AutoWalkManager(RoomGraph, Bfs, RoomTracker,
             MovementCoordinator, filter: Movement, log: Log,
@@ -8680,11 +8679,11 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => AutoHazardCounterProvisioner.Forget("game data changed");
         // Every arrival: a room whose own spell strips the buff ends it, and a
         // follower raises the buff of a hazard room it was carried into.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("hazard counters", t =>
         {
             if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
                 AutoHazardCounterProvisioner.OnArrivedInRoom(arrived.Key);
-        };
+        });
 
         // Predictive one-room-lookahead: the walker hands the room it's about to
         // enter to both provisioners BEFORE the move bytes — the light one casts the
@@ -8768,13 +8767,13 @@ public sealed class AppServices
         // rem'ing the light we just lit for it) — hand the new room to the
         // provisioner, which `rem`s an auto-readied light when the room is seeable
         // without it (worn gear, and the room-light buff while it is up).
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("auto-light", t =>
         {
             if (!Equals(t.NewRoom?.Key, t.PreviousRoom?.Key)) AutoLightProvisioner.OnRoomChanged();
             if (RoomTracker.IsInDarkRoom) return;
             if (t.NewRoom is { } room)
                 AutoLightProvisioner.OnRoomEntered(room);
-        };
+        });
 
         // One-shot UI-thread timer; the returned handle cancels it (a flicker's
         // *Combat Off* disposes it before it fires).
@@ -8943,7 +8942,7 @@ public sealed class AppServices
         // (SimulatorCharacterAt). Subscribed here, ahead of any window, so the
         // Simulator's own handlers for the same reads find these already set.
         Stats.ScreenParsed += _ => _simulatorStatRead |= Stats.LastCaptureReadHits;
-        Inventory.FullInventoryParsed += () => _simulatorInventoryRead = true;
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("simulator", () => _simulatorInventoryRead = true);
         Profile.ProfileLoaded += _ => ForgetSimulatorCharacterReads();
 
         // Which loops and auto-lair setups are favourites is each character's own.
@@ -9228,7 +9227,7 @@ public sealed class AppServices
         // that span counts, so fights, rests and gates between steps stay out of
         // the average. A transition that leaves the room unconfirmed or unchanged
         // (a refused move, a re-look, Suspect / Lost) drops the step uncounted.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("session activity", t =>
         {
             bool moved = t.PreviousRoom is { } from && t.NewRoom is { } to && !from.Key.Equals(to.Key);
             if (moved && t.NewConfidence is Game.Map.RoomConfidence.Confirmed or Game.Map.RoomConfidence.Pending)
@@ -9245,7 +9244,7 @@ public sealed class AppServices
             }
             if (SessionActivity.NoteStepAbandoned())
                 Log.Debug("SessionStats", $"walk step not timed: {t.PreviousConfidence} -> {t.NewConfidence} without a new room");
-        };
+        });
 
         // HP/MA-history sampling. Every statline (finest-grained vitals feed —
         // catches mid-combat dips PlayerState.PropertyChanged would coalesce away)
@@ -9309,7 +9308,7 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, heldFor: "a fight", stillWaiting: () => PvpFight.IsActive, Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
             attackCommandFor: PvpAttackCommandFor,
@@ -9339,7 +9338,7 @@ public sealed class AppServices
         PvpFight.Started += _ => DeathRecovery.EndSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             sendWho: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("who\r")),
             schedule: pacedReplyScheduler,
             log: Log);
@@ -9359,7 +9358,7 @@ public sealed class AppServices
         RoomTracker.PlayerDeathObserved += () => PvpFight.Stop("we died", resume: false);
         PvpResponse = new Game.Pvp.PvpResponder(
             RoomClassifier, PvpAttacks, Players,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
             hangUp: Health.HangUpForPvp,
@@ -9462,13 +9461,13 @@ public sealed class AppServices
             // never reached goes back to that set now.
             CounterWear.Recheck();
         };
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("auto-equip", t =>
         {
             if (t.NewConfidence != Game.Map.RoomConfidence.Confirmed || t.NewRoom is not { } nr) return;
             AutoEquip.OnRoomChanged(t.PreviousRoom?.Key, nr.Key);
             // Following, a new room means the leader moved: an idle leader gets asked again.
             if (t.PreviousRoom?.Key != nr.Key) LeaderBossTravel?.NoteMoved();
-        };
+        });
 
         // Roomba Mode — see GhSweepManager. Built on the same LoopRunner
         // rather than its own navigation engine; refuses to start while
@@ -9598,10 +9597,10 @@ public sealed class AppServices
                 SendGameCommand("i");
             });
         RoomTracker.PlayerDeathObserved += InventoryAfterDeath.OnDeath;
-        RoomTracker.StateChanged += _ =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("inventory after death", _ =>
         {
             if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
-        };
+        });
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
         // Sent into a held send gate, or with the character out of the game (a link
         // dropped from the board's menu lets the gate go), the `i` was lost and
@@ -9636,11 +9635,11 @@ public sealed class AppServices
             schedule: uiOneShot);
         // In this order: the gate believes the record again before a re-plan held
         // for the read (below) is let go by it.
-        Inventory.FullInventoryParsed += () =>
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("purse read", () =>
         {
             Movement.NotePurseRead();
             PurseRead.Settle();
-        };
+        });
         Profile.ProfileLoaded += _ => PurseRead.Settle();
         EngineGate.Released += SendOwedInventoryReads;
         InGameCapture.InGameChanged += inGame =>
@@ -9718,11 +9717,11 @@ public sealed class AppServices
         Inventory.CoinGiveMisaimed += () => PartyToll.OnCoinGiveMisaimed();
         Inventory.CoinGiveLackedCoins += () => PartyToll.OnCoinGiveLackedCoins();
         // A member paid for at a toll has spent it once the room beyond is confirmed.
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("party tolls", t =>
         {
             if (t.PreviousRoom is { } left && t.NewRoom is { } now && left.Key != now.Key)
                 PartyToll.NoteRoomChanged(left, now.Key);
-        };
+        });
         Profile.ProfileLoaded += _ => PartyToll.Reset();
         // The check's two Cash settings are handed to it here, on the UI thread,
         // when the profile loads, is saved (a Settings save writes the section and
@@ -9956,7 +9955,7 @@ public sealed class AppServices
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
-        Inventory.FullInventoryParsed += () => TrainFunding.NoteInventoryRefreshed();
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("train funding", () => TrainFunding.NoteInventoryRefreshed());
 
         // Stash → bank transfer. Shares the funding errand's hooks into the collect
         // engine; StartStashTransfer refuses while another errand has the walker, so
@@ -10053,7 +10052,7 @@ public sealed class AppServices
             lightStop: NewErrandLightStop("the spell-shop trip"));
         Walker.Event += e => ShopSpells.OnWalkEvent(e);
         AutoBuy.StockListed += stock => ShopSpells.OnShopListed(stock);
-        Inventory.Changed += () => ShopSpells.OnInventoryChanged();
+        Inventory.Changed += PerformanceMonitor.Named("shop spells", () => ShopSpells.OnInventoryChanged());
         Spellbook.Changed += () => ShopSpells.OnSpellbookChanged();
         Router.Subscribe(Services.Patterns.KnownPatterns.UserBuyFailed, m =>
         {
@@ -10374,7 +10373,7 @@ public sealed class AppServices
             loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             log: Log);
-        RoomTracker.StateChanged += _ => DetourCombat.Evaluate();
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("detour combat", _ => DetourCombat.Evaluate());
         Tick.HeartbeatElapsed += DetourCombat.Evaluate;
         // Return-leg light provisioning: the reroute owns the walker end-to-end, so
         // the reactive shop router is suppressed (IsRerouting) — this manager runs
@@ -10589,7 +10588,7 @@ public sealed class AppServices
             log: Log);
         Walker.Event += ShortcutSource.OnWalkEvent;
         Inventory.Changed += ShortcutSource.OnInventoryChanged;
-        RoomTracker.StateChanged += _ => ShortcutSource.OnCombatStateChanged();
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("shortcut source", _ => ShortcutSource.OnCombatStateChanged());
 
         // Solo token-route execution: on a picked token card, use the token then walk
         // from its landing to the destination — walking overland to the first clear
@@ -10673,11 +10672,11 @@ public sealed class AppServices
         };
         Tokens.MemberDeparted += TokenRoute.OnMemberDeparted;
         Walker.Event += TokenRoute.OnWalkEvent;
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("token route", t =>
         {
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed)
                 TokenRoute.OnRoomChanged(t.NewRoom?.Key);
-        };
+        });
 
         // Follower-side @comeback: one telepath to the leader when the party walks
         // off without us (the triggers and what is never one are on the class).
@@ -10819,7 +10818,7 @@ public sealed class AppServices
             Events, () => EventScheduler.IsInGame, ReadEventReadings, Log);
         EventScheduler.EnteredGame += () => EvaluateEventStates();
         Profile.ProfileLoaded += _ => EventStateWatcher.Reset();
-        Inventory.Changed += () => EvaluateEventStates();
+        Inventory.Changed += PerformanceMonitor.Named("event states", () => EvaluateEventStates());
         PlayerStats.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Game.PlayerStats.Exp) or nameof(Game.PlayerStats.Level))
@@ -11081,10 +11080,10 @@ public sealed class AppServices
         CombatTracker.CombatForceCleared += HangupItems.OnRoomObserved;
         Tick.HeartbeatElapsed += HangupItems.OnHeartbeat;
         OutboundMovement.MoveSent += HangupItems.NoteMoveSent;
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("hang-up items", t =>
         {
             if (!Nullable.Equals(t.PreviousRoom?.Key, t.NewRoom?.Key)) HangupItems.OnRoomChanged();
-        };
+        });
 
         // Once, with the version that stopped the default profile being written: it
         // goes back to the installed defaults. Ahead of the load below, which may be
@@ -11430,11 +11429,11 @@ public sealed class AppServices
             }
             else if (e.Kind == Game.Map.WalkEventKind.Failed) Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
         };
-        RoomTracker.StateChanged += t =>
+        RoomTracker.StateChanged += Game.Map.RoomTracker.Named("sounds", t =>
         {
             if (t.NewConfidence == Game.Map.RoomConfidence.Lost && t.PreviousConfidence != Game.Map.RoomConfidence.Lost)
                 Sounds.Fire(Game.Sounds.SoundCues.NavigationStopped);
-        };
+        });
         Profile.ProfileLoaded += _ => Sounds.ResetCounts();
         Profile.ProfileClosed += Sounds.Invalidate;
 
@@ -11537,7 +11536,6 @@ public sealed class AppServices
         // The route planner asks about every hazard exit it weighs: a plain read,
         // so a plan made with the switch off doesn't count hundreds of skips.
         CounterWear.MasterSwitchIsOff = () => AutoModeController.KillSwitchEngaged;
-        AutoModeController.KillSwitchToggled += _ => _negatorUsable.Clear();
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
         ChestOpens.RefuseOpen = name =>
@@ -11725,7 +11723,6 @@ public sealed class AppServices
         // needs it, given back if one worn before the switch went off is no longer
         // needed here. Neither was done while it was off. Routes planned while it
         // was off counted no carried counter; the next plan asks again.
-        _negatorUsable.Clear();
         CounterWear.Recheck();
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
@@ -11920,7 +11917,7 @@ public sealed class AppServices
     private string? ActiveDisconnectPattern()
     {
         string? name = Profile.CurrentBbsName;
-        if (string.IsNullOrEmpty(name)) return ResolveActiveBbs()?.DisconnectPattern;
+        if (string.IsNullOrEmpty(name)) return PeekActiveBbs()?.DisconnectPattern;
         long now = Environment.TickCount64;
         if (_disconnectPattern is { } recent && recent.Name == name && now - recent.CheckedAt < DisconnectPatternRecheckMs)
             return recent.Pattern;
@@ -11930,7 +11927,7 @@ public sealed class AppServices
             _disconnectPattern = memo with { CheckedAt = now };
             return memo.Pattern;
         }
-        string? pattern = ResolveActiveBbs()?.DisconnectPattern;
+        string? pattern = PeekActiveBbs()?.DisconnectPattern;
         _disconnectPattern = (name, written, now, pattern);
         return pattern;
     }
@@ -14025,36 +14022,13 @@ public sealed class AppServices
     // master switch, and whether this character can wear it). What a route is
     // planned on and what the wear does are the same test.
     //
-    // A route search asks this for every hazard exit it weighs, and the answer
-    // reads the settings, the item's record and the character's build each time.
-    // So an answer is kept for the search: until the counter's own state, the
-    // master switch, the worn list or the setting changes, and for no longer than
-    // NegatorUsableKeptFor in any case (the build and the data set have no one
-    // event to drop it on; a search is over in far less).
-    private bool NegatingItemUsable(int itemId)
-    {
-        long now = Environment.TickCount64;
-        if (now - _negatorUsableSince > NegatorUsableKeptFor)
-        {
-            _negatorUsable.Clear();
-            _negatorUsableSince = now;
-        }
-        if (!_negatorUsable.TryGetValue(itemId, out bool usable))
-            _negatorUsable[itemId] = usable = IsItemWorn(itemId) || CounterWear.WillWear(itemId);
-        return usable;
-    }
-
-    private const long NegatorUsableKeptFor = 500;
-    private readonly Dictionary<int, bool> _negatorUsable = new();
-    private long _negatorUsableSince;
+    // A route search keeps each answer for itself (MovementFilter's readings), so
+    // the settings, the item's record and the build are read once a search.
+    private bool NegatingItemUsable(int itemId) => IsItemWorn(itemId) || CounterWear.WillWear(itemId);
 
     // The setting was saved on the Room Spell Config tab: routes are
     // planned on the new answer, and a counter needed in the room stood in goes on.
-    public void NoteCounterWearSettingSaved()
-    {
-        _negatorUsable.Clear();
-        CounterWear.Recheck();
-    }
+    public void NoteCounterWearSettingSaved() => CounterWear.Recheck();
 
     // A room-spell counter as RoomSpellCounterWear weighs it, null for an item the
     // game data has no wearable record of.
@@ -16511,31 +16485,43 @@ public sealed class AppServices
     // the main window's title-bar / Connect button use, so the
     // game-data + display + cache layers see the same active BBS
     // the user sees in the chrome.
-    public Models.Settings.BbsProfile? ResolveActiveBbs()
+    public Models.Settings.BbsProfile? ResolveActiveBbs() => ResolveActiveBbs(Bbs.Get);
+
+    // The same BBS as its file stands, shared (BbsProfileStore.Peek): for a caller
+    // that reads a setting off it and nothing more. Never change or save what it
+    // returns; ResolveActiveBbs gives a copy of the caller's own for that.
+    public Models.Settings.BbsProfile? PeekActiveBbs() => ResolveActiveBbs(Bbs.Peek);
+
+    private Models.Settings.BbsProfile? ResolveActiveBbs(Func<string, Models.Settings.BbsProfile?> read)
     {
         string? name = Profile.CurrentBbsName;
         if (!string.IsNullOrEmpty(name))
         {
-            Models.Settings.BbsProfile? pinned = Bbs.Get(name);
+            Models.Settings.BbsProfile? pinned = read(name);
             if (pinned is not null) return pinned;
         }
 
         string? first = Bbs.ListNames()
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
-        return first is null ? null : Bbs.Get(first);
+        return first is null ? null : read(first);
     }
+
+    // ResolveActiveRealm on PeekActiveBbs's shared copy, for the same readers: the
+    // PvP checks at each room arrival, the bash rule a route search reads, the
+    // death floor and coin name read per line.
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? PeekActiveRealm() =>
+        RealmPlayedOn(PeekActiveBbs());
 
     // The realm being played: the loaded character's (CharacterProfile.Realm) on the
     // active BBS, else that BBS's first realm. Null only when no BBS resolves. Every
     // realm setting (game data, menu commands, death floor, cleanup time, currency
     // name) and every store of collected data keys on it.
-    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? ResolveActiveRealm()
-    {
-        if (ResolveActiveBbs() is not { } bbs) return null;
-        if (bbs.RealmFor(Profile.Current?.Realm) is not { } realm) return null;
-        return (bbs, realm);
-    }
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? ResolveActiveRealm() =>
+        RealmPlayedOn(ResolveActiveBbs());
+
+    private (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? RealmPlayedOn(Models.Settings.BbsProfile? bbs) =>
+        bbs?.RealmFor(Profile.Current?.Realm) is { } realm ? (bbs, realm) : null;
 
     // The active realm's data folder, or null with no BBS or when a name in the way
     // can't be a folder (AppPaths.UsableRealmFolder).
@@ -16561,7 +16547,7 @@ public sealed class AppServices
     // The active BBS credential's goto table, or empty when no character / BBS / row
     // is set. Both the manager and the menus read through this so they share one table.
     private IReadOnlyList<Models.Profile.SysopGotoLocation> ActiveBbsSysopGotos()
-        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+        => PeekActiveBbs()?.Name is { Length: > 0 } bbs
            && Profile.Current?.BbsCredentials is { } creds
            && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
            && cred.SysopGotos is { } list
@@ -16569,7 +16555,7 @@ public sealed class AppServices
             : System.Array.Empty<Models.Profile.SysopGotoLocation>();
 
     private bool SysopPowerHere(Func<Models.Profile.BbsCredentials, bool> pick)
-        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+        => PeekActiveBbs()?.Name is { Length: > 0 } bbs
            && Profile.Current?.BbsCredentials is { } creds
            && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
            && pick(cred);
@@ -16803,7 +16789,7 @@ public sealed class AppServices
     // a name every store keyed on the set would be handed.
     private string? ProfileGameDataSet()
     {
-        string? set = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
+        string? set = PeekActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
         string? usable = GameData.UsableSet(set, out string? whyNot);
         if (whyNot is null)
         {

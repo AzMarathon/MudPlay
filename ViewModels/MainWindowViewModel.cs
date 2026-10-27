@@ -171,24 +171,24 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Host the active connection target resolves to. Quick Connect wins over
     // the saved BBS pin when set; otherwise the user's BBS Host stands in.
-    public string Host => _quickConnectTarget?.Host ?? ResolveActiveBbs()?.Host ?? string.Empty;
+    public string Host => _quickConnectTarget?.Host ?? PeekActiveBbs()?.Host ?? string.Empty;
 
     // Port the active connection target resolves to. 0 when nothing is configured.
-    public int Port => _quickConnectTarget?.Port ?? ResolveActiveBbs()?.Port ?? 0;
+    public int Port => _quickConnectTarget?.Port ?? PeekActiveBbs()?.Port ?? 0;
 
     // Name of the dial target — Quick Connect's host:port when active,
     // otherwise the active BBS's display name (or null). Consumed by the
     // title bar and the connect-status banner.
     public string? ActiveBbsName => _quickConnectTarget is { } qc
         ? $"Quick Connect: {qc.Host}:{qc.Port}"
-        : ResolveActiveBbs()?.Name;
+        : PeekActiveBbs()?.Name;
 
     // Optional URL field on the active BBS's BbsProfile.WebsiteUrl. Drives
     // the Help → BBS site menu item's enable state + the actual launch. Quick
     // Connect targets have no website (Quick Connect bypasses the BBS profile
     // store entirely), so this is null in that case.
     public string? BbsWebsiteUrl => _quickConnectTarget is null
-        ? ResolveActiveBbs()?.WebsiteUrl
+        ? PeekActiveBbs()?.WebsiteUrl
         : null;
 
     // True when BbsWebsiteUrl looks launch-able — gates the Help menu item.
@@ -198,7 +198,7 @@ public partial class MainWindowViewModel : ObservableObject
     // entry appears in the Help menu at all — independent of HasBbsWebsite,
     // which only gates its enabled state. Edited under Settings → Toolbar +
     // Shortcuts. Defaults on when there's no active BBS to read.
-    public bool ShowBbsWebsiteInHelp => ResolveActiveBbs()?.ShowWebsiteInHelp ?? true;
+    public bool ShowBbsWebsiteInHelp => PeekActiveBbs()?.ShowWebsiteInHelp ?? true;
 
     // User-editable Help-menu website list (Global tier). Composed into the
     // Help menu by the code-behind, and edited under Settings → Toolbar +
@@ -1043,7 +1043,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Seed the BBS-pin sentinel so OnProfileMutatedForBbs can detect
         // the first real change against a known baseline.
-        _lastSeenBbsName = ResolveActiveBbs()?.Name;
+        _lastSeenBbsName = PeekActiveBbs()?.Name;
 
         // Help-menu website list (Global tier). Seed now, then re-read on every
         // global-settings Save so the Toolbar + Shortcuts editor's changes land
@@ -1865,7 +1865,7 @@ public partial class MainWindowViewModel : ObservableObject
         // freeze/resume across the gap.
         AppServices.Current.CastDirector.SetConnectedGate(() => IsConnected);
         AppServices.Current.CleanupLogout.SetAutoLogoutEnabledCheck(
-            () => ResolveActiveBbs()?.ReconnectAfterCleanup ?? false);
+            () => PeekActiveBbs()?.ReconnectAfterCleanup ?? false);
         AppServices.Current.CleanupLogout.SetDisconnectCallback(
             () => _ = DisconnectInternalAsync());
 
@@ -2934,7 +2934,7 @@ public partial class MainWindowViewModel : ObservableObject
             // takes over: it waits for a safe room, exits to the menu, and
             // drops the carrier for us — so the banner promises the managed
             // flow rather than telling the user to quit manually.
-            bool autoLogout = ResolveActiveBbs()?.ReconnectAfterCleanup ?? false;
+            bool autoLogout = PeekActiveBbs()?.ReconnectAfterCleanup ?? false;
             string banner = autoLogout
                 ? $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
                 : $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
@@ -3351,6 +3351,10 @@ public partial class MainWindowViewModel : ObservableObject
     private static BbsProfile? ResolveActiveBbs()
         => AppServices.Current.ResolveActiveBbs();
 
+    // For a setting read off the BBS and nothing more (AppServices.PeekActiveBbs).
+    private static BbsProfile? PeekActiveBbs()
+        => AppServices.Current.PeekActiveBbs();
+
     private void RefreshBbsBindings()
     {
         OnPropertyChanged(nameof(Host));
@@ -3364,7 +3368,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Mirror the title-bar identity onto the OS process name so
         // multiple instances are distinguishable in ps / top / htop.
-        ProcessTitle.Set(AppServices.Current.Profile.CurrentProfileName, ResolveActiveBbs()?.Name);
+        ProcessTitle.Set(AppServices.Current.Profile.CurrentProfileName, PeekActiveBbs()?.Name);
     }
 
     // ProfileLoaded handler that wires in the Settings → General
@@ -3416,7 +3420,7 @@ public partial class MainWindowViewModel : ObservableObject
     // quick-dialled target.
     private void OnProfileMutatedForBbs()
     {
-        string? current = ResolveActiveBbs()?.Name;
+        string? current = PeekActiveBbs()?.Name;
         if (!string.Equals(current, _lastSeenBbsName, StringComparison.Ordinal))
         {
             ClearQuickConnect();
@@ -4942,8 +4946,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         ProfileService profile = AppServices.Current.Profile;
         string? bbs = profile.CurrentProfileName is null
-            ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
-            : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
+            ? selectedBbs ?? profile.CurrentBbsName ?? PeekActiveBbs()?.Name
+            : profile.CurrentBbsName ?? PeekActiveBbs()?.Name;
         return string.IsNullOrWhiteSpace(bbs) ? null : bbs;
     }
 
