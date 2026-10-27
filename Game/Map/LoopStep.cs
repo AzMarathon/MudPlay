@@ -9,6 +9,7 @@ namespace MudPlay.Game.Map;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(MoveLoopStep),    typeDiscriminator: "move")]
 [JsonDerivedType(typeof(CommandLoopStep), typeDiscriminator: "command")]
+[JsonDerivedType(typeof(LapWaitLoopStep), typeDiscriminator: "lapwait")]
 public abstract record LoopStep
 {
     // Display label for the Navigation right rail / loop editor list.
@@ -62,4 +63,12 @@ public sealed record CommandLoopStep(string Command, long DelayMs = 0) : LoopSte
     public override string Display => DelayMs > 0
         ? $"{Command} (wait {LoopDelay.Describe(DelayMs)})"
         : Command;
+}
+
+// A waypoint's "wait here until the lap has run LapTimeMs" (LoopWaypoint.LapWaitMs):
+// the runner holds in the room until the current lap's clock reaches it, the way a
+// command's delay holds, and goes straight on when the lap is already past it.
+public sealed record LapWaitLoopStep(long LapTimeMs) : LoopStep
+{
+    public override string Display => $"wait until lap time {LoopDelay.Describe(LapTimeMs)}";
 }

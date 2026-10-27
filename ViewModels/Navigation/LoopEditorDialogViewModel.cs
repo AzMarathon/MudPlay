@@ -44,7 +44,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // waypoint list to the current room at Start, so a positional diff against
     // it would false-positive; a restart re-rotates anyway, making rotation
     // irrelevant to whether the run would differ.
-    private readonly List<(string Room, string? Command, long DelayMs, bool DoNotRest, bool DoNotAttack, bool RestHereHp, bool RestHereMana)> _openedSteps;
+    private readonly List<(string Room, string? Command, long DelayMs, bool DoNotRest, bool DoNotAttack, bool RestHereHp, bool RestHereMana, long LapWaitMs)> _openedSteps;
 
     // Window title — flips between "Create Loop" (when the dialog was opened
     // on a fresh empty loop) and "Edit Loop" (mutating an existing saved
@@ -142,7 +142,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // (row.Key.ToString() / Command / DelayMs) so the dirty check is an
         // apples-to-apples comparison immune to Room-string reformatting.
         _openedSteps = Waypoints
-            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs, r.DoNotRest, r.DoNotAttack, r.RestHereHp, r.RestHereMana))
+            .Select(r => (r.Key.ToString(), r.Command, r.DelayMs, r.DoNotRest, r.DoNotAttack, r.RestHereHp, r.RestHereMana, r.LapWaitMs))
             .ToList();
     }
 
@@ -444,6 +444,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             {
                 RestHereHp = row.RestHereHp,
                 RestHereMana = row.RestHereMana,
+                LapWaitMs = Math.Max(0, row.LapWaitMs),
             });
         }
 
@@ -562,7 +563,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         if (current.Count != _openedSteps.Count) return true;
         for (int i = 0; i < current.Count; i++)
         {
-            (string room, string? command, long delayMs, bool doNotRest, bool doNotAttack, bool restHp, bool restMana) = _openedSteps[i];
+            (string room, string? command, long delayMs, bool doNotRest, bool doNotAttack, bool restHp, bool restMana, long lapWaitMs) = _openedSteps[i];
             if (!string.Equals(current[i].Room, room, StringComparison.OrdinalIgnoreCase))
                 return true;
             if (!string.Equals(current[i].Command ?? string.Empty, command ?? string.Empty,
@@ -572,6 +573,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
             if (current[i].DoNotRest != doNotRest) return true;
             if (current[i].DoNotAttack != doNotAttack) return true;
             if (current[i].RestHereHp != restHp || current[i].RestHereMana != restMana) return true;
+            if (current[i].LapWaitMs != lapWaitMs) return true;
         }
         return false;
     }
@@ -590,7 +592,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
 // Per-row VM for the editor's Waypoints ListBox. Carries the resolved room
 // name (read-only) + the inline-editable command, delay, do-not-rest,
-// do-not-attack and rest-up-here fields (each a column in the table).
+// do-not-attack, rest-up-here and lap-wait fields (each a column in the table).
 public sealed partial class LoopWaypointRowViewModel : ObservableObject
 {
     public RoomKey Key { get; }
@@ -602,6 +604,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
     [ObservableProperty] private bool _doNotAttack;
     [ObservableProperty] private bool _restHereHp;
     [ObservableProperty] private bool _restHereMana;
+    [ObservableProperty] private long _lapWaitMs;
 
     public LoopWaypointRowViewModel(LoopWaypoint source, RoomGraphManager graph)
     {
@@ -614,6 +617,7 @@ public sealed partial class LoopWaypointRowViewModel : ObservableObject
         _doNotAttack = source.DoNotAttack;
         _restHereHp = source.RestHereHp;
         _restHereMana = source.RestHereMana;
+        _lapWaitMs = source.LapWaitMs;
         RefreshDisplayFor(graph);
     }
 

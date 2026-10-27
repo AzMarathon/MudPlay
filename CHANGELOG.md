@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.0
+
+- Waypoint action: wait in a room until the current lap has run at least a set time
+
 ## 3.186.30
 
 - A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop

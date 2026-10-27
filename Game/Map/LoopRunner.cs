@@ -131,6 +131,10 @@ public sealed class LoopRunner : IRecoverableEngine
     // A no-delay command block is on the wire and the game hasn't answered all of it.
     private bool _awaitingCommandReplies;
     public bool AwaitingCommandReplies => _awaitingCommandReplies;
+    // The lap wait the loop is holding in, when one is under way: its delay clock
+    // (CommandDelayRemaining) is then the lap wait's, not a command's.
+    public LapWaitLoopStep? LapWaitUnderWay =>
+        _stepInFlight && _index < _expandedSteps.Count && _expandedSteps[_index] is LapWaitLoopStep wait ? wait : null;
     // What the wait still needs: one prompt for each command in the block, and, when
     // the block holds a bare Enter, the room shown again.
     private int _commandPromptsOwed;
@@ -902,6 +906,21 @@ public sealed class LoopRunner : IRecoverableEngine
             }
             if (redrive) SendNextStep();
             else AdvanceStep();
+            return;
+        }
+        if (_index < _expandedSteps.Count && _expandedSteps[_index] is LapWaitLoopStep)
+        {
+            // A lap wait the flee broke off is held again: it reads the lap clock, so
+            // it waits only for what's left of it.
+            _stepInFlight = false;
+            _expectedMoveTarget = null;
+            if (_coordinator.IsPaused)
+            {
+                State = LoopState.Paused;
+                Raise(new LoopEvent(LoopEventKind.Paused, "coordinator paused"));
+                return;
+            }
+            SendNextStep();
             return;
         }
         if (_coordinator.IsPaused)
@@ -1818,17 +1837,18 @@ public sealed class LoopRunner : IRecoverableEngine
         return true;
     }
 
-    // Reconcile the live per-room edits the running-loop rail allows (command / delay)
-    // into the already-expanded runtime steps WITHOUT restarting the loop or moving
-    // _index. The rail forbids add / remove / reorder of rooms, so the waypoint path is
+    // Reconcile the live per-room edits the running-loop rail allows (command / delay /
+    // lap wait) into the already-expanded runtime steps WITHOUT restarting the loop or
+    // moving _index. The rail forbids add / remove / reorder of rooms, so the waypoint path is
     // unchanged and the command-bearing waypoints map 1:1, in order, onto the
     // waypoint CommandLoopSteps in _expandedSteps (LoopExpander emits one per
     // command-bearing waypoint; a lever detour's actions are not among them):
     //   - same command count → swap each changed CommandLoopStep in place; the next run
     //     of that step uses the new command / delay (effectively instant).
-    //   - count changed (a command was added or removed → the step count shifts) → defer
-    //     a full re-expand to the next lap wrap, the only safe point to swap the list
-    //     (see _reExpandAtLapEnd in SendNextStep).
+    //   - count changed (a command or lap wait was added or removed → the step count
+    //     shifts) → defer a full re-expand to the next lap wrap, the only safe point to
+    //     swap the list (see _reExpandAtLapEnd in SendNextStep). Lap waits map onto the
+    //     LapWaitLoopSteps the same way.
     // Do-not-rest / do-not-attack and the lair toggle need no reconcile — they're read
     // live off _loop each decision. Runs on the UI thread, same as the step pump.
     public void ReconcileExpandedSteps()
@@ -1846,7 +1866,14 @@ public sealed class LoopRunner : IRecoverableEngine
         foreach (LoopWaypoint w in RuntimeWaypointOrder())
             if (!string.IsNullOrEmpty(w.Command)) cmdWaypoints.Add(w);
 
-        if (cmdWaypoints.Count != cmdStepIdx.Count)
+        var waitStepIdx = new List<int>();
+        for (int i = 0; i < _expandedSteps.Count; i++)
+            if (_expandedSteps[i] is LapWaitLoopStep) waitStepIdx.Add(i);
+        var waitWaypoints = new List<LoopWaypoint>();
+        foreach (LoopWaypoint w in RuntimeWaypointOrder())
+            if (w.LapWaitMs > 0) waitWaypoints.Add(w);
+
+        if (cmdWaypoints.Count != cmdStepIdx.Count || waitWaypoints.Count != waitStepIdx.Count)
         {
             _reExpandAtLapEnd = true;
             _log?.Info("LoopRunner",
@@ -1861,6 +1888,9 @@ public sealed class LoopRunner : IRecoverableEngine
             if (cmd.Command != wp.Command || cmd.DelayMs != wp.DelayMs)
                 _expandedSteps[cmdStepIdx[k]] = cmd with { Command = wp.Command!, DelayMs = wp.DelayMs };
         }
+        for (int k = 0; k < waitWaypoints.Count; k++)
+            if (((LapWaitLoopStep)_expandedSteps[waitStepIdx[k]]).LapTimeMs != waitWaypoints[k].LapWaitMs)
+                _expandedSteps[waitStepIdx[k]] = new LapWaitLoopStep(waitWaypoints[k].LapWaitMs);
     }
 
     // Common entry into the circle phase — called either immediately from Start
@@ -2172,6 +2202,7 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             case MoveLoopStep move:    SendMove(move);    break;
             case CommandLoopStep cmd:  SendCommand(cmd);  break;
+            case LapWaitLoopStep wait: WaitForLapTime(wait); break;
         }
     }
 
@@ -2981,6 +3012,36 @@ public sealed class LoopRunner : IRecoverableEngine
             _combatHoldLogged = false;
             StartDelay(CommandReplyWait);
         }
+    }
+
+    // A waypoint's lap wait: hold in the room until the current lap has run the
+    // wait. It is the delay's clock, set to what's left of the lap's wait, so it
+    // holds as a delay does: in real time, a fight during it doesn't stop the clock,
+    // and the move waits for the room to clear (user, 2026-10-27). A lap that isn't
+    // counted (joined partway round) has no clock to read, so it doesn't wait.
+    private void WaitForLapTime(LapWaitLoopStep step)
+    {
+        TimeSpan wait = TimeSpan.FromMilliseconds(step.LapTimeMs);
+        if (_partialLap)
+        {
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}: lap wait {LoopDelay.Describe(step.LapTimeMs)} skipped — this lap was joined partway round and isn't timed");
+            AdvanceStep();
+            return;
+        }
+        TimeSpan lap = CurrentLapTime;
+        if (lap >= wait)
+        {
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}: lap time {LoopDelay.Describe((long)lap.TotalMilliseconds)} is already at the lap wait {LoopDelay.Describe(step.LapTimeMs)}; moving on");
+            AdvanceStep();
+            return;
+        }
+        _stepInFlight = true;
+        _awaitingCommandReplies = false;
+        _log?.Info("LoopRunner",
+            $"step {_index + 1}: lap time {LoopDelay.Describe((long)lap.TotalMilliseconds)}; waiting {LoopDelay.Describe((long)(wait - lap).TotalMilliseconds)} here for the lap wait {LoopDelay.Describe(step.LapTimeMs)}");
+        StartDelay(wait - lap, runsInRealTime: true);
     }
 
     // A lever action on a detour, sent as the walker sends one

@@ -30,7 +30,10 @@ namespace MudPlay.Game.Map;
 //     map number, room number            int, int
 //     command                            text; none and empty are the same
 //     delay in milliseconds              int
-//     marks                              1 byte: 1 no rest, 2 no attack, 4 rest here HP, 8 rest here mana
+//     marks                              1 byte: 1 no rest, 2 no attack, 4 rest here HP, 8 rest here mana,
+//                                        16 a lap wait follows
+//     lap wait in milliseconds           int, int (high, low); only when mark 16 is set, so a
+//                                        loop with no lap wait keeps the signature it had
 //
 // An int is 4 bytes, little-endian, two's complement. A text is its UTF-8 byte count
 // as an int, then the bytes. Every field is fixed in size or carries its length, so
@@ -80,7 +83,13 @@ public static class LoopSignature
                 WriteInt(form, (int)w.DelayMs);
             }
             form.WriteByte((byte)((w.DoNotRest ? 1 : 0) | (w.DoNotAttack ? 2 : 0)
-                                  | (w.RestHereHp ? 4 : 0) | (w.RestHereMana ? 8 : 0)));
+                                  | (w.RestHereHp ? 4 : 0) | (w.RestHereMana ? 8 : 0)
+                                  | (w.LapWaitMs > 0 ? 16 : 0)));
+            if (w.LapWaitMs > 0)
+            {
+                WriteInt(form, (int)(w.LapWaitMs >> 32));
+                WriteInt(form, (int)w.LapWaitMs);
+            }
         }
         return Convert.ToHexStringLower(SHA256.HashData(form.GetBuffer().AsSpan(0, (int)form.Length)));
     }

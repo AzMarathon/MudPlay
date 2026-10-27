@@ -68,7 +68,9 @@ public sealed class LoopShareTests : IDisposable
     [Fact]
     public void Codec_RoundTripsTheRoute_ButNotFavourite()
     {
-        Loop decoded = LoopShareCodec.Decode(LoopShareCodec.Encode(SampleLoop()), out _);
+        Loop sent = SampleLoop();
+        sent.Waypoints[1].LapWaitMs = 90_000;
+        Loop decoded = LoopShareCodec.Decode(LoopShareCodec.Encode(sent), out _);
 
         Assert.Equal("King's Road", decoded.Name);
         Assert.Equal("watch the bridge", decoded.Notes);
@@ -80,6 +82,7 @@ public sealed class LoopShareTests : IDisposable
         Assert.Equal("ask barmaid ale", decoded.Waypoints[0].Command);
         Assert.Equal(1500, decoded.Waypoints[0].DelayMs);
         Assert.True(decoded.Waypoints[1].DoNotRest);
+        Assert.Equal(90_000, decoded.Waypoints[1].LapWaitMs);
         Assert.True(decoded.Waypoints[2].DoNotAttack);
     }
 

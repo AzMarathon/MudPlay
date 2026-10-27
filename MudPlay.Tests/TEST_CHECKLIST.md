@@ -2237,7 +2237,7 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; backing out of the loaded loop's start lets go of it, but not of one loaded since.
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; a waypoint's lap wait holds after its command for what's left of the lap and is skipped on a lap joined partway round; backing out of the loaded loop's start lets go of it, but not of one loaded since.
 - Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, -20261022-170426, …).
 
 ### LoopSettingsStoreTests.cs
@@ -2247,12 +2247,12 @@ How to keep it current:
 
 ### LoopShareTests.cs
 - Covers: Game/Remote/LoopShareCodec, LoopShareHandler, LoopShareReceiver, RemoteCommandManager (answers)
-- Checks: codec round-trip and hostile payloads, offer → yes/no → send, offer codes verified, telepath-only, result answers and their gating, numbered copies.
+- Checks: codec round-trip (a lap wait included) and hostile payloads, offer → yes/no → send, offer codes verified, telepath-only, result answers and their gating, numbered copies.
 - Why: `@loop send` safety and integrity.
 
 ### LoopSignatureTests.cs
 - Covers: Game/Map/LoopSignature
-- Checks: fixed known hashes, short code, labels and file-held settings excluded, every route/setting change alters it, no collisions.
+- Checks: fixed known hashes (unchanged by the lap-wait field for loops without one), short code, labels and file-held settings excluded, every route/setting change alters it (a lap wait included), no collisions.
 - Why: two client versions must agree on "same loop".
 
 ### LoopSimulatorTests.cs
