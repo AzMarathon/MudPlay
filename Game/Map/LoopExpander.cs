@@ -5,7 +5,10 @@ namespace MudPlay.Game.Map;
 // Static expansion of a saved Loop's persistent LoopWaypoint list into the
 // flat runtime LoopStep sequence the runner executes. BFS-fills the move
 // directions between consecutive waypoints (plus the closing leg back to
-// waypoint 0) and inserts per-waypoint commands after each arrival.
+// waypoint 0) and inserts per-waypoint commands after each arrival. A leg
+// through a lever exit whose actions are typed in other rooms gets the
+// walker's go-act-return detour (RemoteActionPathExpander), so a lap opens
+// the exit the way a walk-to does.
 //
 // Pure static helper — takes no state and produces no side effects beyond
 // the returned tuple. Lets the runner do the expansion once at Start and
@@ -18,14 +21,16 @@ public static class LoopExpander
     // can surface "fix the loop" hints. Empty steps + empty unreachables
     // means "too few waypoints to form a cycle" (need at least 2).
     // waypoints is the ordered cycle (closing edge implicit); bfs is the
-    // pathfinder bound to the active room graph; filter is an optional
-    // avoided-rooms / stash filter.
+    // pathfinder bound to graph, the active room graph; filter is an optional
+    // avoided-rooms / stash filter. A leg whose lever detour can't be routed is
+    // unreachable, as the walker refuses the same route.
     public static (IReadOnlyList<LoopStep> Steps,
                    IReadOnlyList<(RoomKey From, RoomKey To)> UnreachableSegments)
-        Expand(IReadOnlyList<LoopWaypoint> waypoints, BfsMapper bfs, IRoomFilter? filter = null)
+        Expand(IReadOnlyList<LoopWaypoint> waypoints, BfsMapper bfs, RoomGraphManager graph, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(waypoints);
         ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(graph);
         if (waypoints.Count < 2)
             return (Array.Empty<LoopStep>(), Array.Empty<(RoomKey, RoomKey)>());
 
@@ -45,7 +50,7 @@ public static class LoopExpander
             if (!string.IsNullOrEmpty(here.Command))
                 steps.Add(new CommandLoopStep(here.Command!, here.DelayMs));
 
-            AppendMoves(here.Key, next.Key, bfs, filter, steps, unreachable);
+            AppendMoves(here.Key, next.Key, bfs, graph, filter, steps, unreachable);
         }
 
         return (steps, unreachable);
@@ -63,7 +68,7 @@ public static class LoopExpander
         IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
-        (IReadOnlyList<LoopStep> steps, _) = Expand(waypoints, bfs, filter);
+        (IReadOnlyList<LoopStep> steps, _) = Expand(waypoints, bfs, graph, filter);
         if (steps.Count == 0 || waypoints.Count < 2) return Array.Empty<RoomKey>();
 
         // Walk the move steps from the FIRST waypoint and accumulate
@@ -122,7 +127,7 @@ public static class LoopExpander
 
     private static void AppendMoves(
         RoomKey from, RoomKey to,
-        BfsMapper bfs, IRoomFilter? filter,
+        BfsMapper bfs, RoomGraphManager graph, IRoomFilter? filter,
         List<LoopStep> steps,
         List<(RoomKey From, RoomKey To)> unreachable)
     {
@@ -138,6 +143,21 @@ public static class LoopExpander
             unreachable.Add((from, to));
             return;
         }
-        foreach (Direction d in path) steps.Add(new MoveLoopStep(d));
+        IReadOnlyList<WalkStep> walk = RemoteActionPathExpander.Expand(graph, from, path, bfs, filter);
+        if (!RemoteActionPathExpander.ReachesDestination(walk, to))
+        {
+            unreachable.Add((from, to));
+            return;
+        }
+        foreach (WalkStep step in walk)
+        {
+            steps.Add(step switch
+            {
+                MoveStep move => new MoveLoopStep(move.Direction) { SkipSpecialDispatch = move.SkipSpecialDispatch },
+                CommandStep command => new CommandLoopStep(command.Command)
+                    { IsExitAction = true, IsWinchPull = command.IsWinchPull },
+                _ => throw new InvalidOperationException($"a loop leg expanded to a {step.GetType().Name}"),
+            });
+        }
     }
 }

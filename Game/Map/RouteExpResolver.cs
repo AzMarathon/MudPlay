@@ -101,7 +101,7 @@ public sealed class RouteExpResolver : IDisposable
     public IReadOnlyList<Simulation.SimRoom> ResolveSimLap(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(waypoints);
-        (IReadOnlyList<LoopStep> steps, var unreachable) = LoopExpander.Expand(waypoints, _bfs, filter);
+        (IReadOnlyList<LoopStep> steps, var unreachable) = LoopExpander.Expand(waypoints, _bfs, _graph, filter);
         if (steps.Count == 0 || unreachable.Count > 0) return Array.Empty<Simulation.SimRoom>();
 
         // Walks the steps itself rather than through LoopExpander.ResolveCycleRoomKeys:

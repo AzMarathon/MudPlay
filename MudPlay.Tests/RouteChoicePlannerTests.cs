@@ -2999,7 +2999,7 @@ public sealed class RouteChoicePlannerTests
         {
             LoopWaypoint[] shoreToShore = { new() { Room = "1/1" }, new() { Room = "1/5" } };
             (IReadOnlyList<LoopStep> steps, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) =
-                LoopExpander.Expand(shoreToShore, bfs, filter);
+                LoopExpander.Expand(shoreToShore, bfs, graph, filter);
             Assert.Empty(unreachable);
             Assert.Equal(8, steps.Count);   // four by the path each way, not four across
             Assert.Equal(Direction.N, Assert.IsType<MoveLoopStep>(steps[0]).Direction);
@@ -3007,7 +3007,7 @@ public sealed class RouteChoicePlannerTests
                 LoopExpander.ResolveCycleRoomKeys(shoreToShore, bfs, graph, filter), filter.IsClosedToRoutes);
 
             LoopWaypoint[] intoTheLake = { new() { Room = "1/1" }, new() { Room = "1/4" } };
-            (_, unreachable) = LoopExpander.Expand(intoTheLake, bfs, filter);
+            (_, unreachable) = LoopExpander.Expand(intoTheLake, bfs, graph, filter);
             Assert.Contains((new RoomKey(1, 1), new RoomKey(1, 4)), unreachable);
         });
     }

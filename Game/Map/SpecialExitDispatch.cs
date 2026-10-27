@@ -95,11 +95,11 @@ internal static class SpecialExitDispatch
         // prerequisite commands in StepNumber order, then send the cardinal.
         // Same-room actions only. Cross-room remote actions are pre-linearized
         // into an explicit walk/act/walk-back detour by RemoteActionPathExpander
-        // (the point-to-point walker), so they never reach here as a single
-        // MultiActionHidden step; the loop runner doesn't expand them, and the
-        // walker fails such a route at plan time, so this stays a clear-fail
-        // safety net. The reason is engine-neutral — it is reachable from either
-        // caller and the old "loop circuits" wording misled on a plain walk.
+        // (for the walker, and for a loop's legs through LoopExpander), so they
+        // never reach here as a single MultiActionHidden step; a walk whose detour
+        // can't be routed is refused at plan time, and such a loop leg is
+        // reported unreachable, so this stays a clear-fail safety net. The reason is engine-neutral — it is reachable
+        // from either caller.
         if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is { } maData)
         {
             // Already open — its actions were done by someone else, or it opened on

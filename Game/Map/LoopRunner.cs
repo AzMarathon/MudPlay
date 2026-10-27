@@ -1146,7 +1146,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private string? UnpaidRefusalFor(Loop loop)
     {
         if (_filter is null || _bfs is null || _graph is null || loop.Waypoints.Count < 2) return null;
-        (_, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) = LoopExpander.Expand(loop.Waypoints, _bfs, _filter);
+        (_, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) = LoopExpander.Expand(loop.Waypoints, _bfs, _graph, _filter);
         foreach ((RoomKey from, RoomKey to) in unreachable)
         {
             // A leg something obtainable opens is not blocked by coin.
@@ -1600,7 +1600,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private void ExpandSteps()
     {
         _unreachableLeg = null;
-        if (_loop is null || _bfs is null)
+        if (_loop is null || _bfs is null || _graph is null)
         {
             _expandedSteps = new List<LoopStep>();
             return;
@@ -1618,17 +1618,24 @@ public sealed class LoopRunner : IRecoverableEngine
 
         (IReadOnlyList<LoopStep> steps,
          IReadOnlyList<(RoomKey From, RoomKey To)> unreachable)
-                = LoopExpander.Expand(wps, _bfs, _filter);
+                = LoopExpander.Expand(wps, _bfs, _graph, _filter);
         _expandedSteps = new List<LoopStep>(steps);
+        IReadOnlyList<string> exitActions = ExitActionCommands;
         _log?.Info("LoopRunner",
-            $"expand: loop='{_loop.Name}' waypoints={wps.Count} → {steps.Count} step(s), {unreachable.Count} unreachable segment(s)");
+            $"expand: loop='{_loop.Name}' waypoints={wps.Count} → {steps.Count} step(s), {unreachable.Count} unreachable segment(s)"
+            + (exitActions.Count == 0 ? "" : $", lever detours typing {string.Join(", ", exitActions.Select(c => $"'{c}'"))}"));
         if (unreachable.Count > 0)
         {
             _unreachableLeg = unreachable[0];
             foreach ((RoomKey from, RoomKey to) in unreachable)
-                _log?.Warn("LoopRunner", $"expand unreachable: {from} → {to} (BFS found no path)");
+                _log?.Warn("LoopRunner", $"expand unreachable: {from} → {to} (no route, or a lever exit on it whose detour can't be routed)");
         }
     }
+
+    // The lever actions each lap types on its detours to the lever exits it
+    // crosses, in lap order.
+    public IReadOnlyList<string> ExitActionCommands =>
+        _expandedSteps.OfType<CommandLoopStep>().Where(static c => c.IsExitAction).Select(static c => c.Command).ToList();
 
     // The first leg the last expansion found no route for, to name when it left
     // the loop with nothing to walk.
@@ -1650,8 +1657,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // into the already-expanded runtime steps WITHOUT restarting the loop or moving
     // _index. The rail forbids add / remove / reorder of rooms, so the waypoint path is
     // unchanged and the command-bearing waypoints map 1:1, in order, onto the
-    // CommandLoopSteps in _expandedSteps (LoopExpander emits one per command-bearing
-    // waypoint):
+    // waypoint CommandLoopSteps in _expandedSteps (LoopExpander emits one per
+    // command-bearing waypoint; a lever detour's actions are not among them):
     //   - same command count → swap each changed CommandLoopStep in place; the next run
     //     of that step uses the new command / delay (effectively instant).
     //   - count changed (a command was added or removed → the step count shifts) → defer
@@ -1665,7 +1672,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
         var cmdStepIdx = new List<int>();
         for (int i = 0; i < _expandedSteps.Count; i++)
-            if (_expandedSteps[i] is CommandLoopStep) cmdStepIdx.Add(i);
+            if (_expandedSteps[i] is CommandLoopStep { IsExitAction: false }) cmdStepIdx.Add(i);
 
         // Iterate the RUNTIME order (authored order from the entry) so the
         // command-bearing waypoints line up 1:1, in sequence, with the CommandLoopSteps
@@ -2246,7 +2253,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // firing the move blindly (the synchronous path below) bonks "The gate is
         // closed!". Only when an enqueuer is bound; unwired harnesses fall through to
         // the synchronous dispatch (fire-and-forget pull + move) unchanged.
-        if (_winchEnqueuer is not null && WinchManager.IsWinchExit(exit)
+        if (!step.SkipSpecialDispatch && _winchEnqueuer is not null && WinchManager.IsWinchExit(exit)
             && WinchManager.PullCommand(exit) is { } winchPull)
         {
             if (_tracker.State.OpenDoorDirections is { } openGate && openGate.Contains(step.Direction))
@@ -2264,7 +2271,13 @@ public sealed class LoopRunner : IRecoverableEngine
         // Synchronous special exits (Text / Teleport / same-room
         // MultiActionHidden) share the walker's emission path so both
         // engines cross them identically — the fix that makes a circuit
-        // send "borrow skiff" for a Text exit instead of the cardinal.
+        // send "borrow skiff" for a Text exit instead of the cardinal. A lever exit
+        // the lap's own detour has just opened is crossed as it stands.
+        if (step.SkipSpecialDispatch)
+        {
+            EmitCardinal(step.Direction, exit.Target, "lever exit, opened on the detour before it");
+            return;
+        }
         SpecialExitSend sync = SpecialExitDispatch.TrySendSynchronous(
             exit, step.Direction, _tracker.State.CurrentRoom,
             _tracker, _recovery,
@@ -2432,7 +2445,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // other way.
     private bool TryGoRoundDoor(string reason)
     {
-        if (_loop is null || _bfs is null || _index >= _expandedSteps.Count
+        if (_loop is null || _bfs is null || _graph is null || _index >= _expandedSteps.Count
             || _expandedSteps[_index] is not MoveLoopStep step
             || _tracker.State.CurrentRoom is not { } here
             || !here.Exits.TryGetValue(step.Direction, out RoomExit exit))
@@ -2443,11 +2456,11 @@ public sealed class LoopRunner : IRecoverableEngine
         if (RecoveryWouldDeclineAsEcho()) return false;
 
         IReadOnlyList<LoopWaypoint> waypoints = RuntimeWaypointOrder();
-        int unreachableBefore = LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count;
+        int unreachableBefore = LoopExpander.Expand(waypoints, _bfs, _graph, _filter).UnreachableSegments.Count;
         _abandonedDoors.Add((here.Key, exit.Target));
         _filter = new AbandonedDoorsFilter(_runFilter, _abandonedDoors);
         string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
-        if (LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count > unreachableBefore)
+        if (LoopExpander.Expand(waypoints, _bfs, _graph, _filter).UnreachableSegments.Count > unreachableBefore)
         {
             FailStep($"couldn't open {door} ({reason}), and the loop has no way round it");
             return true;
@@ -2548,6 +2561,15 @@ public sealed class LoopRunner : IRecoverableEngine
         switch (result)
         {
             case WinchResult.Turned:
+                // A detour's pull is done once it turns; the detour walks on to the gate.
+                // Held, the advance waits for the resume to drive the next step.
+                if (_loop is not null && _index < _expandedSteps.Count
+                    && _expandedSteps[_index] is CommandLoopStep { IsWinchPull: true })
+                {
+                    _stepInFlight = false;
+                    AdvanceStep();
+                    return;
+                }
                 if (ParkClearedStepWhilePaused("winch turned")) return;
                 if (_loop is null || State != LoopState.Running
                     || _index >= _expandedSteps.Count
@@ -2717,7 +2739,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // written or imported before the map knew the passage) would cross twice: the
         // command goes through, then the move sends it again from the far side and
         // walks back out (report paradigm-20261005-201733, `go path` both ways).
-        if (CrossingTheNextMoveTakes(step) is { } crossing)
+        if (!step.IsExitAction && CrossingTheNextMoveTakes(step) is { } crossing)
         {
             _log?.Info("LoopRunner",
                 $"step {_index + 1}: command '{crossing}' skipped — the next move takes that exit itself");
@@ -2725,6 +2747,11 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
         _stepInFlight = true;
+        if (step.IsExitAction)
+        {
+            SendExitAction(step);
+            return;
+        }
         // A waypoint command may chain several commands with `;` or `^M` (the same
         // convention macros / triggers / pre-rest commands use) — send each fragment
         // as its own CR-terminated wire line. A command with no separator splits to a
@@ -2777,6 +2804,36 @@ public sealed class LoopRunner : IRecoverableEngine
             _combatHoldLogged = false;
             StartDelay(CommandReplyWait);
         }
+    }
+
+    // A lever action on a detour, sent as the walker sends one
+    // (AutoWalkManager.SendCommandStep). The game's answer differs per lever and
+    // isn't in the game data (GAME_MECHANICS "Multi-action exits and levers"), so
+    // its prompt is all the step waits for. A winch pull goes to WinchManager,
+    // which pulls again until the winch turns.
+    private void SendExitAction(CommandLoopStep step)
+    {
+        if (step.IsWinchPull && _winchEnqueuer is not null)
+        {
+            _log?.Info("LoopRunner", $"step {_index + 1}: detour winch pull ('{step.Command}') — re-pulling until it turns");
+            _awaitingWinch = true;
+            _winchEnqueuer(Direction.N, step.Command, /*waitForGate:*/ false, "loop", OnWinchReply);
+            return;
+        }
+        SendingOwnCommand = true;
+        try
+        {
+            // Claimed rather than tracked: a lever command can start with a text-exit
+            // verb, and read as a move it would leave a phantom in the pending queue.
+            _tracker.NoteAuxCommandSent(step.Command);
+            Write(Encoding.Latin1.GetBytes(step.Command + "\r"), $"lever action '{step.Command}'");
+        }
+        finally { SendingOwnCommand = false; }
+        _awaitingCommandReplies = true;
+        _commandPromptsOwed = 1;
+        _commandRedisplayAwaited = false;
+        _combatHoldLogged = false;
+        StartDelay(CommandReplyWait);
     }
 
     // Everything the block needed is in: move on, unless it started a fight. Then the

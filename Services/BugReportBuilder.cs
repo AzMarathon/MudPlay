@@ -2191,6 +2191,11 @@ public static class BugReportBuilder
                 .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
                 .ToArray();
             Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
+            // The lever actions the lap types on its detours to the lever exits it
+            // crosses: a loop that stopped at, or walked round, such an exit.
+            IReadOnlyList<string> leverActions = loop.ExitActionCommands;
+            Kv(sb, "Loop lever detours (actions each lap)",
+                leverActions.Count == 0 ? "(none)" : string.Join(", ", leverActions.Select(c => $"'{c}'")));
             Kv(sb, "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the

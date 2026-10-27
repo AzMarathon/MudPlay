@@ -1,5 +1,10 @@
 # Version history
 
+## 3.186.19
+
+- Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+- bug reports addressed: paradigm-20261026-220231
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
