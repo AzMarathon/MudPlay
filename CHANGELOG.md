@@ -1,6 +1,6 @@
 # Version history
 
-## 3.186.16
+## 3.186.15
 
 - Editing a loop-builder step's action no longer crashes the client when the builder closed while the editor was open
 - Live edits from the running-loop rail, and a loop editor's "Restart now", are dropped if that run has ended meanwhile
