@@ -395,7 +395,9 @@ public sealed class RoomTracker
     public event Action? RoomDisplayRead;
 
     // A room display read that left the tracker confirmed in the room it shows: (that
-    // room, the display). A display that lands one of several moves in flight leaves
+    // room, the display). Also when an engine moved on from inside the read's own
+    // transition, so the tracker is Pending again by its end: the display was still
+    // that room's. A display that lands one of several moves in flight leaves
     // the tracker Pending and is not raised either: the room it shows is the one the
     // first move reached, but a door read off it would be laid on whichever room the
     // tracker settles on, so its doors wait for the next display read confirmed. Not raised for a dropped peek, nor for
@@ -1178,6 +1180,24 @@ public sealed class RoomTracker
     // that display (RoomTransition.Displayed).
     private bool _reconcilingDisplay;
 
+    // The exits of the display being reconciled, which SetRoom gives the room that
+    // display settles us in before StateChanged goes out. An engine sends its next
+    // step from inside that event, and its "already open" checks (a lever exit, a
+    // hidden exit already revealed) read null there: a loop stopped at a lever exit
+    // the display showed open (report paradigm-20261026-220231), and a same-room
+    // lever on an open gate would be pulled, which locks it.
+    private IReadOnlySet<Direction>? _displayExits;
+
+    // The room the display being read confirmed us in, for RoomShown: an engine
+    // that moves on from inside the transition has the tracker Pending again by
+    // the time the read ends, and that display's doors are still that room's.
+    private RoomKey? _displaySettledIn;
+
+    private void NoteDisplayShowsRoom(Room room)
+    {
+        if (_reconcilingDisplay && !_bookedOffAnotherRoomsDisplay) _displaySettledIn = room.Key;
+    }
+
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private Action? _requestRedisplay;
 
@@ -1495,6 +1515,7 @@ public sealed class RoomTracker
     public void NoteRoomObserved(RoomObservation observation, DateTimeOffset? whenUtc = null)
     {
         _displayNotOfRoomHere = false;
+        _displaySettledIn = null;
         try
         {
             ReadRoomDisplay(observation, whenUtc ?? _now());
@@ -1504,8 +1525,11 @@ public sealed class RoomTracker
             // RoomDisplayRead is owed whatever a RoomShown listener does.
             try
             {
-                if (!_displayNotOfRoomHere && State is { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here })
-                    RoomShown?.Invoke(here.Key, observation);
+                RoomKey? shown = State is { Confidence: RoomConfidence.Confirmed, CurrentRoom: { } here }
+                    ? here.Key : _displaySettledIn;
+                _displaySettledIn = null;
+                if (!_displayNotOfRoomHere && shown is { } key)
+                    RoomShown?.Invoke(key, observation);
             }
             finally
             {
@@ -1571,6 +1595,7 @@ public sealed class RoomTracker
         // From here on a room the tracker settles on is the one this display shows:
         // a booked landing it corrects, as much as the reconcile that follows.
         _reconcilingDisplay = true;
+        _displayExits = observation.Exits;
         try
         {
             VerifyCastLanding(observation, when);
@@ -1619,6 +1644,7 @@ public sealed class RoomTracker
         finally
         {
             _reconcilingDisplay = false;
+            _displayExits = null;
             _trailAwaitsFirstDisplay = false;
         }
 
@@ -1630,16 +1656,19 @@ public sealed class RoomTracker
             _displayNotOfRoomHere = true;
             State.OpenDoorDirections = null;
             State.ClosedDoorDirections = null;
+            State.ObservedExitDirections = null;
             _lastObservation = null;
             return;
         }
 
         // Mirror the full observed-exit set so the walker can skip a redundant
         // `sea <dir>` when a graph-hidden exit is already showing in the live
-        // display. Set AFTER the switch: the reconcile paths call SetRoom, which
-        // clears ObservedExitDirections (so a dead-reckoned / recovered room never
-        // carries a stale set) — re-applying it here binds the set to the room we
-        // actually just observed. A blind character still gets no exits here (blind
+        // display. SetRoom already gave a room this display settled us in its exits
+        // before raising StateChanged (_displayExits); set again after the switch for
+        // the paths that settle without SetRoom (a passive re-show, a display held for
+        // its move), binding the set to the room we actually just observed. A
+        // dead-reckoned / recovered room set outside a display still gets none. A
+        // blind character still gets no exits here (blind
         // room displays carry no `Obvious exits:` line), so the walker will run the
         // real `sea` a hidden exit needs instead of skipping it on a stale value.
         State.ObservedExitDirections = observation.Exits;
@@ -2122,7 +2151,11 @@ public sealed class RoomTracker
             // Same room — refresh timestamp, no state churn. Subset
             // match tolerates exits the live display hides relative
             // to the graph (closed doors, hidden / searchable, gated).
+            // The display's exits go in first, as SetRoom gives them: a listener
+            // acting on this re-show reads what it showed (an exit that opened).
             State.LastUpdatedAt = when;
+            State.ObservedExitDirections = observation.Exits;
+            NoteDisplayShowsRoom(current);
             RaiseStateChanged(RoomConfidence.Confirmed, RoomConfidence.Confirmed, current, current);
             return;
         }
@@ -3475,8 +3508,16 @@ public sealed class RoomTracker
         }
         _pending.TryDequeue(out _);
         State.SuspectStrikes = 0;
-        SetRoom(target, RoomConfidence.Pending, when,
-            $"move {moveLabel} confirmed by the display held for it, the next move's room showing now");
+        // The room set here is the held display's, not the one showing now: it
+        // takes the held display's exits.
+        IReadOnlySet<Direction>? showing = _displayExits;
+        _displayExits = held.Display.Exits;
+        try
+        {
+            SetRoom(target, RoomConfidence.Pending, when,
+                $"move {moveLabel} confirmed by the display held for it, the next move's room showing now");
+        }
+        finally { _displayExits = showing; }
         MoveConfirmed?.Invoke();
         ReconcileFromPending(observation, when);
         return true;
@@ -3542,8 +3583,11 @@ public sealed class RoomTracker
         // already revealed?" pre-check. Clear it; NoteRoomObserved re-applies the
         // fresh set right after its reconcile switch on a real display. (A stale set
         // here made the walker skip the required `sea <dir>` and ram a hidden exit
-        // — report paradigm-20260921-145800.)
-        State.ObservedExitDirections = null;
+        // — report paradigm-20260921-145800.) A room the display being reconciled
+        // settles us in takes that display's exits at once, the same rule
+        // RoomTransition.Displayed follows.
+        State.ObservedExitDirections = _reconcilingDisplay && !_bookedOffAnotherRoomsDisplay ? _displayExits : null;
+        if (confidence == RoomConfidence.Confirmed && room is not null) NoteDisplayShowsRoom(room);
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
         // Sure of the room again: the pending queue tracks every move from here.
         if (IsSure) ResetPassiveLocate();

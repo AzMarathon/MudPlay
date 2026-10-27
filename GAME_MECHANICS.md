@@ -6315,15 +6315,19 @@ Among protectable hazards, a further split governs whether the navigator may off
     already open instead of re-pulling its levers or detouring to them.
 
 ### Multi-action exits and levers
-*Status: CONFIRMED (timed window, fire-and-forget); CONFIRMED 2026-08-17 (user; relative order, nesting); CONFIRMED 2026-07-28 (capture, report 180730 — supersedes report 195552; redundant levers) · per-fact tags inline*
+*Status: CONFIRMED (timed window, fire-and-forget); CONFIRMED 2026-08-17 (user; relative order, nesting); CONFIRMED 2026-07-28 (capture, report 180730 — supersedes report 195552; redundant levers); door/gate toggle settled 2026-10-26 (user: the DLL is the answer, Paradigm the same) · per-fact tags inline*
 
 - **[CONFIRMED] A `(Hidden, Needs N Actions, {any|specific} order)` exit unlocks by issuing the listed
   command(s) from the named room + exit direction.** The action room can differ from the room the exit
   lives in (the "cross-room" case): e.g. pull a lever in room A to open an exit in room B.
-- **[CONFIRMED] Repeating the action on an open exit does not close it** *(2026-10-05, user: pushing the
-  brick or the stone a second time)*. A repeat is wasted, not harmful.
+- **[CONFIRMED] Repeating the action on an open hidden exit does not close it** *(2026-10-05, user: pushing the
+  brick or the stone a second time)*. A repeat is wasted, not harmful. A lever-opened **door or gate** is
+  the other way: a second action locks it (*Stock: what the engine's action handler does*, the door or gate
+  bullet).
 - **[CONFIRMED] Once opened, the exit stays open for a timed window of roughly 3–5 minutes that is NOT
-  encoded anywhere in the game data.** Long enough to walk from the action room to the exit room and
+  encoded anywhere in the game data.** On Stock the window is the exit-reset queue: at least 5 minutes from
+  the action for a hidden exit and for a lever door or gate alike (*Stock: what the engine's action handler
+  does*, its *The open window* and *Both sides are queued for the relock* bullets). Long enough to walk from the action room to the exit room and
   cross without racing a re-lock.
 - **[CONFIRMED] Specific-order across rooms is tolerant of walk time.** For "Needs 2 Actions, specific
   order," performing action #1 (in its room) stays satisfied through the same ~3–5 min timer; you then
@@ -6349,6 +6353,20 @@ Among protectable hazards, a further split governs whether the navigator may off
     `6/861 →D→ 6/922 →D→ 6/923 →D→ 6/924`; `6/861` D needs 4 ordered levers, in alcoves 6/919 / 6/921 /
     6/920 / 6/918. Each alcove is behind its own `Needs 1 Actions` entrance gate whose lever sits in a
     freely-walked Ancestral Tomb room (6/889 / 6/917 / 6/903 / 6/875) — genuinely one level of nesting.
+  - **The treetops vine chain above the Lost City is five hidden exits in a row** *([OBSERVED] 2026-10-26,
+    Anomaly v0.61.48 Rooms and report `paradigm-20261026-220231` · Realm: Paradigm)*. `16/551` N → `16/552`
+    (the vine up to the Narrow Ledge `16/640`) opens to `tear bark` in `16/569`, behind `16/568` NW, which
+    opens to `push knot` in `16/567`, behind `16/565` N (`pull vine` in `16/556`), behind `16/555` W
+    (`move branch` in `16/561`), behind `16/560` N (`turn knot` in `16/547`). Each answers its actor with two
+    lines, whatever the exit was:
+    - `turn knot`: `You twist the knot set into the tree branch.` / `With a creaking noise, a branch moves and exposes an opening to the north.`
+    - `move branch`: `You push on the branch and it moves a few inches to one side.` / `A passage deeper into the tree opens to the west.`
+    - `pull vine`: `You pull on the vine and it gives a few inches.` / `An opening in the foliage appears to the north, revealing a large branch.`
+    - `push knot`: `You push the knot and hear a creaking noise.` / `You hear a rustling noise, and the foliage opens to the northwest.`
+    - `tear bark`: `As you tear at the bark, you hear a loud creaking noise.` / `With several loud creaks, a branch moves revealing a path to the north.`
+    - The gate stood open 3 min 54 s after `tear bark`: `16/551` listed `Obvious exits: north, south` as a
+      loop arrived, inside the open window. The loop stopped there all the same, judging the crossing
+      before it had read that display's exits.
 - **[CONFIRMED, capture 2026-07-28 report 180730 — SUPERSEDES the earlier report-195552 "both needed"
   claim] Two guardroom levers with identical commands on one gate are REDUNDANT alternatives — one pull
   raises it.** Some `Door` exits are raised not by a same-room verb but by a `pull lever` performed in
@@ -6358,18 +6376,26 @@ Among protectable hazards, a further split governs whether the navigator may off
   **both cells carry the identical command list and a bare `Action` (StepNumber 1)** with **no `Needs N`
   modifier** on the door.
   - Scrollback proves one suffices: the exits line went `closed gate north` → `open gate north` after
-    the *first* `pull lever` and stayed open through the redundant second pull. So same-command,
-    same-StepNumber levers on one exit are interchangeable — pulling either raises it. (An earlier run
-    misread a failure as "both must be pulled"; this direct capture retracts that.)
+    the *first* `pull lever`. So same-command, same-StepNumber levers on one exit are interchangeable —
+    pulling either raises it, and the second must not be pulled: it locks the gate again (*Stock: what the
+    engine's action handler does*). (An earlier run misread a failure as "both must be pulled"; this direct
+    capture retracts that. This bullet also said the gate stayed open through the redundant second pull;
+    superseded 2026-10-26 by the user's ruling that the DLL's toggle holds on both realms.)
   - A **genuine** multi-step gate is one whose data declares an explicit `Needs N Actions` modifier or
     distinct `Action#1`/`Action#2` StepNumbers — those pull every step.
   - A same-room lever variant also exists (`1/1375 S`, the courtyard, whose lever is on this room's own
     W slot — one action, no remote detour).
-- **Stock: what the engine's action handler does** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `Remote Action` handler @0x46c573, called from `_execute_input` @0x4507ae; Realm: Stock, Paradigm not recorded)*. An exit action is a `Remote Action` exit (type 12 in *Monsters, lairs & spawns → Monster roaming and following*). Its phrases and its action message are rows of the message table, not a textblock.
+- **Stock: what the engine's action handler does** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `Remote Action` handler @0x46c573, called from `_execute_input` @0x4507ae; Realm: Stock, and for lever doors and gates both: the user, 2026-10-26, "paradigm and stock will be the same"; the rest of it not recorded for Paradigm)*. An exit action is a `Remote Action` exit (type 12 in *Monsters, lairs & spawns → Monster roaming and following*). Its phrases and its action message are rows of the message table, not a textblock.
   - **The action message is printed first, whatever state the target is in**: line 2 to the room (@0x46c5e5–0x46c63b) and line 1 to the actor (@0x46c643–0x46c66c), before the handler looks at the target exit (@0x46c672). So an action answers with the same line every time. The pyramid's stone block is the worked case (*Great Pyramid puzzle climb*).
   - **A hidden target opens when all its blocked bits are clear** (@0x46ca8a–0x46cafc): the exit is queued for the exit reset with count 1 (`_add_exit_to_list(room, map, dir, 1)` @0x46cb0f), and the exit's room is told the exit's own "opens" message, or `A concealed passage opens to the %s.` when it has none (@0x46cb24–0x46cb8d). Repeating the action on an open hidden exit runs that branch again: the reset is queued again and the line is broadcast again. That agrees with the repeat rule in this topic.
   - **The open window is the exit-reset queue.** Count 1 is 5 minutes, and the queue's order can stretch it (the re-arm note in *Exit traps — search and disarm*). The reset gives an action-opened exit its blocked bits back, and that branch prints no line (`_background_update_exits` @0x44f6c9–0x44f893).
-  - **`[CONFLICT — ask the user]` A door or gate target is toggled on every action** (@0x46c6bb–0x46c7d0): state 0 (open) becomes 2 (locked) and any other state becomes 0, then the far side is toggled from its own state, and the relock is queued on both sides. By that code a second pull of a lever on an open gate locks it again. The redundant-levers capture in this topic (report 180730, realm not recorded) has the gate staying open through the second pull. Question: which realm was that capture on, and does a second pull shut a lever gate on Stock? (User 2026-10-09: unsure.)
+  - **A door or gate target is toggled on every action** *([OBSERVED] 2026-10-26, Stock 1.11p `wccmmud.dll`; the user, 2026-10-26: "for lever operated doors and gates look at the DLL for the answer, paradigm and stock will be the same" · Realm: both)*. The handler picks its branch by the target exit's type (`[room+dir*2+0x360]` − 6 through the byte table @0x46c693 and the jump table @0x46c6a6): type 7 (door) and type 11 (gate) go to @0x46c6bb, type 6 (hidden) to @0x46c8de, types 9 and 24 (traps) to @0x46c7dd, anything else nowhere.
+    - **The state flips, from whatever it is** (@0x46c6bb–0x46c6df): the side's state (`[room+dir*4+0x374]`, 0 open / 1 closed / 2 locked, as `_cmd_open` reads it) goes from 0 to **2, locked**, and from 1 or 2 to **0, open**. A second action on a door or gate standing open locks it; a third opens it again. There is no "already open" test and no refusal.
+    - **The far side flips from its own state** (@0x46c709–0x46c7d0): when the target's far exit points back to this room and is a door or gate (type 7 or 11), it gets the same 0 → 2, otherwise → 0, and its room is marked changed (`[room+0x5f8]`).
+    - **Both sides are queued for the relock** (`_add_exit_to_list` @0x46c701 and @0x46c7d0) with the side's relock timer, at least 1: the same queue an opened door goes on (*Locked doors — picking, opening and bashing*, its *Stock: when an opened or unlocked door locks again* bullet), so an opened lever gate stays open at least 5 minutes from the action unless an entry queued earlier for it, or another action, comes first. That is the window the user's ruling of 2026-10-18 gives an opened door on both realms: 300 s, Paradigm assumed to use Stock's relock timer (*Locked doors — picking, opening and bashing*, its *Stock: when an opened or unlocked door locks again* and *Paradigm is assumed to use Stock's relock timer* bullets). The relock that ends it prints `The door to the %s just locked!` (@0x44f907) or `The gate to the %s just locked!` (@0x44f987) to that side's room; a gate already locked is left without a line.
+    - **No line tells open from locked.** The action's own message (both rows: the room's, then the actor's) prints before the handler looks at the target (@0x46c5e5–0x46c66c), and the door or gate branch prints nothing (@0x46c6bb–0x46c7d8). Only the room's exits line (`open gate <dir>` / `closed gate <dir>`) or a refused move shows which way it went.
+    - **A room command's `remoteaction` runs the same handler.** The textblock directive (`remoteaction` @0x471606) reads a room number, a message, an action number and an exit (0–10) and calls @0x46c573 (@0x4716e0) with the room on the player's map, so a wheel or lever worked through a room's CMD toggles a door or gate the same way.
+    - (An earlier entry held this as `[CONFLICT — ask the user]` against the redundant-levers capture, report 180730, which read the gate open after a second pull; settled 2026-10-26 by the user for the DLL.)
     - **Paradigm evidence for the toggle** *([OBSERVED] 2026-10-26, report `paradigm-20261026-150710`)*: two turns of the Dark-Elf Castle wheel in one burst left its gate shut, every time (*Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*, the dark-elf castle chain). The refusal read `The gate is Closed!`, with the capital Stock prints for a shut, unlocked gate, where this Stock code would have locked it (`The gate is closed!`). Paradigm's capitalisation isn't recorded (*Refused ("bonked") moves*).
   - **A trap target in state 2 (a lever trapdoor) pushes every player and every monster in the target room through the exit** (@0x46c7dd–0x46c8ab; the monsters' side is in *Monsters, lairs & spawns → Monster roaming and following*).
   - `[NEEDS CONFIRMATION]` **Specific order on Stock.** The handler ignores action *n* while the blocked bit of action *n+1* is still set (action 1 tests bit `0x20` @0x46c972, action 2 tests `0x40` @0x46c992, and so on), so the highest-numbered action is the first one it accepts. Whether the engine's action number (the exit's second parameter divided by 10) is the game data's `Action#N` wasn't traced. Question: on Stock, must a specific-order gate's levers be pulled from the highest `Action#N` down? The relative-order rule in this topic (user, 2026-08-17) has #1 before #2.
@@ -6389,6 +6415,8 @@ Among protectable hazards, a further split governs whether the navigator may off
     graph-build; the required-action count is the number of DISTINCT StepNumbers (same-StepNumber levers
     count as one), and the path expander pulls one cheapest alternative per StepNumber — so a redundant
     pair pulls once, a declared multi-step gate pulls all.
+  - A loop's legs get the walker's detour (`LoopExpander` → `RemoteActionPathExpander`, run by `LoopRunner`); report `paradigm-20261026-220231`.
+  - A lever is not pulled at a door or gate held open (`DoorsHeldOpen.MayPullLever`, from `AutoWalkManager.SendCommandStep` and `LoopRunner.SendExitAction`), a walk-to leaves out the detour of one held open past the walk there, and a loop skips a detour at its start when its exit shows open or is held open (`LoopRunner.SkipDetourToAnOpenExit`). **Client policy**: a lever gate counts as held open on the door rule of 2026-10-18, from each sighting of it open, whoever opened it, for 300 s; one our pull opened, seen open within those 300 s, is held from the pull, and its far side with it. **Client policy (2026-10-26, the coordinator's ruling on the review)**: a lever is never pulled while its gate is held open at all, its last minute included, since the pull locks it for certain where leaving it fails only if it locks before we arrive; the walk there and the 60 s margin are weighed only when a walk-to plans to leave the detour out (`DoorsHeldOpen.IsHeldOpen` with the moves ahead). A display of the gate's own room, where we stand, outranks a hold either way. A guard door's `ask` is left out of the rule: nothing records that it flips the door.
   - A room command the exit's own action cell already lists is not added again as a second action (`RoomGraphManager.InjectRoomCmdRemoteActions`; a `testskill` roll carries over to the cell's action), so the engines send it once per crossing. Report `paradigm-20261026-150710`: the `8/560` wheel went out twice and its gate stayed shut. When the re-plans are spent on a step the game keeps refusing, the walk stops with a reason naming the step, direction and room (`AutoWalkManager`).
 
 ### Room-command reveal exits
@@ -7079,9 +7107,11 @@ Among protectable hazards, a further split governs whether the navigator may off
        - **Two turns in a row leave the gate shut** *([OBSERVED] 2026-10-26, report
          `paradigm-20261026-150710`, Paradigm)*: six times the walker sent `turn wheel` twice in the same
          millisecond, got the line twice, and `n` met `The gate is Closed!`. By the user's account (relayed
-         2026-10-26) one hand-typed `turn wheel` then let the walk go on. This fits the door toggle in
-         *Multi-action exits and levers*. `[NEEDS CONFIRMATION]` Does one turn open the gate and a second
-         shut it again on Paradigm?
+         2026-10-26) one hand-typed `turn wheel` then let the walk go on. One turn opens the gate and a
+         second locks it again, on both realms: the `remoteaction` directive runs the action handler's door
+         or gate toggle (*Multi-action exits and levers*, *Stock: what the engine's action handler does*;
+         user 2026-10-26, "paradigm and stock will be the same"). (This was `[NEEDS CONFIRMATION]`;
+         settled 2026-10-26.)
     7. **The queen's door:** Royal Guardroom `8/702` N → Royal Throne Room `8/705` is
        `(Key: 809 [or 101 picklocks])`. The dark-elf queen (monster 343) is the NPC of `8/705` and drops
        the golden key (item 813) at 100%, for Vault Antechamber `8/706` N `(Key: 813 [or 1000 picklocks])`.

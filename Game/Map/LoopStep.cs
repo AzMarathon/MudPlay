@@ -19,6 +19,12 @@ public abstract record LoopStep
 // A planar movement step. Same execution semantics as MoveStep.
 public sealed record MoveLoopStep(Direction Direction) : LoopStep
 {
+    // The crossing of a lever exit whose actions the lap types on its own detour
+    // just before (MoveStep.SkipSpecialDispatch has the reasoning): crossed as a
+    // plain cardinal. Expansion-only, never saved.
+    [JsonIgnore]
+    public bool SkipSpecialDispatch { get; init; }
+
     public override string Display => Direction switch
     {
         Map.Direction.N  => "north",
@@ -40,6 +46,19 @@ public sealed record MoveLoopStep(Direction Direction) : LoopStep
 // to the next step; 0 means "advance once the game has answered the command".
 public sealed record CommandLoopStep(string Command, long DelayMs = 0) : LoopStep
 {
+    // A lever exit's action on the detour the expansion lays in ahead of the exit,
+    // not a waypoint's command. Expansion-only, never saved.
+    [JsonIgnore]
+    public bool IsExitAction { get; init; }
+
+    // That action is a winch pull, re-pulled until the winch turns (CommandStep.IsWinchPull).
+    [JsonIgnore]
+    public bool IsWinchPull { get; init; }
+
+    // The door or gate that action opens (CommandStep.DoorOrGate).
+    [JsonIgnore]
+    public (RoomKey Room, Direction Dir)? DoorOrGate { get; init; }
+
     public override string Display => DelayMs > 0
         ? $"{Command} (wait {LoopDelay.Describe(DelayMs)})"
         : Command;

@@ -15,6 +15,14 @@
 - Bug reports show how far the game's answer to `train stats` got
 - bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
 
+## 3.186.22
+
+- Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+- An exit the arrival's room display shows open is crossed as it stands, by walks and loops alike
+- A lever door or gate seen open (ours or anyone's) isn't pulled shut again while it can still be open when we get there
+- A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
+- bug reports addressed: paradigm-20261026-220231
+
 ## 3.186.20
 
 - A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
