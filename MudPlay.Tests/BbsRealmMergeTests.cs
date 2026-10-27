@@ -48,7 +48,8 @@ public sealed class BbsRealmMergeTests : IDisposable
 
     private BbsSectionViewModel OpenSettings()
     {
-        BbsSectionViewModel vm = new(_store, _profile, new PasswordProtector(), new DisplayConfig(), new SettingsService());
+        BbsSectionViewModel vm = new(_store, _profile, new PasswordProtector(), new DisplayConfig(), new SettingsService(),
+            new GameDataCache(AppPaths.GameDataRoot));
         vm.SelectedBbsName = _board;
         return vm;
     }

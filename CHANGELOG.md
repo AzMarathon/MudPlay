@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.24
+
+- A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
+
 ## 3.186.23
 
 - `train stats` is no longer abandoned on a room display or prompt that answers something sent just before it

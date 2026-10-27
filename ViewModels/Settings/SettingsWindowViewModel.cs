@@ -316,7 +316,8 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
             _profile,
             AppServices.Current.Passwords,
             AppServices.Current.Display,
-            AppServices.Current.Settings);
+            AppServices.Current.Settings,
+            AppServices.Current.GameData);
         Sections.Add(bbsSection);
 
         // One shared combat-profile staging session, edited by the Combat, Health,

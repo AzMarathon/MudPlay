@@ -114,7 +114,8 @@ public sealed class BbsSectionCredentialStagingTests
                 Store = store,
                 Profile = profile,
                 Passwords = passwords,
-                Vm = new BbsSectionViewModel(store, profile, passwords, new DisplayConfig(), new SettingsService()),
+                Vm = new BbsSectionViewModel(store, profile, passwords, new DisplayConfig(), new SettingsService(),
+                    new GameDataCache(AppPaths.GameDataRoot)),
             };
         }
 
