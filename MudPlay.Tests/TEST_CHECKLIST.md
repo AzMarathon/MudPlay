@@ -1846,7 +1846,7 @@ How to keep it current:
 
 ### ItemFinderViewModelTests.cs
 - Covers: ViewModels/CharacterWorkshop/ItemFinderViewModel
-- Checks: the level filters; the Missing tint against worn gear; the trial-damage readout following the trial gear, stats and target.
+- Checks: the level filters; a More stats row (Quickness) filtering and clearing on Reset; the Missing tint against worn gear; the trial-damage readout following the trial gear, stats and target.
 - Why: Item Finder / Gear Finder wiring
 
 ### ItemMagicIndexTests.cs
