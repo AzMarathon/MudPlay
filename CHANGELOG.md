@@ -9,6 +9,12 @@
 - Background route searches no longer risk corrupting the room-spell counter check
 - bug reports addressed: paradigm-20261026-201217
 
+## 3.186.15
+
+- Editing a loop-builder step's action no longer crashes the client when the builder closed while the editor was open
+- Live edits from the running-loop rail, and a loop editor's "Restart now", are dropped if that run has ended meanwhile
+- bug reports addressed: Crash-20261026-212906, Crash-20261026-212908
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did

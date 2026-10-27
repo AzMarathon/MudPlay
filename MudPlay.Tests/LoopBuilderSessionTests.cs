@@ -315,6 +315,62 @@ public sealed class LoopBuilderSessionTests : IDisposable
         Assert.Equal(string.Empty, s.UnreachableSummary);
     }
 
+    // The step action editor is modeless and holds the row it was opened on. Its
+    // result lands on that step wherever it has moved, and on no other step once
+    // that one is gone (report Crash-20261026-212906).
+    [Fact]
+    public void IndexOfStep_FollowsTheStepThroughEditsAndMoves()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+        s.AddClick(new RoomKey(1, 3));
+        LoopBuilderRow opened = s.Clicks[2];
+
+        s.SetClickAction(2, "search", 500);   // another edit replaces the row
+        s.RemoveClickAt(0);                   // renumbers every row
+        Assert.Equal(1, s.IndexOfStep(opened));
+
+        s.MoveClick(1, 0);
+        Assert.Equal(0, s.IndexOfStep(opened));
+        Assert.Equal("search", s.Clicks[0].Command);
+    }
+
+    [Fact]
+    public void IndexOfStep_IsNone_OnceTheStepIsRemoved_EvenWhenAnIdenticalStepTakesItsPlace()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 2));
+        s.AddClick(new RoomKey(1, 2));        // a stay-put step, the same room twice
+        LoopBuilderRow opened = s.Clicks[1];
+
+        s.RemoveClickAt(1);
+        Assert.Equal((2, new RoomKey(1, 2)), (s.Clicks[1].Index, s.Clicks[1].Key));
+        Assert.Equal(-1, s.IndexOfStep(opened));
+    }
+
+    [Fact]
+    public void IndexOfStep_IsNone_AfterSaveOrClear_ThoughNewStepsFillTheSamePlaces()
+    {
+        (LoopBuilderSessionViewModel s, _) = NewSession();
+        s.ProposedName = "Saved";
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        LoopBuilderRow beforeSave = s.Clicks[0];
+        Assert.NotNull(s.Save());
+
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        Assert.Equal(-1, s.IndexOfStep(beforeSave));
+
+        LoopBuilderRow beforeClear = s.Clicks[1];
+        s.Clear();
+        s.AddClick(new RoomKey(1, 1));
+        s.AddClick(new RoomKey(1, 3));
+        Assert.Equal(-1, s.IndexOfStep(beforeClear));
+    }
+
     [Fact]
     public void PreviewedRoomKeys_PopulatesAfterTwoClicks()
     {
