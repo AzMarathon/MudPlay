@@ -4,6 +4,21 @@
 
 - A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
 
+## 3.186.16
+
+- Route searches several times faster, with far less memory churn, most of all on Windows
+- Chest Offload's shop trip worked out about 13× faster
+- BBS settings read for a check (PvP, death floor, coin name) are parsed again only when bbs.json changes
+- Hang reports and the program log now name a slow room-change, inventory or Chest Offload step
+- Background route searches no longer risk corrupting the room-spell counter check
+- bug reports addressed: paradigm-20261026-201217
+
+## 3.186.15
+
+- Editing a loop-builder step's action no longer crashes the client when the builder closed while the editor was open
+- Live edits from the running-loop rail, and a loop editor's "Restart now", are dropped if that run has ended meanwhile
+- bug reports addressed: Crash-20261026-212906, Crash-20261026-212908
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
