@@ -616,8 +616,8 @@ How to keep it current:
 
 ### CastingDirectorTests.cs
 - Covers: Game/Spells/CastingDirector (+ CastCoordinator, ConditionTracker, TickEngine)
-- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine.
-- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124); user rulings 2026-10-10 and 2026-10-17.
+- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine; the rest-time heal goes out standing while following a party leader, and solo or leading is held for standing, logged once and flagged (RestHealHeldStanding).
+- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124; the follower's standing heal: paradigm-20261027-094915, paradigm-20261027-123536); user rulings 2026-10-10 and 2026-10-17.
 
 ### CharacterCalculatorMatchupProfileTests.cs
 - Covers: Game/Calculators/CharacterCalculator.BuildNormalAttackProfile, MonsterMatchupCalculator

@@ -59,8 +59,9 @@ public static class SelfHealPicker
         int triggerValue = s.InCombat ? health.MinorHealCombatTrigger : health.HealRestTrigger;
         if (s.Hp > s.HealHpTrigger(health.HpThresholdMode, triggerValue)) return null;
 
-        // Out-of-combat heal-spell-during-rest only — don't cast
-        // mid-walk between rooms.
+        // Out of combat only while Resting says so — don't cast mid-walk between
+        // rooms. The caller folds in the standing cases that count as resting (a
+        // rest owed in a room that hurts, following a party leader).
         if (!s.InCombat && !s.Resting) return null;
 
         // Prefer an HP-regen HoT (regeneration / rejuvinating field) over the

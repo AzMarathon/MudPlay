@@ -2360,6 +2360,8 @@ public sealed class CastingDirector : IDisposable
         // gates on the cast cooldown upstream — so it lands ~once per between-round, not
         // every heartbeat poll.
         LogDueQueue(spells, health, partySettings, healEnabled, blessEnabled);
+        if (healEnabled) NoteRestHealHeldStanding(spells, health);
+        else RestHealHeldStanding = false;
 
         // Sneak keeping (Game.Stealth.SneakGuard): every in-between cast ends a sneak,
         // so while a backstab is still owed here, our sneaked move is landing, or we're
@@ -2760,12 +2762,41 @@ public sealed class CastingDirector : IDisposable
     private string? PickMinorSelfHeal(SpellsSettings spells, HealthSettings health) =>
         SelfHealPicker.Minor(spells, health, SelfHealState());
 
+    // A follower counts as resting for the rest-time heal. Its recovery rest ends one
+    // point above the rest trigger so it never holds the party for a top-off
+    // (HealthManager.SetPartyRoleSync), and the leader keeps the fights coming, so
+    // lying down was the only way it ever healed out of combat: it stood at 60-80%
+    // between fights with Heal (rest) set to 86% (reports paradigm-20261027-094915,
+    // paradigm-20261027-123536). The leader moves it either way, so a cast holds up no
+    // walk of its own, which is what the resting-only rule is there to protect.
     private SelfHealInputs SelfHealState() => new(
         _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
-        Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true,
+        Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true
+                 || FollowingALeader,
         HealHpTrigger: ResolveHpThreshold,
         Affordable: SpellAffordable,
         HpRegenRecastDue: spell => IsRecastDue("", spell));
+
+    private bool FollowingALeader => _party is { IsInParty: true, SelfIsLeader: false };
+
+    // The rest-time heal is due by HP and mana but held because we're standing out of
+    // combat and not resting. Said once per stretch, so a report shows why a character
+    // below Heal (rest) cast nothing.
+    private void NoteRestHealHeldStanding(SpellsSettings spells, HealthSettings health)
+    {
+        SelfHealInputs s = SelfHealState();
+        bool held = !s.InCombat && !s.Resting
+            && SelfHealPicker.Minor(spells, health, s with { Resting = true }) is not null;
+        if (held && !RestHealHeldStanding)
+            _log?.Info(LogCategory,
+                $"rest-time heal held: HP {_state.Hp}/{_state.MaxHp} is at or under Heal (rest), "
+                + "but we're standing out of combat and not following a leader — it is cast once resting");
+        RestHealHeldStanding = held;
+    }
+
+    // Read by the bug report: the rest-time heal was due at the last decision pass
+    // but held for standing (see NoteRestHealHeldStanding).
+    public bool RestHealHeldStanding { get; private set; }
 
     // Mirrors the decision-pass affordability skip (an unknown cost never blocks):
     // a spell is castable when we don't know its cost or the pool covers it. Used

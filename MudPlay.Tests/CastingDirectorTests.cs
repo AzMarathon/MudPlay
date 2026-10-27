@@ -4112,6 +4112,41 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal Tank", h.CastsSent[0]);
     }
 
+    // Reports paradigm-20261027-094915 / paradigm-20261027-123536: a cleric following
+    // a party leader stood at 60-80% HP between fights with Heal (rest) at 86% and
+    // never healed. A follower's recovery rest ends one point above the rest trigger,
+    // so the rest-time heal, cast only while resting, never got its chance. Following,
+    // it goes out standing; solo or leading, standing still holds it, and says so.
+    [Fact]
+    public void RestHeal_CastStanding_OnlyWhileFollowingALeader()
+    {
+        using PartyHarness h = new();
+        h.Spells.MinorHealSpell = "mihe";
+        h.Health.HealRestTrigger = 86;
+        h.Health.MajorHealCombatTrigger = 60;
+        h.State.Position = PlayerPosition.Standing;
+        h.State.InCombat = false;
+        h.State.Hp = 150;                 // 75%: under Heal (rest), above the major band
+
+        // Solo: held for standing, logged once.
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+        Assert.True(h.Director.RestHealHeldStanding);
+        Assert.Single(h.Log.Snapshot(), e => e.Message.Contains("rest-time heal held"));
+
+        // Leading a party: our own walk, still held.
+        h.AddMember("Korrde", hpPercent: 100);
+        h.Party.SelfIsLeader = true;
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        // Following the leader: the heal goes out standing.
+        h.Party.SelfIsLeader = false;
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "mihe" }, h.CastsSent);
+        Assert.False(h.Director.RestHealHeldStanding);
+    }
+
     // Report paradigm-20260820-122341 ("party heal fires a round late"): the heal
     // picker reads each member's HpPercent, but that value is refreshed by the `par`
     // poll on its own cadence. Before the member-watch, a member falling below the

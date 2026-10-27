@@ -69,6 +69,8 @@ public static class BugReportHoldsAndWaits
                 svc.CastDirector.BetweenRoundSlotMayBeSpent ? "yes" : "no");
             Kv(sb, "A cast is due", svc.CastDirector.HasCastDue() ? "yes" : "no");
             Kv(sb, "A cast held for a kept sneak", svc.CastDirector.HasSneakHeldCast ? "yes" : "no");
+            Kv(sb, "Rest-time heal held for standing (out of combat, not resting, not following)",
+                svc.CastDirector.RestHealHeldStanding ? "yes" : "no");
         });
         return sb.ToString();
     }
