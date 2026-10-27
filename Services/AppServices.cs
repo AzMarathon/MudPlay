@@ -9072,7 +9072,8 @@ public sealed class AppServices
         // A lever door or gate held open isn't pulled shut again by a walk or a lap:
         // the engine flips it on every pull. Its window is judged against the walk
         // still to go to the gate.
-        DoorsHeldOpen.TravelTime = moves => AutoLair.TravelCostModel.EstimateTravel(moves);
+        DoorsHeldOpen.TravelTime = moves => AutoLair?.TravelCostModel.EstimateTravel(moves) ?? TimeSpan.Zero;
+        RoomTracker.PlayerDeathObserved += () => DoorsHeldOpen.ForgetPulls("died");
         Walker.SetDoorsHeldOpen(DoorsHeldOpen);
         LoopRunner.SetDoorsHeldOpen(DoorsHeldOpen);
         // A waypoint's command block: the loop moves on once the game has answered it,

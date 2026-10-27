@@ -31,10 +31,11 @@ namespace MudPlay.Game.Map;
 // engine flips a door or gate on every action, so a lever pulled while it stands
 // open locks it (GAME_MECHANICS "Multi-action exits and levers"). A detour's lever
 // goes out only through MayPullLever, which holds it back while the gate is held
-// open long enough for the walk to reach it. A pull of ours is remembered until
-// the gate's room is next shown: shown open, the gate (and its far side, which the
-// engine flipped too) is held from the pull, the moment it opened, not from the
-// sighting. Guard doors opened by asking an NPC are not lever gates here: nothing
+// open at all; a walk leaves a detour out only while the hold outlasts the walk to
+// the gate (IsHeldOpen with the steps ahead). A pull of ours is remembered until
+// the gate's room is next shown, within the window: shown open, the gate (and its
+// far side, which the engine flipped too) is held from the pull, the moment it
+// opened, not from the sighting. Guard doors opened by asking an NPC are not lever gates here: nothing
 // records that an ask flips them (RoomGraphManager leaves their DoorOrGate unset).
 //
 // The route planner reads it from its worker thread, so every read and write of the
@@ -127,9 +128,12 @@ public sealed class DoorsHeldOpen
     public void NoteSeenOpen(RoomKey room, Direction dir)
     {
         if (_exitAt(room, dir) is not { } exit || !IsDoor(exit)) return;
+        DateTimeOffset now = _now();
         DateTimeOffset? pulledAt;
         lock (_gate) pulledAt = _pulled.Remove((room, dir), out DateTimeOffset at) ? at : null;
-        if (pulledAt is not { } pull)
+        // A pull older than the window can't be what holds it open now: the gate is
+        // seen open as any door is.
+        if (pulledAt is not { } pull || now - pull >= RelockFloor)
         {
             Hold(room, dir, exit, KindOf(exit), quiet: exit.Hint != RoomExitHint.KeyLocked);
             return;
@@ -142,21 +146,22 @@ public sealed class DoorsHeldOpen
             Hold(far, back, farExit, SideKind.DoorOrGate, quiet: false, from: pull);
     }
 
-    // Whether a detour's lever for this door or gate may go out, stepsToGate steps
-    // before the crossing it opens: not while the gate is held open past the time
-    // the walk takes to get there, since the pull would lock it. A pull that goes
-    // out is remembered (see the class comment). engine names the sender for the log.
-    public bool MayPullLever((RoomKey Room, Direction Dir) gate, string command, int stepsToGate, string engine)
+    // Whether a detour's lever for this door or gate may go out: never while the
+    // gate is held open at all, its last minute included, since the pull would lock
+    // it for certain, where leaving it alone fails only if it locks before we get
+    // there (GAME_MECHANICS "Multi-action exits and levers", Client policy). A pull
+    // that goes out is remembered (see the class comment). engine names the sender
+    // for the log.
+    public bool MayPullLever((RoomKey Room, Direction Dir) gate, string command, string engine)
     {
         DateTimeOffset now = _now();
-        TimeSpan reach = TravelTime?.Invoke(Math.Max(0, stepsToGate)) ?? TimeSpan.Zero;
         bool held;
-        DateTimeOffset? until = null;
+        DateTimeOffset? until;
         List<(RoomKey Room, Direction Dir)>? ranOut;
         lock (_gate)
         {
             ranOut = Prune(now);
-            held = _open.TryGetValue(gate, out until) && (until is not { } t || now + reach < t - PlanMargin);
+            held = _open.TryGetValue(gate, out until);
             if (!held) _pulled[gate] = now;
         }
         LogRanOut(ranOut);
@@ -164,7 +169,7 @@ public sealed class DoorsHeldOpen
         {
             _log?.Info(LogCategory,
                 $"{engine}: '{command}' not sent: {gate.Room} {gate.Dir} is held open"
-                + (until is { } u ? $" for {(int)(u - now).TotalSeconds}s more, past the ~{(int)reach.TotalSeconds}s walk to it" : " for good")
+                + (until is { } u ? $" for {(int)(u - now).TotalSeconds}s more" : " for good")
                 + ", and a pull would lock it");
             return false;
         }
@@ -173,13 +178,33 @@ public sealed class DoorsHeldOpen
     }
 
     // Whether a lever gate may be counted on stepsAhead steps from now, for a walk
-    // that would leave its detour out: held, past the time the walk takes to get there.
+    // that would leave its detour out: held past the walk there (TravelTime) and
+    // the plan margin.
     public bool IsHeldOpen(RoomKey room, Direction dir, int stepsAhead)
     {
         DateTimeOffset now = _now();
         TimeSpan reach = TravelTime?.Invoke(Math.Max(0, stepsAhead)) ?? TimeSpan.Zero;
+        bool held;
+        List<(RoomKey Room, Direction Dir)>? ranOut;
         lock (_gate)
-            return _open.TryGetValue((room, dir), out DateTimeOffset? until) && (until is not { } t || now + reach < t - PlanMargin);
+        {
+            ranOut = Prune(now);
+            held = IsCounted(room, dir, now + reach);
+        }
+        LogRanOut(ranOut);
+        return held;
+    }
+
+    // A death ends the pulls remembered: the run they were part of is over.
+    public void ForgetPulls(string why)
+    {
+        int forgotten;
+        lock (_gate)
+        {
+            forgotten = _pulled.Count;
+            _pulled.Clear();
+        }
+        if (forgotten > 0) _log?.Info(LogCategory, $"{forgotten} lever pull(s) not yet seen forgotten ({why}).");
     }
 
     // The side was seen shut, the game said it shut or locked, or a move into it was
@@ -278,6 +303,9 @@ public sealed class DoorsHeldOpen
     private List<(RoomKey Room, Direction Dir)>? Prune(DateTimeOffset now)
     {
         List<(RoomKey Room, Direction Dir)>? gone = null;
+        // A pull whose gate wasn't seen within its window says nothing any more.
+        foreach ((RoomKey Room, Direction Dir) stale in _pulled.Where(kv => now - kv.Value >= RelockFloor).Select(kv => kv.Key).ToList())
+            _pulled.Remove(stale);
         foreach (((RoomKey Room, Direction Dir) side, DateTimeOffset? until) in _open)
             if (until is { } t && now >= t) (gone ??= new()).Add(side);
         if (gone is null) return null;
@@ -303,9 +331,11 @@ public sealed class DoorsHeldOpen
             _open[(room, dir)] = until;
             _version++;
         }
+        DateTimeOffset now = _now();
         string line = $"{room} {dir} seen open — held open "
-            + (until is null ? "for good (it never locks again)"
-                : $"for {RelockFloor.TotalSeconds:0}s, counted on for {(RelockFloor - PlanMargin).TotalSeconds:0}s")
+            + (until is not { } end ? "for good (it never locks again)"
+                : $"for {(end - now).TotalSeconds:0}s, counted on for {Math.Max(0, (end - PlanMargin - now).TotalSeconds):0}s"
+                  + (from is { } pulled && pulled < now ? $" (from our pull at {pulled.ToLocalTime():HH:mm:ss})" : ""))
             + (fresh ? "" : " (window started again)");
         // A sighting of a side already held only moves its window on.
         if (quiet || !fresh) _log?.Debug(LogCategory, line);

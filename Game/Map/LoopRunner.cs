@@ -890,8 +890,8 @@ public sealed class LoopRunner : IRecoverableEngine
             _stepInFlight = false;
             _expectedMoveTarget = null;
             _log?.Info("LoopRunner", redrive
-                ? $"step {_index + 1}: '{command.Command}' goes out (again) after the flee"
-                : $"step {_index + 1}: '{command.Command}' went out before the flee; not sent again");
+                ? $"step {_index + 1}: '{command.Command}' goes out after the flee (it hadn't, or a hidden exit's action whose answer wasn't read)"
+                : $"step {_index + 1}: '{command.Command}' went out before the flee (answered, or not one to send twice); going on past it");
             if (_coordinator.IsPaused)
             {
                 // The resume drives the step the index stands at.
@@ -1762,24 +1762,6 @@ public sealed class LoopRunner : IRecoverableEngine
 
     public void SetDoorsHeldOpen(DoorsHeldOpen held) => _heldDoors = held;
 
-    // The moves from the step at `from` to the crossing of gate, the first primed
-    // step out of its room that way, walked over the map from the room we stand in;
-    // the lap's length when it can't be followed.
-    private int MovesToCrossing(int from, (RoomKey Room, Direction Dir) gate)
-    {
-        if (_graph is null || _tracker.State.CurrentRoom?.Key is not { } at) return _expandedSteps.Count;
-        int moves = 0;
-        for (int i = from; i < _expandedSteps.Count; i++)
-        {
-            if (_expandedSteps[i] is not MoveLoopStep move) continue;
-            moves++;
-            if (move.SkipSpecialDispatch && at.Equals(gate.Room) && move.Direction == gate.Dir) return moves;
-            if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) break;
-            at = exit.Target;
-        }
-        return _expandedSteps.Count;
-    }
-
     // The lever actions each lap types on its detours to the lever exits it
     // crosses, in lap order.
     public IReadOnlyList<string> ExitActionCommands =>
@@ -1800,9 +1782,12 @@ public sealed class LoopRunner : IRecoverableEngine
             foreach (LeverDetour d in _detours)
             {
                 if (d.Start != _index || d.OneWay || d.End == d.Start) continue;
-                bool shownOpen = _tracker.State.CurrentRoom?.Key.Equals(d.GateRoom) == true
-                    && _tracker.ShownOpenExits() is { } shown && shown.Contains(d.GateDir);
-                bool held = !shownOpen && _heldDoors?.IsHeldOpen(d.GateRoom, d.GateDir,
+                // Standing in the gate's room with its display read, that display
+                // decides: a hold can be older than a gate shut since.
+                IReadOnlySet<Direction>? shownHere = _tracker.State.CurrentRoom?.Key.Equals(d.GateRoom) == true
+                    ? _tracker.ShownOpenExits() : null;
+                bool shownOpen = shownHere?.Contains(d.GateDir) == true;
+                bool held = shownHere is null && _heldDoors?.IsHeldOpen(d.GateRoom, d.GateDir,
                     _expandedSteps.Skip(d.End).Take(d.Cross - d.End + 1).Count(static s => s is MoveLoopStep)) == true;
                 if (!shownOpen && !held) continue;
                 _log?.Info("LoopRunner",
@@ -2458,10 +2443,15 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             // The display we arrived on shows it shut (its action didn't take, or it
             // shut again): the walker takes the crossing now rather than after a bonk.
+            // The hold on it goes first: the display that shows it shut is read into
+            // DoorsHeldOpen only after this transition's handlers, and the walk handed
+            // the crossing must not take the gate for open and leave its lever.
             if (_tracker.State.Confidence == RoomConfidence.Confirmed
-                && _tracker.ShownOpenExits() is { } shown && !shown.Contains(step.Direction)
-                && TryWalkRefusedLeverCrossing(current.Key, "shows shut"))
-                return;
+                && _tracker.ShownOpenExits() is { } shown && !shown.Contains(step.Direction))
+            {
+                _heldDoors?.NoteShut(current.Key, step.Direction);
+                if (TryWalkRefusedLeverCrossing(current.Key, "shows shut")) return;
+            }
             EmitCardinal(step.Direction, exit.Target, "lever exit, opened on the detour before it");
             return;
         }
@@ -3001,7 +2991,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private void SendExitAction(CommandLoopStep step)
     {
         if (step.DoorOrGate is { } gate && _heldDoors is not null
-            && !_heldDoors.MayPullLever(gate, step.Command, MovesToCrossing(_index, gate), $"LoopRunner step {_index + 1}"))
+            && !_heldDoors.MayPullLever(gate, step.Command, $"LoopRunner step {_index + 1}"))
         {
             _stepInFlight = false;
             AdvanceStep();

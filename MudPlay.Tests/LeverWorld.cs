@@ -53,6 +53,8 @@ internal sealed class LeverWorld
         Held = new DoorsHeldOpen(
             (room, dir) => Graph.GetRoom(room) is { } r && r.Exits.TryGetValue(dir, out RoomExit e) ? e : null, () => Clock.Now);
         Held.ReleaseOn(refusals);
+        // Two seconds a move, so a hold's last stretch is weighed against the walk.
+        Held.TravelTime = moves => TimeSpan.FromSeconds(2 * moves);
         Tracker.RoomShown += Held.NoteRoomShown;
         Runner.SetDoorsHeldOpen(Held);
         Runner.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));

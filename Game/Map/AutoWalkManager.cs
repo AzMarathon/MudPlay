@@ -3188,7 +3188,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private void SendCommandStep(CommandStep step)
     {
         if (step.DoorOrGate is { } gate && _heldDoors is not null
-            && !_heldDoors.MayPullLever(gate, step.Command, MovesToCrossing(_index, gate), $"Walker step {_index + 1}/{_path!.Count}"))
+            && !_heldDoors.MayPullLever(gate, step.Command, $"Walker step {_index + 1}/{_path!.Count}"))
         {
             AdvanceStep();
             return;
@@ -3229,24 +3229,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private DoorsHeldOpen? _heldDoors;
 
     public void SetDoorsHeldOpen(DoorsHeldOpen held) => _heldDoors = held;
-
-    // The moves from the step at `from` to the crossing of gate: the first primed
-    // step out of its room that way, followed by each move's landing. The walk's
-    // length when it isn't found.
-    private int MovesToCrossing(int from, (RoomKey Room, Direction Dir) gate)
-    {
-        if (_path is not { } path) return 0;
-        RoomKey? at = _tracker.State.CurrentRoom?.Key;
-        int moves = 0;
-        for (int i = from; i < path.Count; i++)
-        {
-            if (path[i] is not MoveStep move) continue;
-            moves++;
-            if (move.SkipSpecialDispatch && at.Equals(gate.Room) && move.Direction == gate.Dir) return moves;
-            at = move.ExpectedTarget;
-        }
-        return path.Count;
-    }
 
     // Put a sea-captain sailing on the wire. Like the chime teleport it splits
     // the party (leader `.@party <keyword>` relay, then every member types the

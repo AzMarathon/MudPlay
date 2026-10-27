@@ -124,9 +124,16 @@ public static class RemoteActionPathExpander
             // shows as open (openAtSource: its levers were pulled, or it opened by
             // itself) is crossed as it stands — no detour to pull them again.
             bool openNow = steps.Count == 0 && current.Equals(source) && openAtSource?.Contains(dir) == true;
+            // Standing in the gate's room with its display read, that display decides
+            // (openNow above): a hold can be older than a gate shut since. Further on,
+            // the walk there counts the detours already laid in ahead of it.
+            bool liveHere = steps.Count == 0 && current.Equals(source) && openAtSource is not null;
             if (exit.Hint == RoomExitHint.MultiActionHidden
                 && exit.MultiAction is { HasRemoteActions: true, DoorOrGate: { } } gated && bfs is not null && !openNow
-                && heldOpen?.Invoke(current, dir, steps.Count(static s => s is MoveStep)) == true)
+                && !liveHere
+                && heldOpen?.Invoke(current, dir,
+                    steps.Count(static s => s is MoveStep)
+                    + detours.Sum(static d => d.Steps.Count(static s => s is MoveStep))) == true)
             {
                 log?.Debug("Walker",
                     $"remote-action exit {current} {dir}->{exit.Target}: its door or gate is held open past the walk there — "
