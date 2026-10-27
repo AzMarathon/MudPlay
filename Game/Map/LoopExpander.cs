@@ -52,6 +52,10 @@ public static class LoopExpander
             // outer wrap inside the runner).
             if (!string.IsNullOrEmpty(here.Command))
                 steps.Add(new CommandLoopStep(here.Command!, here.DelayMs));
+            // The lap wait comes after the command: the command goes out on arrival,
+            // then the room holds until the lap clock reaches the wait.
+            if (here.LapWaitMs > 0)
+                steps.Add(new LapWaitLoopStep(here.LapWaitMs));
 
             // A zero-length leg — the same room listed twice in a row — is a
             // deliberate "stay put": no movement, just run the next waypoint's

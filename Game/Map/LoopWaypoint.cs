@@ -51,6 +51,13 @@ public sealed class LoopWaypoint
     public bool RestHereHp { get; set; }
     public bool RestHereMana { get; set; }
 
+    // Wait here, after Command if there is one, until the current lap has run this
+    // many milliseconds, so a lap never comes round sooner (a lair's respawn, say).
+    // 0 = no wait. Skipped on a lap that isn't counted (a run joined partway round
+    // has no lap clock to read). Independent of DelayMs, which counts from the
+    // command, not from the lap's start.
+    public long LapWaitMs { get; set; }
+
     // Parsed RoomKey from Room. Default when malformed.
     [JsonIgnore]
     public RoomKey Key => RoomKey.TryParseWire(Room, out RoomKey k) ? k : default;

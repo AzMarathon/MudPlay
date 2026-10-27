@@ -2973,6 +2973,62 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A waypoint's lap wait (user, 2026-10-27): after the room's command, the loop
+    // holds there until the lap has run the wait, counted from the lap's start, so
+    // only what's left of it is waited; then the move goes out.
+    [Fact]
+    public void LapWait_AfterTheCommand_HoldsForWhatIsLeftOfTheLap()
+    {
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Loop loop = new("lap", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1)),
+            new LoopWaypoint(new RoomKey(1, 2), "get all") { LapWaitMs = 10_000 },
+        });
+        h.Runner.Start(loop);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal("get all\r", Encoding.Latin1.GetString(h.Sent[^1]));
+        h.Prompt.Append(Encoding.Latin1.GetBytes("[HP=100]: "));   // the command's reply
+        h.Drain();
+
+        Assert.NotNull(h.Runner.LapWaitUnderWay);
+        Assert.Equal(TimeSpan.FromSeconds(8), h.Runner.CommandDelayRemaining);
+        Assert.DoesNotContain(h.Sent, b => Encoding.Latin1.GetString(b) == "s\r");
+
+        clock.Advance(TimeSpan.FromSeconds(8));
+        RunCommandDelay(h);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));
+        Assert.Null(h.Runner.LapWaitUnderWay);
+    }
+
+    // A lap joined partway along a leg isn't timed, so its lap wait doesn't hold
+    // (user, 2026-10-27).
+    [Fact]
+    public void LapWait_OnALapJoinedPartwayRound_IsSkipped()
+    {
+        ManualClock clock = new();
+        Harness h = NewHarness(clock: clock);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Loop loop = new("lap", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1)),
+            new LoopWaypoint(new RoomKey(1, 3)) { LapWaitMs = 600_000 },
+        });
+        h.Runner.Start(loop);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+
+        Assert.Null(h.Runner.LapWaitUnderWay);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));
+    }
+
     // ----- PR C: lap timing + ReachedFirstWaypoint ---------------------
 
     // Report paradigm-20261002-170259: the current lap read zero while a fight held

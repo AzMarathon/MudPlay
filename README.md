@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.30**
-> - A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop
-> - Heal (rest) goes out while resting, meditating or idle, and for a party follower between fights; only our own walk or loop holds it
-> - Cast when mana full goes out again each time mana is back at the top, even when its own cost never drops mana under the full mark
-> - Party rank is sent again on a re-invite after the party broke up (every join starts mid); the game's answer is logged
+> **Version 3.187.0**
+> - Waypoint action: wait in a room until the current lap has run at least a set time
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

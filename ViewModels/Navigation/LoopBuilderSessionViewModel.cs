@@ -167,7 +167,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     // WaypointActionEditDialog. Commands don't change the
     // gap-filled path, so no re-expand. No-op when index is out of range.
     public void SetClickAction(int index, string? command, long delayMs, bool doNotRest = false, bool doNotAttack = false,
-        bool restHereHp = false, bool restHereMana = false)
+        bool restHereHp = false, bool restHereMana = false, long lapWaitMs = 0)
     {
         if (index < 0 || index >= Clicks.Count) return;
         string? cmd = string.IsNullOrWhiteSpace(command) ? null : command;
@@ -179,6 +179,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
             DoNotAttack = doNotAttack,
             RestHereHp = restHereHp,
             RestHereMana = restHereMana,
+            LapWaitMs = Math.Max(0, lapWaitMs),
         };
     }
 
@@ -254,6 +255,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
             {
                 RestHereHp = row.RestHereHp,
                 RestHereMana = row.RestHereMana,
+                LapWaitMs = row.LapWaitMs,
             });
 
         return new Loop(ProposedName, waypoints)
@@ -320,7 +322,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
 // marker.
 public sealed record LoopBuilderRow(
     int Index, RoomKey Key, string Name, string? Command = null, long DelayMs = 0, bool DoNotRest = false, bool DoNotAttack = false,
-    bool RestHereHp = false, bool RestHereMana = false)
+    bool RestHereHp = false, bool RestHereMana = false, long LapWaitMs = 0)
 {
     // The step's identity within its build, kept through every edit, renumber and
     // move (each of those replaces the row). 0 on the Exp/Hr estimator's rows, which
@@ -333,4 +335,6 @@ public sealed record LoopBuilderRow(
     public bool HasRestHere => RestHereHp || RestHereMana;
     public string RestHereTip => RestHereHp && RestHereMana ? "Rest up here (HP and mana)"
         : RestHereHp ? "Rest up here (HP)" : "Rest up here (mana)";
+    public bool HasLapWait => LapWaitMs > 0;
+    public string LapWaitTip => $"Wait here until lap time {LoopDelay.Describe(LapWaitMs)}";
 }

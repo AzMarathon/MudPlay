@@ -2202,6 +2202,11 @@ public static class BugReportBuilder
                 .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
                 .ToArray();
             Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
+            string[] lapWaits = curLoop.Waypoints
+                .Where(w => w.LapWaitMs > 0)
+                .Select(w => $"{w.Key} until lap time {Game.Map.LoopDelay.Describe(w.LapWaitMs)}")
+                .ToArray();
+            Kv(sb, "Loop lap waits", lapWaits.Length == 0 ? "(none)" : string.Join("; ", lapWaits));
             // The lever actions the lap types on its detours to the lever exits it
             // crosses: a loop that stopped at, or walked round, such an exit.
             IReadOnlyList<string> leverActions = loop.ExitActionCommands;
@@ -2214,7 +2219,9 @@ public static class BugReportBuilder
                     : "no");
             Kv(sb, "Loop lever detours that can't be routed",
                 loop.UnroutableLevers.Count == 0 ? "(none)" : string.Join("; ", loop.UnroutableLevers));
-            Kv(sb, "Command delay under way",
+            Kv(sb, loop.LapWaitUnderWay is { } lapWait
+                    ? $"Lap wait under way (until lap time {Game.Map.LoopDelay.Describe(lapWait.LapTimeMs)}; lap at {Game.Map.LoopDelay.Describe((long)loop.CurrentLapTime.TotalMilliseconds)})"
+                    : "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
             // room an in-flight loop move is entering, or the tracker's current room.

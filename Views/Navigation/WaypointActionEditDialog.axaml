@@ -8,7 +8,7 @@
         x:Class="MudPlay.Views.Navigation.WaypointActionEditDialog"
         x:DataType="vm:WaypointActionEditDialogViewModel"
         Title="Waypoint action"
-        Width="380" Height="300"
+        Width="400" Height="420"
         WindowStartupLocation="CenterOwner">
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
@@ -63,6 +63,28 @@
                           Content="Rest up here (mana)"
                           FontSize="11"
                           ToolTip.Tip="On arriving, rest until mana is back to its rest-max before moving on — even above your 'rest if below' trigger. Skipped when mana is already there (loops only)."/>
+
+                <!-- The lap wait reads the lap's clock, not the command's, so it sits in
+                     a box of its own, apart from the Delay above. -->
+                <Border Margin="0,6,0,0" Padding="8" CornerRadius="4"
+                        BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                        Background="{StaticResource ChromeBgSunkenBrush}">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="Lap time" FontSize="11" FontWeight="SemiBold"
+                                   Foreground="{StaticResource ChromeFgBrush}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Wait here until the lap has run" FontSize="11"
+                                       Foreground="{StaticResource ChromeFgMutedBrush}"
+                                       VerticalAlignment="Center"/>
+                            <ctl:LoopDelayEditor DelayMs="{Binding LapWaitMs, Mode=TwoWay}"
+                                                 FontSize="11"
+                                                 ToolTip.Tip="Hold in this room until the current lap has run at least this long, counted from the lap's start (not from the command). A lap already past it moves straight on."/>
+                        </StackPanel>
+                        <TextBlock Text="0 = off. Skipped on a lap joined partway round. Fights and rests go on while it waits."
+                                   FontSize="11" TextWrapping="Wrap"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
             <StackPanel Grid.Row="4" Orientation="Horizontal"
