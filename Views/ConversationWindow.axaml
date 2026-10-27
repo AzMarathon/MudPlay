@@ -213,8 +213,8 @@
         <Grid>
         <!-- MaxHeight 0 until the window has opened: the first layout would otherwise
              build the rows at the TOP of the history, only for the open to jump
-             straight to the newest line and build that end as well. OnOpened lifts
-             it and scrolls to the last row in one step. -->
+             straight to the newest line and build that end as well. The open's
+             first pin moves the view to the end and then lifts it (OnOpened). -->
         <ListBox x:Name="RowsList"
                  ItemsSource="{Binding Rows}"
                  Background="{StaticResource ChromeBgSunkenBrush}"

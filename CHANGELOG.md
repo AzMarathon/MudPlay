@@ -8,6 +8,12 @@
 - A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
 - bug reports addressed: paradigm-20261026-220231
 
+## 3.186.18
+
+- Conversation window with a full history opens without freezing
+- Starting on the unnamed profile skips building its game data until something needs it
+- bug reports addressed: Hang-20261026-215238
+
 ## 3.186.16
 
 - Route searches several times faster, with far less memory churn, most of all on Windows
