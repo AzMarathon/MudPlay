@@ -830,20 +830,24 @@ public sealed class PartyManagerTests
         Assert.Contains("moved us to the back ranks", p.LastRankDecision);
     }
 
+    // A re-invite after the party broke up starts us in the middle rank again, and
+    // the client can still count us in the old party when its follow line arrives:
+    // the rank goes out on that join too.
     [Fact]
-    public void FollowLine_WhileAlreadyCountedInAParty_RecordsThatNoRankWentOut()
+    public void ReInvite_WhileStillCountedInTheOldParty_SendsTheRankAgain()
     {
         var (_, p) = Setup(localCharacterName: "MudPlay");
         List<byte[]> wire = new();
         p.SetWireSender(wire.Add);
         p.LocalRankPreference = Models.Profile.PartyRank.Back;
         _feed.Line("You are now following Raijin.");
+        _feed.Line("You have moved to the back ranks of your group.");
         wire.Clear();
 
         _feed.Line("You are now following Raijin.");
 
-        Assert.Empty(wire);
-        Assert.Contains("already counted us in a party", p.LastRankDecision);
+        Assert.Equal("backrank\r", System.Text.Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
     }
 
     [Fact]

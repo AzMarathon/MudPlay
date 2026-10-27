@@ -2869,8 +2869,8 @@ How to keep it current:
 
 ### PartyManagerTests.cs
 - Covers: Game/PartyManager, Game/PartyMember display props
-- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; the rank decision on joining (sent, skipped while already counted in a party, the game's refusal or move) recorded for the bug report; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
-- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to); a cleric set to back rank found in the middle after joining a party of two (player report, 2026-10-27).
+- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; the rank decision on joining (sent on every join, a re-invite the client still counted as the old party included; the game's refusal or move) recorded for the bug report; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
+- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to); a cleric set to back rank found in the middle after being re-invited to a party of two (player report, 2026-10-27).
 
 ### PartyPathItemGateTests.cs
 - Covers: Game/Map/PartyPathItemGate, PartyHandOverMemory

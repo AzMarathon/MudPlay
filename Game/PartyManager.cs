@@ -680,7 +680,6 @@ public sealed partial class PartyManager : IDisposable
         if (result.Groups.Count == 0) return;
         string leaderName = result.Groups[0];
         if (string.IsNullOrEmpty(leaderName)) return;
-        bool wasInParty = State.IsInParty;
         SetListedWith(null, $"we follow {leaderName}");
         // Same early-set rationale as OnFollowsYou — derived state
         // (IsInParty + LeaderName + SelfIsLeader) needs to be
@@ -693,12 +692,12 @@ public sealed partial class PartyManager : IDisposable
         PartyMember leader = AddOrTouchMember(leaderName);
         leader.IsLeader = true;
         AddSelfIfKnown(isLeader: false);
-        // The rank goes out on joining a party, not on a follow line read while the
-        // client already counted us in one. Logged either way: a report of the
-        // wrong rank turns on which of the two happened.
-        if (!wasInParty) SendRankPreferenceCommand(leaderName);
-        else if (LocalRankPreference != Models.Profile.PartyRank.Mid)
-            NoteRankDecision($"now following {leaderName}, but the client already counted us in a party: no rank command sent");
+        // Every join starts in the middle rank, a re-invite after the party broke up
+        // included (GAME_MECHANICS "Party ranks"), so the rank goes out on each one.
+        // Sent only on a first join, a re-invite the client still counted as the old
+        // party left a back-rank follower in the middle.
+        SetSelfRank(Models.Profile.PartyRank.Mid);
+        SendRankPreferenceCommand(leaderName);
         FollowingLeader?.Invoke(leaderName);
     }
 
@@ -1351,6 +1350,11 @@ public sealed partial class PartyManager : IDisposable
         if (result.Groups.Count == 0) return;
         Models.Profile.PartyRank rank = ParseRankWord(result.Groups[0]);
         NoteRankDecision($"the game moved us to the {result.Groups[0]} ranks");
+        SetSelfRank(rank);
+    }
+
+    private void SetSelfRank(Models.Profile.PartyRank rank)
+    {
         foreach (PartyMember m in State.Members)
         {
             if (m.IsSelf) { m.Rank = rank; return; }

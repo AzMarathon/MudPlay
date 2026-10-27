@@ -8976,18 +8976,19 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - An absent bracket on a known-caster row (`BaselineMp > 0`) means 0, not "unchanged."
 
 ### Party ranks
-*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
+*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`); refusals and the join rank [CONFIRMED] 2026-10-27 (user) · Realm: both where tagged, otherwise Stock*
 
 - **A rank change prints one line to the mover and one to the rest of the group** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_change_user_rank` @0x41e169; Realm: Stock, Paradigm not recorded)*:
   - front: `You have moved to the front ranks of your group.` / `%s just moved to the front rank in your group.`
   - back: `You have moved to the back ranks of your group.` / `%s just moved to the back rank in your group.`
   - middle: `You have moved to the middle ranks of your group.` / `%s just moved to the middle of your group.`
-- **Refusals** *(same source)*:
+- **Refusals** *(same source; [CONFIRMED] 2026-10-27, user: Paradigm prints the same refusals as Stock; Realm: both)*:
   - alone: `You are not in a party at the present time.`, the line `par` prints for a player with no party;
   - a player who follows nobody (the leader) can't go to the back or the middle: `You may not enter the backrank of your own party.` (@0x41e308), `You may not leave your current rank in your own party.` (@0x41e4af);
   - `You are the only one in the front rank.  You may not leave.` (two spaces after the first full stop);
   - `There would not be enough people left in the frontrank if you did that.`, when the others in front are fewer than those in back (@0x41e354–0x41e367);
   - `You are the only one in the back rank.  You may not leave.`
+- **Every joiner starts in the middle rank, a re-invite after the party broke up included** *([CONFIRMED] 2026-10-27, user; Realm: both)*. A rank chosen in the old party is not carried into the new one.
 - **Inviting anyone puts the inviter in the front rank** (`_cmd_invite` @0x4568ac; *Party commands: `invite`, `join` / `follow`, `leave`, `uninvite`, `disband party`*).
 - **The three rank commands end a rest**: each clears the resting and meditating flags before it runs (@0x4144ea, @0x414524, @0x41455e). Which words the dispatcher binds to them wasn't read.
 - What a rank does in a fight is in *Combat → Monster target selection — who it swings at once fighting*; how `par` prints it is in *`par` output block*.
@@ -8995,6 +8996,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 **Client use:**
 - `PartyManager.OnMemberRankChanged` reads the other-member line (`KnownPatterns.PartyMemberRankChanged`: front, middle or back) and updates that member's rank without waiting for the next `par`.
 - `PartyManager.OnRankRefused` reads the refusals above (`KnownPatterns.PartyRankRefused`, Stock wording) into the program log and the bug report's *Last rank decision*, beside the `frontrank` / `backrank` the client sends on joining a party as a follower.
+- `PartyManager.OnYouFollowing` sends the rank preference on every `You are now following X.`, since each join starts in the middle; it used to send only when the client didn't already count itself in a party, which missed a re-invite after a break-up (player report, 2026-10-27).
 
 ### Following the leader: follow / drag movement
 *Status: CONFIRMED (live follower capture, Darkwood Forest)*

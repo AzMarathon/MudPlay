@@ -6036,7 +6036,7 @@ Settings → Party. The **Combat profile** chips at the top switch profiles from
 
 **Default:** `Mid`
 **Available options:** `Front`, `Mid`, `Back`
-**What it does:** Your preferred position in a party. When you join someone's party as a follower, MudPlay sends `frontrank` (Front) or `backrank` (Back). **Mid** is the game's default, so nothing is sent for it. As the leader nothing is sent, because the game keeps a leader in the front rank. The command goes out once, on joining; if the game turns it down, its answer is in the program log, and a bug report's Party section shows the rank you want and what was last sent or said about it.
+**What it does:** Your preferred position in a party. When you join someone's party as a follower, MudPlay sends `frontrank` (Front) or `backrank` (Back). **Mid** is the game's default, so nothing is sent for it. As the leader nothing is sent, because the game keeps a leader in the front rank. The command goes out every time you join, a re-invite after the party broke up included, since the game starts every joiner in the middle rank; if the game turns it down, its answer is in the program log, and a bug report's Party section shows the rank you want and what was last sent or said about it.
 **When you might change it:** Set it to your role: Front for a fighter who should take the hits, Back for a caster or healer.
 
 ### Minor / Major Party Heal — Single-target and Party (AOE) spells
