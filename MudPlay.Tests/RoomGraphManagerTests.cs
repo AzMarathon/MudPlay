@@ -155,6 +155,39 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.True(action.Rolled);
     }
 
+    // The cell can name the command by a synonym other than the room command's first
+    // keyword (`push bar` beside `turn wheel`): still one action.
+    [Fact]
+    public void RoomCmdAction_TheExitsActionCellNamesBySynonym_IsOneAction()
+    {
+        SeedRooms("alpha", """
+            [
+              { "Map Number": 9, "Room Number": 1012, "Name": "Crumbling Ruin, Entrance",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 1422, "Lair": "", "Delay": 0,
+                "N": "9/1013 (Hidden/Needs 1 Actions, any order)", "S": "0",
+                "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0",
+                "D": "Action [on the N exit of this room]: move rubble" },
+              { "Map Number": 9, "Room Number": 1013, "Name": "Crumbling Ruin",
+                "Light": 0, "Shop": 0, "NPC": 0, "CMD": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "9/1012", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """);
+        SeedTable("alpha", "TBInfo", NecromancerTbInfoJson);
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        TBInfoStore store = new(cache);
+        store.OnActiveSetChanged("alpha");
+        RoomGraphManager graph = new(cache, log: null, tbinfo: store);
+
+        graph.OnActiveSetChanged("alpha");
+
+        RoomExit hidden = graph.GetRoom(new RoomKey(9, 1012))!.Exits[Direction.N];
+        ExitAction action = Assert.Single(hidden.MultiAction!.Actions);
+        Assert.Equal(new[] { "move rubble" }, action.Commands);
+        Assert.True(action.Rolled);
+    }
+
     // ----- RoomKey.TryParseWire --------------------------------------
 
     [Theory]

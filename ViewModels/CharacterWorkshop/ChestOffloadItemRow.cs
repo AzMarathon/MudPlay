@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -24,6 +25,11 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
 
     private readonly Action<ChestOffloadItemRow>? _onQtyChanged;
     private readonly Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? _buildChoices;
+    // The same choices nearest first with their steps, which take a whole-map search
+    // each and so come back from a worker after the menu is up.
+    private readonly Func<ChestOffloadItemRow, Task<IReadOnlyList<ShopChoiceRow>>>? _rankChoices;
+    // Bumped by each opening, so a ranking for an earlier one is dropped.
+    private int _shopMenuAsk;
     private readonly Action<ChestOffloadItemRow, int>? _moveToShop;
     private int _charm;
     private RealmType _realm;
@@ -52,6 +58,7 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         IReadOnlyCollection<int> candidateShops, int currentShop,
         Action<ChestOffloadItemRow>? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null,
         Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? buildChoices = null,
+        Func<ChestOffloadItemRow, Task<IReadOnlyList<ShopChoiceRow>>>? rankChoices = null,
         Action<ChestOffloadItemRow, int>? moveToShop = null,
         Action<ChestOffloadItemRow>? onSell = null,
         Action<ChestOffloadItemRow>? onRemove = null)
@@ -63,6 +70,7 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         CurrentShop = currentShop;
         _onQtyChanged = onQtyChanged;
         _buildChoices = buildChoices;
+        _rankChoices = rankChoices;
         _moveToShop = moveToShop;
         _sellQty = gained;   // default: sell all of what the chest gave
         DropCommand = new RelayCommand(() => onDrop?.Invoke(this));
@@ -77,15 +85,28 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         Recompute();
     }
 
-    [RelayCommand]
-    private void OpenShopMenu()
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task OpenShopMenu()
     {
-        ShopChoices.Clear();
-        if (_buildChoices is not null)
-            foreach (ShopChoiceRow choice in _buildChoices(this)) ShopChoices.Add(choice);
-        OnPropertyChanged(nameof(HasShopChoices));
+        int ask = ++_shopMenuAsk;
+        ShowShopChoices(_buildChoices?.Invoke(this) ?? Array.Empty<ShopChoiceRow>());
         SelectedShopChoice = null;
         ShopMenuOpen = true;
+        if (_rankChoices is null) return;
+
+        IReadOnlyList<ShopChoiceRow> ranked = await _rankChoices(this);
+        // Closed, or opened again, while the steps were being worked out.
+        if (ask != _shopMenuAsk || !ShopMenuOpen) return;
+        int? picked = SelectedShopChoice?.Shop;
+        ShowShopChoices(ranked);
+        SelectedShopChoice = ranked.FirstOrDefault(c => c.Shop == picked);
+    }
+
+    private void ShowShopChoices(IReadOnlyList<ShopChoiceRow> choices)
+    {
+        ShopChoices.Clear();
+        foreach (ShopChoiceRow choice in choices) ShopChoices.Add(choice);
+        OnPropertyChanged(nameof(HasShopChoices));
     }
 
     [RelayCommand]

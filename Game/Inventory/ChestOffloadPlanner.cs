@@ -146,10 +146,10 @@ public static class ChestOffloadPlanner
 
     // The shops in the order of a short trip from here, each with its steps from here
     // (null when it has no room or no route reaches it): the shop nearest here first,
-    // then the nearest not yet visited from there. A shop with no room or no route
-    // sorts last, ties keep the given order, and a single shop is left where it is.
-    // Every step count is asked of distance once per pair, the counts from here
-    // doubling as the labels, because each answer is a search of the whole map.
+    // then the nearest not yet visited from the shop just reached. A shop with no room
+    // or no route sorts last, ties keep the given order, and a single shop stays put.
+    // An answer from distance can be a search of the whole map, so no pair is asked
+    // twice: the first leg is chosen by the same answers that label the shops.
     public static IReadOnlyList<(int Shop, int? Steps)> RouteShops(
         RoomKey here, IReadOnlyList<(int Shop, RoomKey? Room)> shops, Func<RoomKey, RoomKey, int?> distance)
     {

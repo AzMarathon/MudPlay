@@ -76,9 +76,19 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private string _note = "";
     private string? _noteItem;
     private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
-    // Bumped by each render and by Dispose, so a trip worked out for an earlier render
-    // is dropped when it comes back.
+    // Bumped by each render, a game-data reload and Dispose, so a trip worked out for
+    // an earlier one is dropped when it comes back.
     private int _routeGeneration;
+    private CancellationTokenSource? _routeCancel;
+    // The trip being worked out: done once its order and steps are on the groups, or
+    // it was called off. A Sell Tour waits for it, to walk the shops in trip order.
+    private Task _routeLanded = Task.CompletedTask;
+    // The last trip's place and steps by shop, which a re-render's groups keep until
+    // their own trip comes back.
+    private readonly Dictionary<int, (int Place, string Steps)> _lastTrip = new();
+    // The distance answers the last trip was worked out with, asked again by the tab's
+    // other distance lookups. Set and read on the UI thread; dropped on a reload.
+    private TripDistance? _tripDistance;
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _sellTotal = "—";
@@ -143,6 +153,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
         _chests.Changed += OnChestsChanged;
         _inventory.Changed += OnInventoryChanged;
+        _rooms.GraphReloaded += OnGraphReloaded;
         _tour.Changed += OnTourChanged;
         _sellStatus = _tour.Status;
         _isTourRunning = _tour.IsRunning;
@@ -335,19 +346,27 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         IReadOnlyList<(int Shop, IReadOnlyList<LootItem> Items)> groups =
             ChestOffloadPlanner.GroupByFewestShops(loot, li => li.Shops, out IReadOnlyList<LootItem> noShop);
 
+        // Until this render's trip comes back, the shops the last one ordered keep
+        // their place and steps, so a ✕ doesn't scramble the list.
+        if (_tracker.State.CurrentRoom is null) _lastTrip.Clear();
         ShopGroups.Clear();
-        foreach ((int shopNum, IReadOnlyList<LootItem> items) in groups)
+        foreach ((int shopNum, IReadOnlyList<LootItem> items) in groups
+                     .Select((g, i) => (Group: g, Index: i))
+                     .OrderBy(t => _lastTrip.TryGetValue(t.Group.Shop, out (int Place, string _) last) ? last.Place : int.MaxValue)
+                     .ThenBy(t => t.Index)
+                     .Select(t => t.Group))
         {
             _shopRoom.TryGetValue(shopNum, out Room? room);
             string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
+            string steps = _lastTrip.TryGetValue(shopNum, out (int _, string Steps) known) ? known.Steps : "";
             var group = new ChestOffloadShopGroup(
-                room?.Name ?? $"Shop #{shopNum}", shopNum, location, "", room?.Key,
+                room?.Name ?? $"Shop #{shopNum}", shopNum, location, steps, room?.Key,
                 _queueWalk, SellGroup, DropAllGroup);
             foreach (LootItem li in items)
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
                     li.Shops, shopNum,
                     it => { GroupOf(it)?.Retotal(); UpdateGrandTotal(); },
-                    DropItem, BuildShopChoices, MoveItemToShop, SellItem, RemoveItem));
+                    DropItem, BuildShopChoices, RankShopChoicesAsync, MoveItemToShop, SellItem, RemoveItem));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
@@ -399,57 +418,113 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // paradigm-20261026-201217). So the trip is worked out on a worker, as a route
     // card's plan is, mapping each room once (BfsMapper.DistanceMemo), and the groups
     // take their order and steps when it comes back. The rows stay live meanwhile, so
-    // a sale or hide confirmed in between still finds its row.
+    // a sale or hide confirmed in between still finds its row. Every other distance
+    // the tab shows (the Sell Tour's legs, the ⇄ list, a group an item is moved into)
+    // is asked on a worker too, of the memo the last trip filled (DistancesAsync).
     private void RouteShopGroups()
     {
-        int generation = ++_routeGeneration;
-        if (_tracker.State.CurrentRoom?.Key is not { } here || ShopGroups.Count == 0) return;
+        int generation = NewRouteGeneration();
+        if (_tracker.State.CurrentRoom?.Key is not { } here || ShopGroups.Count == 0)
+        {
+            _routeLanded = Task.CompletedTask;
+            return;
+        }
         List<(int Shop, RoomKey? Room)> shops = ShopGroups
             .Select(g => (g.Shop, _shopRoom.TryGetValue(g.Shop, out Room? r) ? r.Key : (RoomKey?)null))
             .ToList();
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                long started = Stopwatch.GetTimestamp();
-                IReadOnlyList<(int Shop, int? Steps)> trip =
-                    ChestOffloadPlanner.RouteShops(here, shops, _bfs.DistanceMemo(_movement));
-                TimeSpan took = Stopwatch.GetElapsedTime(started);
-                Dispatcher.UIThread.Post(() => ApplyRoute(generation, here, trip, took));
-            }
-            catch (Exception ex)
-            {
-                _log?.Warn(LogCategory, $"the trip to {shops.Count} shop(s) could not be worked out ({ex.GetType().Name}: {ex.Message}); the shops stay unordered");
-            }
-        });
+        var cancel = new CancellationTokenSource();
+        _routeCancel = cancel;
+        _routeLanded = RouteAsync(generation, here, shops, cancel.Token);
     }
 
-    private void ApplyRoute(int generation, RoomKey here, IReadOnlyList<(int Shop, int? Steps)> trip, TimeSpan took)
+    private async Task RouteAsync(int generation, RoomKey here, List<(int Shop, RoomKey? Room)> shops, CancellationToken cancel)
     {
-        // A newer render has its own trip coming, or the tab has closed.
-        if (generation != _routeGeneration) return;
+        try
+        {
+            long started = Stopwatch.GetTimestamp();
+            (IReadOnlyList<(int Shop, int? Steps)> trip, Func<RoomKey, RoomKey, int?> memo) = await Task.Run(() =>
+            {
+                Func<RoomKey, RoomKey, int?> memo = _bfs.DistanceMemo(_movement);
+                return (ChestOffloadPlanner.RouteShops(here, shops, (a, b) =>
+                {
+                    cancel.ThrowIfCancellationRequested();
+                    return memo(a, b);
+                }), memo);
+            }, cancel);
+            if (generation != _routeGeneration) return;
+            ApplyRoute(here, trip, memo);
+            _log?.Debug(LogCategory,
+                $"trip to {trip.Count} shop(s) worked out in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms, off the UI thread");
+        }
+        catch (OperationCanceledException)
+        {
+            // A re-render, a game-data reload or the tab closing called it off; a
+            // re-render has its own trip coming.
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn(LogCategory, $"the trip to {shops.Count} shop(s) could not be worked out ({ex.GetType().Name}: {ex.Message}); the shops keep their order");
+        }
+    }
+
+    private void ApplyRoute(RoomKey here, IReadOnlyList<(int Shop, int? Steps)> trip, Func<RoomKey, RoomKey, int?> memo)
+    {
+        _lastTrip.Clear();
         int at = 0;
         foreach ((int shop, int? steps) in trip)
         {
-            int index = ShopGroups.ToList().FindIndex(g => g.Shop == shop);
+            int index = -1;
+            for (int i = 0; i < ShopGroups.Count && index < 0; i++)
+                if (ShopGroups[i].Shop == shop) index = i;
             if (index < 0) continue;   // its last row left meanwhile
             if (index != at) ShopGroups.Move(index, at);
             _shopRoom.TryGetValue(shop, out Room? room);
             ShopGroups[at].Steps = StepsText(room, here, steps);
+            _lastTrip[shop] = (at, ShopGroups[at].Steps);
             at++;
         }
-        _log?.Debug(LogCategory,
-            $"trip to {trip.Count} shop(s) worked out in {took.TotalMilliseconds:F0} ms, off the UI thread");
+        _tripDistance = new TripDistance(memo);
     }
 
-    // Steps from the player's current room to a shop, under the walker's routing
-    // (same filter as RouteShopGroups). Empty when we don't know where we are or the
-    // shop has no room; "unreachable" when no route survives the filter.
-    private string StepsLabel(Room? room)
+    // A new trip takes over from the one being worked out, which is called off.
+    private int NewRouteGeneration()
     {
-        RoomKey? here = _tracker.State.CurrentRoom?.Key;
-        int? dist = room is { } r && here is { } h ? _bfs.DistanceBetween(h, r.Key, _movement) : null;
-        return StepsText(room, here, dist);
+        _routeCancel?.Cancel();
+        _routeCancel?.Dispose();
+        _routeCancel = null;
+        return ++_routeGeneration;
+    }
+
+    // The trip was worked out on the graph a reload has replaced: it, and the
+    // answers it was worked out with, are dropped, as a route card's plan is.
+    private void OnGraphReloaded() => Dispatcher.UIThread.Post(() =>
+    {
+        NewRouteGeneration();
+        _tripDistance = null;
+        _lastTrip.Clear();
+    });
+
+    // Hop counts for each pair, on a worker, from the memo the last trip filled (or a
+    // fresh one before any trip has come back); null for a pair with no destination
+    // or no route. Null as a whole when the lookup failed, which is logged.
+    private async Task<int?[]?> DistancesAsync(IReadOnlyList<(RoomKey From, RoomKey? To)> pairs, string what)
+    {
+        TripDistance? last = _tripDistance;
+        try
+        {
+            return await Task.Run(() =>
+            {
+                TripDistance distance = last ?? new TripDistance(_bfs.DistanceMemo(_movement));
+                // The memo's tables aren't safe to fill from two workers at once.
+                lock (distance.Gate)
+                    return pairs.Select(p => p.To is { } to ? distance.Ask(p.From, to) : null).ToArray();
+            });
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn(LogCategory, $"the steps for {what} could not be worked out ({ex.GetType().Name}: {ex.Message})");
+            return null;
+        }
     }
 
     private string StepsText(Room? room, RoomKey? here, int? dist)
@@ -630,6 +705,10 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         if (_tour.IsRunning) { SellStatus = "A sell tour is already running — cancel it first."; return; }
         if (_simulating) { SellStatus = "Simulated chests can't be sold — Clear list first."; return; }
         await ReadInventoryAsync();
+        // The stops go in the tab's order, so a trip still being worked out (the read
+        // may have pruned the list and started one) is waited for, and so is any
+        // re-render's trip that takes over from it meanwhile.
+        while (!_routeLanded.IsCompleted) await _routeLanded;
 
         var stops = new List<ChestSellTour.Stop>();
         foreach (ChestOffloadShopGroup group in ShopGroups)
@@ -642,10 +721,16 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         body.Append("Walk to each shop below in this order and sell exactly these items:\n");
         int n = 0, totalSteps = 0;
         bool anyUnknown = false;
-        RoomKey? from = _tracker.State.CurrentRoom?.Key;
+        RoomKey? here = _tracker.State.CurrentRoom?.Key;
+        var pairs = new List<(RoomKey From, RoomKey? To)>(stops.Count);
+        for (int i = 0; i < stops.Count; i++)
+            pairs.Add(i > 0 ? (stops[i - 1].Room, stops[i].Room)
+                : here is { } start ? (start, stops[0].Room)
+                : (stops[0].Room, null));   // no first leg while we don't know where we are
+        int?[]? legs = await DistancesAsync(pairs, "the sell tour's legs");
         foreach (ChestSellTour.Stop stop in stops)
         {
-            int? leg = from is { } f ? _bfs.DistanceBetween(f, stop.Room, _movement) : null;
+            int? leg = legs?[n];
             string legText = leg switch
             {
                 null => "steps unknown",
@@ -656,7 +741,6 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
             body.Append($"\n{++n}. {stop.ShopName} ({stop.Room.Map}/{stop.Room.Room}) — {legText}, sells for {ValueOf(stop)}\n   ")
                 .Append(string.Join(", ", stop.Items.Select(i => $"{i.Qty} {i.Name}")))
                 .Append('\n');
-            from = stop.Room;
         }
         body.Append($"\nWhole tour: {(anyUnknown ? "at least " : "")}{StepsAndEta(totalSteps)} of walking (fights on the way not counted).\n");
         body.Append("\nOnly items the chests gave are sold, never more than the chests gave — " +
@@ -783,25 +867,41 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         if (!_tour.IsRunning) ShowNote($"{item.Name}: nothing sent — {why}.", waiting ? item.Name : null);
     }
 
-    // Alternate shops that also buy this item, nearest first, minus the one it's in.
+    // Alternate shops that also buy this item, minus the one it's in, as the ⇄ list
+    // shows them at once: in the item's own order, with no steps yet.
     private IReadOnlyList<ShopChoiceRow> BuildShopChoices(ChestOffloadItemRow item)
+        => OtherShops(item).Select(s => ChoiceRow(s.Shop, s.Room, "")).ToList();
+
+    // The same shops nearest first, each with its steps, worked out on a worker.
+    private async Task<IReadOnlyList<ShopChoiceRow>> RankShopChoicesAsync(ChestOffloadItemRow item)
     {
-        RoomKey? here = _tracker.State.CurrentRoom?.Key;
-        var scored = new List<(int? Dist, ShopChoiceRow Row)>();
-        foreach (int shop in item.CandidateShops)
-        {
-            if (shop == item.CurrentShop) continue;
-            _shopRoom.TryGetValue(shop, out Room? room);
-            int? dist = room is { } r && here is { } h ? _bfs.DistanceBetween(h, r.Key, _movement) : null;
-            string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
-            scored.Add((dist, new ShopChoiceRow(shop, room?.Name ?? $"Shop #{shop}", location,
-                StepsText(room, here, dist))));
-        }
-        return scored
+        List<(int Shop, Room? Room)> shops = OtherShops(item);
+        if (_tracker.State.CurrentRoom?.Key is not { } here) return BuildShopChoices(item);
+        int?[]? dists = await DistancesAsync(
+            shops.Select(s => (here, s.Room?.Key)).ToList(), $"the other shops buying {item.Name}");
+        if (dists is null) return BuildShopChoices(item);
+        return shops.Select((s, i) => (Dist: dists[i], Row: ChoiceRow(s.Shop, s.Room, StepsText(s.Room, here, dists[i]))))
             .OrderBy(t => t.Dist is null)          // reachable first
             .ThenBy(t => t.Dist ?? int.MaxValue)   // then nearest
             .Select(t => t.Row)
             .ToList();
+    }
+
+    private List<(int Shop, Room? Room)> OtherShops(ChestOffloadItemRow item)
+        => item.CandidateShops.Where(shop => shop != item.CurrentShop)
+            .Select(shop => (shop, _shopRoom.TryGetValue(shop, out Room? room) ? room : null))
+            .ToList();
+
+    private static ShopChoiceRow ChoiceRow(int shop, Room? room, string steps)
+        => new(shop, room?.Name ?? $"Shop #{shop}", room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "", steps);
+
+    // A group an item was moved into, for a shop the last trip didn't visit, gets its
+    // steps from here when they come back.
+    private async Task FillStepsAsync(ChestOffloadShopGroup group, Room? room)
+    {
+        if (room is null || _tracker.State.CurrentRoom?.Key is not { } here) return;
+        int?[]? dist = await DistancesAsync(new[] { (here, (RoomKey?)room.Key) }, $"shop #{group.Shop}");
+        if (dist is not null && ShopGroups.Contains(group)) group.Steps = StepsText(room, here, dist[0]);
     }
 
     // Move an item to another shop it can be sold at: pull it from its current group
@@ -819,9 +919,11 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         {
             _shopRoom.TryGetValue(targetShop, out Room? room);
             string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
+            string steps = _lastTrip.TryGetValue(targetShop, out (int _, string Steps) known) ? known.Steps : "";
             target = new ChestOffloadShopGroup(room?.Name ?? $"Shop #{targetShop}", targetShop, location,
-                StepsLabel(room), room?.Key, _queueWalk, SellGroup, DropAllGroup);
+                steps, room?.Key, _queueWalk, SellGroup, DropAllGroup);
             ShopGroups.Add(target);
+            if (steps.Length == 0) _ = FillStepsAsync(target, room);
         }
 
         item.CurrentShop = targetShop;
@@ -858,7 +960,8 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
     public override void Dispose()
     {
-        ++_routeGeneration;
+        NewRouteGeneration();
+        _rooms.GraphReloaded -= OnGraphReloaded;
         _chests.Changed -= OnChestsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _tour.Changed -= OnTourChanged;
@@ -867,6 +970,13 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _discard.HeldHideEnded -= OnHeldHideEnded;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
         _log?.Info(LogCategory, "tab closed");
+    }
+
+    // A trip's distance memo and the lock its workers take turns under.
+    private sealed class TripDistance(Func<RoomKey, RoomKey, int?> ask)
+    {
+        public Func<RoomKey, RoomKey, int?> Ask { get; } = ask;
+        public object Gate { get; } = new();
     }
 
     private readonly record struct LootItem(string Name, int Count, double BaseCopper, IReadOnlyCollection<int> Shops);

@@ -2655,6 +2655,24 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // A many-pair lookup (the Chest Offload trip, the trainer pick) asks the memo, and
+    // must answer as DistanceBetween does on the lake too: out of a sea room by the
+    // way FindPath takes out of it, and across to the island only on the terms.
+    [Fact]
+    public void DistanceMemo_MatchesDistanceBetween_InAndAcrossTheLake()
+    {
+        WithLake(LakeCrossingJson, (bfs, graph, filter, _) =>
+        {
+            RoomKey[] rooms = graph.Rooms.Select(r => r.Key).ToArray();
+            Func<RoomKey, RoomKey, int?> memo = bfs.DistanceMemo(filter);
+            for (int pass = 0; pass < 2; pass++)
+                foreach (RoomKey from in rooms)
+                    foreach (RoomKey to in rooms)
+                        Assert.True(bfs.DistanceBetween(from, to, filter) == memo(from, to),
+                            $"{from} → {to}: DistanceBetween {bfs.DistanceBetween(from, to, filter)}, memo {memo(from, to)}");
+        });
+    }
+
     // The Isle of Bones: the lake surrounds it too, but there is another way in (a
     // keyed door here), so it is never reached across the lake, whoever asks: the
     // route card is the key's.

@@ -1083,14 +1083,19 @@ public sealed class RoomGraphManager
             Room room = _rooms[key];
 
             // Collapse synonyms (clear/move/push × rubble/mound/rock all reveal the
-            // same exit) to the first keyword per (target room, direction).
-            Dictionary<(int Room, int Dir), (string Keyword, bool Rolled)>? firstByExit = null;
+            // same exit) to the first keyword per (target room, direction), keeping
+            // every synonym to tell whether the exit's own cell already lists one.
+            Dictionary<(int Room, int Dir), (string Keyword, bool Rolled, List<string> Synonyms)>? firstByExit = null;
             foreach (TBInfoActionResolver.RemoteActionExit ra in
                      TBInfoActionResolver.EnumerateRemoteActions(_tbinfo, room.Cmd))
-                (firstByExit ??= new()).TryAdd((ra.RoomNumber, ra.DirectionIndex), (ra.Keyword, ra.Rolled));
+            {
+                firstByExit ??= new();
+                if (firstByExit.TryGetValue((ra.RoomNumber, ra.DirectionIndex), out var first)) first.Synonyms.Add(ra.Keyword);
+                else firstByExit[(ra.RoomNumber, ra.DirectionIndex)] = (ra.Keyword, ra.Rolled, new List<string> { ra.Keyword });
+            }
             if (firstByExit is null) continue;
 
-            foreach (((int roomNum, int dirIdx), (string keyword, bool rolled)) in firstByExit)
+            foreach (((int roomNum, int dirIdx), (string keyword, bool rolled, List<string> synonyms)) in firstByExit)
             {
                 Direction dir = s_directions[dirIdx];
                 RoomKey target = new(key.Map, roomNum);
@@ -1104,13 +1109,14 @@ public sealed class RoomGraphManager
                 if (!byExit.TryGetValue(exitKey, out List<ExitAction>? list))
                     byExit[exitKey] = list = new List<ExitAction>();
 
-                // The exit's own action cell can already list this keyword (8/560's
-                // `turn wheel` on its N gate is both its CMD and a D-slot cell). Adding
-                // it again had the engines send it twice per crossing, and the gate was
-                // still shut after every pair (report paradigm-20261026-150710;
-                // GAME_MECHANICS "Multi-action exits and levers" has the door toggle).
+                // The exit's own action cell can already list this command, under any of
+                // its synonyms (8/560's `turn wheel` on its N gate is both its CMD and a
+                // D-slot cell). Adding it again had the engines send it twice per
+                // crossing, and the gate was still shut after every pair (report
+                // paradigm-20261026-150710; GAME_MECHANICS "Multi-action exits and
+                // levers" has the door toggle).
                 int listed = list.FindIndex(a => a.StepNumber == 1 && a.RemoteSourceRoom == remote
-                    && a.Commands.Contains(keyword, StringComparer.OrdinalIgnoreCase));
+                    && a.Commands.Any(c => synonyms.Contains(c, StringComparer.OrdinalIgnoreCase)));
                 if (listed >= 0)
                 {
                     if (rolled) list[listed] = list[listed] with { Rolled = true };

@@ -742,12 +742,18 @@ public sealed class BfsMapper
     // DistanceBetween's: both are breadth-first, so a shortest count doesn't depend
     // on which of several routes was found. Picking the auto-trainer's trainer this
     // way took 50 searches, over half a second on the UI thread.
+    //
+    // FindPath's two searches no map takes are left to DistanceBetween itself: the
+    // way out of a room closed to routes (from such a room, every question is asked
+    // the slow way), and the walk across those rooms to a place reached no other way
+    // (a destination neither map has, for a crosser who meets their terms).
     public Func<RoomKey, RoomKey, int?> DistanceMemo(IRoomFilter? filter = null)
     {
         Dictionary<(RoomKey, RoomKey), int?> answers = new();
         HashSet<RoomKey> askedOnce = new();
         Dictionary<RoomKey, Dictionary<RoomKey, int>> walk = new();
         Dictionary<RoomKey, Dictionary<RoomKey, int>> viaGateway = new();
+        bool mayCross = filter?.MayCrossClosedRooms() == true;
         return (source, destination) =>
         {
             if (answers.TryGetValue((source, destination), out int? known)) return known;
@@ -755,7 +761,7 @@ public sealed class BfsMapper
             // Distances refuses an avoided source outright, where FindPath walks out
             // of it, so that one is always asked the slow way.
             if (walk.TryGetValue(source, out Dictionary<RoomKey, int>? map)
-                || (!askedOnce.Add(source) && filter?.IsAvoided(source) != true
+                || (!askedOnce.Add(source) && filter?.IsAvoided(source) != true && filter?.IsClosedToRoutes(source) != true
                     && (map = walk[source] = Distances(source, filter, viaBoats: false, targets: null, allowGateway: false)) is not null))
             {
                 if (map.TryGetValue(destination, out int hops)) d = hops;
@@ -763,7 +769,9 @@ public sealed class BfsMapper
                 {
                     if (!viaGateway.TryGetValue(source, out Dictionary<RoomKey, int>? gateway))
                         viaGateway[source] = gateway = Distances(source, filter, viaBoats: false, targets: null, allowGateway: true);
-                    d = gateway.TryGetValue(destination, out int via) ? via : null;
+                    d = gateway.TryGetValue(destination, out int via) ? via
+                        : mayCross ? DistanceBetween(source, destination, filter)
+                        : null;
                 }
             }
             else d = DistanceBetween(source, destination, filter);

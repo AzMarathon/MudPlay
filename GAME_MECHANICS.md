@@ -7057,8 +7057,8 @@ Among protectable hazards, a further split governs whether the navigator may off
          `8/560` itself; the room shows it as `closed gate north`. Both message rows are printed before the
          `remoteaction`, so every turn answers `You turn the great wheel with a mighty effort, and the
          drawbridge opens!`, whatever the gate does. The sets also write the command out as `8/560`'s D-slot
-         cell `Action [on the N exit of this room]: turn wheel, push bar, move wheel`, the only room of the
-         three imported sets where a room command and an action cell name the same exit.
+         cell `Action [on the N exit of this room]: turn wheel, push bar, move wheel`, the only room in all
+         six installed sets where a room command and an action cell name the same exit.
        - **Two turns in a row leave the gate shut** *([OBSERVED] 2026-10-26, report
          `paradigm-20261026-150710`, Paradigm)*: six times the walker sent `turn wheel` twice in the same
          millisecond, got the line twice, and `n` met `The gate is Closed!`. By the user's account (relayed

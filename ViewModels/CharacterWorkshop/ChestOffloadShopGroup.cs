@@ -23,8 +23,9 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
     public ObservableCollection<ChestOffloadItemRow> Items { get; } = new();
 
     [ObservableProperty] private string _total = "—";
-    // "N steps" from the player's current room (empty if unknown). Filled in once the
-    // trip has been worked out off the UI thread.
+    // "N steps" from the player's current room (empty if unknown). Worked out off the
+    // UI thread and set when it comes back: by the trip for the groups it orders, by a
+    // lookup of its own for a group an item is moved into.
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(LocationLine))] private string _steps;
 
     public IRelayCommand WalkCommand { get; }

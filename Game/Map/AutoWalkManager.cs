@@ -3526,11 +3526,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // the way that kept refusing: "tracker entered Confirmed" told the user
             // nothing about the gate the wheel never opened (report
             // paradigm-20261026-150710).
-            string refusedWay = _path is { } planned && _index < planned.Count && planned[_index] is MoveStep move
-                ? $"{move.Direction} from {sourceForCurrentStep.Key}"
-                : $"from {sourceForCurrentStep.Key}";
-            TryReplanOrFail(RoomConfidence.Confirmed,
-                failText: $"step {_index + 1} ({refusedWay}) was refused on every try and every re-plan; walker stopped");
+            TryReplanOrFail(RoomConfidence.Confirmed, replansSpentText: () =>
+            {
+                string refusedWay = _path is { } planned && _index < planned.Count && planned[_index] is MoveStep move
+                    ? $"{move.Direction} from {sourceForCurrentStep.Key}"
+                    : $"from {sourceForCurrentStep.Key}";
+                return $"step {_index + 1} ({refusedWay}) was refused on every try and every re-plan; walker stopped";
+            });
             return;
         }
 
@@ -3560,9 +3562,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // With nobody to ask, or no re-plan left to spend on asking, nothing is counted,
     // changed or failed.
     //
-    // failText, when given, is the Failed text in place of the tracker wording.
+    // replansSpentText, when given, words the Failed text in place of the tracker
+    // wording when it is the re-plan budget that ends the walk.
     private bool TryReplanOrFail(RoomConfidence newConfidence, string when = "mid-step", bool onlyIfAsked = false,
-        string? failText = null)
+        Func<string>? replansSpentText = null)
     {
         // A block landing while the character is Confused is the movement-fumble
         // mechanic (GAME_MECHANICS "Confusion fumbles — actions fail and must be
@@ -3582,13 +3585,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         // Re-plan caps avoid infinite ping-pong when manual user
         // typing keeps interfering with the walker's expectations.
-        if ((!confused && _replanCount >= MaxReplansPerWalk)
+        bool replansSpent = !confused && _replanCount >= MaxReplansPerWalk;
+        if (replansSpent
             || _destination is not { } dest
             || _tracker.State.CurrentRoom is not { } here)
         {
             if (onlyIfAsked) return false;
+            bool walkStillPlaced = _destination is not null && _tracker.State.CurrentRoom is not null;
             Raise(new WalkEvent(WalkEventKind.Failed,
-                failText ?? $"tracker entered {newConfidence} {when}; walker can't continue",
+                replansSpent && walkStillPlaced && replansSpentText is not null
+                    ? replansSpentText()
+                    : $"tracker entered {newConfidence} {when}; walker can't continue",
                 _destination));
             Reset();
             return true;
