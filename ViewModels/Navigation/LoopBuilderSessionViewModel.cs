@@ -19,6 +19,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     private readonly RoomGraphManager _graph;
     private readonly IRoomFilter? _filter;
     private readonly List<RoomKey> _clicks = new();
+    private long _lastStepId;
     // The game-data set the rooms clicked are of: the one the loop catalogue was on
     // when they were clicked, which is where Save writes.
     private string? _builtOn;
@@ -100,9 +101,20 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         // 1-based index matches the map's red numbered waypoint
         // markers + the post-edit RenumberRows pass. Clicks.Count is
         // pre-Add, so the first row gets 1, not 0.
-        Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName));
+        Clicks.Add(new LoopBuilderRow(Clicks.Count + 1, key, room.DisplayName) { StepId = ++_lastStepId });
         OnPropertyChanged(nameof(HasClicks));
         Reexpand();
+    }
+
+    // Where the step a row was read from sits now, or -1 when it has been removed
+    // (or the build cleared). The action editor is modeless, so the steps can be
+    // removed or reordered while it is open; its result goes to this step or nowhere.
+    public int IndexOfStep(LoopBuilderRow row)
+    {
+        if (row.StepId == 0) return -1;
+        for (int i = 0; i < Clicks.Count; i++)
+            if (Clicks[i].StepId == row.StepId) return i;
+        return -1;
     }
 
     // Remove the click at index (CURRENT NAV row click → remove). No-op when
@@ -310,6 +322,11 @@ public sealed record LoopBuilderRow(
     int Index, RoomKey Key, string Name, string? Command = null, long DelayMs = 0, bool DoNotRest = false, bool DoNotAttack = false,
     bool RestHereHp = false, bool RestHereMana = false)
 {
+    // The step's identity within its build, kept through every edit, renumber and
+    // move (each of those replaces the row). 0 on the Exp/Hr estimator's rows, which
+    // no editor opens.
+    public long StepId { get; init; }
+
     public bool HasCommand => !string.IsNullOrWhiteSpace(Command);
     public bool HasDoNotRest => DoNotRest;
     public bool HasDoNotAttack => DoNotAttack;

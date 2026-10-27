@@ -100,7 +100,7 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
 
     public PvpSectionViewModel() : this(
         AppServices.Current.Profile, TryGetFavorites(),
-        () => AppServices.Current.ResolveActiveRealm()?.Realm.PvpEnabled == true) { }
+        () => AppServices.Current.PeekActiveRealm()?.Realm.PvpEnabled == true) { }
 
     public PvpSectionViewModel(ProfileService profile, FavoritesStore? favorites, Func<bool> pvpEnabledHere)
     {

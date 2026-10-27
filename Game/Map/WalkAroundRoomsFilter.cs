@@ -19,6 +19,7 @@ public sealed class WalkAroundRoomsFilter : IRoomFilter
     }
 
     public bool IsAvoided(RoomKey key) => _around.Contains(key) || (_inner?.IsAvoided(key) ?? false);
+    public IDisposable? BeginSearch() => _inner?.BeginSearch();
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
     public bool IsExitRefused(RoomKey from, in RoomExit exit) => _inner?.IsExitRefused(from, in exit) ?? false;
     public bool IsExitHeldOpen(RoomKey from, in RoomExit exit) => _inner?.IsExitHeldOpen(from, in exit) ?? false;

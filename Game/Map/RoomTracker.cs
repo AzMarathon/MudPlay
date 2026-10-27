@@ -53,6 +53,8 @@ public sealed class RoomTracker
 
     private readonly RoomGraphManager _graph;
     private readonly LogService? _log;
+    // Times each room-change handler, so a slow one is named (RaiseStateChanged).
+    private readonly PerformanceMonitor? _performance;
     private readonly ConcurrentQueue<PendingMove> _pending = new();
 
     // True while one or more move commands are on the wire awaiting their room
@@ -431,11 +433,13 @@ public sealed class RoomTracker
 
     public RoomTracker(RoomGraphManager graph) : this(graph, log: null) { }
 
-    public RoomTracker(RoomGraphManager graph, LogService? log, Func<DateTimeOffset>? now = null)
+    public RoomTracker(RoomGraphManager graph, LogService? log, Func<DateTimeOffset>? now = null,
+        PerformanceMonitor? performance = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _graph = graph;
         _log = log;
+        _performance = performance;
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _passiveGrid = new FootprintMatcher(
             probeHop: (from, dir) => GraphFootprintProbes.Hop(_graph, from, dir),
@@ -3606,10 +3610,22 @@ public sealed class RoomTracker
         Room? previousRoom,
         Room? newRoom)
     {
-        StateChanged?.Invoke(new RoomTransition(
+        if (StateChanged is not { } handlers) return;
+        RoomTransition transition = new(
             previousConfidence, newConfidence, previousRoom, newRoom, State.LastUpdatedAt,
-            Displayed: _reconcilingDisplay && !_bookedOffAnotherRoomsDisplay));
+            Displayed: _reconcilingDisplay && !_bookedOffAnotherRoomsDisplay);
+        // Each handler on its own clock. A room arrival is one line of game text to
+        // the hang report and the slow-line warning, and dozens of engines hear it:
+        // the report that stood the client still for 3 s on an `Obvious exits:` line
+        // (paradigm-20261026-201217) could name nothing past "terminal feed".
+        if (_performance is { } performance) performance.Raise(handlers, transition, "room change", _log, "RoomTracker");
+        else handlers(transition);
     }
+
+    // A lambda subscribed to StateChanged, named for the hang report
+    // (PerformanceMonitor.Named).
+    public static Action<RoomTransition> Named(string name, Action<RoomTransition> handler) =>
+        PerformanceMonitor.Named(name, handler);
 
     // ----- queue / step / history housekeeping ------------------------
 

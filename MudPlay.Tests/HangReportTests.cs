@@ -118,6 +118,68 @@ public sealed class HangReportTests
         Assert.Contains("still not answering after 15.0 s; innermost scope `stuck`", report);
     }
 
+    // Report paradigm-20261026-201217: the client stood still for 3 s on a room's
+    // `Obvious exits:` line, and the report could name nothing past "terminal feed".
+    // Each handler of a room change now runs in a scope of its own, named for it.
+    [Fact]
+    public void A_room_change_that_hangs_names_the_handler_holding_it_in_the_report_and_the_log()
+    {
+        using Rig rig = new();
+        rig.Log.Diagnostics = new LogDiagnosticState { DebugDiagnostics = true };
+        string set = Path.Combine(rig.Folder, "sets", "alpha");
+        Directory.CreateDirectory(set);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), """
+            [ { "Map Number": 1, "Room Number": 1, "Name": "Town Square", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" } ]
+            """);
+        GameDataCache cache = new(Path.Combine(rig.Folder, "sets"));
+        cache.SwitchSet("alpha");
+        Game.Map.RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        Game.Map.RoomTracker tracker = new(graph, rig.Log, performance: rig.Monitor);
+        tracker.StateChanged += _ => { };
+        tracker.StateChanged += Game.Map.RoomTracker.Named("slow neighbour", _ => rig.Pass(6));
+
+        tracker.SetLocated(new Game.Map.RoomKey(1, 1));
+
+        Assert.Contains("1. `room change slow neighbour` at `", rig.Report);
+        Assert.Contains(rig.Log.Snapshot(), e => e.Severity == LogSeverity.Debug && e.Source == "RoomTracker"
+            && e.Message == "room change handler 'slow neighbour' took 6000 ms");
+    }
+
+    // A room change runs some fifty handlers. Each one under a millisecond stays out
+    // of the recent activity, so a step doesn't push out what ran before it; one
+    // that took longer is listed like any other work.
+    [Fact]
+    public void A_room_change_leaves_earlier_activity_in_the_report_and_lists_only_its_slow_handlers()
+    {
+        using Rig rig = new();
+        string set = Path.Combine(rig.Folder, "sets", "alpha");
+        Directory.CreateDirectory(set);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), """
+            [ { "Map Number": 1, "Room Number": 1, "Name": "Town Square", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" } ]
+            """);
+        GameDataCache cache = new(Path.Combine(rig.Folder, "sets"));
+        cache.SwitchSet("alpha");
+        Game.Map.RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        Game.Map.RoomTracker tracker = new(graph, rig.Log, performance: rig.Monitor);
+        for (int i = 0; i < 60; i++)
+            tracker.StateChanged += Game.Map.RoomTracker.Named($"quick {i}", _ => { });
+        tracker.StateChanged += Game.Map.RoomTracker.Named("lair timers",
+            _ => rig.Clock.Advance(TimeSpan.FromMilliseconds(3)));
+
+        using (rig.Monitor.Measure("Character Info refresh")) rig.Clock.Advance(TimeSpan.FromMilliseconds(5));
+        tracker.SetLocated(new Game.Map.RoomKey(1, 1));
+        using (rig.Monitor.Measure("stuck")) rig.Pass(6);
+
+        string recent = rig.Report[rig.Report.IndexOf("## Last UI-thread activity", StringComparison.Ordinal)..];
+        Assert.Contains("Character Info refresh", recent);
+        Assert.Contains("room change lair timers", recent);
+        Assert.DoesNotContain("room change quick", recent);
+    }
+
     [Fact]
     public void The_report_names_each_open_scope_with_its_file_member_and_line_and_what_ran_before()
     {
