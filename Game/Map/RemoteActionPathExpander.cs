@@ -62,6 +62,10 @@ public static class RemoteActionPathExpander
     // room nearest the action rooms. Without a mapper the exit falls through to
     // the plain single-step form and the send-side dispatcher reports the
     // missing wiring.
+    //
+    // spans, when given, gets each top-level lever exit's detour as indices into
+    // the returned steps (LeverDetour), for a loop that has to know where a
+    // detour starts and ends.
     public static IReadOnlyList<WalkStep> Expand(
         RoomGraphManager graph,
         RoomKey source,
@@ -70,13 +74,18 @@ public static class RemoteActionPathExpander
         IRoomFilter? filter = null,
         LogService? log = null,
         IReadOnlySet<Direction>? openAtSource = null,
-        List<UnroutableLeverLeg>? unroutable = null)
+        List<UnroutableLeverLeg>? unroutable = null,
+        List<LeverDetour>? spans = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(directions);
 
         if (directions.Count == 0) return Array.Empty<WalkStep>();
 
+        // Each detour's span as it moves while later detours are spliced in ahead of
+        // it. Placed: the span's steps are in the list (a one-way detour from the
+        // start, a round trip once spliced).
+        var open = new List<SpanBuild>();
         var steps = new List<WalkStep>(directions.Count);
         // roomBefore[i] is the room the walker stands in immediately before
         // executing steps[i]. Those approach rooms (plus the exit's host room)
@@ -85,7 +94,7 @@ public static class RemoteActionPathExpander
         // Round-trip lever detours to splice in before their exit's cross step,
         // each keyed by the step index at which the walker stands in its anchor.
         // CrossAt is the step index of the gated exit's own crossing.
-        var detours = new List<(int InsertAt, List<WalkStep> Steps, int CrossAt)>();
+        var detours = new List<(int InsertAt, List<WalkStep> Steps, int CrossAt, SpanBuild Span)>();
 
         RoomKey current = source;
 
@@ -158,15 +167,22 @@ public static class RemoteActionPathExpander
                     steps.RemoveRange(leaveAt, steps.Count - leaveAt);
                     roomBefore.RemoveRange(leaveAt, roomBefore.Count - leaveAt);
                     detours.RemoveAll(d => d.CrossAt >= leaveAt);
+                    open.RemoveAll(s => s.Cross >= leaveAt);
                     foreach (WalkStep step in detour.Value.Steps)
                     {
                         roomBefore.Add(at);
                         steps.Add(step);
                         if (step is MoveStep moved) at = moved.ExpectedTarget;
                     }
+                    open.Add(new SpanBuild(current, dir, oneWay: true)
+                        { Start = leaveAt, End = steps.Count, Cross = steps.Count, Placed = true });
                 }
                 else if (detour.Value.Steps.Count > 0)
-                    detours.Add((detour.Value.InsertAt, detour.Value.Steps, steps.Count));
+                {
+                    SpanBuild span = new(current, dir, oneWay: false) { Start = detour.Value.InsertAt, Cross = steps.Count };
+                    open.Add(span);
+                    detours.Add((detour.Value.InsertAt, detour.Value.Steps, steps.Count, span));
+                }
 
                 roomBefore.Add(current);
                 steps.Add(new MoveStep(dir, exit.Target) { SkipSpecialDispatch = true });
@@ -200,10 +216,37 @@ public static class RemoteActionPathExpander
         // Splice detours in from the highest anchor index down so earlier
         // insertion indices stay valid as later inserts shift the tail.
         detours.Sort(static (a, b) => b.InsertAt - a.InsertAt);
-        foreach ((int insertAt, List<WalkStep> dsteps, _) in detours)
+        foreach ((int insertAt, List<WalkStep> dsteps, _, SpanBuild placing) in detours)
+        {
             steps.InsertRange(insertAt, dsteps);
+            int length = dsteps.Count;
+            foreach (SpanBuild s in open)
+            {
+                if (s.Cross >= insertAt) s.Cross += length;
+                if (ReferenceEquals(s, placing) || !s.Placed) continue;
+                if (s.Start >= insertAt) { s.Start += length; s.End += length; }
+                else if (s.End > insertAt) s.End += length;
+            }
+            placing.Start = insertAt;
+            placing.End = insertAt + length;
+            placing.Placed = true;
+        }
 
+        spans?.AddRange(open.OrderBy(static s => s.Start)
+            .Select(static s => new LeverDetour(s.Start, s.End, s.Cross, s.GateRoom, s.GateDir, s.OneWay)));
         return steps;
+    }
+
+    // A detour's span while Expand assembles the steps (LeverDetour once done).
+    private sealed class SpanBuild(RoomKey gateRoom, Direction gateDir, bool oneWay)
+    {
+        public RoomKey GateRoom { get; } = gateRoom;
+        public Direction GateDir { get; } = gateDir;
+        public bool OneWay { get; } = oneWay;
+        public int Start { get; set; }
+        public int End { get; set; }
+        public int Cross { get; set; }
+        public bool Placed { get; set; }
     }
 
     // Build the round-trip lever detour for a cross-room multi-action exit and
@@ -448,7 +491,7 @@ public static class RemoteActionPathExpander
             // walker re-pulls until it turns (via WinchManager) instead of firing once
             // fire-and-forget and walking on to a still-closed gate.
             string cmd = action.Commands[0];
-            steps.Add(new CommandStep(cmd, IsWinchPull: WinchManager.IsWinchPullCommand(cmd)));
+            steps.Add(new CommandStep(cmd, IsWinchPull: WinchManager.IsWinchPullCommand(cmd)) { DoorOrGate = maData.DoorOrGate });
         }
 
         if (!cursor.Equals(finish))

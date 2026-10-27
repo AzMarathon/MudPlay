@@ -55,6 +55,10 @@ public sealed record CommandLoopStep(string Command, long DelayMs = 0) : LoopSte
     [JsonIgnore]
     public bool IsWinchPull { get; init; }
 
+    // The door or gate that action opens (CommandStep.DoorOrGate).
+    [JsonIgnore]
+    public (RoomKey Room, Direction Dir)? DoorOrGate { get; init; }
+
     public override string Display => DelayMs > 0
         ? $"{Command} (wait {LoopDelay.Describe(DelayMs)})"
         : Command;

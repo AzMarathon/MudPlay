@@ -2196,6 +2196,13 @@ public static class BugReportBuilder
             IReadOnlyList<string> leverActions = loop.ExitActionCommands;
             Kv(sb, "Loop lever detours (actions each lap)",
                 leverActions.Count == 0 ? "(none)" : string.Join(", ", leverActions.Select(c => $"'{c}'")));
+            Kv(sb, "Loop step inside a lever detour",
+                loop.CurrentDetour is { } detour
+                    ? $"yes: steps {detour.Start + 1}-{detour.Cross + 1}, for {detour.GateRoom} {detour.GateDir}"
+                      + (detour.OneWay ? " (one-way)" : $", back on the route at step {detour.End + 1}")
+                    : "no");
+            Kv(sb, "Loop lever detours that can't be routed",
+                loop.UnroutableLevers.Count == 0 ? "(none)" : string.Join("; ", loop.UnroutableLevers));
             Kv(sb, "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
@@ -2750,6 +2757,10 @@ public static class BugReportBuilder
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
         Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
+        // A lever is not pulled again while its door or gate stands open from our pull:
+        // a second pull locks it.
+        Kv(sb, "Lever gates our pulls opened (not pulled again yet)", svc.LeverGates.Describe() is { Count: > 0 } levers
+            ? string.Join(", ", levers) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"

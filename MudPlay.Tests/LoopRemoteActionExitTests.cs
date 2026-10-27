@@ -144,41 +144,64 @@ public sealed class LoopRemoteActionExitTests : IDisposable
         Assert.Equal(Ledge, end);
     }
 
-    // The loop's leg is the walker's walk: the same detour, the same steps.
+    // The room stood in before each step of a lap walked from start.
+    private static List<RoomKey> RoomsBeforeEachStep(RoomGraphManager graph, RoomKey start, IReadOnlyList<LoopStep> steps)
+    {
+        List<RoomKey> before = new(steps.Count);
+        RoomKey at = start;
+        foreach (LoopStep step in steps)
+        {
+            before.Add(at);
+            if (step is MoveLoopStep move) at = graph.GetRoom(at)!.Exits[move.Direction].Target;
+        }
+        return before;
+    }
+
+    // The vine gate's detour, as the plan marks it: it leaves the route at 16/545
+    // (where the walk-to of the report left it too), comes back there with every
+    // lever typed, and the crossing is the primed step out of 16/551.
     [Fact]
-    public void Expansion_OfTheLegThroughTheGate_IsTheWalkersOwn()
+    public void Plan_MarksTheVineGateDetour_FromLeavingTheRouteToItsCrossing()
     {
         RoomGraphManager graph = Graph(TreetopsJson);
         BfsMapper bfs = new(graph);
 
-        IReadOnlyList<WalkStep> walk = RemoteActionPathExpander.Expand(
-            graph, Rooftop, bfs.FindPath(Rooftop, Ledge)!, bfs);
-        (IReadOnlyList<LoopStep> steps, _) =
-            LoopExpander.Expand(new[] { new LoopWaypoint(Rooftop), new LoopWaypoint(Ledge) }, bfs, graph);
+        LoopExpansion plan = LoopExpander.Plan(LedgeToRooftop().Waypoints, bfs, graph);
 
-        string Of(object step) => step switch
-        {
-            MoveStep m => $"{m.Direction}{(m.SkipSpecialDispatch ? " primed" : "")}",
-            MoveLoopStep m => $"{m.Direction}{(m.SkipSpecialDispatch ? " primed" : "")}",
-            CommandStep c => c.Command,
-            CommandLoopStep c => c.Command,
-            _ => step.ToString()!,
-        };
-        Assert.Equal(walk.Select(Of), steps.Take(walk.Count).Select(Of));
+        LeverDetour vine = Assert.Single(plan.Detours);
+        Assert.Equal((VineGate, Direction.N, false), (vine.GateRoom, vine.GateDir, vine.OneWay));
+        List<RoomKey> before = RoomsBeforeEachStep(graph, Ledge, plan.Steps);
+        Assert.Equal(new RoomKey(16, 545), before[vine.Start]);
+        Assert.Equal(new RoomKey(16, 545), before[vine.End]);
+        Assert.Equal(VineGate, before[vine.Cross]);
+        Assert.True(plan.Steps[vine.Cross] is MoveLoopStep { Direction: Direction.N, SkipSpecialDispatch: true });
+        int[] actions = Enumerable.Range(0, plan.Steps.Count).Where(i => plan.Steps[i] is CommandLoopStep).ToArray();
+        Assert.Equal(5, actions.Length);
+        Assert.All(actions, i => Assert.InRange(i, vine.Start, vine.End - 1));
     }
 
     // A lever room no route may enter leaves its gate shut: the leg through it is
-    // reported unreachable when the loop is built or started, not found mid-lap.
+    // reported unreachable, and the loop isn't started, naming the exit and the
+    // lever room.
     [Fact]
-    public void Expansion_WithTheLeverRoomAvoided_ReportsTheLegThroughTheGate()
+    public void LeverRoomAvoided_TheLegIsUnreachable_AndTheLoopIsRefusedNamingTheExitAndLeverRoom()
     {
         RoomGraphManager graph = Graph(TreetopsJson);
         BfsMapper bfs = new(graph);
+        AvoidRooms avoid = new(new RoomKey(16, 569));
 
-        (_, IReadOnlyList<(RoomKey From, RoomKey To)> unreachable) =
-            LoopExpander.Expand(LedgeToRooftop().Waypoints, bfs, graph, new AvoidRooms(new RoomKey(16, 569)));
+        LoopExpansion plan = LoopExpander.Plan(LedgeToRooftop().Waypoints, bfs, graph, avoid);
+        Assert.Equal(new[] { (Rooftop, Ledge) }, plan.UnreachableSegments);
+        UnroutableLeverLeg lever = Assert.Single(plan.UnroutableLevers);
+        Assert.Equal((VineGate, Direction.N, new RoomKey(16, 569)), (lever.GateRoom, lever.GateDir, lever.To));
 
-        Assert.Equal(new[] { (Rooftop, Ledge) }, unreachable);
+        LeverWorld world = World(filter: avoid);
+        world.StandIn(Ledge);
+        Assert.False(world.Runner.Start(LedgeToRooftop()));
+        LoopEvent failed = Assert.Single(world.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains("the exit north of 16/551", failed.Detail);
+        Assert.Contains("opened from 16/569", failed.Detail);
+        Assert.Empty(world.Sent);
     }
 
     private sealed class AvoidRooms(params RoomKey[] rooms) : IRoomFilter
@@ -186,114 +209,140 @@ public sealed class LoopRemoteActionExitTests : IDisposable
         public bool IsAvoided(RoomKey key) => rooms.Contains(key);
     }
 
-    // The game side of a run: the rooms shown as the game shows them, the lever exits
-    // shut until their action is typed, each command answered by its prompt.
-    private sealed class Treetops(RoomGraphManager graph, RoomTracker tracker, LoopRunner runner, ServerFeed server,
-        WirePromptScanner prompts)
-    {
-        public LoopRunner Runner { get; } = runner;
-        public RoomTracker Tracker { get; } = tracker;
-        public List<string> Sent { get; } = new();
-        public List<LoopEvent> Events { get; } = new();
-        public List<(RoomKey Room, string Command)> Typed { get; } = new();
-        public List<(RoomKey From, string Sent)> Moves { get; } = new();
-        public List<string> Bonks { get; } = new();
-        public RoomKey At { get; set; }
-        private readonly HashSet<(RoomKey, Direction)> _open = new();
-        private int _answered;
+    private static readonly (RoomKey Room, string Command, RoomKey Gate, Direction Way)[] LeverCells =
+        Levers.Select(l => (l.Room, l.Command, l.Opens, l.Way)).ToArray();
 
-        public void Show(RoomKey key)
-        {
-            Room room = graph.GetRoom(key)!;
-            IEnumerable<string> exits = room.Exits
-                .Where(e => e.Key.IsCardinal() && e.Value.Hint != RoomExitHint.Text
-                            && (e.Value.Hint != RoomExitHint.MultiActionHidden || _open.Contains((key, e.Key))))
-                .Select(e => e.Key.ToLongName());
-            server.Line($"\u001b[1;36m{room.Name}\u001b[0m");
-            server.Line($"Obvious exits: {string.Join(", ", exits)}.");
-        }
+    private LeverWorld World(IRoomFilter? filter = null, bool withWalker = false) =>
+        new(_root, TreetopsJson, LeverCells, filter, withWalker);
 
-        // Answers what the client sent, one line at a time, until the lap is round
-        // or the run stops.
-        public void Play(int limit = 400)
-        {
-            while (_answered < Sent.Count && limit-- > 0
-                   && Runner.State == LoopState.Running && !Events.Any(e => e.Kind == LoopEventKind.RepeatStarted))
-            {
-                string sent = Sent[_answered++];
-                // The game echoes what it takes on the prompt row it was typed at.
-                server.Line("[HP=565]:" + sent);
-                Room room = graph.GetRoom(At)!;
-                RoomExit? crossed = null;
-                if (DirectionExtensions.TryFromToken(sent, out Direction d) && room.Exits.TryGetValue(d, out RoomExit cardinal))
-                {
-                    crossed = cardinal;
-                    if (cardinal.Hint == RoomExitHint.MultiActionHidden && !_open.Contains((At, d)))
-                    {
-                        Bonks.Add($"{At} {d}");
-                        return;
-                    }
-                }
-                else if (room.Exits.Values.FirstOrDefault(e => e.Hint == RoomExitHint.Text && e.TextCommands!.Contains(sent))
-                         is { Target.Map: > 0 } text)
-                    crossed = text;
-
-                if (crossed is { } exit)
-                {
-                    Moves.Add((At, sent));
-                    At = exit.Target;
-                    Show(At);
-                    continue;
-                }
-                Typed.Add((At, sent));
-                foreach ((RoomKey lever, string command, RoomKey opens, Direction way) in Levers)
-                    if (lever.Equals(At) && command == sent) _open.Add((opens, way));
-                prompts.Append(Encoding.Latin1.GetBytes("[HP=565]: "));
-            }
-        }
-    }
-
-    private Treetops NewRun()
-    {
-        RoomGraphManager graph = Graph(TreetopsJson);
-        RoomTracker tracker = new(graph);
-        WirePromptScanner prompts = new();
-        LoopRunner runner = new(tracker, new MovementCoordinator(), promptScanner: prompts, graph: graph,
-            bfs: new BfsMapper(graph), postToUi: a => a(), schedule: new ManualTimers().Arm);
-        ServerFeed server = new();
-        _ = new RoomDisplayParser(server.Lines, tracker);
-        // Its echo tells a move into one Treetops from a re-show of the last.
-        _ = new InboundMoveEchoScanner(server.Lines, tracker);
-        Treetops run = new(graph, tracker, runner, server, prompts);
-        runner.SetWireSender(b => run.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
-        runner.Event += run.Events.Add;
-        return run;
-    }
+    private static bool CrossedTheVine(LeverWorld world) =>
+        world.Moves.Any(m => m.From.Equals(VineGate) && m.Sent == "n");
 
     // The loop of the report, from the Narrow Ledge down the vine and round to the
-    // rooftop and back: the lap walks the lever chain, crosses the vine gate once
-    // `tear bark` has opened it, and climbs back to the ledge, where the next lap starts.
+    // rooftop and back, twice: each lap walks the lever chain, crosses the vine gate
+    // once `tear bark` has opened it, and climbs back to the ledge.
     [Fact]
-    public void Lap_ThroughTheVineGate_PullsTheChainThenCrossesIt_AndComesRound()
+    public void TwoLaps_ThroughTheVineGate_EachPullsTheChainThenCrossesIt()
     {
-        Treetops run = NewRun();
-        run.Tracker.SetLocated(Ledge);
-        run.At = Ledge;
+        LeverWorld world = World();
+        world.StandIn(Ledge);
 
-        Assert.True(run.Runner.Start(LedgeToRooftop()));
-        run.Play();
+        Assert.True(world.Runner.Start(LedgeToRooftop()));
+        world.Play(() => world.Laps >= 2);
 
-        Assert.Empty(run.Bonks);
-        Assert.DoesNotContain(run.Events, e => e.Kind == LoopEventKind.Failed);
-        Assert.Equal(Levers.Select(l => (l.Room, l.Command)), run.Typed);
-        int bark = run.Sent.IndexOf("tear bark");
-        int cross = run.Moves.FindIndex(m => m.From.Equals(VineGate) && m.Sent == "n");
-        Assert.True(cross >= 0, "the vine gate was never crossed");
-        Assert.True(run.Sent.IndexOf("n", bark) > bark);
-        Assert.Equal((new RoomKey(16, 552), "climb vine"), run.Moves[^1]);
-        Assert.Equal(Ledge, run.At);
-        Assert.Contains(run.Events, e => e.Kind == LoopEventKind.RepeatStarted);
-        Assert.Equal(new[] { "turn knot", "move branch", "pull vine", "push knot", "tear bark" }, run.Runner.ExitActionCommands);
+        Assert.Empty(world.Bonks);
+        Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Equal(2, world.Laps);
+        Assert.Equal(Levers.Select(l => (l.Room, l.Command)).Concat(Levers.Select(l => (l.Room, l.Command))), world.Typed);
+        Assert.Equal(2, world.Moves.Count(m => m.From.Equals(VineGate) && m.Sent == "n"));
+        Assert.Equal(new[] { "turn knot", "move branch", "pull vine", "push knot", "tear bark" }, world.Runner.ExitActionCommands);
+    }
+
+    // Started in 16/565, a room the lap only reaches partway through the vine gate's
+    // detour, the run doesn't join there and cross exits nothing opened: it walks
+    // to a room outside the detour and works the whole chain when the lap comes to
+    // it. (The two inner gates stand open from a run before.)
+    [Fact]
+    public void StartedInARoomInsideTheDetour_JoinsElsewhere_AndWorksTheWholeChain()
+    {
+        LeverWorld world = World(withWalker: true);
+        world.StandIn(new RoomKey(16, 565));
+        world.Open.UnionWith(new[] { (new RoomKey(16, 560), Direction.N), (new RoomKey(16, 555), Direction.W) });
+
+        Assert.True(world.Runner.Start(LedgeToRooftop()));
+        Assert.Equal(LoopState.Approaching, world.Runner.State);
+        world.Play(() => CrossedTheVine(world) && world.At.Equals(Ledge));
+
+        Assert.Empty(world.Bonks);
+        Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.True(CrossedTheVine(world));
+        Assert.Equal(Levers.Select(l => (l.Room, l.Command)), world.Typed.TakeLast(5));
+    }
+
+    // The lap's `tear bark` didn't take, so the vine gate is still shut when the run
+    // gets there: the primed crossing is refused, and instead of a recovery that
+    // would join the lap past the levers, the walker takes that one crossing,
+    // working the chain again from 16/551, and the lap carries on up the vine.
+    [Fact]
+    public void RefusedPrimedCrossing_IsWalkedByTheWalker_AndTheLapCarriesOn()
+    {
+        LeverWorld world = World(withWalker: true);
+        world.StandIn(Ledge);
+        bool fizzled = false;
+        world.Fizzle = sent => !fizzled && sent == "tear bark" && (fizzled = true);
+
+        Assert.True(world.Runner.Start(LedgeToRooftop()));
+        world.Play(() => CrossedTheVine(world) && world.At.Equals(Ledge));
+
+        Assert.Equal(new[] { "16/551 N" }, world.Bonks);
+        Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(world.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
+        Assert.Equal(1, world.Moves.Count(m => m.From.Equals(Rooftop)));
+        Assert.Equal(2, world.Sent.Count(s => s == "tear bark"));
+        Assert.Equal(1, world.Count("tear bark"));
+        Assert.True(CrossedTheVine(world));
+        Assert.Equal(Ledge, world.At);
+        Assert.Equal(LoopState.Running, world.Runner.State);
+    }
+
+    // A flee out of 16/569 before the game took `tear bark`: the walk back returns
+    // to the lever room and the action goes out again there, rather than being
+    // taken as done, so the gate is open when the lap reaches it.
+    [Fact]
+    public void FleeFromTheLeverRoomBeforeItsActionWasTaken_SendsTheActionAgainOnReturn()
+    {
+        LeverWorld world = World(withWalker: true);
+        world.StandIn(Ledge);
+        Assert.True(world.Runner.Start(LedgeToRooftop()));
+        world.Play(() => world.Sent.Contains("tear bark"));
+        Assert.Equal(new RoomKey(16, 569), world.At);
+        world.DropUnanswered();
+
+        world.Runner.PauseForFlee("low HP");
+        world.Runner.SendBacktrackMove(Direction.SE);
+        world.Play();
+        Assert.Equal(new RoomKey(16, 568), world.At);
+        world.Runner.ResumeAfterFlee(new RoomKey(16, 568));
+        world.Play(() => CrossedTheVine(world) && world.At.Equals(Ledge));
+
+        Assert.Equal(1, world.Count("tear bark"));
+        Assert.Empty(world.Bonks);
+        Assert.True(CrossedTheVine(world));
+        Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
+    // A shrine passage whose lever is in an alcove off the passage's own room: the
+    // lap leaves for the lever from that room, so on the next lap, with the room
+    // showing the passage open, the detour is skipped.
+    private const string ShrineJson = """
+        [
+          { "Map Number": 2, "Room Number": 2, "Name": "Shrine Door", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "2/3 (Hidden/Needs 1 Actions, any order)", "S": "0", "E": "2/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 2, "Room Number": 3, "Name": "Sanctum", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "2/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 2, "Room Number": 4, "Name": "Alcove", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "2/2",
+            "NE": "Action#1 [on the N exit of room 2/2]: press stone", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void ExitShownOpenWhereTheDetourStarts_TheDetourIsSkipped()
+    {
+        RoomKey door = new(2, 2), sanctum = new(2, 3), alcove = new(2, 4);
+        LeverWorld world = new(_root, ShrineJson, new[] { (alcove, "press stone", door, Direction.N) });
+        world.StandIn(door);
+
+        Assert.True(world.Runner.Start(new Loop("shrine", new[] { door, sanctum })));
+        world.Play(() => world.Laps >= 2);
+
+        Assert.Equal(2, world.Laps);
+        Assert.Equal(1, world.Count("press stone"));
+        Assert.Equal(1, world.Moves.Count(m => m.From.Equals(door) && m.Sent == "e"));
+        Assert.Equal(2, world.Moves.Count(m => m.From.Equals(door) && m.Sent == "n"));
+        Assert.Empty(world.Bonks);
     }
 
     // A winch in another room is pulled until it turns, as the walker pulls one,

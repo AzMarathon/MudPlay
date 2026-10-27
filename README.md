@@ -3,6 +3,9 @@
 <!-- current-version:start -->
 > **Version 3.186.19**
 > - Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+> - An exit the arrival's room display shows open is crossed as it stands, by walks and loops alike
+> - A lever door or gate our pull opened isn't pulled shut again by the next walk or lap within 5 minutes
+> - A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

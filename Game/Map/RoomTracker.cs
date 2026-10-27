@@ -1178,6 +1178,14 @@ public sealed class RoomTracker
     // that display (RoomTransition.Displayed).
     private bool _reconcilingDisplay;
 
+    // The exits of the display being reconciled, which SetRoom gives the room that
+    // display settles us in before StateChanged goes out. An engine sends its next
+    // step from inside that event, and its "already open" checks (a lever exit, a
+    // hidden exit already revealed) read null there: a loop stopped at a lever exit
+    // the display showed open (report paradigm-20261026-220231), and a same-room
+    // lever on an open gate would be pulled, which locks it.
+    private IReadOnlySet<Direction>? _displayExits;
+
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private Action? _requestRedisplay;
 
@@ -1571,6 +1579,7 @@ public sealed class RoomTracker
         // From here on a room the tracker settles on is the one this display shows:
         // a booked landing it corrects, as much as the reconcile that follows.
         _reconcilingDisplay = true;
+        _displayExits = observation.Exits;
         try
         {
             VerifyCastLanding(observation, when);
@@ -1619,6 +1628,7 @@ public sealed class RoomTracker
         finally
         {
             _reconcilingDisplay = false;
+            _displayExits = null;
             _trailAwaitsFirstDisplay = false;
         }
 
@@ -1630,6 +1640,7 @@ public sealed class RoomTracker
             _displayNotOfRoomHere = true;
             State.OpenDoorDirections = null;
             State.ClosedDoorDirections = null;
+            State.ObservedExitDirections = null;
             _lastObservation = null;
             return;
         }
@@ -3542,8 +3553,10 @@ public sealed class RoomTracker
         // already revealed?" pre-check. Clear it; NoteRoomObserved re-applies the
         // fresh set right after its reconcile switch on a real display. (A stale set
         // here made the walker skip the required `sea <dir>` and ram a hidden exit
-        // — report paradigm-20260921-145800.)
-        State.ObservedExitDirections = null;
+        // — report paradigm-20260921-145800.) A room the display being reconciled
+        // settles us in takes that display's exits at once, the same rule
+        // RoomTransition.Displayed follows.
+        State.ObservedExitDirections = _reconcilingDisplay && !_bookedOffAnotherRoomsDisplay ? _displayExits : null;
         if (confidence == RoomConfidence.Confirmed) State.SuspectStrikes = 0;
         // Sure of the room again: the pending queue tracks every move from here.
         if (IsSure) ResetPassiveLocate();

@@ -3,6 +3,9 @@
 ## 3.186.19
 
 - Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+- An exit the arrival's room display shows open is crossed as it stands, by walks and loops alike
+- A lever door or gate our pull opened isn't pulled shut again by the next walk or lap within 5 minutes
+- A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
 - bug reports addressed: paradigm-20261026-220231
 
 ## 3.186.16

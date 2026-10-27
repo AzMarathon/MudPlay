@@ -1389,6 +1389,7 @@ public sealed class AppServices
     // The door sides the client has seen open that can't have locked again yet. Set
     // beside it.
     public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
+    public Game.Map.LeverGateMemory LeverGates { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
 
@@ -9069,6 +9070,11 @@ public sealed class AppServices
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
         Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
             .OfType<string>().ToArray();
+        // A lever-opened door or gate one of our detours opened isn't pulled shut again
+        // by the next walk or lap through it while it stands open.
+        LeverGates = new Game.Map.LeverGateMemory(RoomTracker, log: Log);
+        Walker.SetLeverGates(LeverGates);
+        LoopRunner.SetLeverGates(LeverGates);
         // A waypoint's command block: the loop moves on once the game has answered it,
         // and stays while a fight it started runs.
         LoopRunner.SetInCombatProbe(() => PlayerState.InCombat);

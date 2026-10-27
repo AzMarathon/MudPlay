@@ -763,7 +763,7 @@ public sealed class RoomGraphManager
                 : (actions.Select(a => a.StepNumber).Distinct().Count(), false);
 
             actions.Sort(static (a, b) => a.StepNumber.CompareTo(b.StepNumber));
-            var data = new MultiActionExitData(count, specific, actions);
+            var data = new MultiActionExitData(count, specific, actions) { DoorOrGate = leverDoor ? (roomKey, dir) : null };
             RoomExit patched = leverDoor
                 ? exit with { Hint = RoomExitHint.MultiActionHidden, MultiAction = data }
                 : exit with { MultiAction = data };

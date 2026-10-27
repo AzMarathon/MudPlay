@@ -3186,6 +3186,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void SendCommandStep(CommandStep step)
     {
+        if (step.DoorOrGate is { } gate && _leverGates?.OpenedAt(gate) is { } opened)
+        {
+            _log?.Info("Walker",
+                $"step {_index + 1}/{_path!.Count}: '{step.Command}' not sent: {gate.Room} {gate.Dir} has stood open since our pull at "
+                + $"{opened.ToLocalTime():HH:mm:ss}, and a second pull would lock it");
+            AdvanceStep();
+            return;
+        }
+        if (step.DoorOrGate is { } pulled) _leverGates?.NotePulled(pulled);
         _stepInFlight = true;
 
         // A cross-room detour's winch pull is a strength roll that can "not budge" —
@@ -3215,6 +3224,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<string>? _roomActionSent;
 
     public void SetRoomActionHook(Action<string> hook) => _roomActionSent = hook;
+
+    // The lever gates our pulls are known to have opened (LeverGateMemory).
+    private LeverGateMemory? _leverGates;
+
+    public void SetLeverGates(LeverGateMemory gates) => _leverGates = gates;
 
     // Put a sea-captain sailing on the wire. Like the chime teleport it splits
     // the party (leader `.@party <keyword>` relay, then every member types the

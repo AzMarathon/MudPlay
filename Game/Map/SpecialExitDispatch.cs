@@ -96,14 +96,16 @@ internal static class SpecialExitDispatch
         // Same-room actions only. Cross-room remote actions are pre-linearized
         // into an explicit walk/act/walk-back detour by RemoteActionPathExpander
         // (for the walker, and for a loop's legs through LoopExpander), so they
-        // never reach here as a single MultiActionHidden step; a walk whose detour
-        // can't be routed is refused at plan time, and such a loop leg is
-        // reported unreachable, so this stays a clear-fail safety net. The reason is engine-neutral — it is reachable
+        // never reach here as a single MultiActionHidden step; a walk or a loop
+        // whose detour can't be routed is refused at plan time, so this stays a
+        // clear-fail safety net. The reason is engine-neutral — it is reachable
         // from either caller.
         if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is { } maData)
         {
             // Already open — its actions were done by someone else, or it opened on
-            // its own ("The exit to the <dir> just opened!"): just walk through.
+            // its own ("The exit to the <dir> just opened!"): just walk through. A
+            // lever door or gate must be: an action on an open one locks it
+            // (GAME_MECHANICS "Multi-action exits and levers").
             if (tracker.ShownOpenExits() is { } shown && shown.Contains(direction))
             {
                 tracker.NoteMoveSent(direction);
