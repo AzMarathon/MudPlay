@@ -863,6 +863,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.TrainerMenu.CursorAtGamePrompt =
             () => SentCommandTrail.RowIsGamePrompt(
                 CursorRowText(), string.Empty, AppServices.Current.CurrentStatlinePromptRegex);
+        AppServices.Current.TrainerMenu.ReadScreen = BuildVisibleScreenText;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a

@@ -1,8 +1,9 @@
 using System.Text;
+using MudPlay.Terminal;
 
 namespace MudPlay.Tests;
 
-// The game's side of a `train stats`, in the shapes Paradigm put on the wire in
+// The game's side of a `train stats`, in the shapes the Anomaly server put on the wire in
 // reports paradigm-20261026-225703, -225718 and -225733: the prompt redrawn in
 // place, the command echoed on it, party lines that wipe the prompt row, the room
 // a bare Enter redraws, and the Character Editor painted whole after a clear
@@ -61,6 +62,51 @@ internal static class TrainStatsWire
         return form.Append("\u001b[5;36H").ToString();
     }
 
+    // The `Char. Creation` box (captures paradigm-20260805-*), painted with cursor
+    // positioning at the layout of report paradigm-20260930-160602: labels at
+    // column 7 of rows 9-14, ranges at column 18, values right-aligned from column
+    // 34, CP Left on row 20. Its title row, with the panel, is painted last and the
+    // cursor left on it, so the row never completes as a line.
+    public static string CreationBox(int strength, int cpLeft)
+    {
+        string[] labels = { "Strength", "Intellect", "Willpower", "Agility", "Health", "Charm" };
+        string[] ranges = { "(  55 to  160)", "(  30 to  130)", "(  30 to  135)", "(  45 to  145)", "(  55 to  165)", "(  30 to  120)" };
+        int[] values = { strength, 40, 30, 100, 60, 30 };
+        StringBuilder box = new("\u001b[2J\u001b[1;1H");
+        box.Append("\u001b[5;3H| > Family Name\u001b[5;39H<");
+        for (int i = 0; i < labels.Length; i++)
+        {
+            int row = 9 + i;
+            box.Append($"\u001b[{row};3H| > {labels[i]}\u001b[{row};39H<\u001b[{row};41H|");
+            box.Append($"\u001b[{row};18H{ranges[i]}");
+            box.Append($"\u001b[{row};34H{values[i],4}");
+        }
+        box.Append($"\u001b[20;3H| >  Exit:\u001b[20;14HSAVE\u001b[20;19H<\u001b[20;22H> CP Left:\u001b[20;33H{cpLeft,4}\u001b[20;39H<");
+        return box.Append("\u001b[2;4H/ P A R A D I G M      Char. Creation /    \\  --    Point Cost Chart    --").ToString();
+    }
+
+    // Stock's scrolling form: its lines are Stock-sourced, as `wccmmud.dll` 1.11p
+    // prints them (GAME_MECHANICS "The `train stats` screen (Char. Creation
+    // box)"); the frame around the Point Cost Chart, and only one of its rows, are
+    // drawn here in ASCII.
+    public static string ScrollingForm(int cp) =>
+        "M A J O R   M U D\r\n"
+        + "Character Generator\r\n"
+        + "+---- Point Cost Chart ----+\r\n"
+        + "| 1st 10 points: 1 CP each |\r\n"
+        + "+--------------------------+\r\n"
+        + "Strength  55 - 160\r\n"
+        + "Intellect 30 - 130\r\n"
+        + "Willpower 30 - 135\r\n"
+        + "Agility   45 - 145\r\n"
+        + "Health    55 - 165\r\n"
+        + "Charm     30 - 120\r\n"
+        + $"You have {cp} CP to distribute.\r\n";
+
+    // Stock's refusal of `train stats` where there's no trainer, as `wccmmud.dll`
+    // 1.11p prints it; Paradigm's wording isn't recorded.
+    public const string StockNotATrainer = "You may not train your stats here!";
+
     // Leaving the form with SAVE: the screen cleared, the save line, the realm
     // re-entry, and the prompt left waiting in place.
     public static string Saved(string name = "Someone") =>
@@ -69,4 +115,17 @@ internal static class TrainStatsWire
         + Prompt();
 
     private static void Row(StringBuilder form, string row) => form.Append(row).Append("\r\n");
+
+    // The visible screen as newline-joined rows, the way the terminal session
+    // flattens it for the trainer screen's readers.
+    public static string ScreenText(TerminalScreen screen)
+    {
+        StringBuilder text = new();
+        for (int y = 0; y < screen.Rows; y++)
+        {
+            foreach (Cell cell in screen.Row(y)) text.Append(cell.Char);
+            text.Append('\n');
+        }
+        return text.ToString();
+    }
 }

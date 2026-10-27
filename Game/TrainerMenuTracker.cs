@@ -49,20 +49,6 @@ public sealed class TrainerMenuTracker : IDisposable
 
     private readonly Func<DateTime> _now;
 
-    // Substring unique to the initial character-creation training screen — the
-    // "MAJOR MUD Character Creation" box shares the menu's top terminal row
-    // with the "Point Cost Chart" panel. Its presence on a marker line
-    // confirms menu entry without an outbound train stats: character creation
-    // walks class → race → alignment → training with no such command, so the
-    // outbound gate never arms. A single line carrying BOTH this phrase and
-    // "Point Cost Chart" is the full-screen menu, not chat noise.
-    private const string CharacterCreationSignature = "Character Creation";
-
-    // ParaMUD abbreviates the box title to "Char. Creation" rather than the
-    // stock "Character Creation"; match both so the creation stat box is
-    // recognised on either realm.
-    private const string CharCreationAbbrevSignature = "Char. Creation";
-
     // The framed "Point Cost Chart" panel beside the creation/train box title.
     // Public so the screen-feed path (MainWindowViewModel) can cheaply pre-check
     // for it before building screen text to hand to ObserveScreen. The emitted-
@@ -91,10 +77,18 @@ public sealed class TrainerMenuTracker : IDisposable
     private FormAnswer _answer;
     private DateTime _trainStatsSentAt;
     private readonly MessageRouter _router;
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
+    // Decides a Pending or Echoed answer once ExpectingMenuWindow is up, so the
+    // hold doesn't wait on a prompt that may never be read.
+    private IDisposable? _windowTick;
+    // A prompt or room display came in this read with the window up and no answer
+    // read. The read's own lines may still carry the echo, so it is decided at the
+    // read's end.
+    private bool _signalPastWindow;
 
     // True while we believe the trainer-stats menu is the active screen
-    // (marker-confirmed — never sets on a cursor-positioned menu whose marker
-    // row doesn't scroll; use IsInputMenuActive for the realm-independent read).
+    // (marker-confirmed — never sets on a cursor-positioned box whose marker
+    // row doesn't complete as a line; use IsInputMenuActive for the realm-independent read).
     public bool IsInTrainerMenu => _inMenu;
 
     // True while character-mode input is armed for the `train stats` screen —
@@ -110,17 +104,27 @@ public sealed class TrainerMenuTracker : IDisposable
     // command-armed `train stats` input session (realm-independent) and the
     // marker-confirmed full-screen menu (covers character creation, which has no
     // outbound command to arm on). Gating on IsInTrainerMenu alone is a trap: on
-    // a cursor-positioned menu (Paradigm's stat box) the "Point Cost Chart"
-    // marker row never scrolls inline, so that flag never confirms — yet the
+    // a cursor-positioned box whose "Point Cost Chart" row doesn't complete as a
+    // line, that flag never confirms — yet the
     // screen owns the keyboard, and the box's FIRST field is the Family Name, so
     // a stray automated `par\r` types into it and overwrites the character's last
     // name. IsInputMenuActive carries that case; this property folds both in.
     public bool MenuOwnsKeyboard => _inputMenuActive || _inMenu;
 
-    // The game has echoed `train stats` and drawn no trainer screen after it (yet):
-    // what follows is its refusal, or the form's first row is still to come. Nothing
-    // may be typed into the form on this state's word.
-    public bool AnsweredWithoutForm => _inputMenuActive && _answer == FormAnswer.Echoed;
+    // The form answering the last `train stats` is up: its marker row was read as
+    // a line, or the form or its panel was on the screen at the end of a read.
+    // Short of this nothing may be typed into the form: the game may have echoed
+    // `train stats` and be refusing it.
+    public bool FormShown => _inputMenuActive && _answer == FormAnswer.Form;
+
+    // Fires when FormShown turns true.
+    public event Action? FormDrawn;
+
+    // The visible screen as newline-joined rows, bound by the terminal session.
+    // A box drawn with cursor positioning may never complete its marker row as a
+    // line, so once the answer has begun the screen is the other place the form
+    // is seen.
+    public Func<string>? ReadScreen { get; set; }
 
     // Whether the cursor's row holds the game's own prompt with nothing after it.
     // Bound by the terminal session, which owns the screen. Read at the end of a
@@ -131,15 +135,18 @@ public sealed class TrainerMenuTracker : IDisposable
     public Func<bool>? CursorAtGamePrompt { get; set; }
 
     // The keyboard state, in words for a bug report.
-    public string Describe() => !MenuOwnsKeyboard ? "off"
-        : !_inputMenuActive ? "on (trainer/creation box)"
-        : _answer switch
+    public string Describe()
+    {
+        if (!MenuOwnsKeyboard) return "off";
+        if (!_inputMenuActive || _answer == FormAnswer.None) return "on (trainer/creation box)";
+        string since = $"{(_now() - _trainStatsSentAt).TotalSeconds:0.0} s since `train stats`";
+        return _answer switch
         {
-            FormAnswer.Pending => "on (trainer box; the game hasn't answered `train stats` yet)",
-            FormAnswer.Echoed => "on (trainer box; `train stats` echoed, no trainer screen drawn yet)",
-            FormAnswer.Form => "on (trainer box drawn)",
-            _ => "on (trainer/creation box)",
+            FormAnswer.Pending => $"on (trainer box; the game hasn't answered `train stats` yet; {since})",
+            FormAnswer.Echoed => $"on (trainer box; `train stats` echoed, no trainer screen drawn yet; {since})",
+            _ => $"on (trainer box drawn; {since})",
         };
+    }
 
     // Snapshot of non-self party member names taken at the moment we confirmed
     // menu entry. Subscribers to MenuExited inspect this to decide who to
@@ -156,13 +163,12 @@ public sealed class TrainerMenuTracker : IDisposable
     public event Action? MenuExited;
 
     // Input character-mode switch, driven by the outbound `train stats`
-    // command rather than the marker. A full-screen menu drawn with cursor
-    // positioning (Paradigm's stat box) never emits its "Point Cost Chart"
-    // marker row until it's torn down — the row only completes when it scrolls
-    // off or is overwritten on exit — so a marker-gated switch leaves arrow
-    // keys captured by history-recall for the whole session. Stock realms that
-    // render the marker inline still work, but the command is the realm-
-    // independent signal. Kept separate from MenuEntered/MenuExited so the
+    // command rather than the marker. A full-screen box drawn with cursor
+    // positioning may not complete its "Point Cost Chart" row as a line until
+    // it's torn down, so a marker-gated switch could leave arrow keys captured
+    // by history-recall for the whole session. Forms whose marker row completes
+    // as it is drawn still work, but the command is the realm-independent
+    // signal. Kept separate from MenuEntered/MenuExited so the
     // party re-invite flow stays marker-confirmed (no false-positive invites).
     public event Action? InputMenuEntered;
 
@@ -170,9 +176,12 @@ public sealed class TrainerMenuTracker : IDisposable
     // the screen has closed, so line-mode input should resume.
     public event Action? InputMenuExited;
 
-    public TrainerMenuTracker(MessageRouter router, PartyState party, LogService? log = null, Func<DateTime>? now = null)
+    // schedule runs the ExpectingMenuWindow tick (DispatcherTicks.Once live).
+    public TrainerMenuTracker(MessageRouter router, PartyState party, LogService? log = null, Func<DateTime>? now = null,
+                              Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         _now = now ?? (() => DateTime.UtcNow);
+        _schedule = schedule ?? DispatcherTicks.Once;
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(party);
         _party = party;
@@ -194,6 +203,7 @@ public sealed class TrainerMenuTracker : IDisposable
         _roomSub.Dispose();
         _router.LineDispatched -= OnLineDispatched;
         _router.ReadEnded -= OnReadEnded;
+        _windowTick?.Dispose();
     }
 
     // Called by the wire-send path so we can spot the user's own outbound
@@ -211,8 +221,8 @@ public sealed class TrainerMenuTracker : IDisposable
             $"Observed outbound `{cmd}` — armed menu-marker watch for {ExpectingMenuWindow.TotalSeconds:0} s.");
 
         // The full-screen stat box is driven by the `train stats` command, not
-        // its marker row (which on a cursor-positioned menu only completes on
-        // teardown — too late, and on some realms never inline at all). Arm
+        // its marker row (which a cursor-positioned box may only complete on
+        // teardown — too late). Arm
         // character-mode input off the command itself so arrow keys reach the
         // wire immediately, realm-independently. Bare `train` opens a different
         // (line-driven) prompt, so it doesn't arm input.
@@ -223,6 +233,8 @@ public sealed class TrainerMenuTracker : IDisposable
             {
                 _answer = FormAnswer.Pending;
                 _trainStatsSentAt = _now();
+                _windowTick?.Dispose();
+                _windowTick = _schedule(ExpectingMenuWindow, OnWindowElapsed);
             }
             if (!_inputMenuActive)
             {
@@ -240,11 +252,12 @@ public sealed class TrainerMenuTracker : IDisposable
     // emitted line until the box is torn down — too late: arrow keys stay
     // captured by history-recall for the whole creation session (the reported
     // "arrows cycle the given/family names" bug). Scanning the live screen each
-    // feed flips character-mode input the moment the box appears. Scoped to
-    // character creation (the box carries the "Character Creation" / "Char.
-    // Creation" title): the in-game `train stats` screen has no such title and
-    // keeps arming off its outbound command, so this can't false-positive on it
-    // or on chat noise. Fed the flattened visible screen by the terminal-feed
+    // feed flips character-mode input the moment the box appears. Scoped to that
+    // kind of box (TrainStatsScreen.Kind.CharCreationBox, its "Character Creation"
+    // / "Char. Creation" title): any other trainer screen arms off the outbound
+    // `train stats` only, and an in-game `train stats` that draws this box is
+    // already armed by its command, so this can't false-positive on chat noise.
+    // Fed the flattened visible screen by the terminal-feed
     // path, which pre-filters on StatBoxMarker so this runs only when a stat box
     // is actually on screen.
     public void ObserveScreen(string screenText)
@@ -253,10 +266,7 @@ public sealed class TrainerMenuTracker : IDisposable
         if (string.IsNullOrEmpty(screenText)) return;
         if (!screenText.Contains(StatBoxMarker, StringComparison.OrdinalIgnoreCase)) return;
 
-        bool creation =
-            screenText.Contains(CharacterCreationSignature, StringComparison.OrdinalIgnoreCase)
-            || screenText.Contains(CharCreationAbbrevSignature, StringComparison.OrdinalIgnoreCase);
-        if (!creation) return;
+        if (TrainStatsScreen.Recognise(screenText) != TrainStatsScreen.Kind.CharCreationBox) return;
 
         _inputMenuActive = true;
         _log?.Log(LogSeverity.Info, "TrainerMenu",
@@ -284,16 +294,12 @@ public sealed class TrainerMenuTracker : IDisposable
                 _expectingMenuSince = null; // window lapsed — disarm
         }
 
-        bool characterCreation =
-            match.Text.Contains(CharacterCreationSignature, StringComparison.OrdinalIgnoreCase)
-            || match.Text.Contains(CharCreationAbbrevSignature, StringComparison.OrdinalIgnoreCase);
+        TrainStatsScreen.Kind? kind = TrainStatsScreen.Recognise(match.Text);
+        bool characterCreation = kind == TrainStatsScreen.Kind.CharCreationBox;
 
         if (!gateArmed && !characterCreation) return;
         if (_inputMenuActive && _answer is FormAnswer.Pending or FormAnswer.Echoed)
-        {
-            _answer = FormAnswer.Form;
-            _log?.Info("TrainerMenu", "The trainer screen is drawn — it owns the keyboard until the game's prompt returns.");
-        }
+            MarkFormShown($"its marker row was read, {kind}");
         if (_inMenu) return;
         _inMenu = true;
         _rosterSnapshot = _party.Members
@@ -325,7 +331,7 @@ public sealed class TrainerMenuTracker : IDisposable
 
         bool fireInputExited = _inputMenuActive;
         _inputMenuActive = false;
-        _answer = FormAnswer.None;
+        ClearAnswer();
 
         bool fireMenuExited = _inMenu;
         if (_inMenu)
@@ -362,7 +368,7 @@ public sealed class TrainerMenuTracker : IDisposable
     {
         if (!MenuOwnsKeyboard) return;
         if (SetAsideBeforeAnswer("A room display")) return;
-        ForceExit("room display observed — back in the world");
+        ForceExit("room display observed — back in the world, exit prompt missed");
     }
 
     // The game's echo of `train stats` on its prompt row: everything from here on
@@ -378,28 +384,105 @@ public sealed class TrainerMenuTracker : IDisposable
 
     private void OnReadEnded()
     {
-        if (!AnsweredWithoutForm || CursorAtGamePrompt?.Invoke() != true) return;
-        ForceExit("the game answered `train stats` with its prompt and no trainer screen");
+        bool signal = _signalPastWindow;
+        _signalPastWindow = false;
+        if (!_inputMenuActive) return;
+        if (_answer == FormAnswer.Echoed) Decide(signalReleases: false);
+        else if (_answer == FormAnswer.Pending && PastWindow()) Decide(signalReleases: signal);
     }
+
+    private void OnWindowElapsed()
+    {
+        _windowTick = null;
+        if (!_inputMenuActive || _answer is not (FormAnswer.Pending or FormAnswer.Echoed)) return;
+        Decide(signalReleases: false);
+    }
+
+    // The answer, settled from the terminal where no line has settled it: the
+    // game's bare prompt on the cursor's row means no form has the cursor, and the
+    // form or its panel on the screen means it's up. A prompt or room display that
+    // came with no answer read in the window, and no form on the screen, releases
+    // too: a statline the cursor read can't make out still lets the keyboard go.
+    private void Decide(bool signalReleases)
+    {
+        bool echoed = _answer == FormAnswer.Echoed;
+        if (CursorAtGamePrompt?.Invoke() == true)
+        {
+            ForceExit(echoed
+                ? "the game answered `train stats` with its prompt and no trainer screen"
+                : $"no answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s, and the game's prompt is back");
+            return;
+        }
+        if (FormOnScreen() is { } shown)
+        {
+            MarkFormShown($"it is on the screen, {shown}");
+            return;
+        }
+        if (signalReleases)
+            ForceExit($"no answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s, and no trainer screen on the terminal");
+    }
+
+    // The kind of trainer screen on the terminal: any the game is known to draw,
+    // whatever the realm, or a form that reads with no panel seen.
+    private string? FormOnScreen()
+    {
+        if (ReadScreen?.Invoke() is not { Length: > 0 } text) return null;
+        if (TrainStatsScreen.Recognise(text) is { } kind) return kind.ToString();
+        return TrainStatsScreen.TryRead(text) is not null ? "a form with no panel" : null;
+    }
+
+    private void MarkFormShown(string how)
+    {
+        _answer = FormAnswer.Form;
+        _windowTick?.Dispose();
+        _windowTick = null;
+        _log?.Info("TrainerMenu", $"The trainer screen is up ({how}) — it owns the keyboard until the game's prompt returns.");
+        FormDrawn?.Invoke();
+    }
+
+    private void ClearAnswer()
+    {
+        _answer = FormAnswer.None;
+        _signalPastWindow = false;
+        _windowTick?.Dispose();
+        _windowTick = null;
+    }
+
+    private bool PastWindow() => _now() - _trainStatsSentAt > ExpectingMenuWindow;
 
     // True when a "back in the world" signal arrived before the game's answer to
     // `train stats`: it answers an earlier command or a party line, so the keyboard
-    // stays with the form. A statline the line splitter can't read leaves no echo
-    // to find; past ExpectingMenuWindow with neither echo nor form, the signals
-    // count again, as they did before the echo was looked for.
+    // stays with the form. Past ExpectingMenuWindow with no answer read (a late
+    // echo, or a statline the line splitter can't read), the signal is left to the
+    // read's end: the wire's prompt scan runs ahead of the read's lines, so the
+    // late echo's own statline is seen here before the echo is.
     private bool SetAsideBeforeAnswer(string what)
     {
         if (_answer != FormAnswer.Pending) return false;
-        if (_now() - _trainStatsSentAt > ExpectingMenuWindow)
+        if (PastWindow())
         {
-            _answer = FormAnswer.None;
+            _signalPastWindow = true;
             _log?.Info("TrainerMenu",
-                $"No answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s — {what.ToLowerInvariant()} counts as leaving the screen.");
-            return false;
+                $"{what} with no answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s — decided when this read ends.");
+            return true;
         }
         _log?.Info("TrainerMenu",
             $"{what} came before the game's answer to `train stats` (it answers something sent earlier) — the keyboard stays with the trainer screen.");
         return true;
+    }
+
+    // An attempt that ended without the form hands the keyboard back, unless the
+    // form is up after all (by the tracker's word or on the screen): typing into it
+    // is the user's then, but nothing else may be.
+    public void ReleaseUnlessFormUp(string reason)
+    {
+        if (!MenuOwnsKeyboard) return;
+        if (_answer == FormAnswer.Form || _inMenu || FormOnScreen() is not null)
+        {
+            _log?.Info("TrainerMenu", $"{reason} — the trainer screen is up, so it keeps the keyboard.");
+            return;
+        }
+        ForceExit(reason);
     }
 
     // Fed by AppServices for every live statline WirePromptScanner sees off the
@@ -436,14 +519,13 @@ public sealed class TrainerMenuTracker : IDisposable
     public void ForceExit(string reason)
     {
         if (!MenuOwnsKeyboard) return;
-        _log?.Log(LogSeverity.Info, "TrainerMenu",
-            $"Forcing trainer keyboard release ({reason}) — exit prompt missed.");
+        _log?.Log(LogSeverity.Info, "TrainerMenu", $"Forcing trainer keyboard release ({reason}).");
         bool fireInputExited = _inputMenuActive;
         bool fireMenuExited = _inMenu;
         _inputMenuActive = false;
         _inMenu = false;
         _expectingMenuSince = null;
-        _answer = FormAnswer.None;
+        ClearAnswer();
         if (fireInputExited) InputMenuExited?.Invoke();
         if (fireMenuExited) MenuExited?.Invoke();
     }

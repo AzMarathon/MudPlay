@@ -52,6 +52,9 @@ public sealed class AutoTrainApplyTests : IDisposable
     private Func<string> _readScreen;
     // Whether `train stats` finds a trainer: the game echoes it and draws the form.
     private bool _trainerHere = true;
+    // Where that answer arrives: the client's terminal and line extractor, its
+    // rows through the router.
+    private readonly ServerFeed _answers;
     private Action<string>? _onTyped;
     private bool _formCloses = true;
     private int _formSends = -1;
@@ -66,6 +69,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         _trainer = new TrainerMenuTracker(_router, new PartyState());
         _profile.LoadDefaultProfile();
         _readScreen = () => _screen;
+        _answers = new ServerFeed(_router);
     }
 
     public void Dispose()
@@ -126,16 +130,10 @@ public sealed class AutoTrainApplyTests : IDisposable
         _router.Dispatch(new LineExtractor.EmittedLine(
             line, new CellAttributes[line.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
 
-    // The prompt row carrying the echo, split into the prompt and the echoed
-    // command as the line extractor splits it, then the form's top row.
-    private void GameEchoesAndDrawsTheForm(string command)
-    {
-        DateTimeOffset at = DateTimeOffset.UnixEpoch.AddSeconds(1);
-        _router.Dispatch(new LineExtractor.EmittedLine(
-            TrainStatsWire.Statline, new CellAttributes[TrainStatsWire.Statline.Length], at, IsPromptLine: true));
-        _router.Dispatch(new LineExtractor.EmittedLine(command, new CellAttributes[command.Length], at, IsPromptLine: false));
-        Dispatch("   / M A J O R  M U D Character Editor /    \\  +-    Point Cost Chart    -+");
-    }
+    // The echo on the prompt row, then the form. The pass reads its own screen
+    // text (_screen), so only the rows matter here.
+    private void GameEchoesAndDrawsTheForm(string command) =>
+        _answers.Raw(TrainStatsWire.Echo(command) + TrainStatsWire.Form(133, 26));
 
     private string[] Sent()
     {
@@ -611,31 +609,25 @@ public sealed class AutoTrainApplyTests : IDisposable
         TerminalScreen screen = game.Emulator.Screen;
         _trainer.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
             TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
-        _readScreen = () =>
-        {
-            StringBuilder text = new();
-            for (int y = 0; y < screen.Rows; y++)
-            {
-                foreach (Cell cell in screen.Row(y)) text.Append(cell.Char);
-                text.Append('\n');
-            }
-            return text.ToString();
-        };
+        _readScreen = () => TrainStatsWire.ScreenText(screen);
+        _trainer.ReadScreen = _readScreen;
         _trainerHere = false;
         _formCloses = false;
         return game;
     }
 
     // The form on the wire: it is painted again with each value typed into it,
-    // SAVE leaves it, and the return after that shows the room.
-    private void GameTakesTheForm(ServerFeed game)
+    // SAVE leaves it, and the return after that shows the room. paint draws it
+    // with Strength and CP Left; the Character Editor unless given.
+    private void GameTakesTheForm(ServerFeed game, Func<int, int, string>? paint = null)
     {
+        paint ??= (strength, cp) => TrainStatsWire.Form(strength, cp);
         int payloads = 0;
         _onTyped = text =>
         {
             if (text == "train stats") return;
             payloads++;
-            if (text == "136") game.Raw(TrainStatsWire.Form(136, 1));
+            if (text == "136") game.Raw(paint(136, 1));
             if (payloads == FormPayloads - 1) game.Raw(TrainStatsWire.Saved());
             if (payloads == FormPayloads) game.Raw(TrainStatsWire.RoomRedrawn());
         };
@@ -727,7 +719,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         CleanStat();
 
         Start(manager.TrainNow);
-        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n"
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n"
                              + TrainStatsWire.Prompt()));
 
         Assert.False(_trainer.MenuOwnsKeyboard);
@@ -738,5 +730,55 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         engine(Bytes("par"));
         Assert.Equal("par", Sent()[^1]);
+    }
+
+    // Each kind of trainer screen the game is known to draw is found and typed
+    // into by what it shows, whatever the realm the character is set to: which one
+    // a server draws isn't tied to its realm (user, 2026-10-27). The `Char.
+    // Creation` box is drawn with cursor positioning and its title row never
+    // completes as a line, so only the screen says it is up.
+    [Theory]
+    [InlineData("editor", true)]
+    [InlineData("editor", false)]
+    [InlineData("creation box", true)]
+    [InlineData("creation box", false)]
+    public void EachKindOfTrainerScreen_IsFoundAndTyped_WhateverTheRealm(string kind, bool paradigm)
+    {
+        AutoTrainManager manager = Build(paradigm);
+        ServerFeed game = GameOnTheWire();
+        Func<int, int, string> paint = kind == "editor"
+            ? (strength, cp) => TrainStatsWire.Form(strength, cp)
+            : TrainStatsWire.CreationBox;
+        CleanStat();
+        GameTakesTheForm(game, paint);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + paint(133, 26)));
+        Assert.True(_trainer.FormShown);
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+    }
+
+    // An echo the line splitter doesn't attribute (on a row of its own), then the
+    // game's refusal and its prompt. Nothing says a form is up, so no keystroke
+    // goes out as a game command, and the pass's end hands the keyboard back.
+    [Fact]
+    public void AnUnreadEchoAndARefusal_TypeNothing_AndTheKeyboardIsReleased()
+    {
+        AutoTrainManager manager = Build(paradigm: false);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw("train stats\r\n" + TrainStatsWire.StockNotATrainer + "\r\n" + TrainStatsWire.Prompt()));
+        Settle();
+
+        Assert.Equal(new[] { "train stats" }, Sent());
+        Assert.False(manager.IsBusy);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.Equal("the trainer screen never opened", manager.LastApplyNote);
     }
 }

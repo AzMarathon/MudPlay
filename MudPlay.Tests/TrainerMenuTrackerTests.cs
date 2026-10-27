@@ -35,17 +35,20 @@ public sealed class TrainerMenuTrackerTests
     // The game's output reaching the tracker as it does in the client: each read
     // through the wire's prompt scan first (its prompts to NotifyLivePromptObserved,
     // as AppServices wires it), then the terminal and the router; the cursor's row
-    // read the way the terminal session reads it.
-    private static (TrainerMenuTracker tracker, ServerFeed game) Wired(Func<DateTime>? now = null)
+    // and the screen read the way the terminal session reads them.
+    private static (TrainerMenuTracker tracker, ServerFeed game) Wired(Func<DateTime>? now = null, ManualTimers? timers = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
-        TrainerMenuTracker tracker = new(router, new PartyState(), now: now ?? (() => Now));
+        TrainerMenuTracker tracker = new(router, new PartyState(), now: now ?? (() => Now),
+                                         schedule: (timers ?? new ManualTimers()).Arm);
         WirePromptScanner scanner = new();
         scanner.PromptObserved += _ => tracker.NotifyLivePromptObserved();
         ServerFeed game = new(router, promptScanner: scanner);
+        TerminalScreen screen = game.Emulator.Screen;
         tracker.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
-            TranscriptSnapshot.RowText(game.Emulator.Screen.Row(game.Emulator.Screen.CursorY)), string.Empty);
+            TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
+        tracker.ReadScreen = () => TrainStatsWire.ScreenText(screen);
         return (tracker, game);
     }
 
@@ -312,7 +315,7 @@ public sealed class TrainerMenuTrackerTests
         game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
         Assert.True(tracker.MenuOwnsKeyboard);
-        Assert.False(tracker.AnsweredWithoutForm);
+        Assert.True(tracker.FormShown);
     }
 
     // Report paradigm-20261026-225733: party lines after `train stats` redraw the
@@ -345,7 +348,7 @@ public sealed class TrainerMenuTrackerTests
         tracker.InputMenuExited += () => exited++;
 
         SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n" + TrainStatsWire.Prompt());
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n" + TrainStatsWire.Prompt());
 
         Assert.Equal(1, exited);
         Assert.False(tracker.MenuOwnsKeyboard);
@@ -359,8 +362,9 @@ public sealed class TrainerMenuTrackerTests
         tracker.InputMenuExited += () => exited++;
 
         SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n");
-        Assert.True(tracker.AnsweredWithoutForm);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n");
+        Assert.True(tracker.MenuOwnsKeyboard);   // echoed, refused, the prompt still to come
+        Assert.False(tracker.FormShown);
         Assert.Equal(0, exited);
 
         game.Raw(TrainStatsWire.Prompt());
@@ -369,7 +373,8 @@ public sealed class TrainerMenuTrackerTests
     }
 
     // A statline the line splitter can't read leaves no echo to find. Once the
-    // window has passed with neither echo nor form, a prompt counts again.
+    // window has passed with neither echo nor form, a prompt at the end of a read
+    // counts again.
     [Fact]
     public void NoAnswerReadWithinTheWindow_TheNextPromptReleases()
     {
@@ -385,6 +390,81 @@ public sealed class TrainerMenuTrackerTests
         t = t.AddSeconds(6);
         game.Raw(TrainStatsWire.Prompt());
         Assert.Equal(1, exited);
+    }
+
+    // A slow game: the echo of `train stats` comes 6 s after it went out. The
+    // wire's prompt scan sees the echo's own statline ahead of the echo line, so
+    // the window running out must not let that statline release the keyboard.
+    [Fact]
+    public void AnEchoPastTheWindow_StillOpensTheForm()
+    {
+        DateTime t = Now;
+        var (tracker, game) = Wired(() => t);
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.RoomRedrawn());
+        t = t.AddSeconds(6);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+
+        Assert.Equal(0, exited);
+        Assert.True(tracker.FormShown);
+
+        game.Raw(TrainStatsWire.Saved());
+        Assert.Equal(1, exited);
+    }
+
+    // The `Char. Creation` box, drawn with cursor positioning and its title row
+    // never completing as a line: after the echo, the box on the screen is the form.
+    [Fact]
+    public void ACursorPositionedBox_WithNoMarkerLine_IsTheForm()
+    {
+        var (tracker, game) = Wired();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.CreationBox(133, 26));
+
+        Assert.False(tracker.IsInTrainerMenu);   // no marker line was read
+        Assert.True(tracker.FormShown);
+        Assert.Equal(0, exited);
+    }
+
+    // An echo the line splitter doesn't attribute (here on a row of its own), the
+    // refusal and its prompt, all ahead of the window: the window's tick finds the
+    // game's prompt on the cursor's row and lets the keyboard go.
+    [Fact]
+    public void AnUnreadEchoAndARefusal_AreDecidedWhenTheWindowIsUp()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw("train stats\r\n" + TrainStatsWire.StockNotATrainer + "\r\n" + TrainStatsWire.Prompt());
+        Assert.Equal(0, exited);
+
+        timers.Advance(tracker.ExpectingMenuWindow);
+        Assert.Equal(1, exited);
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    // The window's tick with the form drawn and no marker or echo read keeps it.
+    [Fact]
+    public void TheWindowsTick_WithTheFormOnTheScreen_KeepsTheKeyboard()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+
+        SendTrainStats(tracker);
+        game.Raw("train stats\r\n" + TrainStatsWire.CreationBox(133, 26));
+        timers.Advance(tracker.ExpectingMenuWindow);
+
+        Assert.True(tracker.FormShown);
+        Assert.True(tracker.MenuOwnsKeyboard);
     }
 
     [Fact]
