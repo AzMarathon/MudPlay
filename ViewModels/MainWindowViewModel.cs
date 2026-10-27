@@ -2466,8 +2466,10 @@ public partial class MainWindowViewModel : ObservableObject
         // tracker can never locate us — every state reads "Lost", which
         // misleads a fresh profile into thinking something broke. Surface
         // the real cause instead and point the user at the fix. Clears
-        // automatically once a set loads (RoomGraph.GraphReloaded → here).
-        if (room is null && AppServices.Current.RoomGraph.RoomCount == 0)
+        // automatically once a set loads (RoomGraph.GraphReloaded → here). A set
+        // chosen but not built yet (the startup draft's) is no missing set: the
+        // slot reads as it did with the set built and no room yet.
+        if (room is null && AppServices.Current.RoomGraph.RoomCount == 0 && !AppServices.Current.GameData.BuildDeferred)
             return "Load a game data set to use navigation";
         // The map/room number, not the room name. Names run long ("Newhaven,
         // Arena", …) and were overflowing the narrow status slot; the key is

@@ -18,7 +18,7 @@ namespace MudPlay.Views;
 // Wires the terminal control's user-input event to the view-model and
 // re-focuses the terminal whenever a connection is established (so the user
 // can start typing right away).
-public partial class MainWindow : Window
+public partial class MainWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     // Set once the user (or programmatic shutdown) has confirmed exit, so the second Close call sails through.
     private bool _exitConfirmed;
@@ -86,6 +86,22 @@ public partial class MainWindow : Window
             _importMdbMenuItem.Classes.Remove("tutTarget");
     }
 
+    // A key at the terminal that types toward the game. Not a modifier on its own,
+    // an Alt chord or bare F10 (they reach the menu bar: File → a recent profile is
+    // the usual way off the draft), nor a client hotkey (KeybindingStore, bound on
+    // this window): what those open builds the set itself, as it opens or connects.
+    private bool KeyStartsPlay(KeyEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt)
+            || e.Key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
+                or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
+            || (e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.None))
+            return false;
+        foreach (KeyBinding binding in KeyBindings)
+            if (binding.Gesture?.Matches(e) == true) return false;
+        return true;
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -109,20 +125,14 @@ public partial class MainWindow : Window
         // auto-sends (par poll, AutoParty invite, @health round-trip)
         // can fire freely without interleaving into half-typed input.
         Terminal.InputBuffer = AppServices.Current.InputBuffer;
-        // Typing at or clicking the terminal (its right-click menu holds the GOTO
-        // favourites) is the startup draft starting to play: its game data is built.
-        Terminal.AddHandler(InputElement.PointerPressedEvent,
-            (_, _) => AppServices.Current.BuildDeferredGameData("the terminal was used"),
-            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
-        // Not for Alt or the menu key on its own, which reach the menu bar from here
-        // (File → a recent profile is the usual way off the draft).
+        // Typing at the terminal, or opening its context menu (it holds the GOTO
+        // favourites), is the startup draft starting to play: its game data is built.
+        TerminalContextMenu.Opening += (_, _) =>
+            AppServices.Current.BuildDeferredGameData("the terminal's menu was opened");
         Terminal.AddHandler(InputElement.KeyDownEvent, (_, e) =>
             {
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Alt)
-                    || e.Key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
-                        or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.F10)
-                    return;
-                AppServices.Current.BuildDeferredGameData("the terminal was used");
+                if (!KeyStartsPlay(e)) return;
+                AppServices.Current.BuildDeferredGameData("the terminal was typed at");
             },
             Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
 

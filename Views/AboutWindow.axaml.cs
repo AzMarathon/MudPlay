@@ -7,7 +7,7 @@ namespace MudPlay.Views;
 // Help → About: program identity, a clickable repo link, a tab per bundled
 // license, and a community thank-you. Read-only modeless window (DataContext =
 // AboutWindowViewModel); Close on the button or the toggle command.
-public partial class AboutWindow : Window
+public partial class AboutWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     public AboutWindow()
     {

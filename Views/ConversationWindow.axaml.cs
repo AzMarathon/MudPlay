@@ -19,7 +19,7 @@ namespace MudPlay.Views;
 // Modeless Conversation panel. Bound to ConversationViewModel;
 // code-behind handles Enter-to-send in the input field and scroll-to-newest
 // when AutoScroll is on.
-public partial class ConversationWindow : Window
+public partial class ConversationWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     private ListBox? _rowsList;
     private ScrollViewer? _rowsScroll;

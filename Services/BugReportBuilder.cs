@@ -384,15 +384,19 @@ public static class BugReportBuilder
 
     // ----- Section builders ----------------------------------------------
 
+    // The active set as a report names it: whether its build is still put off (the
+    // startup draft's), or why there is none. Read off the UI thread by a hang report.
+    public static string ActiveSetLabel(AppServices svc) => svc.GameData.ActiveSet is { } set
+        ? svc.GameData.BuildDeferred ? $"{set} (not built yet: the unnamed draft hasn't needed it)" : set
+        : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)";
+
     private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now)
     {
         StringBuilder sb = new();
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet is { } activeSet
-            ? svc.GameData.BuildDeferred ? $"{activeSet} (not built yet: the unnamed draft hasn't needed it)" : activeSet
-            : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)");
+        Kv(sb, "Active game-data set", ActiveSetLabel(svc));
         Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
             ? "available"
             : "none (no BBS, or the realm's name can't be a folder)");

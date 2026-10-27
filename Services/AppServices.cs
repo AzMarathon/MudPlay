@@ -3074,7 +3074,7 @@ public sealed class AppServices
                 ("Character", Profile.CurrentProfileName ?? "(none loaded)"),
                 ("BBS", Profile.CurrentBbsName ?? "(none)"),
                 ("Realm", BugReportBuilder.RealmLabel(GameData.ActiveRealm)),
-                ("Active game-data set", GameData.ActiveSet ?? "(none)"),
+                ("Active game-data set", BugReportBuilder.ActiveSetLabel(this)),
                 ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
                 ("Log to send with this", CrashReporter.LogToSend()),
             ],
@@ -16748,8 +16748,9 @@ public sealed class AppServices
     private bool _deferDraftGameDataBuild;
 
     // Build the startup draft's game-data set now, when its build was put off: the
-    // draft is about to need it (a connect, a window that shows game data, the main
-    // window used, a local API request). A no-op once built. UI thread.
+    // draft is about to need it (a connect, a window that shows game data, typing at
+    // the terminal or opening its menu, a local API request). A no-op once built. UI
+    // thread.
     public void BuildDeferredGameData(string why)
     {
         _deferDraftGameDataBuild = false;
@@ -16757,24 +16758,12 @@ public sealed class AppServices
         GameData.BuildDeferredSet(why);
     }
 
-    // Windows that show no game data, so opening one leaves the draft's set unbuilt:
-    // the main window, picking or managing a profile, the conversation, and help and
-    // notices. Any other window builds it as it opens.
-    private static readonly HashSet<string> WindowsWithoutGameData = new(StringComparer.Ordinal)
-    {
-        "MainWindow", "ProfileManagerWindow", "ConversationWindow", "QuickConnectWindow",
-        "GuideCardWindow", "GuidePickerWindow", "AboutWindow", "InfoDialog", "ConfirmDialog",
-        "UpdateWindow", "BugReportDialog",
-    };
-
     private static int s_windowOpenHooked;
 
     private void OnWindowOpenedForGameData(Avalonia.Controls.Window window)
     {
-        if (!GameData.BuildDeferred) return;
-        string name = window.GetType().Name;
-        if (WindowsWithoutGameData.Contains(name)) return;
-        BuildDeferredGameData($"the {name} opened");
+        if (!GameData.BuildDeferred || window is IShowsNoGameData) return;
+        BuildDeferredGameData($"the {window.GetType().Name} opened");
     }
 
     // Set while a profile event is switching the set, for the stop that switch makes.
