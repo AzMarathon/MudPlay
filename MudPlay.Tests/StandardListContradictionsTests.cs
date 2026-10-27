@@ -76,7 +76,10 @@ public sealed class StandardListContradictionsTests : IDisposable
 
     private RealmProfile OnFile => new BbsProfileStore().Get(_boardName)!.Realms[0];
 
-    private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
+    private int Count => _board.Standing().Count;
+    private bool Unsaved => _board.Standing().Unsaved;
+
+    private int Warnings =>_log.Count(e => e.Severity == LogSeverity.Warn);
 
     private void Contradict(int arrivedIn = 500) => _board.Note(Darkwood, new RoomKey(1, arrivedIn), Listed);
 
@@ -86,11 +89,11 @@ public sealed class StandardListContradictionsTests : IDisposable
     [Fact]
     public void OneDeathIsSaid_AndTheSecondMarksTheBoard_InItsFile()
     {
-        Assert.Equal((0, false), (_board.Count, _board.Marked));
+        Assert.Equal((0, false), (Count, _board.Marked));
 
         Contradict();
 
-        Assert.Equal((1, false), (_board.Count, _board.Marked));
+        Assert.Equal((1, false), (Count, _board.Marked));
         Assert.Equal(1, OnFile.DeathsContradictingStandardArrivalRooms);
         LogEntry first = Assert.Single(_log, e => e.Severity == LogSeverity.Warn);
         Assert.Contains("A death seen in 1/109 ended in 1/500, where the standard list has the dead of that room arrive in 1/2189 or 1/142", first.Message);
@@ -99,7 +102,7 @@ public sealed class StandardListContradictionsTests : IDisposable
 
         Contradict(arrivedIn: 501);
 
-        Assert.Equal((2, true), (_board.Count, _board.Marked));
+        Assert.Equal((2, true), (Count, _board.Marked));
         Assert.Equal(2, Warnings);
         Assert.Contains("ended in 1/501", _log[^1].Message);
         Assert.Contains("That is 2 such deaths on this board", _log[^1].Message);
@@ -117,11 +120,11 @@ public sealed class StandardListContradictionsTests : IDisposable
         Contradict();
 
         _profile.LoadDefaultProfile(onBbs: _boardName);
-        Assert.Equal((2, true), (_board.Count, _board.Marked));
+        Assert.Equal((2, true), (Count, _board.Marked));
 
         _store = new BbsProfileStore();
         (_profile, _board) = Start();
-        Assert.Equal((2, true), (_board.Count, _board.Marked));
+        Assert.Equal((2, true), (Count, _board.Marked));
     }
 
     // The count is this board's against that data set. Pointed at another set,
@@ -134,15 +137,15 @@ public sealed class StandardListContradictionsTests : IDisposable
         Assert.True(_board.Marked);
 
         _set = "the board's own data";
-        Assert.Equal((0, false), (_board.Count, _board.Marked));
+        Assert.Equal((0, false), (Count, _board.Marked));
 
         Contradict();
-        Assert.Equal((1, false), (_board.Count, _board.Marked));
+        Assert.Equal((1, false), (Count, _board.Marked));
         Assert.Equal("the board's own data", OnFile.DeathsContradictingStandardArrivalRoomsOn);
 
         // Back on the first set, its count is gone too: one set at a time.
         _set = "data-v1.11p";
-        Assert.Equal(0, _board.Count);
+        Assert.Equal(0, Count);
     }
 
     // A count written by a client before the set was kept with it stands for no
@@ -154,7 +157,7 @@ public sealed class StandardListContradictionsTests : IDisposable
         bbs.Realms[0].DeathsContradictingStandardArrivalRooms = 5;
         _store.Save(bbs);
 
-        Assert.Equal((0, false), (_board.Count, _board.Marked));
+        Assert.Equal((0, false), (Count, _board.Marked));
     }
 
     // It is called from inside the room display's handling: a save that fails
@@ -170,7 +173,7 @@ public sealed class StandardListContradictionsTests : IDisposable
         Contradict();
         Contradict();
 
-        Assert.Equal((2, true, true), (_board.Count, _board.Marked, _board.Unsaved));
+        Assert.Equal((2, true, true), (Count, _board.Marked, Unsaved));
         Assert.Equal(0, OnFile.DeathsContradictingStandardArrivalRooms);
         Assert.Single(_log, e => e.Severity == LogSeverity.Warn && e.Message.Contains("couldn't be written (the disk is full)"));
         Assert.Equal(0, _saves);
@@ -184,7 +187,7 @@ public sealed class StandardListContradictionsTests : IDisposable
 
         Assert.Equal(2, OnFile.DeathsContradictingStandardArrivalRooms);
         Assert.Contains(_log, e => e.Severity == LogSeverity.Info && e.Message.Contains("(2) is written now"));
-        Assert.Equal((2, true, false), (_board.Count, _board.Marked, _board.Unsaved));
+        Assert.Equal((2, true, false), (Count, _board.Marked, Unsaved));
 
         // Written, there is nothing more to try.
         _board.RetryUnsaved();
@@ -197,12 +200,12 @@ public sealed class StandardListContradictionsTests : IDisposable
     {
         _saveThrows = new IOException("the disk is full");
         Contradict();
-        Assert.Equal((1, true), (_board.Count, _board.Unsaved));
+        Assert.Equal((1, true), (Count, Unsaved));
 
         _saveThrows = null;
         Contradict();
 
-        Assert.Equal((2, true, false), (_board.Count, _board.Marked, _board.Unsaved));
+        Assert.Equal((2, true, false), (Count, _board.Marked, Unsaved));
         Assert.Equal((2, "data-v1.11p"), (OnFile.DeathsContradictingStandardArrivalRooms, OnFile.DeathsContradictingStandardArrivalRoomsOn));
         Assert.Contains("That is 2 such deaths on this board", _log[^1].Message);
     }
@@ -219,13 +222,13 @@ public sealed class StandardListContradictionsTests : IDisposable
 
         _set = "the board's own data";
         _board.RetryUnsaved();
-        Assert.Equal((0, false, false), (_board.Count, _board.Marked, _board.Unsaved));
+        Assert.Equal((0, false, false), (Count, _board.Marked, Unsaved));
 
         _set = "data-v1.11p";
         string other = NewBoard();
         _profile.LoadDefaultProfile(onBbs: other);
         _board.RetryUnsaved();
-        Assert.Equal((0, false), (_board.Count, _board.Unsaved));
+        Assert.Equal((0, false), (Count, Unsaved));
         Assert.Equal(0, _saves);
         Assert.Equal(0, OnFile.DeathsContradictingStandardArrivalRooms);
         Assert.Equal(0, new BbsProfileStore().Get(other)!.Realms[0].DeathsContradictingStandardArrivalRooms);
@@ -250,10 +253,10 @@ public sealed class StandardListContradictionsTests : IDisposable
         _board.RetryUnsaved();
 
         Assert.Equal(2, _log.Count(e => e.Severity == LogSeverity.Warn && e.Message.Contains("couldn't be written")));
-        Assert.Equal((2, true), (_board.Count, _board.Unsaved));
+        Assert.Equal((2, true), (Count, Unsaved));
 
         _profile.LoadDefaultProfile(onBbs: _boardName);
-        Assert.Equal((1, true), (_board.Count, _board.Unsaved));
+        Assert.Equal((1, true), (Count, Unsaved));
     }
 
     // A board file that doesn't parse counts nothing and throws nothing into the
@@ -282,7 +285,7 @@ public sealed class StandardListContradictionsTests : IDisposable
 
         StandardListContradictions noBoard = new(() => null, () => "data-v1.11p", _ => _saves++, _logService);
         noBoard.Note(Darkwood, new RoomKey(1, 500), Listed);
-        Assert.Equal((0, false), (noBoard.Count, noBoard.Marked));
+        Assert.Equal((0, false), (noBoard.Standing().Count, noBoard.Marked));
         Assert.Equal(0, _saves);
     }
 }

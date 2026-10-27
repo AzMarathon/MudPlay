@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.186.20**
 > - A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
-> - OK in Settings no longer undoes a realm's death floor or death count written while the window was open
+> - OK in Settings no longer undoes a realm's death floor or death count written while the window was open, a renamed realm included
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

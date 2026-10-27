@@ -141,12 +141,80 @@ public sealed class BbsRealmMergeTests : IDisposable
         Assert.Equal("new.example", onFile.Host);
     }
 
+    // A realm renamed in Settings is the same realm under its new name: what the
+    // running client wrote to it under the old name meanwhile goes with it.
+    [Fact]
+    public void ARealmRenamedInSettings_KeepsTheCountWrittenToItsOldNameMeanwhile()
+    {
+        using BbsSectionViewModel vm = OpenSettings();
+        vm.RealmName = "Prime";
+        Assert.Equal("Prime", vm.SelectedRealmName);
+
+        TwoDeathsTheListDoesNotAllow();
+        DeathFloorRefinedTo(-40);
+        vm.Apply();
+
+        BbsProfile onFile = OnFile;
+        Assert.Equal(new[] { "Prime", "Arena" }, onFile.Realms.Select(r => r.Name));
+        Assert.Equal((2, Set, -40), (onFile.Realms[0].DeathsContradictingStandardArrivalRooms,
+            onFile.Realms[0].DeathsContradictingStandardArrivalRoomsOn, onFile.Realms[0].PlayerDiesAtHp));
+    }
+
+    // Two renames of one realm, to different names: Profile Management renames it
+    // at once, and Settings, open since before, renames it again on OK. The first
+    // rename saved stands, as its data folder and characters already moved with
+    // it; the later one is dropped, and there is no second realm.
+    [Fact]
+    public void TwoRenamesOfOneRealm_TheFirstSavedStands_AndNoRealmIsLeftBehind()
+    {
+        using BbsSectionViewModel vm = OpenSettings();
+        Assert.Null(new RealmCatalog(_store, _profile).Rename(_board, "Main", "Prime"));
+
+        vm.RealmName = "First";
+        vm.Apply();
+
+        Assert.Equal(new[] { "Prime", "Arena" }, OnFile.Realms.Select(r => r.Name));
+    }
+
+    // Each side removed a different realm, which merged would leave none; a board
+    // always has one, and this copy's stand rather than a fresh default realm.
+    [Fact]
+    public void TwoRemovalsOfDifferentRealms_LeaveThisCopysRealms_NotNone()
+    {
+        BbsProfile first = _store.Get(_board)!;
+        BbsProfile second = _store.Get(_board)!;
+        first.Realms.RemoveAll(r => r.Name == "Arena");
+        _store.Save(first);
+        second.Realms.RemoveAll(r => r.Name == "Main");
+        _store.Save(second);
+
+        Assert.Equal(new[] { "Arena" }, OnFile.Realms.Select(r => r.Name));
+    }
+
+    // A copy held a long time (the running client's, or any reader's) saved after
+    // Profile Management removed a realm does not bring the realm back, though it
+    // wrote to it.
+    [Fact]
+    public void ALongHeldCopy_SavedAfterARealmWasRemoved_DoesNotBringItBack()
+    {
+        BbsProfile held = _store.Get(_board)!;
+        Assert.True(new RealmCatalog(_store, _profile).Remove(_board, "Arena"));
+
+        held.RealmFor("Arena")!.PlayerDiesAtHp = -60;
+        held.RealmFor("Main")!.PlayerDiesAtHp = -40;
+        _store.Save(held);
+
+        BbsProfile onFile = OnFile;
+        Assert.Equal(new[] { "Main" }, onFile.Realms.Select(r => r.Name));
+        Assert.Equal(-40, onFile.Realms[0].PlayerDiesAtHp);
+    }
+
     // Only the arrays named as keyed merge record by record; any other is still
     // taken whole from the side that changed it.
     [Fact]
     public void Merge_KeyedRecordsMergeByName_OtherArraysWhole()
     {
-        Dictionary<string, string> keyed = new() { ["Realms"] = "Name" };
+        Dictionary<string, JsonThreeWayMerge.KeyedArray> keyed = new() { ["Realms"] = new("Name") };
         JsonNode baseline = JsonNode.Parse("""{ "Realms": [ { "Name": "A", "x": 1, "y": 1 }, { "Name": "B", "x": 1 } ], "List": [1, 2] }""")!;
         JsonNode mine     = JsonNode.Parse("""{ "Realms": [ { "Name": "A", "x": 2, "y": 1 }, { "Name": "B", "x": 1 } ], "List": [1, 2, 3] }""")!;
         JsonNode theirs   = JsonNode.Parse("""{ "Realms": [ { "Name": "A", "x": 1, "y": 9 }, { "Name": "B", "x": 5 } ], "List": [7] }""")!;

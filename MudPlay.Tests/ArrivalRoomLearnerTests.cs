@@ -102,7 +102,7 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     // board's file and read afresh from it, as the client reads the active board.
     private readonly string _boardName = "!mudplay-test-arrivals-" + Path.GetRandomFileName();
     private readonly StandardListContradictions _board;
-    private int BoardContradictions => _board.Count;
+    private int BoardContradictions => _board.Standing().Count;
 
     private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
 

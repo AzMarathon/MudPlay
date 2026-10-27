@@ -72,7 +72,7 @@ public sealed class RealmCatalog
             return problem;
         string previous = realm.Name;
         realm.Name = newName;
-        _bbs.Save(bbs);
+        _bbs.Save(bbs, new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { [previous] = newName });
         MoveData(bbsName, previous, newName);
         return null;
     }

@@ -57,16 +57,17 @@ public sealed class StandardListContradictions
         _log = log;
     }
 
-    // The deaths counted on this board against the set in play.
-    public int Count => _active() is { } active && _activeSet() is { Length: > 0 } set ? CountOn(active, set) : 0;
+    // From one read of the board: the deaths counted on it against the set in
+    // play, whether they mark it (its rooms are taken to differ from the standard
+    // set's), and whether the count is held for the session, not yet in its file.
+    public (int Count, bool Marked, bool Unsaved) Standing()
+    {
+        if (_active() is not { } active || _activeSet() is not { Length: > 0 } set) return (0, false, false);
+        int count = CountOn(active, set);
+        return (count, count >= DeathsToMark, _unsaved.ContainsKey(Key(active, set)));
+    }
 
-    // The board's rooms are taken to differ from the standard set's.
-    public bool Marked => Count >= DeathsToMark;
-
-    // This board's count is held for the session, not yet in its file.
-    public bool Unsaved =>
-        !_unsaved.IsEmpty && _active() is { } active && _activeSet() is { Length: > 0 } set
-        && _unsaved.ContainsKey(Key(active, set));
+    public bool Marked => Standing().Marked;
 
     private static string Key((BbsProfile Bbs, RealmProfile Realm) active, string set) =>
         $"{active.Bbs.Name}\n{active.Realm.Name}\n{set}";
