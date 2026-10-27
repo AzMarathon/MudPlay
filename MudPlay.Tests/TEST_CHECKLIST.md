@@ -641,9 +641,9 @@ How to keep it current:
 - Why: confirmed-count bookkeeping.
 
 ### ChestOffloadPlannerTests.cs
-- Covers: Game/Inventory/ChestOffloadPlanner
-- Checks: carried gains; fewest-shops grouping.
-- Why: sell-tour planning.
+- Covers: Game/Inventory/ChestOffloadPlanner, BfsMapper.DistanceMemo
+- Checks: carried gains; fewest-shops grouping; the shop trip (RouteShops) over a real map: nearest shop from the last one visited, steps from where the player stands, shops with no route or no room last; the memo gives the trip a search for every pair gives; no pair is asked twice.
+- Why: sell-tour planning; the Chest Offload tab worked the trip out with about a hundred whole-map searches on the UI thread, freezing the client for 49.7 s after a chest open (report `paradigm-20261026-201217`).
 
 ### ChestOpenTrackerTests.cs
 - Covers: Game/Inventory/ChestOpenTracker, OutboundOpenObserver
@@ -3374,8 +3374,8 @@ How to keep it current:
 
 ### RoomGraphManagerTests.cs
 - Covers: Game/Map/RoomGraphManager, RoomKey and RoomExit parse, BfsMapper routing
-- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
-- Why: reports paradigm-20260714-091000, -20260728-180730, -20260729-221044.
+- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions; a room command the exit's action cell already lists, by any of its synonyms, stays one action and keeps its roll; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
+- Why: reports `paradigm-20260714-091000`, `paradigm-20260728-180730`, `paradigm-20260729-221044`, `paradigm-20261026-150710`.
 
 ### RoomHazardIndexTests.cs
 - Covers: Services/RoomHazardIndex (RoomHazard, BuffCounter)
@@ -3500,8 +3500,8 @@ How to keep it current:
 
 ### RouteChoicePlannerTests.cs
 - Covers: Services/RouteChoicePlanner, with Game/Map/BfsMapper, Services/MovementFilter, PathItemShopRouter, LoopExpander, AutoWalkManager (lake crossings)
-- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route; a teleport fork past a trap carries the fewest-traps route unless it is the walk already offered (WithTrapAvoidCard). Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
-- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10 and 2026-10-20.
+- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route; a teleport fork past a trap carries the fewest-traps route unless it is the walk already offered (WithTrapAvoidCard). Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it; BfsMapper.DistanceMemo answers every pair in and across the lake as DistanceBetween does (the way out of a sea room, the crossing to the island).
+- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10 and 2026-10-20; the Chest Offload trip's distances (report `paradigm-20261026-201217`).
 
 ### RouteDetailsColoringTests.cs
 - Covers: ViewModels/Navigation/RouteDetailsDialogViewModel (monster hit-% colouring)
@@ -4231,8 +4231,8 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor).
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's and given a TBInfo table; a test can answer commands its own way (a room command, a gate that refuses) and word a room's exits (`closed gate north`); the gate's timeouts run on ManualTimers.
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor, and WheelGateWalkTests).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs
@@ -4404,6 +4404,11 @@ How to keep it current:
 - Covers: Game/Map/WalkReach, RoomGraphManager.IsExitCommandSomewhere
 - Checks: outward reach through every exit type; following room commands only when they stay on the same map; the land of a map and its knots; a 6,400-room case without recursion; exit-command lookup.
 - Why: Paradigm Albion arrival rooms (user, 2026-10-10).
+
+### WheelGateWalkTests.cs
+- Covers: Game/Map/AutoWalkManager crossing a room-command gate through SpecialExitDispatch, with RoomGraphManager.InjectRoomCmdRemoteActions building the exit, on TrackerWireRig (the Dark-Elf Castle gatehouse `8/560` N, `CMD 4100` and its D-slot action cell, the game answering in the report's lines).
+- Checks: the walker turns the wheel once, then moves, and lands beyond the gate; a gate the wheel never opens ends the walk after the step's retry and the two re-plans, one turn per move, with a reason that names the step's direction and room.
+- Why: report `paradigm-20261026-150710` (`turn wheel` went out twice per try, the gate stayed shut, and the walk failed as "tracker entered Confirmed mid-step").
 
 ### WhereReplyParserTests.cs
 - Covers: Game/Remote/WhereReplyParser
