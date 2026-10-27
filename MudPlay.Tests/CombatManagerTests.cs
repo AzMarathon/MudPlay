@@ -4961,4 +4961,23 @@ public sealed class CombatManagerTests
         Assert.Single(h.Sent);               // no extra CR
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
+
+    // A swing the link drop left unanswered isn't checked once the link is gone:
+    // no room re-display goes out at a dead connection (hang report
+    // Hang-20261027-165432).
+    [Fact]
+    public void AttackUnconfirmed_WhenTheLinkDrops_NoRoomRefreshCr()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Sent);
+
+        h.Combat.OnDisconnected();
+        h.Clock.Advance(EngageConfirmWindow);
+        h.Combat.OnCombatTick();
+
+        Assert.Single(h.Sent);
+    }
 }

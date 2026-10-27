@@ -235,9 +235,14 @@ public partial class NavigationWindow : Window
         vm.ContextRoomKey = key;   // rebuilds the up/down/teleport context synchronously
         vm.RefreshContextTransferChoices();
         // Shift held on a room whose sole jump is an up-only / down-only / lone
-        // teleport → do it now and skip the menu.
-        if (key is not null && (modifiers & KeyModifiers.Shift) != 0)
-            _suppressRoomMenu = vm.TryQuickFloorTeleportShortcut();
+        // teleport → do it now and skip the menu. Shift+Ctrl takes the down and
+        // Shift+Alt the up even when the room has more than one; all three held is
+        // no one exit, so the menu opens.
+        if (key is null || (modifiers & KeyModifiers.Shift) == 0) return;
+        bool ctrl = (modifiers & KeyModifiers.Control) != 0;
+        bool alt = (modifiers & KeyModifiers.Alt) != 0;
+        if (ctrl && alt) return;
+        _suppressRoomMenu = vm.TryQuickFloorTeleportShortcut(forceDown: ctrl, forceUp: alt);
     }
 
     private void OnRoomMenuOpening(object? sender, CancelEventArgs e)

@@ -2949,8 +2949,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // the room has zero or more than one such option (show the normal menu, where
     // the user picks). Assumes ContextRoomKey is already set to the clicked room
     // (its setter rebuilt the up/down/teleport context synchronously).
-    public bool TryQuickFloorTeleportShortcut()
+    //
+    // forceDown / forceUp (Shift+Ctrl / Shift+Alt, user 2026-10-27) take that one
+    // exit whatever else the room offers; a room without it shows the menu.
+    public bool TryQuickFloorTeleportShortcut(bool forceDown = false, bool forceUp = false)
     {
+        if (forceDown || forceUp)
+        {
+            if (forceDown && ContextHasDown) { GoDownFloor(); return true; }
+            if (forceUp && ContextHasUp) { GoUpFloor(); return true; }
+            return false;
+        }
+
         // Multiple teleport destinations are a menu of choices, never an auto-pick.
         if (_contextTeleportDests.Count > 1) return false;
 
