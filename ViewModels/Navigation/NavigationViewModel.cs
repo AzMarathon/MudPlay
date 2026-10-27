@@ -5557,7 +5557,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task EditBuilderWaypointAction(LoopBuilderRow? row)
     {
-        if (row is null || LoopBuilder is null) return;
+        if (row is null || LoopBuilder is not { } builder) return;
         WaypointActionEditDialogViewModel vm = new(
             waypointLabel: $"{row.Index}. {row.Name}",
             command: row.Command,
@@ -5569,7 +5569,23 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
-        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack,
+        // The editor is modeless: while it was open the builder can have been saved,
+        // closed or left for a run of its loop (report Crash-20261026-212906), and the
+        // step removed or moved. The edit goes to the step it was opened on or is dropped.
+        if (!ReferenceEquals(LoopBuilder, builder))
+        {
+            _services.Log?.Debug("Navigation",
+                $"waypoint action edit of builder step {row.Index} {row.Name} dropped: the builder it was opened in has closed");
+            return;
+        }
+        int index = builder.IndexOfStep(row);
+        if (index < 0)
+        {
+            _services.Log?.Debug("Navigation",
+                $"waypoint action edit of builder step {row.Index} {row.Name} dropped: the step is no longer in the loop being built");
+            return;
+        }
+        builder.SetClickAction(index, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack,
             result.RestHereHp, result.RestHereMana);
     }
 
@@ -5624,6 +5640,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
+        // The editor is modeless: the loop can have stopped, or another started, while
+        // it was open. A live edit belongs to the run it was opened on, so with that run
+        // gone it is dropped rather than written into a loop no longer running.
+        if (!ReferenceEquals(_services.LoopRunner.CurrentLoop, loop))
+        {
+            _services.Log?.Debug("Navigation",
+                $"loop live-edit of waypoint {row.Index} {row.Name} dropped: loop '{loop.Name}' is no longer running");
+            return;
+        }
 
         // Rows are built from the loop's authored waypoint list in order, so the row
         // index maps straight in; verify by Key and fall back to a key match for safety.
