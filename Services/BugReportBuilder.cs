@@ -557,8 +557,9 @@ public static class BugReportBuilder
         // Direct-input (character) mode: on while a trainer / character-creation
         // stat box owns the keyboard, so arrow keys pass to the wire instead of
         // recalling command history. An "arrows don't move between stat fields"
-        // report hinges on whether this flipped on entering the box.
-        Kv(sb, "Direct-input mode", svc.TrainerMenu.MenuOwnsKeyboard ? "on (trainer/creation box)" : "off");
+        // report hinges on whether this flipped on entering the box. While it waits
+        // on the game's answer to `train stats`, it says how far that answer got.
+        Kv(sb, "Direct-input mode", svc.TrainerMenu.Describe());
         // Death-pile auto-recovery: the toggles + the most recent death record's
         // state, so a "corpse didn't auto-recover" report shows whether it was
         // armed and how the last pile resolved (Recovered / Partial / Missing).

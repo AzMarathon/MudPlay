@@ -31,6 +31,12 @@ public sealed class TerminalEmulator
     // a scroll, a clear or a shrink pushes the row into the ring.
     public event Action<ScrollbackBuffer.Row>? LineCompleted;
 
+    // How many times the whole screen has been erased: ED 2 / 3, ED 0 from the
+    // top-left cell (ESC[H ESC[J), ED 1 from the bottom-right one, and a full reset
+    // (ESC c). A reader that noted it can tell a screen drawn since from one left
+    // over from before.
+    public long ScreenClears { get; private set; }
+
     // The cursor row has taken a glyph since it was last completed.
     private bool _rowWritten;
 
@@ -494,11 +500,13 @@ public sealed class TerminalEmulator
         switch (mode)
         {
             case 0:  // From cursor to end of screen.
+                if (Screen.CursorX == 0 && Screen.CursorY == 0) ScreenClears++;
                 Screen.ClearRow(Screen.CursorY, Screen.CursorX, Screen.Cols - 1, _attr);
                 if (Screen.CursorY + 1 <= Screen.Rows - 1)
                     Screen.ClearRowsInclusive(Screen.CursorY + 1, Screen.Rows - 1, _attr);
                 break;
             case 1:  // From start of screen to cursor.
+                if (Screen.CursorY == Screen.Rows - 1 && Screen.CursorX >= Screen.Cols - 1) ScreenClears++;
                 if (Screen.CursorY > 0)
                     Screen.ClearRowsInclusive(0, Screen.CursorY - 1, _attr);
                 Screen.ClearRow(Screen.CursorY, 0, Screen.CursorX, _attr);
@@ -506,6 +514,7 @@ public sealed class TerminalEmulator
             case 2:
             case 3:  // Whole screen (3 also clears scrollback in real terms).
                 Screen.ClearAll(_attr);
+                ScreenClears++;
                 // The row under the cursor went with the rest: nothing left to complete.
                 _rowWritten = false;
                 // ANSI.SYS / SyncTERM behavior: ED 2 also homes the cursor.
@@ -713,6 +722,7 @@ public sealed class TerminalEmulator
         Screen.CursorY = 0;
         Screen.CursorVisible = true;
         Screen.ClearAll(_attr);
+        ScreenClears++;
         _rowWritten = false;
         _wrapPending = false;
         _scrollTop = 0;

@@ -1201,6 +1201,10 @@ public static class DefaultPatterns
             @"^You do not have the money required for your training\.");
         yield return new RegexPattern(KnownPatterns.TrainStatsAltered,
             @"^Your stats are unnaturally altered!\s+You may not train stats now\.");
+        yield return new RegexPattern(KnownPatterns.TrainStatsNotHere,
+            @"^You may not train your stats here!$");
+        yield return new RegexPattern(KnownPatterns.TrainStatsTournament,
+            @"^You may not do any training while in tournament mode!$");
     }
 
 }

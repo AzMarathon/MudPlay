@@ -1,5 +1,20 @@
 # Version history
 
+## 3.186.23
+
+- `train stats` is no longer abandoned on a room display or prompt that answers something sent just before it
+- Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
+- Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
+- Each kind of trainer screen is recognised by what it shows, whatever the realm, the cursor-drawn box included
+- After `train stats` the keyboard is held up to 10 s for the trainer screen; Stock's refusals let it go at once
+- A trainer screen that turns up just after that is still taken back and filled
+- A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
+- A dropped link, a reconnect or a profile change lets go of a trainer screen's hold
+- Telepaths queued just before the trainer screen wait until it closes
+- A training MudPlay started that can't save what it typed now leaves the trainer screen with QUIT, nothing saved
+- Bug reports show how far the game's answer to `train stats` got
+- bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
+
 ## 3.186.22
 
 - Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit

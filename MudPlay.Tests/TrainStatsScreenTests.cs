@@ -76,6 +76,48 @@ public sealed class TrainStatsScreenTests
         Assert.Null(TrainStatsScreen.TryRead(full.Replace("CP Left:", "        ")));
     }
 
+    // ----- which screen is it? -------------------------------------------------
+
+    // The game's bytes on an 80 × 24 terminal, flattened as the client reads it.
+    private static string OnTerminal(string wire)
+    {
+        ServerFeed feed = new();
+        feed.Raw(wire);
+        return TrainStatsWire.ScreenText(feed.Emulator.Screen);
+    }
+
+    // Each kind is told by what it shows, with no realm asked (user, 2026-10-27:
+    // which screen a server draws isn't tied to its realm and may change).
+    [Fact]
+    public void EachKindOfScreen_IsRecognisedByWhatItShows()
+    {
+        Assert.Equal(TrainStatsScreen.Kind.CharacterEditor, TrainStatsScreen.Recognise(OnTerminal(TrainStatsWire.Form(133, 26))));
+        Assert.Equal(TrainStatsScreen.Kind.CharCreationBox, TrainStatsScreen.Recognise(OnTerminal(TrainStatsWire.CreationBox(133, 26))));
+        Assert.Equal(TrainStatsScreen.Kind.ScrollingForm, TrainStatsScreen.Recognise(OnTerminal(TrainStatsWire.ScrollingForm(26))));
+        Assert.Equal(TrainStatsScreen.Kind.PanelOnly, TrainStatsScreen.Recognise("  +-    Point Cost Chart    -+\n"));
+        Assert.Null(TrainStatsScreen.Recognise(OnTerminal(TrainStatsWire.RoomRedrawn())));
+    }
+
+    [Fact]
+    public void TheEditorAndTheCreationBox_ReadTheSame()
+    {
+        foreach (string wire in new[] { TrainStatsWire.Form(133, 26), TrainStatsWire.CreationBox(133, 26) })
+        {
+            TrainStatsScreen? form = TrainStatsScreen.TryRead(OnTerminal(wire));
+            Assert.NotNull(form);
+            Assert.Equal(new[] { 133, 40, 30, 100, 60, 30 }, form.Stats);
+            Assert.Equal(26, form.CpLeft);
+        }
+    }
+
+    // Stock's scrolling form prints the race's range for each stat and no current
+    // values, so there is no form to read off it.
+    [Fact]
+    public void TheScrollingForm_IsNotRead()
+    {
+        Assert.Null(TrainStatsScreen.TryRead(OnTerminal(TrainStatsWire.ScrollingForm(26))));
+    }
+
     // ----- was the row applied? ----------------------------------------------
 
     private static readonly int[] Row = { 136, 40, 30, 100, 60, 30 };

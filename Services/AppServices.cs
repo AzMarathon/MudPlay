@@ -3378,6 +3378,8 @@ public sealed class AppServices
         // to re-fire `invite` for any party member that the trainer-
         // menu round-trip dropped from the follower's view.
         TrainerMenu = new Game.TrainerMenuTracker(Router, PartyState, Log);
+        // A trainer screen belongs to the character that opened it.
+        Profile.ProfileLoaded += _ => TrainerMenu.ForceExit("profile changed");
         // Full-screen forms want character-at-a-time input with server echo,
         // not client-side line buffering. Two arming paths, both flip the same
         // flag (idempotent): the command-armed InputMenuEntered/Exited pair
@@ -3404,7 +3406,7 @@ public sealed class AppServices
         // combat, casting, auto-get, chat replies, the lot). The user's manual
         // input and the auto-trainer's CP replay both ride the raw SendUserInput,
         // so they pierce the hold and remain the only two things that can type.
-        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log);
+        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log, Telepaths);
         // Entering the train-stats screen breaks up our party server-side; a
         // FOLLOWER must clear its own stale "following <leader>" state now so the
         // leader's fresh re-invite on return is auto-accepted, not rejected as
