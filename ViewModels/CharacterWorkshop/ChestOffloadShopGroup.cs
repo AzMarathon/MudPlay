@@ -17,13 +17,16 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
     public string ShopName { get; }
     public int Shop { get; }          // shop id, so items can be moved to/from this group
     public string Location { get; }   // "map/room", or empty when the shop's room is unknown
-    public string Steps { get; }      // "N steps" from the player's current room (empty if unknown)
     public bool HasLocation => Location.Length > 0;
     public string LocationLine => Steps.Length > 0 ? $"{Location} · {Steps}" : Location;
     public bool CanWalk { get; }
     public ObservableCollection<ChestOffloadItemRow> Items { get; } = new();
 
     [ObservableProperty] private string _total = "—";
+    // "N steps" from the player's current room (empty if unknown). Worked out off the
+    // UI thread and set when it comes back: by the trip for the groups it orders, by a
+    // lookup of its own for a group an item is moved into.
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(LocationLine))] private string _steps;
 
     public IRelayCommand WalkCommand { get; }
     public IRelayCommand SellCommand { get; }
@@ -35,7 +38,7 @@ public sealed partial class ChestOffloadShopGroup : ObservableObject
         ShopName = shopName;
         Shop = shop;
         Location = location;
-        Steps = steps;
+        _steps = steps;
         CanWalk = room is not null;
         WalkCommand = new RelayCommand(() => { if (room is { } key) queueWalk(key); }, () => room is not null);
         SellCommand = new RelayCommand(() => sell(this));

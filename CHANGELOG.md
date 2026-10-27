@@ -1,8 +1,15 @@
 # Version history
 
-## 3.186.10
+## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
+
+## 3.186.12
+
+- Chest Offload no longer freezes the client after a chest open: the shop trip is worked out in the background
+- Gatehouse wheel (and any room command also listed as the exit's action) sent once per try, so the gate opens
+- A walk that's refused on every try now names the step it gave up on
+- bug reports addressed: paradigm-20261026-150710, paradigm-20261026-201217
 
 ## 3.186.9
 

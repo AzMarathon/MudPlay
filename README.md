@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.10**
+> **Version 3.186.13**
 > - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
 <!-- current-version:end -->
 
