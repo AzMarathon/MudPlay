@@ -81,6 +81,14 @@ internal sealed class TrackerWireRig : IDisposable
     // ("You are blind.").
     public Queue<string> NextMoveShows { get; } = new();
 
+    // The game's own answer to a command a test models (a room command, a gate that
+    // refuses), or null to answer it as the room graph does; the character stays put.
+    public Func<string, string?>? GameAnswer { get; set; }
+
+    // How a room's exits line names an exit ("closed gate north"), or null for the
+    // bare direction.
+    public Func<RoomKey, Direction, string?>? ExitWords { get; set; }
+
     // Whether the prompt row echoes each command, as a statline the client can
     // read does. Off, the tracker never sees an echo and times arrivals instead.
     public bool Echo { get; set; } = true;
@@ -90,17 +98,26 @@ internal sealed class TrackerWireRig : IDisposable
 
     // prompt: the statline the game prints; the default isn't one the prompt
     // scanner's class-default pattern reads. paradigm: the set is a Paradigm realm's
-    // (Info.json Legit 2), where `rm` names the room.
-    public TrackerWireRig(string roomsJson, string prompt = "[HP=100/100]:", bool paradigm = false)
+    // (Info.json Legit 2), where `rm` names the room. tbinfoJson: the set's TBInfo,
+    // for rooms whose commands the graph reads.
+    public TrackerWireRig(string roomsJson, string prompt = "[HP=100/100]:", bool paradigm = false,
+        string? tbinfoJson = null)
     {
         _prompt = prompt;
         _root = Path.Combine(Path.GetTempPath(), "mudplay-wire-rig-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), roomsJson);
         if (paradigm) File.WriteAllText(Path.Combine(_root, "alpha", "Info.json"), "[{\"Legit\":2}]");
+        if (tbinfoJson is not null) File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), tbinfoJson);
         Cache = new GameDataCache(_root);
         Cache.SwitchSet("alpha");
-        Graph = new RoomGraphManager(Cache, Log);
+        TBInfoStore? tbinfo = null;
+        if (tbinfoJson is not null)
+        {
+            tbinfo = new TBInfoStore(Cache);
+            tbinfo.OnActiveSetChanged("alpha");
+        }
+        Graph = new RoomGraphManager(Cache, Log, tbinfo);
         Graph.OnActiveSetChanged("alpha");
 
         // Each read moves the clock one tick, as the wall clock does between two rows:
@@ -206,6 +223,8 @@ internal sealed class TrackerWireRig : IDisposable
         text.Append("\r\n");
         if (NextAnswers.TryDequeue(out string? scripted))
             text.Append(scripted).Append("\r\n");
+        else if (GameAnswer?.Invoke(command) is { } own)
+            text.Append(own).Append("\r\n");
         else if (command is "l" or "look")
             text.Append(RoomText(Position));
         else if (DirectionExtensions.TryFromToken(command, out Direction dir))
@@ -247,7 +266,8 @@ internal sealed class TrackerWireRig : IDisposable
             .Select(e => e.Key);
         if (ExtraShownExits.TryGetValue(key, out Direction[]? extra)) shown = shown.Concat(extra);
         if (UnshownExits.TryGetValue(key, out Direction[]? hidden)) shown = shown.Except(hidden);
-        string exits = string.Join(", ", shown.Distinct().OrderBy(d => (int)d).Select(d => d.ToLongName()));
+        string exits = string.Join(", ", shown.Distinct().OrderBy(d => (int)d)
+            .Select(d => ExitWords?.Invoke(key, d) ?? d.ToLongName()));
         return $"\u001b[1;36m{room.Name}\u001b[0m\r\nObvious exits: {(exits.Length == 0 ? "NONE!" : exits)}\r\n";
     }
 

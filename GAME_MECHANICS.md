@@ -6353,6 +6353,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   - **A hidden target opens when all its blocked bits are clear** (@0x46ca8a–0x46cafc): the exit is queued for the exit reset with count 1 (`_add_exit_to_list(room, map, dir, 1)` @0x46cb0f), and the exit's room is told the exit's own "opens" message, or `A concealed passage opens to the %s.` when it has none (@0x46cb24–0x46cb8d). Repeating the action on an open hidden exit runs that branch again: the reset is queued again and the line is broadcast again. That agrees with the repeat rule in this topic.
   - **The open window is the exit-reset queue.** Count 1 is 5 minutes, and the queue's order can stretch it (the re-arm note in *Exit traps — search and disarm*). The reset gives an action-opened exit its blocked bits back, and that branch prints no line (`_background_update_exits` @0x44f6c9–0x44f893).
   - **`[CONFLICT — ask the user]` A door or gate target is toggled on every action** (@0x46c6bb–0x46c7d0): state 0 (open) becomes 2 (locked) and any other state becomes 0, then the far side is toggled from its own state, and the relock is queued on both sides. By that code a second pull of a lever on an open gate locks it again. The redundant-levers capture in this topic (report 180730, realm not recorded) has the gate staying open through the second pull. Question: which realm was that capture on, and does a second pull shut a lever gate on Stock? (User 2026-10-09: unsure.)
+    - **Paradigm evidence for the toggle** *([OBSERVED] 2026-10-26, report `paradigm-20261026-150710`)*: two turns of the Dark-Elf Castle wheel in one burst left its gate shut, every time (*Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*, the dark-elf castle chain). The refusal read `The gate is Closed!`, with the capital Stock prints for a shut, unlocked gate, where this Stock code would have locked it (`The gate is closed!`). Paradigm's capitalisation isn't recorded (*Refused ("bonked") moves*).
   - **A trap target in state 2 (a lever trapdoor) pushes every player and every monster in the target room through the exit** (@0x46c7dd–0x46c8ab; the monsters' side is in *Monsters, lairs & spawns → Monster roaming and following*).
   - `[NEEDS CONFIRMATION]` **Specific order on Stock.** The handler ignores action *n* while the blocked bit of action *n+1* is still set (action 1 tests bit `0x20` @0x46c972, action 2 tests `0x40` @0x46c992, and so on), so the highest-numbered action is the first one it accepts. Whether the engine's action number (the exit's second parameter divided by 10) is the game data's `Action#N` wasn't traced. Question: on Stock, must a specific-order gate's levers be pulled from the highest `Action#N` down? The relative-order rule in this topic (user, 2026-08-17) has #1 before #2.
 - **Client use:**
@@ -6371,6 +6372,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     graph-build; the required-action count is the number of DISTINCT StepNumbers (same-StepNumber levers
     count as one), and the path expander pulls one cheapest alternative per StepNumber — so a redundant
     pair pulls once, a declared multi-step gate pulls all.
+  - A room command the exit's own action cell already lists is not added again as a second action (`RoomGraphManager.InjectRoomCmdRemoteActions`; a `testskill` roll carries over to the cell's action), so the engines send it once per crossing. Report `paradigm-20261026-150710`: the `8/560` wheel went out twice and its gate stayed shut. When the re-plans are spent on a step the game keeps refusing, the walk stops with a reason naming the step, direction and room (`AutoWalkManager`).
 
 ### Room-command reveal exits
 *Status: CONFIRMED 2026-08-18 (user + game-data trace) · Realm: Paradigm (1.9.1)*
@@ -7049,6 +7051,20 @@ Among protectable hazards, a further split governs whether the navigator may off
        `(Key: 820 [or 251 picklocks/strength])`. The gatehouse door `8/559` S ↔ `8/560` N is
        `(Door [1000 picklocks/strength])` both ways; the wheel in `8/560` (`CMD 4100`, `turn wheel`) works
        it from inside.
+       - **The "drawbridge" is that gate** *([OBSERVED] 2026-10-26, Paradigm 1.9.1 and Anomaly v0.61.48
+         TBInfo / Rooms; report `paradigm-20261026-150710`)*. `CMD 4100` is `turn wheel:message 1400:message
+         3211:remoteaction 560 0 0 0` (`push bar` and `move wheel` the same), so it works direction 0, N, of
+         `8/560` itself; the room shows it as `closed gate north`. Both message rows are printed before the
+         `remoteaction`, so every turn answers `You turn the great wheel with a mighty effort, and the
+         drawbridge opens!`, whatever the gate does. The sets also write the command out as `8/560`'s D-slot
+         cell `Action [on the N exit of this room]: turn wheel, push bar, move wheel`, the only room of the
+         three imported sets where a room command and an action cell name the same exit.
+       - **Two turns in a row leave the gate shut** *([OBSERVED] 2026-10-26, report
+         `paradigm-20261026-150710`, Paradigm)*: six times the walker sent `turn wheel` twice in the same
+         millisecond, got the line twice, and `n` met `The gate is Closed!`. By the user's account (relayed
+         2026-10-26) one hand-typed `turn wheel` then let the walk go on. This fits the door toggle in
+         *Multi-action exits and levers*. `[NEEDS CONFIRMATION]` Does one turn open the gate and a second
+         shut it again on Paradigm?
     7. **The queen's door:** Royal Guardroom `8/702` N → Royal Throne Room `8/705` is
        `(Key: 809 [or 101 picklocks])`. The dark-elf queen (monster 343) is the NPC of `8/705` and drops
        the golden key (item 813) at 100%, for Vault Antechamber `8/706` N `(Key: 813 [or 1000 picklocks])`.
