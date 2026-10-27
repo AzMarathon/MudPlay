@@ -276,12 +276,13 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void RoutineRest_NoCast_WhenStanding()
+    public void RoutineRest_NoCast_WhenWalking()
     {
-        // HP is low and we're out of combat, but we're not resting —
+        // HP is low and we're out of combat, but a walk is moving us —
         // walking between rooms shouldn't auto-heal. Tier 1 still
         // fires in life-threat range but that's a different trigger.
         using Harness h = new();
+        h.Director.SetMovementCheck(() => true);
         h.Spells.MinorHealSpell = "heal";
         h.Health.HealRestTrigger = 80;
         h.Health.MajorHealCombatTrigger = 40;
@@ -4112,15 +4113,17 @@ public sealed class CastingDirectorTests
         Assert.Equal("heal Tank", h.CastsSent[0]);
     }
 
-    // Reports paradigm-20261027-094915 / paradigm-20261027-123536: a cleric following
-    // a party leader stood at 60-80% HP between fights with Heal (rest) at 86% and
-    // never healed. A follower's recovery rest ends one point above the rest trigger,
-    // so the rest-time heal, cast only while resting, never got its chance. Following,
-    // it goes out standing; solo or leading, standing still holds it, and says so.
+    // Heal (rest) is for resting, meditating or idling (user, 2026-10-27). Out of
+    // combat and standing it is held only while a walk or loop of our own moves us,
+    // and said once. A follower is moved by its leader, so it heals standing even
+    // then (reports paradigm-20261027-094915 / paradigm-20261027-123536: a cleric
+    // following a leader stood at 60-80% with Heal (rest) at 86% and never healed).
     [Fact]
-    public void RestHeal_CastStanding_OnlyWhileFollowingALeader()
+    public void RestHeal_StandingHeld_OnlyWhileOurOwnWalkMovesUs()
     {
         using PartyHarness h = new();
+        bool moving = true;
+        h.Director.SetMovementCheck(() => moving);
         h.Spells.MinorHealSpell = "mihe";
         h.Health.HealRestTrigger = 86;
         h.Health.MajorHealCombatTrigger = 60;
@@ -4128,13 +4131,14 @@ public sealed class CastingDirectorTests
         h.State.InCombat = false;
         h.State.Hp = 150;                 // 75%: under Heal (rest), above the major band
 
-        // Solo: held for standing, logged once.
+        // Solo, walking: held, logged once.
+        h.Director.Evaluate();
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
-        Assert.True(h.Director.RestHealHeldStanding);
+        Assert.True(h.Director.RestHealHeldForMovement);
         Assert.Single(h.Log.Snapshot(), e => e.Message.Contains("rest-time heal held"));
 
-        // Leading a party: our own walk, still held.
+        // Leading a party on our own walk: still held.
         h.AddMember("Korrde", hpPercent: 100);
         h.Party.SelfIsLeader = true;
         h.Director.Evaluate();
@@ -4144,7 +4148,27 @@ public sealed class CastingDirectorTests
         h.Party.SelfIsLeader = false;
         h.Director.Evaluate();
         Assert.Equal(new[] { "mihe" }, h.CastsSent);
-        Assert.False(h.Director.RestHealHeldStanding);
+        Assert.False(h.Director.RestHealHeldForMovement);
+    }
+
+    [Theory]
+    [InlineData(PlayerPosition.Standing)]   // idle: nothing moves us
+    [InlineData(PlayerPosition.Meditating)]
+    [InlineData(PlayerPosition.Resting)]
+    public void RestHeal_GoesOut_WhileIdleMeditatingOrResting(PlayerPosition position)
+    {
+        using PartyHarness h = new();
+        h.Director.SetMovementCheck(() => false);
+        h.Spells.MinorHealSpell = "mihe";
+        h.Health.HealRestTrigger = 86;
+        h.Health.MajorHealCombatTrigger = 60;
+        h.State.Position = position;
+        h.State.InCombat = false;
+        h.State.Hp = 150;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "mihe" }, h.CastsSent);
     }
 
     // Report paradigm-20260820-122341 ("party heal fires a round late"): the heal

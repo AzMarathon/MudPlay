@@ -3,7 +3,7 @@
 ## 3.186.30
 
 - A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop
-- A party follower casts its Heal (rest) heal standing between fights instead of waiting to rest
+- Heal (rest) goes out while resting, meditating or idle, and for a party follower between fights; only our own walk or loop holds it
 - Cast when mana full goes out again each time mana is back at the top, even when its own cost never drops mana under the full mark
 - Party rank is sent again on a re-invite after the party broke up (every join starts mid); the game's answer is logged
 - bug reports addressed: paradigm-20261027-092353, paradigm-20261027-094915, paradigm-20261027-123536
