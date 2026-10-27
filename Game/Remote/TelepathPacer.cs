@@ -66,9 +66,11 @@ public sealed partial class TelepathPacer
     private int _resendsQueued;
     private int _resends;
     private int _givenUp;
-    // Nothing leaves the outbox while this is set (Hold / Release). Under _lock
-    // like the outbox it stops.
-    private bool _held;
+    // Nothing leaves the outbox while any holder is named here (Hold / Release),
+    // so one holder letting go never frees the outbox from under another (an
+    // @suicide waiting on its password prompt, a trainer screen). Under _lock like
+    // the outbox it stops.
+    private readonly HashSet<string> _holders = new(StringComparer.Ordinal);
     // The telepath line last put on the wire, while nothing else has gone out
     // after it (LastWrittenTelepath). Any other line clears it, so nothing else
     // written, a password included, is ever kept here.
@@ -97,25 +99,27 @@ public sealed partial class TelepathPacer
     // watches what is typed, so a caller that has put a question to the game and
     // must be the next to answer it holds the pacer as well: the game would take
     // a telepath written in between as the answer. @suicide does, from `suicide`
-    // to the password. Safe from any thread.
-    public void Hold()
+    // to the password, and so does a trainer screen while it owns the keyboard.
+    // Safe from any thread.
+    public void Hold(string holder)
     {
-        lock (_lock) _held = true;
+        lock (_lock) _holders.Add(holder);
     }
 
-    // Let the outbox go again; what waited is written in its order, paced as ever.
-    public void Release()
+    // The holder lets the outbox go; once no holder is left, what waited is written
+    // in its order, paced as ever.
+    public void Release(string holder)
     {
         lock (_lock)
         {
-            if (!_held) return;
-            _held = false;
+            if (!_holders.Remove(holder) || _holders.Count > 0) return;
         }
         Pump();
     }
 
     // Bug-report surface.
-    public bool Held { get { lock (_lock) return _held; } }
+    public bool Held { get { lock (_lock) return _holders.Count > 0; } }
+    public string HeldBy { get { lock (_lock) return string.Join(", ", _holders.Order(StringComparer.Ordinal)); } }
     public int Queued { get { lock (_lock) return _outbox.Count; } }
     public int InFlight { get { lock (_lock) return _inFlight.Count; } }
     public int Resends { get { lock (_lock) return _resends; } }
@@ -158,7 +162,7 @@ public sealed partial class TelepathPacer
             // hold before it gets here. It is written at once whatever it looks
             // like. A password that begins with a slash and a letter must not
             // wait in the outbox as a telepath, behind the ones already there.
-            if (_held)
+            if (_holders.Count > 0)
             {
                 passThrough.AddRange(data);
                 start = data.Length;
@@ -195,7 +199,7 @@ public sealed partial class TelepathPacer
         TimeSpan wait = TimeSpan.Zero;
         lock (_lock)
         {
-            if (_held || _outbox.First is null || _pumpArmed) return;
+            if (_holders.Count > 0 || _outbox.First is null || _pumpArmed) return;
             DateTimeOffset now = _now();
             DateTimeOffset due = _lastSent + Gap;
             if (now < due)

@@ -1,5 +1,6 @@
 using System.Text;
 using MudPlay.Game;
+using MudPlay.Game.Remote;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -37,9 +38,10 @@ public sealed class TrainerScreenGateTests
 
     // The game's answer to `train stats` (its echo, then the form), and the room
     // shown again once the form is left.
-    private static void FormOpensThenCloses(MessageRouter router)
+    private static void FormOpensThenCloses(TrainerMenuTracker tracker, MessageRouter router)
     {
         ServerFeed game = new(router);
+        tracker.ReadScreen = () => TrainStatsWire.ScreenText(game.Emulator.Screen);
         game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         game.Raw("\u001b[2J\u001b[H" + TrainStatsWire.RoomRedrawn());
     }
@@ -71,7 +73,7 @@ public sealed class TrainerScreenGateTests
         engine(Encoding.Latin1.GetBytes("par\r")); // would leak into Family Name
         Assert.Empty(wire);
 
-        FormOpensThenCloses(router);
+        FormOpensThenCloses(tracker, router);
 
         engine(Encoding.Latin1.GetBytes("par\r"));
         Assert.Single(wire);
@@ -114,7 +116,7 @@ public sealed class TrainerScreenGateTests
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
         Assert.True(send.IsLocked);
 
-        FormOpensThenCloses(router);
+        FormOpensThenCloses(tracker, router);
 
         Assert.False(gate.IsHeld);
         Assert.False(send.IsLocked);
@@ -129,11 +131,44 @@ public sealed class TrainerScreenGateTests
         send.Hold("password");
 
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        FormOpensThenCloses(router);   // trainer hold released here
+        FormOpensThenCloses(tracker, router);   // trainer hold released here
 
         Assert.True(send.IsLocked); // password hold still up
         send.Release("password");
         Assert.False(send.IsLocked);
+    }
+
+    // The telepath pacer writes queued telepaths from its own timer, past the send
+    // gate: one queued just before the form opened would be typed into it. The
+    // gate holds the pacer over the same stretch, alongside any other holder.
+    [Fact]
+    public void TheTelepathPacer_IsHeldWhileTheFormOwnsTheKeyboard()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        TrainerMenuTracker tracker = new(router, new PartyState(), now: () => Now, schedule: new ManualTimers().Arm);
+        ManualTimers pacerTimers = new();
+        DateTimeOffset now = new(2026, 7, 15, 0, 0, 0, TimeSpan.Zero);
+        TelepathPacer pacer = new(pacerTimers.Schedule, () => now);
+        List<string> wire = new();
+        pacer.SetWriter(b => wire.Add(Encoding.Latin1.GetString(b)));
+        using TrainerScreenGate gate = new(tracker, new EngineSendGate(), telepaths: pacer);
+
+        pacer.Send(Encoding.Latin1.GetBytes("/Ironbar {Trained to level 31.}\r/Barter {HP=533/533}\r"));
+        Assert.Single(wire);                     // the second waits out the pacer's gap
+        pacer.Hold("@suicide");
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        Assert.Equal("@suicide, TrainerMenu", pacer.HeldBy);
+
+        now += TelepathPacer.Gap;
+        pacerTimers.Advance(TelepathPacer.Gap);
+        Assert.Single(wire);                     // held: nothing typed into the form
+
+        FormOpensThenCloses(tracker, router);
+        Assert.Equal("@suicide", pacer.HeldBy);  // the trainer let go; @suicide still holds
+        pacer.Release("@suicide");
+        pacerTimers.Advance(TelepathPacer.Gap);
+        Assert.Equal(2, wire.Count);
     }
 
     [Fact]

@@ -34,6 +34,18 @@ namespace MudPlay.Game;
 // gate — a chat line can't carry both — so the state machine flips and
 // downstream input switches to character mode just as it does for in-game
 // training.
+//
+// From an outbound `train stats` the keyboard is held until exactly one of:
+// the trainer screen is seen (then until the form is left, as for any form), the
+// game's own refusal line, or HoldCap with neither. Nothing else releases it
+// meanwhile: output already on its way when the command went out answers earlier
+// commands (a room an Enter redrew, the prompt a party line redraws), and lines
+// may come between the game's echo of `train stats` and the form (reports
+// paradigm-20261026-225703, -225718, -225733: the release went on such a room
+// display and prompt, and the party's telepaths and `par` polls were typed into
+// the Family Name box the game had just opened). Held engine sends are dropped,
+// not queued, so the hold is capped: a longer one would drop heals and attacks.
+// A trainer screen within LateFormWindow after the cap takes the keyboard back.
 public sealed class TrainerMenuTracker : IDisposable
 {
     private readonly PartyState _party;
@@ -41,16 +53,19 @@ public sealed class TrainerMenuTracker : IDisposable
     private readonly IDisposable _markerSub;
     private readonly IDisposable _promptSub;
     private readonly IDisposable _roomSub;
+    private readonly IDisposable[] _refusalSubs;
     private bool _disposed;
 
     // Window after observing outbound train stats during which a marker line
     // confirms entry.
     public TimeSpan ExpectingMenuWindow { get; set; } = TimeSpan.FromSeconds(5);
 
-    // How long after `train stats` the answer may still come. With nothing read by
-    // then the keyboard is let go; a keyboard let go early (on a guess, not on the
-    // game's word) is taken back if the form turns up within it.
-    public TimeSpan AnswerWindow { get; set; } = TimeSpan.FromSeconds(60);
+    // The longest the keyboard is held for the answer to `train stats` with no
+    // trainer screen seen.
+    public TimeSpan HoldCap { get; set; } = TimeSpan.FromSeconds(10);
+
+    // After the cap, how long a trainer screen still takes the keyboard back.
+    public TimeSpan LateFormWindow { get; set; } = TimeSpan.FromSeconds(10);
 
     private readonly Func<DateTime> _now;
 
@@ -68,41 +83,25 @@ public sealed class TrainerMenuTracker : IDisposable
     // than the marker (see InputMenuEntered).
     private bool _inputMenuActive;
 
-    // How far the game has got answering the last `train stats`. Output already
-    // on its way when the command went out answers earlier commands: a room
-    // display drawn by an Enter sent just before, the prompt after a party line.
-    // None of that says the form closed, or never opened (reports
-    // paradigm-20261026-225703, -225718, -225733: the release went on such a room
-    // display and prompt, and the party's telepaths and `par` polls were typed into
-    // the Family Name box the game had just opened). The game echoes each command
-    // on its prompt row before its result (GAME_MECHANICS "Movement on the wire —
-    // command echo, failure lines, and what actually moves you"), so the answer
-    // starts at the echo of `train stats`.
+    // How far the game has got answering the last `train stats`. The game echoes
+    // each command on its prompt row before its result (GAME_MECHANICS "Movement
+    // on the wire — command echo, failure lines, and what actually moves you"):
+    // Echoed only says how far a log or report got, it releases nothing.
     private enum FormAnswer { None, Pending, Echoed, Form }
     private FormAnswer _answer;
     private DateTime _trainStatsSentAt;
     private readonly MessageRouter _router;
     private readonly Func<TimeSpan, Action, IDisposable> _schedule;
-    // Decides a Pending or Echoed answer at ExpectingMenuWindow, then again at
-    // AnswerWindow, so the hold never waits on a prompt that may never be read.
-    private IDisposable? _answerTick;
-    // A prompt or room display has come since `train stats` went out. A prompt on
-    // the cursor's row means nothing until one has: it may be the one already
-    // there when the command was sent.
-    private bool _signalSinceSend;
-    // A prompt or room display came in this read with the window up and no answer
-    // read. The read's own lines may still carry the echo, so it is decided at the
-    // read's end.
-    private bool _signalPastWindow;
+    private IDisposable? _capTick;
+    private IDisposable? _lateTick;
+    private bool _awaitingLateForm;
     // What the screen held when `train stats` went out: a trainer screen left on it
     // from before (the `Char. Creation` box lingers after exit), and how many times
-    // it had been cleared. Screen evidence counts only once the screen has been
-    // cleared since, or when nothing was left on it.
+    // it had been cleared. A trainer screen counts only once the screen has been
+    // cleared since, or when none was on it then, so a leftover box is neither
+    // the answer nor a form to plan from.
     private bool _leftoverAtSend;
     private long _clearsAtSend;
-    // The keyboard was let go on a guess (no form read, no refusal, no exit) until
-    // this moment: a form that turns up before it takes the keyboard back.
-    private DateTime? _retakeUntil;
 
     // True while we believe the trainer-stats menu is the active screen
     // (marker-confirmed — never sets on a cursor-positioned box whose marker
@@ -129,55 +128,56 @@ public sealed class TrainerMenuTracker : IDisposable
     // carries that case; this property folds both in.
     public bool MenuOwnsKeyboard => _inputMenuActive || _inMenu;
 
-    // The form answering the last `train stats` is up: its marker row was read as
-    // a line, or the form or its panel was on a screen drawn since the command,
-    // at the end of a read or at the answer tick. Short of this nothing may be
-    // typed into the form: the game may have echoed `train stats` and be
-    // refusing it.
+    // The form answering the last `train stats` is up: a trainer screen drawn
+    // since the command was on the terminal at the end of a read. Short of this
+    // nothing may be typed into it.
     public bool FormShown => _inputMenuActive && _answer == FormAnswer.Form;
 
     // Fires when FormShown turns true, a keyboard taken back included.
     public event Action? FormDrawn;
 
-    // Whether the screen has been drawn afresh since the last `train stats`: it was
-    // cleared since, or held no trainer screen then. A form read off a screen that
-    // wasn't is one left over from before.
+    // The keyboard was let go at HoldCap with no trainer screen, and one may still
+    // take it back. An AutoTrainManager pass waits on through it.
+    public bool AwaitingLateForm => _awaitingLateForm;
+
+    // Fires when a `train stats` ends with no trainer screen after the keyboard was
+    // let go at the cap: LateFormWindow ran out, or ForceExit cut it short.
+    public event Action? LateFormWindowClosed;
+
+    // Whether the screen has been drawn afresh since the last `train stats`.
     public bool ScreenDrawnSinceTrainStats =>
         !_leftoverAtSend || (ScreenClears?.Invoke() ?? 0) > _clearsAtSend;
 
     // The visible screen as newline-joined rows, bound by the terminal session.
-    // A box drawn with cursor positioning may never complete its marker row as a
-    // line, so the screen is the other place the form is seen.
+    // The form is told by what it draws there, not by a line, so neither a box
+    // whose marker row never completes nor a chat line naming the panel misleads.
     public Func<string>? ReadScreen { get; set; }
 
     // How many times the terminal's whole screen has been cleared, bound by the
     // terminal session (TerminalEmulator.ScreenClears).
     public Func<long>? ScreenClears { get; set; }
 
-    // Whether the cursor's row holds the game's own prompt with nothing after it.
-    // Bound by the terminal session, which owns the screen. Read where no line has
-    // settled the answer to `train stats`: at the end of a read after the echo (a
-    // refusal's prompt that came in the echo's own read was taken in by the wire's
-    // prompt scan before the echo line was read, so the cursor row is the only
-    // place left to see it), and at the answer tick, once a prompt or room display
-    // has come since the command.
-    public Func<bool>? CursorAtGamePrompt { get; set; }
-
-    // The keyboard state, in words for a bug report.
+    // The keyboard state, in words for a bug report: what holds it, for how long,
+    // and whether a trainer screen on the terminal is left from before.
     public string Describe()
     {
-        string since = $"{(_now() - _trainStatsSentAt).TotalSeconds:0.0} s since `train stats`";
+        double held = (_now() - _trainStatsSentAt).TotalSeconds;
         if (!MenuOwnsKeyboard)
-            return _retakeUntil is { } until && _now() < until
-                ? $"off (let go with no answer read; taken back if the trainer screen turns up; {since})"
+            return _awaitingLateForm
+                ? $"off (no trainer screen {HoldCap.TotalSeconds:0} s after `train stats`; one until "
+                  + $"{(HoldCap + LateFormWindow).TotalSeconds:0} s takes the keyboard back; {held:0.0} s since)"
                 : "off";
         if (!_inputMenuActive || _answer == FormAnswer.None) return "on (trainer/creation box)";
-        return _answer switch
+        string why = _answer switch
         {
-            FormAnswer.Pending => $"on (trainer box; the game hasn't answered `train stats` yet; {since})",
-            FormAnswer.Echoed => $"on (trainer box; `train stats` echoed, no trainer screen drawn yet; {since})",
-            _ => $"on (trainer box drawn; {since})",
+            FormAnswer.Pending => "waiting for the game's answer to `train stats`",
+            FormAnswer.Echoed => "`train stats` echoed, waiting for the trainer screen",
+            _ => "the trainer screen is up",
         };
+        string leftover = _leftoverAtSend && !ScreenDrawnSinceTrainStats
+            ? "; a trainer screen left from before is on the terminal and doesn't count"
+            : string.Empty;
+        return $"on ({why}; held {held:0.0} s{leftover})";
     }
 
     // Snapshot of non-self party member names taken at the moment we confirmed
@@ -208,9 +208,9 @@ public sealed class TrainerMenuTracker : IDisposable
     // the screen has closed, so line-mode input should resume.
     public event Action? InputMenuExited;
 
-    // schedule runs the answer ticks (DispatcherTicks.Once live). Every member is
-    // called on the UI thread: MainWindowViewModel posts ObserveOutbound there for
-    // a send made off it.
+    // schedule runs the cap and late-form ticks (DispatcherTicks.Once live). Every
+    // member is called on the UI thread: MainWindowViewModel posts ObserveOutbound
+    // there for a send made off it.
     public TrainerMenuTracker(MessageRouter router, PartyState party, LogService? log = null, Func<DateTime>? now = null,
                               Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
@@ -224,6 +224,12 @@ public sealed class TrainerMenuTracker : IDisposable
         _markerSub = router.Subscribe(KnownPatterns.MenuTrainerStatsMarker, OnMenuMarker);
         _promptSub = router.Subscribe(KnownPatterns.StatusLine,             OnPrompt);
         _roomSub   = router.Subscribe(KnownPatterns.RoomExits,              OnRoomDisplay);
+        _refusalSubs = new[]
+        {
+            router.Subscribe(KnownPatterns.TrainStatsAltered,    OnRefusal),
+            router.Subscribe(KnownPatterns.TrainStatsNotHere,    OnRefusal),
+            router.Subscribe(KnownPatterns.TrainStatsTournament, OnRefusal),
+        };
         router.LineDispatched += OnLineDispatched;
         router.ReadEnded += OnReadEnded;
     }
@@ -235,9 +241,11 @@ public sealed class TrainerMenuTracker : IDisposable
         _markerSub.Dispose();
         _promptSub.Dispose();
         _roomSub.Dispose();
+        foreach (IDisposable sub in _refusalSubs) sub.Dispose();
         _router.LineDispatched -= OnLineDispatched;
         _router.ReadEnded -= OnReadEnded;
-        _answerTick?.Dispose();
+        _capTick?.Dispose();
+        _lateTick?.Dispose();
     }
 
     // Called by the wire-send path so we can spot the user's own outbound
@@ -264,14 +272,13 @@ public sealed class TrainerMenuTracker : IDisposable
             // A form already drawn stays drawn: a second `train stats` goes into it.
             if (_answer != FormAnswer.Form)
             {
+                EndLateFormWait();
                 _answer = FormAnswer.Pending;
                 _trainStatsSentAt = _now();
-                _signalSinceSend = false;
-                _signalPastWindow = false;
-                _retakeUntil = null;
                 _clearsAtSend = ScreenClears?.Invoke() ?? 0;
                 _leftoverAtSend = TrainerScreenIn(ReadScreen?.Invoke()) is not null;
-                ArmAnswerTick(ExpectingMenuWindow);
+                _capTick?.Dispose();
+                _capTick = _schedule(HoldCap, OnHoldCap);
             }
             if (!_inputMenuActive)
             {
@@ -315,14 +322,15 @@ public sealed class TrainerMenuTracker : IDisposable
     {
         // Two confirmation paths:
         //  1. In-game `train stats` / `train` — ObserveOutbound armed a
-        //     short window and this marker landed inside it, or the keyboard was
-        //     let go on a guess and may still be taken back.
+        //     short window and this marker landed inside it.
         //  2. Initial character creation — the training screen is reached
         //     from the class/race/alignment flow with no outbound `train
         //     stats`, so the gate never armed. The char-creation training
         //     row carries the "Character Creation" box title next to the
         //     "Point Cost Chart" panel; a line bearing both phrases is the
         //     full-screen menu, not chat noise, so it stands in for the gate.
+        // Whether the form answering `train stats` is up is the screen's to say
+        // (OnReadEnded), not this line's.
         bool gateArmed = false;
         if (_expectingMenuSince is { } armedAt)
         {
@@ -332,17 +340,9 @@ public sealed class TrainerMenuTracker : IDisposable
                 _expectingMenuSince = null; // window lapsed — disarm
         }
 
-        TrainStatsScreen.Kind? kind = TrainStatsScreen.Recognise(match.Text);
-        bool characterCreation = kind == TrainStatsScreen.Kind.CharCreationBox;
+        bool characterCreation = TrainStatsScreen.Recognise(match.Text) == TrainStatsScreen.Kind.CharCreationBox;
 
-        if (MayTakeBack())
-        {
-            TakeBack($"its marker row was read, {kind}");
-            gateArmed = true;
-        }
         if (!gateArmed && !characterCreation) return;
-        if (_inputMenuActive && _answer is FormAnswer.Pending or FormAnswer.Echoed)
-            MarkFormShown($"its marker row was read, {kind}");
         if (_inMenu) return;
         _inMenu = true;
         _rosterSnapshot = _party.Members
@@ -358,10 +358,10 @@ public sealed class TrainerMenuTracker : IDisposable
     private void OnPrompt(MatchResult _)
     {
         // Input-mode teardown runs independently of the marker-confirmed party
-        // flow below. Prompts up to and including the command's own
-        // `[HP=...]:train stats` echo are set aside; the next one is the bare
-        // prompt that returns when the user leaves the stat box (or the game's
-        // refusal ends with), so line-mode resumes.
+        // flow below. Prompts before the trainer screen, the command's own
+        // `[HP=...]:train stats` echo among them, are held; the next one after the
+        // form is the bare prompt that returns when the user leaves the stat box,
+        // so line-mode resumes.
         //
         // BOTH keyboard-owning flags are cleared BEFORE firing any exit event.
         // InputMenuExited drives the auto-train loop-resume walk synchronously, and
@@ -370,12 +370,7 @@ public sealed class TrainerMenuTracker : IDisposable
         // InputMenuExited fired, the gate would stay held and silently drop the
         // resume's first move byte with no retry — the walker draws the route back
         // but never steps (report paradigm-20260813-063517).
-        if (_inputMenuActive && SetAsideBeforeAnswer("A prompt")) return;
-        if (_inputMenuActive && _answer == FormAnswer.Echoed)
-        {
-            LetGoOnAGuess("a prompt after the echo of `train stats`, before any trainer screen");
-            return;
-        }
+        if (HeldForTheAnswer("A prompt")) return;
 
         bool fireInputExited = _inputMenuActive;
         _inputMenuActive = false;
@@ -415,168 +410,122 @@ public sealed class TrainerMenuTracker : IDisposable
     private void OnRoomDisplay(MatchResult _)
     {
         if (!MenuOwnsKeyboard) return;
-        if (SetAsideBeforeAnswer("A room display")) return;
-        if (_inputMenuActive && _answer == FormAnswer.Echoed)
-        {
-            LetGoOnAGuess("a room display after the echo of `train stats`, before any trainer screen");
-            return;
-        }
+        if (HeldForTheAnswer("A room display")) return;
         ForceExit("room display observed — back in the world, exit prompt missed");
     }
 
-    // The game's echo of `train stats` on its prompt row: everything from here on
-    // answers it. The prompt row is dispatched ahead of its echo, so OnPrompt has
-    // already set that prompt aside.
+    // The game's echo of `train stats` on its prompt row, logged for the record of
+    // how far the answer got.
     private void OnLineDispatched(LineExtractor.EmittedLine line)
     {
         if (_answer != FormAnswer.Pending || !_inputMenuActive || !_router.LineIsCommandEcho) return;
         if (!line.Text.Trim().Equals("train stats", StringComparison.OrdinalIgnoreCase)) return;
         _answer = FormAnswer.Echoed;
-        _log?.Info("TrainerMenu", "The game echoed `train stats` — its answer starts here.");
+        _log?.Info("TrainerMenu", "The game echoed `train stats` — waiting for the trainer screen.");
+    }
+
+    // The game's own word that the form isn't coming.
+    private void OnRefusal(MatchResult match)
+    {
+        if (!_inputMenuActive || _answer is not (FormAnswer.Pending or FormAnswer.Echoed)) return;
+        ForceExit($"the game refused `train stats`: \"{match.Text.Trim()}\"");
     }
 
     private void OnReadEnded()
     {
-        bool signal = _signalPastWindow;
-        _signalPastWindow = false;
-        if (MayTakeBack())
+        if (_inputMenuActive && _answer is FormAnswer.Pending or FormAnswer.Echoed)
         {
-            if (FreshTrainerScreen() is { } kind) TakeBack($"it is on the screen, {kind}");
-            return;
+            if (FreshTrainerScreen() is { } shown) MarkFormShown(shown);
         }
+        else if (_awaitingLateForm && !_inputMenuActive && FreshTrainerScreen() is { } late)
+        {
+            TakeBack(late);
+        }
+    }
+
+    private void OnHoldCap()
+    {
+        _capTick = null;
         if (!_inputMenuActive || _answer is not (FormAnswer.Pending or FormAnswer.Echoed)) return;
         if (FreshTrainerScreen() is { } shown)
         {
-            MarkFormShown($"it is on the screen, {shown}");
+            MarkFormShown(shown);
             return;
         }
-        if (_answer == FormAnswer.Echoed && CursorAtGamePrompt?.Invoke() == true)
-            LetGoOnAGuess("the game's prompt after the echo of `train stats`, and no trainer screen");
-        else if (signal)
-            LetGoOnAGuess($"no answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s, "
-                          + "a prompt or room display since, and no trainer screen");
+        _log?.Warn("TrainerMenu",
+            $"No trainer screen {HoldCap.TotalSeconds:0} s after `train stats` ({_answer}) — letting the keyboard go; "
+            + $"one within {LateFormWindow.TotalSeconds:0} s more takes it back.");
+        // Set ahead of the release, which an AutoTrainManager pass reads from.
+        _awaitingLateForm = true;
+        _lateTick = _schedule(LateFormWindow, OnLateFormWindowOut);
+        Release("no trainer screen within the hold cap");
     }
 
-    private void ArmAnswerTick(TimeSpan after)
+    private void OnLateFormWindowOut()
     {
-        _answerTick?.Dispose();
-        _answerTick = _schedule(after, OnAnswerTick);
+        _lateTick = null;
+        if (!_awaitingLateForm) return;
+        _awaitingLateForm = false;
+        _log?.Info("TrainerMenu", "No trainer screen came after `train stats` — given up on it.");
+        LateFormWindowClosed?.Invoke();
     }
 
-    // The answer no line has settled: a trainer screen drawn since the command is
-    // the form; the game's prompt on the cursor's row, once something has come
-    // since the command, is the game back at its prompt. Neither, the hold waits on
-    // to AnswerWindow, and then lets go.
-    private void OnAnswerTick()
+    private void EndLateFormWait()
     {
-        _answerTick = null;
-        if (!_inputMenuActive || _answer is not (FormAnswer.Pending or FormAnswer.Echoed)) return;
-        if (FreshTrainerScreen() is { } shown)
-        {
-            MarkFormShown($"it is on the screen, {shown}");
-            return;
-        }
-        TimeSpan elapsed = _now() - _trainStatsSentAt;
-        if ((_signalSinceSend || _answer == FormAnswer.Echoed) && CursorAtGamePrompt?.Invoke() == true)
-        {
-            LetGoOnAGuess($"no trainer screen {elapsed.TotalSeconds:0} s after `train stats`, and the game's prompt is back");
-            return;
-        }
-        if (elapsed >= AnswerWindow)
-        {
-            LetGoOnAGuess($"no answer to `train stats` read in {AnswerWindow.TotalSeconds:0} s");
-            return;
-        }
-        ArmAnswerTick(AnswerWindow - elapsed);
+        _lateTick?.Dispose();
+        _lateTick = null;
+        _awaitingLateForm = false;
     }
 
-    // The kind of trainer screen in the screen text: any the game is known to draw,
-    // whatever the realm, or a form that reads with no panel seen.
+    // The trainer screen came after the cap let the keyboard go: it owns the
+    // keyboard again, and the pass that sent `train stats` fills it.
+    private void TakeBack(string kind)
+    {
+        EndLateFormWait();
+        _inputMenuActive = true;
+        _answer = FormAnswer.Echoed;
+        _log?.Warn("TrainerMenu", $"The trainer screen turned up after the keyboard was let go ({kind}) — taking it back.");
+        InputMenuEntered?.Invoke();
+        if (_inputMenuActive && _answer == FormAnswer.Echoed) MarkFormShown(kind);
+    }
+
+    // The kind of trainer screen in the screen text: a kind the game is known to
+    // draw, titled (the panel alone could be someone's chat), or a form that reads.
     private static string? TrainerScreenIn(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;
-        if (TrainStatsScreen.Recognise(text) is { } kind) return kind.ToString();
-        return TrainStatsScreen.TryRead(text) is not null ? "a form with no panel" : null;
+        if (TrainStatsScreen.Recognise(text) is { } kind && kind != TrainStatsScreen.Kind.PanelOnly) return kind.ToString();
+        return TrainStatsScreen.TryRead(text) is not null ? "a form that reads" : null;
     }
 
-    // A trainer screen on a screen drawn since the last `train stats`; one left
-    // from before (the `Char. Creation` box lingers) isn't the answer.
+    // A trainer screen on a screen drawn since the last `train stats`.
     private string? FreshTrainerScreen() =>
         ScreenDrawnSinceTrainStats ? TrainerScreenIn(ReadScreen?.Invoke()) : null;
 
-    private void MarkFormShown(string how)
+    private void MarkFormShown(string kind)
     {
         _answer = FormAnswer.Form;
-        _answerTick?.Dispose();
-        _answerTick = null;
-        _log?.Info("TrainerMenu", $"The trainer screen is up ({how}) — it owns the keyboard until the game's prompt returns.");
+        _capTick?.Dispose();
+        _capTick = null;
+        _log?.Info("TrainerMenu", $"The trainer screen is up ({kind}) — it owns the keyboard until the game's prompt returns.");
         FormDrawn?.Invoke();
     }
 
     private void ClearAnswer()
     {
         _answer = FormAnswer.None;
-        _signalPastWindow = false;
-        _answerTick?.Dispose();
-        _answerTick = null;
+        _capTick?.Dispose();
+        _capTick = null;
     }
 
-    private bool PastWindow() => _now() - _trainStatsSentAt > ExpectingMenuWindow;
-
-    // True when a "back in the world" signal arrived before the game's answer to
-    // `train stats`: it answers an earlier command or a party line, so the keyboard
-    // stays with the form. Past ExpectingMenuWindow with no answer read (a late
-    // echo, or a statline the line splitter can't read), the signal is left to the
-    // read's end: the wire's prompt scan runs ahead of the read's lines, so the
-    // late echo's own statline is seen here before the echo is.
-    private bool SetAsideBeforeAnswer(string what)
+    // While `train stats` waits for its answer nothing but the trainer screen, the
+    // game's refusal or the cap ends the hold; this signal is logged and held.
+    private bool HeldForTheAnswer(string what)
     {
-        if (_answer != FormAnswer.Pending) return false;
-        _signalSinceSend = true;
-        if (PastWindow())
-        {
-            _signalPastWindow = true;
-            _log?.Info("TrainerMenu",
-                $"{what} with no answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s — decided when this read ends.");
-            return true;
-        }
+        if (!_inputMenuActive || _answer is not (FormAnswer.Pending or FormAnswer.Echoed)) return false;
         _log?.Info("TrainerMenu",
-            $"{what} came before the game's answer to `train stats` (it answers something sent earlier) — the keyboard stays with the trainer screen.");
+            $"{what} came before the trainer screen ({_answer}) — the keyboard stays held for the answer to `train stats`.");
         return true;
-    }
-
-    // Let the keyboard go without the game's word for it: no form was read, and
-    // neither a refusal nor the user leaving the form closed it. Whatever the game
-    // interleaves (a party line between the echo and the form, an echo slower than
-    // the window), a form that turns up before AnswerWindow is out takes the
-    // keyboard back. The marker-row window is kept for the same reason.
-    private void LetGoOnAGuess(string reason)
-    {
-        DateTime? expecting = _expectingMenuSince;
-        DateTime until = _trainStatsSentAt + AnswerWindow;
-        Release(reason);
-        _expectingMenuSince = expecting;
-        if (_now() < until) _retakeUntil = until;
-    }
-
-    private bool MayTakeBack()
-    {
-        if (_retakeUntil is not { } until || _inputMenuActive) return false;
-        if (_now() < until) return true;
-        _retakeUntil = null;
-        return false;
-    }
-
-    // The form turned up after the keyboard was let go: it owns the keyboard
-    // again, and anything typed into it from here is the user's or the plan's.
-    private void TakeBack(string how)
-    {
-        _retakeUntil = null;
-        _inputMenuActive = true;
-        _answer = FormAnswer.Echoed;
-        _log?.Warn("TrainerMenu", $"The trainer screen turned up after the keyboard was let go ({how}) — taking it back.");
-        InputMenuEntered?.Invoke();
-        if (_inputMenuActive && _answer == FormAnswer.Echoed) MarkFormShown(how);
     }
 
     // Fed by AppServices for every live statline WirePromptScanner sees off the
@@ -588,40 +537,36 @@ public sealed class TrainerMenuTracker : IDisposable
     // paradigm-20260906-090057). This releases line-mode on the exit prompt the
     // instant the form closes, even in a dark room with no "Obvious exits" line.
     // Scoped to the char-mode (`train stats`) state; the marker-confirmed party
-    // flow stays on the committed OnPrompt. Prompts before the game's answer are
-    // set aside, the command's own echo statline among them: the wire is scanned
-    // ahead of the lines of the same read, so the echo's prompt is seen here before
-    // its echo is read (the form emits no statline, so a prompt after the answer is
-    // the exit). ForceExit tears both flags down before firing, preserving the
-    // send-gate ordering the loop-resume depends on.
+    // flow stays on the committed OnPrompt. Prompts before the trainer screen are
+    // held, the command's own echo statline among them (the form emits no
+    // statline, so a prompt after it is the exit). ForceExit tears both flags down
+    // before firing, preserving the send-gate ordering the loop-resume depends on.
     public void NotifyLivePromptObserved()
     {
         if (!_inputMenuActive) return;
-        if (SetAsideBeforeAnswer("An in-place prompt")) return;
-        if (_answer == FormAnswer.Echoed)
-        {
-            LetGoOnAGuess("an in-place prompt after the echo of `train stats`, before any trainer screen");
-            return;
-        }
+        if (HeldForTheAnswer("An in-place prompt")) return;
         ForceExit("in-place statline prompt observed — back in the world");
     }
 
     // Force the keyboard release on the caller's word: the user left the form, the
-    // game refused `train stats`, the link dropped, the profile changed, or the
-    // AutoTrainManager CP-replay ExitGrace fallback found the exit prompt missed.
-    // No form is taken back after it. Mirrors OnPrompt's teardown: clear BOTH
-    // keyboard-owning flags BEFORE firing the exit events, so the event-driven
-    // TrainerScreenGate re-evaluates with MenuOwnsKeyboard=false and releases the
-    // engine send-gate before the loop-resume those events drive sends its first
-    // move. Without this, a missed exit prompt leaves the gate held and the resumed
-    // loop's first move byte is silently dropped — the walker draws the route but
-    // stands idle (report paradigm-20260815-072308: 10 minutes idle after CP
-    // allocation). No-op when nothing is held.
+    // game refused `train stats`, the link dropped or came up again, the profile
+    // changed, or the AutoTrainManager CP-replay ExitGrace fallback found the exit
+    // prompt missed. A late trainer screen no longer takes the keyboard back after
+    // it. Mirrors OnPrompt's teardown: clear BOTH keyboard-owning flags BEFORE
+    // firing the exit events, so the event-driven TrainerScreenGate re-evaluates
+    // with MenuOwnsKeyboard=false and releases the engine send-gate before the
+    // loop-resume those events drive sends its first move. Without this, a missed
+    // exit prompt leaves the gate held and the resumed loop's first move byte is
+    // silently dropped — the walker draws the route but stands idle (report
+    // paradigm-20260815-072308: 10 minutes idle after CP allocation). No-op when
+    // nothing is held.
     public void ForceExit(string reason)
     {
-        _retakeUntil = null;
+        bool lateWaitCut = _awaitingLateForm;
+        EndLateFormWait();
         _expectingMenuSince = null;
         Release(reason);
+        if (lateWaitCut) LateFormWindowClosed?.Invoke();
     }
 
     private void Release(string reason)

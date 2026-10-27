@@ -6,9 +6,11 @@
 > - Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
 > - Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
 > - Each kind of trainer screen is recognised by what it shows, whatever the realm, the cursor-drawn box included
-> - A trainer screen that turns up after the keyboard was let go takes it back; no answer holds it past a minute
+> - After `train stats` the keyboard is held up to 10 s for the trainer screen; Stock's refusals let it go at once
+> - A trainer screen that turns up just after that is still taken back and filled
 > - A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
-> - A dropped link or a profile change lets go of a trainer screen's hold
+> - A dropped link, a reconnect or a profile change lets go of a trainer screen's hold
+> - Telepaths queued just before the trainer screen wait until it closes
 > - Bug reports show how far the game's answer to `train stats` got
 <!-- current-version:end -->
 

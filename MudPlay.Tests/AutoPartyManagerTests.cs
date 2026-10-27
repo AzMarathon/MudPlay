@@ -53,6 +53,15 @@ public sealed class AutoPartyManagerTests
         router.Dispatch(line);
     }
 
+    // The game's answer to `train stats`: its echo, then the Character Editor, on
+    // the client's terminal; the tracker reads the screen from it.
+    private static void TheGameDrawsTheForm(TrainerMenuTracker tracker, MessageRouter router)
+    {
+        ServerFeed game = new(router);
+        tracker.ReadScreen = () => TrainStatsWire.ScreenText(game.Emulator.Screen);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+    }
+
     private static void SeedPlayer(PlayerDatabase db, string name, bool inviteOnSeen = false, bool joinOnInvited = false)
     {
         db.RecordObservation(name, null, null, null, null, null, null, Now);
@@ -1441,7 +1450,7 @@ public sealed class AutoPartyManagerTests
         // "Raijin was in the party before we visited the trainer".
         party.Members.Add(new PartyMember { Name = "Raijin WuzHere" });
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "    Point Cost Chart");
+        TheGameDrawsTheForm(tracker, router);
         Assert.True(tracker.IsInTrainerMenu);
         Assert.Contains("Raijin WuzHere", tracker.RosterAtMenuEntry);
 
@@ -1475,7 +1484,7 @@ public sealed class AutoPartyManagerTests
 
         party.Members.Add(new PartyMember { Name = "Raijin WuzHere" });
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "    Point Cost Chart");
+        TheGameDrawsTheForm(tracker, router);
         _sent.Clear();
 
         Dispatch(router, "[HP=33]:");
@@ -1504,7 +1513,7 @@ public sealed class AutoPartyManagerTests
 
         party.Members.Add(new PartyMember { Name = "Raijin WuzHere" });
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "    Point Cost Chart");
+        TheGameDrawsTheForm(tracker, router);
         Assert.Contains("Raijin WuzHere", tracker.RosterAtMenuEntry);
 
         // Follower view dissolved → row is now a bare [Invited] placeholder.
@@ -1540,7 +1549,7 @@ public sealed class AutoPartyManagerTests
         // Roster at menu entry holds our leader.
         party.Members.Add(new PartyMember { Name = "MudPlay" });
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "    Point Cost Chart");
+        TheGameDrawsTheForm(tracker, router);
         Assert.Contains("MudPlay", tracker.RosterAtMenuEntry);
 
         // Follower-side view dissolved during the trip.

@@ -858,11 +858,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SentCommands.TypedAtGamePrompt =
             line => SentCommandTrail.RowIsGamePrompt(
                 CursorRowText(), line, AppServices.Current.CurrentStatlinePromptRegex);
-        // The same reading of the cursor's row tells the trainer tracker that the
-        // game answered `train stats` with its bare prompt rather than the form.
-        AppServices.Current.TrainerMenu.CursorAtGamePrompt =
-            () => SentCommandTrail.RowIsGamePrompt(
-                CursorRowText(), string.Empty, AppServices.Current.CurrentStatlinePromptRegex);
+        // The trainer tracker tells the form answering `train stats` by what the
+        // screen shows, and a screen drawn since the command by its clears.
         AppServices.Current.TrainerMenu.ReadScreen = BuildVisibleScreenText;
         AppServices.Current.TrainerMenu.ScreenClears = () => Emulator.ScreenClears;
 
@@ -3494,6 +3491,8 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 if (ShowSplash) ShowSplash = false;   // session started — dismiss the splash
                 IsConnected = true;
+                // A new session starts at the login, never inside a trainer screen.
+                AppServices.Current.TrainerMenu.ForceExit("connected");
                 // Fresh session — drop any cleanup-watcher state carried
                 // over and clear any pending auto-reconnect schedule.
                 // Do NOT zero _reactiveReconnectCount here: a BBS in
@@ -3596,8 +3595,14 @@ public partial class MainWindowViewModel : ObservableObject
                 // Leaving the game takes us off every member list we were still on.
                 if (wasConnected) AppServices.Current.Party.NoteLinkDropped();
                 // A trainer screen open when the link dropped is gone with the link:
-                // its hold would block the menu entry and the re-entry.
-                AppServices.Current.TrainerMenu.ForceExit("link dropped");
+                // its hold would block the menu entry and the re-entry. Guarded like
+                // the hangup note above: its exit events run subscribers here and now.
+                try { AppServices.Current.TrainerMenu.ForceExit("link dropped"); }
+                catch (Exception ex)
+                {
+                    AppServices.Current.Log.Warn("TrainerMenu",
+                        $"Couldn't let go of the trainer screen's hold on the drop ({ex.GetType().Name}: {ex.Message}).");
+                }
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
@@ -3976,12 +3981,16 @@ public partial class MainWindowViewModel : ObservableObject
         // accepting the "Point Cost Chart" marker as menu confirmation.
         // It reads the screen and arms a dispatcher timer, so it runs on the UI
         // thread; a send made off it is noted there, still ahead of any answer
-        // (the answer's read is posted after it).
-        if (Dispatcher.UIThread.CheckAccess()) AppServices.Current.TrainerMenu.ObserveOutbound(data);
-        else
+        // (the answer's read is posted after it). Nothing sent with no link up
+        // reaches a game to answer it.
+        if (IsConnected)
         {
-            byte[] sent = data.ToArray();
-            Dispatcher.UIThread.Post(() => AppServices.Current.TrainerMenu.ObserveOutbound(sent));
+            if (Dispatcher.UIThread.CheckAccess()) AppServices.Current.TrainerMenu.ObserveOutbound(data);
+            else
+            {
+                byte[] sent = data.ToArray();
+                Dispatcher.UIThread.Post(() => AppServices.Current.TrainerMenu.ObserveOutbound(sent));
+            }
         }
         // Suicide-password capture — during the AwaitingNewPassword
         // state, the next bytes the user types ARE the password. We

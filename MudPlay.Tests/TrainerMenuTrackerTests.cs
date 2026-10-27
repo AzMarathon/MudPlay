@@ -46,8 +46,6 @@ public sealed class TrainerMenuTrackerTests
         scanner.PromptObserved += _ => tracker.NotifyLivePromptObserved();
         ServerFeed game = new(router, promptScanner: scanner);
         TerminalScreen screen = game.Emulator.Screen;
-        tracker.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
-            TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
         tracker.ReadScreen = () => TrainStatsWire.ScreenText(screen);
         tracker.ScreenClears = () => game.Emulator.ScreenClears;
         return (tracker, game);
@@ -207,17 +205,18 @@ public sealed class TrainerMenuTrackerTests
     [Fact]
     public void Menu_PromptArrives_FiresMenuExitedAndClears()
     {
-        var (tracker, router, _) = Setup();
+        var (tracker, game) = Wired();
         bool fired = false;
         tracker.MenuExited += () => fired = true;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "    Point Cost Chart");
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.True(tracker.IsInTrainerMenu);
 
         // The trainer screen doesn't print game prompts; the next one
         // appears only after we exit.
-        Dispatch(router, "[HP=33]:");
+        game.Raw("\u001b[2J\u001b[H");
+        game.Prompt(TrainStatsWire.Statline);
 
         Assert.True(fired);
         Assert.False(tracker.IsInTrainerMenu);
@@ -253,9 +252,9 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
-    public void InputMenu_PromptsUpToTheEcho_AreNotTheExit_TheNextPromptIs()
+    public void InputMenu_PromptsBeforeTheForm_AreNotTheExit_TheNextPromptIs()
     {
-        // Prompts that come before the game's answer to `train stats`, its own
+        // Prompts that come before the trainer screen, the command's own
         // `[HP=...]:train stats` echo among them, aren't the form closing. The
         // committed prompt after the form is.
         var (tracker, game) = Wired();
@@ -315,7 +314,6 @@ public sealed class TrainerMenuTrackerTests
 
         game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
-        Assert.True(tracker.MenuOwnsKeyboard);
         Assert.True(tracker.FormShown);
     }
 
@@ -335,192 +333,156 @@ public sealed class TrainerMenuTrackerTests
         game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
 
         Assert.Equal(0, exited);
-        Assert.True(tracker.MenuOwnsKeyboard);
+        Assert.True(tracker.FormShown);
     }
 
-    // Not at a trainer: the game echoes `train stats`, refuses, and leaves its
-    // prompt waiting, all in one read. The wire's prompt scan saw that prompt
-    // before the echo was read, so the cursor's row is what says it.
+    // A slow game: the echo 6 s after `train stats`, a party line's prompt redraw
+    // between it and the form. Nothing but the form ends the hold.
     [Fact]
-    public void ARefusalAndItsPrompt_InTheEchosRead_ReleaseTheKeyboard()
-    {
-        var (tracker, game) = Wired();
-        int exited = 0;
-        tracker.InputMenuExited += () => exited++;
-
-        SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n" + TrainStatsWire.Prompt());
-
-        Assert.Equal(1, exited);
-        Assert.False(tracker.MenuOwnsKeyboard);
-    }
-
-    [Fact]
-    public void ARefusalWhosePromptComesInALaterRead_ReleasesTheKeyboard()
-    {
-        var (tracker, game) = Wired();
-        int exited = 0;
-        tracker.InputMenuExited += () => exited++;
-
-        SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n");
-        Assert.True(tracker.MenuOwnsKeyboard);   // echoed, refused, the prompt still to come
-        Assert.False(tracker.FormShown);
-        Assert.Equal(0, exited);
-
-        game.Raw(TrainStatsWire.Prompt());
-        Assert.Equal(1, exited);
-        Assert.False(tracker.MenuOwnsKeyboard);
-    }
-
-    // A statline the line splitter can't read leaves no echo to find. Once the
-    // window has passed with neither echo nor form, a prompt at the end of a read
-    // counts again.
-    [Fact]
-    public void NoAnswerReadWithinTheWindow_TheNextPromptReleases()
-    {
-        DateTime t = Now;
-        var (tracker, game) = Wired(() => t);
-        int exited = 0;
-        tracker.InputMenuExited += () => exited++;
-
-        SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Prompt());
-        Assert.Equal(0, exited);
-
-        t = t.AddSeconds(6);
-        game.Raw(TrainStatsWire.Prompt());
-        Assert.Equal(1, exited);
-    }
-
-    // A slow game: an Enter's room redraw, ending on the prompt, came after `train
-    // stats`, and the echo only 6 s after the command. The tick at the window
-    // finds the prompt back and lets the keyboard go; the form, when it comes,
-    // takes it back.
-    [Fact]
-    public void AnEchoPastTheWindow_TheFormTakesTheKeyboardBack()
+    public void ASlowEchoAndAPromptBeforeTheForm_KeepTheHoldUntilTheForm()
     {
         DateTime t = Now;
         ManualTimers timers = new();
         var (tracker, game) = Wired(() => t, timers);
-        int entered = 0, exited = 0;
-        tracker.InputMenuEntered += () => entered++;
+        int exited = 0;
         tracker.InputMenuExited += () => exited++;
 
         SendTrainStats(tracker);
         game.Raw(TrainStatsWire.RoomRedrawn());
-        t = t.AddSeconds(5);
-        timers.Advance(TimeSpan.FromSeconds(5));
-        Assert.Equal(1, exited);
-        Assert.False(tracker.MenuOwnsKeyboard);
+        t = t.AddSeconds(6);
+        timers.Advance(TimeSpan.FromSeconds(6));
+        game.Raw(TrainStatsWire.Echo("train stats"));
+        game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!"));
+        Assert.Equal(0, exited);
+        Assert.True(tracker.MenuOwnsKeyboard);
 
         t = t.AddSeconds(1);
-        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
-        Assert.True(tracker.MenuOwnsKeyboard);
+        timers.Advance(TimeSpan.FromSeconds(1));
+        game.Raw(TrainStatsWire.Form(133, 26));
         Assert.True(tracker.FormShown);
-        Assert.Equal(2, entered);
+        Assert.Equal(0, exited);
 
-        game.Raw(TrainStatsWire.Saved());
-        Assert.Equal(2, exited);
-    }
-
-    // The game's prompt already on the cursor's row when `train stats` went out is
-    // no answer: with nothing come since, the tick at the window keeps the hold,
-    // and only the answer window's end lets it go.
-    [Fact]
-    public void APromptAlreadyWaiting_IsNotTheAnswer()
-    {
-        DateTime t = Now;
-        ManualTimers timers = new();
-        var (tracker, game) = Wired(() => t, timers);
-        game.Raw(TrainStatsWire.Prompt());
-
-        SendTrainStats(tracker);
-        t = t.AddSeconds(5);
-        timers.Advance(TimeSpan.FromSeconds(5));
+        timers.Advance(TimeSpan.FromSeconds(60));   // the cap was disarmed by the form
         Assert.True(tracker.MenuOwnsKeyboard);
-
-        t = Now + tracker.AnswerWindow;
-        timers.Advance(tracker.AnswerWindow);
-        Assert.False(tracker.MenuOwnsKeyboard);
     }
 
-    // The `Char. Creation` box lingers after the form it belonged to closed. Left
-    // on the screen when `train stats` goes out, it isn't the answer; the box the
-    // game draws afresh after a clear screen is.
-    [Fact]
-    public void ABoxLeftOnTheScreen_IsNotTheAnswer_ABoxDrawnSinceIs()
-    {
-        ManualTimers timers = new();
-        var (tracker, game) = Wired(timers: timers);
-        game.Raw(TrainStatsWire.CreationBox(140, 0));
-
-        SendTrainStats(tracker);
-        timers.Advance(tracker.ExpectingMenuWindow);
-        Assert.False(tracker.ScreenDrawnSinceTrainStats);
-        Assert.False(tracker.FormShown);
-        Assert.True(tracker.MenuOwnsKeyboard);
-
-        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.CreationBox(133, 26));
-        Assert.True(tracker.ScreenDrawnSinceTrainStats);
-        Assert.True(tracker.FormShown);
-    }
-
-    // A box left on the screen keeps the hold no longer than the answer window.
-    [Fact]
-    public void ABoxLeftOnTheScreen_DoesNotHoldTheKeyboardForGood()
-    {
-        DateTime t = Now;
-        ManualTimers timers = new();
-        var (tracker, game) = Wired(() => t, timers);
-        game.Raw(TrainStatsWire.CreationBox(140, 0));
-
-        SendTrainStats(tracker);
-        t = Now + tracker.AnswerWindow;
-        timers.Advance(tracker.AnswerWindow);
-
-        Assert.False(tracker.MenuOwnsKeyboard);
-    }
-
-    // A party line between the echo and the form redraws the prompt ahead of it;
-    // that prompt lets the keyboard go, and the form drawn next takes it back.
-    [Fact]
-    public void APartyLineBetweenTheEchoAndTheForm_TheFormTakesTheKeyboardBack()
+    // Stock's refusals (`wccmmud.dll` 1.11p, Stock-sourced text): the game's own
+    // word that no form is coming lets the keyboard go at once.
+    [Theory]
+    [InlineData("You may not train your stats here!")]
+    [InlineData("You may not do any training while in tournament mode!")]
+    [InlineData("Your stats are unnaturally altered!  You may not train stats now.")]
+    public void AStockRefusal_ReleasesAtOnce(string refusal)
     {
         var (tracker, game) = Wired();
-        int entered = 0, exited = 0;
-        tracker.InputMenuEntered += () => entered++;
+        int exited = 0;
         tracker.InputMenuExited += () => exited++;
 
         SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats"));
-        game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!"));
-        Assert.Equal(1, exited);
+        game.Raw(TrainStatsWire.Echo("train stats") + refusal + "\r\n" + TrainStatsWire.Prompt());
 
-        game.Raw(TrainStatsWire.Form(133, 26));
-        Assert.True(tracker.FormShown);
-        Assert.True(tracker.MenuOwnsKeyboard);
-        Assert.Equal(2, entered);
+        Assert.Equal(1, exited);
+        Assert.False(tracker.MenuOwnsKeyboard);
+        Assert.False(tracker.AwaitingLateForm);
     }
 
-    // The link dropping (or the profile changing) ends any taking back: a form
-    // after it belongs to nothing this tracker sent.
+    // A refusal the client doesn't know (Paradigm's wording isn't recorded): the
+    // hold lasts to the cap, then lets go; the late-form window then closes.
+    [Fact]
+    public void AnUnknownRefusal_ReleasesAtTheCap()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+        int exited = 0, closed = 0;
+        tracker.InputMenuExited += () => exited++;
+        tracker.LateFormWindowClosed += () => closed++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + "You can't train that here.\r\n" + TrainStatsWire.Prompt());
+        timers.Advance(tracker.HoldCap - TimeSpan.FromMilliseconds(1));
+        Assert.Equal(0, exited);
+
+        timers.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(1, exited);
+        Assert.True(tracker.AwaitingLateForm);
+
+        timers.Advance(tracker.LateFormWindow);
+        Assert.False(tracker.AwaitingLateForm);
+        Assert.Equal(1, closed);
+    }
+
+    // The form after the cap, inside the late-form window, takes the keyboard back.
+    [Fact]
+    public void AFormAfterTheCap_TakesTheKeyboardBack()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+        int entered = 0;
+        tracker.InputMenuEntered += () => entered++;
+
+        SendTrainStats(tracker);
+        timers.Advance(tracker.HoldCap);
+        Assert.False(tracker.MenuOwnsKeyboard);
+
+        timers.Advance(TimeSpan.FromSeconds(2));
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        Assert.True(tracker.FormShown);
+        Assert.Equal(2, entered);
+        Assert.False(tracker.AwaitingLateForm);
+    }
+
+    [Fact]
+    public void AFormAfterTheLateWindow_DoesNotTakeTheKeyboardBack()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+
+        SendTrainStats(tracker);
+        timers.Advance(tracker.HoldCap + tracker.LateFormWindow);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    // A gossip naming the panel is someone's chat, not the form: it neither marks
+    // the form up nor takes a let-go keyboard back.
+    [Fact]
+    public void AGossipNamingThePanel_IsNotTheForm()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+
+        SendTrainStats(tracker);
+        game.Line("Foo gossips: did you see the Point Cost Chart");
+        Assert.False(tracker.FormShown);
+
+        timers.Advance(tracker.HoldCap);
+        game.Line("Foo gossips: the Point Cost Chart again");
+        Assert.False(tracker.MenuOwnsKeyboard);
+        Assert.True(tracker.AwaitingLateForm);
+    }
+
+    // The link dropping (or coming up again, or the profile changing) ends the
+    // late-form wait: a form after it belongs to nothing this tracker sent.
     [Fact]
     public void AfterTheLinkDrops_NoFormTakesTheKeyboardBack()
     {
-        var (tracker, game) = Wired();
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+        int closed = 0;
+        tracker.LateFormWindowClosed += () => closed++;
 
         SendTrainStats(tracker);
-        game.Raw(TrainStatsWire.Echo("train stats"));
-        game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!"));
+        timers.Advance(tracker.HoldCap);
         tracker.ForceExit("link dropped");
+        Assert.Equal(1, closed);
 
-        game.Raw(TrainStatsWire.Form(133, 26));
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.False(tracker.MenuOwnsKeyboard);
     }
 
     // The `Char. Creation` box, drawn with cursor positioning and its title row
-    // never completing as a line: after the echo, the box on the screen is the form.
+    // never completing as a line: the box on the screen is the form.
     [Fact]
     public void ACursorPositionedBox_WithNoMarkerLine_IsTheForm()
     {
@@ -536,39 +498,54 @@ public sealed class TrainerMenuTrackerTests
         Assert.Equal(0, exited);
     }
 
-    // An echo the line splitter doesn't attribute (here on a row of its own), the
-    // refusal and its prompt, all ahead of the window: the window's tick finds the
-    // game's prompt on the cursor's row and lets the keyboard go.
+    // The `Char. Creation` box lingers after the form it belonged to closed. Left
+    // on the screen when `train stats` goes out, it isn't the answer; the box the
+    // game draws afresh after a clear screen is.
     [Fact]
-    public void AnUnreadEchoAndARefusal_AreDecidedWhenTheWindowIsUp()
+    public void ABoxLeftOnTheScreen_IsNotTheAnswer_ABoxDrawnSinceIs()
+    {
+        var (tracker, game) = Wired();
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Prompt());
+        Assert.False(tracker.ScreenDrawnSinceTrainStats);
+        Assert.False(tracker.FormShown);
+        Assert.Contains("left from before", tracker.Describe());
+
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.CreationBox(133, 26));
+        Assert.True(tracker.ScreenDrawnSinceTrainStats);
+        Assert.True(tracker.FormShown);
+    }
+
+    // A box left on the screen keeps the hold no longer than the cap.
+    [Fact]
+    public void ABoxLeftOnTheScreen_DoesNotHoldTheKeyboardPastTheCap()
     {
         ManualTimers timers = new();
         var (tracker, game) = Wired(timers: timers);
-        int exited = 0;
-        tracker.InputMenuExited += () => exited++;
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
 
         SendTrainStats(tracker);
-        game.Raw("train stats\r\n" + TrainStatsWire.StockNotATrainer + "\r\n" + TrainStatsWire.Prompt());
-        Assert.Equal(0, exited);
+        timers.Advance(tracker.HoldCap);
 
-        timers.Advance(tracker.ExpectingMenuWindow);
-        Assert.Equal(1, exited);
         Assert.False(tracker.MenuOwnsKeyboard);
     }
 
-    // The window's tick with the form drawn and no marker or echo read keeps it.
-    [Fact]
-    public void TheWindowsTick_WithTheFormOnTheScreen_KeepsTheKeyboard()
+    // Erasing from the top-left cell to the end (ESC[H ESC[J), and a full reset
+    // (ESC c), clear the whole screen as ESC[2J does: the box drawn after either is
+    // a fresh screen.
+    [Theory]
+    [InlineData("\u001b[H\u001b[J")]
+    [InlineData("\u001bc")]
+    public void OtherWholeScreenClears_MakeAFreshScreen(string clear)
     {
-        ManualTimers timers = new();
-        var (tracker, game) = Wired(timers: timers);
+        var (tracker, game) = Wired();
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
 
         SendTrainStats(tracker);
-        game.Raw("train stats\r\n" + TrainStatsWire.CreationBox(133, 26));
-        timers.Advance(tracker.ExpectingMenuWindow);
-
-        Assert.True(tracker.FormShown);
-        Assert.True(tracker.MenuOwnsKeyboard);
+        game.Raw(clear);
+        Assert.True(tracker.ScreenDrawnSinceTrainStats);
     }
 
     [Fact]

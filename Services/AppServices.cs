@@ -3406,7 +3406,7 @@ public sealed class AppServices
         // combat, casting, auto-get, chat replies, the lot). The user's manual
         // input and the auto-trainer's CP replay both ride the raw SendUserInput,
         // so they pierce the hold and remain the only two things that can type.
-        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log);
+        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log, Telepaths);
         // Entering the train-stats screen breaks up our party server-side; a
         // FOLLOWER must clear its own stale "following <leader>" state now so the
         // leader's fresh re-invite on return is auto-accepted, not rejected as

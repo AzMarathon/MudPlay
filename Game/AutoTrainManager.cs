@@ -22,15 +22,15 @@ namespace MudPlay.Game;
 //
 // Menu-open detection is realm-independent and screen-kind-independent.
 // TrainerMenuTracker.FormDrawn fires once the form answering `train stats` is up
-// (its marker row read as a line, or a trainer screen drawn since the command on
-// the terminal), and the replay starts once the form reads off the screen, or at
-// most a second after FormDrawn when it doesn't (then from a trusted `stat`).
-// Nothing is typed on the input-menu signal alone: that is up from the moment
-// `train stats` goes out, whatever the game answers. If the keyboard was let go
-// before any form (InputMenuExited — we weren't at a trainer, or the tracker gave
-// up on an answer) the pass ends; a form that turns up after that takes the
-// keyboard back, and with Auto-train stats on the user's-own-form path applies the
-// plan. MenuExited is marker-driven, so InputMenuExited is also our exit signal.
+// (a trainer screen drawn since the command, on the terminal), and the replay
+// starts once the form reads off the screen, or at most a second after FormDrawn
+// when it doesn't (then from a trusted `stat`). Nothing is typed on the
+// input-menu signal alone: that is up from the moment `train stats` goes out,
+// whatever the game answers. The pass lasts as long as the tracker may still see
+// the form: the game's refusal ends it, and so does the tracker giving up after
+// its hold cap and late-form window (LateFormWindowClosed); a form that turns up
+// late is filled by the same pass, whatever started it. MenuExited is
+// marker-driven, so InputMenuExited is also our exit signal.
 //
 // What gets typed is decided with the form on screen. The form shows the trained
 // stats and the CP left, with no spell in them, so when it can be read the plan
@@ -85,8 +85,9 @@ public sealed class AutoTrainManager : IDisposable
 
     // Delay between keystrokes so the server's form redraw keeps pace.
     private const int KeystrokeDelayMs = 200;
-    // How long to wait for the trainer screen after sending `train stats`.
-    private static readonly TimeSpan MenuEntryTimeout = TimeSpan.FromSeconds(6);
+    // Past the tracker's own resolution (its hold cap and late-form window), how
+    // long before a pass still waiting is ended anyway.
+    private static readonly TimeSpan MenuEntryBackstop = TimeSpan.FromSeconds(5);
     // How long a form the tracker says is up gets to read off the screen, all six
     // stats and CP Left, before the replay starts without it. The marker row is read
     // as it is drawn, ahead of the stat rows.
@@ -154,7 +155,10 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.InputMenuEntered += OnManualTrainStatsEntered;
         _trainer.MenuExited += OnMenuExited;
         _trainer.InputMenuExited += OnInputMenuExited;
-        _refusalSub = router.Subscribe(KnownPatterns.TrainStatsAltered, OnStatsAlteredRefusal);
+        _trainer.LateFormWindowClosed += OnLateFormWindowClosed;
+        // Ahead of the tracker's own handler of the line, so the pass ends with this
+        // reason before the tracker's release would end it as "didn't open".
+        _refusalSub = router.Subscribe(KnownPatterns.TrainStatsAltered, OnStatsAlteredRefusal, tieBreak: 1);
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
@@ -309,9 +313,9 @@ public sealed class AutoTrainManager : IDisposable
 
     private async Task AwaitMenuTimeoutAsync(int session)
     {
-        await _delay(MenuEntryTimeout);
-        // The keyboard stays as the tracker has it: a slow game may still draw the
-        // form, and the tracker's answer tick lets go of a hold no form came for.
+        await _delay(_trainer.HoldCap + _trainer.LateFormWindow + MenuEntryBackstop);
+        // The tracker has resolved long before this (form, refusal, or its cap
+        // and late-form window); a pass still waiting is ended.
         if (_sessionId == session && _phase == Phase.AwaitingMenu)
             Abort("the trainer screen never opened", "Trainer screen never opened (not at a trainer?) — aborted.");
     }
@@ -504,10 +508,25 @@ public sealed class AutoTrainManager : IDisposable
     // after the replay, on realms where the marker-driven MenuExited never fires.
     private void OnInputMenuExited()
     {
-        if (_phase == Phase.AwaitingMenu)
-            Abort("the trainer screen didn't open", "Trainer screen didn't open (not at a trainer?) — aborted.");
-        else
+        if (_phase != Phase.AwaitingMenu)
+        {
             OnMenuExited();
+            return;
+        }
+        // Let go at the hold cap, not on the game's word: a late form is still this
+        // pass's to fill.
+        if (_trainer.AwaitingLateForm)
+        {
+            _log?.Info("AutoTrain", "No trainer screen yet; the keyboard is let go meanwhile — still waiting for it.");
+            return;
+        }
+        Abort("the trainer screen didn't open", "Trainer screen didn't open (not at a trainer?) — aborted.");
+    }
+
+    private void OnLateFormWindowClosed()
+    {
+        if (_phase == Phase.AwaitingMenu)
+            Abort("the trainer screen never opened", "Trainer screen never opened (not at a trainer?) — aborted.");
     }
 
     private void OnMenuExited()
@@ -765,6 +784,7 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.InputMenuEntered -= OnManualTrainStatsEntered;
         _trainer.MenuExited -= OnMenuExited;
         _trainer.InputMenuExited -= OnInputMenuExited;
+        _trainer.LateFormWindowClosed -= OnLateFormWindowClosed;
         _refusalSub.Dispose();
     }
 }
