@@ -144,8 +144,8 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { /* temp cleanup */ }
-        try { if (Directory.Exists(AppPaths.BbsFolder(_boardName))) Directory.Delete(AppPaths.BbsFolder(_boardName), recursive: true); }
-        catch (IOException) { /* best-effort cleanup of a scratch board */ }
+        try { new BbsProfileStore().Delete(_boardName); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort cleanup of a scratch board */ }
     }
 
     // The map is sure of the room, and the death lines are read there.

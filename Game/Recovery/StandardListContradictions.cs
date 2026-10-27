@@ -30,13 +30,15 @@ public sealed class StandardListContradictions
     private readonly Func<string?> _activeSet;
     private readonly Action<BbsProfile> _save;
     private readonly LogService? _log;
-    // The save failed, and it has been said.
-    private bool _saveFailed;
-    // A count the board's file couldn't take, with the board, realm and set it was
-    // counted on. The board is read afresh from its file on every ask, so a count
-    // that never reached the file is held here for the session, or it would be
-    // gone at the next read.
-    private (string Bbs, string Realm, string Set, int Count)? _unsaved;
+    // Counts the board's file couldn't take, by board, realm and set (Key). The
+    // board is read afresh from its file on every ask, so a count that never
+    // reached the file is held here for the session, or it would be gone at the
+    // next read. A count is said once when it first fails, not on every retry.
+    // Concurrent: a bug report may read it off the UI thread.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _unsaved =
+        new(StringComparer.OrdinalIgnoreCase);
+    // The board's file couldn't be read, and it has been said.
+    private bool _readFailed;
 
     //   active    — the active board, read afresh, and the realm on it being
     //               played; null with none.
@@ -61,22 +63,22 @@ public sealed class StandardListContradictions
     // The board's rooms are taken to differ from the standard set's.
     public bool Marked => Count >= DeathsToMark;
 
+    // This board's count is held for the session, not yet in its file.
+    public bool Unsaved =>
+        !_unsaved.IsEmpty && _active() is { } active && _activeSet() is { Length: > 0 } set
+        && _unsaved.ContainsKey(Key(active, set));
+
+    private static string Key((BbsProfile Bbs, RealmProfile Realm) active, string set) =>
+        $"{active.Bbs.Name}\n{active.Realm.Name}\n{set}";
+
     private int CountOn((BbsProfile Bbs, RealmProfile Realm) active, string set)
     {
         int onFile = string.Equals(active.Realm.DeathsContradictingStandardArrivalRoomsOn, set, StringComparison.OrdinalIgnoreCase)
             ? active.Realm.DeathsContradictingStandardArrivalRooms
             : 0;
         // Another client on the board may have counted since.
-        return HeldFor(active, set) is int held ? Math.Max(held, onFile) : onFile;
+        return _unsaved.TryGetValue(Key(active, set), out int held) ? Math.Max(held, onFile) : onFile;
     }
-
-    private int? HeldFor((BbsProfile Bbs, RealmProfile Realm) active, string set) =>
-        _unsaved is { } held
-        && string.Equals(held.Bbs, active.Bbs.Name, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(held.Realm, active.Realm.Name, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(held.Set, set, StringComparison.OrdinalIgnoreCase)
-            ? held.Count
-            : null;
 
     // A death seen in diedIn ended in arrivedIn, which the standard list doesn't
     // allow: its dead arrive in one of expected. With no board to count it on,
@@ -85,7 +87,7 @@ public sealed class StandardListContradictions
     public void Note(RoomKey diedIn, RoomKey arrivedIn, IReadOnlyList<RoomKey> expected)
     {
         // One read of the board: the count goes onto the copy that is saved.
-        if (_active() is not { } active || _activeSet() is not { Length: > 0 } set) return;
+        if (_activeSet() is not { Length: > 0 } set || ReadActive() is not { } active) return;
         int count = CountOn(active, set) + 1;
         Write(active, set, count);
 
@@ -105,39 +107,60 @@ public sealed class StandardListContradictions
     }
 
     // A count the board's file couldn't take is tried again, while that board,
-    // realm and set are still the ones in play.
+    // realm and set are the ones in play. Called when a character is loaded and
+    // when the game is entered: not on a timer, as a write that keeps failing can
+    // spend a good part of a second retrying, on the UI thread.
     public void RetryUnsaved()
     {
-        if (_unsaved is null || _active() is not { } active || _activeSet() is not { Length: > 0 } set
-            || HeldFor(active, set) is null)
+        if (_unsaved.IsEmpty || _activeSet() is not { Length: > 0 } set || ReadActive() is not { } active
+            || !_unsaved.ContainsKey(Key(active, set)))
             return;
         int count = CountOn(active, set);
         Write(active, set, count);
-        if (_unsaved is null)
+        if (!_unsaved.ContainsKey(Key(active, set)))
             _log?.Info(LearnedArrivalRoomStore.LogCategory,
                 $"The board's count of deaths the standard list doesn't allow ({count}) is written now.");
     }
 
-    // A count the file won't take is held for the session and tried again on
-    // the heartbeat.
+    private (BbsProfile Bbs, RealmProfile Realm)? ReadActive()
+    {
+        try
+        {
+            (BbsProfile Bbs, RealmProfile Realm)? active = _active();
+            _readFailed = false;
+            return active;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            if (!_readFailed)
+                _log?.Warn(LearnedArrivalRoomStore.LogCategory,
+                    $"The board's file couldn't be read ({ex.Message}). A death the standard list doesn't allow isn't "
+                    + "counted on it while it can't.");
+            _readFailed = true;
+            return null;
+        }
+    }
+
+    // A count the file won't take is held for the session, and tried again with
+    // the next death counted and on RetryUnsaved.
     private void Write((BbsProfile Bbs, RealmProfile Realm) active, string set, int count)
     {
         active.Realm.DeathsContradictingStandardArrivalRooms = count;
         active.Realm.DeathsContradictingStandardArrivalRoomsOn = set;
+        string key = Key(active, set);
         try
         {
             _save(active.Bbs);
-            if (HeldFor(active, set) is not null) _unsaved = null;
-            _saveFailed = false;
+            _unsaved.TryRemove(key, out _);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _unsaved = (active.Bbs.Name, active.Realm.Name, set, count);
-            if (!_saveFailed)
+            if (!_unsaved.ContainsKey(key))
                 _log?.Warn(LearnedArrivalRoomStore.LogCategory,
                     $"The board's file couldn't be written ({ex.Message}). Its count of deaths the standard list doesn't "
-                    + "allow is kept for this session and tried again until it is written.");
-            _saveFailed = true;
+                    + "allow is kept for this session, and tried again with the next one counted, when a character is "
+                    + "loaded and when the game is entered.");
+            _unsaved[key] = count;
         }
     }
 }

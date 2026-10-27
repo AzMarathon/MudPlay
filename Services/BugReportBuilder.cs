@@ -686,6 +686,7 @@ public static class BugReportBuilder
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
             + $"this board's deaths have contradicted the standard list: {contradicted}"
+            + (svc.StandardListContradictions.Unsaved ? " (not yet written to bbs.json)" : "")
             + (svc.StandardListContradictions.Marked
                 ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
                   + "and pointing the realm at another set starts afresh)"

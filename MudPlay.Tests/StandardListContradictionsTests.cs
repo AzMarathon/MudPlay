@@ -34,10 +34,23 @@ public sealed class StandardListContradictionsTests : IDisposable
         (_profile, _board) = Start();
     }
 
+    private readonly List<string> _otherBoards = new();
+
     public void Dispose()
     {
-        try { if (Directory.Exists(AppPaths.BbsFolder(_boardName))) Directory.Delete(AppPaths.BbsFolder(_boardName), recursive: true); }
-        catch (IOException) { /* best-effort cleanup of a scratch board */ }
+        foreach (string board in _otherBoards.Append(_boardName))
+        {
+            try { new BbsProfileStore().Delete(board); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort cleanup of a scratch board */ }
+        }
+    }
+
+    private string NewBoard()
+    {
+        string name = "!mudplay-test-contradictions-" + Path.GetRandomFileName();
+        _otherBoards.Add(name);
+        _store.Save(new BbsProfile { Name = name, Host = "other.example", Port = 23, Realms = { new RealmProfile { Name = "Stock" } } });
+        return name;
     }
 
     // A client started on the board: its character loaded there, and the board
@@ -157,7 +170,7 @@ public sealed class StandardListContradictionsTests : IDisposable
         Contradict();
         Contradict();
 
-        Assert.Equal((2, true), (_board.Count, _board.Marked));
+        Assert.Equal((2, true, true), (_board.Count, _board.Marked, _board.Unsaved));
         Assert.Equal(0, OnFile.DeathsContradictingStandardArrivalRooms);
         Assert.Single(_log, e => e.Severity == LogSeverity.Warn && e.Message.Contains("couldn't be written (the disk is full)"));
         Assert.Equal(0, _saves);
@@ -171,11 +184,92 @@ public sealed class StandardListContradictionsTests : IDisposable
 
         Assert.Equal(2, OnFile.DeathsContradictingStandardArrivalRooms);
         Assert.Contains(_log, e => e.Severity == LogSeverity.Info && e.Message.Contains("(2) is written now"));
-        Assert.Equal((2, true), (_board.Count, _board.Marked));
+        Assert.Equal((2, true, false), (_board.Count, _board.Marked, _board.Unsaved));
 
         // Written, there is nothing more to try.
         _board.RetryUnsaved();
         Assert.Equal(1, _saves);
+    }
+
+    // The next death is counted on the held count, and takes it into the file.
+    [Fact]
+    public void AfterAFailedSave_TheNextDeathWritesTheHeldCountPlusOne()
+    {
+        _saveThrows = new IOException("the disk is full");
+        Contradict();
+        Assert.Equal((1, true), (_board.Count, _board.Unsaved));
+
+        _saveThrows = null;
+        Contradict();
+
+        Assert.Equal((2, true, false), (_board.Count, _board.Marked, _board.Unsaved));
+        Assert.Equal((2, "data-v1.11p"), (OnFile.DeathsContradictingStandardArrivalRooms, OnFile.DeathsContradictingStandardArrivalRoomsOn));
+        Assert.Contains("That is 2 such deaths on this board", _log[^1].Message);
+    }
+
+    // A held count is the board's, realm's and set's it was counted on: it is not
+    // written onto another board or against another set, and waits for its own.
+    [Fact]
+    public void AHeldCount_IsNotRetriedWhileAnotherBoardOrSetIsInPlay()
+    {
+        _saveThrows = new IOException("the disk is full");
+        Contradict();
+        Contradict();
+        _saveThrows = null;
+
+        _set = "the board's own data";
+        _board.RetryUnsaved();
+        Assert.Equal((0, false, false), (_board.Count, _board.Marked, _board.Unsaved));
+
+        _set = "data-v1.11p";
+        string other = NewBoard();
+        _profile.LoadDefaultProfile(onBbs: other);
+        _board.RetryUnsaved();
+        Assert.Equal((0, false), (_board.Count, _board.Unsaved));
+        Assert.Equal(0, _saves);
+        Assert.Equal(0, OnFile.DeathsContradictingStandardArrivalRooms);
+        Assert.Equal(0, new BbsProfileStore().Get(other)!.Realms[0].DeathsContradictingStandardArrivalRooms);
+
+        _profile.LoadDefaultProfile(onBbs: _boardName);
+        _board.RetryUnsaved();
+        Assert.Equal(1, _saves);
+        Assert.Equal(2, OnFile.DeathsContradictingStandardArrivalRooms);
+    }
+
+    // Each board's failed count is said once, by itself: a second board failing
+    // too is said, and a retry that fails again is not.
+    [Fact]
+    public void FailedCounts_AreHeldAndSaidOncePerBoard()
+    {
+        _saveThrows = new IOException("the disk is full");
+        Contradict();
+        string other = NewBoard();
+        _profile.LoadDefaultProfile(onBbs: other);
+        Contradict();
+        Contradict();
+        _board.RetryUnsaved();
+
+        Assert.Equal(2, _log.Count(e => e.Severity == LogSeverity.Warn && e.Message.Contains("couldn't be written")));
+        Assert.Equal((2, true), (_board.Count, _board.Unsaved));
+
+        _profile.LoadDefaultProfile(onBbs: _boardName);
+        Assert.Equal((1, true), (_board.Count, _board.Unsaved));
+    }
+
+    // A board file that doesn't parse counts nothing and throws nothing into the
+    // room display's handling; it is said once.
+    [Fact]
+    public void ABoardFileThatCantBeRead_CountsNothing_AndIsSaidOnce()
+    {
+        File.WriteAllText(AppPaths.BbsProfileFile(_boardName), "{ not json");
+
+        Contradict();
+        Contradict();
+        _board.RetryUnsaved();
+
+        Assert.Equal(0, _saves);
+        Assert.Single(_log, e => e.Severity == LogSeverity.Warn && e.Message.Contains("couldn't be read"));
+        Assert.DoesNotContain(_log, e => e.Message.Contains("A death seen in"));
     }
 
     [Fact]

@@ -151,7 +151,7 @@ public sealed class BbsProfileStore
             // this copy was read. With nothing changed here, theirs stands;
             // otherwise write theirs with this copy's changes on top.
             if (JsonNode.DeepEquals(mine, baseline)) return;
-            JsonNode? merged = JsonThreeWayMerge.Merge(baseline, mine, theirs);
+            JsonNode? merged = JsonThreeWayMerge.Merge(baseline, mine, theirs, RealmsByName);
             if (merged?.Deserialize<BbsProfile>(JsonStore.Options) is { } combined)
             {
                 JsonStore.Save(path, combined);
@@ -162,6 +162,15 @@ public sealed class BbsProfileStore
         JsonStore.Save(path, profile);
         Remember(profile, mine);
     }
+
+    // The realms merge one at a time: the Settings window's copy otherwise wrote
+    // back every realm as it was when the window opened, the counts the running
+    // client wrote since (death floor, deaths the standard list doesn't allow)
+    // with them.
+    private static readonly Dictionary<string, string> RealmsByName = new()
+    {
+        [nameof(BbsProfile.Realms)] = nameof(RealmProfile.Name),
+    };
 
     // What each profile handed out or saved held at that moment. A caller keeps a
     // BbsProfile for as long as its window is open (the Settings BBS tab) or the

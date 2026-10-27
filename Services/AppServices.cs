@@ -10891,7 +10891,8 @@ public sealed class AppServices
         RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
         StandardListContradictions = new Game.Recovery.StandardListContradictions(
             ResolveActiveRealm, () => GameData.ActiveSet, Bbs.Save, Log);
-        Tick.HeartbeatElapsed += StandardListContradictions.RetryUnsaved;
+        Profile.ProfileLoaded += _ => StandardListContradictions.RetryUnsaved();
+        InGameCapture.InGameChanged += inGame => { if (inGame) StandardListContradictions.RetryUnsaved(); };
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
             RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
             RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,

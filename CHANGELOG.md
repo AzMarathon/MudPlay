@@ -3,6 +3,7 @@
 ## 3.186.20
 
 - A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
+- OK in Settings no longer undoes a realm's death floor or death count written while the window was open
 
 ## 3.186.16
 

@@ -344,6 +344,11 @@ How to keep it current:
 - Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades.
 - Why: the realm-tier migration from BBS-tier files.
 
+### BbsRealmMergeTests.cs
+- Covers: Services/JsonThreeWayMerge (keyed arrays), BbsProfileStore.Save, ViewModels/Settings/BbsSectionViewModel, Game/Recovery/StandardListContradictions
+- Checks: with the Settings BBS tab open on a board, a death count and death floor written by the running client survive an OK that edits another realm field; an edit to the same field in Settings wins; a realm added in Settings is saved beside the count, in order; a realm removed in Settings stays removed while the other realm keeps what was written meanwhile; only arrays named as keyed merge record by record, others are still taken whole.
+- Why: the Settings window's copy of a board wrote every realm back as it was when the window opened, unmarking a board with edited rooms and losing the refined death floor.
+
 ### BbsRenameCascadeTests.cs
 - Covers: Services/BbsProfileStore.Rename / Get, ProfileService.RenameBbs
 - Checks: rename moves the whole subtree and rewrites the name; Get reconciles a stale Name to the folder; refuses an existing destination; credentials re-keyed on disk and in the loaded profile.
@@ -3918,7 +3923,7 @@ How to keep it current:
 
 ### StandardListContradictionsTests.cs
 - Covers: Game/Recovery/StandardListContradictions
-- Checks: run on a real board file (BbsProfileStore, read afresh on every ask as the client reads the active board) with a character loaded on it. One contradicting death is logged, the second marks the board and both are in bbs.json; the mark survives a profile reload and a restart; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once, the count is held for the session (still marked) and RetryUnsaved writes it once the file can be written; no board/set → nothing counted
+- Checks: run on a real board file (BbsProfileStore, read afresh on every ask as the client reads the active board) with a character loaded on it. One contradicting death is logged, the second marks the board and both are in bbs.json; the mark survives a profile reload and a restart; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once, the count is held for the session (still marked, Unsaved) and RetryUnsaved writes it once the file can be written; the next death after a failed save writes the held count plus one; a held count is not retried while another board or set is in play, and is written when its own is back; failed counts are held and said once per board; a board file that doesn't parse counts nothing and is said once; no board/set → nothing counted
 - Why: telling a Stock board with edited rooms from standard data; a count changed on one copy of the board and saved from another never reached two
 
 ### StartupOptionsTests.cs
