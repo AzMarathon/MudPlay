@@ -1896,7 +1896,7 @@ How HP works from full health down through dropping and death, how monster healt
 - **Client policy** *(user, 2026-10-09: "a room spell that does magma drip which breaks rests, means we should heal but not actively try to rest in a room like this, because it'll kill us if we dont have heals")*: **no rest or meditate is started in a room whose spell is set to bar resting, and healing goes on.**
   - **Which spells bar resting is the user's choice, spell by spell** *(user, 2026-10-10: "make a settings tab for "Periodic Damage Room Spells" that lets the user choose whether to bar resting or not, it should list the spell record, name, how much damage it does and the rooms it applies linked, so when clicked it shows that room on the map")*. The tab is named **Room Spell Config** *(user, 2026-10-24)*. It lists every room spell of the loaded set that damages a character who stays in the room (*Damage that only comes with a move out of the room is left out*, in this topic). Ticked by default: the spells that damage on every cast, and the one whose timer ends in death (holding breath #512). Clear by default: those that damage on a roll or on a condition. Only the spells set away from the default are stored, on the character tier beside the Health tab's rest settings.
   - The room is treated as a do-not-rest room: no recovery hold is raised, so a walk, a loop or a followed leader carries on out of it, and the rest is taken up in the next room that isn't barred. A character nothing is moving stands there and heals.
-  - **In such rooms the character heals and moves** *([CONFIRMED] 2026-10-10, user, asked whether a walk should stop and heal at some HP before going further into them: "it can heal and move, if healing spells configured")*. The rest-time heal (Settings → Health, *Heal (rest)*), which is otherwise cast only while resting, is cast standing while an HP rest is owed in such a room. The combat-time and emergency heals are unchanged. Nothing stops the walk to heal.
+  - **In such rooms the character heals and moves** *([CONFIRMED] 2026-10-10, user, asked whether a walk should stop and heal at some HP before going further into them: "it can heal and move, if healing spells configured")*. The rest-time heal (Settings → Health, *Heal (rest)*), which is otherwise cast out of combat only while resting, meditating, idle (no walk or loop of ours moving us) or following a party leader (**Client policy**, user 2026-10-27: "heal (rest) is for while resting, meditating or idling"; reports `paradigm-20261027-094915`, `paradigm-20261027-123536`), is cast on the move while an HP rest is owed in such a room. The combat-time and emergency heals are unchanged. Nothing stops the walk to heal.
   - **A follower keeps following and asks in the next room it can rest in** *([CONFIRMED] 2026-10-10, user: "yes")*: no `@wait` is sent from a barred room.
     - **Client policy:** a follower that comes into a barred room with a `@wait` already out (its deficit began in an ordinary room, the leader's wait window ran out and it walked on with the follower in tow), or under whom the room begins to bar, sends no second `@wait` there and releases the one that is out with `@ok`, as it does when Auto-Rest is switched off. The rest is owed for the next room that isn't barred, where the usual `@wait` goes out. (Before 2026-10-10 the room change re-sent `@wait` from inside the barred room and no `@ok` followed, so the party stood in the damage for the leader's whole wait window.)
   - **A rest given up because the room began to bar it runs no post-rest commands** (**Client policy**): the counter came off mid-rest, or the spell was ticked. Nothing was recovered, and the Post-rest chain (Settings → Health) is for a rest that ran its course.
@@ -8976,24 +8976,27 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - An absent bracket on a known-caster row (`BaselineMp > 0`) means 0, not "unchanged."
 
 ### Party ranks
-*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
+*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`); refusals and the join rank [CONFIRMED] 2026-10-27 (user) · Realm: both where tagged, otherwise Stock*
 
 - **A rank change prints one line to the mover and one to the rest of the group** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_change_user_rank` @0x41e169; Realm: Stock, Paradigm not recorded)*:
   - front: `You have moved to the front ranks of your group.` / `%s just moved to the front rank in your group.`
   - back: `You have moved to the back ranks of your group.` / `%s just moved to the back rank in your group.`
   - middle: `You have moved to the middle ranks of your group.` / `%s just moved to the middle of your group.`
-- **Refusals** *(same source)*:
+- **Refusals** *(same source; [CONFIRMED] 2026-10-27, user: Paradigm prints the same refusals as Stock; Realm: both)*:
   - alone: `You are not in a party at the present time.`, the line `par` prints for a player with no party;
   - a player who follows nobody (the leader) can't go to the back or the middle: `You may not enter the backrank of your own party.` (@0x41e308), `You may not leave your current rank in your own party.` (@0x41e4af);
   - `You are the only one in the front rank.  You may not leave.` (two spaces after the first full stop);
   - `There would not be enough people left in the frontrank if you did that.`, when the others in front are fewer than those in back (@0x41e354–0x41e367);
   - `You are the only one in the back rank.  You may not leave.`
+- **Every joiner starts in the middle rank, a re-invite after the party broke up included** *([CONFIRMED] 2026-10-27, user; Realm: both)*. A rank chosen in the old party is not carried into the new one.
 - **Inviting anyone puts the inviter in the front rank** (`_cmd_invite` @0x4568ac; *Party commands: `invite`, `join` / `follow`, `leave`, `uninvite`, `disband party`*).
 - **The three rank commands end a rest**: each clears the resting and meditating flags before it runs (@0x4144ea, @0x414524, @0x41455e). Which words the dispatcher binds to them wasn't read.
 - What a rank does in a fight is in *Combat → Monster target selection — who it swings at once fighting*; how `par` prints it is in *`par` output block*.
 
 **Client use:**
 - `PartyManager.OnMemberRankChanged` reads the other-member line (`KnownPatterns.PartyMemberRankChanged`: front, middle or back) and updates that member's rank without waiting for the next `par`.
+- `PartyManager.OnRankRefused` reads the refusals above (`KnownPatterns.PartyRankRefused`, Stock wording) into the program log and the bug report's *Last rank decision*, beside the `frontrank` / `backrank` the client sends on joining a party as a follower.
+- `PartyManager.OnYouFollowing` sends the rank preference on every `You are now following X.`, since each join starts in the middle; it used to send only when the client didn't already count itself in a party, which missed a re-invite after a break-up (player report, 2026-10-27).
 
 ### Following the leader: follow / drag movement
 *Status: CONFIRMED (live follower capture, Darkwood Forest)*

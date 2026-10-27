@@ -712,6 +712,10 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // A "wrong rank after joining" report turns on whether the rank command went
+        // out and what the game said to it.
+        Kv(sb, "Rank wanted (Settings → Party)", svc.Party.LocalRankPreference.ToString());
+        Kv(sb, "Last rank decision", svc.Party.LastRankDecision ?? "(none this session)");
         // Stock: a follower an exit turned away stops following and stays on the
         // leader's member list. A "why didn't I rejoin" report turns on whether the
         // client still counted itself as listed.

@@ -427,6 +427,7 @@ public sealed partial class PartyManager : IDisposable
         // catches up.
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRankChanged,    OnMemberRankChanged));
         _subs.Add(_router.Subscribe(KnownPatterns.PartySelfRankChanged,      OnSelfRankChanged));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyRankRefused,          OnRankRefused));
         // Live rest observation — flips a member's Resting flag the moment we
         // see "X stops to rest.", ahead of the 5s par poll, so a follower's
         // HealthManager can mirror the leader's rest immediately.
@@ -679,7 +680,6 @@ public sealed partial class PartyManager : IDisposable
         if (result.Groups.Count == 0) return;
         string leaderName = result.Groups[0];
         if (string.IsNullOrEmpty(leaderName)) return;
-        bool wasInParty = State.IsInParty;
         SetListedWith(null, $"we follow {leaderName}");
         // Same early-set rationale as OnFollowsYou — derived state
         // (IsInParty + LeaderName + SelfIsLeader) needs to be
@@ -692,8 +692,12 @@ public sealed partial class PartyManager : IDisposable
         PartyMember leader = AddOrTouchMember(leaderName);
         leader.IsLeader = true;
         AddSelfIfKnown(isLeader: false);
-        // Initial-join edge — see OnFollowsYou for the rationale.
-        if (!wasInParty) SendRankPreferenceCommand();
+        // Every join starts in the middle rank, a re-invite after the party broke up
+        // included (GAME_MECHANICS "Party ranks"), so the rank goes out on each one.
+        // Sent only on a first join, a re-invite the client still counted as the old
+        // party left a back-rank follower in the middle.
+        SetSelfRank(Models.Profile.PartyRank.Mid);
+        SendRankPreferenceCommand(leaderName);
         FollowingLeader?.Invoke(leaderName);
     }
 
@@ -733,22 +737,43 @@ public sealed partial class PartyManager : IDisposable
     // here: their callers are.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // What the client last did about our rank (sent, skipped, the game's answer),
+    // with its time, for the bug report. null until a party is joined this session.
+    public string? LastRankDecision { get; private set; }
+
+    private void NoteRankDecision(string decision)
+    {
+        LastRankDecision = $"{_now().ToLocalTime():HH:mm:ss} {decision}";
+        _log?.Info("Party", $"rank: {decision}");
+    }
+
     // Send the rerank command (`frontrank` / `backrank`) to the server iff
     // LocalRankPreference is non-Mid and a wire-sender is bound. Mid is the
     // server-side default rank — no command needed when that's the preference.
-    private void SendRankPreferenceCommand()
+    private void SendRankPreferenceCommand(string leaderName)
     {
-        if (_wireSender is null) return;
-        if (MasterSwitchOff?.Invoke() == true) return;
         string? cmd = LocalRankPreference switch
         {
-            Models.Profile.PartyRank.Front => "frontrank\r",
-            Models.Profile.PartyRank.Back  => "backrank\r",
+            Models.Profile.PartyRank.Front => "frontrank",
+            Models.Profile.PartyRank.Back  => "backrank",
             _                              => null,
         };
         if (cmd is null) return;
-        _wireSender(System.Text.Encoding.Latin1.GetBytes(cmd));
+        if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            NoteRankDecision($"joined {leaderName}'s party: `{cmd}` not sent, the master switch is off");
+            return;
+        }
+        _wireSender(System.Text.Encoding.Latin1.GetBytes(cmd + "\r"));
+        NoteRankDecision($"joined {leaderName}'s party: sent `{cmd}` (Settings → Party → Rank is {LocalRankPreference})");
     }
+
+    // The game turned a rank command down (its refusals are in GAME_MECHANICS
+    // "Party ranks"). Only logged: the line says why, and the rank stays as the
+    // game has it.
+    private void OnRankRefused(MatchResult result) =>
+        NoteRankDecision($"the game refused a rank change: \"{result.Text.Trim()}\"");
 
     private void OnStopsFollowing(MatchResult result)
     {
@@ -1324,6 +1349,12 @@ public sealed partial class PartyManager : IDisposable
     {
         if (result.Groups.Count == 0) return;
         Models.Profile.PartyRank rank = ParseRankWord(result.Groups[0]);
+        NoteRankDecision($"the game moved us to the {result.Groups[0]} ranks");
+        SetSelfRank(rank);
+    }
+
+    private void SetSelfRank(Models.Profile.PartyRank rank)
+    {
         foreach (PartyMember m in State.Members)
         {
             if (m.IsSelf) { m.Rank = rank; return; }

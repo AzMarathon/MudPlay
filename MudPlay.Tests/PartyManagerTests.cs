@@ -810,6 +810,47 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void FollowerJoin_RankDecisionAndTheGamesAnswer_AreRecorded()
+    {
+        // A "set to back rank but joined in the middle" report turns on whether
+        // `backrank` went out and what the game said to it, so both are kept for
+        // the bug report.
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+
+        _feed.Line("You are now following Raijin.");
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
+
+        _feed.Line("There would not be enough people left in the frontrank if you did that.");
+        Assert.Contains("the game refused a rank change", p.LastRankDecision);
+
+        _feed.Line("You have moved to the back ranks of your group.");
+        Assert.Contains("moved us to the back ranks", p.LastRankDecision);
+    }
+
+    // A re-invite after the party broke up starts us in the middle rank again, and
+    // the client can still count us in the old party when its follow line arrives:
+    // the rank goes out on that join too.
+    [Fact]
+    public void ReInvite_WhileStillCountedInTheOldParty_SendsTheRankAgain()
+    {
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+        _feed.Line("You are now following Raijin.");
+        _feed.Line("You have moved to the back ranks of your group.");
+        wire.Clear();
+
+        _feed.Line("You are now following Raijin.");
+
+        Assert.Equal("backrank\r", System.Text.Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
+    }
+
+    [Fact]
     public void LiveRankChange_OtherMember_UpdatesRankImmediately()
     {
         // Observer side: when another party member reranks, the game

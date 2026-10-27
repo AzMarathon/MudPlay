@@ -262,7 +262,7 @@
                      pool has dropped and refilled. -->
                 <TextBlock Classes="SectionHeader" Text="Cast when full"/>
                 <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
-                           Text="Any spell (a utility spell, one you're training, a mana burn), cast once out of combat each time HP or mana comes up to full: the Rest-max level on the Health tab. It goes out again only after the pool has dropped below full and refilled."/>
+                           Text="Any spell (a utility spell, one you're training, a mana burn), cast once out of combat each time HP or mana comes up to full: the Rest-max level on the Health tab. It goes out again only after the pool has dropped and refilled: back to Rest max after a drop under it, or back to the top after a smaller one (a cheap spell's own cost)."/>
                 <Grid ColumnDefinitions="180,Auto,Auto,*" RowDefinitions="Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cast when HP full"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
@@ -274,7 +274,7 @@
                                      ItemTemplate="{StaticResource SpellPickItem}"
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast once, out of combat, when HP comes up to the Health tab's Rest-max level; again only after HP has dropped below it. Unlike a Buff Watchdog buff ticked &quot;when HP full&quot;, nothing is timed or recast on expiry. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
+                                     ToolTip.Tip="Cast once, out of combat, when HP comes up to the Health tab's Rest-max level; again only after HP has dropped and refilled (to Rest max after a drop under it, to the top after a smaller one). Unlike a Buff Watchdog buff ticked &quot;when HP full&quot;, nothing is timed or recast on expiry. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
                     <TextBox Grid.Row="0" Grid.Column="2" Margin="8,0,0,0" Width="96"
                              Text="{Binding CastWhenHpFullTarget, Mode=TwoWay}"
                              PlaceholderText="Target (self)"
@@ -294,7 +294,7 @@
                                      ItemTemplate="{StaticResource SpellPickItem}"
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
-                                     ToolTip.Tip="Cast once, out of combat, when mana comes up to the Health tab's Rest-max level; again each time mana has dropped below it and refilled, so a mana burn goes out on every refill. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
+                                     ToolTip.Tip="Cast once, out of combat, when mana comes up to the Health tab's Rest-max level; again each time mana has dropped and refilled (to Rest max after a drop under it, to the top after a smaller one, such as the spell's own cost), so a mana burn goes out on every refill, whatever your HP. Only goes out, under Auto-Bless, when no heal, cure, buff or debuff takes the round, and waits while one of them is due but short of mana."/>
                     <TextBox Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" Width="96"
                              Text="{Binding CastWhenMaFullTarget, Mode=TwoWay}"
                              PlaceholderText="Target (self)"

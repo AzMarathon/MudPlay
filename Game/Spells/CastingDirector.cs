@@ -638,6 +638,18 @@ public sealed class CastingDirector : IDisposable
 
     private Func<bool>? _hpRestDeferredHere;
 
+    // Wire the check for a walk or loop moving us. Heal (rest) is for resting,
+    // meditating or idling (user, 2026-10-27): out of combat and standing it goes
+    // out only while nothing moves us, so it never stops a walk to heal. Unwired,
+    // standing counts as moving.
+    public void SetMovementCheck(Func<bool> somethingMovesUs)
+    {
+        ArgumentNullException.ThrowIfNull(somethingMovesUs);
+        _somethingMovesUs = somethingMovesUs;
+    }
+
+    private Func<bool>? _somethingMovesUs;
+
     // Wire the mana-rest-lock gate for "cast before resting for mana" slots (see
     // _isManaRestActive). True while a mana-recovery rest is active — held through a
     // combat interruption until mana reaches its rest-max target.
@@ -2360,6 +2372,8 @@ public sealed class CastingDirector : IDisposable
         // gates on the cast cooldown upstream — so it lands ~once per between-round, not
         // every heartbeat poll.
         LogDueQueue(spells, health, partySettings, healEnabled, blessEnabled);
+        if (healEnabled) NoteRestHealHeldForMovement(spells, health);
+        else RestHealHeldForMovement = false;
 
         // Sneak keeping (Game.Stealth.SneakGuard): every in-between cast ends a sneak,
         // so while a backstab is still owed here, our sneaked move is landing, or we're
@@ -2760,12 +2774,41 @@ public sealed class CastingDirector : IDisposable
     private string? PickMinorSelfHeal(SpellsSettings spells, HealthSettings health) =>
         SelfHealPicker.Minor(spells, health, SelfHealState());
 
+    // Heal (rest) is for resting, meditating or idling (user, 2026-10-27); the heal is
+    // held only while a walk or loop of our own moves us, so it never stops one to
+    // heal. A follower is moved by its leader, not by a walk of its own, so it heals
+    // standing even while its own loop is held: its recovery rest ends one point over
+    // the rest trigger and the leader keeps the fights coming, so it stood at 60-80%
+    // with Heal (rest) at 86% (reports paradigm-20261027-094915,
+    // paradigm-20261027-123536).
     private SelfHealInputs SelfHealState() => new(
         _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
-        Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true,
+        Resting: _state.Position != PlayerPosition.Standing || _hpRestDeferredHere?.Invoke() == true
+                 || FollowingALeader || _somethingMovesUs?.Invoke() == false,
         HealHpTrigger: ResolveHpThreshold,
         Affordable: SpellAffordable,
         HpRegenRecastDue: spell => IsRecastDue("", spell));
+
+    private bool FollowingALeader => _party is { IsInParty: true, SelfIsLeader: false };
+
+    // The rest-time heal is due by HP and mana but held because a walk or loop is
+    // moving us. Said once per stretch, so a report shows why a character below
+    // Heal (rest) cast nothing.
+    private void NoteRestHealHeldForMovement(SpellsSettings spells, HealthSettings health)
+    {
+        SelfHealInputs s = SelfHealState();
+        bool held = !s.InCombat && !s.Resting
+            && SelfHealPicker.Minor(spells, health, s with { Resting = true }) is not null;
+        if (held && !RestHealHeldForMovement)
+            _log?.Info(LogCategory,
+                $"rest-time heal held: HP {_state.Hp}/{_state.MaxHp} is at or under Heal (rest), "
+                + "but a walk or loop is moving us — it is cast once we rest or stop");
+        RestHealHeldForMovement = held;
+    }
+
+    // Read by the bug report: the rest-time heal was due at the last decision pass
+    // but held for a walk or loop moving us (see NoteRestHealHeldForMovement).
+    public bool RestHealHeldForMovement { get; private set; }
 
     // Mirrors the decision-pass affordability skip (an unknown cost never blocks):
     // a spell is castable when we don't know its cost or the pool covers it. Used
@@ -3423,15 +3466,25 @@ public sealed class CastingDirector : IDisposable
     private bool MaAtFull(int mark) => _state.MaxMa > 0 && _state.Ma >= mark;
 
     // One cast-when-full slot's state. Client policy: the slot fires on the pool's
-    // way up to full, not for as long as it stays full, and re-arms only when the
-    // pool falls under the mark again. A spell that leaves the pool where it is (an
-    // HP-full utility spell) goes out once; a mana burn goes out each time mana refills.
+    // way up to full, not for as long as it stays full, and again each time the pool
+    // has dipped and refilled. A spell that leaves the pool where it is (an HP-full
+    // utility spell) goes out once; a mana burn goes out each time mana refills.
+    //
+    // Two dips count. One under the full mark re-arms the slot for the mark, as a
+    // rest refills to it. One that stays over the mark (a cheap spell's own cost: the
+    // mark is the rest max, often well under the pool's top) re-arms it for the top
+    // of the pool. Without the second, a 5-mana healing rain cast at full mana would
+    // never go out again while nothing else spends mana, which with HP full is always.
     private sealed class WhenFullSlot(string pool)
     {
         public string Pool { get; } = pool;
         public bool Armed { get; set; } = true;
         // The full mark the last decision pass worked out; a reading under it re-arms.
         public int Mark { get; set; } = int.MaxValue;
+        // The highest reading since the slot last fired; a reading under it is a dip.
+        public int Peak { get; set; } = int.MaxValue;
+        // Re-armed by a dip that stayed over the mark: the slot fires at the pool's top.
+        public bool NeedsTop { get; set; }
         public string? SentSpell { get; set; }
         public DateTime? SentAt { get; set; }
         // Why a cast that is otherwise due is waiting; null when nothing holds it.
@@ -3441,6 +3494,8 @@ public sealed class CastingDirector : IDisposable
         {
             Armed = true;
             Mark = int.MaxValue;
+            Peak = int.MaxValue;
+            NeedsTop = false;
             SentSpell = null;
             SentAt = null;
             HoldReason = null;
@@ -3454,15 +3509,31 @@ public sealed class CastingDirector : IDisposable
     // to: a pool can dip and refill while the round's cast is spent.
     private void NoteWhenFullDrops()
     {
-        Rearm(_hpFull, _state.Hp);
-        Rearm(_maFull, _state.Ma);
+        Rearm(_hpFull, _state.Hp, _state.MaxHp);
+        Rearm(_maFull, _state.Ma, _state.MaxMa);
     }
 
-    private void Rearm(WhenFullSlot slot, int value)
+    private void Rearm(WhenFullSlot slot, int value, int max)
     {
-        if (slot.Armed || value >= slot.Mark) return;
+        if (value < slot.Mark)
+        {
+            // Under the mark, whatever came before: fire on coming back up to it.
+            slot.NeedsTop = false;
+            if (slot.Armed) return;
+            slot.Armed = true;
+            _log?.Combat(LogCategory, $"cast when {slot.Pool} full re-armed — {slot.Pool} {value} is under the full mark {slot.Mark}.");
+            return;
+        }
+        if (slot.Armed) return;
+        if (value >= slot.Peak)
+        {
+            slot.Peak = value;
+            return;
+        }
         slot.Armed = true;
-        _log?.Combat(LogCategory, $"cast when {slot.Pool} full re-armed — {slot.Pool} {value} is under the full mark {slot.Mark}.");
+        slot.NeedsTop = true;
+        _log?.Combat(LogCategory,
+            $"cast when {slot.Pool} full re-armed — {slot.Pool} dipped from {slot.Peak} to {value}, over the full mark {slot.Mark}: fires again at its top, {max}.");
     }
 
     // The two slots' cast, when one is due: out of combat, the pool at full and the
@@ -3476,15 +3547,16 @@ public sealed class CastingDirector : IDisposable
         _hpFull.Mark = hpMark;
         _maFull.Mark = maMark;
         return TryCastWhenFull(_hpFull, spells.CastWhenHpFullSpell, spells.CastWhenHpFullTarget,
-                   spells.CastWhenHpFullWhileResting, HpAtFull(hpMark), keepSneak, dueWaitingForMana)
+                   spells.CastWhenHpFullWhileResting, _state.Hp, _state.MaxHp, keepSneak, dueWaitingForMana)
             ?? TryCastWhenFull(_maFull, spells.CastWhenMaFullSpell, spells.CastWhenMaFullTarget,
-                   spells.CastWhenMaFullWhileResting, MaAtFull(maMark), keepSneak, dueWaitingForMana);
+                   spells.CastWhenMaFullWhileResting, _state.Ma, _state.MaxMa, keepSneak, dueWaitingForMana);
     }
 
     private string? TryCastWhenFull(WhenFullSlot slot, string? spell, string? target, bool whileResting,
-        bool full, bool keepSneak, string? dueWaitingForMana)
+        int value, int max, bool keepSneak, string? dueWaitingForMana)
     {
         string? code = spell?.Trim();
+        bool full = max > 0 && value >= (slot.NeedsTop ? max : slot.Mark);
         // A mark of 0 or less (a Rest max of 0, a pool not known yet) is always met, so
         // nothing could re-arm the slot after one cast: it stays inactive instead. A
         // different spell picked since the last cast hasn't gone out yet.
@@ -3501,6 +3573,8 @@ public sealed class CastingDirector : IDisposable
         string? aim = WireTarget(target);
         if (!_cast.TryCast(code!, aim)) return null;
         slot.Armed = false;
+        slot.NeedsTop = false;
+        slot.Peak = value;
         slot.SentSpell = code;
         slot.SentAt = _now();
         _log?.Info(LogCategory,
@@ -3571,8 +3645,10 @@ public sealed class CastingDirector : IDisposable
             string state = slot.Mark <= 0
                 ? $"inactive, the full mark resolves to {slot.Mark}"
                 : slot.Armed
-                    ? $"armed, fires when {slot.Pool} reaches the full mark ({mark})"
-                    : $"fired {slot.SentSpell} at {slot.SentAt?.ToLocalTime():HH:mm:ss}, re-arms when {slot.Pool} drops under {mark}";
+                    ? slot.NeedsTop
+                        ? $"armed by a dip that stayed over the full mark ({mark}), fires when {slot.Pool} is back at its top"
+                        : $"armed, fires when {slot.Pool} reaches the full mark ({mark})"
+                    : $"fired {slot.SentSpell} at {slot.SentAt?.ToLocalTime():HH:mm:ss}, re-arms when {slot.Pool} drops under {slot.Peak} (and fires at its top) or under the full mark {mark}";
             string held = slot.HoldReason is { } why ? $"; held: {why}" : "";
             return $"{slot.Pool} full: {spell.Trim()} — {state}{held}";
         }

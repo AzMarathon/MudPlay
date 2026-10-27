@@ -5614,6 +5614,7 @@ public sealed class AppServices
         // In a room whose own spell does damage no rest is started, so the rest-time
         // heal fires standing while an HP rest is owed there.
         CastDirector.SetRestDeferredGate(() => Health.HpRestDeferredByRoomSpell);
+        CastDirector.SetMovementCheck(() => ResolveActiveMovementEngine() is not null);
         // Mana-rest lock for "cast before resting for mana" slots — held while the
         // mana-recovery gate is asserted (mana below target), durable across a combat
         // interruption, released when mana tops back up.
