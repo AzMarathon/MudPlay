@@ -8,6 +8,11 @@
 - A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
 - bug reports addressed: paradigm-20261026-220231
 
+## 3.186.20
+
+- A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
+- OK in Settings no longer undoes a realm's death floor or death count written while the window was open, a renamed realm included
+
 ## 3.186.18
 
 - Conversation window with a full history opens without freezing

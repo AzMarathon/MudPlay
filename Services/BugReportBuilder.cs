@@ -684,14 +684,15 @@ public static class BugReportBuilder
             .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
         string twoInOneLand = string.Join("; ", odd.Where(o => !o.Exception)
             .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
-        int contradicted = svc.StandardListContradictions.Count;
+        (int contradicted, bool marked, bool unsaved) = svc.StandardListContradictions.Standing();
         return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
             + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
             + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
             + $"this board's deaths have contradicted the standard list: {contradicted}"
-            + (svc.StandardListContradictions.Marked
+            + (unsaved ? " (not yet written to bbs.json)" : "")
+            + (marked
                 ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
                   + "and pointing the realm at another set starts afresh)"
                 : contradicted > 0
