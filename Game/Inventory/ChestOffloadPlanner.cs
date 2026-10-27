@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MudPlay.Game.Map;
 
 namespace MudPlay.Game.Inventory;
 
 // Pure helpers behind the Chest Offload tab: diff a before/after carried
 // inventory to find what a chest gave, and pack the sellable loot into as few
 // shops as possible. Everything here is deterministic and service-free; the
-// view-model supplies the item→shop and pricing lookups.
+// view-model supplies the item→shop, pricing and distance lookups.
 public static class ChestOffloadPlanner
 {
     // Items.ItemType of a container — a chest, box or other thing you `open`.
@@ -141,5 +142,43 @@ public static class ChestOffloadPlanner
             remaining = rest;
         }
         return result;
+    }
+
+    // The shops in the order of a short trip from here, each with its steps from here
+    // (null when it has no room or no route reaches it): the shop nearest here first,
+    // then the nearest not yet visited from there. A shop with no room or no route
+    // sorts last, ties keep the given order, and a single shop is left where it is.
+    // Every step count is asked of distance once per pair, the counts from here
+    // doubling as the labels, because each answer is a search of the whole map.
+    public static IReadOnlyList<(int Shop, int? Steps)> RouteShops(
+        RoomKey here, IReadOnlyList<(int Shop, RoomKey? Room)> shops, Func<RoomKey, RoomKey, int?> distance)
+    {
+        var fromHere = new int?[shops.Count];
+        for (int i = 0; i < shops.Count; i++)
+            fromHere[i] = shops[i].Room is { } room ? distance(here, room) : null;
+
+        var order = new List<int>(shops.Count);
+        if (shops.Count <= 1) order.AddRange(Enumerable.Range(0, shops.Count));
+        else
+        {
+            var remaining = Enumerable.Range(0, shops.Count).ToList();
+            RoomKey? pos = null;   // null while still standing here
+            while (remaining.Count > 0)
+            {
+                int bestIdx = 0, bestDist = int.MaxValue;
+                for (int i = 0; i < remaining.Count; i++)
+                {
+                    int? d = shops[remaining[i]].Room is not { } room ? null
+                        : pos is { } p ? distance(p, room)
+                        : fromHere[remaining[i]];
+                    if ((d ?? int.MaxValue) < bestDist) { bestDist = d ?? int.MaxValue; bestIdx = i; }
+                }
+                int chosen = remaining[bestIdx];
+                order.Add(chosen);
+                remaining.RemoveAt(bestIdx);
+                if (shops[chosen].Room is { } at) pos = at;
+            }
+        }
+        return order.Select(i => (shops[i].Shop, fromHere[i])).ToList();
     }
 }

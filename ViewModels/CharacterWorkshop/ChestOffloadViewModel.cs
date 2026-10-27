@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using Avalonia;
@@ -75,6 +76,9 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private string _note = "";
     private string? _noteItem;
     private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
+    // Bumped by each render and by Dispose, so a trip worked out for an earlier render
+    // is dropped when it comes back.
+    private int _routeGeneration;
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _sellTotal = "—";
@@ -332,12 +336,12 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
             ChestOffloadPlanner.GroupByFewestShops(loot, li => li.Shops, out IReadOnlyList<LootItem> noShop);
 
         ShopGroups.Clear();
-        foreach ((int shopNum, IReadOnlyList<LootItem> items) in OrderByRoute(groups, _shopRoom))
+        foreach ((int shopNum, IReadOnlyList<LootItem> items) in groups)
         {
             _shopRoom.TryGetValue(shopNum, out Room? room);
             string location = room is { } lr ? $"{lr.Key.Map}/{lr.Key.Room}" : "";
             var group = new ChestOffloadShopGroup(
-                room?.Name ?? $"Shop #{shopNum}", shopNum, location, StepsLabel(room), room?.Key,
+                room?.Name ?? $"Shop #{shopNum}", shopNum, location, "", room?.Key,
                 _queueWalk, SellGroup, DropAllGroup);
             foreach (LootItem li in items)
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
@@ -356,6 +360,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
         OnPropertyChanged(nameof(HasUnsellable));
+        RouteShopGroups();
     }
 
     // Coin the chest gave as a vertical list, most-expensive denomination first,
@@ -382,42 +387,63 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         SellTotal = total > 0 ? ShopPriceCalculator.FormatCopper(total) : "—";
     }
 
-    // Order the shop groups into a short trip: the shop nearest the player's current
-    // room first, then the nearest not-yet-visited shop from there (a nearest-
-    // neighbour route). Distances use the same routing the walker does —
-    // Bfs.DistanceBetween under the MovementFilter — so they honour avoid rooms,
-    // usable teleport gates, and item/hazard/boat gates (rope & grapple, ferries…)
-    // rather than raw hops. A room-less or currently-unroutable shop sorts last; no
-    // known current room (offline / unknown position) leaves the grouping order.
-    private IReadOnlyList<(int Shop, IReadOnlyList<LootItem> Items)> OrderByRoute(
-        IReadOnlyList<(int Shop, IReadOnlyList<LootItem> Items)> groups, Dictionary<int, Room> shopRoom)
+    // Order the shop groups into a short trip (ChestOffloadPlanner.RouteShops: nearest
+    // shop first, then the nearest not yet visited from there) and give each its steps
+    // from here. Distances use the same routing the walker does, under the
+    // MovementFilter, so they honour avoid rooms, usable teleport gates, and
+    // item/hazard/boat gates (rope & grapple, ferries…) rather than raw hops. No known
+    // current room (offline / unknown position) leaves the grouping order unlabelled.
+    //
+    // Each distance is a search of the whole map, and a dozen shops asked for about a
+    // hundred: on the UI thread one chest open froze the client for 49.7 s (report
+    // paradigm-20261026-201217). So the trip is worked out on a worker, as a route
+    // card's plan is, mapping each room once (BfsMapper.DistanceMemo), and the groups
+    // take their order and steps when it comes back. The rows stay live meanwhile, so
+    // a sale or hide confirmed in between still finds its row.
+    private void RouteShopGroups()
     {
-        RoomKey? here = _tracker.State.CurrentRoom?.Key;
-        if (here is null || groups.Count <= 1) return groups;
-
-        var remaining = groups.ToList();
-        var ordered = new List<(int, IReadOnlyList<LootItem>)>(remaining.Count);
-        RoomKey pos = here.Value;
-        while (remaining.Count > 0)
+        int generation = ++_routeGeneration;
+        if (_tracker.State.CurrentRoom?.Key is not { } here || ShopGroups.Count == 0) return;
+        List<(int Shop, RoomKey? Room)> shops = ShopGroups
+            .Select(g => (g.Shop, _shopRoom.TryGetValue(g.Shop, out Room? r) ? r.Key : (RoomKey?)null))
+            .ToList();
+        _ = Task.Run(() =>
         {
-            int bestIdx = 0, bestDist = int.MaxValue;
-            for (int i = 0; i < remaining.Count; i++)
+            try
             {
-                int d = shopRoom.TryGetValue(remaining[i].Shop, out Room? r)
-                        && _bfs.DistanceBetween(pos, r.Key, _movement) is { } dd
-                    ? dd : int.MaxValue;
-                if (d < bestDist) { bestDist = d; bestIdx = i; }
+                long started = Stopwatch.GetTimestamp();
+                IReadOnlyList<(int Shop, int? Steps)> trip =
+                    ChestOffloadPlanner.RouteShops(here, shops, _bfs.DistanceMemo(_movement));
+                TimeSpan took = Stopwatch.GetElapsedTime(started);
+                Dispatcher.UIThread.Post(() => ApplyRoute(generation, here, trip, took));
             }
-            (int Shop, IReadOnlyList<LootItem> Items) chosen = remaining[bestIdx];
-            ordered.Add(chosen);
-            remaining.RemoveAt(bestIdx);
-            if (shopRoom.TryGetValue(chosen.Shop, out Room? cr)) pos = cr.Key;
+            catch (Exception ex)
+            {
+                _log?.Warn(LogCategory, $"the trip to {shops.Count} shop(s) could not be worked out ({ex.GetType().Name}: {ex.Message}); the shops stay unordered");
+            }
+        });
+    }
+
+    private void ApplyRoute(int generation, RoomKey here, IReadOnlyList<(int Shop, int? Steps)> trip, TimeSpan took)
+    {
+        // A newer render has its own trip coming, or the tab has closed.
+        if (generation != _routeGeneration) return;
+        int at = 0;
+        foreach ((int shop, int? steps) in trip)
+        {
+            int index = ShopGroups.ToList().FindIndex(g => g.Shop == shop);
+            if (index < 0) continue;   // its last row left meanwhile
+            if (index != at) ShopGroups.Move(index, at);
+            _shopRoom.TryGetValue(shop, out Room? room);
+            ShopGroups[at].Steps = StepsText(room, here, steps);
+            at++;
         }
-        return ordered;
+        _log?.Debug(LogCategory,
+            $"trip to {trip.Count} shop(s) worked out in {took.TotalMilliseconds:F0} ms, off the UI thread");
     }
 
     // Steps from the player's current room to a shop, under the walker's routing
-    // (same filter as OrderByRoute). Empty when we don't know where we are or the
+    // (same filter as RouteShopGroups). Empty when we don't know where we are or the
     // shop has no room; "unreachable" when no route survives the filter.
     private string StepsLabel(Room? room)
     {
@@ -832,6 +858,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
     public override void Dispose()
     {
+        ++_routeGeneration;
         _chests.Changed -= OnChestsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _tour.Changed -= OnTourChanged;

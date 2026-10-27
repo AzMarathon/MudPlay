@@ -641,9 +641,9 @@ How to keep it current:
 - Why: confirmed-count bookkeeping.
 
 ### ChestOffloadPlannerTests.cs
-- Covers: Game/Inventory/ChestOffloadPlanner
-- Checks: carried gains; fewest-shops grouping.
-- Why: sell-tour planning.
+- Covers: Game/Inventory/ChestOffloadPlanner, BfsMapper.DistanceMemo
+- Checks: carried gains; fewest-shops grouping; the shop trip (RouteShops) over a real map: nearest shop from the last one visited, steps from where the player stands, shops with no route or no room last; the memo gives the trip a search for every pair gives; no pair is asked twice.
+- Why: sell-tour planning; the Chest Offload tab worked the trip out with about a hundred whole-map searches on the UI thread, freezing the client for 49.7 s after a chest open (report `paradigm-20261026-201217`).
 
 ### ChestOpenTrackerTests.cs
 - Covers: Game/Inventory/ChestOpenTracker, OutboundOpenObserver
