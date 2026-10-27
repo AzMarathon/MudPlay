@@ -11091,6 +11091,20 @@ public sealed class AppServices
         // of that profile.
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
 
+        // A launch that comes up on the unnamed draft chooses its game-data set but
+        // builds nothing from it until something needs it (BuildDeferredGameData):
+        // most such launches go straight on to load a character on another set, and
+        // the draft's build (seconds, with a room graph, loops and indexes) was
+        // thrown away (Hang-20261026-215238). Not in the launch that loads what the
+        // default profile held before its reset: that draft may hold a room, which
+        // only a built room graph can place.
+        _deferDraftGameDataBuild = defaultProfileBeforeReset is null;
+        // Once per process: a class handler outlives the instance that adds it.
+        if (Interlocked.Exchange(ref s_windowOpenHooked, 1) == 0)
+            Avalonia.Controls.Window.WindowOpenedEvent.AddClassHandler<Avalonia.Controls.Window>(
+                (window, _) => CurrentOrNull?.OnWindowOpenedForGameData(window),
+                Avalonia.Interactivity.RoutingStrategies.Direct);
+
         // Startup profile priority: a --profile launch argument wins over the
         // "Auto-load last profile" setting, which wins over a blank draft. The CLI
         // token is resolved here (not in Program.Main) because resolving a bare
@@ -16736,8 +16750,45 @@ public sealed class AppServices
     {
         string? outer = _gameDataSwitchCause;
         _gameDataSwitchCause = because;
-        try { GameData.SwitchSet(ProfileGameDataSet()); }
+        // Only the startup draft puts the build off; the first named profile ends it.
+        bool defer = _deferDraftGameDataBuild && Profile.CurrentProfileName is null;
+        if (!defer) _deferDraftGameDataBuild = false;
+        try { GameData.SwitchSet(ProfileGameDataSet(), deferBuild: defer); }
         finally { _gameDataSwitchCause = outer; }
+    }
+
+    // While the startup draft's game-data build is put off (see the startup profile
+    // load). UI thread.
+    private bool _deferDraftGameDataBuild;
+
+    // Build the startup draft's game-data set now, when its build was put off: the
+    // draft is about to need it (a connect, a window that shows game data, the main
+    // window used, a local API request). A no-op once built. UI thread.
+    public void BuildDeferredGameData(string why)
+    {
+        _deferDraftGameDataBuild = false;
+        if (!GameData.BuildDeferred) return;
+        GameData.BuildDeferredSet(why);
+    }
+
+    // Windows that show no game data, so opening one leaves the draft's set unbuilt:
+    // the main window, picking or managing a profile, the conversation, and help and
+    // notices. Any other window builds it as it opens.
+    private static readonly HashSet<string> WindowsWithoutGameData = new(StringComparer.Ordinal)
+    {
+        "MainWindow", "ProfileManagerWindow", "ConversationWindow", "QuickConnectWindow",
+        "GuideCardWindow", "GuidePickerWindow", "AboutWindow", "InfoDialog", "ConfirmDialog",
+        "UpdateWindow", "BugReportDialog",
+    };
+
+    private static int s_windowOpenHooked;
+
+    private void OnWindowOpenedForGameData(Avalonia.Controls.Window window)
+    {
+        if (!GameData.BuildDeferred) return;
+        string name = window.GetType().Name;
+        if (WindowsWithoutGameData.Contains(name)) return;
+        BuildDeferredGameData($"the {name} opened");
     }
 
     // Set while a profile event is switching the set, for the stop that switch makes.

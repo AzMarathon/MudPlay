@@ -390,8 +390,9 @@ public static class BugReportBuilder
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
-            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Active game-data set", svc.GameData.ActiveSet is { } activeSet
+            ? svc.GameData.BuildDeferred ? $"{activeSet} (not built yet: the unnamed draft hasn't needed it)" : activeSet
+            : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)");
         Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
             ? "available"
             : "none (no BBS, or the realm's name can't be a folder)");

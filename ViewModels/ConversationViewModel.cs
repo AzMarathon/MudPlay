@@ -308,6 +308,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
 
     private void Rebuild()
     {
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("conversation rows rebuilt");
         Rows.Clear();
         foreach (ChatLogEntry entry in _history.Entries)
         {
@@ -492,6 +493,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         if (colors) ApplyColorsFromDisplay();
         ConversationRowLook look = BuildRowLook();
         if (!colors && look == _rowLook) return;
+        using PerformanceMonitor.Scope? scope = AppServices.CurrentOrNull?.Performance.Measure("conversation rows restyled");
         _rowLook = look;
         for (int i = 0; i < Rows.Count; i++)
             Rows[i] = new ConversationRowViewModel(Rows[i].Entry, ChannelBrush, TextBrush, _rowLook);

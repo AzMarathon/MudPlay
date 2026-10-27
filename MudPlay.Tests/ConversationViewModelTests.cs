@@ -300,4 +300,49 @@ public sealed class ConversationViewModelTests
             Assert.False(row.Look.EmotesEnabled);
         }
     }
+
+    // The backlog a profile load replays from its talk log (SessionLogService's
+    // hydrate: each line parsed, the store seeded) is what the window opens on: a row
+    // per line, in the log's order, reading as the line was written, and one request
+    // to scroll to the newest of them (Hang-20261026-215238 opened on 2,000).
+    [Fact]
+    public void TalkLogBacklog_OpensAsOneRowPerLine_InOrder_WithOneScroll()
+    {
+        (_, ChatHistoryStore history) = NewStore();
+        ChatChannel[] channels = { ChatChannel.Gossip, ChatChannel.Local, ChatChannel.TelepathIncoming,
+                                   ChatChannel.Gangpath, ChatChannel.Broadcast, ChatChannel.Yell, ChatChannel.Social };
+        List<string> log = new();
+        for (int i = 0; i < 2_000; i++)
+        {
+            ChatChannel channel = channels[i % channels.Length];
+            string? speaker = channel == ChatChannel.Social ? null : $"Speaker{i % 7}";
+            string message = $"line {i}: see https://example.org/{i} :)";
+            log.Add(SessionLogService.FormatChatLine(new ChatLogEntry(T0.AddSeconds(i), channel, speaker, message, message)));
+        }
+        List<ChatLogEntry> parsed = new();
+        foreach (string line in log)
+        {
+            Assert.True(SessionLogService.TryParseChatLine(line, out ChatLogEntry entry));
+            parsed.Add(entry);
+        }
+        history.Seed(parsed);
+
+        using ConversationViewModel vm = NewViewModel(history);
+        int scrolls = 0;
+        vm.ScrollToRowRequested += _ => scrolls++;
+        // A rebuild of the whole list (here a search every line matches) asks once.
+        vm.SearchText = "line";
+
+        Assert.Equal(1, scrolls);
+        Assert.Equal(2_000, vm.Rows.Count);
+        for (int i = 0; i < 2_000; i++)
+        {
+            ConversationRowViewModel row = vm.Rows[i];
+            ChatChannel channel = channels[i % channels.Length];
+            Assert.Equal(channel, row.Entry.Channel);
+            Assert.Equal($"line {i}: see https://example.org/{i} :)", row.MessageText);
+            Assert.Equal(T0.AddSeconds(i).ToLocalTime().ToString("HH:mm:ss"), row.TimestampText);
+            Assert.Equal(channel == ChatChannel.Social ? "" : $"Speaker{i % 7}:", row.SpeakerText);
+        }
+    }
 }

@@ -109,6 +109,22 @@ public partial class MainWindow : Window
         // auto-sends (par poll, AutoParty invite, @health round-trip)
         // can fire freely without interleaving into half-typed input.
         Terminal.InputBuffer = AppServices.Current.InputBuffer;
+        // Typing at or clicking the terminal (its right-click menu holds the GOTO
+        // favourites) is the startup draft starting to play: its game data is built.
+        Terminal.AddHandler(InputElement.PointerPressedEvent,
+            (_, _) => AppServices.Current.BuildDeferredGameData("the terminal was used"),
+            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
+        // Not for Alt or the menu key on its own, which reach the menu bar from here
+        // (File → a recent profile is the usual way off the draft).
+        Terminal.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+            {
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Alt)
+                    || e.Key is Key.LeftAlt or Key.RightAlt or Key.LeftCtrl or Key.RightCtrl
+                        or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.F10)
+                    return;
+                AppServices.Current.BuildDeferredGameData("the terminal was used");
+            },
+            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // Feed the terminal-host viewport size into the control so its
         // ScaleToFit math can grow the font to fill the window. The control is

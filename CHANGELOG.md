@@ -1,5 +1,10 @@
 # Version history
 
+## 3.186.18
+
+- Conversation window with a full history opens without freezing
+- Starting on the unnamed profile skips building its game data until something needs it
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did

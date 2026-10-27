@@ -2700,6 +2700,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
         }
+        AppServices.Current.BuildDeferredGameData("connecting to the game");
 
         // Per-BBS retry knobs. ReconnectOnFailedConnect gates the loop:
         // when off, the user gets one shot and we surface the error — no
@@ -4622,6 +4623,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        using PerformanceMonitor.Scope open = AppServices.Current.Performance.Measure("open Conversation window");
         ConversationViewModel vm = new(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
