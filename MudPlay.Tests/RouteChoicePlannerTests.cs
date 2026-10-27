@@ -2655,7 +2655,7 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
-    // A many-pair lookup (the Chest Offload trip, the trainer pick) asks the memo, and
+    // A many-pair lookup (the Chest Offload trip, the funding router) asks the memo, and
     // must answer as DistanceBetween does on the lake too: out of a sea room by the
     // way FindPath takes out of it, and across to the island only on the terms.
     [Fact]
