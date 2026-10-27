@@ -216,6 +216,44 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.CombatGateHeld);
     }
 
+    // A stealth runner's see-hidden clear with auto-attack off lets the gate go through
+    // the "auto-attack disabled" release; that ends the fight too.
+    [Fact]
+    public void SeeHiddenClearDone_WithAutoAttackOff_FiresFightEnded_BeforeTheGateLetsGo()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "crystal golem");
+        bool? gateHeldWhenFired = null;
+        h.Tracker.FightEnded += () => gateHeldWhenFired = h.CombatGateHeld;
+
+        h.Feed("Also here: crystal golem.");
+        Assert.True(h.CombatGateHeld);
+        h.Feed("Also here: Bob.");
+
+        Assert.True(gateHeldWhenFired);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    // A force-clear (the idle-stall watchdog, Reset States) ends the fight as well.
+    [Fact]
+    public void ResetCombatState_FiresFightEnded()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        int fired = 0;
+        h.Tracker.FightEnded += () => fired++;
+
+        h.Tracker.ResetCombatState("test");
+
+        Assert.Equal(1, fired);
+        Assert.False(h.CombatGateHeld);
+    }
+
     [Fact]
     public void ShopkeeperFlaggedFriend_DoesNotAssertGate()
     {

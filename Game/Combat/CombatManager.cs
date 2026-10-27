@@ -1354,18 +1354,26 @@ public sealed partial class CombatManager : IDisposable
     // attribution, the temp-death-spell nudge, and the summon-on-death recheck, which
     // then never re-scanned for the bone snake a stitched zombie's death spell summons
     // (report paradigm-20260925-115042).
-    //
-    // Last, the monster the user last attacked by hand in this room: a fight the
-    // engine isn't running (Auto-Combat off) sets no target of its own, and its kill
-    // is still that monster's death to the boss timers, the death-spell nudge, the
-    // summon recheck and the floor check.
     public string? DeathAttributionTarget =>
         _currentTarget
         ?? (_inferredKillPendingRemoval is { } name
             && _now() - _inferredKillPendingAt < ExpKillWindow
                 ? name
-                : null)
-        ?? _userAttackedLast;
+                : null);
+
+    // The monster the user last attacked by hand in this room, while the engine runs
+    // no fight of its own and the room still lists it; null otherwise. Read only by
+    // the post-kill floor check, to name a kill made by hand: the boss timers and the
+    // death-spell nudge keep to DeathAttributionTarget, so a hand fight starts no
+    // boss timer and sends no nudge. Gone once a death has been handled, so a later
+    // death isn't taken for it.
+    public string? HandFoughtTarget =>
+        !EngineOn()
+        && _handFoughtLast is { } byHand
+        && _classifier.Current is { } room
+        && TargetPresent(room, byHand)
+            ? byHand
+            : null;
 
     // The monster the round's combat spell was announced against, or null when the
     // round isn't in spell mode. Distinct from CurrentTarget: a weapon attack and a
@@ -4279,6 +4287,9 @@ public sealed partial class CombatManager : IDisposable
     // the debounced CR re-display, letting the server hand back the true roster.
     public void NoteUnattributedDeath()
     {
+        // Every reader of the death has had it: a later one is no longer the
+        // hand-fought monster's.
+        _handFoughtLast = null;
         // A kill of ours with the attack held. When its exp line came before any
         // *Combat Off* did, in the round the break was typed in, the round beat the
         // break to the game and still landed (_userBreakHoldKillRaced). A
@@ -4728,9 +4739,10 @@ public sealed partial class CombatManager : IDisposable
     // break typed with the engine off, which every hand-fought break is.
     private bool _userBreakHoldAnnounced;
     // Whom the user last attacked by hand here, for a break typed while the engine
-    // holds no target of its own (Auto-Combat off, hand-fighting), and for the
-    // attribution of a kill in such a fight (DeathAttributionTarget).
+    // holds no target of its own (Auto-Combat off, hand-fighting).
     private string? _userAttackedLast;
+    // The same, for HandFoughtTarget: also forgotten once a death is handled.
+    private string? _handFoughtLast;
     private (DateTimeOffset At, string Text)? _lastUserBreakHoldEnd;
     // An exp line came under the hold before any *Combat Off* did, inside the round
     // the break was typed in: the round beat the break to the game and its kill is
@@ -4879,7 +4891,7 @@ public sealed partial class CombatManager : IDisposable
         if (_disposed) return;
         string? held = _userBreakHold;
         EngageableCandidate? aimedAt = ResolveManualTarget(target ?? held ?? _userAttackedLast);
-        if (aimedAt is { } hit) _userAttackedLast = hit.RawName;
+        if (aimedAt is { } hit) _userAttackedLast = _handFoughtLast = hit.RawName;
         if (held is null) return;
 
         string line = target is null ? word : $"{word} {target}";
@@ -4912,6 +4924,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory, "the game was left — dropping the attack-order / follow room state");
         _awaitingNotLast = false;
         _awaitingFollowAnnounce = false;
+        _handFoughtLast = null;
         LeaveRoomFight();
     }
 
@@ -4942,6 +4955,7 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
         _userAttackedLast = null;
+        _handFoughtLast = null;
         if (_userBreakHold is null) return;
         EndUserBreakHold("we left the room");
         _post(() =>
@@ -4956,6 +4970,7 @@ public sealed partial class CombatManager : IDisposable
     public void ClearUserBreakHold(string why)
     {
         _userAttackedLast = null;
+        _handFoughtLast = null;
         EndUserBreakHold(why);
     }
 

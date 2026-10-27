@@ -14,22 +14,28 @@ namespace MudPlay.Game.Inventory;
 //   - it has a chance above 0 of dropping anything, with Settings → Cash + Items →
 //     "Look after killing a monster that can drop an item" on.
 //
+// Which monster died comes from the attribute delegate (AppServices): the engine's
+// target, the one an exp-inferred kill dropped, or, for this reader alone, the
+// monster the user is fighting by hand (CombatManager.HandFoughtTarget).
+//
 // The death is read on its exp line or its *Combat Off*, and the Enter goes out at
 // the end of that server read: never among the kill's own lines, and one Enter for
 // all the kills the read carried. For the setting's reason alone it also waits for
 // the room's fight to end, so a fight that kills several such monsters looks once.
 // An Auto-collect drop is looked for straight away, since auto-get collects
-// mid-fight.
+// mid-fight. A monster whose death spell stalls the room (a silent "… temp" spell)
+// is looked at once the stall has run out: the game throws away what is sent before
+// then (GAME_MECHANICS "Silent death spells that stall the room").
 //
 // No Enter of its own when the room has been displayed since the kill, or an Enter
 // has gone out since the kill's read began and its display is still to come (the
-// combat engine's roster re-read, the cash engine's combat-clear look, a
-// death-spell nudge). Any Enter sent after the kill reached us is answered after
-// it, so its display shows the floor, whichever death handler sent it first. None
-// either when we have left the room or a move is on its way, in a room too dark to
-// see or while blind (the display shows no floor then), while the send gate is
-// held, or with the master switch off. A `look <dir>` peek's display is another
-// room's and settles nothing.
+// combat engine's roster re-read, the cash engine's combat-clear look). Any Enter
+// sent after the kill reached us is answered after it, so its display shows the
+// floor, whichever death handler sent it first; during a stall only one sent as it
+// ends counts. None either when we have left the room or a move is on its way, in a
+// room too dark to see or while blind (the display shows no floor then), while the
+// send gate is held, or with the master switch off. A `look <dir>` peek's display
+// is another room's and settles nothing.
 //
 // The walker is held through AcquisitionGate from the kill until the display has
 // been read (or ReleaseAfter, for a display that never comes). The kill clears the
@@ -47,9 +53,16 @@ public sealed class PostKillFloorCheck : IDisposable
     // How long the walker waits for the display the Enter asked for.
     public static readonly TimeSpan ReleaseAfter = TimeSpan.FromMilliseconds(1500);
 
+    // Who a death is taken to be: the Monsters numbers it may be, the name they were
+    // found by, and where that name came from (for the log and the bug report).
+    public readonly record struct DeathAttribution(
+        IReadOnlyCollection<int> Monsters, string? Name, string Source);
+
     // The look a kill has asked for and not yet had. AtOnce: an Auto-collect drop,
     // looked for while the fight goes on. EntersBefore: the bare Enters that can't
     // show the latest such kill, sent before its read began or already answered.
+    // Stall: how long a death spell keeps the room from acting; StallTimer is armed
+    // at the read's end and the look waits for it.
     private sealed class OwedLook(string why, bool atOnce, int entersBefore)
     {
         public string Why { get; } = why;
@@ -57,11 +70,14 @@ public sealed class PostKillFloorCheck : IDisposable
         public int EntersBefore { get; set; } = entersBefore;
         public int Kills { get; set; } = 1;
         public bool WaitLogged { get; set; }
+        public TimeSpan Stall { get; set; }
+        public IDisposable? StallTimer { get; set; }
     }
 
     private readonly MessageRouter _router;
-    private readonly Func<MonsterDeathEvent, IReadOnlyCollection<int>> _dyingMonsters;
+    private readonly Func<MonsterDeathEvent, DeathAttribution> _attribute;
     private readonly Func<int, MonsterCatalogEntry?> _monster;
+    private readonly Func<int, TimeSpan> _deathStall;
     private readonly Func<int, bool> _autoCollectWanted;
     private readonly Func<bool> _lookForAnyDrop;
     private readonly Func<bool> _hasEngageableHostiles;
@@ -94,15 +110,21 @@ public sealed class PostKillFloorCheck : IDisposable
     // What the last kill that asked for a look came to, for the bug report.
     private string? _lastCheck;
 
-    // autoCollectWanted: whether the item is one auto-get would take now (flagged
-    // Auto-collect, takeable, Auto-Get Items on). lookForAnyDrop: the setting.
-    // displayIsPeek: the display being read is a `look <dir>` peek's.
-    // bareEntersSent: EngineSendGate.BareEntersSent. blocked: the master switch,
-    // asked with a detail for its skip count.
+    // Who the last death was taken to be, and how, for the bug report.
+    public string? LastAttribution { get; private set; }
+
+    // attribute: who the death was (see DeathAttribution). deathStall: how long a
+    // monster's death spell stalls the room, zero for none. autoCollectWanted:
+    // whether the item is one auto-get would take now (flagged Auto-collect,
+    // takeable, Auto-Get Items on). lookForAnyDrop: the setting. displayIsPeek: the
+    // display being read is a `look <dir>` peek's. bareEntersSent:
+    // EngineSendGate.BareEntersSent. blocked: the master switch, asked with a
+    // detail for its skip count.
     public PostKillFloorCheck(
         MessageRouter router,
-        Func<MonsterDeathEvent, IReadOnlyCollection<int>> dyingMonsters,
+        Func<MonsterDeathEvent, DeathAttribution> attribute,
         Func<int, MonsterCatalogEntry?> monster,
+        Func<int, TimeSpan> deathStall,
         Func<int, bool> autoCollectWanted,
         Func<bool> lookForAnyDrop,
         Func<bool> hasEngageableHostiles,
@@ -119,8 +141,9 @@ public sealed class PostKillFloorCheck : IDisposable
     {
         ArgumentNullException.ThrowIfNull(router);
         _router = router;
-        _dyingMonsters = dyingMonsters;
+        _attribute = attribute;
         _monster = monster;
+        _deathStall = deathStall;
         _autoCollectWanted = autoCollectWanted;
         _lookForAnyDrop = lookForAnyDrop;
         _hasEngageableHostiles = hasEngageableHostiles;
@@ -163,7 +186,8 @@ public sealed class PostKillFloorCheck : IDisposable
     {
         string state = _owed is { } owed
             ? $"owed after {owed.Kills} kill(s) ({owed.Why})"
-              + (owed.AtOnce ? "" : ", waiting for the room's fight to end")
+              + (owed.StallTimer is not null ? ", waiting out a death spell's stall"
+                 : owed.AtOnce ? "" : ", waiting for the room's fight to end")
             : _holding ? "waiting on the room display" : "idle";
         return _lastCheck is null ? state : $"{state}; last: {_lastCheck}";
     }
@@ -173,11 +197,26 @@ public sealed class PostKillFloorCheck : IDisposable
     public void OnMonsterDied(MonsterDeathEvent evt)
     {
         if (_disposed) return;
-        if (WhyLook(evt) is not { } look)
+        DeathAttribution who = _attribute(evt);
+        LastAttribution = $"{who.Name ?? "(no name)"} ({who.Source})";
+        _log?.Debug(LogCategory, $"death attributed to {LastAttribution}");
+
+        TimeSpan stall = TimeSpan.Zero;
+        foreach (int number in who.Monsters)
+        {
+            TimeSpan own = _deathStall(number);
+            if (own > stall) stall = own;
+        }
+
+        if (WhyLook(who.Monsters) is not { } look)
         {
             // A later kill of the fight a look is owed for: the hold keeps the walker
             // for that look once this kill has ended the fight.
-            if (_owed is not null) Hold();
+            if (_owed is not null)
+            {
+                NoteStall(_owed, stall);
+                Hold();
+            }
             return;
         }
         int entersBefore = Math.Max(_entersAtReadStart, _entersAtLastDisplay);
@@ -188,14 +227,28 @@ public sealed class PostKillFloorCheck : IDisposable
             _owed.AtOnce |= look.AtOnce;
             _owed.EntersBefore = entersBefore;
         }
+        NoteStall(_owed, stall);
         Hold();
+    }
+
+    // A death spell stalls the room: the look waits it out, and a stall that comes
+    // later restarts the wait.
+    private void NoteStall(OwedLook owed, TimeSpan stall)
+    {
+        if (stall <= TimeSpan.Zero) return;
+        owed.StallTimer?.Dispose();
+        owed.StallTimer = null;
+        owed.Stall = stall;
     }
 
     // The room's fight is over (CombatStateTracker.FightEnded), just before the
     // walker may step: a look still owed holds it, and goes out at the read's end.
     public void NoteFightEnded()
     {
-        if (_owed is not null) Hold();
+        if (_disposed || _owed is not { } owed) return;
+        _log?.Debug(LogCategory, $"the room's fight is over — holding the walker for the look owed ({owed.Why})");
+        // A stall's wait already holds it, for longer.
+        if (owed.StallTimer is null) Hold();
     }
 
     // A room display was read (its exits line): it showed the floor.
@@ -203,22 +256,14 @@ public sealed class PostKillFloorCheck : IDisposable
     {
         if (_displayIsPeek()) return;
         _entersAtLastDisplay = _bareEntersSent();
-        if (_owed is { } owed)
-        {
-            _owed = null;
-            Skipped(owed, "the room was displayed after the kill");
-        }
+        Settle("the room was displayed after the kill");
         ReleaseHold();
     }
 
     // We are in another room: the floor of the one the kill was in is behind us.
     public void OnRoomChanged()
     {
-        if (_owed is { } owed)
-        {
-            _owed = null;
-            Skipped(owed, "left the room first");
-        }
+        Settle("left the room first");
         ReleaseHold();
     }
 
@@ -226,22 +271,26 @@ public sealed class PostKillFloorCheck : IDisposable
     // be the same on the way back in.
     public void NoteGameLeft()
     {
-        if (_owed is { } owed)
-        {
-            _owed = null;
-            Skipped(owed, "left the game first");
-        }
+        Settle("left the game first");
         ReleaseHold();
+    }
+
+    private void Settle(string reason)
+    {
+        if (_owed is not { } owed) return;
+        _owed = null;
+        owed.StallTimer?.Dispose();
+        Skipped(owed, reason);
     }
 
     // Why the death asks for a look, or null. An Auto-collect drop wins: it is the
     // one that is looked for while the fight goes on.
-    private (string Why, bool AtOnce)? WhyLook(MonsterDeathEvent evt)
+    private (string Why, bool AtOnce)? WhyLook(IReadOnlyCollection<int> dying)
     {
         bool anyDrop = _lookForAnyDrop();
         string? chance = null;
         string? names = null;
-        foreach (int number in _dyingMonsters(evt))
+        foreach (int number in dying)
         {
             if (_monster(number) is not { } monster) continue;
             names = names is null ? $"'{monster.Name}'" : $"{names}, '{monster.Name}'";
@@ -274,12 +323,41 @@ public sealed class PostKillFloorCheck : IDisposable
         _entersAtReadStart = _bareEntersSent();
     }
 
-    // The read with the kill in it has ended: look now, unless the fight is still on
-    // and nothing flagged Auto-collect is waiting.
+    // The read with the kill in it has ended: look now, unless a death spell's stall
+    // is still to run out, or the fight is still on and nothing flagged Auto-collect
+    // is waiting.
     private void OnReadEnded()
     {
+        // First, so a handler below that throws can't leave the next read's
+        // baseline unread.
         _readUnderway = false;
         if (_owed is not { } owed) return;
+        if (owed.StallTimer is not null) return;
+        if (owed.Stall > TimeSpan.Zero)
+        {
+            TimeSpan stall = owed.Stall;
+            _log?.Debug(LogCategory,
+                $"look owed ({owed.Why}) — waiting {stall.TotalMilliseconds:F0} ms for the death spell's stall to run out");
+            owed.StallTimer = _schedule(stall, () => OnStallOver(owed, _bareEntersSent()));
+            Hold(stall + ReleaseAfter);
+            return;
+        }
+        Decide(owed);
+    }
+
+    // The stall has run out. An Enter sent while it ran (a death-spell nudge) was
+    // thrown away; one sent as it ended (the cash engine's coin look) is answered.
+    private void OnStallOver(OwedLook owed, int entersAtArm)
+    {
+        if (_disposed || !ReferenceEquals(_owed, owed)) return;
+        owed.StallTimer = null;
+        owed.Stall = TimeSpan.Zero;
+        owed.EntersBefore = Math.Max(owed.EntersBefore, entersAtArm);
+        Decide(owed);
+    }
+
+    private void Decide(OwedLook owed)
+    {
         if (!owed.AtOnce && _hasEngageableHostiles())
         {
             if (!owed.WaitLogged)
@@ -287,7 +365,7 @@ public sealed class PostKillFloorCheck : IDisposable
                 owed.WaitLogged = true;
                 _log?.Debug(LogCategory, $"look owed ({owed.Why}) — waiting for the room's fight to end");
             }
-            // The Combat gate holds the walker meanwhile; the last kill holds it again.
+            // The Combat gate holds the walker meanwhile; the fight's end holds it again.
             ReleaseHold();
             return;
         }
@@ -331,7 +409,7 @@ public sealed class PostKillFloorCheck : IDisposable
     }
 
     // Hold the walker, or restart the wait of a hold already up.
-    private void Hold()
+    private void Hold(TimeSpan? wait = null)
     {
         if (_gate is null) return;
         if (!_holding)
@@ -340,14 +418,14 @@ public sealed class PostKillFloorCheck : IDisposable
             _gate.NoteReLookPending();
         }
         _holdRelease?.Dispose();
-        _holdRelease = _schedule(ReleaseAfter, OnHoldElapsed);
+        _holdRelease = _schedule(wait ?? ReleaseAfter, OnHoldElapsed);
     }
 
     private void OnHoldElapsed()
     {
         _holdRelease = null;
         if (_holding)
-            _log?.Debug(LogCategory, $"no room display within {ReleaseAfter.TotalSeconds:0.#}s — letting the walker go");
+            _log?.Debug(LogCategory, "no room display came in time — letting the walker go");
         ReleaseHold();
     }
 
@@ -366,6 +444,7 @@ public sealed class PostKillFloorCheck : IDisposable
         _disposed = true;
         _router.LineDispatched -= OnLineDispatched;
         _router.ReadEnded -= OnReadEnded;
+        _owed?.StallTimer?.Dispose();
         ReleaseHold();
     }
 }

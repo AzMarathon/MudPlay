@@ -4941,8 +4941,9 @@ public sealed class AppServices
         // the summon settle is: the walker hold has to be up before the resync clears
         // the Combat gate.
         FloorCheck = new Game.Inventory.PostKillFloorCheck(Router,
-            dyingMonsters: DyingMonsterNumbers,
+            attribute: FloorCheckAttribution,
             monster: number => MonsterCatalog.Get(number),
+            deathStall: DeathStallOf,
             autoCollectWanted: item =>
             {
                 if (!ReadAutoModeFlag(d => d.AutoGetItems)) return false;
@@ -13450,8 +13451,14 @@ public sealed class AppServices
                 if (id.Number is { } n) numbers.Add(n);
             return numbers;
         }
-        if (Combat.DeathAttributionTarget is not { Length: > 0 } dying) return numbers;
+        return Combat.DeathAttributionTarget is { Length: > 0 } dying ? MonsterNumbersNamed(dying) : numbers;
+    }
 
+    // The Monsters-table Numbers a dying monster's name may be: the room roster's
+    // entries of that name first, then the name lookup (see DyingMonsterNumbers).
+    private HashSet<int> MonsterNumbersNamed(string dying)
+    {
+        HashSet<int> numbers = new();
         if (RoomClassifier.Current is { } roster)
             foreach (Game.Combat.RoomEntity e in roster.Entities)
                 if (e.Kind == Game.Combat.EntityKind.Monster && e.MonsterNumber is { } inRoom
@@ -13460,6 +13467,24 @@ public sealed class AppServices
                     numbers.Add(inRoom);
         if (ResolveMonsterNumberByName(dying) is { } byName) numbers.Add(byName);
         return numbers;
+    }
+
+    // Who the post-kill floor check takes a death to be: who every reader takes it
+    // to be (DyingMonsterNumbers), or, failing that and for this reader alone, the
+    // monster the user is fighting by hand with the engine off
+    // (CombatManager.HandFoughtTarget). The boss timers and the death-spell nudge
+    // never see that last one.
+    private Game.Inventory.PostKillFloorCheck.DeathAttribution FloorCheckAttribution(
+        Game.Combat.MonsterDeathEvent evt)
+    {
+        if (evt.RoomSpellRoster is not null)
+            return new(DyingMonsterNumbers(evt), null, "the kinds our room spell's room listed");
+        if (Combat.DeathAttributionTarget is { Length: > 0 } named)
+            return new(MonsterNumbersNamed(named), named,
+                Combat.CurrentTarget is not null ? "engine target" : "exp-inferred");
+        if (Combat.HandFoughtTarget is { Length: > 0 } byHand)
+            return new(MonsterNumbersNamed(byHand), byHand, "last hand attack");
+        return new(Array.Empty<int>(), null, "unknown");
     }
 
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no

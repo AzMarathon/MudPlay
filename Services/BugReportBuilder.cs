@@ -2284,6 +2284,7 @@ public static class BugReportBuilder
         // check owes, and why its last look was sent or skipped. The setting itself
         // is printed with the Cash settings.
         Kv(sb, "Floor check after a kill", svc.FloorCheck.Describe());
+        Kv(sb, "Floor check attributed the death to", svc.FloorCheck.LastAttribution ?? "no death yet");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.

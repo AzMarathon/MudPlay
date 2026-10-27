@@ -319,26 +319,59 @@ public sealed class CombatManagerBreakHoldTests
         Assert.True(h.Combat.AttackHeldByUserBreak);
     }
 
-    // A fight the engine isn't running: the monster the user attacked by hand is the
-    // one a kill there is attributed to (the boss timers, the death-spell nudge, the
-    // summon recheck and the post-kill floor check read it). Nothing is attributed
-    // before any attack, and leaving the room forgets it.
+    // A fight the engine isn't running: the monster the user attacked by hand names a
+    // kill for the post-kill floor check alone (HandFoughtTarget). DeathAttributionTarget,
+    // which the boss timers and the death-spell nudge read, stays empty as before, so a
+    // hand fight starts no boss timer (BossTimerTests: no engaged name, no timer).
+    // Nothing is named before any attack, and leaving the room forgets it.
     [Fact]
-    public void HandFoughtKill_WithTheEngineOff_IsAttributedToTheMonsterAttacked()
+    public void HandFight_WithTheEngineOff_NamesTheKillForTheFloorCheckOnly()
     {
         using Harness h = new();
         h.AddMonster(1, Rat);
         h.AutoCombatEnabled = false;
         h.Feed($"Also here: {Rat}.");
-        Assert.Null(h.Combat.DeathAttributionTarget);
+        Assert.Null(h.Combat.HandFoughtTarget);
 
         h.UserSends("a rat");
 
-        Assert.Equal(Rat, h.Combat.DeathAttributionTarget);
+        Assert.Equal(Rat, h.Combat.HandFoughtTarget);
+        Assert.Null(h.Combat.DeathAttributionTarget);
         Assert.Empty(h.Sent);
 
         h.Combat.NoteRoomLeft(h.Now);
-        Assert.Null(h.Combat.DeathAttributionTarget);
+        Assert.Null(h.Combat.HandFoughtTarget);
+    }
+
+    // Once a death has been handled the hand-fought monster names no later one, even
+    // with another of its name still listed.
+    [Fact]
+    public void HandFoughtMonsterDied_ALaterDeathIsNotTakenForIt()
+    {
+        using Harness h = new();
+        h.AddMonster(1, Rat);
+        h.AutoCombatEnabled = false;
+        h.Feed($"Also here: {Rat}, {Rat}.");
+        h.UserSends("a rat");
+        Assert.Equal(Rat, h.Combat.HandFoughtTarget);
+
+        h.Feed("You gain 10 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Null(h.Combat.HandFoughtTarget);
+    }
+
+    // The hand-fought name is only for a fight the engine isn't running.
+    [Fact]
+    public void HandAttack_WithTheEngineOn_NamesNothingOfItsOwn()
+    {
+        using Harness h = new();
+        h.AddMonster(1, Rat);
+        h.Feed($"Also here: {Rat}.");
+
+        h.UserSends("a rat");
+
+        Assert.Null(h.Combat.HandFoughtTarget);
     }
 
     // A party member's `@do break` holds the attack exactly as a typed one does

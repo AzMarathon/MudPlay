@@ -5,6 +5,7 @@ using MudPlay.Game;
 using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
+using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
@@ -16,20 +17,23 @@ namespace MudPlay.Tests;
 // dropped an item, so the floor is shown again, and holds the walker until that
 // display has been read. Kills come in as the game prints them, through
 // MonsterDeathWatcher; the Enter goes out through a send-gate-wrapped sender, as
-// every engine's does; room displays are parsed by RoomDisplayParser.
+// every engine's does; room displays are parsed by RoomDisplayParser; the end of a
+// fight comes from a real CombatStateTracker.
 public sealed class PostKillFloorCheckTests : IDisposable
 {
     private const int Dropper = 1;       // orc lieutenant: item 900 at 5%
     private const int NonDropper = 2;    // giant rat: no drops
     private const int OtherDropper = 3;  // kobold: item 901 at 10%
     private const int ZeroChance = 4;    // cave bear: item 900 listed at 0%
+    private const int Staller = 5;       // stone giant: item 901 at 50%, a death spell that stalls
 
     private const string Monsters = """
         [
           { "Number": 1, "Name": "orc lieutenant", "EXP": 50, "DropItem-0": 900, "DropItem%-0": 5 },
           { "Number": 2, "Name": "giant rat", "EXP": 10 },
           { "Number": 3, "Name": "kobold", "EXP": 20, "DropItem-0": 901, "DropItem%-0": 10 },
-          { "Number": 4, "Name": "cave bear", "EXP": 30, "DropItem-0": 900, "DropItem%-0": 0 }
+          { "Number": 4, "Name": "cave bear", "EXP": 30, "DropItem-0": 900, "DropItem%-0": 0 },
+          { "Number": 5, "Name": "stone giant", "EXP": 90, "DropItem-0": 901, "DropItem%-0": 50 }
         ]
         """;
 
@@ -59,7 +63,12 @@ public sealed class PostKillFloorCheckTests : IDisposable
     private readonly AcquisitionGate _acquisition;
     private readonly ManualTimers _timers = new();
     private readonly PostKillFloorCheck _check;
+    private readonly CombatStateTracker _combat;
+    private readonly MonsterMessageStore _monsterNames = new();
     private readonly List<string> _sent = new();
+
+    // How long each monster's death spell stalls the room (AppServices.DeathStallOf).
+    private static readonly TimeSpan GiantStall = TimeSpan.FromSeconds(3);
 
     // What CombatManager's attribution would name as the monster that died.
     private int? _fighting;
@@ -90,14 +99,24 @@ public sealed class PostKillFloorCheckTests : IDisposable
         _displays = new RoomDisplayParser(_feed.Lines, _tracker);
         _master = new AutoModeController(_profile);
         _acquisition = new AcquisitionGate(_coordinator);
+        foreach ((int number, string name) in new[] { (1, "orc lieutenant"), (3, "kobold") })
+            _monsterNames.Messages.Add(new MonsterMessageRecord(
+                Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
+        RoomEntityClassifier classifier = new(_router, _monsterNames,
+            new PlayerDatabase(new ProfileService(), () => null));
+        _combat = new CombatStateTracker(_router, _coordinator, classifier, _monsterNames, new PlayerState(),
+            () => true, resolveOverlay: _ => new MonsterOverlay());
 
         _check = new PostKillFloorCheck(_router,
-            dyingMonsters: _ => _fighting is { } n ? new[] { n } : System.Array.Empty<int>(),
+            attribute: _ => _fighting is { } n
+                ? new PostKillFloorCheck.DeathAttribution(new[] { n }, catalog.Get(n)?.Name, "engine target")
+                : new PostKillFloorCheck.DeathAttribution(System.Array.Empty<int>(), null, "unknown"),
             monster: catalog.Get,
+            deathStall: n => n == Staller ? GiantStall : TimeSpan.Zero,
             autoCollectWanted: _flaggedAutoCollect.Contains,
             lookForAnyDrop: () =>
                 SettingsSection.Read<CashSettings>(_profile.Current, "Cash").LookAfterKillingDropper,
-            hasEngageableHostiles: () => _hostilesLeft,
+            hasEngageableHostiles: () => _hostilesLeft || _combat.HasEngageableHostiles,
             canSeeRoom: () => _canSee,
             moveOnItsWay: () => _tracker.MoveOnItsWay,
             displayIsPeek: () => _tracker.IsPeekSuppressed(),
@@ -113,11 +132,13 @@ public sealed class PostKillFloorCheckTests : IDisposable
         _deaths.MonsterDied += evt => { foreach (Action<MonsterDeathEvent> h in _earlierDeathHandlers) h(evt); };
         _deaths.MonsterDied += _check.OnMonsterDied;
         _displays.RoomParsed += _ => _check.NoteRoomDisplayed();
+        _combat.FightEnded += _check.NoteFightEnded;
     }
 
     public void Dispose()
     {
         _check.Dispose();
+        _combat.Dispose();
         _displays.Dispose();
         _deaths.Dispose();
         _acquisition.Dispose();
@@ -148,6 +169,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Assert.Equal(new[] { "\r" }, _sent);
         Assert.True(WalkerHeld);
         Assert.Contains("sent an Enter after 1 kill(s)", _check.Describe());
+        Assert.Equal("orc lieutenant (engine target)", _check.LastAttribution);
 
         RoomDisplay();
 
@@ -310,6 +332,21 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Assert.Contains("sent an Enter", _check.Describe());
     }
 
+    // The same with the tracker sure where it stands: the move is queued.
+    [Fact]
+    public void QueuedMove_OnASureTracker_NoEnter()
+    {
+        RoomDisplay();
+        _tracker.NoteMoveSent(Direction.S);
+        Assert.True(_tracker.HasQueuedMoves);
+
+        Kill(Dropper);
+
+        Assert.Empty(_sent);
+        Assert.False(WalkerHeld);
+        Assert.Contains("a move is on its way", _check.Describe());
+    }
+
     // A walk step already sent: the room shown next is the next room, so no Enter, and
     // the walker isn't held back. The tracker here has never been sure where it
     // stands, so the move is one noted while unsure.
@@ -342,22 +379,54 @@ public sealed class PostKillFloorCheckTests : IDisposable
     }
 
     // The last monster falls to a party member's blow, which pays us nothing: no death
-    // of ours, but the fight's end still holds the walker and sends the owed look.
+    // of ours, but the room clearing ends the fight (CombatStateTracker.FightEnded),
+    // which holds the walker before the Combat gate lets go, and the owed look goes.
     [Fact]
     public void FightEndsWithoutAKillOfOurs_TheOwedLookStillGoes()
     {
-        _hostilesLeft = true;
+        Read("Also here: orc lieutenant, kobold.", "[HP=100/MA=50]:");
+        Assert.True(_coordinator.IsGateAsserted(MovementCoordinator.CombatGate));
         Kill(Dropper);
+        Read("Also here: kobold.", "[HP=100/MA=50]:");
         Assert.Empty(_sent);
-        Assert.False(WalkerHeld);
 
-        _hostilesLeft = false;
-        _check.NoteFightEnded();
-        Assert.True(WalkerHeld);
-        Read("Bob's blow fells the kobold.", "[HP=100/MA=50]:");
+        bool heldWhenTheGateWent = false;
+        _coordinator.GatesChanged += () =>
+        {
+            if (!_coordinator.IsGateAsserted(MovementCoordinator.CombatGate)) heldWhenTheGateWent |= WalkerHeld;
+        };
+        Read("Bob's blow fells the kobold.", "Also here: Bob.", "[HP=100/MA=50]:");
 
+        Assert.True(heldWhenTheGateWent);
         Assert.Equal(new[] { "\r" }, _sent);
         Assert.True(WalkerHeld);
+    }
+
+    // A death spell that stalls the room: what is sent before the stall runs out is
+    // thrown away, so the nudge's Enter isn't the look, and the look goes once the
+    // stall is over, with the walker held all the while.
+    [Fact]
+    public void DeathSpellStall_TheLookWaitsItOut()
+    {
+        Action<byte[]> nudge = _sendGate.WrapEngineSender(bytes => _sent.Add(Text(bytes)));
+        _earlierDeathHandlers.Add(_ => nudge(new[] { (byte)'\r', (byte)'\r' }));
+
+        Kill(Staller, exp: 90);
+
+        Assert.Equal(new[] { "\r\r" }, _sent);
+        Assert.True(WalkerHeld);
+        Assert.Contains("waiting out a death spell's stall", _check.Describe());
+
+        _timers.Advance(GiantStall - TimeSpan.FromMilliseconds(1));
+        Assert.Single(_sent);
+        Assert.True(WalkerHeld);
+
+        _timers.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.Equal(new[] { "\r\r", "\r" }, _sent);
+        Assert.True(WalkerHeld);
+
+        RoomDisplay();
+        Assert.False(WalkerHeld);
     }
 
     // A `look <dir>` peek shows the next room: it settles no look, and the one owed
