@@ -183,8 +183,15 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // The selected realm's game-data set; GlobalDefaultSet means "use the Global
     // default" (RealmProfile.ActiveGameDataSet = null).
     public const string GlobalDefaultSet = "(global default)";
-    public IReadOnlyList<string> GameDataSetOptions { get; } = BuildGameDataSetOptions();
+    public ObservableCollection<string> GameDataSetOptions { get; }
     [ObservableProperty] private string _realmGameDataSet = GlobalDefaultSet;
+
+    // A realm naming a set that isn't installed here gets a picker entry of its
+    // own, standing for that name: shown as the global default instead, any other
+    // edit to the realm would save null over the set it chose.
+    private string? _missingSet;
+    private string? _missingSetOption;
+    private static string NotInstalledOption(string set) => $"{set} (not installed)";
 
     // Realm renames / removals made in the window, applied on OK: a rename moves
     // the realm's data folder and re-points its characters; a removal deletes the
@@ -200,13 +207,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         HasProfile && SelectedBbsName is { } sel
         && string.Equals(sel, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase);
 
-    private static IReadOnlyList<string> BuildGameDataSetOptions()
-    {
-        var sets = new List<string> { GlobalDefaultSet };
-        if (AppServices.CurrentOrNull is { } svcs)
-            sets.AddRange(svcs.GameData.AvailableSets.OrderBy(s => s, StringComparer.OrdinalIgnoreCase));
-        return sets;
-    }
+    private static ObservableCollection<string> BuildGameDataSetOptions(GameDataCache gameData) =>
+        new(gameData.AvailableSets.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).Prepend(GlobalDefaultSet));
 
     // ----- Game-menu commands (selected realm) -----
     // The two main-menu picks for entering / leaving the game.
@@ -377,18 +379,21 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         ProfileService profile,
         PasswordProtector passwords,
         DisplayConfig display,
-        SettingsService globalSettings)
+        SettingsService globalSettings,
+        GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(bbsStore);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(passwords);
         ArgumentNullException.ThrowIfNull(display);
         ArgumentNullException.ThrowIfNull(globalSettings);
+        ArgumentNullException.ThrowIfNull(gameData);
         _bbsStore = bbsStore;
         _profile = profile;
         _passwords = passwords;
         _display = display;
         _globalSettings = globalSettings;
+        GameDataSetOptions = BuildGameDataSetOptions(gameData);
 
         Action<CharacterProfile> onProfileLoaded = _ => RefreshProfileState();
         // SuicidePasswordTracker writes a new encrypted blob and
@@ -822,8 +827,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         RealmProfile realm = SelectedRealm() ?? new RealmProfile();
         RealmName = realm.Name;
-        RealmGameDataSet = realm.ActiveGameDataSet is { } set && GameDataSetOptions.Contains(set)
-            ? set : GlobalDefaultSet;
+        LoadRealmGameDataSet(realm.ActiveGameDataSet);
         GameEntryCommand = realm.GameEntryCommand;
         GameExitCommand = realm.GameExitCommand;
         PlayerDiesAtHp = realm.PlayerDiesAtHp;
@@ -841,6 +845,19 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         CleanupTimeOfDay = realm.CleanupTimeOfDay;
         CleanupTimeZoneId = realm.CleanupTimeZoneId;
         RunicCurrencyName = realm.RunicCurrencyName;
+    }
+
+    // The new entry goes in before it's selected and the old one comes out after,
+    // so the picker never loses its selection to a removed item.
+    private void LoadRealmGameDataSet(string? set)
+    {
+        string? staleOption = _missingSetOption;
+        bool missing = set is not null && !GameDataSetOptions.Contains(set);
+        _missingSet = missing ? set : null;
+        _missingSetOption = missing ? NotInstalledOption(set!) : null;
+        if (_missingSetOption is { } option && option != staleOption) GameDataSetOptions.Add(option);
+        RealmGameDataSet = _missingSetOption ?? set ?? GlobalDefaultSet;
+        if (staleOption is not null && staleOption != _missingSetOption) GameDataSetOptions.Remove(staleOption);
     }
 
     partial void OnSelectedRealmNameChanged(string? value)
@@ -1235,7 +1252,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
         if (SelectedRealm() is not { } realm) return;
         RealmProfile defaults = new();
-        realm.ActiveGameDataSet = RealmGameDataSet == GlobalDefaultSet ? null : RealmGameDataSet;
+        realm.ActiveGameDataSet = RealmGameDataSet == GlobalDefaultSet ? null
+            : RealmGameDataSet == _missingSetOption ? _missingSet
+            : RealmGameDataSet;
         realm.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
             ? defaults.GameEntryCommand : GameEntryCommand.Trim();
         realm.GameExitCommand = string.IsNullOrWhiteSpace(GameExitCommand)

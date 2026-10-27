@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.17
+
+- A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
+
 ## 3.186.16
 
 - Route searches several times faster, with far less memory churn, most of all on Windows

@@ -360,6 +360,11 @@ How to keep it current:
 - Checks: credential edits on several boards all commit on Apply; returning to a board shows the staged value; Discard drops edits on boards no longer selected.
 - Why: the first board's username, password and logon steps were silently dropped.
 
+### BbsSectionRealmGameDataSetTests.cs
+- Covers: ViewModels/Settings/BbsSectionViewModel (realm Game data picker)
+- Checks: a realm naming an uninstalled set shows it as "(not installed)" and keeps the name in bbs.json when another field is edited and saved; picking an installed set or the global default saves that.
+- Why: an OK after any realm edit saved null over a set not installed on this machine.
+
 ### BenignChatterMatcherTests.cs
 - Covers: Game/BenignChatterMatcher
 - Checks: known chatter shapes (departures, disconnects, also-here, the suicide-password block, the 2026-10-08 export families) are benign; player look headers; look-alike and genuine spell lines are left alone; gear swaps only for known players.
