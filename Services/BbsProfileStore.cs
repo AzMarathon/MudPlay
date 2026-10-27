@@ -80,6 +80,9 @@ public sealed class BbsProfileStore
     // drops it at once. Get reads and parses the file and serializes the result
     // again each call, some 70 KB a time; a route search asked it at every door, and
     // the PvP checks at every room arrival (report paradigm-20261026-201217).
+    // A rewrite inside one tick of the file's clock that keeps its length is not
+    // seen until the file next changes: NTFS and ext4 keep times far finer than
+    // any two saves land apart.
     public BbsProfile? Peek(string bbsName)
     {
         if (string.IsNullOrWhiteSpace(bbsName) || !Usable("Reading a BBS", bbsName)) return null;
@@ -92,16 +95,21 @@ public sealed class BbsProfileStore
             _peeked.TryRemove(path, out _);
             return null;
         }
-        if (_peeked.TryGetValue(path, out Peeked? kept) && kept.File == onFile) return kept.Profile;
+        if (_peeked.TryGetValue(path, out Peeked? kept) && kept.File == onFile
+            && string.Equals(kept.Path, path, StringComparison.Ordinal))
+            return kept.Profile;
         BbsProfile? read = Get(bbsName);
-        _peeked[path] = new Peeked(onFile.Value, read);
+        _peeked[path] = new Peeked(path, onFile.Value, read);
         return read;
     }
 
-    private sealed record Peeked(FileIdentity File, BbsProfile? Profile);
+    private sealed record Peeked(string Path, FileIdentity File, BbsProfile? Profile);
 
+    // Keyed without case, so a save under a name cased otherwise (Windows' folders
+    // are one either way) still drops what was read; a copy is only handed back for
+    // the path it was read from.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Peeked> _peeked =
-        new(StringComparer.Ordinal);
+        new(StringComparer.OrdinalIgnoreCase);
 
     private readonly record struct FileIdentity(long LastWriteUtcTicks, long Length)
     {

@@ -349,10 +349,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // Nested scopes stack. Off the UI thread it is free while not collecting.
     // detail tells one run from another (a section's id, the file a save writes);
     // it is kept apart from name so nothing is put together until it is read, and
-    // a path is shown by its file name.
+    // a full path is shown by its file name.
     public Scope Measure(string name, string? detail = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) =>
-        Open(name, detail, expectedLong: false, file, member, line);
+        Open(name, detail, expectedLong: false, quiet: false, file, member, line);
 
     // As Measure, for work that holds the UI thread for seconds by design: a
     // game-data set loaded, switched or re-imported. Client policy (2026-10-18):
@@ -362,9 +362,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // report names it and what it has taken before.
     public Scope MeasureLong(string name, string? detail = null,
         [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0) =>
-        Open(name, detail, expectedLong: true, file, member, line);
+        Open(name, detail, expectedLong: true, quiet: false, file, member, line);
 
-    private Scope Open(string name, string? detail, bool expectedLong, string file, string member, int line)
+    // quiet: left out of the recent activity when it ran under QuietBelowMs (Raise).
+    private Scope Open(string name, string? detail, bool expectedLong, bool quiet, string file, string member, int line)
     {
         bool timed = _collecting;
         if (!_onUiThread()) return timed ? new Scope(this, name, detail, -1, _timestamp(), timed: true) : default;
@@ -373,7 +374,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         lock (_scopesLock)
         {
             depth = _depth++;
-            if (depth < MaxDepth) _stack[depth] = new Frame(name, detail, file, member, line, start, expectedLong);
+            if (depth < MaxDepth) _stack[depth] = new Frame(name, detail, file, member, line, start, expectedLong, quiet);
         }
         return new Scope(this, name, detail, depth, start, timed);
     }
@@ -384,43 +385,56 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // the handler: a hang report then names the slow subscriber, where a scope
     // round the raise could name only the line of game text that raised it. A
     // handler that runs StallMs or more is said in the log, at Debug, in category.
-    public void Raise(Action? handlers, string what, LogService? log = null, string category = "Performance")
+    // A room change has some fifty handlers, so one that finishes under
+    // QuietBelowMs stays out of the recent activity: fifty rows a step would push
+    // out everything else the report's list is for.
+    public void Raise(Action? handlers, string what, LogService? log = null, string category = "Performance",
+        [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0)
     {
         if (handlers is null) return;
         foreach (Delegate handler in handlers.GetInvocationList())
-        {
-            long started = _timestamp();
-            using (Measure(what, HandlerName(handler))) ((Action)handler)();
-            NoteSlowHandler(what, handler, started, log, category);
-        }
+            RaiseOne(handler, static (h, _) => ((Action)h)(), (object?)null, what, log, category, file, member, line);
     }
 
-    public void Raise<T>(Action<T>? handlers, T arg, string what, LogService? log = null, string category = "Performance")
+    public void Raise<T>(Action<T>? handlers, T arg, string what, LogService? log = null, string category = "Performance",
+        [CallerFilePath] string file = "", [CallerMemberName] string member = "", [CallerLineNumber] int line = 0)
     {
         if (handlers is null) return;
         foreach (Delegate handler in handlers.GetInvocationList())
-        {
-            long started = _timestamp();
-            using (Measure(what, HandlerName(handler))) ((Action<T>)handler)(arg);
-            NoteSlowHandler(what, handler, started, log, category);
-        }
+            RaiseOne(handler, static (h, a) => ((Action<T>)h)(a), arg, what, log, category, file, member, line);
     }
 
-    private void NoteSlowHandler(string what, Delegate handler, long started, LogService? log, string category)
+    // Under this, a raised handler's scope is left out of the recent activity.
+    private const double QuietBelowMs = 1;
+
+    private void RaiseOne<T>(Delegate handler, Action<Delegate, T> invoke, T arg, string what, LogService? log,
+        string category, string file, string member, int line)
     {
+        string name = HandlerName(handler);
+        long started = _timestamp();
+        using (Open(what, name, expectedLong: false, quiet: true, file, member, line)) invoke(handler, arg);
         double ms = Ms(started, _timestamp());
         if (log is not null && ms >= StallMs)
-            log.Debug(category, $"{what} handler '{HandlerName(handler)}' took {ms:F0} ms");
+            log.Debug(category, $"{what} handler '{name}' took {ms:F0} ms");
     }
 
     // A handler subscribed as a lambda has no name of its own (the compiler's reads
     // "<.ctor>b__1644_1001"), so one that is raised through Raise subscribes
-    // through this, to be named by what it does.
+    // through this, to be named by what it does. Each call makes a new delegate: to
+    // unsubscribe, keep the one subscribed and `-=` that; `-=` with a fresh
+    // Named(...) removes nothing.
     public static Action<T> Named<T>(string name, Action<T> handler)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(handler);
         return new NamedHandler<T>(name, handler).Invoke;
+    }
+
+    public static Action Named(string name, Action handler)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(handler);
+        return new NamedAction(name, handler).Invoke;
     }
 
     private interface INamedHandler
@@ -434,15 +448,18 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         public void Invoke(T arg) => handler(arg);
     }
 
+    private sealed class NamedAction(string name, Action handler) : INamedHandler
+    {
+        public string Name { get; } = name;
+        public void Invoke() => handler();
+    }
+
     private static readonly ConditionalWeakTable<Delegate, string> HandlerNames = new();
 
-    public static string HandlerName(Delegate handler)
-    {
-        ArgumentNullException.ThrowIfNull(handler);
-        return HandlerNames.GetValue(handler, static d => d.Target is INamedHandler named
+    private static string HandlerName(Delegate handler) =>
+        HandlerNames.GetValue(handler, static d => d.Target is INamedHandler named
             ? named.Name
             : $"{d.Method.DeclaringType?.Name ?? "?"}.{d.Method.Name}");
-    }
 
     public readonly struct Scope : IDisposable
     {
@@ -477,7 +494,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             if (depth < MaxDepth)
             {
                 ref Frame f = ref _stack[depth];
-                NoteRan(in f, end, ms);
+                if (!f.Quiet || ms >= QuietBelowMs) NoteRan(in f, end, ms);
                 if (f.ExpectedLong)
                 {
                     _longRuns[f.Name] = (ms, Math.Max(_longRuns.GetValueOrDefault(f.Name).Max, ms));
@@ -493,7 +510,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     // A scope's name with its detail, as the report and the summary show it.
     private static string Describe(string name, string? detail) =>
-        detail is null ? name : name + " " + Path.GetFileName(detail);
+        detail is null ? name : name + " " + (Path.IsPathRooted(detail) ? Path.GetFileName(detail) : detail);
 
     // Under _scopesLock.
     private void NoteRan(in Frame f, long end, double ms)
@@ -1070,7 +1087,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     // A scope open on the UI thread.
     private readonly record struct Frame(string Name, string? Detail, string File, string Member, int Line, long Start,
-        bool ExpectedLong);
+        bool ExpectedLong, bool Quiet);
 
     // A scope the UI thread closed, or a run of alike ones.
     private struct Ran

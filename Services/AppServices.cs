@@ -6373,7 +6373,7 @@ public sealed class AppServices
             if (Stats.LastCaptureReadStealth) CarriedStealth.NoteStealthRead();
             Stealth.NoteCarriedChanged();
         };
-        Inventory.Changed += () => Stealth.NoteCarriedChanged();
+        Inventory.Changed += PerformanceMonitor.Named("stealth carried", () => Stealth.NoteCarriedChanged());
         Func<IReadOnlyList<Game.Quests.QuestBonus>?> regenQuestBonuses = () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
             Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog);
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData, regenQuestBonuses);
@@ -6418,10 +6418,10 @@ public sealed class AppServices
                 return (totals.PlusMaxHp, totals.PlusMaxMana);
             },
             Player.ApplyEquipmentMaxDelta);
-        Inventory.Changed += () =>
+        Inventory.Changed += PerformanceMonitor.Named("equipment maxima", () =>
         {
             if (Inventory.IsLoaded) equipmentMaxSync.OnEquippedItemsChanged(Inventory.Snapshot.EquippedItems);
-        };
+        });
         Profile.ProfileLoaded += _ => equipmentMaxSync.Reset();
         GameData.ActiveSetChanged += _ => equipmentMaxSync.Reset();
 
@@ -6765,7 +6765,7 @@ public sealed class AppServices
 
         // Fill in charges for any carried charged item we don't know yet, whenever the
         // carry list changes (Paradigm-only inside the tracker). Idempotent + paced.
-        Inventory.Changed += () => ItemCharges.EnsureChargesKnown();
+        Inventory.Changed += PerformanceMonitor.Named("item charges", () => ItemCharges.EnsureChargesKnown());
 
         // An item the game shows gone comes off what is held at once, ahead of the next
         // `i`: a key the door handler found missing or used up, an item a charge look
@@ -7025,7 +7025,6 @@ public sealed class AppServices
             log: Log);
         // A wear the locked send gate would drop is not claimed and not waited for.
         Equipment.SetSendGateProbe(() => EngineGate.IsLocked);
-        CounterWear.UsabilityChanged += () => ForgetNegatorUsable();
         // Confirmed rooms only, as the gear sets' own room hook has it: a restore
         // acted on a predicted or doubtful room could take the counter off in lava.
         RoomTracker.StateChanged += Game.Map.RoomTracker.Named("counter wear", t =>
@@ -7038,11 +7037,10 @@ public sealed class AppServices
         // the pack, when the pack is first read, and when commands held back (a
         // password prompt, the trainer form) go out again. A restore that waited
         // for a kept sneak is decided again when the sneak ends.
-        Inventory.Changed += () =>
+        Inventory.Changed += PerformanceMonitor.Named("counter wear", () =>
         {
-            ForgetNegatorUsable();
             CounterWear.Recheck();
-        };
+        });
         Inventory.FullInventoryParsed += CounterWear.NoteInventoryRead;
         EngineGate.Released += CounterWear.Recheck;
         SneakGuard.Released += CounterWear.Recheck;
@@ -7964,14 +7962,14 @@ public sealed class AppServices
         // the walker is constructed (see below).
         // An item the party is short of stays forced though the leader holds a copy:
         // the copies still to come are for the members.
-        Inventory.Changed += () => Fetch?.DropCovered(
-            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id));
+        Inventory.Changed += PerformanceMonitor.Named("forced obtain", () => Fetch?.DropCovered(
+            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id)));
 
         // Registered AFTER the forced-obtain draining handler above so the set is
         // fully emptied before this checks it: once the route counter lands (found on
         // the floor or bought), the forced set drains → flip auto-search back off if
         // WE turned it on for a "search en route" pick.
-        Inventory.Changed += () => RestoreRouteSearchAutoSearchIfDone("counter obtained");
+        Inventory.Changed += PerformanceMonitor.Named("route-search auto-search", () => RestoreRouteSearchAutoSearchIfDone("counter obtained"));
 
         // Party-level probe + tracker. The probe broadcasts @level and
         // persists each reply into the players table (RecordLevel) — the sole
@@ -8944,7 +8942,7 @@ public sealed class AppServices
         // (SimulatorCharacterAt). Subscribed here, ahead of any window, so the
         // Simulator's own handlers for the same reads find these already set.
         Stats.ScreenParsed += _ => _simulatorStatRead |= Stats.LastCaptureReadHits;
-        Inventory.FullInventoryParsed += () => _simulatorInventoryRead = true;
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("simulator", () => _simulatorInventoryRead = true);
         Profile.ProfileLoaded += _ => ForgetSimulatorCharacterReads();
 
         // Which loops and auto-lair setups are favourites is each character's own.
@@ -9637,11 +9635,11 @@ public sealed class AppServices
             schedule: uiOneShot);
         // In this order: the gate believes the record again before a re-plan held
         // for the read (below) is let go by it.
-        Inventory.FullInventoryParsed += () =>
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("purse read", () =>
         {
             Movement.NotePurseRead();
             PurseRead.Settle();
-        };
+        });
         Profile.ProfileLoaded += _ => PurseRead.Settle();
         EngineGate.Released += SendOwedInventoryReads;
         InGameCapture.InGameChanged += inGame =>
@@ -9957,7 +9955,7 @@ public sealed class AppServices
         // The full parse that answers that `i`: an incremental pickup / drop patch is
         // exactly the drifting figure the refresh exists to replace. Harmless at any
         // other time, since the router only listens while it is holding for one.
-        Inventory.FullInventoryParsed += () => TrainFunding.NoteInventoryRefreshed();
+        Inventory.FullInventoryParsed += PerformanceMonitor.Named("train funding", () => TrainFunding.NoteInventoryRefreshed());
 
         // Stash → bank transfer. Shares the funding errand's hooks into the collect
         // engine; StartStashTransfer refuses while another errand has the walker, so
@@ -10054,7 +10052,7 @@ public sealed class AppServices
             lightStop: NewErrandLightStop("the spell-shop trip"));
         Walker.Event += e => ShopSpells.OnWalkEvent(e);
         AutoBuy.StockListed += stock => ShopSpells.OnShopListed(stock);
-        Inventory.Changed += () => ShopSpells.OnInventoryChanged();
+        Inventory.Changed += PerformanceMonitor.Named("shop spells", () => ShopSpells.OnInventoryChanged());
         Spellbook.Changed += () => ShopSpells.OnSpellbookChanged();
         Router.Subscribe(Services.Patterns.KnownPatterns.UserBuyFailed, m =>
         {
@@ -10820,7 +10818,7 @@ public sealed class AppServices
             Events, () => EventScheduler.IsInGame, ReadEventReadings, Log);
         EventScheduler.EnteredGame += () => EvaluateEventStates();
         Profile.ProfileLoaded += _ => EventStateWatcher.Reset();
-        Inventory.Changed += () => EvaluateEventStates();
+        Inventory.Changed += PerformanceMonitor.Named("event states", () => EvaluateEventStates());
         PlayerStats.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Game.PlayerStats.Exp) or nameof(Game.PlayerStats.Level))
@@ -11524,7 +11522,6 @@ public sealed class AppServices
         // The route planner asks about every hazard exit it weighs: a plain read,
         // so a plan made with the switch off doesn't count hundreds of skips.
         CounterWear.MasterSwitchIsOff = () => AutoModeController.KillSwitchEngaged;
-        AutoModeController.KillSwitchToggled += _ => ForgetNegatorUsable();
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
         ChestOpens.RefuseOpen = name =>
@@ -11712,7 +11709,6 @@ public sealed class AppServices
         // needs it, given back if one worn before the switch went off is no longer
         // needed here. Neither was done while it was off. Routes planned while it
         // was off counted no carried counter; the next plan asks again.
-        ForgetNegatorUsable();
         CounterWear.Recheck();
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
@@ -14012,47 +14008,13 @@ public sealed class AppServices
     // master switch, and whether this character can wear it). What a route is
     // planned on and what the wear does are the same test.
     //
-    // A route search asks this for every hazard exit it weighs, and the answer
-    // reads the settings, the item's record and the character's build each time.
-    // So an answer is kept for the search: until the counter's own state, the
-    // master switch, the worn list or the setting changes, and for no longer than
-    // NegatorUsableKeptFor in any case (the build and the data set have no one
-    // event to drop it on; a search is over in far less).
-    // Searches run on workers too (the route picker, Chest Offload), so the kept
-    // answers are locked: two threads writing a Dictionary at once can break it.
-    private bool NegatingItemUsable(int itemId)
-    {
-        long now = Environment.TickCount64;
-        lock (_negatorUsable)
-        {
-            if (now - _negatorUsableSince > NegatorUsableKeptFor)
-            {
-                _negatorUsable.Clear();
-                _negatorUsableSince = now;
-            }
-            if (_negatorUsable.TryGetValue(itemId, out bool kept)) return kept;
-        }
-        bool usable = IsItemWorn(itemId) || CounterWear.WillWear(itemId);
-        lock (_negatorUsable) _negatorUsable[itemId] = usable;
-        return usable;
-    }
-
-    private const long NegatorUsableKeptFor = 500;
-    private readonly Dictionary<int, bool> _negatorUsable = new();
-    private long _negatorUsableSince;
-
-    private void ForgetNegatorUsable()
-    {
-        lock (_negatorUsable) _negatorUsable.Clear();
-    }
+    // A route search keeps each answer for itself (MovementFilter's readings), so
+    // the settings, the item's record and the build are read once a search.
+    private bool NegatingItemUsable(int itemId) => IsItemWorn(itemId) || CounterWear.WillWear(itemId);
 
     // The setting was saved on the Room Spell Config tab: routes are
     // planned on the new answer, and a counter needed in the room stood in goes on.
-    public void NoteCounterWearSettingSaved()
-    {
-        ForgetNegatorUsable();
-        CounterWear.Recheck();
-    }
+    public void NoteCounterWearSettingSaved() => CounterWear.Recheck();
 
     // A room-spell counter as RoomSpellCounterWear weighs it, null for an item the
     // game data has no wearable record of.
@@ -16534,23 +16496,18 @@ public sealed class AppServices
     // ResolveActiveRealm on PeekActiveBbs's shared copy, for the same readers: the
     // PvP checks at each room arrival, the bash rule a route search reads, the
     // death floor and coin name read per line.
-    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? PeekActiveRealm()
-    {
-        if (PeekActiveBbs() is not { } bbs) return null;
-        if (bbs.RealmFor(Profile.Current?.Realm) is not { } realm) return null;
-        return (bbs, realm);
-    }
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? PeekActiveRealm() =>
+        RealmPlayedOn(PeekActiveBbs());
 
     // The realm being played: the loaded character's (CharacterProfile.Realm) on the
     // active BBS, else that BBS's first realm. Null only when no BBS resolves. Every
     // realm setting (game data, menu commands, death floor, cleanup time, currency
     // name) and every store of collected data keys on it.
-    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? ResolveActiveRealm()
-    {
-        if (ResolveActiveBbs() is not { } bbs) return null;
-        if (bbs.RealmFor(Profile.Current?.Realm) is not { } realm) return null;
-        return (bbs, realm);
-    }
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? ResolveActiveRealm() =>
+        RealmPlayedOn(ResolveActiveBbs());
+
+    private (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? RealmPlayedOn(Models.Settings.BbsProfile? bbs) =>
+        bbs?.RealmFor(Profile.Current?.Realm) is { } realm ? (bbs, realm) : null;
 
     // The active realm's data folder, or null with no BBS or when a name in the way
     // can't be a folder (AppPaths.UsableRealmFolder).

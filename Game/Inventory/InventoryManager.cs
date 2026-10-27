@@ -154,10 +154,8 @@ public sealed partial class InventoryManager : IDisposable
     // Fired (outside the lock) whenever the snapshot changes.
     public event Action? Changed;
 
-    // A hide, a sale or an `i` raises these on the line that confirms it, and a
-    // dozen engines and windows hear them: each handler is timed, so a slow one is
-    // named in a hang report rather than "no measured scope was open" (Chest
-    // Offload's re-render after a hide, on 3.186.3).
+    // A dozen engines and windows hear these: each handler is timed, so a slow one
+    // is named in a hang report (report paradigm-20261026-201217).
     private readonly PerformanceMonitor? _performance;
 
     private void RaiseChanged()

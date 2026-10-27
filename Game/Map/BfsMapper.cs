@@ -85,9 +85,22 @@ public sealed class BfsMapper
 
     // Each search opens one: the filter reads what it reads once for the search
     // (IRoomFilter.BeginSearch), and the monitor times it.
+    // The timer first, so a filter's readings are never opened without the scope
+    // that closes them.
     private SearchScope OpenSearch(IRoomFilter? filter, string what,
-        [System.Runtime.CompilerServices.CallerMemberName] string member = "") =>
-        new(filter?.BeginSearch(), _performance?.Measure("route search", what, member: member));
+        [System.Runtime.CompilerServices.CallerMemberName] string member = "")
+    {
+        Services.PerformanceMonitor.Scope? timed = _performance?.Measure("route search", what, member: member);
+        try
+        {
+            return new SearchScope(filter?.BeginSearch(), timed);
+        }
+        catch
+        {
+            timed?.Dispose();
+            throw;
+        }
+    }
 
     private readonly struct SearchScope(IDisposable? readings, Services.PerformanceMonitor.Scope? timed) : IDisposable
     {
@@ -710,10 +723,9 @@ public sealed class BfsMapper
         bool roundPoorOddsDoors, out bool usedPoorOddsDoor)
     {
         usedPoorOddsDoor = false;
-        if (_graph.GetRoom(source) is null || (filter is not null && filter.IsAvoided(source))) return new();
-        // A map of every room reached usually holds most of the graph: sized for it
-        // at the start, it doesn't leave a trail of outgrown copies on the way there.
-        Dictionary<RoomKey, int> dist = targets is null ? new(_graph.RoomCount) : new();
+        Dictionary<RoomKey, int> dist = new();
+        if (_graph.GetRoom(source) is null) return dist;
+        if (filter is not null && filter.IsAvoided(source)) return dist;
 
         Queue<RoomKey> queue = new();
         queue.Enqueue(source);
