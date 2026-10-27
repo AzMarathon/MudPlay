@@ -1,5 +1,13 @@
 # Version history
 
+## 3.186.16
+
+- Route searches several times faster, with far less memory churn, most of all on Windows
+- Chest Offload's shop trip worked out about 13× faster
+- Hang reports and the program log now name a slow room-change, inventory or Chest Offload step
+- Background route searches no longer risk corrupting the room-spell counter check
+- bug reports addressed: paradigm-20261026-201217
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did

@@ -70,14 +70,32 @@ public sealed class BfsMapper
     // the layout.
     private Func<RoomKey, bool>? _isBlacklisted;
     private readonly Services.LogService? _log;
+    // Times each search: one on the UI thread is then named in a hang report.
+    private readonly Services.PerformanceMonitor? _performance;
 
     public BfsMapper(RoomGraphManager graph) : this(graph, log: null) { }
 
-    public BfsMapper(RoomGraphManager graph, Services.LogService? log)
+    public BfsMapper(RoomGraphManager graph, Services.LogService? log, Services.PerformanceMonitor? performance = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _graph = graph;
         _log = log;
+        _performance = performance;
+    }
+
+    // Each search opens one: the filter reads what it reads once for the search
+    // (IRoomFilter.BeginSearch), and the monitor times it.
+    private SearchScope OpenSearch(IRoomFilter? filter, string what,
+        [System.Runtime.CompilerServices.CallerMemberName] string member = "") =>
+        new(filter?.BeginSearch(), _performance?.Measure("route search", what, member: member));
+
+    private readonly struct SearchScope(IDisposable? readings, Services.PerformanceMonitor.Scope? timed) : IDisposable
+    {
+        public void Dispose()
+        {
+            timed?.Dispose();
+            readings?.Dispose();
+        }
     }
 
     // Bind the blacklist predicate. Pass null to disable. Cache is
@@ -170,6 +188,8 @@ public sealed class BfsMapper
         if (source.Equals(destination))
             return returnEmptyWhenAtDestination ? Array.Empty<Direction>() : null;
 
+        using SearchScope search = OpenSearch(filter, "path");
+
         IReadOnlyList<Direction>? path = FindPathRoundClosedRooms(
             source, destination, filter, ignoreExitGates, refuseTeleports, avoidTraps, ignoreAvoids);
         if (path is not null || ignoreExitGates || filter is null) return path;
@@ -261,6 +281,7 @@ public sealed class BfsMapper
         ArgumentNullException.ThrowIfNull(filter);
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return false;
         if (source.Equals(destination)) return false;
+        using SearchScope search = OpenSearch(filter, "cut off");
         return !ReachOutsideClosedRooms(source, filter, stopAt: destination).Contains(destination);
     }
 
@@ -312,6 +333,7 @@ public sealed class BfsMapper
     {
         ArgumentNullException.ThrowIfNull(filter);
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return null;
+        using SearchScope search = OpenSearch(filter, "crossing");
         if (source.Equals(destination) || filter.IsClosedToRoutes(destination)) return null;
         if (!IsCutOffByClosedRooms(source, destination, filter)) return null;
         return CrossingSearch(source, destination, filter, refuseTeleports, ignoreAvoids);
@@ -575,7 +597,7 @@ public sealed class BfsMapper
         RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(targets);
-        return HopFloors(source, targets, (here, seen, visit) =>
+        return HopFloors(source, targets, filter, (here, seen, visit) =>
         {
             if (_graph.GetRoom(here) is not { } room) return;
             foreach (RoomExit exit in room.Exits.Values)
@@ -590,7 +612,7 @@ public sealed class BfsMapper
     {
         ArgumentNullException.ThrowIfNull(sources);
         IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]> into = ExitsInto();
-        return HopFloors(destination, sources, (here, seen, visit) =>
+        return HopFloors(destination, sources, filter, (here, seen, visit) =>
         {
             if (!into.TryGetValue(here, out (RoomKey From, Direction Dir)[]? ways)) return;
             foreach ((RoomKey from, Direction dir) in ways)
@@ -604,11 +626,12 @@ public sealed class BfsMapper
     // search hasn't reached yet, asking seen before the filter: the filter is the
     // costly part of a step.
     private Dictionary<RoomKey, int> HopFloors(
-        RoomKey start, IReadOnlyCollection<RoomKey> wanted,
+        RoomKey start, IReadOnlyCollection<RoomKey> wanted, IRoomFilter? filter,
         Action<RoomKey, Func<RoomKey, bool>, Action<RoomKey>> neighbours)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(start) is null) return dist;
+        using SearchScope search = OpenSearch(filter, "hop floors");
         HashSet<RoomKey> outstanding = new(wanted);
         dist[start] = 0;
         outstanding.Remove(start);
@@ -665,6 +688,7 @@ public sealed class BfsMapper
     private Dictionary<RoomKey, int> Distances(
         RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets, bool allowGateway)
     {
+        using SearchScope search = OpenSearch(filter, targets is null ? "distances" : "distances to rooms");
         // Each search removes the targets it reaches, so the second needs its own.
         HashSet<RoomKey>? targetsAgain = targets is null ? null : new HashSet<RoomKey>(targets);
         Dictionary<RoomKey, int> through = DistancesCore(
@@ -686,9 +710,10 @@ public sealed class BfsMapper
         bool roundPoorOddsDoors, out bool usedPoorOddsDoor)
     {
         usedPoorOddsDoor = false;
-        Dictionary<RoomKey, int> dist = new();
-        if (_graph.GetRoom(source) is null) return dist;
-        if (filter is not null && filter.IsAvoided(source)) return dist;
+        if (_graph.GetRoom(source) is null || (filter is not null && filter.IsAvoided(source))) return new();
+        // A map of every room reached usually holds most of the graph: sized for it
+        // at the start, it doesn't leave a trail of outgrown copies on the way there.
+        Dictionary<RoomKey, int> dist = targets is null ? new(_graph.RoomCount) : new();
 
         Queue<RoomKey> queue = new();
         queue.Enqueue(source);
@@ -788,6 +813,7 @@ public sealed class BfsMapper
         return (source, destination) =>
         {
             if (answers.TryGetValue((source, destination), out int? known)) return known;
+            using SearchScope search = OpenSearch(filter, "distance memo");
             int? d;
             // Distances refuses an avoided source outright, where FindPath walks out
             // of it, so that one is always asked the slow way.

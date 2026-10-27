@@ -378,6 +378,72 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         return new Scope(this, name, detail, depth, start, timed);
     }
 
+    // ----- Raise -----------------------------------------------------------
+
+    // Raises an event one handler at a time, each in a scope of its own named for
+    // the handler: a hang report then names the slow subscriber, where a scope
+    // round the raise could name only the line of game text that raised it. A
+    // handler that runs StallMs or more is said in the log, at Debug, in category.
+    public void Raise(Action? handlers, string what, LogService? log = null, string category = "Performance")
+    {
+        if (handlers is null) return;
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            long started = _timestamp();
+            using (Measure(what, HandlerName(handler))) ((Action)handler)();
+            NoteSlowHandler(what, handler, started, log, category);
+        }
+    }
+
+    public void Raise<T>(Action<T>? handlers, T arg, string what, LogService? log = null, string category = "Performance")
+    {
+        if (handlers is null) return;
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            long started = _timestamp();
+            using (Measure(what, HandlerName(handler))) ((Action<T>)handler)(arg);
+            NoteSlowHandler(what, handler, started, log, category);
+        }
+    }
+
+    private void NoteSlowHandler(string what, Delegate handler, long started, LogService? log, string category)
+    {
+        double ms = Ms(started, _timestamp());
+        if (log is not null && ms >= StallMs)
+            log.Debug(category, $"{what} handler '{HandlerName(handler)}' took {ms:F0} ms");
+    }
+
+    // A handler subscribed as a lambda has no name of its own (the compiler's reads
+    // "<.ctor>b__1644_1001"), so one that is raised through Raise subscribes
+    // through this, to be named by what it does.
+    public static Action<T> Named<T>(string name, Action<T> handler)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(handler);
+        return new NamedHandler<T>(name, handler).Invoke;
+    }
+
+    private interface INamedHandler
+    {
+        string Name { get; }
+    }
+
+    private sealed class NamedHandler<T>(string name, Action<T> handler) : INamedHandler
+    {
+        public string Name { get; } = name;
+        public void Invoke(T arg) => handler(arg);
+    }
+
+    private static readonly ConditionalWeakTable<Delegate, string> HandlerNames = new();
+
+    public static string HandlerName(Delegate handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        return HandlerNames.GetValue(handler, static d => d.Target is INamedHandler named
+            ? named.Name
+            : $"{d.Method.DeclaringType?.Name ?? "?"}.{d.Method.Name}");
+    }
+
     public readonly struct Scope : IDisposable
     {
         private readonly PerformanceMonitor? _monitor;
