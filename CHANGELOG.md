@@ -1,5 +1,10 @@
 # Version history
 
+## 3.186.26
+
+- A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop
+- bug reports addressed: paradigm-20261027-092353
+
 ## 3.186.25
 
 - Item Finder: a More stats filter for every bonus column (Quickness, Charm, resists, …)
