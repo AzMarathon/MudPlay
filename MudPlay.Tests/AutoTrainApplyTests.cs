@@ -68,7 +68,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         DefaultPatterns.Seed(_router);
         _parser = new StatParser(_stats);
         _parser.AttachLineExtractor(_feed.Lines);
-        // The tracker's answer ticks run on the pass's clock, under the pump.
+        // The tracker's cap and late-form ticks run on the pass's clock, under the pump.
         _trainer = new TrainerMenuTracker(_router, new PartyState(), now: () => _clock.Now.UtcDateTime,
                                           schedule: (after, tick) => _clock.Arm(after, () => _pump.Run(tick)));
         _profile.LoadDefaultProfile();
@@ -883,6 +883,25 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Empty(Typed());
         Assert.Equal(FormPayloads + 1, Sent().Length);
         Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+    }
+
+    // The user's own `train stats` found no screen within the cap, and none has
+    // turned up yet: Train now doesn't send another into the form the game may
+    // still draw.
+    [Fact]
+    public void TrainNow_WhileAFormMayStillTurnUp_SendsNoSecondTrainStats()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        GameOnTheWire();
+        CleanStat();
+
+        UserTypesTrainStats();
+        AdvanceTo(_trainer.HoldCap);
+        Assert.True(_trainer.AwaitingLateForm);
+
+        Start(manager.TrainNow);
+        Assert.Equal(new[] { "train stats" }, Sent());
         Assert.False(manager.IsBusy);
     }
 

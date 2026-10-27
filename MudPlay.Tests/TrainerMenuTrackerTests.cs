@@ -34,8 +34,8 @@ public sealed class TrainerMenuTrackerTests
 
     // The game's output reaching the tracker as it does in the client: each read
     // through the wire's prompt scan first (its prompts to NotifyLivePromptObserved,
-    // as AppServices wires it), then the terminal and the router; the cursor's row
-    // and the screen read the way the terminal session reads them.
+    // as AppServices wires it), then the terminal and the router; the screen and its
+    // clears read the way the terminal session reads them.
     private static (TrainerMenuTracker tracker, ServerFeed game) Wired(Func<DateTime>? now = null, ManualTimers? timers = null)
     {
         MessageRouter router = new();
@@ -454,6 +454,7 @@ public sealed class TrainerMenuTrackerTests
 
         SendTrainStats(tracker);
         game.Line("Foo gossips: did you see the Point Cost Chart");
+        game.Line("Foo gossips: the Character Editor's Point Cost Chart is off");
         Assert.False(tracker.FormShown);
 
         timers.Advance(tracker.HoldCap);
@@ -518,6 +519,50 @@ public sealed class TrainerMenuTrackerTests
         Assert.True(tracker.FormShown);
     }
 
+    // A box redrawn in place over a lingering one, with no clear: its figures
+    // differ from the leftover's, so it is the answer.
+    [Fact]
+    public void ABoxRedrawnOverALeftoverOne_IsTheForm()
+    {
+        var (tracker, game) = Wired();
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.CreationBoxRedrawn(140, 0));
+        Assert.False(tracker.FormShown);   // the same figures: still the leftover
+
+        game.Raw(TrainStatsWire.CreationBoxRedrawn(133, 26));
+        Assert.True(tracker.ScreenDrawnSinceTrainStats);
+        Assert.True(tracker.FormShown);
+    }
+
+    // The terminal session scans the screen for the creation box in the same
+    // update the router ends its read in, in whichever order the two were
+    // subscribed. A late box seen there first takes the keyboard back for the
+    // `train stats` too, not as a creation box with no answer to fill.
+    [Fact]
+    public void ALateBoxSeenByTheScreenScanFirst_TakesTheKeyboardBack()
+    {
+        ManualTimers timers = new();
+        var (tracker, _) = Wired(timers: timers);
+        int drawn = 0;
+        tracker.FormDrawn += () => drawn++;
+
+        SendTrainStats(tracker);
+        timers.Advance(tracker.HoldCap);
+        Assert.True(tracker.AwaitingLateForm);
+
+        ServerFeed box = new();
+        box.Raw(TrainStatsWire.CreationBox(133, 26));
+        string text = TrainStatsWire.ScreenText(box.Emulator.Screen);
+        tracker.ReadScreen = () => text;
+        tracker.ScreenClears = () => box.Emulator.ScreenClears;
+        tracker.ObserveScreen(text);
+
+        Assert.True(tracker.FormShown);
+        Assert.Equal(1, drawn);
+    }
+
     // A box left on the screen keeps the hold no longer than the cap.
     [Fact]
     public void ABoxLeftOnTheScreen_DoesNotHoldTheKeyboardPastTheCap()
@@ -537,6 +582,7 @@ public sealed class TrainerMenuTrackerTests
     // a fresh screen.
     [Theory]
     [InlineData("\u001b[H\u001b[J")]
+    [InlineData("\u001b[24;80H\u001b[1J")]
     [InlineData("\u001bc")]
     public void OtherWholeScreenClears_MakeAFreshScreen(string clear)
     {

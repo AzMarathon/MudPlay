@@ -157,11 +157,13 @@ public sealed partial class TelepathPacer
         int start = 0;
         lock (_lock)
         {
-            // While the outbox is held, what is handed over is the holder's own
-            // answer: every other sender is stopped at the send gate or ends the
-            // hold before it gets here. It is written at once whatever it looks
-            // like. A password that begins with a slash and a letter must not
-            // wait in the outbox as a telepath, behind the ones already there.
+            // While the outbox is held, what is handed over is what the holder lets
+            // through: every other sender is stopped at the send gate or ends the
+            // hold before it gets here. That is @suicide's own answer, or, under a
+            // trainer screen, the user's keys and the CP replay's keystrokes. It is
+            // written at once whatever it looks like. A password that begins with a
+            // slash and a letter must not wait in the outbox as a telepath, behind
+            // the ones already there.
             if (_holders.Count > 0)
             {
                 passThrough.AddRange(data);

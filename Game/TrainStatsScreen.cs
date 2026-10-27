@@ -26,15 +26,27 @@ public sealed partial record TrainStatsScreen(int[] Stats, int CpLeft)
     }
 
     // Which screen is on the terminal, or null when no "Point Cost Chart" panel is.
+    // Read row by row, and only off rows that aren't chat: the title shares the
+    // panel's row on the box kinds, and the scrolling form's "Character Generator"
+    // is a row of its own, so a gossip or telepath naming the panel and a title
+    // (one row, said by a player) is no screen at all.
     public static Kind? Recognise(string? screenText)
     {
         if (string.IsNullOrEmpty(screenText)
             || !screenText.Contains(TrainerMenuTracker.StatBoxMarker, StringComparison.OrdinalIgnoreCase)) return null;
-        if (screenText.Contains("Character Editor", StringComparison.OrdinalIgnoreCase)) return Kind.CharacterEditor;
-        if (screenText.Contains("Char. Creation", StringComparison.OrdinalIgnoreCase)
-            || screenText.Contains("Character Creation", StringComparison.OrdinalIgnoreCase)) return Kind.CharCreationBox;
-        if (screenText.Contains("Character Generator", StringComparison.OrdinalIgnoreCase)) return Kind.ScrollingForm;
-        return Kind.PanelOnly;
+        bool panel = false, generator = false;
+        foreach (string row in screenText.Split('\n'))
+        {
+            if (Terminal.ChatLineDetector.IsChat(row)) continue;
+            if (row.Trim().Equals("Character Generator", StringComparison.OrdinalIgnoreCase)) generator = true;
+            if (!row.Contains(TrainerMenuTracker.StatBoxMarker, StringComparison.OrdinalIgnoreCase)) continue;
+            panel = true;
+            if (row.Contains("Character Editor", StringComparison.OrdinalIgnoreCase)) return Kind.CharacterEditor;
+            if (row.Contains("Char. Creation", StringComparison.OrdinalIgnoreCase)
+                || row.Contains("Character Creation", StringComparison.OrdinalIgnoreCase)) return Kind.CharCreationBox;
+        }
+        if (!panel) return null;
+        return generator ? Kind.ScrollingForm : Kind.PanelOnly;
     }
 
     // Read the form off the flattened visible screen. Null unless all six stat rows

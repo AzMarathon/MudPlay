@@ -269,6 +269,7 @@ How to keep it current:
     - a form 8 s late, after the echo and a party line's prompt, is filled by the same pass; a form after the cap takes the keyboard back and the same pass fills it;
     - a box left on the screen from before, with only a marker row and no clear, is never typed into;
     - a form showing nothing to raise is walked with Enter and left through SAVE, not left open;
+    - while a form may still turn up for the user's own `train stats` (the late-form window), Train now sends no second `train stats`;
     - each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
 - Named seam: the `schedule` constructor parameter of TrainerMenuTracker (the dispatcher's one-shot timer in the client) takes ManualClock.Arm here, so the cap and late-form window run on the pass's clock.
 - Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39), `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (the pass given up on output that answered earlier sends, and party replies typed into the Family Name box).
@@ -4323,7 +4324,7 @@ How to keep it current:
 
 ### TrainStatsWire.cs
 - Test infrastructure.
-- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen, and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted, Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
+- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen, and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted (and the same box redrawn with no clear), Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
 - Checks: n/a (helper).
 - Why: the trainer tests feed the byte order the reports recorded, not lines made up for the test.
 
@@ -4340,9 +4341,10 @@ How to keep it current:
     - room displays, committed prompts and in-place prompts before the trainer screen are held (an earlier Enter's room redraw, party lines, a slow echo with a party line's prompt after it); the exit comes on a prompt / room display / live prompt after the form;
     - Stock's refusals (not here, tournament mode, stats altered) release at once; a refusal the client doesn't know holds to the 10 s cap, then the late-form window closes;
     - a form after the cap takes the keyboard back; one after the late-form window doesn't; ForceExit (the link dropping) ends the wait;
-    - a gossip naming the panel neither marks the form up nor takes the keyboard back;
+    - a gossip naming the panel, or the panel and "Character Editor", neither marks the form up nor takes the keyboard back;
     - the cursor-positioned `Char. Creation` box with no marker line is the form, off the screen;
-    - a box left on the screen isn't the answer and holds no longer than the cap; one drawn after a clear is the answer; `ESC[H ESC[J` and `ESC c` count as clears.
+    - a box left on the screen isn't the answer and holds no longer than the cap; one drawn after a clear is the answer, and so is one redrawn in place with other figures; `ESC[H ESC[J`, ED 1 from the last cell and `ESC c` count as clears;
+    - a late box seen first by the terminal session's screen scan (ObserveScreen) takes the keyboard back as the screen-update order would have through the read's end.
 - Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes ManualTimers.Arm (the dispatcher's one-shot timer in the client), so the test decides when HoldCap and LateFormWindow are up.
 - Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field; reports `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (released on output that answered earlier sends, with the form opening a moment later).
 

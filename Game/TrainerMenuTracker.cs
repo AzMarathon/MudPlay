@@ -96,11 +96,14 @@ public sealed class TrainerMenuTracker : IDisposable
     private IDisposable? _lateTick;
     private bool _awaitingLateForm;
     // What the screen held when `train stats` went out: a trainer screen left on it
-    // from before (the `Char. Creation` box lingers after exit), and how many times
-    // it had been cleared. A trainer screen counts only once the screen has been
-    // cleared since, or when none was on it then, so a leftover box is neither
-    // the answer nor a form to plan from.
+    // from before (the `Char. Creation` box lingers after exit), the form as it
+    // read then, and how many times the screen had been cleared. A trainer screen
+    // counts only once the screen has been cleared since, or when none was on it
+    // then, or when the form reads with other figures than it did (a box redrawn
+    // in place over the old one), so a leftover box is neither the answer nor a
+    // form to plan from.
     private bool _leftoverAtSend;
+    private TrainStatsScreen? _leftoverForm;
     private long _clearsAtSend;
 
     // True while we believe the trainer-stats menu is the active screen
@@ -146,7 +149,12 @@ public sealed class TrainerMenuTracker : IDisposable
 
     // Whether the screen has been drawn afresh since the last `train stats`.
     public bool ScreenDrawnSinceTrainStats =>
-        !_leftoverAtSend || (ScreenClears?.Invoke() ?? 0) > _clearsAtSend;
+        !_leftoverAtSend
+        || (ScreenClears?.Invoke() ?? 0) > _clearsAtSend
+        || (TrainStatsScreen.TryRead(ReadScreen?.Invoke()) is { } now && !SameForm(now, _leftoverForm));
+
+    private static bool SameForm(TrainStatsScreen now, TrainStatsScreen? before) =>
+        before is not null && now.CpLeft == before.CpLeft && now.Stats.SequenceEqual(before.Stats);
 
     // The visible screen as newline-joined rows, bound by the terminal session.
     // The form is told by what it draws there, not by a line, so neither a box
@@ -276,7 +284,9 @@ public sealed class TrainerMenuTracker : IDisposable
                 _answer = FormAnswer.Pending;
                 _trainStatsSentAt = _now();
                 _clearsAtSend = ScreenClears?.Invoke() ?? 0;
-                _leftoverAtSend = TrainerScreenIn(ReadScreen?.Invoke()) is not null;
+                string? screen = ReadScreen?.Invoke();
+                _leftoverAtSend = TrainerScreenIn(screen) is not null;
+                _leftoverForm = _leftoverAtSend ? TrainStatsScreen.TryRead(screen) : null;
                 _capTick?.Dispose();
                 _capTick = _schedule(HoldCap, OnHoldCap);
             }
@@ -307,6 +317,15 @@ public sealed class TrainerMenuTracker : IDisposable
     public void ObserveScreen(string screenText)
     {
         if (_inputMenuActive) return;   // already armed — nothing to do
+        // A box after the cap let the keyboard go answers that `train stats`, not
+        // character creation. This runs in the same screen update as OnReadEnded,
+        // in whichever order the two were subscribed, so it takes the keyboard back
+        // here too rather than arming it as a creation box with no answer to fill.
+        if (_awaitingLateForm)
+        {
+            if (FreshTrainerScreen() is { } late) TakeBack(late);
+            return;
+        }
         if (string.IsNullOrEmpty(screenText)) return;
         if (!screenText.Contains(StatBoxMarker, StringComparison.OrdinalIgnoreCase)) return;
 
@@ -490,7 +509,8 @@ public sealed class TrainerMenuTracker : IDisposable
     }
 
     // The kind of trainer screen in the screen text: a kind the game is known to
-    // draw, titled (the panel alone could be someone's chat), or a form that reads.
+    // draw, titled on a row that isn't chat (TrainStatsScreen.Recognise; the panel
+    // alone could be anyone's line), or a form that reads.
     private static string? TrainerScreenIn(string? text)
     {
         if (string.IsNullOrEmpty(text)) return null;

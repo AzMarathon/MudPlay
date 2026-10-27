@@ -237,10 +237,14 @@ public sealed class AutoTrainManager : IDisposable
     // A form on screen takes `train stats` as text for whichever box the cursor is
     // in, and every keystroke after it lands a box further on, with SAVE reached
     // one Enter early. A pass that stopped before SAVE leaves exactly that form up.
+    // The same goes for a form the game may still draw for a `train stats` already
+    // sent: a second `train stats` would land in it once it turns up.
     private bool FormAlreadyOpen()
     {
-        if (!_trainer.MenuOwnsKeyboard) return false;
-        _log?.Info("AutoTrain", "A trainer screen is already open — `train stats` is not sent into it.");
+        if (!_trainer.MenuOwnsKeyboard && !_trainer.AwaitingLateForm) return false;
+        _log?.Info("AutoTrain", _trainer.MenuOwnsKeyboard
+            ? "A trainer screen is already open — `train stats` is not sent into it."
+            : "A trainer screen may still turn up for the last `train stats` — another is not sent.");
         return true;
     }
 

@@ -87,6 +87,10 @@ internal static class TrainStatsWire
         return box.Append("\u001b[2;4H/ P A R A D I G M      Char. Creation /    \\  --    Point Cost Chart    --").ToString();
     }
 
+    // The same box painted over whatever is on the screen, with no clear first.
+    public static string CreationBoxRedrawn(int strength, int cpLeft) =>
+        CreationBox(strength, cpLeft)["\u001b[2J\u001b[1;1H".Length..];
+
     // Stock's scrolling form: its lines are Stock-sourced, as `wccmmud.dll` 1.11p
     // prints them (GAME_MECHANICS "The `train stats` screen (Char. Creation
     // box)"); the frame around the Point Cost Chart, and only one of its rows, are
