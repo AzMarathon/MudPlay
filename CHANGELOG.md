@@ -1,9 +1,12 @@
 # Version history
 
-## 3.186.26
+## 3.186.30
 
 - A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop
-- bug reports addressed: paradigm-20261027-092353
+- A party follower casts its Heal (rest) heal standing between fights instead of waiting to rest
+- Cast when mana full goes out again each time mana is back at the top, even when its own cost never drops mana under the full mark
+- The party rank sent on joining (or why none was), and the game's answer, are logged and shown in bug reports
+- bug reports addressed: paradigm-20261027-092353, paradigm-20261027-094915, paradigm-20261027-123536
 
 ## 3.186.25
 
