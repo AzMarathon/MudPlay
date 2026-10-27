@@ -994,7 +994,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // than clobbering it with the WebsiteUrl loaded at selection time.
         if (_bbsStore.Get(profile.Name) is { WebsiteUrl: var url })
             profile.WebsiteUrl = url;
-        _bbsStore.Save(profile);
+        // The realms renamed here, so a count written to one under its old name
+        // meanwhile follows it to the new name.
+        Dictionary<string, string> renamed = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string bbs, string oldName, string newName) in _realmRenames)
+            if (string.Equals(bbs, profile.Name, StringComparison.OrdinalIgnoreCase)) renamed[oldName] = newName;
+        _bbsStore.Save(profile, renamed);
     }
 
     // OK: put the loaded character on the realm picked for it.
