@@ -20,17 +20,16 @@ namespace MudPlay.Game;
 // It waits for the screen to come up, types the stats with a short delay between
 // strokes, and the form's SAVE-default Exit commits on the final Enter.
 //
-// Menu-open detection is realm-independent. Stock realms scroll the trainer's
-// "Point Cost Chart" marker as an inline line, so TrainerMenuTracker.MenuEntered
-// fires and drives the replay immediately. Paradigm draws the stat box with
-// cursor positioning — the marker row never completes until teardown, so
-// MenuEntered never fires mid-session. For that path we fall back to the
-// command-driven signal TrainerMenuTracker already arms for the terminal's
-// character-mode switch: after a short render delay, if the input menu is still
-// active (full-screen menu owns the keyboard, no in-game prompt returned) we
-// begin the replay; if instead the in-game prompt came back (InputMenuExited —
-// we weren't at a trainer) we abort cleanly. MenuExited is likewise marker-driven
-// and never fires on Paradigm, so InputMenuExited is also our exit signal.
+// Menu-open detection is realm-independent. When the form's "Point Cost Chart"
+// row completes as a line, TrainerMenuTracker.MenuEntered fires and the replay
+// starts at the end of that read. A box drawn with cursor positioning whose rows
+// never complete gives no such line, so we fall back to the command-driven signal
+// TrainerMenuTracker already arms for the terminal's character-mode switch: after
+// a short render delay, if the input menu is still active (full-screen menu owns
+// the keyboard, no in-game prompt returned) we begin the replay; if instead the
+// game's prompt came back after its answer (InputMenuExited — we weren't at a
+// trainer) we abort cleanly. MenuExited is likewise marker-driven, so
+// InputMenuExited is also our exit signal.
 //
 // What gets typed is decided with the form on screen. The form shows the trained
 // stats and the CP left, with no spell in them, so when it can be read the plan
@@ -55,6 +54,7 @@ public sealed class AutoTrainManager : IDisposable
     private readonly TrainerMenuTracker _trainer;
     private readonly ListedEffectCatalog _listedEffects;
     private readonly IDisposable _refusalSub;
+    private readonly MessageRouter _router;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<TimeSpan, Task> _delay;
@@ -82,6 +82,9 @@ public sealed class AutoTrainManager : IDisposable
     private bool _verifying;
     // Completes when the form the pass is typing into closes.
     private TaskCompletionSource<bool>? _formClosed;
+    // The marker is the form's top row, read as it is drawn: the stat rows below it
+    // aren't on the screen yet, so the replay starts once the read that drew it ends.
+    private bool _replayAtReadEnd;
 
     // Delay between keystrokes so the server's form redraw keeps pace.
     private const int KeystrokeDelayMs = 200;
@@ -154,6 +157,8 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.MenuExited += OnMenuExited;
         _trainer.InputMenuExited += OnInputMenuExited;
         _refusalSub = router.Subscribe(KnownPatterns.TrainStatsAltered, OnStatsAlteredRefusal);
+        _router = router;
+        router.ReadEnded += OnReadEnded;
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
@@ -289,6 +294,7 @@ public sealed class AutoTrainManager : IDisposable
         _manualEntry = manualEntry;
         _formBefore = null;
         _formClosed = null;
+        _replayAtReadEnd = false;
         _cost = 0;
         _cpAtStart = _stats.Cp;
         LastApplyNote = null;
@@ -325,6 +331,13 @@ public sealed class AutoTrainManager : IDisposable
         await _delay(MenuRenderDelay);
         if (_sessionId != session || _phase != Phase.AwaitingMenu) return;
         if (!_trainer.IsInputMenuActive) return;   // prompt returned / not armed — let the abort paths handle it
+        if (_trainer.AnsweredWithoutForm)
+        {
+            // The game has answered and drawn no form: whatever is typed now
+            // would go to the game as commands. The timeout ends the pass.
+            _log?.Info("AutoTrain", "The game echoed `train stats` but no trainer screen followed — nothing typed.");
+            return;
+        }
         _log?.Info("AutoTrain", "Trainer screen up (input-menu signal) — replaying plan.");
         StartReplay();
     }
@@ -332,7 +345,14 @@ public sealed class AutoTrainManager : IDisposable
     private void OnMenuEntered()
     {
         if (_phase != Phase.AwaitingMenu) return;   // user opened the trainer themselves — ignore
-        StartReplay();
+        _replayAtReadEnd = true;
+    }
+
+    private void OnReadEnded()
+    {
+        if (!_replayAtReadEnd) return;
+        _replayAtReadEnd = false;
+        if (_phase == Phase.AwaitingMenu) StartReplay();
     }
 
     // The master switch (true = off): off, a stat form the user opens by hand is
@@ -755,5 +775,6 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.MenuExited -= OnMenuExited;
         _trainer.InputMenuExited -= OnInputMenuExited;
         _refusalSub.Dispose();
+        _router.ReadEnded -= OnReadEnded;
     }
 }

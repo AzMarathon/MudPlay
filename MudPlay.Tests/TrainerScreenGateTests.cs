@@ -35,6 +35,15 @@ public sealed class TrainerScreenGateTests
             Timestamp: Now,
             IsPromptLine: false));
 
+    // The game's answer to `train stats` (its echo, then the form), and the room
+    // shown again once the form is left.
+    private static void FormOpensThenCloses(MessageRouter router)
+    {
+        ServerFeed game = new(router);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        game.Raw("\u001b[2J\u001b[H" + TrainStatsWire.RoomRedrawn());
+    }
+
     [Fact]
     public void TrainStats_WithoutMarker_HoldsTheGate()
     {
@@ -62,9 +71,7 @@ public sealed class TrainerScreenGateTests
         engine(Encoding.Latin1.GetBytes("par\r")); // would leak into Family Name
         Assert.Empty(wire);
 
-        // Exit the form: command echo swallowed, next prompt is the real exit.
-        Dispatch(router, "[HP=33]:");
-        Dispatch(router, "[HP=33]:");
+        FormOpensThenCloses(router);
 
         engine(Encoding.Latin1.GetBytes("par\r"));
         Assert.Single(wire);
@@ -107,8 +114,7 @@ public sealed class TrainerScreenGateTests
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
         Assert.True(send.IsLocked);
 
-        Dispatch(router, "[HP=33]:"); // command echo — swallowed
-        Dispatch(router, "[HP=33]:"); // exit prompt — form left
+        FormOpensThenCloses(router);
 
         Assert.False(gate.IsHeld);
         Assert.False(send.IsLocked);
@@ -123,8 +129,7 @@ public sealed class TrainerScreenGateTests
         send.Hold("password");
 
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "[HP=33]:");
-        Dispatch(router, "[HP=33]:"); // trainer hold released here
+        FormOpensThenCloses(router);   // trainer hold released here
 
         Assert.True(send.IsLocked); // password hold still up
         send.Release("password");

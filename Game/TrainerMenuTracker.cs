@@ -1,6 +1,7 @@
 using System.Text;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 
 namespace MudPlay.Game;
 
@@ -73,16 +74,23 @@ public sealed class TrainerMenuTracker : IDisposable
     private List<string> _rosterSnapshot = new();
 
     // Input-mode state, driven by the outbound `train stats` command rather
-    // than the marker (see InputMenuEntered). _skipNextInputPrompt swallows the
-    // command's own `[HP=...]:train stats` prompt echo so it isn't mistaken for
-    // the menu-exit prompt.
+    // than the marker (see InputMenuEntered).
     private bool _inputMenuActive;
-    private bool _skipNextInputPrompt;
-    // Same echo-swallow as _skipNextInputPrompt, but for the live-wire prompt
-    // path (NotifyLivePromptObserved). Kept separate so the committed-line and
-    // in-place-redraw release triggers each consume their own echo without
-    // fighting over one flag.
-    private bool _skipNextLivePrompt;
+
+    // How far the game has got answering the last `train stats`. Output already
+    // on its way when the command went out answers earlier commands: a room
+    // display drawn by an Enter sent just before, the prompt after a party line.
+    // None of that says the form closed, or never opened (reports
+    // paradigm-20261026-225703, -225718, -225733: the release went on such a room
+    // display and prompt, and the party's telepaths and `par` polls were typed into
+    // the Family Name box the game had just opened). The game echoes each command
+    // on its prompt row before its result (GAME_MECHANICS "Movement on the wire —
+    // command echo, failure lines, and what actually moves you"), so the answer
+    // starts at the echo of `train stats`.
+    private enum FormAnswer { None, Pending, Echoed, Form }
+    private FormAnswer _answer;
+    private DateTime _trainStatsSentAt;
+    private readonly MessageRouter _router;
 
     // True while we believe the trainer-stats menu is the active screen
     // (marker-confirmed — never sets on a cursor-positioned menu whose marker
@@ -108,6 +116,30 @@ public sealed class TrainerMenuTracker : IDisposable
     // a stray automated `par\r` types into it and overwrites the character's last
     // name. IsInputMenuActive carries that case; this property folds both in.
     public bool MenuOwnsKeyboard => _inputMenuActive || _inMenu;
+
+    // The game has echoed `train stats` and drawn no trainer screen after it (yet):
+    // what follows is its refusal, or the form's first row is still to come. Nothing
+    // may be typed into the form on this state's word.
+    public bool AnsweredWithoutForm => _inputMenuActive && _answer == FormAnswer.Echoed;
+
+    // Whether the cursor's row holds the game's own prompt with nothing after it.
+    // Bound by the terminal session, which owns the screen. Read at the end of a
+    // server read while the game has echoed `train stats` with no form after it:
+    // a refusal's prompt that came in the echo's own read was taken in by the
+    // wire's prompt scan before the echo line was read, so the cursor row is the
+    // only place left to see it.
+    public Func<bool>? CursorAtGamePrompt { get; set; }
+
+    // The keyboard state, in words for a bug report.
+    public string Describe() => !MenuOwnsKeyboard ? "off"
+        : !_inputMenuActive ? "on (trainer/creation box)"
+        : _answer switch
+        {
+            FormAnswer.Pending => "on (trainer box; the game hasn't answered `train stats` yet)",
+            FormAnswer.Echoed => "on (trainer box; `train stats` echoed, no trainer screen drawn yet)",
+            FormAnswer.Form => "on (trainer box drawn)",
+            _ => "on (trainer/creation box)",
+        };
 
     // Snapshot of non-self party member names taken at the moment we confirmed
     // menu entry. Subscribers to MenuExited inspect this to decide who to
@@ -145,9 +177,12 @@ public sealed class TrainerMenuTracker : IDisposable
         ArgumentNullException.ThrowIfNull(party);
         _party = party;
         _log   = log;
+        _router = router;
         _markerSub = router.Subscribe(KnownPatterns.MenuTrainerStatsMarker, OnMenuMarker);
         _promptSub = router.Subscribe(KnownPatterns.StatusLine,             OnPrompt);
         _roomSub   = router.Subscribe(KnownPatterns.RoomExits,              OnRoomDisplay);
+        router.LineDispatched += OnLineDispatched;
+        router.ReadEnded += OnReadEnded;
     }
 
     public void Dispose()
@@ -157,6 +192,8 @@ public sealed class TrainerMenuTracker : IDisposable
         _markerSub.Dispose();
         _promptSub.Dispose();
         _roomSub.Dispose();
+        _router.LineDispatched -= OnLineDispatched;
+        _router.ReadEnded -= OnReadEnded;
     }
 
     // Called by the wire-send path so we can spot the user's own outbound
@@ -181,8 +218,12 @@ public sealed class TrainerMenuTracker : IDisposable
         // (line-driven) prompt, so it doesn't arm input.
         if (cmd == "train stats")
         {
-            _skipNextInputPrompt = true; // the command's own prompt echo isn't a menu exit
-            _skipNextLivePrompt  = true; // same, for the live-wire prompt path
+            // A form already drawn stays drawn: a second `train stats` goes into it.
+            if (_answer != FormAnswer.Form)
+            {
+                _answer = FormAnswer.Pending;
+                _trainStatsSentAt = _now();
+            }
             if (!_inputMenuActive)
             {
                 _inputMenuActive = true;
@@ -248,6 +289,11 @@ public sealed class TrainerMenuTracker : IDisposable
             || match.Text.Contains(CharCreationAbbrevSignature, StringComparison.OrdinalIgnoreCase);
 
         if (!gateArmed && !characterCreation) return;
+        if (_inputMenuActive && _answer is FormAnswer.Pending or FormAnswer.Echoed)
+        {
+            _answer = FormAnswer.Form;
+            _log?.Info("TrainerMenu", "The trainer screen is drawn — it owns the keyboard until the game's prompt returns.");
+        }
         if (_inMenu) return;
         _inMenu = true;
         _rosterSnapshot = _party.Members
@@ -263,9 +309,10 @@ public sealed class TrainerMenuTracker : IDisposable
     private void OnPrompt(MatchResult _)
     {
         // Input-mode teardown runs independently of the marker-confirmed party
-        // flow below: the first in-game prompt after arming is the command's own
-        // `[HP=...]:train stats` echo (skipped); the next one is the bare prompt
-        // that returns when the user leaves the stat box, so line-mode resumes.
+        // flow below. Prompts up to and including the command's own
+        // `[HP=...]:train stats` echo are set aside; the next one is the bare
+        // prompt that returns when the user leaves the stat box (or the game's
+        // refusal ends with), so line-mode resumes.
         //
         // BOTH keyboard-owning flags are cleared BEFORE firing any exit event.
         // InputMenuExited drives the auto-train loop-resume walk synchronously, and
@@ -274,17 +321,11 @@ public sealed class TrainerMenuTracker : IDisposable
         // InputMenuExited fired, the gate would stay held and silently drop the
         // resume's first move byte with no retry — the walker draws the route back
         // but never steps (report paradigm-20260813-063517).
-        bool fireInputExited = false;
-        if (_inputMenuActive)
-        {
-            if (_skipNextInputPrompt)
-                _skipNextInputPrompt = false;
-            else
-            {
-                _inputMenuActive = false;
-                fireInputExited = true;
-            }
-        }
+        if (_inputMenuActive && SetAsideBeforeAnswer("A prompt")) return;
+
+        bool fireInputExited = _inputMenuActive;
+        _inputMenuActive = false;
+        _answer = FormAnswer.None;
 
         bool fireMenuExited = _inMenu;
         if (_inMenu)
@@ -320,7 +361,45 @@ public sealed class TrainerMenuTracker : IDisposable
     private void OnRoomDisplay(MatchResult _)
     {
         if (!MenuOwnsKeyboard) return;
+        if (SetAsideBeforeAnswer("A room display")) return;
         ForceExit("room display observed — back in the world");
+    }
+
+    // The game's echo of `train stats` on its prompt row: everything from here on
+    // answers it. The prompt row is dispatched ahead of its echo, so OnPrompt has
+    // already set that prompt aside.
+    private void OnLineDispatched(LineExtractor.EmittedLine line)
+    {
+        if (_answer != FormAnswer.Pending || !_inputMenuActive || !_router.LineIsCommandEcho) return;
+        if (!line.Text.Trim().Equals("train stats", StringComparison.OrdinalIgnoreCase)) return;
+        _answer = FormAnswer.Echoed;
+        _log?.Info("TrainerMenu", "The game echoed `train stats` — its answer starts here.");
+    }
+
+    private void OnReadEnded()
+    {
+        if (!AnsweredWithoutForm || CursorAtGamePrompt?.Invoke() != true) return;
+        ForceExit("the game answered `train stats` with its prompt and no trainer screen");
+    }
+
+    // True when a "back in the world" signal arrived before the game's answer to
+    // `train stats`: it answers an earlier command or a party line, so the keyboard
+    // stays with the form. A statline the line splitter can't read leaves no echo
+    // to find; past ExpectingMenuWindow with neither echo nor form, the signals
+    // count again, as they did before the echo was looked for.
+    private bool SetAsideBeforeAnswer(string what)
+    {
+        if (_answer != FormAnswer.Pending) return false;
+        if (_now() - _trainStatsSentAt > ExpectingMenuWindow)
+        {
+            _answer = FormAnswer.None;
+            _log?.Info("TrainerMenu",
+                $"No answer to `train stats` read in {ExpectingMenuWindow.TotalSeconds:0} s — {what.ToLowerInvariant()} counts as leaving the screen.");
+            return false;
+        }
+        _log?.Info("TrainerMenu",
+            $"{what} came before the game's answer to `train stats` (it answers something sent earlier) — the keyboard stays with the trainer screen.");
+        return true;
     }
 
     // Fed by AppServices for every live statline WirePromptScanner sees off the
@@ -332,14 +411,16 @@ public sealed class TrainerMenuTracker : IDisposable
     // paradigm-20260906-090057). This releases line-mode on the exit prompt the
     // instant the form closes, even in a dark room with no "Obvious exits" line.
     // Scoped to the char-mode (`train stats`) state; the marker-confirmed party
-    // flow stays on the committed OnPrompt. Skips the command's own echo statline
-    // first (the form emits no statline, so the very next live prompt is the
-    // exit). ForceExit tears both flags down before firing, preserving the
+    // flow stays on the committed OnPrompt. Prompts before the game's answer are
+    // set aside, the command's own echo statline among them: the wire is scanned
+    // ahead of the lines of the same read, so the echo's prompt is seen here before
+    // its echo is read (the form emits no statline, so a prompt after the answer is
+    // the exit). ForceExit tears both flags down before firing, preserving the
     // send-gate ordering the loop-resume depends on.
     public void NotifyLivePromptObserved()
     {
         if (!_inputMenuActive) return;
-        if (_skipNextLivePrompt) { _skipNextLivePrompt = false; return; }
+        if (SetAsideBeforeAnswer("An in-place prompt")) return;
         ForceExit("in-place statline prompt observed — back in the world");
     }
 
@@ -351,7 +432,7 @@ public sealed class TrainerMenuTracker : IDisposable
     // Without this, a missed exit prompt leaves the gate held and the resumed loop's first
     // move byte is silently dropped — the walker draws the route but stands idle (report
     // paradigm-20260815-072308: 10 minutes idle after CP allocation). No-op when nothing
-    // is held; unconditional otherwise (no skip-echo logic — this is the recovery path).
+    // is held; unconditional otherwise (nothing set aside — callers have already decided).
     public void ForceExit(string reason)
     {
         if (!MenuOwnsKeyboard) return;
@@ -362,8 +443,7 @@ public sealed class TrainerMenuTracker : IDisposable
         _inputMenuActive = false;
         _inMenu = false;
         _expectingMenuSince = null;
-        _skipNextInputPrompt = false;
-        _skipNextLivePrompt = false;
+        _answer = FormAnswer.None;
         if (fireInputExited) InputMenuExited?.Invoke();
         if (fireMenuExited) MenuExited?.Invoke();
     }

@@ -858,6 +858,11 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SentCommands.TypedAtGamePrompt =
             line => SentCommandTrail.RowIsGamePrompt(
                 CursorRowText(), line, AppServices.Current.CurrentStatlinePromptRegex);
+        // The same reading of the cursor's row tells the trainer tracker that the
+        // game answered `train stats` with its bare prompt rather than the form.
+        AppServices.Current.TrainerMenu.CursorAtGamePrompt =
+            () => SentCommandTrail.RowIsGamePrompt(
+                CursorRowText(), string.Empty, AppServices.Current.CurrentStatlinePromptRegex);
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a

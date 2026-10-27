@@ -256,8 +256,8 @@ How to keep it current:
 
 ### AutoTrainApplyTests.cs
 - Covers: Game/AutoTrainManager (with StatParser, TrainerMenuTracker)
-- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
-- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39).
+- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it. The game's answer echoes `train stats` and draws the form's marker row, dispatched through the router. With the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner, the form read off its terminal and a TrainerScreenGate on an EngineSendGate: a room display, or party lines' prompts, arriving after `train stats` and before its echo keep the form, the plan is typed and applied, and no wrapped engine send (the `@train` reply, `par`) reaches the form; not at a trainer, the refusal and its prompt in the echo's read release the keyboard, end the pass and type nothing.
+- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39), `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (the pass given up on output that answered earlier sends, and party replies typed into the Family Name box).
 
 ### AutoTrainSequenceBuilderTests.cs
 - Covers: Game/AutoTrainSequenceBuilder
@@ -3627,7 +3627,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does; given a WirePromptScanner, each read reaches it before the terminal, as in the client. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
@@ -4295,6 +4295,12 @@ How to keep it current:
 - Checks: reading the six stats and CP Left off the cursor-painted form (not a half-drawn one); applied / partial / nothing-spent judged from the form, or from CP via `stat`.
 - Why: report `paradigm-20260930-160602` (form took no keystrokes yet the row was counted applied).
 
+### TrainStatsWire.cs
+- Test infrastructure.
+- Covers: test helper: the game's side of a `train stats` as Paradigm put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen, and the SAVE exit.
+- Checks: n/a (helper).
+- Why: the trainer tests feed the byte order the reports recorded, not lines made up for the test.
+
 ### TrainerCatalogSelectTests.cs
 - Covers: Game/GameData/TrainerCatalog (TrainerShop)
 - Checks: SelectNearest by level band / class / disabled / reachability / distance, cheaper markup on a tie; SelectNearestForStats ignores the band; CheapestMarkup; RankCandidates ordering and DescribeCandidates log text.
@@ -4302,12 +4308,12 @@ How to keep it current:
 
 ### TrainerMenuTrackerTests.cs
 - Covers: Game/TrainerMenuTracker
-- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`, echo-prompt skip, exit on prompt / room display / live prompt; MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
-- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field.
+- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`; with the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner wired as AppServices wires it and the cursor's row read as the terminal session reads it: room displays, committed prompts and in-place prompts before the game's echo of `train stats` are set aside (an earlier Enter's room redraw, party lines), the exit comes on a prompt / room display / live prompt after the form; a refusal releases on its prompt, in the echo's read (cursor row) or a later one; with no answer read in the window a prompt releases again. MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
+- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field; reports `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (released on output that answered earlier sends, with the form opening a moment later).
 
 ### TrainerScreenGateTests.cs
 - Covers: Game/TrainerScreenGate, Services/EngineSendGate
-- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume, holds compose with others, Dispose releases.
+- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume once the form (its echo and box fed as bytes through a ServerFeed) is left, holds compose with others, Dispose releases.
 - Why: background sends leaking into the `train stats` form.
 
 ### TrainerWalkCpPlanTests.cs

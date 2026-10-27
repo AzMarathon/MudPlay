@@ -1,5 +1,13 @@
 # Version history
 
+## 3.186.23
+
+- `train stats` is no longer abandoned on a room display or prompt that answers something sent just before it
+- Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
+- Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
+- Bug reports show how far the game's answer to `train stats` got
+- bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
+
 ## 3.186.16
 
 - Route searches several times faster, with far less memory churn, most of all on Windows

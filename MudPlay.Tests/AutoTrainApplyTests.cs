@@ -47,6 +47,11 @@ public sealed class AutoTrainApplyTests : IDisposable
     private readonly ContinuationPump _pump = new();
     private AutoTrainManager? _manager;
     private string _screen = string.Empty;
+    // What the pass reads the form from: the test's screen text, or the terminal a
+    // game fed as bytes draws on.
+    private Func<string> _readScreen;
+    // Whether `train stats` finds a trainer: the game echoes it and draws the form.
+    private bool _trainerHere = true;
     private Action<string>? _onTyped;
     private bool _formCloses = true;
     private int _formSends = -1;
@@ -60,6 +65,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         _parser.AttachLineExtractor(_feed.Lines);
         _trainer = new TrainerMenuTracker(_router, new PartyState());
         _profile.LoadDefaultProfile();
+        _readScreen = () => _screen;
     }
 
     public void Dispose()
@@ -89,20 +95,25 @@ public sealed class AutoTrainApplyTests : IDisposable
                                            new ListedEffectCatalog(new MessageStore(), gameData), _router,
                                            now: () => _clock.Now, delay: _clock.Delay);
         manager.SetWireSender(OnWire);
-        manager.SetScreenReader(() => _screen);
+        manager.SetScreenReader(() => _readScreen());
         manager.PlanCommitted += () => _committed++;
         manager.ApplyTargetsCompleted += _explicitResults.Add;
         return _manager = manager;
     }
 
-    // What the game does with a line the client sends: `train stats` opens the
-    // form, and the return after the form's last field closes it and shows the room.
+    // What the game does with a line the client sends: `train stats` is echoed and
+    // opens the form, and the return after the form's last field closes it and
+    // shows the room.
     private void OnWire(byte[] bytes)
     {
         _trainer.ObserveOutbound(bytes);
         string text = Encoding.Latin1.GetString(bytes).TrimEnd('\r');
         lock (_wireLock) _sent.Add(text);
-        if (text == "train stats") _formSends = 0;
+        if (text == "train stats")
+        {
+            _formSends = 0;
+            if (_trainerHere) GameEchoesAndDrawsTheForm(text);
+        }
         else if (_formSends >= 0 && ++_formSends == FormPayloads)
         {
             _formSends = -1;
@@ -114,6 +125,17 @@ public sealed class AutoTrainApplyTests : IDisposable
     private void Dispatch(string line) =>
         _router.Dispatch(new LineExtractor.EmittedLine(
             line, new CellAttributes[line.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
+
+    // The prompt row carrying the echo, split into the prompt and the echoed
+    // command as the line extractor splits it, then the form's top row.
+    private void GameEchoesAndDrawsTheForm(string command)
+    {
+        DateTimeOffset at = DateTimeOffset.UnixEpoch.AddSeconds(1);
+        _router.Dispatch(new LineExtractor.EmittedLine(
+            TrainStatsWire.Statline, new CellAttributes[TrainStatsWire.Statline.Length], at, IsPromptLine: true));
+        _router.Dispatch(new LineExtractor.EmittedLine(command, new CellAttributes[command.Length], at, IsPromptLine: false));
+        Dispatch("   / M A J O R  M U D Character Editor /    \\  +-    Point Cost Chart    -+");
+    }
 
     private string[] Sent()
     {
@@ -557,6 +579,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     {
         AutoTrainManager manager = Build(paradigm: false);
         CleanStat();
+        _trainerHere = false;
 
         Start(manager.TrainNow);
         Assert.True(manager.IsBusy);
@@ -572,5 +595,148 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.False(manager.IsBusy);
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Contains("refused", manager.LastApplyNote);
+    }
+
+    // ----- output already on its way when `train stats` went out ---------------
+
+    // The game's reads, through the wire's prompt scan and the terminal, as the
+    // client takes them, with the tracker's prompt reads wired as AppServices and
+    // the terminal session wire them; the pass reads the form off that terminal.
+    // The game's answers are fed by the test.
+    private ServerFeed GameOnTheWire()
+    {
+        WirePromptScanner scanner = new();
+        scanner.PromptObserved += _ => _trainer.NotifyLivePromptObserved();
+        ServerFeed game = new(_router, promptScanner: scanner);
+        TerminalScreen screen = game.Emulator.Screen;
+        _trainer.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
+            TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
+        _readScreen = () =>
+        {
+            StringBuilder text = new();
+            for (int y = 0; y < screen.Rows; y++)
+            {
+                foreach (Cell cell in screen.Row(y)) text.Append(cell.Char);
+                text.Append('\n');
+            }
+            return text.ToString();
+        };
+        _trainerHere = false;
+        _formCloses = false;
+        return game;
+    }
+
+    // The form on the wire: it is painted again with each value typed into it,
+    // SAVE leaves it, and the return after that shows the room.
+    private void GameTakesTheForm(ServerFeed game)
+    {
+        int payloads = 0;
+        _onTyped = text =>
+        {
+            if (text == "train stats") return;
+            payloads++;
+            if (text == "136") game.Raw(TrainStatsWire.Form(136, 1));
+            if (payloads == FormPayloads - 1) game.Raw(TrainStatsWire.Saved());
+            if (payloads == FormPayloads) game.Raw(TrainStatsWire.RoomRedrawn());
+        };
+    }
+
+    private static byte[] Bytes(string line) => Encoding.Latin1.GetBytes(line + "\r");
+
+    // Reports paradigm-20261026-225703 / -225718: a party member trained on the
+    // leader's `@train`. An Enter sent just before `train stats` had its room
+    // display on the way, and it came in after `train stats` went out and before
+    // the game's echo of it. It was taken for the form closing: the pass gave up,
+    // the background engines were let go, and the member's `@train` reply and the
+    // `par` polls were typed into the Family Name box of the form the game drew
+    // next. The room display answers the Enter; the form is the answer to `train
+    // stats`, and the plan is typed into it with nothing else.
+    [Fact]
+    public void ARoomDisplayAlreadyOnItsWay_KeepsTheForm_AndThePlanIsApplied()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.RoomRedrawn()));
+        engine(Bytes(">Ironbar {Trained to level 31.}"));
+        engine(Bytes("par"));
+
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Assert.True(manager.IsBusy);
+        Assert.Equal(new[] { "train stats" }, Sent());
+
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        engine(Bytes("par"));
+        Settle();
+        Assert.False(manager.IsBusy);
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.Null(manager.LastApplyNote);
+        Assert.Equal(FormPayloads + 1, Sent().Length);   // `train stats` and the pass's own keystrokes only
+        Assert.False(_trainer.MenuOwnsKeyboard);
+
+        engine(Bytes("par"));   // back in the world: the engines send again
+        Assert.Equal("par", Sent()[^1]);
+    }
+
+    // Report paradigm-20261026-225733: party lines after `train stats`, each with
+    // the prompt redrawn ahead of it, came before the echo. The first prompt was
+    // taken for the echo and the second for the form closing.
+    [Fact]
+    public void PartyLinesAheadOfTheEcho_KeepTheForm_AndThePlanIsApplied()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.PartyLine("Ironbar looks Thunder up and down.")));
+        Start(() => game.Raw(TrainStatsWire.PartyLine("Thunder just moved to the front rank in your group.")));
+        engine(Bytes(">Ironbar {Trained to level 31.}"));
+        Assert.True(_trainer.MenuOwnsKeyboard);
+
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.Equal(FormPayloads + 1, Sent().Length);
+    }
+
+    // Not at a trainer the game echoes `train stats`, refuses it and leaves its
+    // prompt waiting, in one read: the keyboard goes back and nothing is typed.
+    [Fact]
+    public void NotAtATrainer_TheKeyboardIsReleased_AndNothingIsTyped()
+    {
+        AutoTrainManager manager = Build(paradigm: false);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n"
+                             + TrainStatsWire.Prompt()));
+
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Equal("the trainer screen didn't open", manager.LastApplyNote);
+
+        Settle();
+        Assert.Equal(new[] { "train stats" }, Sent());
+        engine(Bytes("par"));
+        Assert.Equal("par", Sent()[^1]);
     }
 }

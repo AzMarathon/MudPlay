@@ -9,15 +9,20 @@ namespace MudPlay.Tests;
 // rows out of the LineExtractor on it. A component under test attaches to Lines, as
 // MainWindowViewModel attaches the live extractor; given a router, every row is also
 // dispatched through it, chat rows included, and told the end of each read, the way
-// MainWindowViewModel wires them. Each call below is one server read.
+// MainWindowViewModel wires them. Given a prompt scanner, each read reaches it
+// before the terminal, as it does in the client. Each call below is one server read.
 internal sealed class ServerFeed
 {
     // When the row being fed was sent; null stamps it with the clock.
     private DateTimeOffset? _at;
 
+    private readonly WirePromptScanner? _promptScanner;
+
     // clock stamps a row fed without a time of its own; the real clock by default.
-    public ServerFeed(MessageRouter? router = null, Func<DateTimeOffset>? clock = null)
+    public ServerFeed(MessageRouter? router = null, Func<DateTimeOffset>? clock = null,
+                      WirePromptScanner? promptScanner = null)
     {
+        _promptScanner = promptScanner;
         Func<DateTimeOffset> now = clock ?? (() => DateTimeOffset.Now);
         Emulator = new TerminalEmulator(80, 24, now: () => _at ?? now());
         Lines = new LineExtractor(Emulator);
@@ -56,7 +61,12 @@ internal sealed class ServerFeed
     public void Raw(string text, DateTimeOffset? at = null)
     {
         _at = at;
-        try { Emulator.Feed(ToCp437(text)); }
+        try
+        {
+            byte[] bytes = ToCp437(text);
+            _promptScanner?.Append(bytes);
+            Emulator.Feed(bytes);
+        }
         finally { _at = null; }
     }
 

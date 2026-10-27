@@ -32,6 +32,26 @@ public sealed class TrainerMenuTrackerTests
             IsPromptLine: false));
     }
 
+    // The game's output reaching the tracker as it does in the client: each read
+    // through the wire's prompt scan first (its prompts to NotifyLivePromptObserved,
+    // as AppServices wires it), then the terminal and the router; the cursor's row
+    // read the way the terminal session reads it.
+    private static (TrainerMenuTracker tracker, ServerFeed game) Wired(Func<DateTime>? now = null)
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        TrainerMenuTracker tracker = new(router, new PartyState(), now: now ?? (() => Now));
+        WirePromptScanner scanner = new();
+        scanner.PromptObserved += _ => tracker.NotifyLivePromptObserved();
+        ServerFeed game = new(router, promptScanner: scanner);
+        tracker.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
+            TranscriptSnapshot.RowText(game.Emulator.Screen.Row(game.Emulator.Screen.CursorY)), string.Empty);
+        return (tracker, game);
+    }
+
+    private static void SendTrainStats(TrainerMenuTracker tracker) =>
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+
     [Fact]
     public void MarkerWithoutOutboundTrainStats_DoesNotEnterMenu()
     {
@@ -229,23 +249,21 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
-    public void InputMenu_SkipsCommandEchoPrompt_ThenExitsOnNextPrompt()
+    public void InputMenu_PromptsUpToTheEcho_AreNotTheExit_TheNextPromptIs()
     {
-        // Arming a menu leaves two prompts in its wake: the command's own
-        // `[HP=...]:train stats` echo (which must NOT be read as an exit) and
-        // the bare prompt that returns when the user leaves the box.
-        var (tracker, router, _) = Setup();
+        // Prompts that come before the game's answer to `train stats`, its own
+        // `[HP=...]:train stats` echo among them, aren't the form closing. The
+        // committed prompt after the form is.
+        var (tracker, game) = Wired();
         int exited = 0;
         tracker.InputMenuExited += () => exited++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-
-        // First prompt = the command echo — swallowed, no exit.
-        Dispatch(router, "[HP=33]:");
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("") + TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
 
-        // Second prompt = the user left the box — line-mode resumes.
-        Dispatch(router, "[HP=33]:");
+        game.Raw("\u001b[2J\u001b[H");
+        game.Prompt(TrainStatsWire.Statline);   // the user left the box — line-mode resumes
         Assert.Equal(1, exited);
     }
 
@@ -259,19 +277,114 @@ public sealed class TrainerMenuTrackerTests
         // while the form's character-mode still holds the keyboard (sent byte-by-
         // byte, so outbound observers miss it). The room display must resume
         // line-mode on its own.
-        var (tracker, router, _) = Setup();
+        var (tracker, game) = Wired();
         int exited = 0;
         tracker.InputMenuExited += () => exited++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "[HP=213/MA=194]:Train stats");   // the command's own echo — swallowed
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("Train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
         Assert.True(tracker.IsInputMenuActive);            // still owns the keyboard
 
-        Dispatch(router, "Obvious exits: north");          // form closed — back in the world
+        game.Raw("\u001b[2J\u001b[H" + TrainStatsWire.RoomRedrawn());   // form closed — back in the world
 
         Assert.Equal(1, exited);
         Assert.False(tracker.IsInputMenuActive);           // line-mode resumes
+    }
+
+    // Reports paradigm-20261026-225703 / -225718: an Enter sent just before `train
+    // stats` had its room display on the way. It came after `train stats` went
+    // out and ahead of the game's echo of it, and was taken for the form closing:
+    // the keyboard was released and the party's telepaths and `par` polls were
+    // typed into the Family Name box the game opened a moment later.
+    [Fact]
+    public void ARoomDisplayAheadOfTheEcho_AnswersAnEarlierCommand_AndKeepsTheKeyboard()
+    {
+        var (tracker, game) = Wired();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.RoomRedrawn());
+        Assert.Equal(0, exited);
+        Assert.True(tracker.MenuOwnsKeyboard);
+
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        Assert.Equal(0, exited);
+        Assert.True(tracker.MenuOwnsKeyboard);
+        Assert.False(tracker.AnsweredWithoutForm);
+    }
+
+    // Report paradigm-20261026-225733: party lines after `train stats` redraw the
+    // prompt in place ahead of each one. Two of them came before the echo; the
+    // first was swallowed as the echo and the second released the keyboard.
+    [Fact]
+    public void PartyLinesAheadOfTheEcho_KeepTheKeyboard()
+    {
+        var (tracker, game) = Wired();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.PartyLine("Ironbar looks Thunder up and down."));
+        game.Raw(TrainStatsWire.PartyLine("Thunder just moved to the front rank in your group."));
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+
+        Assert.Equal(0, exited);
+        Assert.True(tracker.MenuOwnsKeyboard);
+    }
+
+    // Not at a trainer: the game echoes `train stats`, refuses, and leaves its
+    // prompt waiting, all in one read. The wire's prompt scan saw that prompt
+    // before the echo was read, so the cursor's row is what says it.
+    [Fact]
+    public void ARefusalAndItsPrompt_InTheEchosRead_ReleaseTheKeyboard()
+    {
+        var (tracker, game) = Wired();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n" + TrainStatsWire.Prompt());
+
+        Assert.Equal(1, exited);
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    [Fact]
+    public void ARefusalWhosePromptComesInALaterRead_ReleasesTheKeyboard()
+    {
+        var (tracker, game) = Wired();
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + "You may not train your stats here!\r\n");
+        Assert.True(tracker.AnsweredWithoutForm);
+        Assert.Equal(0, exited);
+
+        game.Raw(TrainStatsWire.Prompt());
+        Assert.Equal(1, exited);
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    // A statline the line splitter can't read leaves no echo to find. Once the
+    // window has passed with neither echo nor form, a prompt counts again.
+    [Fact]
+    public void NoAnswerReadWithinTheWindow_TheNextPromptReleases()
+    {
+        DateTime t = Now;
+        var (tracker, game) = Wired(() => t);
+        int exited = 0;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Prompt());
+        Assert.Equal(0, exited);
+
+        t = t.AddSeconds(6);
+        game.Raw(TrainStatsWire.Prompt());
+        Assert.Equal(1, exited);
     }
 
     [Fact]
@@ -288,24 +401,22 @@ public sealed class TrainerMenuTrackerTests
     }
 
     [Fact]
-    public void LivePrompt_ReleasesKeyboard_AfterSkippingEcho()
+    public void LivePrompt_ReleasesKeyboard_OnceTheFormIsUp()
     {
         // The live-wire prompt path (WirePromptScanner) sees the in-place statline
-        // redraws the committed StatusLine pattern never emits. It swallows the
-        // command's own echo statline, then releases on the exit prompt the form's
-        // close produces — even in a dark room with no "Obvious exits" line.
-        var (tracker, _, _) = Setup();
+        // redraws the committed StatusLine pattern never emits. The command's own
+        // echo statline is set aside; the prompt the form's close leaves waiting
+        // releases the keyboard — even in a dark room with no "Obvious exits" line.
+        var (tracker, game) = Wired();
         int exited = 0;
         tracker.InputMenuExited += () => exited++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Assert.True(tracker.IsInputMenuActive);
-
-        tracker.NotifyLivePromptObserved();   // command echo statline — swallowed
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
         Assert.True(tracker.IsInputMenuActive);
 
-        tracker.NotifyLivePromptObserved();   // exit prompt — line-mode resumes
+        game.Raw(TrainStatsWire.Saved());   // exit prompt — line-mode resumes
         Assert.Equal(1, exited);
         Assert.False(tracker.IsInputMenuActive);
     }
@@ -331,16 +442,16 @@ public sealed class TrainerMenuTrackerTests
         // auto-train replay trigger and the auto-cast suppression gate both read.
         // False before, true the instant `train stats` arms, false once the bare
         // exit prompt returns (the echo prompt in between doesn't clear it).
-        var (tracker, router, _) = Setup();
+        var (tracker, game) = Wired();
         Assert.False(tracker.IsInputMenuActive);
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        SendTrainStats(tracker);
         Assert.True(tracker.IsInputMenuActive);
 
-        Dispatch(router, "[HP=33]:"); // command echo — swallowed, still active
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.True(tracker.IsInputMenuActive);
 
-        Dispatch(router, "[HP=33]:"); // exit prompt — box left, input released
+        game.Raw(TrainStatsWire.Saved());   // box left, input released
         Assert.False(tracker.IsInputMenuActive);
     }
 
@@ -401,12 +512,12 @@ public sealed class TrainerMenuTrackerTests
     [Fact]
     public void MenuOwnsKeyboard_ClearsOnMenuExit()
     {
-        var (tracker, router, _) = Setup();
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        var (tracker, game) = Wired();
+        SendTrainStats(tracker);
         Assert.True(tracker.MenuOwnsKeyboard);
 
-        Dispatch(router, "[HP=33]:"); // command echo — swallowed
-        Dispatch(router, "[HP=33]:"); // exit prompt — screen left
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        game.Raw(TrainStatsWire.Saved());
         Assert.False(tracker.MenuOwnsKeyboard);
     }
 
@@ -414,41 +525,40 @@ public sealed class TrainerMenuTrackerTests
     public void InputMenu_ReOpen_ArmsAgainAfterExit()
     {
         // A fresh `train stats` after the box was left re-arms input mode.
-        var (tracker, router, _) = Setup();
+        var (tracker, game) = Wired();
         int entered = 0, exited = 0;
         tracker.InputMenuEntered += () => entered++;
         tracker.InputMenuExited += () => exited++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        Dispatch(router, "[HP=33]:"); // echo skip
-        Dispatch(router, "[HP=33]:"); // exit
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        game.Raw(TrainStatsWire.Saved());
         Assert.Equal(1, entered);
         Assert.Equal(1, exited);
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        SendTrainStats(tracker);
         Assert.Equal(2, entered);
+        Assert.True(tracker.MenuOwnsKeyboard);
     }
 
     [Fact]
     public void InputMenu_DoubleTrainStatsBeforePrompt_EntersOnce()
     {
         // The observed Paradigm sequence sends `train stats` twice before the
-        // box settles; InputMenuEntered fires once, and both echoes are
-        // swallowed so the exit still lands on the real bare prompt.
-        var (tracker, router, _) = Setup();
+        // box settles; InputMenuEntered fires once, and the exit still lands on
+        // the prompt the form's close leaves.
+        var (tracker, game) = Wired();
         int entered = 0, exited = 0;
         tracker.InputMenuEntered += () => entered++;
         tracker.InputMenuExited += () => exited++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        SendTrainStats(tracker);
+        SendTrainStats(tracker);
         Assert.Equal(1, entered);
 
-        // Each `train stats` re-armed the echo skip, so one prompt is
-        // swallowed and the next is the exit.
-        Dispatch(router, "[HP=33]:");
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
         Assert.Equal(0, exited);
-        Dispatch(router, "[HP=33]:");
+        game.Raw(TrainStatsWire.Saved());
         Assert.Equal(1, exited);
     }
 
