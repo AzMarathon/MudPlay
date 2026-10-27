@@ -397,7 +397,7 @@ public sealed class CashManager : IDisposable
     }
 
     // Bind the shared room-redisplay coordinator so the combat-clear re-display
-    // coalesces with the item engine's post-kill re-look (one Enter, not two).
+    // coalesces with the post-kill floor check's look (one Enter, not two).
     // Optional — unbound, the engine sends its own Enter.
     public void SetRoomRedisplay(Game.Inventory.RoomRedisplayCoordinator coordinator)
     {
@@ -875,7 +875,7 @@ public sealed class CashManager : IDisposable
     // ground total — no duplicates, no stale gets, and naturally correct if someone
     // grabbed the pile first. A bare Enter (carriage return) re-renders the survey
     // exactly like `look` would but honours the profile's brief mode — no room
-    // description / flavor text — matching AutoGetItemsManager.RequestDropReLook. Hold
+    // description / flavor text — matching PostKillFloorCheck's look. Hold
     // the walker across the round-trip; the release timer frees it if the room turned
     // out empty, and a real collect re-arms the gate's settle window before then.
     private void FlushDeferredCollects()
@@ -883,9 +883,9 @@ public sealed class CashManager : IDisposable
         _cashPendingAfterCombat = false;
         _log?.Info(LogCategory, "combat cleared — collecting ground cash");
         _gate?.NoteDeferredPending(1);
-        // Re-render once. The item engine's post-kill re-look fires the same
-        // instant on the last kill; coalesce so the room isn't displayed twice
-        // (our collect still runs off the shared "You notice" survey either way).
+        // Re-render once. The post-kill floor check may have just sent its look for
+        // the last kill; coalesce so the room isn't displayed twice (our collect
+        // still runs off the shared "You notice" survey either way).
         if (_redisplay is null || _redisplay.ShouldSend())
             Send("");   // bare carriage return, not `look` — respects brief mode
         ArmResurveyRelease();

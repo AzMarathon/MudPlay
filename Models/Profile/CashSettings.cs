@@ -110,6 +110,11 @@ public sealed class CashSettings
     // Shared by CashManager and the AutoGetItemsManager item engine.
     public bool CollectAfterCombatFinished { get; set; }
 
+    // After a kill of a monster whose data gives it a chance to drop an item, send a
+    // bare Enter so the room, and anything dropped on its floor, is shown again
+    // (Game.Inventory.PostKillFloorCheck). On by default (user, 2026-10-26).
+    public bool LookAfterKillingDropper { get; set; } = true;
+
     // When a Collect-flagged currency would push past an encumbrance gate, drop
     // just enough lower-value Collect-flagged held coin to make room. Never
     // sacrifices Ignore-flagged coin.

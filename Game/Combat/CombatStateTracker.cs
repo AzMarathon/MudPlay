@@ -235,6 +235,13 @@ public sealed class CombatStateTracker : IDisposable
     // against the now-cleared gate (HasEngageableHostiles is already false here).
     public event Action? CombatForceCleared;
 
+    // Fires whenever a held Combat gate is let go (the room cleared, nothing left
+    // in it worth fighting, auto-attack switched off, a stealth runner's clear
+    // done, a force-clear), just before the release lets the walker step. A hold
+    // put up here is in place before that step, whatever ended the fight: a kill
+    // of ours, a party member's last blow, a flee.
+    public event Action? FightEnded;
+
     public CombatStateTracker(
         MessageRouter router,
         MovementCoordinator coordinator,
@@ -851,7 +858,10 @@ public sealed class CombatStateTracker : IDisposable
                 CombatSpentStealth?.Invoke(obs.Source == RoomObservationSource.Death);
             }
             if (wasAsserted)                                              // (3)
+            {
+                FightEnded?.Invoke();
                 _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);
+            }
         }
     }
 
@@ -989,6 +999,7 @@ public sealed class CombatStateTracker : IDisposable
     {
         if (!_gateAsserted) return;
         _gateAsserted = false;
+        FightEnded?.Invoke();
         _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, reason);
     }
 

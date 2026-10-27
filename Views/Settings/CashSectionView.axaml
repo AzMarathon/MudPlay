@@ -179,6 +179,9 @@
                 <CheckBox Content="Collect after combat finished (Cash and Items)"
                           IsChecked="{Binding CollectAfterCombatFinished, Mode=TwoWay}"
                           ToolTip.Tip="Defer pickups until the room's combat is over before sending get commands. Shared by Cash auto-collect and the Items auto-get engine."/>
+                <CheckBox Content="Look after killing a monster that can drop an item"
+                          IsChecked="{Binding LookAfterKillingDropper, Mode=TwoWay}"
+                          ToolTip.Tip="A monster's drop lands on the floor with no line of its own. When a monster you're credited with killing has any chance in the game data of dropping an item, send one Enter after the kill so the room is shown again and you (and Auto-get) can see whether it dropped. Several kills in one fight share one Enter, sent once the fight is over. Skipped when the room was shown again anyway, after you've moved on, in the dark or while blind. On by default."/>
 
                 <!-- ============ Coin Collection Rules ============ -->
                 <TextBlock Classes="SectionHeader" Text="Coin Collection Rules"/>

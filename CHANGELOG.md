@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.13
+
+- New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
+
 ## 3.186.12
 
 - Chest Offload no longer freezes the client after a chest open: the shop trip is worked out in the background

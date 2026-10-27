@@ -3087,7 +3087,12 @@ MudPlay collects coin and loot, banks your wealth, and manages your gear.
 
 With the collection engines on, MudPlay picks up coin and flagged items off the ground after a fight, following your per-currency rules (Settings → Cash + Items) and the per-item flags in Game Data. It can skip a pickup that would push you into a heavier encumbrance band, and drop smaller coin to make room for larger. Between inventory reads MudPlay keeps its own running count of your coins and weight (pickups, drops, stashes, deposits, purchases, training fees). When the game shows that count is off — it refuses a coin stash or drop, or a pickup is skipped because you look full — MudPlay sends one `i` to re-read the real figures.
 
-**Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So when you kill a monster whose drop list (Game Data → Monsters) holds an item you've flagged **Auto-collect**, MudPlay re-displays the room (a bare Enter) to see whether it dropped, and a loop or walk waits for that display before moving on. Both halves are needed: **Auto-Get Items** on, and the item flagged Auto-collect in Game Data → Items. Kills of monsters that can't drop a flagged item send nothing extra. A room spell's kill doesn't say which monster died, so the room is re-displayed when any kind of monster it listed could have dropped one.
+**Monster drops.** The game doesn't announce an item a monster drops; it just lands on the floor. So after you kill a monster that could have dropped something, MudPlay re-displays the room (a bare Enter) to see whether it did, and a loop or walk waits for that display before moving on. Two things make a monster worth the look:
+
+- **Any drop at all**, with **Look after killing a monster that can drop an item** ticked on Settings → Cash + Items (on by default): the monster's drop list (Game Data → Monsters) gives at least one item a chance above 0%. Several such kills in one fight share one Enter, sent once the fight in the room is over.
+- **An item you've flagged Auto-collect**, with **Auto-Get Items** on: the room is re-displayed straight after the kill, even mid-fight, so the item can be picked up.
+
+Only kills you're credited with count (the ones that give you experience), including a fight you run by hand with Auto-Combat off: the monster you last attacked in the room is taken to be the one that died. If the fight ends some other way (a party member lands the last blow, the last monster flees), the look its earlier kills asked for still goes out. After a monster whose death spell freezes the room for a few seconds, the look waits until the room can act again. No Enter is sent when the room was shown again anyway (the game, another of MudPlay's engines or you re-displayed it after the kill), when you've already moved on or a move is on its way, in a room too dark to see in or while you're blind, or with the Auto-All master switch off. Kills of monsters that can't drop anything send nothing extra. A room spell's kill doesn't say which monster died, so the room is re-displayed when any kind of monster it listed could have dropped one.
 
 A party member with **Alter settings** can flag an item for you, or set its Max to get, from chat: see **@auto-get for one item** in *Remote @-commands*.
 
@@ -6397,12 +6402,19 @@ The program log notes each flip, and the bug report shows whether a detour is ho
 **What it does:** When an auto-deposit trip to a **bank** comes due while you carry anything flagged **Auto-sell**, and a shop that buys it is this many steps or fewer from the bank, the trip goes to the shop first, sells, and then goes on to the bank if a deposit is still due. It counts every Auto-sell item, including ones under their detour count or with *Make detours to sell it* unticked.
 **Important notes:** **0** never adds the stop. Raise it if your shop is further from your bank; lower it to keep bank trips short. A stash-room destination never adds a shop stop.
 
-The pickup rules come in three groups on the tab. **Collection Rules: Coins and Items** holds the one switch both share. **Coin Collection Rules** limit how much weight picking up *coin* may bring you to. **Item Collection Rules** set the same kind of limit for ground *items*, separately, so you can let coin fill you further than items or the other way round.
+The pickup rules come in three groups on the tab. **Collection Rules: Coins and Items** holds the switch both share, and the look at the floor after a kill. **Coin Collection Rules** limit how much weight picking up *coin* may bring you to. **Item Collection Rules** set the same kind of limit for ground *items*, separately, so you can let coin fill you further than items or the other way round.
 
 ### Collect after combat finished (Cash and Items)
 
 **Default:** Off
 **What it does:** Waits until a room's fight is fully over before picking up ground coin and items (this one switch governs both engines), instead of grabbing them mid-fight.
+
+### Look after killing a monster that can drop an item
+
+**Default:** On
+**What it does:** A monster's drop lands on the floor with no line of its own, so you can't see it until the room is shown again. With this on, killing a monster whose game data gives it any chance of dropping an item sends one Enter, which shows the room again, floor included, for you and for Auto-Get Items. It only counts kills that give you experience. Several kills in one fight share one Enter, sent once the room's fight is over, and a loop or walk waits for the room display before it moves on.
+**Important notes:** No Enter goes out when the room was shown again anyway after the kill, when you've moved on or a move is already on its way, in a room too dark to see in or while you're blind, or with the Auto-All master switch off. A monster that can drop an item you've flagged **Auto-collect** is looked at straight after the kill whatever this box says, as long as Auto-Get Items is on (see *Collecting coin and loot*).
+**When you might change it:** Turn it off if you'd rather not have the room scroll by again after every such kill.
 
 ### Don't collect coin if it makes you Light / Medium / Heavy
 
@@ -7621,6 +7633,7 @@ This section is a compact, technical lookup table for every setting documented a
 | No combat during an auto-sell detour / an auto-deposit trip | `false` / `false` | bool | `NoCombatOnSellDetour` / `NoCombatOnDepositTrip` | Models/Profile/CashSettings.cs |
 | Don't collect coin / get item → Light/Medium/Heavy, and past 90% (8 flags) | false (all) | bool | `SkipCollectIfMakesLight` etc. / `SkipGetItemIfMakesLight` etc. / `SkipCollectPast90Percent` / `SkipGetItemPast90Percent` | Models/Profile/CashSettings.cs |
 | Collect after combat finished / Drop smaller for larger | false / false | bool | `CollectAfterCombatFinished` / `DropSmallerForLarger` | Models/Profile/CashSettings.cs |
+| Look after killing a monster that can drop an item | true | bool | `LookAfterKillingDropper` | Models/Profile/CashSettings.cs |
 | On an auto-deposit trip, sell first at a shop within N steps of the bank | 25 | 0–500 (0 = never) | `SellOnBankRunWithinSteps` | Models/Profile/CashSettings.cs |
 | Drop coin to make room for Auto-sell items / up to | false / Silver | bool / Copper–Runic | `DropCoinForSellItems` / `DropCoinForSellItemsUpTo` | Models/Profile/CashSettings.cs |
 | Stash transfers: party members carry a share too | false | bool | `StashTransferPartyShare` | Models/Profile/CashSettings.cs |

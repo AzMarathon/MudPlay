@@ -117,6 +117,7 @@ public sealed class EngineSendGate
             // Before the send: what the send itself causes (a replay, an observer's
             // own command) then lands after it in the trail, as on the wire.
             Trail?.Record(command, origin, _senderLabel, SentCommandTrail.Outcome.Sent);
+            if (command.Length == 0) BareEntersSent++;
             SendAsClient(rawSender, bytes);
             _sent?.Invoke(command);
             // Remember the just-sent client command so a confusion fumble can re-fire
@@ -151,6 +152,11 @@ public sealed class EngineSendGate
     // The holds now up, for a bug report: a send gate that is held explains a
     // client that sends nothing.
     public IReadOnlyCollection<string> Holds => _holds.ToArray();
+
+    // How many bare Enters the wrapped senders have put on the wire. Each one
+    // re-displays the room, so an engine that wants the room shown can tell one
+    // already went out since the moment it cares about.
+    public int BareEntersSent { get; private set; }
 
     // How many commands a hold has dropped this session, and the last of them.
     public int DroppedCount { get; private set; }

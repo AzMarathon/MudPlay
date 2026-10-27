@@ -2280,7 +2280,11 @@ public static class BugReportBuilder
             : "none yet — using the gear estimate");
         Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
         Kv(sb, "Auto-sell", svc.AutoSell.IsSelling ? "selling here" : "idle");
-        Kv(sb, "Floor check after a kill", svc.AutoGetItems.IsReLookHeld ? "waiting on the room display" : "idle");
+        // "It sat there after a kill" / "it never looked for the drop": what the floor
+        // check owes, and why its last look was sent or skipped. The setting itself
+        // is printed with the Cash settings.
+        Kv(sb, "Floor check after a kill", svc.FloorCheck.Describe());
+        Kv(sb, "Floor check attributed the death to", svc.FloorCheck.LastAttribution ?? "no death yet");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.

@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.12**
-> - Chest Offload no longer freezes the client after a chest open: the shop trip is worked out in the background
-> - Gatehouse wheel (and any room command also listed as the exit's action) sent once per try, so the gate opens
-> - A walk that's refused on every try now names the step it gave up on
+> **Version 3.186.13**
+> - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -166,8 +166,8 @@ How to keep it current:
 
 ### AutoGetItemsManagerTests.cs
 - Covers: Game/Inventory/AutoGetItemsManager. Also one stray theory for Game/Inventory/InventorySnapshot.ParseKeyEntry, which is a production helper but has nothing to do with this class.
-- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
-- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; the walker leaving before the post-kill survey lands; Roomba headroom.
+- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
+- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; Roomba headroom.
 
 ### AutoHazardCounterProvisionerTests.cs
 - Covers: Game/Map/AutoHazardCounterProvisioner (with AutoModeController)
@@ -707,9 +707,9 @@ How to keep it current:
 
 ### CombatManagerBreakHoldTests.cs
 - Covers: Game/Combat/CombatManager (user-break hold) + CombatStateTracker, OutboundBreakObserver, HealthManager
-- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves.
+- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves. A hand fight with the engine off names the kill for the floor check only (`HandFoughtTarget`) while `DeathAttributionTarget`, read by the boss timers and the death-spell nudge, stays empty; a handled death and leaving the room forget it, and with the engine on it names nothing.
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, state tracker); each fed line lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time.
-- Why: user 2026-10-10 rulings on manual break.
+- Why: user 2026-10-10 rulings on manual break; the 2026-10-26 floor check, which needs a hand-fought kill named.
 
 ### CombatManagerRoomChangeHoldTests.cs
 - Covers: Game/Combat/CombatManager (Attack Not Last and the follow Target Priority holds) with RoomTracker, RoomDisplayParser, DeathDetector, RoomEntityClassifier, DarkRoomCombatWatcher, all driven through the terminal and the line extractor
@@ -772,7 +772,7 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap).
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap). FightEnded fires on every release of a held gate while the gate still holds (a cleared room, a see-hidden clear with auto-attack off, a force-clear), so the post-kill floor check's hold is up before the walker steps.
 - Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
@@ -3006,6 +3006,11 @@ How to keep it current:
 - Checks: death marks the inventory stale; reread once a room is known, once per death; a profile swap drops the pending read.
 - Why: report paradigm-20261009-105244.
 
+### PostKillFloorCheckTests.cs
+- Covers: Game/Inventory/PostKillFloorCheck (with MonsterDeathWatcher, MonsterCatalog on a Monsters.json fixture, RoomDisplayParser and RoomTracker on a Rooms.json fixture (MoveOnItsWay, IsPeekSuppressed), CombatStateTracker (HasEngageableHostiles, FightEnded) on a RoomEntityClassifier, AcquisitionGate, RoomRedisplayCoordinator, EngineSendGate.BareEntersSent, AutoModeController and the Cash settings of a TestProfiles profile)
+- Checks: kills fed as the game prints them: a monster with a drop chance gets one bare Enter at the end of the kill's read and the walker is held from the death until the room display (or the release timeout); a monster with no drops, a 0% drop or no known identity gets none. Two kills in one read share one Enter; kills a round apart with the fight still on wait and look once the last kill ends it. The setting is on by default and off sends nothing, while an Auto-collect drop looks at once, mid-fight and whatever the setting. No Enter of its own when the room was shown after the kill, or another engine's Enter went out since the kill's read began, whether its death handler ran after the check's or before it (the walker still waits for its display). An Enter answered before the kill doesn't stand in for the look, even inside the redisplay coordinator's window. No Enter and no hold with a move on its way, queued on a sure tracker or noted while it is unsure. A `look <dir>` peek's display settles nothing. A fight that ends with no kill of ours, read through the real `CombatStateTracker.FightEnded`, holds the walker before the Combat gate lets go and sends the owed look. A death spell's stall: the nudge's Enter isn't the look, which goes once the stall has run out, the walker held throughout. The death's attribution and its source are reported (`LastAttribution`). Nothing when we left the room, the send gate is held, the master switch is off, or the room can't be seen. A display with no look owed leaves another hold alone. The outcome is read through `Describe()`, the bug report's line.
+- Why: the user's 2026-10-26 request to look after killing a monster that can drop an item; a drop prints no line (GAME_MECHANICS "Monster drops land on the ground"); report `paradigm-20261003-005951` (the walker leaving before the post-kill survey lands).
+
 ### ProfileBackupTests.cs
 - Covers: Services/ProfileService.Save (backup)
 - Checks: with backup off no .bak is written; with it on the file as it stood is copied to profile.json.bak before the new one is written; with no earlier file there is nothing to back up.
@@ -3390,7 +3395,7 @@ How to keep it current:
 ### RoomRedisplayCoordinatorTests.cs
 - Covers: Game/Inventory/RoomRedisplayCoordinator
 - Checks: The first request sends; a second within the 750 ms window coalesces; a later one sends again.
-- Why: The post-kill drop re-look and the cash re-display would otherwise render the room twice.
+- Why: The post-kill floor check and the cash re-display would otherwise render the room twice.
 
 ### RoomRenameRelearnTests.cs
 - Covers: Game/Map/RoomTracker + RoomGraphManager (learned room names)

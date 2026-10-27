@@ -12,7 +12,7 @@ namespace MudPlay.Tests;
 // game data and sends get <name> for items flagged AutoCollect. Pins the gates
 // (the master toggle, collect-after-combat timing, peeks), MaxToGet, the
 // encumbrance brackets and dropping coin to make weight, the floor ledger's
-// dedup and the re-look after a kill, and Stock / Paradigm batching.
+// dedup, and Stock / Paradigm batching.
 public sealed class AutoGetItemsManagerTests
 {
     private sealed class Harness : IDisposable
@@ -770,7 +770,7 @@ public sealed class AutoGetItemsManagerTests
     public void ReRenderSameFloor_WithinWindow_NoDuplicateGet()
     {
         // The Cash engine re-displays the room to grab ground coin and the
-        // post-kill re-look fires an Enter; both re-render the same "You notice"
+        // post-kill floor check fires an Enter; both re-render the same "You notice"
         // survey before the get lands. The same floor pile must not re-collect.
         using Harness h = new();
         h.Flags["long sword"] = true;
@@ -876,87 +876,6 @@ public sealed class AutoGetItemsManagerTests
         h.Feed("You notice orc-head here.");   // re-render of the same floor
 
         Assert.Single(h.Sent);                  // still deduped
-    }
-
-    // ----- Post-kill drop re-look ----------------------------------
-
-    [Fact]
-    public void RequestDropReLook_SendsBareEnter()
-    {
-        using Harness h = new();
-        h.Items.RequestDropReLook();
-        // A lone carriage return (Enter) re-renders the "You notice … here." survey
-        // without look's room description / flavor text.
-        Assert.Equal(new[] { "" }, h.SentText);
-        Assert.Equal(new byte[] { (byte)'\r' }, h.Sent[0]);
-    }
-
-    [Fact]
-    public void RequestDropReLook_Cooldown_SuppressesSecond()
-    {
-        using Harness h = new();
-        h.Items.RequestDropReLook();
-        h.Items.RequestDropReLook();        // within cooldown → suppressed
-        Assert.Single(h.Sent);
-    }
-
-    [Fact]
-    public void RequestDropReLook_DisabledMaster_NoLook()
-    {
-        using Harness h = new() { Enabled = false };
-        h.Items.RequestDropReLook();
-        Assert.Empty(h.Sent);
-    }
-
-    // The kill clears the Combat gate in the same pass, so the walker has to be held
-    // from the re-look until the room display it asked for has been read.
-    [Fact]
-    public void RequestDropReLook_HoldsTheWalkerUntilTheRoomDisplays()
-    {
-        using Harness h = new();
-        MudPlay.Game.Map.MovementCoordinator coord = new();
-        using AcquisitionGate gate = new(coord);
-        h.Items.SetAcquisitionGate(gate);
-
-        h.Items.RequestDropReLook();
-        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
-
-        h.Items.NoteRoomDisplayed();
-        Assert.False(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
-    }
-
-    [Fact]
-    public void RequestDropReLook_DropOnTheFloor_HoldsUntilItIsTaken()
-    {
-        using Harness h = new();
-        h.Flags["black star key"] = true;
-        MudPlay.Game.Map.MovementCoordinator coord = new();
-        using AcquisitionGate gate = new(coord);
-        h.Items.SetAcquisitionGate(gate);
-
-        h.Items.RequestDropReLook();
-        h.Feed("You notice black star key here.");
-        h.Items.NoteRoomDisplayed();
-
-        Assert.Equal(new[] { "", "get black star key" }, h.SentText);
-        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
-
-        h.Feed("You took black star key.");
-        Assert.False(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
-    }
-
-    [Fact]
-    public void RoomDisplay_WithNoReLookOut_LeavesTheGateAlone()
-    {
-        using Harness h = new();
-        MudPlay.Game.Map.MovementCoordinator coord = new();
-        using AcquisitionGate gate = new(coord);
-        h.Items.SetAcquisitionGate(gate);
-        gate.NoteDeferredPending(1);        // someone else's hold
-
-        h.Items.NoteRoomDisplayed();
-
-        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
     }
 
     // A named get (what a hang-up penalty dropped) is the character's own item
