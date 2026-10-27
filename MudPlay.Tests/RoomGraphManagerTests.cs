@@ -1045,6 +1045,7 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.NotNull(gate);
         Assert.True(gate!.Exits.TryGetValue(Direction.N, out RoomExit ex));
         Assert.Equal(RoomExitHint.MultiActionHidden, ex.Hint);          // promoted off Door
+        Assert.Equal((new RoomKey(1, 1331), Direction.N), ex.MultiAction?.DoorOrGate);   // a lever gate
         Assert.Equal(new RoomKey(1, 1375), ex.Target);
         Assert.NotNull(ex.MultiAction);
         // Both bare "Action" cells share StepNumber 1, so they're redundant
@@ -1471,6 +1472,9 @@ public sealed class RoomGraphManagerTests : IDisposable
         Assert.False(ex.MultiAction.HasRemoteActions);              // spoken here, no detour
         Assert.Equal("ask shadow guard morukai", ex.MultiAction.Actions[0].Commands[0]);
         Assert.Equal(0, ex.MultiAction.Actions[0].RequiredItemId);  // no held-item gate
+        // An ask isn't a lever: nothing records that it flips the door, so the door
+        // is kept out of the lever-gate rules.
+        Assert.Null(ex.MultiAction.DoorOrGate);
     }
 
     [Fact]

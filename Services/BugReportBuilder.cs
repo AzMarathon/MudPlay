@@ -2197,6 +2197,18 @@ public static class BugReportBuilder
                 .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
                 .ToArray();
             Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
+            // The lever actions the lap types on its detours to the lever exits it
+            // crosses: a loop that stopped at, or walked round, such an exit.
+            IReadOnlyList<string> leverActions = loop.ExitActionCommands;
+            Kv(sb, "Loop lever detours (actions each lap)",
+                leverActions.Count == 0 ? "(none)" : string.Join(", ", leverActions.Select(c => $"'{c}'")));
+            Kv(sb, "Loop step inside a lever detour",
+                loop.CurrentDetour is { } detour
+                    ? $"yes: steps {detour.Start + 1}-{detour.Cross + 1}, for {detour.GateRoom} {detour.GateDir}"
+                      + (detour.OneWay ? " (one-way)" : $", back on the route at step {detour.End + 1}")
+                    : "no");
+            Kv(sb, "Loop lever detours that can't be routed",
+                loop.UnroutableLevers.Count == 0 ? "(none)" : string.Join("; ", loop.UnroutableLevers));
             Kv(sb, "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
@@ -2749,7 +2761,9 @@ public static class BugReportBuilder
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
-        Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
+        // Lever gates are among them, and a lever pulled whose gate hasn't been seen
+        // since is listed too: a lever isn't pulled at a gate held open.
+        Kv(sb, "Doors held open (seen open, not yet able to lock again; lever pulls not yet seen)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy

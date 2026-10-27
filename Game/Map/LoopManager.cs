@@ -631,12 +631,12 @@ public sealed class LoopManager
     // unreachable legs without running it.
     public (IReadOnlyList<LoopStep> Steps, IReadOnlyList<(RoomKey From, RoomKey To)> UnreachableSegments)
         ExpandWaypoints(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
-        => LoopExpander.Expand(waypoints, _bfs, filter);
+        => LoopExpander.Expand(waypoints, _bfs, _graph, filter, LoopLegMemo.Of(_graph));
 
     // The rooms a loop with these waypoints walks through, leg by leg, gaps left
     // where a leg doesn't route (LoopExpander.ResolveLegRoomKeys).
     public IReadOnlyList<RoomKey> ResolveRouteRoomKeys(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
-        => LoopExpander.ResolveLegRoomKeys(waypoints, _bfs, _graph, filter);
+        => LoopExpander.ResolveLegRoomKeys(waypoints, _bfs, _graph, filter, LoopLegMemo.Of(_graph));
 
     // ----- internals -------------------------------------------------
 
