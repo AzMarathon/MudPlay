@@ -2760,12 +2760,10 @@ public static class BugReportBuilder
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
-        Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
+        // Lever gates are among them, and a lever pulled whose gate hasn't been seen
+        // since is listed too: a lever isn't pulled at a gate held open.
+        Kv(sb, "Doors held open (seen open, not yet able to lock again; lever pulls not yet seen)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
-        // A lever is not pulled again while its door or gate stands open from our pull:
-        // a second pull locks it.
-        Kv(sb, "Lever gates our pulls opened (not pulled again yet)", svc.LeverGates.Describe() is { Count: > 0 } levers
-            ? string.Join(", ", levers) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"

@@ -66,6 +66,11 @@ public static class RemoteActionPathExpander
     // spans, when given, gets each top-level lever exit's detour as indices into
     // the returned steps (LeverDetour), for a loop that has to know where a
     // detour starts and ends.
+    //
+    // heldOpen, when given, says whether a lever door or gate (room, side) is held
+    // open for a walk that reaches it so many moves from now (DoorsHeldOpen): its
+    // detour is left out and the gate crossed as it stands, since pulling its lever
+    // would lock it. A walk-to asks it; a loop's expansion, kept for hours, doesn't.
     public static IReadOnlyList<WalkStep> Expand(
         RoomGraphManager graph,
         RoomKey source,
@@ -75,7 +80,8 @@ public static class RemoteActionPathExpander
         LogService? log = null,
         IReadOnlySet<Direction>? openAtSource = null,
         List<UnroutableLeverLeg>? unroutable = null,
-        List<LeverDetour>? spans = null)
+        List<LeverDetour>? spans = null,
+        Func<RoomKey, Direction, int, bool>? heldOpen = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(directions);
@@ -118,6 +124,18 @@ public static class RemoteActionPathExpander
             // shows as open (openAtSource: its levers were pulled, or it opened by
             // itself) is crossed as it stands — no detour to pull them again.
             bool openNow = steps.Count == 0 && current.Equals(source) && openAtSource?.Contains(dir) == true;
+            if (exit.Hint == RoomExitHint.MultiActionHidden
+                && exit.MultiAction is { HasRemoteActions: true, DoorOrGate: { } } gated && bfs is not null && !openNow
+                && heldOpen?.Invoke(current, dir, steps.Count(static s => s is MoveStep)) == true)
+            {
+                log?.Debug("Walker",
+                    $"remote-action exit {current} {dir}->{exit.Target}: its door or gate is held open past the walk there — "
+                    + $"no detour to its {gated.Actions.Count} lever(s), crossed as it stands");
+                roomBefore.Add(current);
+                steps.Add(new MoveStep(dir, exit.Target) { SkipSpecialDispatch = true });
+                current = exit.Target;
+                continue;
+            }
             if (exit.Hint == RoomExitHint.MultiActionHidden
                 && exit.MultiAction is { HasRemoteActions: true } maData
                 && bfs is not null

@@ -924,7 +924,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         if (_pendingLoopRing is { } cached && ReferenceEquals(cached.Loop, pending)) return cached.Ring;
         IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(
-            pending.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement);
+            pending.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement, LoopLegMemo.Of(_services.RoomGraph));
         IReadOnlyList<RoomKey>? ring = keys.Count >= 2 ? keys : null;
         _pendingLoopRing = (pending, ring);
         return ring;

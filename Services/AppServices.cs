@@ -1389,7 +1389,6 @@ public sealed class AppServices
     // The door sides the client has seen open that can't have locked again yet. Set
     // beside it.
     public Game.Map.DoorsHeldOpen DoorsHeldOpen { get; private set; } = null!;
-    public Game.Map.LeverGateMemory LeverGates { get; private set; } = null!;
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
 
@@ -9070,11 +9069,12 @@ public sealed class AppServices
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
         Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
             .OfType<string>().ToArray();
-        // A lever-opened door or gate one of our detours opened isn't pulled shut again
-        // by the next walk or lap through it while it stands open.
-        LeverGates = new Game.Map.LeverGateMemory(RoomTracker, log: Log);
-        Walker.SetLeverGates(LeverGates);
-        LoopRunner.SetLeverGates(LeverGates);
+        // A lever door or gate held open isn't pulled shut again by a walk or a lap:
+        // the engine flips it on every pull. Its window is judged against the walk
+        // still to go to the gate.
+        DoorsHeldOpen.TravelTime = moves => AutoLair.TravelCostModel.EstimateTravel(moves);
+        Walker.SetDoorsHeldOpen(DoorsHeldOpen);
+        LoopRunner.SetDoorsHeldOpen(DoorsHeldOpen);
         // A waypoint's command block: the loop moves on once the game has answered it,
         // and stays while a fight it started runs.
         LoopRunner.SetInCombatProbe(() => PlayerState.InCombat);
@@ -10252,7 +10252,7 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom,
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph)),
             coordinator: MovementCoordinator);
         // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
         // whose lit light dwindles under Reorder-at: the walk-to shop router stands
@@ -10376,7 +10376,7 @@ public sealed class AppServices
             selling: () => SellDetour.IsDetouring, sellResume: () => SellDetour.ResumePlan,
             depositing: () => AutoDeposit.IsRerouting, depositResume: () => AutoDeposit.ResumePlan,
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph)),
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             log: Log);
         RoomTracker.StateChanged += Game.Map.RoomTracker.Named("detour combat", _ => DetourCombat.Evaluate());
@@ -16161,7 +16161,7 @@ public sealed class AppServices
     private Game.Map.RoomKey? NearestLoopRoom(Game.Map.RoomKey from, Game.Map.Loop loop)
     {
         System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> rooms =
-            Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement);
+            Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph));
         if (rooms.Count == 0) return null;
         System.Collections.Generic.IReadOnlyDictionary<Game.Map.RoomKey, int> steps =
             Bfs.ComputeDistancesTo(from, rooms, Movement);

@@ -677,6 +677,27 @@ public sealed class RoomRenameRelearnTests : IDisposable
         Assert.Null(tracker.HeldDisplay);
     }
 
+    // The store room, taken from the held display while the vault's display is being
+    // read, carries the held display's exits to a listener of that step, not the
+    // vault's.
+    [Fact]
+    public void NoEcho_TheRoomTakenFromTheHeldDisplay_IsGivenThatDisplaysExits()
+    {
+        (RoomGraphManager _, RoomTracker tracker, List<NameLearnedEvent> _) = AtTheStair();
+        List<IReadOnlySet<Direction>?> storeRoomExits = new();
+        tracker.StateChanged += t =>
+        {
+            if (t.NewRoom?.Key == StoreRoom) storeRoomExits.Add(tracker.State.ObservedExitDirections);
+        };
+
+        tracker.NoteMoveSent(Direction.N, T0.AddSeconds(3));
+        tracker.NoteRoomObserved(new RoomObservation("Vault", X(Direction.S)), T0.AddSeconds(3.1));
+
+        IReadOnlySet<Direction>? shown = Assert.Single(storeRoomExits);
+        Assert.Equal(X(Direction.N, Direction.S), shown);
+        Assert.Equal(X(Direction.S), tracker.State.ObservedExitDirections);
+    }
+
     // No second step: the store room shown again, late enough to be no re-look,
     // is the arrival, as it always was.
     [Fact]

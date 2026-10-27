@@ -16,7 +16,8 @@ namespace MudPlay.Tests;
 // a door or gate shows `open gate <dir>` (`closed gate <dir>` while shut), and an
 // action on a gate standing open shuts it again, as the engine's toggle does
 // (GAME_MECHANICS "Multi-action exits and levers"). A move into a shut lever exit
-// is refused, and each command is answered by a prompt.
+// is refused, and each command is answered by a prompt. The held-open doors
+// (DoorsHeldOpen) are wired to the tracker and the refusals as the client wires them.
 internal sealed class LeverWorld
 {
     private readonly Dictionary<(RoomKey Room, string Command), (RoomKey Room, Direction Dir)> _levers = new();
@@ -40,7 +41,7 @@ internal sealed class LeverWorld
         _ = new RoomDisplayParser(Server.Lines, Tracker);
         // Its echo tells a move into one Treetops from a re-show of the last.
         _ = new InboundMoveEchoScanner(Server.Lines, Tracker);
-        _ = new MovementRefusalDetector(Server.Lines, Tracker);
+        MovementRefusalDetector refusals = new(Server.Lines, Tracker);
         Prompts = new WirePromptScanner();
         BfsMapper bfs = new(Graph);
         MovementCoordinator coordinator = new();
@@ -48,13 +49,17 @@ internal sealed class LeverWorld
         Walker = withWalker ? new AutoWalkManager(Graph, bfs, Tracker, coordinator, filter, promptScanner: Prompts) : null;
         Runner = new LoopRunner(Tracker, coordinator, promptScanner: Prompts, graph: Graph, bfs: bfs, walker: Walker,
             filter: filter, postToUi: a => a(), now: () => Clock.Now, schedule: Timers.Arm);
-        Gates = new LeverGateMemory(Tracker, () => Clock.Now);
-        Runner.SetLeverGates(Gates);
+        // Wired as AppServices wires it.
+        Held = new DoorsHeldOpen(
+            (room, dir) => Graph.GetRoom(room) is { } r && r.Exits.TryGetValue(dir, out RoomExit e) ? e : null, () => Clock.Now);
+        Held.ReleaseOn(refusals);
+        Tracker.RoomShown += Held.NoteRoomShown;
+        Runner.SetDoorsHeldOpen(Held);
         Runner.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         Runner.Event += Events.Add;
         if (Walker is not null)
         {
-            Walker.SetLeverGates(Gates);
+            Walker.SetDoorsHeldOpen(Held);
             Walker.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         }
         foreach ((RoomKey room, string command, RoomKey gate, Direction way) in levers)
@@ -66,7 +71,7 @@ internal sealed class LeverWorld
     public LoopRunner Runner { get; }
     public AutoWalkManager? Walker { get; }
     public MovementCoordinator Coordinator { get; }
-    public LeverGateMemory Gates { get; }
+    public DoorsHeldOpen Held { get; }
     public ServerFeed Server { get; }
     public WirePromptScanner Prompts { get; }
     public ManualClock Clock { get; } = new();
@@ -82,6 +87,10 @@ internal sealed class LeverWorld
     // A command the game answers without its action taking effect, asked as each
     // line is answered.
     public Func<string, bool>? Fizzle { get; set; }
+
+    // Told each line before the game answers it, standing where it was sent from:
+    // a test shuts a gate under the client's feet this way.
+    public Action<string>? BeforeAnswer { get; set; }
 
     // Everything sent and not answered yet never reached the game.
     public void DropUnanswered() => _answered = Sent.Count;
@@ -121,6 +130,7 @@ internal sealed class LeverWorld
         while (_answered < Sent.Count && limit-- > 0 && done?.Invoke() != true)
         {
             string sent = Sent[_answered++];
+            BeforeAnswer?.Invoke(sent);
             Server.Line("[HP=565]:" + sent);
             if (Fizzle?.Invoke(sent) == true)
             {

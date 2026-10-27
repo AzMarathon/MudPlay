@@ -260,11 +260,12 @@ public sealed class LoopRemoteActionExitTests : IDisposable
     }
 
     // The lap's `tear bark` didn't take, so the vine gate is still shut when the run
-    // gets there: the primed crossing is refused, and instead of a recovery that
-    // would join the lap past the levers, the walker takes that one crossing,
-    // working the chain again from 16/551, and the lap carries on up the vine.
+    // gets there, and the arrival's display shows it so: instead of stepping into it,
+    // or a recovery that would join the lap past the levers, the walker takes that
+    // one crossing, working the chain again from 16/551, and the lap carries on up
+    // the vine.
     [Fact]
-    public void RefusedPrimedCrossing_IsWalkedByTheWalker_AndTheLapCarriesOn()
+    public void PrimedCrossingShownShutOnArrival_IsWalkedByTheWalker_AndTheLapCarriesOn()
     {
         LeverWorld world = World(withWalker: true);
         world.StandIn(Ledge);
@@ -274,7 +275,7 @@ public sealed class LoopRemoteActionExitTests : IDisposable
         Assert.True(world.Runner.Start(LedgeToRooftop()));
         world.Play(() => CrossedTheVine(world) && world.At.Equals(Ledge));
 
-        Assert.Equal(new[] { "16/551 N" }, world.Bonks);
+        Assert.Empty(world.Bonks);
         Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
         Assert.DoesNotContain(world.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
         Assert.Equal(1, world.Moves.Count(m => m.From.Equals(Rooftop)));
@@ -311,6 +312,53 @@ public sealed class LoopRemoteActionExitTests : IDisposable
         Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // `tear bark` was answered, and a fight it drew held the lap in 16/569; a flee
+    // out and the walk back don't send it again: it went out and was taken.
+    [Fact]
+    public void FleeAfterTheLeverActionWasAnswered_DoesNotSendItAgain()
+    {
+        LeverWorld world = World(withWalker: true);
+        bool fight = false;
+        world.Runner.SetInCombatProbe(() => fight);
+        world.StandIn(Ledge);
+        Assert.True(world.Runner.Start(LedgeToRooftop()));
+        world.Play(() => world.Sent.Contains("tear bark"));
+        fight = true;
+        world.Play(() => world.Count("tear bark") == 1);
+        Assert.Equal(new RoomKey(16, 569), world.At);
+
+        world.Runner.PauseForFlee("low HP");
+        world.Runner.SendBacktrackMove(Direction.SE);
+        world.Play();
+        fight = false;
+        world.Runner.ResumeAfterFlee(new RoomKey(16, 568));
+        world.Play(() => CrossedTheVine(world) && world.At.Equals(Ledge));
+
+        Assert.Equal(1, world.Sent.Count(s => s == "tear bark"));
+        Assert.Empty(world.Bonks);
+        Assert.True(CrossedTheVine(world));
+    }
+
+    // An exit that opened while we stand in its room, shown by a re-show of that
+    // room: a listener of that re-show's transition reads the exit open.
+    [Fact]
+    public void ReShowOfTheRoomStoodIn_ItsTransitionCarriesTheExitsItShows()
+    {
+        LeverWorld world = World();
+        world.StandIn(VineGate);
+        world.Show(VineGate);
+        List<bool?> sawNorth = new();
+        world.Tracker.StateChanged += t =>
+        {
+            if (t.Displayed) sawNorth.Add(world.Tracker.ShownOpenExits()?.Contains(Direction.N));
+        };
+
+        world.Open.Add((VineGate, Direction.N));
+        world.Show(VineGate);
+
+        Assert.Equal(new bool?[] { true }, sawNorth);
+    }
+
     // A shrine passage whose lever is in an alcove off the passage's own room: the
     // lap leaves for the lever from that room, so on the next lap, with the room
     // showing the passage open, the detour is skipped.
@@ -343,6 +391,37 @@ public sealed class LoopRemoteActionExitTests : IDisposable
         Assert.Equal(1, world.Moves.Count(m => m.From.Equals(door) && m.Sent == "e"));
         Assert.Equal(2, world.Moves.Count(m => m.From.Equals(door) && m.Sent == "n"));
         Assert.Empty(world.Bonks);
+    }
+
+    // A waypoint's command (an `ask`) answered before a flee isn't asked again on the
+    // walk back: the lap goes on past it.
+    [Fact]
+    public void FleeAfterAWaypointCommandWasAnswered_DoesNotSendItAgain()
+    {
+        RoomKey door = new(2, 2), sanctum = new(2, 3), alcove = new(2, 4);
+        LeverWorld world = new(_root, ShrineJson, new[] { (alcove, "press stone", door, Direction.N) }, withWalker: true);
+        bool fight = false;
+        world.Runner.SetInCombatProbe(() => fight);
+        world.Open.Add((door, Direction.N));
+        world.StandIn(sanctum);
+        Assert.True(world.Runner.Start(new Loop("shrine", new[]
+        {
+            new LoopWaypoint(sanctum), new LoopWaypoint(door, "ask priest blessing", 0),
+        })));
+        world.Play(() => world.Sent.Contains("ask priest blessing"));
+        fight = true;
+        world.Play(() => world.Count("ask priest blessing") == 1);
+
+        world.Runner.PauseForFlee("low HP");
+        world.Runner.SendBacktrackMove(Direction.E);
+        world.Play();
+        Assert.Equal(alcove, world.At);
+        fight = false;
+        world.Runner.ResumeAfterFlee(alcove);
+        world.Play(() => world.At.Equals(sanctum) && world.Moves.Count(m => m.From.Equals(door) && m.Sent == "n") >= 1);
+
+        Assert.Equal(1, world.Sent.Count(s => s == "ask priest blessing"));
+        Assert.Equal(sanctum, world.At);
     }
 
     // A winch in another room is pulled until it turns, as the walker pulls one,

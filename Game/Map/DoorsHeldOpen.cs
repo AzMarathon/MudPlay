@@ -27,6 +27,16 @@ namespace MudPlay.Game.Map;
 // shows it closed, the game says it shut or locked, or a move into it is refused; and
 // all of them on a relog, a change of realm or character, or of game data.
 //
+// A door or gate a lever opens is held the same way, and more hangs on it: the
+// engine flips a door or gate on every action, so a lever pulled while it stands
+// open locks it (GAME_MECHANICS "Multi-action exits and levers"). A detour's lever
+// goes out only through MayPullLever, which holds it back while the gate is held
+// open long enough for the walk to reach it. A pull of ours is remembered until
+// the gate's room is next shown: shown open, the gate (and its far side, which the
+// engine flipped too) is held from the pull, the moment it opened, not from the
+// sighting. Guard doors opened by asking an NPC are not lever gates here: nothing
+// records that an ask flips them (RoomGraphManager leaves their DoorOrGate unset).
+//
 // The route planner reads it from its worker thread, so every read and write of the
 // sides holds _gate.
 public sealed class DoorsHeldOpen
@@ -46,6 +56,8 @@ public sealed class DoorsHeldOpen
     private readonly object _gate = new();
     // Side → when it may lock again, or null for never.
     private readonly Dictionary<(RoomKey Room, Direction Dir), DateTimeOffset?> _open = new();
+    // Lever gate → when our pull of it went out, until its room is next shown.
+    private readonly Dictionary<(RoomKey Room, Direction Dir), DateTimeOffset> _pulled = new();
     private readonly Func<RoomKey, Direction, RoomExit?> _exitAt;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
@@ -59,6 +71,10 @@ public sealed class DoorsHeldOpen
         _now = now;
         _log = log;
     }
+
+    // How long the walk takes over so many steps (ITravelCostModel.EstimateTravel),
+    // for a lever decided on far from its gate. Unset → the plan margin alone.
+    public Func<int, TimeSpan>? TravelTime { get; set; }
 
     // Bumped on every change, so a route cache can tell its plans are stale.
     public int Version { get { lock (_gate) return _version; } }
@@ -111,7 +127,59 @@ public sealed class DoorsHeldOpen
     public void NoteSeenOpen(RoomKey room, Direction dir)
     {
         if (_exitAt(room, dir) is not { } exit || !IsDoor(exit)) return;
-        Hold(room, dir, exit, KindOf(exit), quiet: exit.Hint != RoomExitHint.KeyLocked);
+        DateTimeOffset? pulledAt;
+        lock (_gate) pulledAt = _pulled.Remove((room, dir), out DateTimeOffset at) ? at : null;
+        if (pulledAt is not { } pull)
+        {
+            Hold(room, dir, exit, KindOf(exit), quiet: exit.Hint != RoomExitHint.KeyLocked);
+            return;
+        }
+        // Our pull opened it, and flipped a far side that is a door or gate too.
+        Hold(room, dir, exit, SideKind.DoorOrGate, quiet: false, from: pull);
+        RoomKey far = exit.Target;
+        Direction back = dir.Opposite();
+        if (_exitAt(far, back) is { } farExit && farExit.Target == room && KindOf(farExit) == SideKind.DoorOrGate)
+            Hold(far, back, farExit, SideKind.DoorOrGate, quiet: false, from: pull);
+    }
+
+    // Whether a detour's lever for this door or gate may go out, stepsToGate steps
+    // before the crossing it opens: not while the gate is held open past the time
+    // the walk takes to get there, since the pull would lock it. A pull that goes
+    // out is remembered (see the class comment). engine names the sender for the log.
+    public bool MayPullLever((RoomKey Room, Direction Dir) gate, string command, int stepsToGate, string engine)
+    {
+        DateTimeOffset now = _now();
+        TimeSpan reach = TravelTime?.Invoke(Math.Max(0, stepsToGate)) ?? TimeSpan.Zero;
+        bool held;
+        DateTimeOffset? until = null;
+        List<(RoomKey Room, Direction Dir)>? ranOut;
+        lock (_gate)
+        {
+            ranOut = Prune(now);
+            held = _open.TryGetValue(gate, out until) && (until is not { } t || now + reach < t - PlanMargin);
+            if (!held) _pulled[gate] = now;
+        }
+        LogRanOut(ranOut);
+        if (held)
+        {
+            _log?.Info(LogCategory,
+                $"{engine}: '{command}' not sent: {gate.Room} {gate.Dir} is held open"
+                + (until is { } u ? $" for {(int)(u - now).TotalSeconds}s more, past the ~{(int)reach.TotalSeconds}s walk to it" : " for good")
+                + ", and a pull would lock it");
+            return false;
+        }
+        _log?.Debug(LogCategory, $"{engine}: '{command}' pulls the lever of {gate.Room} {gate.Dir} (not held open)");
+        return true;
+    }
+
+    // Whether a lever gate may be counted on stepsAhead steps from now, for a walk
+    // that would leave its detour out: held, past the time the walk takes to get there.
+    public bool IsHeldOpen(RoomKey room, Direction dir, int stepsAhead)
+    {
+        DateTimeOffset now = _now();
+        TimeSpan reach = TravelTime?.Invoke(Math.Max(0, stepsAhead)) ?? TimeSpan.Zero;
+        lock (_gate)
+            return _open.TryGetValue((room, dir), out DateTimeOffset? until) && (until is not { } t || now + reach < t - PlanMargin);
     }
 
     // The side was seen shut, the game said it shut or locked, or a move into it was
@@ -121,6 +189,7 @@ public sealed class DoorsHeldOpen
         bool live;
         lock (_gate)
         {
+            _pulled.Remove((room, dir));
             if (!_open.Remove((room, dir), out DateTimeOffset? until)) return;
             live = until is not { } t || _now() < t;
             _version++;
@@ -140,8 +209,9 @@ public sealed class DoorsHeldOpen
     {
         lock (_gate)
         {
-            if (_open.Count == 0) return;
+            if (_open.Count == 0 && _pulled.Count == 0) return;
             _open.Clear();
+            _pulled.Clear();
             _version++;
         }
         _log?.Info(LogCategory, $"doors held open forgotten ({why}).");
@@ -193,6 +263,8 @@ public sealed class DoorsHeldOpen
                 .Select(kv => $"{kv.Key.Room} {kv.Key.Dir} " + (kv.Value is { } until
                     ? $"for {(int)(until - now).TotalSeconds}s more (counted on for {Math.Max(0, (int)(until - PlanMargin - now).TotalSeconds)}s)"
                     : "for good (never locks again)"))
+                .Concat(_pulled.Select(kv =>
+                    $"{kv.Key.Room} {kv.Key.Dir} lever pulled at {kv.Value.ToLocalTime():HH:mm:ss}, its room not shown since"))
                 .ToList();
         }
     }
@@ -220,9 +292,10 @@ public sealed class DoorsHeldOpen
             _log?.Info(LogCategory, $"{room} {dir}: its window ran out — it could have locked again, no longer held open.");
     }
 
-    private void Hold(RoomKey room, Direction dir, RoomExit exit, SideKind kind, bool quiet)
+    // from: when the window began, if before now (the pull that opened a lever gate).
+    private void Hold(RoomKey room, Direction dir, RoomExit exit, SideKind kind, bool quiet, DateTimeOffset? from = null)
     {
-        DateTimeOffset? until = kind == SideKind.DoorOrGate && NeverLocksAgain(exit) ? null : _now() + RelockFloor;
+        DateTimeOffset? until = kind == SideKind.DoorOrGate && NeverLocksAgain(exit) ? null : (from ?? _now()) + RelockFloor;
         bool fresh;
         lock (_gate)
         {
@@ -239,12 +312,13 @@ public sealed class DoorsHeldOpen
         else _log?.Info(LogCategory, line);
     }
 
-    private static bool IsDoor(RoomExit exit) => exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked;
+    private static bool IsDoor(RoomExit exit) =>
+        exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked || exit.MultiAction?.DoorOrGate is not null;
 
     // A door or gate, a key exit, or a bare `(Key: N)` lock no list knows.
     private static SideKind KindOf(RoomExit exit)
     {
-        if (exit.Hint == RoomExitHint.Door) return SideKind.DoorOrGate;
+        if (exit.Hint == RoomExitHint.Door || exit.MultiAction?.DoorOrGate is not null) return SideKind.DoorOrGate;
         if (exit.IsBareKeyLock)
             return exit.BareLockBash switch
             {

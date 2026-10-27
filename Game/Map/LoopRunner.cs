@@ -826,8 +826,15 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner", why
             ?? $"ResumeAfterFlee: landed at {from}; walking back to {target} to carry on at step {_index + 1}");
         _recovery?.Detach();
+        // A command step the flee broke off is sent once back only when it was never
+        // sent, or it is a hidden exit's action whose answer hadn't come: sending
+        // that again is harmless. One answered, a waypoint's command (a `buy`, an
+        // `ask`) and a lever of a door or gate (a second pull locks it) go on past.
+        _fleeRedrivesCommand = _index < _expandedSteps.Count && _expandedSteps[_index] is CommandLoopStep command
+            && (!_stepInFlight
+                || (command.IsExitAction && command.DoorOrGate is null && _awaitingCommandReplies
+                    && (_commandPromptsOwed > 0 || _commandRedisplayAwaited)));
         _stepInFlight = false;
-        // A command the step was waiting on is sent again once back (ContinueAfterFleeReturn).
         _awaitingCommandReplies = false;
         StopDelayTimer();
         _fleeReturnTarget = target;
@@ -848,16 +855,19 @@ public sealed class LoopRunner : IRecoverableEngine
     // so the crossing goes to the walker instead, which runs the exit's detour from
     // this room, and the lap carries on beyond the exit (as after a flee). Once per
     // crossing per lap; refused again, recovery takes it.
-    private bool TryWalkRefusedLeverCrossing(RoomKey at)
+    private bool TryWalkRefusedLeverCrossing(RoomKey at, string what = "was refused")
     {
         if (_index >= _expandedSteps.Count || _expandedSteps[_index] is not MoveLoopStep { SkipSpecialDispatch: true } step
             || _expectedMoveTarget is not { } beyond
             || _leverCrossingWalked == (_index, _completedLaps)) return false;
         _leverCrossingWalked = (_index, _completedLaps);
         return StartFleeReturn(beyond, at,
-            $"step {_index + 1}: the lever exit {step.Direction.ToLongName()} of {RoomLabel(at)} was refused; "
+            $"step {_index + 1}: the lever exit {step.Direction.ToLongName()} of {RoomLabel(at)} {what}; "
             + $"walking through it, its levers and all, to {RoomLabel(beyond)}");
     }
+
+    // Set by StartFleeReturn: the command step it broke off is to be sent once back.
+    private bool _fleeRedrivesCommand;
 
     // The crossing (step index, lap) last handed to the walker.
     private (int Step, int Lap)? _leverCrossingWalked;
@@ -873,18 +883,25 @@ public sealed class LoopRunner : IRecoverableEngine
         State = LoopState.Running;
         _recovery?.Attach(this);
         _log?.Info("LoopRunner", $"flee return reached {target}; carrying on from step {_index + 1}");
-        if (_index < _expandedSteps.Count && _expandedSteps[_index] is CommandLoopStep)
+        if (_index < _expandedSteps.Count && _expandedSteps[_index] is CommandLoopStep command)
         {
+            bool redrive = _fleeRedrivesCommand;
+            _fleeRedrivesCommand = false;
             _stepInFlight = false;
             _expectedMoveTarget = null;
+            _log?.Info("LoopRunner", redrive
+                ? $"step {_index + 1}: '{command.Command}' goes out (again) after the flee"
+                : $"step {_index + 1}: '{command.Command}' went out before the flee; not sent again");
             if (_coordinator.IsPaused)
             {
-                // The resume re-drives the unsent step.
+                // The resume drives the step the index stands at.
                 State = LoopState.Paused;
+                if (!redrive) AdvanceStep();
                 Raise(new LoopEvent(LoopEventKind.Paused, "coordinator paused"));
                 return;
             }
-            SendNextStep();
+            if (redrive) SendNextStep();
+            else AdvanceStep();
             return;
         }
         if (_coordinator.IsPaused)
@@ -970,6 +987,8 @@ public sealed class LoopRunner : IRecoverableEngine
         _now = now ?? (static () => DateTimeOffset.UtcNow);
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         _legMemo = new LoopLegMemo(_now);
+        // Legs planned on the map before a reload are not this map's.
+        if (_graph is not null) _graph.GraphReloaded += _legMemo.Clear;
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _restart = new ReconnectRestart<Loop>(nameof(LoopRunner), "reconnect", tracker, coordinator, recovery, log,
@@ -1737,10 +1756,29 @@ public sealed class LoopRunner : IRecoverableEngine
             : $"loop '{loop.Name}': {DescribeUnroutableLever(plan.UnroutableLevers[0])}";
     }
 
-    // The lever gates our pulls are known to have opened (LeverGateMemory).
-    private LeverGateMemory? _leverGates;
+    // The doors and gates held open, lever gates among them (DoorsHeldOpen): a
+    // lever is not pulled at a gate held open, which the pull would lock.
+    private DoorsHeldOpen? _heldDoors;
 
-    public void SetLeverGates(LeverGateMemory gates) => _leverGates = gates;
+    public void SetDoorsHeldOpen(DoorsHeldOpen held) => _heldDoors = held;
+
+    // The moves from the step at `from` to the crossing of gate, the first primed
+    // step out of its room that way, walked over the map from the room we stand in;
+    // the lap's length when it can't be followed.
+    private int MovesToCrossing(int from, (RoomKey Room, Direction Dir) gate)
+    {
+        if (_graph is null || _tracker.State.CurrentRoom?.Key is not { } at) return _expandedSteps.Count;
+        int moves = 0;
+        for (int i = from; i < _expandedSteps.Count; i++)
+        {
+            if (_expandedSteps[i] is not MoveLoopStep move) continue;
+            moves++;
+            if (move.SkipSpecialDispatch && at.Equals(gate.Room) && move.Direction == gate.Dir) return moves;
+            if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) break;
+            at = exit.Target;
+        }
+        return _expandedSteps.Count;
+    }
 
     // The lever actions each lap types on its detours to the lever exits it
     // crosses, in lap order.
@@ -1748,8 +1786,8 @@ public sealed class LoopRunner : IRecoverableEngine
         _expandedSteps.OfType<CommandLoopStep>().Where(static c => c.IsExitAction).Select(static c => c.Command).ToList();
 
     // The lever exit a detour opens already stands open where the run is about to
-    // leave for its levers: the exit's own room shows it open, or a pull of ours
-    // opened its door or gate inside the window. The detour's round trip is
+    // leave for its levers: the exit's own room shows it open, or its door or gate
+    // is held open past the walk there (DoorsHeldOpen). The detour's round trip is
     // skipped and the route goes on to the exit, as a walk-to crosses an exit
     // shown open in the room it starts from. A door or gate would only be locked
     // again by the pull (GAME_MECHANICS "Multi-action exits and levers").
@@ -1764,11 +1802,12 @@ public sealed class LoopRunner : IRecoverableEngine
                 if (d.Start != _index || d.OneWay || d.End == d.Start) continue;
                 bool shownOpen = _tracker.State.CurrentRoom?.Key.Equals(d.GateRoom) == true
                     && _tracker.ShownOpenExits() is { } shown && shown.Contains(d.GateDir);
-                DateTimeOffset? opened = _leverGates?.OpenedAt((d.GateRoom, d.GateDir));
-                if (!shownOpen && opened is null) continue;
+                bool held = !shownOpen && _heldDoors?.IsHeldOpen(d.GateRoom, d.GateDir,
+                    _expandedSteps.Skip(d.End).Take(d.Cross - d.End + 1).Count(static s => s is MoveLoopStep)) == true;
+                if (!shownOpen && !held) continue;
                 _log?.Info("LoopRunner",
                     $"step {_index + 1}: the exit {d.GateDir.ToLongName()} of {RoomLabel(d.GateRoom)} "
-                    + (shownOpen ? "shows open here" : $"has stood open since our pull at {opened!.Value.ToLocalTime():HH:mm:ss}")
+                    + (shownOpen ? "shows open here" : "is held open past the walk to it")
                     + $"; skipping its lever detour (steps {d.Start + 1}-{d.End})");
                 _index = d.End;
                 skipped = true;
@@ -2417,6 +2456,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // the lap's own detour has just opened is crossed as it stands.
         if (step.SkipSpecialDispatch)
         {
+            // The display we arrived on shows it shut (its action didn't take, or it
+            // shut again): the walker takes the crossing now rather than after a bonk.
+            if (_tracker.State.Confidence == RoomConfidence.Confirmed
+                && _tracker.ShownOpenExits() is { } shown && !shown.Contains(step.Direction)
+                && TryWalkRefusedLeverCrossing(current.Key, "shows shut"))
+                return;
             EmitCardinal(step.Direction, exit.Target, "lever exit, opened on the detour before it");
             return;
         }
@@ -2955,16 +3000,13 @@ public sealed class LoopRunner : IRecoverableEngine
     // which pulls again until the winch turns.
     private void SendExitAction(CommandLoopStep step)
     {
-        if (step.DoorOrGate is { } gate && _leverGates?.OpenedAt(gate) is { } opened)
+        if (step.DoorOrGate is { } gate && _heldDoors is not null
+            && !_heldDoors.MayPullLever(gate, step.Command, MovesToCrossing(_index, gate), $"LoopRunner step {_index + 1}"))
         {
-            _log?.Info("LoopRunner",
-                $"step {_index + 1}: '{step.Command}' not sent: {gate.Room} {gate.Dir} has stood open since our pull at "
-                + $"{opened.ToLocalTime():HH:mm:ss}, and a second pull would lock it");
             _stepInFlight = false;
             AdvanceStep();
             return;
         }
-        if (step.DoorOrGate is { } pulled) _leverGates?.NotePulled(pulled);
         if (step.IsWinchPull && _winchEnqueuer is not null)
         {
             _log?.Info("LoopRunner", $"step {_index + 1}: detour winch pull ('{step.Command}') — re-pulling until it turns");
@@ -4008,6 +4050,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _echoRetry?.Dispose();
         _echoRetry = null;
         _leverCrossingWalked = null;
+        _fleeRedrivesCommand = false;
         _emptyRoom.End();
         // Drain a door FSM that was opening on our behalf — otherwise its
         // internal state sticks and the next run's enqueue sits in the queue

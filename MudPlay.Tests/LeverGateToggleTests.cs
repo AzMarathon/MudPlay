@@ -115,13 +115,59 @@ public sealed class LeverGateToggleTests : IDisposable
         Assert.Empty(world.Bonks);
 
         // In the hall on lap 2, the 5 minutes run out and the engine locks the gate.
-        world.Clock.Advance(LeverGateMemory.OpenWindow);
+        world.Clock.Advance(TimeSpan.FromSeconds(300));
         world.Open.Remove((Gatehouse, Direction.N));
         world.Play(() => ThroughTheGate() == 3 && world.At.Equals(Hall));
 
         Assert.Equal(2, world.Count("pull lever"));
         Assert.Empty(world.Bonks);
         Assert.Equal(3, ThroughTheGate());
+    }
+
+    // The gate shown open as we arrive in its room, and shut by the time we step
+    // (`The gate is closed!`): the walker takes the crossing, pulls the lever again
+    // and goes through, and the lap carries on with no recovery.
+    [Fact]
+    public void PrimedCrossingRefusedAtTheGate_IsWalkedByTheWalker_LeverAndAll()
+    {
+        LeverWorld world = GatehouseWorld(withWalker: true);
+        world.StandIn(Yard);
+        bool shut = false;
+        world.BeforeAnswer = sent =>
+        {
+            if (shut || sent != "n" || !world.At.Equals(Gatehouse)) return;
+            shut = true;
+            world.Open.Remove((Gatehouse, Direction.N));
+        };
+
+        Assert.True(world.Runner.Start(YardToHall()));
+        world.Play(() => world.At.Equals(Hall));
+
+        Assert.Equal(new[] { "4/1 N" }, world.Bonks);
+        Assert.Equal(2, world.Count("pull lever"));
+        Assert.DoesNotContain(world.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(world.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
+        Assert.Equal(Hall, world.At);
+    }
+
+    // A gate seen open that no pull of ours opened counts the same (the user's
+    // ruling for doors, 2026-10-18): a walk through it within the window leaves
+    // its lever alone.
+    [Fact]
+    public void GateSeenOpen_SomeoneElsesPull_IsNotPulledShut()
+    {
+        LeverWorld world = GatehouseWorld(withWalker: true);
+        world.Open.Add((Gatehouse, Direction.N));
+        world.StandIn(Gatehouse);
+        world.Show(Gatehouse);
+
+        Assert.True(world.Walker!.WalkTo(Yard));
+        world.Play(() => world.At.Equals(Yard) && world.Walker.State == WalkState.Idle);
+        Assert.True(world.Walker.WalkTo(Hall));
+        world.Play(() => world.At.Equals(Hall) && world.Walker.State == WalkState.Idle);
+
+        Assert.Equal(0, world.Count("pull lever"));
+        Assert.Empty(world.Bonks);
     }
 
     // The walker keeps the same rule: the second walk through the gate within the

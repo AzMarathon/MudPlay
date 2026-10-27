@@ -722,7 +722,7 @@ public sealed class RoomGraphManager
         // Fold in guard-monster doors: a placed monster whose greet dialogue
         // opens a door on its own room contributes an `ask` command that the
         // promotion below treats exactly like a lever action.
-        InjectGuardDoorActions(byExit, rooms.Greeters);
+        HashSet<(RoomKey Room, Direction Dir)> guardDoors = InjectGuardDoorActions(byExit, rooms.Greeters);
 
         // Fold in room-CMD reveal actions: a hidden exit whose opener lives in the
         // room's CMD chain (a `remoteaction`, e.g. 9/1012's `clear rubble` revealing
@@ -763,7 +763,13 @@ public sealed class RoomGraphManager
                 : (actions.Select(a => a.StepNumber).Distinct().Count(), false);
 
             actions.Sort(static (a, b) => a.StepNumber.CompareTo(b.StepNumber));
-            var data = new MultiActionExitData(count, specific, actions) { DoorOrGate = leverDoor ? (roomKey, dir) : null };
+            // A guard's `ask` is a greet action, not a lever: nothing records that it
+            // flips the door the way a lever's action does, so a guard door is left
+            // out of the lever-gate rules (DoorsHeldOpen.MayPullLever).
+            var data = new MultiActionExitData(count, specific, actions)
+            {
+                DoorOrGate = leverDoor && !guardDoors.Contains((roomKey, dir)) ? (roomKey, dir) : null,
+            };
             RoomExit patched = leverDoor
                 ? exit with { Hint = RoomExitHint.MultiActionHidden, MultiAction = data }
                 : exit with { MultiAction = data };
@@ -991,7 +997,8 @@ public sealed class RoomGraphManager
     // door is always made routable and the walker reacts to whether the command
     // actually opens it. No-op without a TBInfo source (parameterless / test
     // construction) or when the set has no Monsters table.
-    private void InjectGuardDoorActions(
+    // Returns the guarded exits.
+    private HashSet<(RoomKey Room, Direction Dir)> InjectGuardDoorActions(
         Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit,
         List<(RoomKey Room, Greeter Monster)> greeterRooms)
     {
@@ -1037,6 +1044,7 @@ public sealed class RoomGraphManager
                     ? $" — gated on {AbilityNames.GetName(abilityGate) ?? $"ability {abilityGate}"}; walker issues the command and reacts to whether it opens."
                     : "."));
         }
+        return guardExits.Keys.ToHashSet();
     }
 
     // The monsters that carry a greet, by number: what the guard-door and
