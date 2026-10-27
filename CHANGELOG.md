@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.20
+
+- A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
+
 ## 3.186.13
 
 - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did

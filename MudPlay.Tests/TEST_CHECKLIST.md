@@ -116,7 +116,7 @@ How to keep it current:
 
 ### ArrivalRoomLearnerTests.cs
 - Covers: Game/Recovery/ArrivalRoomLearner (with RoomTracker, LearnedArrivalRoomStore, LearnedArrivalLookup, StandardListContradictions)
-- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions; land-wide readings, exceptions and disputes.
+- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions, counted in a real board file read afresh each time, and the marking death is learned; land-wide readings, exceptions and disputes.
 - Why: corpse recovery routing, so the client walks to where the dead really arrive.
 
 ### AttackEstimatorTests.cs
@@ -3908,8 +3908,8 @@ How to keep it current:
 
 ### StandardListContradictionsTests.cs
 - Covers: Game/Recovery/StandardListContradictions
-- Checks: one contradicting death is logged, the second marks the board; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once and keeps the count; no board/set → nothing counted
-- Why: telling a Stock board with edited rooms from standard data
+- Checks: run on a real board file (BbsProfileStore, read afresh on every ask as the client reads the active board) with a character loaded on it. One contradicting death is logged, the second marks the board and both are in bbs.json; the mark survives a profile reload and a restart; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once, the count is held for the session (still marked) and RetryUnsaved writes it once the file can be written; no board/set → nothing counted
+- Why: telling a Stock board with edited rooms from standard data; a count changed on one copy of the board and saved from another never reached two
 
 ### StartupOptionsTests.cs
 - Covers: Services/StartupOptions

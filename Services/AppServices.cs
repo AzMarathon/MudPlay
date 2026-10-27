@@ -10891,8 +10891,8 @@ public sealed class AppServices
             (from, room) => Game.Map.WalkReach.OnItsMap(RoomGraph, from, room));
         RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
         StandardListContradictions = new Game.Recovery.StandardListContradictions(
-            () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
-            () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
+            ResolveActiveRealm, () => GameData.ActiveSet, Bbs.Save, Log);
+        Tick.HeartbeatElapsed += StandardListContradictions.RetryUnsaved;
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
             RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
             RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
