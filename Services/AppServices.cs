@@ -4152,10 +4152,10 @@ public sealed class AppServices
         GameData.ActiveSetChanged += set => Quests.OnActiveSetChanged(set, ActiveRealmFolder());
         Tick.HeartbeatElapsed += () => Quests.TakeInOutsideChanges();
         Emotes = new EmoteStore(log: Log);
-        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Profile.ProfileClosed += () => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
-        Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Profile.ProfileClosed += () => Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
+        Emotes.OnBbsChanged(PeekActiveBbs()?.Name);
         Tick.HeartbeatElapsed += () => Emotes.TakeInOutsideChanges();
 
         // Boss catalog — the realm's list (seed + the realm's overlay); timer values
@@ -4601,7 +4601,7 @@ public sealed class AppServices
         // ahead of them: they ask it about the room inside their own handlers.
         PvpRoom = new Game.Pvp.PvpRoomSafety(
             Router, RoomClassifier,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             classOf: ResolveKnownPlayerClass,
             levelOf: given => Players.Find(given)?.Level,
@@ -4792,7 +4792,7 @@ public sealed class AppServices
             readParty: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
             isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal),
             log: Log,
-            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
+            readDeathFloor: () => PeekActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
 
         // Mid-room arrival watcher. Subscribes to the
         // RoomEntryArrival pattern + appends to the classifier so the
@@ -4807,7 +4807,7 @@ public sealed class AppServices
         PvpRoom.SetPartySplit(PartySplit);
         PvpAttacks = new Game.Pvp.PvpAttackWatcher(
             Router, RoomClassifier, PvpRoom, Players, PartyState, PartySplit,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             flipFriends: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp")
                 .FlipFriendToEnemyIfAttacked,
             ownGivenName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
@@ -5189,7 +5189,7 @@ public sealed class AppServices
             // Per-realm negative-HP death floor: keeps the emergency
             // hangup firing through the bleeding-out window down to the
             // point the character actually dies.
-            readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25,
+            readDeathFloor: () => PeekActiveRealm()?.Realm.PlayerDiesAtHp ?? -25,
             log: Log,
             // Emergency hangup drops the carrier on purpose — flag it so the
             // reactive-reconnect path doesn't immediately dial back in.
@@ -5436,7 +5436,7 @@ public sealed class AppServices
                 inDarkRoom: RoomTracker.IsInDarkRoom, enteredBlind: RoomTracker.EnteredBlind,
                 blinded: Conditions.IsBlinded,
                 RoomClassifier.Current, RoomClassifier.RosterIsWhole, SpellCasters.KnowsMonster,
-                pvpRealm: ResolveActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
+                pvpRealm: PeekActiveRealm()?.Realm.PvpEnabled == true, isPartyMember: PartyState.HasMember));
         Conditions.SetCastReach(CastReach);
         Conditions.CasterNamed += RoomClassifier.NoteCasterNamed;
         // Watches the same wire for lines neither the message catalogue above nor any
@@ -6629,7 +6629,7 @@ public sealed class AppServices
         // live (via ResolveActiveRealm) and re-reads on profile / realm swap. Injected
         // into every cash parser / command builder so a board-renamed runic word
         // is matched on the wire and sent back on outgoing get/drop/hide commands.
-        Currency = new Game.Cash.CurrencyNaming(() => ResolveActiveRealm()?.Realm.RunicCurrencyName);
+        Currency = new Game.Cash.CurrencyNaming(() => PeekActiveRealm()?.Realm.RunicCurrencyName);
         // Program Log → "Log session statistics". The block is built when one is
         // due, so the trackers it reads only have to exist by then.
         SessionStatsLog = new SessionStatsLog(LogDiagnostics, () => InGameCapture.InGame, SessionStatsBlock, Log);
@@ -6783,10 +6783,10 @@ public sealed class AppServices
         RoomGraph.SetBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
         BareKeyLocks.Changed += () => RoomGraph.ApplyBareLockKinds(BareKeyLocks.Lookup, BareKeyLocks.AnsweredAsDoorHere);
         Movement.BareLockBookVersionProvider = () => BareKeyLocks.Version;
-        Movement.BareLockTrialsAllowedProbe = () => ResolveActiveRealm()?.Realm.PvpEnabled != true;
+        Movement.BareLockTrialsAllowedProbe = () => PeekActiveRealm()?.Realm.PvpEnabled != true;
         Door.SetBareLockBook(BareKeyLocks,
             word => Game.Map.BashTargetWord.NamesSomeoneIn(RoomClassifier, word),
-            pvpOn: () => ResolveActiveRealm()?.Realm.PvpEnabled == true);
+            pvpOn: () => PeekActiveRealm()?.Realm.PvpEnabled == true);
         Movement.UnpickableDoorProbe = Door.IsUnpickable;
         Profile.ProfileLoaded += _ => Door.ForgetSession();
 
@@ -9310,7 +9310,7 @@ public sealed class AppServices
             Walker, LoopRunner, AutoLair, heldFor: "a fight", stillWaiting: () => PvpFight.IsActive, Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
             attackCommandFor: PvpAttackCommandFor,
@@ -9340,7 +9340,7 @@ public sealed class AppServices
         PvpFight.Started += _ => DeathRecovery.EndSpillSweep("a fight with a player began");
         PvpStrangers = new Game.Pvp.PvpStrangerLookup(
             Router, RoomClassifier, Players,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             sendWho: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("who\r")),
             schedule: pacedReplyScheduler,
             log: Log);
@@ -9360,7 +9360,7 @@ public sealed class AppServices
         RoomTracker.PlayerDeathObserved += () => PvpFight.Stop("we died", resume: false);
         PvpResponse = new Game.Pvp.PvpResponder(
             RoomClassifier, PvpAttacks, Players,
-            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            pvpEnabled: () => PeekActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
             readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
             hangUp: Health.HangUpForPvp,
@@ -11907,7 +11907,7 @@ public sealed class AppServices
     private string? ActiveDisconnectPattern()
     {
         string? name = Profile.CurrentBbsName;
-        if (string.IsNullOrEmpty(name)) return ResolveActiveBbs()?.DisconnectPattern;
+        if (string.IsNullOrEmpty(name)) return PeekActiveBbs()?.DisconnectPattern;
         long now = Environment.TickCount64;
         if (_disconnectPattern is { } recent && recent.Name == name && now - recent.CheckedAt < DisconnectPatternRecheckMs)
             return recent.Pattern;
@@ -11917,7 +11917,7 @@ public sealed class AppServices
             _disconnectPattern = memo with { CheckedAt = now };
             return memo.Pattern;
         }
-        string? pattern = ResolveActiveBbs()?.DisconnectPattern;
+        string? pattern = PeekActiveBbs()?.DisconnectPattern;
         _disconnectPattern = (name, written, now, pattern);
         return pattern;
     }
@@ -16509,19 +16509,36 @@ public sealed class AppServices
     // the main window's title-bar / Connect button use, so the
     // game-data + display + cache layers see the same active BBS
     // the user sees in the chrome.
-    public Models.Settings.BbsProfile? ResolveActiveBbs()
+    public Models.Settings.BbsProfile? ResolveActiveBbs() => ResolveActiveBbs(Bbs.Get);
+
+    // The same BBS as its file stands, shared (BbsProfileStore.Peek): for a caller
+    // that reads a setting off it and nothing more. Never change or save what it
+    // returns; ResolveActiveBbs gives a copy of the caller's own for that.
+    public Models.Settings.BbsProfile? PeekActiveBbs() => ResolveActiveBbs(Bbs.Peek);
+
+    private Models.Settings.BbsProfile? ResolveActiveBbs(Func<string, Models.Settings.BbsProfile?> read)
     {
         string? name = Profile.CurrentBbsName;
         if (!string.IsNullOrEmpty(name))
         {
-            Models.Settings.BbsProfile? pinned = Bbs.Get(name);
+            Models.Settings.BbsProfile? pinned = read(name);
             if (pinned is not null) return pinned;
         }
 
         string? first = Bbs.ListNames()
             .OrderBy(static n => n, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
-        return first is null ? null : Bbs.Get(first);
+        return first is null ? null : read(first);
+    }
+
+    // ResolveActiveRealm on PeekActiveBbs's shared copy, for the same readers: the
+    // PvP checks at each room arrival, the bash rule a route search reads, the
+    // death floor and coin name read per line.
+    public (Models.Settings.BbsProfile Bbs, Models.Settings.RealmProfile Realm)? PeekActiveRealm()
+    {
+        if (PeekActiveBbs() is not { } bbs) return null;
+        if (bbs.RealmFor(Profile.Current?.Realm) is not { } realm) return null;
+        return (bbs, realm);
     }
 
     // The realm being played: the loaded character's (CharacterProfile.Realm) on the
@@ -16559,7 +16576,7 @@ public sealed class AppServices
     // The active BBS credential's goto table, or empty when no character / BBS / row
     // is set. Both the manager and the menus read through this so they share one table.
     private IReadOnlyList<Models.Profile.SysopGotoLocation> ActiveBbsSysopGotos()
-        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+        => PeekActiveBbs()?.Name is { Length: > 0 } bbs
            && Profile.Current?.BbsCredentials is { } creds
            && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
            && cred.SysopGotos is { } list
@@ -16567,7 +16584,7 @@ public sealed class AppServices
             : System.Array.Empty<Models.Profile.SysopGotoLocation>();
 
     private bool SysopPowerHere(Func<Models.Profile.BbsCredentials, bool> pick)
-        => ResolveActiveBbs()?.Name is { Length: > 0 } bbs
+        => PeekActiveBbs()?.Name is { Length: > 0 } bbs
            && Profile.Current?.BbsCredentials is { } creds
            && creds.TryGetValue(bbs, out Models.Profile.BbsCredentials? cred)
            && pick(cred);
@@ -16764,7 +16781,7 @@ public sealed class AppServices
     // a name every store keyed on the set would be handed.
     private string? ProfileGameDataSet()
     {
-        string? set = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
+        string? set = PeekActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
         string? usable = GameData.UsableSet(set, out string? whyNot);
         if (whyNot is null)
         {

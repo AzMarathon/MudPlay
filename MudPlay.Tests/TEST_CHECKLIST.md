@@ -334,6 +334,11 @@ How to keep it current:
 - Checks: shipped connection, reconnect, terminal and realm defaults; JSON round trip; partial JSON falls back to defaults.
 - Why: older bbs.json files must load with sane defaults.
 
+### BbsProfilePeekTests.cs
+- Covers: Services/BbsProfileStore (Peek, and Save dropping what it holds)
+- Checks: with the file unchanged Peek hands back the copy already read, while Get still gives each caller its own; another client's save is seen on the next Peek; a hand edit that keeps the file's length is seen by its write time; a save through the store is seen at once; a deleted board reads as none.
+- Why: the PvP checks at each room arrival and the bash rule a route search reads parsed bbs.json from disk on every call, 70 KB a time, which on Windows cost each search and arrival far more (report paradigm-20261026-201217). Another client's change must still be seen right away.
+
 ### BbsRealmTests.cs
 - Covers: Services/BbsProfileStore, ProfileService, RealmCatalog, Models/Settings/BbsProfile.RealmFor
 - Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades.

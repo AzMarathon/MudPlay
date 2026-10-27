@@ -415,7 +415,7 @@ public static class BugReportBuilder
             : "(none)");
         // PvP: whether the realm is marked for it, and how many players carry a
         // relationship other than the Neutral everyone starts with.
-        Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
+        Kv(sb, "Realm PvP", (svc.PeekActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
         // What the board takes for a hang-up in a fight, as the user recorded it
@@ -732,7 +732,7 @@ public static class BugReportBuilder
         // Board-specific disconnect line, if the active BBS defines one — the
         // config a "party sprinted off after a member dropped" report needs to
         // confirm the custom logoff line was actually taught to the client.
-        Kv(sb, "BBS disconnect pattern", svc.ResolveActiveBbs()?.DisconnectPattern ?? "(built-in lines only)");
+        Kv(sb, "BBS disconnect pattern", svc.PeekActiveBbs()?.DisconnectPattern ?? "(built-in lines only)");
         // Follower reconnect-rejoin state — the leader we'd @comeback on the
         // next reconnect (crash-survivable). A "didn't auto-rejoin after a drop"
         // report hinges on whether the leader was remembered at all.
