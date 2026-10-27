@@ -7,7 +7,7 @@ namespace MudPlay.Views;
 // Reusable read-only modeless dialog for "show this text and a Close
 // button" notices that don't earn a bespoke window. Call Configure after
 // construction; then Show(owner).
-public partial class InfoDialog : Window
+public partial class InfoDialog : Window, MudPlay.Services.IShowsNoGameData
 {
     public InfoDialog()
     {

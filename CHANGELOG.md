@@ -5,6 +5,12 @@
 - A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
 - OK in Settings no longer undoes a realm's death floor or death count written while the window was open, a renamed realm included
 
+## 3.186.18
+
+- Conversation window with a full history opens without freezing
+- Starting on the unnamed profile skips building its game data until something needs it
+- bug reports addressed: Hang-20261026-215238
+
 ## 3.186.16
 
 - Route searches several times faster, with far less memory churn, most of all on Windows
