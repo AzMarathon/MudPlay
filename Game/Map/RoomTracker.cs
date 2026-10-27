@@ -2916,6 +2916,11 @@ public sealed class RoomTracker
     public bool MoveAwaitingAnswer => State.Confidence == RoomConfidence.Pending
         || (!IsSure && _unsureMoves.Count > 0);
 
+    // A move is out and the room it leads to hasn't been shown: queued, or noted
+    // while the tracker was unsure where it stood (Unknown, Suspect, Lost,
+    // PendingRespawn). A room display asked for now would show where it leads.
+    public bool MoveOnItsWay => HasQueuedMoves || MoveAwaitingAnswer;
+
     private void NoteUnsureMove(PendingMove move)
     {
         if (IsSure) return;

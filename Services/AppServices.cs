@@ -2160,7 +2160,7 @@ public sealed class AppServices
     public Game.Inventory.AutoGetItemsManager AutoGetItems { get; private set; } = null!;
 
     // Re-displays the room after a kill whose monster could have dropped an item
-    // (Settings -> Cash + Items, and the Auto-collect flag), holding the walker for it.
+    // (Settings → Cash + Items, and the Auto-collect flag), holding the walker for it.
     public Game.Inventory.PostKillFloorCheck FloorCheck { get; private set; } = null!;
 
     // Auto-discard engine. On every inventory change, drops each carried item
@@ -4936,7 +4936,7 @@ public sealed class AppServices
             log: Log);
         // A drop lands on the ground with no line of its own, so the kill of a monster
         // that can drop an item re-displays the room: for an item flagged Auto-collect,
-        // or for any item under Settings -> Cash + Items "Look after killing a monster
+        // or for any item under Settings → Cash + Items "Look after killing a monster
         // that can drop an item". Wired ahead of the roster resync below for the reason
         // the summon settle is: the walker hold has to be up before the resync clears
         // the Combat gate.
@@ -4953,7 +4953,8 @@ public sealed class AppServices
                 ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").LookAfterKillingDropper,
             hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
             canSeeRoom: () => !RoomTracker.IsInDarkRoom && !Conditions.IsBlinded,
-            moveOnItsWay: () => RoomTracker.HasQueuedMoves,
+            moveOnItsWay: () => RoomTracker.MoveOnItsWay,
+            displayIsPeek: () => RoomTracker.IsPeekSuppressed(),
             sendGateHeld: () => EngineGate.IsLocked,
             bareEntersSent: () => EngineGate.BareEntersSent,
             blocked: detail => AutoModeController.Blocks(Game.Inventory.PostKillFloorCheck.SystemName, detail),
@@ -4962,6 +4963,8 @@ public sealed class AppServices
         FloorCheck.SetAcquisitionGate(Acquisition);
         FloorCheck.SetRoomRedisplay(RoomRedisplay);
         MonsterDeath.MonsterDied += FloorCheck.OnMonsterDied;
+        // A fight that ends with no kill of ours still owes the look its kills asked for.
+        CombatTracker.FightEnded += FloorCheck.NoteFightEnded;
         MonsterDeath.MonsterDied += evt =>
         {
             // Every death is the exp + *Combat Off* signal (no per-monster identity,

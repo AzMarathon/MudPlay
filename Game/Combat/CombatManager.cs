@@ -1354,12 +1354,18 @@ public sealed partial class CombatManager : IDisposable
     // attribution, the temp-death-spell nudge, and the summon-on-death recheck, which
     // then never re-scanned for the bone snake a stitched zombie's death spell summons
     // (report paradigm-20260925-115042).
+    //
+    // Last, the monster the user last attacked by hand in this room: a fight the
+    // engine isn't running (Auto-Combat off) sets no target of its own, and its kill
+    // is still that monster's death to the boss timers, the death-spell nudge, the
+    // summon recheck and the floor check.
     public string? DeathAttributionTarget =>
         _currentTarget
         ?? (_inferredKillPendingRemoval is { } name
             && _now() - _inferredKillPendingAt < ExpKillWindow
                 ? name
-                : null);
+                : null)
+        ?? _userAttackedLast;
 
     // The monster the round's combat spell was announced against, or null when the
     // round isn't in spell mode. Distinct from CurrentTarget: a weapon attack and a
@@ -4722,7 +4728,8 @@ public sealed partial class CombatManager : IDisposable
     // break typed with the engine off, which every hand-fought break is.
     private bool _userBreakHoldAnnounced;
     // Whom the user last attacked by hand here, for a break typed while the engine
-    // holds no target of its own (Auto-Combat off, hand-fighting).
+    // holds no target of its own (Auto-Combat off, hand-fighting), and for the
+    // attribution of a kill in such a fight (DeathAttributionTarget).
     private string? _userAttackedLast;
     private (DateTimeOffset At, string Text)? _lastUserBreakHoldEnd;
     // An exp line came under the hold before any *Combat Off* did, inside the round

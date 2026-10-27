@@ -30,8 +30,8 @@ namespace MudPlay.Game.Inventory;
 //     resumes as soon as looting is actually done, not on a fixed timer.
 //   - Pending re-look: the post-kill floor check (PostKillFloorCheck) asked for
 //     a room re-display after a kill (a drop isn't announced, so the floor has
-//     to be read again) and that display hasn't arrived. Asserted on the kill, before the Combat gate
-//     clears, for the same race the deferred items close.
+//     to be read again) and that display hasn't arrived. Asserted on the kill,
+//     before the Combat gate clears, for the same race the deferred items close.
 //   - Settle window: a fallback ceiling on the wait. A get that never confirms
 //     (a failure line we don't yet parse) would otherwise strand the hold, so
 //     once gets stop flowing for SettleWindow the gate releases regardless.

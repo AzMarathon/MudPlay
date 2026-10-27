@@ -51,6 +51,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
     private readonly ServerFeed _feed;
     private readonly MonsterDeathWatcher _deaths;
     private readonly RoomDisplayParser _displays;
+    private readonly RoomTracker _tracker;
     private readonly ProfileService _profile = TestProfiles.Loaded();
     private readonly AutoModeController _master;
     private readonly EngineSendGate _sendGate = new();
@@ -63,9 +64,12 @@ public sealed class PostKillFloorCheckTests : IDisposable
     // What CombatManager's attribution would name as the monster that died.
     private int? _fighting;
     private bool _hostilesLeft;
-    private bool _moveOnItsWay;
     private bool _canSee = true;
     private readonly HashSet<int> _flaggedAutoCollect = new();
+
+    // Death handlers subscribed ahead of the floor check, as AppServices subscribes
+    // the temp-death nudge and the summon settle ahead of it.
+    private readonly List<Action<MonsterDeathEvent>> _earlierDeathHandlers = new();
 
     public PostKillFloorCheckTests()
     {
@@ -82,7 +86,8 @@ public sealed class PostKillFloorCheckTests : IDisposable
         DefaultPatterns.Seed(_router);
         _feed = new ServerFeed(_router);
         _deaths = new MonsterDeathWatcher(_router);
-        _displays = new RoomDisplayParser(_feed.Lines, new RoomTracker(graph));
+        _tracker = new RoomTracker(graph);
+        _displays = new RoomDisplayParser(_feed.Lines, _tracker);
         _master = new AutoModeController(_profile);
         _acquisition = new AcquisitionGate(_coordinator);
 
@@ -94,7 +99,8 @@ public sealed class PostKillFloorCheckTests : IDisposable
                 SettingsSection.Read<CashSettings>(_profile.Current, "Cash").LookAfterKillingDropper,
             hasEngageableHostiles: () => _hostilesLeft,
             canSeeRoom: () => _canSee,
-            moveOnItsWay: () => _moveOnItsWay,
+            moveOnItsWay: () => _tracker.MoveOnItsWay,
+            displayIsPeek: () => _tracker.IsPeekSuppressed(),
             sendGateHeld: () => _sendGate.IsLocked,
             bareEntersSent: () => _sendGate.BareEntersSent,
             blocked: detail => _master.Blocks(PostKillFloorCheck.SystemName, detail),
@@ -104,6 +110,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         _check.SetAcquisitionGate(_acquisition);
         _check.SetRoomRedisplay(new RoomRedisplayCoordinator());
         // As AppServices and MainWindowViewModel wire them.
+        _deaths.MonsterDied += evt => { foreach (Action<MonsterDeathEvent> h in _earlierDeathHandlers) h(evt); };
         _deaths.MonsterDied += _check.OnMonsterDied;
         _displays.RoomParsed += _ => _check.NoteRoomDisplayed();
     }
@@ -140,7 +147,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
 
         Assert.Equal(new[] { "\r" }, _sent);
         Assert.True(WalkerHeld);
-        Assert.Contains("sent an Enter after 1 kill(s)", _check.LastCheck);
+        Assert.Contains("sent an Enter after 1 kill(s)", _check.Describe());
 
         RoomDisplay();
 
@@ -183,7 +190,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
              "The kobold collapses.", "You gain 20 experience.", "*Combat Off*", "[HP=100/MA=50]:");
 
         Assert.Equal(new[] { "\r" }, _sent);
-        Assert.Contains("after 2 kill(s)", _check.LastCheck);
+        Assert.Contains("after 2 kill(s)", _check.Describe());
     }
 
     // Kills a round apart: the look waits for the room's fight to end, then goes once.
@@ -204,7 +211,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Kill(NonDropper, exp: 10);
 
         Assert.Equal(new[] { "\r" }, _sent);
-        Assert.Contains("after 2 kill(s)", _check.LastCheck);
+        Assert.Contains("after 2 kill(s)", _check.Describe());
         Assert.True(WalkerHeld);
     }
 
@@ -237,7 +244,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Kill(Dropper);
 
         Assert.Equal(new[] { "\r" }, _sent);
-        Assert.Contains("flagged Auto-collect", _check.LastCheck);
+        Assert.Contains("flagged Auto-collect", _check.Describe());
     }
 
     [Fact]
@@ -248,7 +255,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
 
         Assert.Empty(_sent);
         Assert.False(WalkerHeld);
-        Assert.Contains("the room was displayed after the kill", _check.LastCheck);
+        Assert.Contains("the room was displayed after the kill", _check.Describe());
     }
 
     // The combat engine's roster re-read (or the cash engine's look) put an Enter on
@@ -264,24 +271,58 @@ public sealed class PostKillFloorCheckTests : IDisposable
 
         Assert.Equal(new[] { "\r" }, _sent);
         Assert.True(WalkerHeld);
-        Assert.Contains("an Enter has gone out since the kill", _check.LastCheck);
+        Assert.Contains("an Enter has gone out since the kill", _check.Describe());
 
         RoomDisplay();
         Assert.False(WalkerHeld);
     }
 
+    // The temp-death nudge and the summon settle hear the death before the floor
+    // check does, and their Enter goes out first: it still counts as the look.
+    [Fact]
+    public void AnEarlierDeathHandlersEnter_NoSecondEnter()
+    {
+        Action<byte[]> nudge = _sendGate.WrapEngineSender(bytes => _sent.Add(Text(bytes)));
+        _earlierDeathHandlers.Add(_ => nudge(new[] { (byte)'\r' }));
+
+        Kill(Dropper);
+
+        Assert.Equal(new[] { "\r" }, _sent);
+        Assert.True(WalkerHeld);
+        Assert.Contains("an Enter has gone out since the kill", _check.Describe());
+    }
+
+    // An Enter sent in an earlier read and answered before the kill shows nothing of
+    // it: the look goes out, the coordinator's window notwithstanding.
+    [Fact]
+    public void AnEnterAnsweredBeforeTheKill_DoesNotStandInForTheLook()
+    {
+        RoomRedisplayCoordinator shared = new();
+        _check.SetRoomRedisplay(shared);
+        Action<byte[]> cash = _sendGate.WrapEngineSender(bytes => _sent.Add(Text(bytes)));
+        Assert.True(shared.ShouldSend());
+        cash(new[] { (byte)'\r' });
+        RoomDisplay();
+
+        Kill(Dropper);
+
+        Assert.Equal(new[] { "\r", "\r" }, _sent);
+        Assert.Contains("sent an Enter", _check.Describe());
+    }
+
     // A walk step already sent: the room shown next is the next room, so no Enter, and
-    // the walker isn't held back.
+    // the walker isn't held back. The tracker here has never been sure where it
+    // stands, so the move is one noted while unsure.
     [Fact]
     public void MoveOnItsWay_NoEnter_WalkerNotHeld()
     {
-        _moveOnItsWay = true;
+        _tracker.NoteMoveSent(Direction.S);
 
         Kill(Dropper);
 
         Assert.Empty(_sent);
         Assert.False(WalkerHeld);
-        Assert.Contains("a move is on its way", _check.LastCheck);
+        Assert.Contains("a move is on its way", _check.Describe());
     }
 
     // No step leaves between the kill and the display the Enter asked for: the hold is
@@ -300,6 +341,41 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Assert.False(_coordinator.IsPaused);
     }
 
+    // The last monster falls to a party member's blow, which pays us nothing: no death
+    // of ours, but the fight's end still holds the walker and sends the owed look.
+    [Fact]
+    public void FightEndsWithoutAKillOfOurs_TheOwedLookStillGoes()
+    {
+        _hostilesLeft = true;
+        Kill(Dropper);
+        Assert.Empty(_sent);
+        Assert.False(WalkerHeld);
+
+        _hostilesLeft = false;
+        _check.NoteFightEnded();
+        Assert.True(WalkerHeld);
+        Read("Bob's blow fells the kobold.", "[HP=100/MA=50]:");
+
+        Assert.Equal(new[] { "\r" }, _sent);
+        Assert.True(WalkerHeld);
+    }
+
+    // A `look <dir>` peek shows the next room: it settles no look, and the one owed
+    // still goes out.
+    [Fact]
+    public void PeekDisplay_DoesNotSettleTheLook()
+    {
+        _hostilesLeft = true;
+        Kill(Dropper);
+        _tracker.NoteLookSent();
+        Read("South Road", "Obvious exits: north", "[HP=100/MA=50]:");
+
+        _hostilesLeft = false;
+        Kill(NonDropper, exp: 10);
+
+        Assert.Equal(new[] { "\r" }, _sent);
+    }
+
     [Fact]
     public void LeftTheRoomBeforeTheLook_NothingOwed()
     {
@@ -310,7 +386,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Read("[HP=100/MA=50]:");
 
         Assert.Empty(_sent);
-        Assert.Contains("left the room first", _check.LastCheck);
+        Assert.Contains("left the room first", _check.Describe());
     }
 
     [Fact]
@@ -322,7 +398,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
 
         Assert.Empty(_sent);
         Assert.False(WalkerHeld);
-        Assert.Contains("the send gate is held", _check.LastCheck);
+        Assert.Contains("the send gate is held", _check.Describe());
     }
 
     [Fact]
@@ -333,7 +409,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Kill(Dropper);
 
         Assert.Empty(_sent);
-        Assert.Contains("the master switch is off", _check.LastCheck);
+        Assert.Contains("the master switch is off", _check.Describe());
     }
 
     [Fact]
@@ -344,7 +420,7 @@ public sealed class PostKillFloorCheckTests : IDisposable
         Kill(Dropper);
 
         Assert.Empty(_sent);
-        Assert.Contains("can't be seen", _check.LastCheck);
+        Assert.Contains("can't be seen", _check.Describe());
     }
 
     [Fact]

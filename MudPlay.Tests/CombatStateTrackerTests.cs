@@ -195,6 +195,27 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.Tracker.HasEngageableHostiles);
     }
 
+    // FightEnded is heard while the gate still holds the walker, so a hold put up from
+    // it (the post-kill floor check's) is in place before the walker can step. A room
+    // that never held the gate ends no fight.
+    [Fact]
+    public void RoomCleared_FiresFightEnded_BeforeTheGateLetsGo()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        bool? gateHeldWhenFired = null;
+        h.Tracker.FightEnded += () => gateHeldWhenFired = h.CombatGateHeld;
+
+        h.Feed("Also here: Bob.");
+        Assert.Null(gateHeldWhenFired);
+
+        h.Feed("Also here: giant rat.");
+        h.Feed("Also here: Bob.");
+
+        Assert.True(gateHeldWhenFired);
+        Assert.False(h.CombatGateHeld);
+    }
+
     [Fact]
     public void ShopkeeperFlaggedFriend_DoesNotAssertGate()
     {

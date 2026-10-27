@@ -11,7 +11,8 @@ public sealed class RoomRedisplayCoordinator
 {
     // Long enough to fold the two combat-clear requests (fired within the same
     // frame) into one, short enough that a genuinely later re-render (a fresh
-    // kill a round away) isn't suppressed. A room visit lasts far longer, so no per-room reset is needed.
+    // kill a round away) isn't suppressed. A room visit lasts far longer, so no
+    // per-room reset is needed.
     private const int WindowMs = 750;
 
     private readonly Func<DateTime> _now;

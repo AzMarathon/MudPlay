@@ -319,6 +319,28 @@ public sealed class CombatManagerBreakHoldTests
         Assert.True(h.Combat.AttackHeldByUserBreak);
     }
 
+    // A fight the engine isn't running: the monster the user attacked by hand is the
+    // one a kill there is attributed to (the boss timers, the death-spell nudge, the
+    // summon recheck and the post-kill floor check read it). Nothing is attributed
+    // before any attack, and leaving the room forgets it.
+    [Fact]
+    public void HandFoughtKill_WithTheEngineOff_IsAttributedToTheMonsterAttacked()
+    {
+        using Harness h = new();
+        h.AddMonster(1, Rat);
+        h.AutoCombatEnabled = false;
+        h.Feed($"Also here: {Rat}.");
+        Assert.Null(h.Combat.DeathAttributionTarget);
+
+        h.UserSends("a rat");
+
+        Assert.Equal(Rat, h.Combat.DeathAttributionTarget);
+        Assert.Empty(h.Sent);
+
+        h.Combat.NoteRoomLeft(h.Now);
+        Assert.Null(h.Combat.DeathAttributionTarget);
+    }
+
     // A party member's `@do break` holds the attack exactly as a typed one does
     // (user, 2026-10-10, asked which breaks sent on someone's behalf should: "only
     // the @do break"), and the log and the terminal say who asked.

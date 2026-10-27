@@ -883,9 +883,9 @@ public sealed class CashManager : IDisposable
         _cashPendingAfterCombat = false;
         _log?.Info(LogCategory, "combat cleared — collecting ground cash");
         _gate?.NoteDeferredPending(1);
-        // Re-render once. The post-kill floor check's look fires the same
-        // instant on the last kill; coalesce so the room isn't displayed twice
-        // (our collect still runs off the shared "You notice" survey either way).
+        // Re-render once. The post-kill floor check may have just sent its look for
+        // the last kill; coalesce so the room isn't displayed twice (our collect
+        // still runs off the shared "You notice" survey either way).
         if (_redisplay is null || _redisplay.ShouldSend())
             Send("");   // bare carriage return, not `look` — respects brief mode
         ArmResurveyRelease();

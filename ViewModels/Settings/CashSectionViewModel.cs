@@ -42,7 +42,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         "Coin count", "Coins exceed",
         "Encumbrance", "Weight", "Light", "Medium", "Heavy",
         "Auto-get", "Get item", "Collection rules",
-        "Look after killing", "Drop", "Monster drops", "Re-display", "Floor check",
+        "Look after killing", "Monster drops", "Drop chance", "Re-display", "Floor check",
     };
 
     // ----- Per-currency policy --------------------------------------

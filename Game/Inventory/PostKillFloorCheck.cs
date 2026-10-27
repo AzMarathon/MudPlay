@@ -16,21 +16,27 @@ namespace MudPlay.Game.Inventory;
 //
 // The death is read on its exp line or its *Combat Off*, and the Enter goes out at
 // the end of that server read: never among the kill's own lines, and one Enter for
-// all the kills the read carried. For the setting's reason alone it also waits for the room's
-// fight to end, so a fight that kills several such monsters looks once. An
-// Auto-collect drop is looked for straight away, since auto-get collects mid-fight.
+// all the kills the read carried. For the setting's reason alone it also waits for
+// the room's fight to end, so a fight that kills several such monsters looks once.
+// An Auto-collect drop is looked for straight away, since auto-get collects
+// mid-fight.
 //
-// No Enter of its own when the room has been displayed since the kill or an Enter
-// has gone out since it (the combat engine's roster re-read, the cash engine's
-// combat-clear look, a death-spell nudge), when we have left the room or a move is
-// on its way, in a room too dark to see or while blind (the display shows no floor
-// then), while the send gate is held, or with the master switch off.
+// No Enter of its own when the room has been displayed since the kill, or an Enter
+// has gone out since the kill's read began and its display is still to come (the
+// combat engine's roster re-read, the cash engine's combat-clear look, a
+// death-spell nudge). Any Enter sent after the kill reached us is answered after
+// it, so its display shows the floor, whichever death handler sent it first. None
+// either when we have left the room or a move is on its way, in a room too dark to
+// see or while blind (the display shows no floor then), while the send gate is
+// held, or with the master switch off. A `look <dir>` peek's display is another
+// room's and settles nothing.
 //
 // The walker is held through AcquisitionGate from the kill until the display has
 // been read (or ReleaseAfter, for a display that never comes). The kill clears the
 // Combat gate in the same pass, so the hold goes up on the death itself, ahead of
 // the roster resync: a walk step would otherwise leave first, and the Enter would
-// show the next room.
+// show the next room. A fight that ends with no kill of ours (a party member's
+// last blow, a flee) holds it the same way, through NoteFightEnded.
 public sealed class PostKillFloorCheck : IDisposable
 {
     public const string LogCategory = "FloorCheck";
@@ -42,13 +48,13 @@ public sealed class PostKillFloorCheck : IDisposable
     public static readonly TimeSpan ReleaseAfter = TimeSpan.FromMilliseconds(1500);
 
     // The look a kill has asked for and not yet had. AtOnce: an Auto-collect drop,
-    // looked for while the fight goes on. EntersAtLastKill: the bare-Enter count when
-    // the latest kill that asked for it was read.
-    private sealed class OwedLook(string why, bool atOnce, int enters)
+    // looked for while the fight goes on. EntersBefore: the bare Enters that can't
+    // show the latest such kill, sent before its read began or already answered.
+    private sealed class OwedLook(string why, bool atOnce, int entersBefore)
     {
         public string Why { get; } = why;
         public bool AtOnce { get; set; } = atOnce;
-        public int EntersAtLastKill { get; set; } = enters;
+        public int EntersBefore { get; set; } = entersBefore;
         public int Kills { get; set; } = 1;
         public bool WaitLogged { get; set; }
     }
@@ -61,6 +67,7 @@ public sealed class PostKillFloorCheck : IDisposable
     private readonly Func<bool> _hasEngageableHostiles;
     private readonly Func<bool> _canSeeRoom;
     private readonly Func<bool> _moveOnItsWay;
+    private readonly Func<bool> _displayIsPeek;
     private readonly Func<bool> _sendGateHeld;
     private readonly Func<int> _bareEntersSent;
     private readonly Func<string, bool> _blocked;
@@ -78,11 +85,18 @@ public sealed class PostKillFloorCheck : IDisposable
     private IDisposable? _holdRelease;
     private bool _disposed;
 
+    // The bare-Enter count when the server read now being dispatched began, and
+    // when the last room display was read.
+    private int _entersAtReadStart;
+    private int _entersAtLastDisplay;
+    private bool _readUnderway;
+
     // What the last kill that asked for a look came to, for the bug report.
-    public string? LastCheck { get; private set; }
+    private string? _lastCheck;
 
     // autoCollectWanted: whether the item is one auto-get would take now (flagged
     // Auto-collect, takeable, Auto-Get Items on). lookForAnyDrop: the setting.
+    // displayIsPeek: the display being read is a `look <dir>` peek's.
     // bareEntersSent: EngineSendGate.BareEntersSent. blocked: the master switch,
     // asked with a detail for its skip count.
     public PostKillFloorCheck(
@@ -94,6 +108,7 @@ public sealed class PostKillFloorCheck : IDisposable
         Func<bool> hasEngageableHostiles,
         Func<bool> canSeeRoom,
         Func<bool> moveOnItsWay,
+        Func<bool> displayIsPeek,
         Func<bool> sendGateHeld,
         Func<int> bareEntersSent,
         Func<string, bool> blocked,
@@ -111,6 +126,7 @@ public sealed class PostKillFloorCheck : IDisposable
         _hasEngageableHostiles = hasEngageableHostiles;
         _canSeeRoom = canSeeRoom;
         _moveOnItsWay = moveOnItsWay;
+        _displayIsPeek = displayIsPeek;
         _sendGateHeld = sendGateHeld;
         _bareEntersSent = bareEntersSent;
         _blocked = blocked;
@@ -118,6 +134,7 @@ public sealed class PostKillFloorCheck : IDisposable
         _log = log;
         _schedule = schedule ?? DispatcherTicks.Once;
         _now = now ?? (static () => DateTimeOffset.Now);
+        _router.LineDispatched += OnLineDispatched;
         _router.ReadEnded += OnReadEnded;
     }
 
@@ -148,7 +165,7 @@ public sealed class PostKillFloorCheck : IDisposable
             ? $"owed after {owed.Kills} kill(s) ({owed.Why})"
               + (owed.AtOnce ? "" : ", waiting for the room's fight to end")
             : _holding ? "waiting on the room display" : "idle";
-        return LastCheck is null ? state : $"{state}; last: {LastCheck}";
+        return _lastCheck is null ? state : $"{state}; last: {_lastCheck}";
     }
 
     // A monster we're credited with died. Subscribed ahead of the roster resync,
@@ -163,19 +180,29 @@ public sealed class PostKillFloorCheck : IDisposable
             if (_owed is not null) Hold();
             return;
         }
-        if (_owed is null) _owed = new OwedLook(look.Why, look.AtOnce, _bareEntersSent());
+        int entersBefore = Math.Max(_entersAtReadStart, _entersAtLastDisplay);
+        if (_owed is null) _owed = new OwedLook(look.Why, look.AtOnce, entersBefore);
         else
         {
             _owed.Kills++;
             _owed.AtOnce |= look.AtOnce;
-            _owed.EntersAtLastKill = _bareEntersSent();
+            _owed.EntersBefore = entersBefore;
         }
         Hold();
+    }
+
+    // The room's fight is over (CombatStateTracker.FightEnded), just before the
+    // walker may step: a look still owed holds it, and goes out at the read's end.
+    public void NoteFightEnded()
+    {
+        if (_owed is not null) Hold();
     }
 
     // A room display was read (its exits line): it showed the floor.
     public void NoteRoomDisplayed()
     {
+        if (_displayIsPeek()) return;
+        _entersAtLastDisplay = _bareEntersSent();
         if (_owed is { } owed)
         {
             _owed = null;
@@ -240,10 +267,18 @@ public sealed class PostKillFloorCheck : IDisposable
 
     private string ItemLabel(int itemId) => _itemName(itemId) ?? $"item #{itemId}";
 
+    private void OnLineDispatched(Terminal.LineExtractor.EmittedLine _)
+    {
+        if (_readUnderway) return;
+        _readUnderway = true;
+        _entersAtReadStart = _bareEntersSent();
+    }
+
     // The read with the kill in it has ended: look now, unless the fight is still on
     // and nothing flagged Auto-collect is waiting.
     private void OnReadEnded()
     {
+        _readUnderway = false;
         if (_owed is not { } owed) return;
         if (!owed.AtOnce && _hasEngageableHostiles())
         {
@@ -258,7 +293,7 @@ public sealed class PostKillFloorCheck : IDisposable
         }
         _owed = null;
 
-        if (_bareEntersSent() != owed.EntersAtLastKill)
+        if (_bareEntersSent() > owed.EntersBefore)
         {
             // Its display is on the way; the hold stays up for it.
             Skipped(owed, "an Enter has gone out since the kill, and its room display will show the floor");
@@ -277,22 +312,21 @@ public sealed class PostKillFloorCheck : IDisposable
             ReleaseHold();
             return;
         }
-        if (_redisplay is not null && !_redisplay.ShouldSend())
-        {
-            Skipped(owed, "the cash engine has just re-displayed the room");
-            Hold();
-            return;
-        }
+        // Stamps the window the cash engine's combat-clear look checks, so that look
+        // folds onto this Enter. A refusal here is for an Enter sent before the
+        // kill's read or already answered, which shows nothing of the kill: ours
+        // goes out all the same.
+        _ = _redisplay?.ShouldSend();
 
         Hold();
         _wireSender!(new[] { (byte)'\r' });
-        LastCheck = $"{_now():HH:mm:ss} sent an Enter after {owed.Kills} kill(s): {owed.Why}";
+        _lastCheck = $"{_now():HH:mm:ss} sent an Enter after {owed.Kills} kill(s): {owed.Why}";
         _log?.Info(LogCategory, $"re-displaying the room after {owed.Kills} kill(s): {owed.Why}");
     }
 
     private void Skipped(OwedLook owed, string reason)
     {
-        LastCheck = $"{_now():HH:mm:ss} no Enter after {owed.Kills} kill(s), {reason} ({owed.Why})";
+        _lastCheck = $"{_now():HH:mm:ss} no Enter after {owed.Kills} kill(s), {reason} ({owed.Why})";
         _log?.Debug(LogCategory, $"no Enter of our own: {reason} ({owed.Why})");
     }
 
@@ -330,6 +364,7 @@ public sealed class PostKillFloorCheck : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _router.LineDispatched -= OnLineDispatched;
         _router.ReadEnded -= OnReadEnded;
         ReleaseHold();
     }
