@@ -11,6 +11,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using MudPlay.Services;
 using MudPlay.ViewModels;
 
 namespace MudPlay.Views;
@@ -18,7 +19,7 @@ namespace MudPlay.Views;
 // Modeless Conversation panel. Bound to ConversationViewModel;
 // code-behind handles Enter-to-send in the input field and scroll-to-newest
 // when AutoScroll is on.
-public partial class ConversationWindow : Window
+public partial class ConversationWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     private ListBox? _rowsList;
     private ScrollViewer? _rowsScroll;
@@ -84,15 +85,17 @@ public partial class ConversationWindow : Window
         {
             vm.ScrollToRowRequested += OnScrollToRow;
             vm.PropertyChanged += OnViewModelPropertyChanged;
-            // Give the list its height back and, when following the newest line, go
-            // straight there. Asking for the last row while the list still has no
-            // rows built makes the panel build that end only; laying out at the top
-            // first and then scrolling built about three times as many rows on every
-            // open (half a second with a full history).
-            _rowsList?.ClearValue(Layoutable.MaxHeightProperty);
-            if (vm.Rows.Count > 0 && vm.AutoScroll) _rowsList?.ScrollIntoView(vm.Rows.Count - 1);
-            // Land flush on the freshest row.
-            if (vm.Rows.Count > 0) PinToBottomOnOpen();
+            // Following the newest line: the pin moves the view to the end while the
+            // list is still 0 high, then gives it its height back, so the first rows
+            // built are the newest. Otherwise the list opens at the top as it lays out.
+            //
+            // Never ScrollIntoView here. Asked for the last row while the panel still
+            // holds the 0-high viewport of that first layout, the virtualizing panel
+            // realized every row from it back to the first and threw all but a
+            // screenful away: 2,000 rows, 4 s and 570 MB on an open with a full
+            // history (Hang-20261026-215238 froze 8.8 s).
+            if (vm.Rows.Count > 0 && vm.AutoScroll) PinToBottomOnOpen();
+            else _rowsList?.ClearValue(Layoutable.MaxHeightProperty);
             this.FindControl<TextBox>("InputBox")?.Focus();
         }
     }
@@ -224,21 +227,33 @@ public partial class ConversationWindow : Window
     // stops short. Re-pin across the following layout passes until the offset
     // stops moving (or a small safety cap), so the newest line ends flush at the
     // viewport bottom every time the window opens.
+    //
+    // The first pass also lifts the list's MaxHeight 0 (see OnOpened): moved to the
+    // end of the estimated extent first, the panel's first full-height layout builds
+    // the rows at that end and none at the top.
     private void PinToBottomOnOpen()
     {
-        if (DataContext is not ConversationViewModel { AutoScroll: true }) return;
-
         int attempts = 0;
         void Pin()
         {
+            using PerformanceMonitor.Scope? scope =
+                AppServices.CurrentOrNull?.Performance.Measure("conversation window: pin to the newest line");
             ScrollViewer? sv = ResolveRowsScroll();
-            if (sv is null) return;
+            if (sv is null)
+            {
+                _rowsList?.ClearValue(Layoutable.MaxHeightProperty);
+                return;
+            }
             double before = sv.Offset.Y;
             _pinning = true;
             sv.ScrollToEnd();
+            // The pass that lifts the height always runs again: the list has not been
+            // laid out at full height yet.
+            bool lifting = attempts == 0;
+            if (lifting) _rowsList?.ClearValue(Layoutable.MaxHeightProperty);
             // Offset unchanged → extent settled, we're truly at the bottom.
             // Otherwise the extent grew this pass; try once more next pass.
-            if (System.Math.Abs(sv.Offset.Y - before) < 0.5 || attempts++ >= 8)
+            if ((!lifting && System.Math.Abs(sv.Offset.Y - before) < 0.5) || attempts++ >= 8)
             {
                 Dispatcher.UIThread.Post(() => _pinning = false, DispatcherPriority.Background);
                 return;

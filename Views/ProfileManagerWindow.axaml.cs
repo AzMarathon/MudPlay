@@ -11,7 +11,7 @@ namespace MudPlay.Views;
 // code-behind attaches the persisted window-layout and global hotkeys, opens a
 // BBS's settings on row double-click, closes on the VM's request, and disposes
 // the VM on close.
-public partial class ProfileManagerWindow : Window
+public partial class ProfileManagerWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     public ProfileManagerWindow()
     {

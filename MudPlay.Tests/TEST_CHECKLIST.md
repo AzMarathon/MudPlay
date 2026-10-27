@@ -847,9 +847,9 @@ How to keep it current:
 - Why: A row bound to the window's view-model left a weak subscription on it each time the list realized the row (over a thousand a second on a busy channel), never swept, so the client grew for as long as the window was open (2026-10-19 memory reports).
 
 ### ConversationViewModelTests.cs
-- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore.
-- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look.
-- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place.
+- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore; Services/SessionLogService (talk-log replay).
+- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look. A 2,000-line talk log, replayed by a real SessionLogService as a named profile's logs open, opens as one row per line in the log's order, each reading as written; a rebuild of the whole list asks once to scroll, to the newest row.
+- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place; the window opening on a full backlog froze 8.8 s (Hang-20261026-215238), and its fix must show the same rows.
 - Named seam: ConversationViewModel's optional `post` (where the coalesced restyle runs; the UI dispatcher in production) — the tests run it inline, or queue it to show one Apply posts one restyle.
 
 ### CorpseHandoffTests.cs
@@ -1375,6 +1375,11 @@ How to keep it current:
 - Covers: ViewModels/GameData/GameDataBrowserViewModel
 - Checks: sections seeded and grouped; initial selection; search filter; status text.
 - Why: the Game Data window.
+
+### GameDataCacheDeferredBuildTests.cs
+- Covers: Services/GameDataCache (SwitchSet with deferBuild, BuildDeferred, BuildDeferredSet, ReloadActiveSet)
+- Checks: a put-off switch names the set and serves its tables on demand without firing ActiveSetChanged (nothing built); the first need builds it once; a character on another set builds only that set, one on the draft's set builds it; a switch is never put off while another set is built; a reload builds a put-off set.
+- Why: the unnamed draft a launch comes up on built its whole set (room graph, loops, indexes; 3.4 s in Hang-20261026-215238), thrown away when a character on another set loaded.
 
 ### GameDataCacheSharedReadTests.cs
 - Covers: Services/GameDataCache (shared reads, ActiveLoad, FileStampAsRead)
