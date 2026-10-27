@@ -31,6 +31,10 @@ public sealed class TerminalEmulator
     // a scroll, a clear or a shrink pushes the row into the ring.
     public event Action<ScrollbackBuffer.Row>? LineCompleted;
 
+    // How many times the whole screen has been erased (ED 2 / 3). A reader that
+    // noted it can tell a screen drawn since from one left over from before.
+    public long ScreenClears { get; private set; }
+
     // The cursor row has taken a glyph since it was last completed.
     private bool _rowWritten;
 
@@ -506,6 +510,7 @@ public sealed class TerminalEmulator
             case 2:
             case 3:  // Whole screen (3 also clears scrollback in real terms).
                 Screen.ClearAll(_attr);
+                ScreenClears++;
                 // The row under the cursor went with the rest: nothing left to complete.
                 _rowWritten = false;
                 // ANSI.SYS / SyncTERM behavior: ED 2 also homes the cursor.

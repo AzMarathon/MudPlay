@@ -25,13 +25,15 @@ internal static class TrainStatsWire
     // A line of another player's, printed over the redrawn prompt.
     public static string PartyLine(string text) => Rewrite + Statline + "\r\u001b[2K" + text + "\r\n";
 
-    // A bare Enter's answer: its empty echo, then the room drawn again.
+    // A bare Enter's answer: its empty echo, the room drawn again, and the prompt
+    // redrawn after it, left waiting in place.
     public static string RoomRedrawn() =>
         Echo(string.Empty)
         + Rewrite + "Ancient Keep, Throne Room\r\n"
         + "You notice 1 gold crown, 10 silver nobles here.\r\n"
         + "Also here: Aunty, Barter, Thunder, Ironbar*, aged titan.\r\n"
-        + "Obvious exits: north\r\n";
+        + "Obvious exits: north\r\n"
+        + Prompt();
 
     // The Character Editor, as the game paints it after each keystroke.
     public static string Form(int strength, int cpLeft, string familyName = "")

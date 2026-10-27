@@ -20,15 +20,17 @@ namespace MudPlay.Game;
 // It waits for the screen to come up, types the stats with a short delay between
 // strokes, and the form's SAVE-default Exit commits on the final Enter.
 //
-// Menu-open detection is realm-independent. TrainerMenuTracker.FormDrawn fires
-// once the form answering `train stats` is up (its marker row read as a line, or
-// the form on the screen at the end of a read), and the replay starts once the
-// form reads off the screen. After a short render delay the replay also starts
-// on a form that reads off the screen. Nothing is typed on the input-menu signal
-// alone: that is up from the moment `train stats` goes out, whatever the game
-// answers. If the game's prompt came back after its answer (InputMenuExited — we
-// weren't at a trainer) we abort cleanly. MenuExited is marker-driven, so
-// InputMenuExited is also our exit signal.
+// Menu-open detection is realm-independent and screen-kind-independent.
+// TrainerMenuTracker.FormDrawn fires once the form answering `train stats` is up
+// (its marker row read as a line, or a trainer screen drawn since the command on
+// the terminal), and the replay starts once the form reads off the screen, or at
+// most a second after FormDrawn when it doesn't (then from a trusted `stat`).
+// Nothing is typed on the input-menu signal alone: that is up from the moment
+// `train stats` goes out, whatever the game answers. If the keyboard was let go
+// before any form (InputMenuExited — we weren't at a trainer, or the tracker gave
+// up on an answer) the pass ends; a form that turns up after that takes the
+// keyboard back, and with Auto-train stats on the user's-own-form path applies the
+// plan. MenuExited is marker-driven, so InputMenuExited is also our exit signal.
 //
 // What gets typed is decided with the form on screen. The form shows the trained
 // stats and the CP left, with no spell in them, so when it can be read the plan
@@ -83,10 +85,6 @@ public sealed class AutoTrainManager : IDisposable
 
     // Delay between keystrokes so the server's form redraw keeps pace.
     private const int KeystrokeDelayMs = 200;
-    // Grace after `train stats` for the stat box to render before we check the
-    // command-driven input-menu signal and begin the replay (the realm-
-    // independent fallback for menus whose marker row never scrolls).
-    private static readonly TimeSpan MenuRenderDelay = TimeSpan.FromMilliseconds(1200);
     // How long to wait for the trainer screen after sending `train stats`.
     private static readonly TimeSpan MenuEntryTimeout = TimeSpan.FromSeconds(6);
     // How long a form the tracker says is up gets to read off the screen, all six
@@ -307,34 +305,15 @@ public sealed class AutoTrainManager : IDisposable
     {
         StateChanged?.Invoke();
         _ = AwaitMenuTimeoutAsync(_sessionId);
-        _ = AwaitRenderThenReplayAsync(_sessionId);
     }
 
     private async Task AwaitMenuTimeoutAsync(int session)
     {
         await _delay(MenuEntryTimeout);
+        // The keyboard stays as the tracker has it: a slow game may still draw the
+        // form, and the tracker's answer tick lets go of a hold no form came for.
         if (_sessionId == session && _phase == Phase.AwaitingMenu)
             Abort("the trainer screen never opened", "Trainer screen never opened (not at a trainer?) — aborted.");
-    }
-
-    // A fallback for a form the tracker hasn't seen: once the box has had time to
-    // render, one that reads off the screen is replayed into. If FormDrawn already
-    // drove the replay this is a no-op (phase has left AwaitingMenu). Anything short
-    // of a form, the echo with nothing after it included, types nothing: the
-    // keystrokes would go to the game as commands. The timeout ends the pass.
-    private async Task AwaitRenderThenReplayAsync(int session)
-    {
-        await _delay(MenuRenderDelay);
-        if (_sessionId != session || _phase != Phase.AwaitingMenu) return;
-        if (!_trainer.IsInputMenuActive) return;   // prompt returned / not armed — let the abort paths handle it
-        if (_trainer.FormShown) return;            // OnFormDrawn has it
-        if (TrainStatsScreen.TryRead(_readScreen?.Invoke()) is null)
-        {
-            _log?.Info("AutoTrain", "No trainer screen up yet — nothing typed.");
-            return;
-        }
-        _log?.Info("AutoTrain", "Trainer screen reads off the terminal — replaying plan.");
-        StartReplay();
     }
 
     private void OnFormDrawn()
@@ -354,7 +333,7 @@ public sealed class AutoTrainManager : IDisposable
         {
             await _delay(FormDrawPoll);
             if (_sessionId != session || _phase != Phase.AwaitingMenu || !_trainer.FormShown) return;
-            if (TrainStatsScreen.TryRead(_readScreen?.Invoke()) is not null || _now() >= giveUp) break;
+            if (FreshForm() is not null || _now() >= giveUp) break;
         }
         StartReplay();
     }
@@ -408,6 +387,8 @@ public sealed class AutoTrainManager : IDisposable
         Abort("the game refused `train stats` because a spell or item is altering a stat",
               "The game refused `train stats`: a spell or item is altering a stat. Plan kept — "
               + "it can be applied once that is gone.");
+        // The game's own word that no form is coming: the keyboard goes back now.
+        _trainer.ForceExit("the game refused `train stats`");
     }
 
     // End a pass that never reached the form.
@@ -417,8 +398,6 @@ public sealed class AutoTrainManager : IDisposable
         ManualApplyLevel = null;
         LastApplyNote = note;
         _log?.Info("AutoTrain", logLine);
-        // No form came, so nothing should still hold the keyboard for one.
-        _trainer.ReleaseUnlessFormUp($"auto-train ended the attempt: {note}");
         ReportExplicit(false);
         StateChanged?.Invoke();
     }
@@ -475,7 +454,7 @@ public sealed class AutoTrainManager : IDisposable
         int[] min = ToArray(ctx.RaceMin);
         int[] max = ToArray(ctx.RaceMax);
 
-        _formBefore = TrainStatsScreen.TryRead(_readScreen?.Invoke());
+        _formBefore = FreshForm();
         int[]? from = _formBefore?.Stats ?? (StatFiguresUsable(ctx) ? ToArray(ctx.Baseline) : null);
         if (from is null)
         {
@@ -509,6 +488,12 @@ public sealed class AutoTrainManager : IDisposable
         }
         _sequence = AutoTrainSequenceBuilder.Build(_current, _target);
     }
+
+    // The form on the terminal, unless the screen hasn't been drawn since `train
+    // stats` went out: a form left over from before shows someone else's moment,
+    // and a plan must not be worked from its figures.
+    private TrainStatsScreen? FreshForm() =>
+        _trainer.ScreenDrawnSinceTrainStats ? TrainStatsScreen.TryRead(_readScreen?.Invoke()) : null;
 
     private static string Describe(int[] s) =>
         $"STR {s[0]} INT {s[1]} WIL {s[2]} AGL {s[3]} HEA {s[4]} CHM {s[5]}";

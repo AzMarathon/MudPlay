@@ -6,7 +6,9 @@
 > - Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
 > - Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
 > - Each kind of trainer screen is recognised by what it shows, whatever the realm, the cursor-drawn box included
-> - A slow or unreadable answer to `train stats` no longer hands the keyboard back early, nor holds it for good
+> - A trainer screen that turns up after the keyboard was let go takes it back; no answer holds it past a minute
+> - A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
+> - A dropped link or a profile change lets go of a trainer screen's hold
 > - Bug reports show how far the game's answer to `train stats` got
 <!-- current-version:end -->
 

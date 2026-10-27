@@ -66,7 +66,9 @@ public sealed class AutoTrainApplyTests : IDisposable
         DefaultPatterns.Seed(_router);
         _parser = new StatParser(_stats);
         _parser.AttachLineExtractor(_feed.Lines);
-        _trainer = new TrainerMenuTracker(_router, new PartyState());
+        // The tracker's answer ticks run on the pass's clock, under the pump.
+        _trainer = new TrainerMenuTracker(_router, new PartyState(), now: () => _clock.Now.UtcDateTime,
+                                          schedule: (after, tick) => _clock.Arm(after, () => _pump.Run(tick)));
         _profile.LoadDefaultProfile();
         _readScreen = () => _screen;
         _answers = new ServerFeed(_router);
@@ -587,6 +589,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Contains("refused", manager.LastApplyNote);
         Assert.Equal(0, _committed);
+        Assert.False(_trainer.MenuOwnsKeyboard);   // the game's own word: no form is coming
 
         // The render wait and the screen's timeout running out afterwards start nothing.
         Settle();
@@ -611,6 +614,7 @@ public sealed class AutoTrainApplyTests : IDisposable
             TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
         _readScreen = () => TrainStatsWire.ScreenText(screen);
         _trainer.ReadScreen = _readScreen;
+        _trainer.ScreenClears = () => game.Emulator.ScreenClears;
         _trainerHere = false;
         _formCloses = false;
         return game;
@@ -779,6 +783,53 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.False(manager.IsBusy);
         Assert.False(_trainer.MenuOwnsKeyboard);
+        // The tracker's tick at ExpectingMenuWindow found the game's prompt back
+        // after the refusal's prompt came, and let the keyboard go.
+        Assert.Equal("the trainer screen didn't open", manager.LastApplyNote);
+    }
+
+    // The pass's own timeout ends the pass but not the hold: a slow game may still
+    // draw the form. With nothing at all from the game, the tracker's answer window
+    // lets the keyboard go.
+    [Fact]
+    public void ThePassTimingOut_KeepsTheKeyboard_UntilTheAnswerWindowIsOut()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        GameOnTheWire();
+        CleanStat();
+
+        Start(manager.TrainNow);
+        _clock.Advance(TimeSpan.FromSeconds(6.5));
+        _pump.Drain();
+        Assert.False(manager.IsBusy);
         Assert.Equal("the trainer screen never opened", manager.LastApplyNote);
+        Assert.True(_trainer.MenuOwnsKeyboard);
+
+        Settle();
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.Equal(new[] { "train stats" }, Sent());
+    }
+
+    // A box left on the screen from an earlier form shows Strength 140 with no CP
+    // left. The game's answer brings only the form's marker row, the box's figures
+    // still standing below it. They are not the plan's starting point: the trusted
+    // `stat` is, and the row's raise is typed.
+    [Fact]
+    public void ABoxLeftOnTheScreen_IsNeverPlannedFrom()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        Start(() => game.Raw(TrainStatsWire.CreationBox(140, 0)));
+        GameTakesTheForm(game, TrainStatsWire.CreationBox);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats")
+            + "   / M A J O R  M U D Character Editor /    \\  ┌─    Point Cost Chart    ─┐\r\n"));
+        Assert.True(_trainer.FormShown);
+        Assert.False(_trainer.ScreenDrawnSinceTrainStats);
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
     }
 }

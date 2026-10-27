@@ -19,7 +19,7 @@ public sealed class TrainerMenuTrackerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        TrainerMenuTracker tracker = new(router, state, now: () => Now);
+        TrainerMenuTracker tracker = new(router, state, now: () => Now, schedule: new ManualTimers().Arm);
         return (tracker, router, state);
     }
 
@@ -49,6 +49,7 @@ public sealed class TrainerMenuTrackerTests
         tracker.CursorAtGamePrompt = () => SentCommandTrail.RowIsGamePrompt(
             TranscriptSnapshot.RowText(screen.Row(screen.CursorY)), string.Empty);
         tracker.ReadScreen = () => TrainStatsWire.ScreenText(screen);
+        tracker.ScreenClears = () => game.Emulator.ScreenClears;
         return (tracker, game);
     }
 
@@ -192,7 +193,7 @@ public sealed class TrainerMenuTrackerTests
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         PartyState state = new();
-        TrainerMenuTracker tracker = new(router, state, now: () => t);
+        TrainerMenuTracker tracker = new(router, state, now: () => t, schedule: new ManualTimers().Arm);
         tracker.ExpectingMenuWindow = TimeSpan.FromSeconds(5);
 
         tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
@@ -392,27 +393,130 @@ public sealed class TrainerMenuTrackerTests
         Assert.Equal(1, exited);
     }
 
-    // A slow game: the echo of `train stats` comes 6 s after it went out. The
-    // wire's prompt scan sees the echo's own statline ahead of the echo line, so
-    // the window running out must not let that statline release the keyboard.
+    // A slow game: an Enter's room redraw, ending on the prompt, came after `train
+    // stats`, and the echo only 6 s after the command. The tick at the window
+    // finds the prompt back and lets the keyboard go; the form, when it comes,
+    // takes it back.
     [Fact]
-    public void AnEchoPastTheWindow_StillOpensTheForm()
+    public void AnEchoPastTheWindow_TheFormTakesTheKeyboardBack()
     {
         DateTime t = Now;
-        var (tracker, game) = Wired(() => t);
-        int exited = 0;
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(() => t, timers);
+        int entered = 0, exited = 0;
+        tracker.InputMenuEntered += () => entered++;
         tracker.InputMenuExited += () => exited++;
 
         SendTrainStats(tracker);
         game.Raw(TrainStatsWire.RoomRedrawn());
-        t = t.AddSeconds(6);
-        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        t = t.AddSeconds(5);
+        timers.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(1, exited);
+        Assert.False(tracker.MenuOwnsKeyboard);
 
-        Assert.Equal(0, exited);
+        t = t.AddSeconds(1);
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26));
+        Assert.True(tracker.MenuOwnsKeyboard);
         Assert.True(tracker.FormShown);
+        Assert.Equal(2, entered);
 
         game.Raw(TrainStatsWire.Saved());
+        Assert.Equal(2, exited);
+    }
+
+    // The game's prompt already on the cursor's row when `train stats` went out is
+    // no answer: with nothing come since, the tick at the window keeps the hold,
+    // and only the answer window's end lets it go.
+    [Fact]
+    public void APromptAlreadyWaiting_IsNotTheAnswer()
+    {
+        DateTime t = Now;
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(() => t, timers);
+        game.Raw(TrainStatsWire.Prompt());
+
+        SendTrainStats(tracker);
+        t = t.AddSeconds(5);
+        timers.Advance(TimeSpan.FromSeconds(5));
+        Assert.True(tracker.MenuOwnsKeyboard);
+
+        t = Now + tracker.AnswerWindow;
+        timers.Advance(tracker.AnswerWindow);
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    // The `Char. Creation` box lingers after the form it belonged to closed. Left
+    // on the screen when `train stats` goes out, it isn't the answer; the box the
+    // game draws afresh after a clear screen is.
+    [Fact]
+    public void ABoxLeftOnTheScreen_IsNotTheAnswer_ABoxDrawnSinceIs()
+    {
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(timers: timers);
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
+
+        SendTrainStats(tracker);
+        timers.Advance(tracker.ExpectingMenuWindow);
+        Assert.False(tracker.ScreenDrawnSinceTrainStats);
+        Assert.False(tracker.FormShown);
+        Assert.True(tracker.MenuOwnsKeyboard);
+
+        game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.CreationBox(133, 26));
+        Assert.True(tracker.ScreenDrawnSinceTrainStats);
+        Assert.True(tracker.FormShown);
+    }
+
+    // A box left on the screen keeps the hold no longer than the answer window.
+    [Fact]
+    public void ABoxLeftOnTheScreen_DoesNotHoldTheKeyboardForGood()
+    {
+        DateTime t = Now;
+        ManualTimers timers = new();
+        var (tracker, game) = Wired(() => t, timers);
+        game.Raw(TrainStatsWire.CreationBox(140, 0));
+
+        SendTrainStats(tracker);
+        t = Now + tracker.AnswerWindow;
+        timers.Advance(tracker.AnswerWindow);
+
+        Assert.False(tracker.MenuOwnsKeyboard);
+    }
+
+    // A party line between the echo and the form redraws the prompt ahead of it;
+    // that prompt lets the keyboard go, and the form drawn next takes it back.
+    [Fact]
+    public void APartyLineBetweenTheEchoAndTheForm_TheFormTakesTheKeyboardBack()
+    {
+        var (tracker, game) = Wired();
+        int entered = 0, exited = 0;
+        tracker.InputMenuEntered += () => entered++;
+        tracker.InputMenuExited += () => exited++;
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats"));
+        game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!"));
         Assert.Equal(1, exited);
+
+        game.Raw(TrainStatsWire.Form(133, 26));
+        Assert.True(tracker.FormShown);
+        Assert.True(tracker.MenuOwnsKeyboard);
+        Assert.Equal(2, entered);
+    }
+
+    // The link dropping (or the profile changing) ends any taking back: a form
+    // after it belongs to nothing this tracker sent.
+    [Fact]
+    public void AfterTheLinkDrops_NoFormTakesTheKeyboardBack()
+    {
+        var (tracker, game) = Wired();
+
+        SendTrainStats(tracker);
+        game.Raw(TrainStatsWire.Echo("train stats"));
+        game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!"));
+        tracker.ForceExit("link dropped");
+
+        game.Raw(TrainStatsWire.Form(133, 26));
+        Assert.False(tracker.MenuOwnsKeyboard);
     }
 
     // The `Char. Creation` box, drawn with cursor positioning and its title row

@@ -243,6 +243,7 @@ How to keep it current:
 - Covers: Game/AutoPartyManager (with Game/TrainerMenuTracker and Game/Map/MovementCoordinator as real collaborators)
 - Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu.
 - Why: - Reports `paradigm-20261004-061346`, `stock-20260801-002423`, `stock-20260924-145545`, `stock-20260924-175224`, `paradigm-20260930-192042`, `paradigm-20260923-092317`, `stock-20260731-015726`. - GAME_MECHANICS "A follower who can't move is left behind", and the chime-teleport arrival ordering (Party chapter). - Guards against invite spam, a stranded loop hold, and a leader walking off without a split party.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### AutoSearchManagerTests.cs
 - Covers: Game/Map/AutoSearchManager (with MovementCoordinator)
@@ -256,7 +257,13 @@ How to keep it current:
 
 ### AutoTrainApplyTests.cs
 - Covers: Game/AutoTrainManager (with StatParser, TrainerMenuTracker)
-- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it. The game's answer (the echo, then the Character Editor) is fed as bytes through a ServerFeed on the router. With the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner, the form read off its terminal and a TrainerScreenGate on an EngineSendGate: a room display, or party lines' prompts, arriving after `train stats` and before its echo keep the form, the plan is typed and applied, and no wrapped engine send (the `@train` reply, `par`) reaches the form; not at a trainer, the refusal and its prompt in the echo's read release the keyboard, end the pass and type nothing; an echo the splitter doesn't attribute plus a refusal types nothing and the pass's end releases the keyboard. Each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
+- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it. The game's answer (the echo, then the Character Editor) reaches the router as bytes through a ServerFeed; the tracker's answer ticks run on the pass's ManualClock (ManualClock.Arm) under the pump. In the tests that read the form off the game's own terminal (TrainStatsWire through a ServerFeed with a WirePromptScanner, a TrainerScreenGate on an EngineSendGate):
+  - a room display, or party lines' prompts, arriving after `train stats` and before its echo keep the form, the plan is typed and applied, and no wrapped engine send (the `@train` reply, `par`) reaches the form;
+  - not at a trainer, the refusal and its prompt in the echo's read release the keyboard, end the pass and type nothing; an echo the splitter doesn't attribute plus a refusal types nothing, and the tracker's tick at the window lets the keyboard go; the game's own refusal line releases at once;
+  - the pass's 6 s timeout keeps the hold, and the tracker's answer window lets it go;
+  - a box left on the screen from before is never planned from (the trusted `stat` is);
+  - each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker (the dispatcher's one-shot timer in the client) takes ManualClock.Arm here, ManualTimers.Arm in the other tests that build a tracker, so the test decides when ExpectingMenuWindow and AnswerWindow are up.
 - Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39), `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (the pass given up on output that answered earlier sends, and party replies typed into the Family Name box).
 
 ### AutoTrainSequenceBuilderTests.cs
@@ -1229,6 +1236,7 @@ How to keep it current:
 - Covers: test infrastructure (the shared world for every errand's light stop)
 - Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them; a Half-Orc race row; NewTrainer's `stat` parser reading the server rows and its sends (trainer and CP pass) seen by the parser and trainer-screen tracker and recorded in TrainerSent.
 - Why: every errand's test drives the same real planning and buying paths.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### EventEditDialogViewModelTests.cs
 - Covers: ViewModels/Settings/EventEditDialogViewModel
@@ -1406,6 +1414,7 @@ How to keep it current:
 - Checks: a game-data change drops the run a fight held, the default task held for the party, and a training trip in a wait; without the hook each would start on the other set's rooms.
 - Why: runs restarting on wrong room numbers.
 - Named seam: PartyTrainCoordinator.RunTripAsync is internal, so the test starts a trip with a set decision: the leader tick's own start needs a running movement engine, MudPlay partners and their status reports.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### GameDataDeltaTests.cs
 - Covers: Services/SettingsResolver game-data deltas, ViewModels MonstersSectionViewModel
@@ -2255,7 +2264,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays, and Arm: a one-shot tick for a component that takes a scheduler) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
@@ -4318,13 +4327,15 @@ How to keep it current:
 
 ### TrainerMenuTrackerTests.cs
 - Covers: Game/TrainerMenuTracker
-- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`; with the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner wired as AppServices wires it and the cursor's row read as the terminal session reads it: room displays, committed prompts and in-place prompts before the game's echo of `train stats` are set aside (an earlier Enter's room redraw, party lines), the exit comes on a prompt / room display / live prompt after the form; a refusal releases on its prompt, in the echo's read (cursor row) or a later one; with no answer read in the window a prompt at a read's end releases again; an echo 6 s late still opens the form (its own statline doesn't release); the cursor-positioned `Char. Creation` box with no marker line is the form, off the screen; with the window tick on ManualTimers, an echo the splitter doesn't attribute plus a refusal is released at the tick, and a form on the screen keeps the hold. MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
+- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`; with the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner wired as AppServices wires it and the cursor's row read as the terminal session reads it: room displays, committed prompts and in-place prompts before the game's echo of `train stats` are set aside (an earlier Enter's room redraw, party lines), the exit comes on a prompt / room display / live prompt after the form; a refusal releases on its prompt, in the echo's read (cursor row) or a later one; with no answer read in the window a prompt at a read's end releases again; the cursor-positioned `Char. Creation` box with no marker line is the form, off the screen; with the window tick on ManualTimers, an echo the splitter doesn't attribute plus a refusal is released at the tick, and a form on the screen keeps the hold. An echo 6 s late after an Enter's room redraw: the tick lets the keyboard go and the form takes it back; a prompt already waiting when `train stats` went out isn't the answer (only the answer window lets go); a box left on the screen isn't the answer, one drawn after a clear is, and a leftover keeps the hold no longer than the answer window; a party line between the echo and the form lets go and the form takes the keyboard back; ForceExit (the link dropping) ends any taking back.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes ManualTimers.Arm (the dispatcher's one-shot timer in the client), so the test decides when ExpectingMenuWindow and AnswerWindow are up. MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
 - Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field; reports `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (released on output that answered earlier sends, with the form opening a moment later).
 
 ### TrainerScreenGateTests.cs
 - Covers: Game/TrainerScreenGate, Services/EngineSendGate
 - Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume once the form (its echo and box fed as bytes through a ServerFeed) is left, holds compose with others, Dispose releases.
 - Why: background sends leaking into the `train stats` form.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### TrainerWalkCpPlanTests.cs
 - Covers: Game/TrainerWalkManager (with AutoTrainManager, StatParser, on the ErrandLightWorld stack)

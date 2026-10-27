@@ -864,6 +864,7 @@ public partial class MainWindowViewModel : ObservableObject
             () => SentCommandTrail.RowIsGamePrompt(
                 CursorRowText(), string.Empty, AppServices.Current.CurrentStatlinePromptRegex);
         AppServices.Current.TrainerMenu.ReadScreen = BuildVisibleScreenText;
+        AppServices.Current.TrainerMenu.ScreenClears = () => Emulator.ScreenClears;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -3594,6 +3595,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
                 // Leaving the game takes us off every member list we were still on.
                 if (wasConnected) AppServices.Current.Party.NoteLinkDropped();
+                // A trainer screen open when the link dropped is gone with the link:
+                // its hold would block the menu entry and the re-entry.
+                AppServices.Current.TrainerMenu.ForceExit("link dropped");
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
@@ -3970,7 +3974,15 @@ public partial class MainWindowViewModel : ObservableObject
         // Observe outbound for the trainer-menu watcher — it gates on
         // the user's own `train stats` / `train` going out before
         // accepting the "Point Cost Chart" marker as menu confirmation.
-        AppServices.Current.TrainerMenu.ObserveOutbound(data);
+        // It reads the screen and arms a dispatcher timer, so it runs on the UI
+        // thread; a send made off it is noted there, still ahead of any answer
+        // (the answer's read is posted after it).
+        if (Dispatcher.UIThread.CheckAccess()) AppServices.Current.TrainerMenu.ObserveOutbound(data);
+        else
+        {
+            byte[] sent = data.ToArray();
+            Dispatcher.UIThread.Post(() => AppServices.Current.TrainerMenu.ObserveOutbound(sent));
+        }
         // Suicide-password capture — during the AwaitingNewPassword
         // state, the next bytes the user types ARE the password. We
         // peek here (the bytes still flow to the server unchanged).

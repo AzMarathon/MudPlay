@@ -1432,7 +1432,7 @@ public sealed class AutoPartyManagerTests
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
-        TrainerMenuTracker tracker = new(router, party, now: () => Now);
+        TrainerMenuTracker tracker = new(router, party, now: () => Now, schedule: _partyTimers.Arm);
         _partyNow = () => Now;
         AutoPartyManager engine = new(router, players, party, tracker, schedule: _partyTimers.Arm, now: () => _partyNow());
         engine.SetWireSender(_sent.Add);
@@ -1468,7 +1468,7 @@ public sealed class AutoPartyManagerTests
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
-        TrainerMenuTracker tracker = new(router, party, now: () => Now);
+        TrainerMenuTracker tracker = new(router, party, now: () => Now, schedule: _partyTimers.Arm);
         _partyNow = () => Now;
         AutoPartyManager engine = new(router, players, party, tracker, schedule: _partyTimers.Arm, now: () => _partyNow());
         engine.SetWireSender(_sent.Add);
@@ -1497,7 +1497,7 @@ public sealed class AutoPartyManagerTests
         SeedPlayer(players, "Raijin", inviteOnSeen: true);
         PartyState party = new();
         party.SelfIsLeader = true;   // leader-side reform — only a leader re-invites its followers
-        TrainerMenuTracker tracker = new(router, party, now: () => Now);
+        TrainerMenuTracker tracker = new(router, party, now: () => Now, schedule: _partyTimers.Arm);
         _partyNow = () => Now;
         AutoPartyManager engine = new(router, players, party, tracker, schedule: _partyTimers.Arm, now: () => _partyNow());
         engine.SetWireSender(_sent.Add);
@@ -1532,7 +1532,7 @@ public sealed class AutoPartyManagerTests
         PartyState party = new();
         party.SelfIsLeader = false;      // we're a follower
         party.LeaderName = "MudPlay";
-        TrainerMenuTracker tracker = new(router, party, now: () => Now);
+        TrainerMenuTracker tracker = new(router, party, now: () => Now, schedule: _partyTimers.Arm);
         _partyNow = () => Now;
         AutoPartyManager engine = new(router, players, party, tracker, schedule: _partyTimers.Arm, now: () => _partyNow());
         engine.SetWireSender(_sent.Add);

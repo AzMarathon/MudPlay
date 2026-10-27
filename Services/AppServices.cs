@@ -3378,6 +3378,8 @@ public sealed class AppServices
         // to re-fire `invite` for any party member that the trainer-
         // menu round-trip dropped from the follower's view.
         TrainerMenu = new Game.TrainerMenuTracker(Router, PartyState, Log);
+        // A trainer screen belongs to the character that opened it.
+        Profile.ProfileLoaded += _ => TrainerMenu.ForceExit("profile changed");
         // Full-screen forms want character-at-a-time input with server echo,
         // not client-side line buffering. Two arming paths, both flip the same
         // flag (idempotent): the command-armed InputMenuEntered/Exited pair
