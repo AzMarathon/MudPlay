@@ -2159,6 +2159,10 @@ public sealed class AppServices
     // Settings → Cash + Items (CollectAfterCombatFinished).
     public Game.Inventory.AutoGetItemsManager AutoGetItems { get; private set; } = null!;
 
+    // Re-displays the room after a kill whose monster could have dropped an item
+    // (Settings -> Cash + Items, and the Auto-collect flag), holding the walker for it.
+    public Game.Inventory.PostKillFloorCheck FloorCheck { get; private set; } = null!;
+
     // Auto-discard engine. On every inventory change, drops each carried item
     // flagged Models.GameData.ItemOverlay.AutoDiscard down to its keep floor —
     // one drop <name> per excess copy. Cleans chest dumps and unwanted collected
@@ -4931,10 +4935,33 @@ public sealed class AppServices
             movementActive: () => MovementControl.IsActive && !AutoModeController.KillSwitchEngaged,
             log: Log);
         // A drop lands on the ground with no line of its own, so the kill of a monster
-        // that can drop something flagged for auto-collect re-displays the room. Wired
-        // ahead of the roster resync below for the reason the summon settle is: the
-        // walker hold has to be up before the resync clears the Combat gate.
-        MonsterDeath.MonsterDied += ReLookForDrops;
+        // that can drop an item re-displays the room: for an item flagged Auto-collect,
+        // or for any item under Settings -> Cash + Items "Look after killing a monster
+        // that can drop an item". Wired ahead of the roster resync below for the reason
+        // the summon settle is: the walker hold has to be up before the resync clears
+        // the Combat gate.
+        FloorCheck = new Game.Inventory.PostKillFloorCheck(Router,
+            dyingMonsters: DyingMonsterNumbers,
+            monster: number => MonsterCatalog.Get(number),
+            autoCollectWanted: item =>
+            {
+                if (!ReadAutoModeFlag(d => d.AutoGetItems)) return false;
+                Models.GameData.ItemOverlay overlay = ResolveItemOverlay(item);
+                return (overlay.AutoCollect ?? false) && !(overlay.CannotBeTaken ?? false);
+            },
+            lookForAnyDrop: () =>
+                ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").LookAfterKillingDropper,
+            hasEngageableHostiles: () => CombatTracker.HasEngageableHostiles,
+            canSeeRoom: () => !RoomTracker.IsInDarkRoom && !Conditions.IsBlinded,
+            moveOnItsWay: () => RoomTracker.HasQueuedMoves,
+            sendGateHeld: () => EngineGate.IsLocked,
+            bareEntersSent: () => EngineGate.BareEntersSent,
+            blocked: detail => AutoModeController.Blocks(Game.Inventory.PostKillFloorCheck.SystemName, detail),
+            itemName: item => ItemNames.GetName(item),
+            log: Log);
+        FloorCheck.SetAcquisitionGate(Acquisition);
+        FloorCheck.SetRoomRedisplay(RoomRedisplay);
+        MonsterDeath.MonsterDied += FloorCheck.OnMonsterDied;
         MonsterDeath.MonsterDied += evt =>
         {
             // Every death is the exp + *Combat Off* signal (no per-monster identity,
@@ -6511,8 +6538,9 @@ public sealed class AppServices
             StatlineReconcile.Arm();
             // Whoever was in the room is not known to be there on the way back in.
             RoomClassifier.NoteGameLeft();
-            // Nor is the fight that was going on in it.
+            // Nor is the fight that was going on in it, or the floor its kills left.
             Combat.NoteGameLeft();
+            FloorCheck.NoteGameLeft();
         };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
@@ -7569,7 +7597,6 @@ public sealed class AppServices
             isParadigm: onParadigm,
             dropCoinForWeight: (weight, item) => Cash.TryDropCoinForWeight(weight, item));
         AutoGetItems.SetAcquisitionGate(Acquisition);
-        AutoGetItems.SetRoomRedisplay(RoomRedisplay);
         // A light on the floor is picked up for Auto-Light, flagged or not and with
         // Auto-Get Items on or off (AutoLightProvisioner is built further down).
         AutoGetItems.SetExtraCollect(item => AutoLightProvisioner.FloorLightsWanted(item.Number), "for Auto-Light");
@@ -8084,6 +8111,7 @@ public sealed class AppServices
             AutoBuy.OnRoomChanged();
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
+            FloorCheck.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
             GhSweep.OnRoomChanged(t);
@@ -13429,28 +13457,6 @@ public sealed class AppServices
                     numbers.Add(inRoom);
         if (ResolveMonsterNumberByName(dying) is { } byName) numbers.Add(byName);
         return numbers;
-    }
-
-    // Re-display the room after a kill when the dead monster can drop an item the
-    // auto-get engine would pick up. Nothing is sent for a monster with no such drop,
-    // so ordinary kills cost no extra Enter.
-    private void ReLookForDrops(Game.Combat.MonsterDeathEvent evt)
-    {
-        if (!ReadAutoModeFlag(d => d.AutoGetItems)) return;
-        foreach (int number in DyingMonsterNumbers(evt))
-        {
-            if (MonsterCatalog.Get(number) is not { } monster) continue;
-            foreach (Game.Combat.MonsterDropSlot drop in monster.Drops)
-            {
-                Models.GameData.ItemOverlay overlay = ResolveItemOverlay(drop.ItemId);
-                if (!(overlay.AutoCollect ?? false) || (overlay.CannotBeTaken ?? false)) continue;
-                Log.Debug(Game.Inventory.AutoGetItemsManager.LogCategory,
-                    $"killed '{monster.Name}' (#{number}), which can drop "
-                    + $"'{ItemNames.GetName(drop.ItemId)}' — checking the floor");
-                AutoGetItems.RequestDropReLook();
-                return;
-            }
-        }
     }
 
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no

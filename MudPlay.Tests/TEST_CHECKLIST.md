@@ -166,8 +166,8 @@ How to keep it current:
 
 ### AutoGetItemsManagerTests.cs
 - Covers: Game/Inventory/AutoGetItemsManager. Also one stray theory for Game/Inventory/InventorySnapshot.ParseKeyEntry, which is a production helper but has nothing to do with this class.
-- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
-- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; the walker leaving before the post-kill survey lands; Roomba headroom.
+- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
+- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; Roomba headroom.
 
 ### AutoHazardCounterProvisionerTests.cs
 - Covers: Game/Map/AutoHazardCounterProvisioner (with AutoModeController)
@@ -3006,6 +3006,11 @@ How to keep it current:
 - Checks: death marks the inventory stale; reread once a room is known, once per death; a profile swap drops the pending read.
 - Why: report paradigm-20261009-105244.
 
+### PostKillFloorCheckTests.cs
+- Covers: Game/Inventory/PostKillFloorCheck (with MonsterDeathWatcher, MonsterCatalog on a Monsters.json fixture, RoomDisplayParser, AcquisitionGate, RoomRedisplayCoordinator, EngineSendGate.BareEntersSent, AutoModeController and the Cash settings of a TestProfiles profile)
+- Checks: kills fed as the game prints them: a monster with a drop chance gets one bare Enter at the end of the kill's read and the walker is held from the death until the room display (or the release timeout); a monster with no drops, a 0% drop or no known identity gets none. Two kills in one read share one Enter; kills a round apart with the fight still on wait and look once the last kill ends it. The setting is on by default and off sends nothing, while an Auto-collect drop looks at once, mid-fight and whatever the setting. No Enter of its own when the room was shown after the kill, another engine's Enter went out since it (the walker still waits for its display), a move is on its way (no hold), we left the room, the send gate is held, the master switch is off, or the room can't be seen. A display with no look owed leaves another hold alone.
+- Why: the user's 2026-10-26 request to look after killing a monster that can drop an item; a drop prints no line (GAME_MECHANICS "Monster drops land on the ground"); report `paradigm-20261003-005951` (the walker leaving before the post-kill survey lands).
+
 ### ProfileBackupTests.cs
 - Covers: Services/ProfileService.Save (backup)
 - Checks: with backup off no .bak is written; with it on the file as it stood is copied to profile.json.bak before the new one is written; with no earlier file there is nothing to back up.
@@ -3390,7 +3395,7 @@ How to keep it current:
 ### RoomRedisplayCoordinatorTests.cs
 - Covers: Game/Inventory/RoomRedisplayCoordinator
 - Checks: The first request sends; a second within the 750 ms window coalesces; a later one sends again.
-- Why: The post-kill drop re-look and the cash re-display would otherwise render the room twice.
+- Why: The post-kill floor check and the cash re-display would otherwise render the room twice.
 
 ### RoomRenameRelearnTests.cs
 - Covers: Game/Map/RoomTracker + RoomGraphManager (learned room names)

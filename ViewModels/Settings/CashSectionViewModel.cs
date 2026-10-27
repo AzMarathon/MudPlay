@@ -42,6 +42,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         "Coin count", "Coins exceed",
         "Encumbrance", "Weight", "Light", "Medium", "Heavy",
         "Auto-get", "Get item", "Collection rules",
+        "Look after killing", "Drop", "Monster drops", "Re-display", "Floor check",
     };
 
     // ----- Per-currency policy --------------------------------------
@@ -109,6 +110,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _skipCollectIfMakesHeavy;
     [ObservableProperty] private bool _skipCollectPast90Percent;
     [ObservableProperty] private bool _collectAfterCombatFinished;
+    // The default is CashSettings' own.
+    [ObservableProperty] private bool _lookAfterKillingDropper = new CashSettings().LookAfterKillingDropper;
     [ObservableProperty] private bool _dropSmallerForLarger;
 
     // ----- Item encumbrance gate (independent of the coin gate) ------
@@ -196,6 +199,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             SkipCollectIfMakesHeavy    = SkipCollectIfMakesHeavy,
             SkipCollectPast90Percent   = SkipCollectPast90Percent,
             CollectAfterCombatFinished = CollectAfterCombatFinished,
+            LookAfterKillingDropper    = LookAfterKillingDropper,
             DropSmallerForLarger       = DropSmallerForLarger,
 
             SkipGetItemIfMakesLight    = SkipGetItemIfMakesLight,
@@ -274,6 +278,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         SkipCollectIfMakesHeavy    = dto.SkipCollectIfMakesHeavy;
         SkipCollectPast90Percent   = dto.SkipCollectPast90Percent;
         CollectAfterCombatFinished = dto.CollectAfterCombatFinished;
+        LookAfterKillingDropper    = dto.LookAfterKillingDropper;
         DropSmallerForLarger       = dto.DropSmallerForLarger;
 
         SkipGetItemIfMakesLight    = dto.SkipGetItemIfMakesLight;
@@ -363,6 +368,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
 
     partial void OnSkipCollectPast90PercentChanged(bool value)         => MarkDirty();
     partial void OnCollectAfterCombatFinishedChanged(bool value)      => MarkDirty();
+    partial void OnLookAfterKillingDropperChanged(bool value)         => MarkDirty();
     partial void OnDropSmallerForLargerChanged(bool value)            => MarkDirty();
 
     // ----- Item encumbrance-gate cascade ----------------------------

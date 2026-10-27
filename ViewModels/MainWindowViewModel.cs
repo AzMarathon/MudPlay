@@ -1281,8 +1281,9 @@ public partial class MainWindowViewModel : ObservableObject
         // matching prompt — a prompt that never matches is the very thing it
         // watches for.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.StatlineReconcile.NoteRoomDisplayed();
-        // Ends the walker hold a post-kill floor check put up.
-        _roomDisplayParser.RoomParsed += _ => AppServices.Current.AutoGetItems.NoteRoomDisplayed();
+        // Ends the walker hold a post-kill floor check put up, or settles the look it
+        // owes: the display showed the floor.
+        _roomDisplayParser.RoomParsed += _ => AppServices.Current.FloorCheck.NoteRoomDisplayed();
         // Ends the walker hold a summon-on-death kill put up, when the room came
         // back empty.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
@@ -1631,6 +1632,7 @@ public partial class MainWindowViewModel : ObservableObject
         // AutoGetItemsManager's `get <name>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoGetItems.SetWireSender(Named("AutoGetItems"));
+        AppServices.Current.FloorCheck.SetWireSender(Named("FloorCheck"));
         // The hang-up item check's own two sends, `i` and a room redisplay; its
         // gets go out through the auto-get engine above.
         AppServices.Current.HangupItems.SetWireSender(Named("HangupItems"));
@@ -3665,6 +3667,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // back: left standing, the roster is re-issued while offline (the
                 // Auto-Combat toggle, the PvP fight stopped above) and acted on.
                 AppServices.Current.RoomClassifier.NoteGameLeft();
+                AppServices.Current.FloorCheck.NoteGameLeft();
                 // A drop with a Hangup monster in sight turns the watch off for the
                 // first minute back in the game.
                 AppServices.Current.MonsterWatch.NoteDisconnected();

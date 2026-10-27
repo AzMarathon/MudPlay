@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.9**
-> - Startup splash stops animating while the window is minimized
-> - Loops folder followed by change notification plus a check every minute, instead of a full rescan every 3 s
-> - Game-data names, lair tags and attack names kept once per set instead of once per index
-> - Windows build runs its assemblies unpacked, so clients share them; older versions' unpacked copies removed
-> - Idle clients, and minimized ones, compact their memory now and then
+> **Version 3.186.10**
+> - New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.
