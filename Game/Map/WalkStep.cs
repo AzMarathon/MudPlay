@@ -48,9 +48,9 @@ public sealed record MoveStep(Direction Direction, RoomKey ExpectedTarget, strin
 }
 
 // A free-text command the walker must send and have the server acknowledge
-// before sending the next step. Door-open prerequisites are the only kind
-// RemoteActionPathExpander emits today; lever pulls / button presses could
-// follow when game data describes the prerequisite.
+// before sending the next step: the lever pulls, wheel turns and other actions
+// RemoteActionPathExpander lays into a detour to a lever exit's action rooms.
+// Doors are opened at send time, not by a CommandStep.
 //
 // Command is the exact text to send (no trailing CR — the walker appends it).
 //
@@ -62,6 +62,10 @@ public sealed record MoveStep(Direction Direction, RoomKey ExpectedTarget, strin
 // the open delay. A plain CommandStep (IsWinchPull=false) is fire-and-forget.
 public sealed record CommandStep(string Command, bool IsWinchPull = false) : WalkStep
 {
+    // The door or gate this lever action opens (MultiActionExitData.DoorOrGate):
+    // one already open is not pulled again, since a second pull locks it.
+    public (RoomKey Room, Direction Dir)? DoorOrGate { get; init; }
+
     public override string Display => Command;
 }
 

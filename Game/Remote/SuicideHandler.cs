@@ -181,7 +181,7 @@ public sealed class SuicideHandler : IDisposable
             // telepath already queued is such a line too, and the pacer writes it
             // from its own timer, past the gate.
             SendGate?.Hold(GateHold);
-            Telepaths?.Hold();
+            Telepaths?.Hold(PacerHolder);
             SendOwn("suicide");
             _log?.Log(LogSeverity.Info, "Suicide",
                 "@suicide: sent `suicide`; the stored password goes out when the game asks for it.");
@@ -279,6 +279,9 @@ public sealed class SuicideHandler : IDisposable
     // when unwired.
     public TelepathPacer? Telepaths { get; set; }
 
+    // This handler's name among the pacer's holders.
+    private const string PacerHolder = "@suicide";
+
     private bool _sendingOwn;
 
     private void SendOwn(string line)
@@ -295,7 +298,7 @@ public sealed class SuicideHandler : IDisposable
         _promptAwaitedSince = null;
         _awaitingPrompt = false;
         SendGate?.Release(GateHold);
-        Telepaths?.Release();
+        Telepaths?.Release(PacerHolder);
     }
 
     // Every line that reaches the wire, whoever sent it. The send gate keeps the

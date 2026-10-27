@@ -3074,7 +3074,7 @@ public sealed class AppServices
                 ("Character", Profile.CurrentProfileName ?? "(none loaded)"),
                 ("BBS", Profile.CurrentBbsName ?? "(none)"),
                 ("Realm", BugReportBuilder.RealmLabel(GameData.ActiveRealm)),
-                ("Active game-data set", GameData.ActiveSet ?? "(none)"),
+                ("Active game-data set", BugReportBuilder.ActiveSetLabel(this)),
                 ("Log folder", BugReportContext.HomeRelative(AppPaths.LogsDir)),
                 ("Log to send with this", CrashReporter.LogToSend()),
             ],
@@ -3378,6 +3378,8 @@ public sealed class AppServices
         // to re-fire `invite` for any party member that the trainer-
         // menu round-trip dropped from the follower's view.
         TrainerMenu = new Game.TrainerMenuTracker(Router, PartyState, Log);
+        // A trainer screen belongs to the character that opened it.
+        Profile.ProfileLoaded += _ => TrainerMenu.ForceExit("profile changed");
         // Full-screen forms want character-at-a-time input with server echo,
         // not client-side line buffering. Two arming paths, both flip the same
         // flag (idempotent): the command-armed InputMenuEntered/Exited pair
@@ -3404,7 +3406,7 @@ public sealed class AppServices
         // combat, casting, auto-get, chat replies, the lot). The user's manual
         // input and the auto-trainer's CP replay both ride the raw SendUserInput,
         // so they pierce the hold and remain the only two things that can type.
-        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log);
+        TrainerScreen = new Game.TrainerScreenGate(TrainerMenu, EngineGate, Log, Telepaths);
         // Entering the train-stats screen breaks up our party server-side; a
         // FOLLOWER must clear its own stale "following <leader>" state now so the
         // leader's fresh re-invite on return is auto-accepted, not rejected as
@@ -9069,6 +9071,13 @@ public sealed class AppServices
             PromptScanner, Log, RoomGraph, Recovery, Bfs, Walker, Movement);
         Loops.NamesInUse = () => new[] { LoopRunner.CurrentLoop?.Name, LoopRunner.StagedLoop?.Name }
             .OfType<string>().ToArray();
+        // A lever door or gate held open isn't pulled shut again by a walk or a lap:
+        // the engine flips it on every pull. Its window is judged against the walk
+        // still to go to the gate.
+        DoorsHeldOpen.TravelTime = moves => AutoLair?.TravelCostModel.EstimateTravel(moves) ?? TimeSpan.Zero;
+        RoomTracker.PlayerDeathObserved += () => DoorsHeldOpen.ForgetPulls("died");
+        Walker.SetDoorsHeldOpen(DoorsHeldOpen);
+        LoopRunner.SetDoorsHeldOpen(DoorsHeldOpen);
         // A waypoint's command block: the loop moves on once the game has answered it,
         // and stays while a fight it started runs.
         LoopRunner.SetInCombatProbe(() => PlayerState.InCombat);
@@ -10246,7 +10255,7 @@ public sealed class AppServices
             // follower pass-through stash (Cash → "stash as follower").
             isFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             nearestLoopRoom: NearestLoopRoom,
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph)),
             coordinator: MovementCoordinator);
         // A loop or Auto-Lair run that crosses dark rooms its lights can't cover, or
         // whose lit light dwindles under Reorder-at: the walk-to shop router stands
@@ -10370,7 +10379,7 @@ public sealed class AppServices
             selling: () => SellDetour.IsDetouring, sellResume: () => SellDetour.ResumePlan,
             depositing: () => AutoDeposit.IsRerouting, depositResume: () => AutoDeposit.ResumePlan,
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
-            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement),
+            loopRooms: loop => Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph)),
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             log: Log);
         RoomTracker.StateChanged += Game.Map.RoomTracker.Named("detour combat", _ => DetourCombat.Evaluate());
@@ -10890,8 +10899,9 @@ public sealed class AppServices
             (from, room) => Game.Map.WalkReach.OnItsMap(RoomGraph, from, room));
         RoomGraph.GraphReloaded += LearnedArrivalLands.Forget;
         StandardListContradictions = new Game.Recovery.StandardListContradictions(
-            () => ResolveActiveRealm()?.Realm, () => GameData.ActiveSet,
-            () => { if (ResolveActiveBbs() is { } board) Bbs.Save(board); }, Log);
+            ResolveActiveRealm, () => GameData.ActiveSet, Bbs.Save, Log);
+        Profile.ProfileLoaded += _ => StandardListContradictions.RetryUnsaved();
+        InGameCapture.InGameChanged += inGame => { if (inGame) StandardListContradictions.RetryUnsaved(); };
         ArrivalLearner = new Game.Recovery.ArrivalRoomLearner(
             RoomTracker, LearnedArrivals, LearnedArrivalLands, () => HangupArrivalListTrust,
             RoomGraph.CouldBeTakenFor, InParadigmAlbion, RoomGraph.IsExitCommandSomewhere,
@@ -11089,6 +11099,20 @@ public sealed class AppServices
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
+
+        // A launch that comes up on the unnamed draft chooses its game-data set but
+        // builds nothing from it until something needs it (BuildDeferredGameData):
+        // most such launches go straight on to load a character on another set, and
+        // the draft's build (seconds, with a room graph, loops and indexes) was
+        // thrown away (Hang-20261026-215238). Not in the launch that loads what the
+        // default profile held before its reset: that draft may hold a room, which
+        // only a built room graph can place.
+        _deferDraftGameDataBuild = defaultProfileBeforeReset is null;
+        // Once per process: a class handler outlives the instance that adds it.
+        if (Interlocked.Exchange(ref s_windowOpenHooked, 1) == 0)
+            Avalonia.Controls.Window.WindowOpenedEvent.AddClassHandler<Avalonia.Controls.Window>(
+                (window, _) => CurrentOrNull?.OnWindowOpenedForGameData(window),
+                Avalonia.Interactivity.RoutingStrategies.Direct);
 
         // Startup profile priority: a --profile launch argument wins over the
         // "Auto-load last profile" setting, which wins over a blank draft. The CLI
@@ -16141,7 +16165,7 @@ public sealed class AppServices
     private Game.Map.RoomKey? NearestLoopRoom(Game.Map.RoomKey from, Game.Map.Loop loop)
     {
         System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> rooms =
-            Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement);
+            Game.Map.LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, Bfs, RoomGraph, Movement, Game.Map.LoopLegMemo.Of(RoomGraph));
         if (rooms.Count == 0) return null;
         System.Collections.Generic.IReadOnlyDictionary<Game.Map.RoomKey, int> steps =
             Bfs.ComputeDistancesTo(from, rooms, Movement);
@@ -16722,8 +16746,34 @@ public sealed class AppServices
     {
         string? outer = _gameDataSwitchCause;
         _gameDataSwitchCause = because;
-        try { GameData.SwitchSet(ProfileGameDataSet()); }
+        // Only the startup draft puts the build off; the first named profile ends it.
+        bool defer = _deferDraftGameDataBuild && Profile.CurrentProfileName is null;
+        if (!defer) _deferDraftGameDataBuild = false;
+        try { GameData.SwitchSet(ProfileGameDataSet(), deferBuild: defer); }
         finally { _gameDataSwitchCause = outer; }
+    }
+
+    // While the startup draft's game-data build is put off (see the startup profile
+    // load). UI thread.
+    private bool _deferDraftGameDataBuild;
+
+    // Build the startup draft's game-data set now, when its build was put off: the
+    // draft is about to need it (a connect, a window that shows game data, typing at
+    // the terminal or opening its menu, a local API request). A no-op once built. UI
+    // thread.
+    public void BuildDeferredGameData(string why)
+    {
+        _deferDraftGameDataBuild = false;
+        if (!GameData.BuildDeferred) return;
+        GameData.BuildDeferredSet(why);
+    }
+
+    private static int s_windowOpenHooked;
+
+    private void OnWindowOpenedForGameData(Avalonia.Controls.Window window)
+    {
+        if (!GameData.BuildDeferred || window is IShowsNoGameData) return;
+        BuildDeferredGameData($"the {window.GetType().Name} opened");
     }
 
     // Set while a profile event is switching the set, for the stop that switch makes.

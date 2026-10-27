@@ -1,3 +1,4 @@
+using MudPlay.Game.Remote;
 using MudPlay.Services;
 
 namespace MudPlay.Game;
@@ -25,6 +26,11 @@ namespace MudPlay.Game;
 // it. It's a NAMED hold so it composes with the suicide-password and
 // mortally-wounded holds rather than clobbering them — any subset can be up
 // independently and sends stay gated until all clear.
+//
+// The telepath pacer is held over the same stretch: it writes queued telepaths
+// from its own timer, past the send gate, so a telepath queued just before the
+// form opened would otherwise be typed into it (reports paradigm-20261026-225703,
+// -225718, -225733).
 public sealed class TrainerScreenGate : IDisposable
 {
     // Surfaced in the EngineSendGate hold set / diagnostics.
@@ -36,6 +42,7 @@ public sealed class TrainerScreenGate : IDisposable
 
     private readonly TrainerMenuTracker _tracker;
     private readonly EngineSendGate _gate;
+    private readonly TelepathPacer? _telepaths;
     private readonly LogService? _log;
     private bool _held;
     private bool _disposed;
@@ -44,13 +51,15 @@ public sealed class TrainerScreenGate : IDisposable
     // keyboard. Mirrors the EngineSendGate hold.
     public bool IsHeld => _held;
 
-    public TrainerScreenGate(TrainerMenuTracker tracker, EngineSendGate gate, LogService? log = null)
+    public TrainerScreenGate(TrainerMenuTracker tracker, EngineSendGate gate, LogService? log = null,
+                             TelepathPacer? telepaths = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(gate);
         _tracker = tracker;
         _gate = gate;
         _log = log;
+        _telepaths = telepaths;
 
         // Both entry/exit pairs feed the same MenuOwnsKeyboard read, so any of
         // them can raise or clear the composite state.
@@ -72,6 +81,7 @@ public sealed class TrainerScreenGate : IDisposable
         if (owns)
         {
             _gate.Hold(HoldReason);
+            _telepaths?.Hold(HoldReason);
             _log?.Info(LogCategory,
                 "train stats / creation form owns the keyboard — background engine sends held "
                 + "(only manual input + auto-train CP allocation reach the form).");
@@ -79,6 +89,7 @@ public sealed class TrainerScreenGate : IDisposable
         else
         {
             _gate.Release(HoldReason);
+            _telepaths?.Release(HoldReason);
             _log?.Info(LogCategory,
                 "train stats / creation form closed — background engine sends resume.");
         }
@@ -95,6 +106,8 @@ public sealed class TrainerScreenGate : IDisposable
         _tracker.MenuEntered      -= Evaluate;
         _tracker.MenuExited       -= Evaluate;
         // Don't leave a stuck hold if torn down mid-form.
-        if (_held) _gate.Release(HoldReason);
+        if (!_held) return;
+        _gate.Release(HoldReason);
+        _telepaths?.Release(HoldReason);
     }
 }

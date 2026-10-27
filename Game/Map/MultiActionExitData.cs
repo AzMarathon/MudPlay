@@ -29,6 +29,13 @@ public sealed partial record MultiActionExitData(
     // reciprocal exit reading as a hidden action exit with no action data.
     public bool IsSatisfiable => Actions.Count >= RequiredActionCount;
 
+    // The door or gate these actions open (its room and side), set when the room
+    // map promoted a lever-opened door to a multi-action exit; null for a hidden
+    // exit. An action toggles a door or gate, so one sent while it stands open
+    // locks it again (GAME_MECHANICS "Multi-action exits and levers"); a hidden
+    // exit's action never shuts it.
+    public (RoomKey Room, Direction Dir)? DoorOrGate { get; init; }
+
     // True when at least one action is remote (different room).
     public bool HasRemoteActions
     {

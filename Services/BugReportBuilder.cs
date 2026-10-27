@@ -384,14 +384,19 @@ public static class BugReportBuilder
 
     // ----- Section builders ----------------------------------------------
 
+    // The active set as a report names it: whether its build is still put off (the
+    // startup draft's), or why there is none. Read off the UI thread by a hang report.
+    public static string ActiveSetLabel(AppServices svc) => svc.GameData.ActiveSet is { } set
+        ? svc.GameData.BuildDeferred ? $"{set} (not built yet: the unnamed draft hasn't needed it)" : set
+        : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)";
+
     private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now)
     {
         StringBuilder sb = new();
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
-            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Active game-data set", ActiveSetLabel(svc));
         Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
             ? "available"
             : "none (no BBS, or the realm's name can't be a folder)");
@@ -552,8 +557,9 @@ public static class BugReportBuilder
         // Direct-input (character) mode: on while a trainer / character-creation
         // stat box owns the keyboard, so arrow keys pass to the wire instead of
         // recalling command history. An "arrows don't move between stat fields"
-        // report hinges on whether this flipped on entering the box.
-        Kv(sb, "Direct-input mode", svc.TrainerMenu.MenuOwnsKeyboard ? "on (trainer/creation box)" : "off");
+        // report hinges on whether this flipped on entering the box. While it waits
+        // on the game's answer to `train stats`, it says how far that answer got.
+        Kv(sb, "Direct-input mode", svc.TrainerMenu.Describe());
         // Death-pile auto-recovery: the toggles + the most recent death record's
         // state, so a "corpse didn't auto-recover" report shows whether it was
         // armed and how the last pile resolved (Recovered / Partial / Missing).
@@ -679,14 +685,15 @@ public static class BugReportBuilder
             .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
         string twoInOneLand = string.Join("; ", odd.Where(o => !o.Exception)
             .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
-        int contradicted = svc.StandardListContradictions.Count;
+        (int contradicted, bool marked, bool unsaved) = svc.StandardListContradictions.Standing();
         return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
             + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
             + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
             + $"this board's deaths have contradicted the standard list: {contradicted}"
-            + (svc.StandardListContradictions.Marked
+            + (unsaved ? " (not yet written to bbs.json)" : "")
+            + (marked
                 ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
                   + "and pointing the realm at another set starts afresh)"
                 : contradicted > 0
@@ -2191,6 +2198,18 @@ public static class BugReportBuilder
                 .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
                 .ToArray();
             Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
+            // The lever actions the lap types on its detours to the lever exits it
+            // crosses: a loop that stopped at, or walked round, such an exit.
+            IReadOnlyList<string> leverActions = loop.ExitActionCommands;
+            Kv(sb, "Loop lever detours (actions each lap)",
+                leverActions.Count == 0 ? "(none)" : string.Join(", ", leverActions.Select(c => $"'{c}'")));
+            Kv(sb, "Loop step inside a lever detour",
+                loop.CurrentDetour is { } detour
+                    ? $"yes: steps {detour.Start + 1}-{detour.Cross + 1}, for {detour.GateRoom} {detour.GateDir}"
+                      + (detour.OneWay ? " (one-way)" : $", back on the route at step {detour.End + 1}")
+                    : "no");
+            Kv(sb, "Loop lever detours that can't be routed",
+                loop.UnroutableLevers.Count == 0 ? "(none)" : string.Join("; ", loop.UnroutableLevers));
             Kv(sb, "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
@@ -2743,7 +2762,9 @@ public static class BugReportBuilder
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
-        Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
+        // Lever gates are among them, and a lever pulled whose gate hasn't been seen
+        // since is listed too: a lever isn't pulled at a gate held open.
+        Kv(sb, "Doors held open (seen open, not yet able to lock again; lever pulls not yet seen)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy

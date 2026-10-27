@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.186.17**
+> **Version 3.186.24**
 > - A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
 <!-- current-version:end -->
 

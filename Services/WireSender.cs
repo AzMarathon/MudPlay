@@ -34,4 +34,8 @@ internal sealed class WireSender
         byte[] bytes = Encoding.Latin1.GetBytes(command + "\r");
         _sink?.Invoke(bytes);
     }
+
+    // Keys with no line end, for a full-screen form that takes a key at a time
+    // (the trainer screen's Space on its Exit field).
+    public void SendKeys(string keys) => _sink?.Invoke(Encoding.Latin1.GetBytes(keys));
 }

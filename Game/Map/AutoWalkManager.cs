@@ -1554,7 +1554,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     ? _tracker.ShownOpenExits()
                     : null;
                 LogPaidCrossings(source.Key, path, destination);
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable,
+                    heldOpen: _heldDoors is { } held ? (room, dir, moves) => held.IsHeldOpen(room, dir, moves) : null);
             }
         }
         finally
@@ -3186,6 +3187,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void SendCommandStep(CommandStep step)
     {
+        if (step.DoorOrGate is { } gate && _heldDoors is not null
+            && !_heldDoors.MayPullLever(gate, step.Command, $"Walker step {_index + 1}/{_path!.Count}"))
+        {
+            AdvanceStep();
+            return;
+        }
         _stepInFlight = true;
 
         // A cross-room detour's winch pull is a strength roll that can "not budge" —
@@ -3215,6 +3222,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<string>? _roomActionSent;
 
     public void SetRoomActionHook(Action<string> hook) => _roomActionSent = hook;
+
+    // The doors and gates held open, lever gates among them (DoorsHeldOpen): a
+    // lever is not pulled at a gate held open, which the pull would lock, and a
+    // walk planned past one leaves its detour out.
+    private DoorsHeldOpen? _heldDoors;
+
+    public void SetDoorsHeldOpen(DoorsHeldOpen held) => _heldDoors = held;
 
     // Put a sea-captain sailing on the wire. Like the chime teleport it splits
     // the party (leader `.@party <keyword>` relay, then every member types the

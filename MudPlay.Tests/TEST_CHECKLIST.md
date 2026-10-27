@@ -116,7 +116,7 @@ How to keep it current:
 
 ### ArrivalRoomLearnerTests.cs
 - Covers: Game/Recovery/ArrivalRoomLearner (with RoomTracker, LearnedArrivalRoomStore, LearnedArrivalLookup, StandardListContradictions)
-- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions; land-wide readings, exceptions and disputes.
+- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions, counted in a real board file read afresh each time, and the marking death is learned; land-wide readings, exceptions and disputes.
 - Why: corpse recovery routing, so the client walks to where the dead really arrive.
 
 ### AttackEstimatorTests.cs
@@ -241,8 +241,9 @@ How to keep it current:
 
 ### AutoPartyManagerTests.cs
 - Covers: Game/AutoPartyManager (with Game/TrainerMenuTracker and Game/Map/MovementCoordinator as real collaborators)
-- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu.
+- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu (the game's echo and Character Editor fed as bytes through a ServerFeed, the tracker reading the screen).
 - Why: - Reports `paradigm-20261004-061346`, `stock-20260801-002423`, `stock-20260924-145545`, `stock-20260924-175224`, `paradigm-20260930-192042`, `paradigm-20260923-092317`, `stock-20260731-015726`. - GAME_MECHANICS "A follower who can't move is left behind", and the chime-teleport arrival ordering (Party chapter). - Guards against invite spam, a stranded loop hold, and a leader walking off without a split party.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### AutoSearchManagerTests.cs
 - Covers: Game/Map/AutoSearchManager (with MovementCoordinator)
@@ -256,8 +257,23 @@ How to keep it current:
 
 ### AutoTrainApplyTests.cs
 - Covers: Game/AutoTrainManager (with StatParser, TrainerMenuTracker)
-- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
-- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39).
+- Checks:
+  - the CP pass plans from the `train stats` form, not a buffed `stat`;
+  - SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form;
+  - fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass and releases the keyboard;
+  - after hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
+  - The game's answer (the echo, then the Character Editor) reaches the router as bytes through a ServerFeed, the tracker reading the form off that terminal; the tracker's ticks run on the pass's ManualClock (ManualClock.Arm) under the pump.
+  - In the tests that read the form off the game's own terminal (TrainStatsWire through a ServerFeed with a WirePromptScanner, a TrainerScreenGate on an EngineSendGate):
+    - a room display, or party lines' prompts, arriving after `train stats` and before its echo keep the form; the plan is typed and applied; no wrapped engine send (the `@train` reply, `par`) reaches the form;
+    - not at a trainer, Stock's refusal releases the keyboard at once, ends the pass and types nothing; a refusal the client doesn't know holds to the 10 s cap, and the pass ends with the late-form window, nothing typed;
+    - a form 8 s late, after the echo and a party line's prompt, is filled by the same pass; a form after the cap takes the keyboard back and the same pass fills it;
+    - a box left on the screen from before, with only a marker row and no clear, is never typed into;
+    - a form showing nothing to raise is walked with Enter and left through SAVE, not left open;
+    - a pass that can't save what the form shows (Strength refused, on a key-by-key Character Editor whose Exit redraws on each Space) walks to Exit with plain Enters, brings it round to QUIT with Space and leaves, nothing saved and the keyboard released; an Exit that never reads QUIT gets nothing but Space and the form is left open; a cursor on no box gets no key past the stop;
+    - while a form may still turn up for the user's own `train stats` (the late-form window), Train now sends no second `train stats`;
+    - each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker (the dispatcher's one-shot timer in the client) takes ManualClock.Arm here, so the cap and late-form window run on the pass's clock.
+- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39), `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (the pass given up on output that answered earlier sends, and party replies typed into the Family Name box).
 
 ### AutoTrainSequenceBuilderTests.cs
 - Covers: Game/AutoTrainSequenceBuilder
@@ -343,6 +359,11 @@ How to keep it current:
 - Covers: Services/BbsProfileStore, ProfileService, RealmCatalog, Models/Settings/BbsProfile.RealmFor
 - Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades.
 - Why: the realm-tier migration from BBS-tier files.
+
+### BbsRealmMergeTests.cs
+- Covers: Services/JsonThreeWayMerge (keyed arrays, renames), BbsProfileStore.Save, ViewModels/Settings/BbsSectionViewModel, Services/RealmCatalog (Rename, Remove), Game/Recovery/StandardListContradictions
+- Checks: with the Settings BBS tab open on a board, a death count and death floor written by the running client survive an OK that edits another realm field; an edit to the same field in Settings wins; a realm added in Settings is saved beside the count, in order; a realm renamed in Settings keeps the count and floor written to its old name meanwhile; two renames of one realm (Profile Management's at once, then Settings' on OK) leave the first saved and no second realm; a realm removed (Settings simulated by a second store copy that removes it and saves) stays removed while the other realm keeps what was written meanwhile; two removals of different realms leave the saving copy's realms, not none; a long-held copy saved after Profile Management removed a realm doesn't bring it back; only arrays named as keyed merge record by record, others are still taken whole.
+- Why: the Settings window's copy of a board wrote every realm back as it was when the window opened, unmarking a board with edited rooms and losing the refined death floor.
 
 ### BbsRenameCascadeTests.cs
 - Covers: Services/BbsProfileStore.Rename / Get, ProfileService.RenameBbs
@@ -852,9 +873,9 @@ How to keep it current:
 - Why: A row bound to the window's view-model left a weak subscription on it each time the list realized the row (over a thousand a second on a busy channel), never swept, so the client grew for as long as the window was open (2026-10-19 memory reports).
 
 ### ConversationViewModelTests.cs
-- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore.
-- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look.
-- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place.
+- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore; Services/SessionLogService (talk-log replay).
+- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look. A 2,000-line talk log, replayed by a real SessionLogService as a named profile's logs open, opens as one row per line in the log's order, each reading as written; a rebuild of the whole list asks once to scroll, to the newest row.
+- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place; the window opening on a full backlog froze 8.8 s (Hang-20261026-215238), and its fix must show the same rows.
 - Named seam: ConversationViewModel's optional `post` (where the coalesced restyle runs; the UI dispatcher in production) — the tests run it inline, or queue it to show one Apply posts one restyle.
 
 ### CorpseHandoffTests.cs
@@ -1229,6 +1250,7 @@ How to keep it current:
 - Covers: test infrastructure (the shared world for every errand's light stop)
 - Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them; a Half-Orc race row; NewTrainer's `stat` parser reading the server rows and its sends (trainer and CP pass) seen by the parser and trainer-screen tracker and recorded in TrainerSent.
 - Why: every errand's test drives the same real planning and buying paths.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### EventEditDialogViewModelTests.cs
 - Covers: ViewModels/Settings/EventEditDialogViewModel
@@ -1381,6 +1403,11 @@ How to keep it current:
 - Checks: sections seeded and grouped; initial selection; search filter; status text.
 - Why: the Game Data window.
 
+### GameDataCacheDeferredBuildTests.cs
+- Covers: Services/GameDataCache (SwitchSet with deferBuild, BuildDeferred, BuildDeferredSet, ReloadActiveSet)
+- Checks: a put-off switch names the set and serves its tables on demand without firing ActiveSetChanged (nothing built); the first need builds it once; a character on another set builds only that set, one on the draft's set builds it; a switch is never put off while another set is built; a reload builds a put-off set.
+- Why: the unnamed draft a launch comes up on built its whole set (room graph, loops, indexes; 3.4 s in Hang-20261026-215238), thrown away when a character on another set loaded.
+
 ### GameDataCacheSharedReadTests.cs
 - Covers: Services/GameDataCache (shared reads, ActiveLoad, FileStampAsRead)
 - Checks: ActiveLoad moves with every load of a set and nothing else; FileStampAsRead is the file as read, as a prewarm read it, and is forgotten when the next read finds the file gone or unparseable.
@@ -1401,6 +1428,7 @@ How to keep it current:
 - Checks: a game-data change drops the run a fight held, the default task held for the party, and a training trip in a wait; without the hook each would start on the other set's rooms.
 - Why: runs restarting on wrong room numbers.
 - Named seam: PartyTrainCoordinator.RunTripAsync is internal, so the test starts a trip with a set decision: the leader tick's own start needs a running movement engine, MudPlay partners and their status reports.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### GameDataDeltaTests.cs
 - Covers: Services/SettingsResolver game-data deltas, ViewModels MonstersSectionViewModel
@@ -2057,6 +2085,15 @@ How to keep it current:
 - Checks: "I can now train to level: N" on crossing, multi-level bursts, pre-banked levels silent, no repeats, channel → wire verb, profile swap reseeds.
 - Why: avoid login spam.
 
+### LeverGateToggleTests.cs
+- Covers: Game/Map/DoorsHeldOpen with lever gates (MayPullLever, sightings, a pull held from when it went out), LoopRunner and AutoWalkManager at a lever-opened door or gate, and Game/Map/RoomTracker's arrival display read before StateChanged (SetRoom with the display's exits), played against LeverWorld.
+- Checks: a same-room lever whose gate the arrival display shows open is crossed without the lever, and one shown shut is pulled once; a guardroom lever whose gate our pull opened isn't pulled on the next lap inside the 300 s hold, and is after the hold and the gate's relock; a held gate that shut before the run got back is shown shut on arrival and the walker pulls it again, with no bonk; a crossing refused at a gate shown open on arrival (`The gate is closed!`) is walked by the walker, lever pulled again, with no recovery; a gate seen open that no pull of ours opened isn't pulled on a walk through it; a walk leaves the detour out with 100 s of hold left and walks it with 50 s left (2 s a move plus the 60 s margin), pulling the held gate in neither; a gate our pull opened 120 s before its room was shown is held from the pull, its far side too, and one only seen from the sighting; a pull not seen within 300 s doesn't date a later sighting; RoomShown is raised for the room a display confirmed when an engine moved on inside its transition; a walker's second walk through a gate its pull opened leaves the lever and its detour out.
+- Why: the engine flips a lever door or gate on every action, so a second pull locks it (Stock 1.11p handler @0x46c6bb; user, 2026-10-26, Paradigm the same), and a door seen open counts as open for 300 s on both realms (user, 2026-10-18); the arrival-driven "already open" check read no exits (report `paradigm-20261026-220231`).
+
+### LeverWorld.cs
+- Test infrastructure: the game side of a walk or loop through lever exits (rooms shown through a ServerFeed read by RoomDisplayParser, InboundMoveEchoScanner and MovementRefusalDetector; lever exits shut until their action, door and gate levers toggling; commands answered by a prompt; DoorsHeldOpen wired to the tracker and the refusals; a LoopRunner and an optional AutoWalkManager on ManualTimers and a ManualClock).
+- Why: the lever tests run the client's real display, echo, refusal and prompt paths.
+
 ### LightItemIndexTests.cs
 - Covers: Game/Light/LightItemIndex
 - Checks: only light items catalogued, strength/use count/burn time read (any ability slot), case-insensitive lookup, set switch rebuilds.
@@ -2183,6 +2220,11 @@ How to keep it current:
 - Why: two clients sharing a set's Loops folder; following it by notification instead of a full rescan every 3 s in every client (RAM pass, 2026-10-25), with nothing on the folder done on the UI thread and no change lost to a busy folder or a first minute (review of #1135).
 - Named seam: NavFolderWatcher.InFlight, WatchStarting and the internal constructor taking the check interval, the walk, the signature check, the read, the hand-back to the UI thread and the change-notification factory: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done, and drives the system's notification by hand except in the one test on a real folder.
 
+### LoopRemoteActionExitTests.cs
+- Covers: Game/Map/LoopExpander (a leg through a lever exit whose actions are in other rooms, via RemoteActionPathExpander; the detour spans and unroutable lever rooms of LoopExpander.Plan) and Game/Map/LoopRunner (lever actions and the primed crossing, joining the lap outside a detour, a crossing shown shut handed to AutoWalkManager, flees from a lever room and a waypoint room, a detour skipped at an exit shown open, the start refused for an unroutable lever room; a remote winch through WinchManager), and Game/Map/RoomTracker's re-show of the room stood in; on the treetops rooms 16/543-16/569 and 16/640 of data-Anomaly-v0.61.48-checked and two small room sets; the runs are played against LeverWorld.
+- Checks: the expansion of the Narrow Ledge ↔ rooftop loop types the five-lever chain (`turn knot`, `move branch`, `pull vine`, `push knot`, `tear bark`) each in its own room and crosses every lever exit on the lap after its action, as a plain move; the plan marks the vine gate's detour as leaving the route at 16/545, coming back there with all five actions inside it, and crossing out of 16/551; with the last lever room avoided the leg is unreachable, the lever room is named, and the loop is refused with the exit and the lever room; two laps each pull the chain and cross the vine gate, with no move into a shut exit; a start in 16/565, reached only inside the detour, joins elsewhere and works the whole chain; a `tear bark` that didn't take leaves the gate shown shut on arrival, and that crossing is walked by the walker, chain and all, with no bonk, no recovery and no second trip to the rooftop; a flee out of 16/569 before `tear bark` was taken sends it again on the walk back, and one after it was answered (a fight held the lap) doesn't, nor a waypoint's answered `ask`; a re-show of the room stood in carries the exit it now shows to its transition's listeners; a passage shown open in the room its detour leaves from is crossed on the next lap without the detour; a winch in another room is pulled again after *does not budge* and the loop walks back through the gate once it turns.
+- Why: report `paradigm-20261026-220231`, a loop that expanded its legs as plain moves stopped at 16/551 N with "multi-action exit requires actions in another room, which can't be auto-crossed on this route" (and it had been open on arrival, unread); a re-sent `buy` or lever would buy twice or lock the gate.
+
 ### LoopReconnectRestartRoomTests.cs
 - Covers: Game/Map/LoopRunner's restart after a reconnect through Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate; the runner's and the resolver's timers on ManualTimers), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
 - Checks: back in the same room the loop restarts from it; put back in another room, the first command is the walk from the shown room, never a step planned from the room before the drop; shown a room the map can't tell from another, the game is asked (`rm`) and the loop restarts from the room the answer names; with the `rm` unanswered, or nothing to ask on Stock, it starts from the room the map believes with a terminal notice (also for a drop between two lookalike rooms, which goes on from the room it left); with no room believed at all it is dropped with a notice; with no display and no further prompt the 12 s limit starts it from the room believed; with no display, the first prompt waits and the next one asks; a no-answer to a locate from before another drop neither starts the loop offline nor ends the next restart; a Stop drops a restart waiting on the answer; the master switch holds it; a reform whose display came with the prompt holds the restarted loop until the follower is back; a dark room keeps it behind its own reform hold; a loop a light buy handed over restarts from the shown room; a loop the user starts while the restart is owed is left running.
@@ -2250,7 +2292,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays, and Arm: a one-shot tick for a component that takes a scheduler) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
@@ -3389,7 +3431,7 @@ How to keep it current:
 
 ### RoomGraphManagerTests.cs
 - Covers: Game/Map/RoomGraphManager, RoomKey and RoomExit parse, BfsMapper routing
-- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions; a room command the exit's action cell already lists, by any of its synonyms, stays one action and keeps its roll; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
+- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions (a lever door marked as the door or gate its actions open, a guard's ask door not); a room command the exit's action cell already lists, by any of its synonyms, stays one action and keeps its roll; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
 - Why: reports `paradigm-20260714-091000`, `paradigm-20260728-180730`, `paradigm-20260729-221044`, `paradigm-20261026-150710`.
 
 ### RoomHazardIndexTests.cs
@@ -3409,7 +3451,7 @@ How to keep it current:
 
 ### RoomRenameRelearnTests.cs
 - Covers: Game/Map/RoomTracker + RoomGraphManager (learned room names)
-- Checks: A data-unnamed house renamed by its gang, whole or one room at a time, is walked and every room re-learned. A data-named room is never re-learned. Learning needs a move in flight that predicts the room, an echo, or a follow drag. Re-looks of the room being left, look-peeks, held displays with no echo, and teleporting exits must not name the room ahead.
+- Checks: A data-unnamed house renamed by its gang, whole or one room at a time, is walked and every room re-learned. A data-named room is never re-learned. Learning needs a move in flight that predicts the room, an echo, or a follow drag. Re-looks of the room being left, look-peeks, held displays with no echo, and teleporting exits must not name the room ahead. A room taken from a held display carries that display's exits to a listener of its step, not those of the display showing now.
 - Why: Gang houses can be renamed per room, so the stored name is no proof against the walk; this was confirming the tracker in the wrong room.
 
 ### RoomSearchRankingTests.cs
@@ -3632,7 +3674,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does; given a WirePromptScanner, each read reaches it before the terminal, as in the client. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
@@ -3923,8 +3965,8 @@ How to keep it current:
 
 ### StandardListContradictionsTests.cs
 - Covers: Game/Recovery/StandardListContradictions
-- Checks: one contradicting death is logged, the second marks the board; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once and keeps the count; no board/set → nothing counted
-- Why: telling a Stock board with edited rooms from standard data
+- Checks: run on a real board file (BbsProfileStore, read afresh on every ask as the client reads the active board) with a character loaded on it. One contradicting death is logged, the second marks the board and both are in bbs.json; the mark survives a profile reload and a restart; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once, the count is held for the session (Standing: still marked, unsaved) and RetryUnsaved writes it once the file can be written; the next death after a failed save writes the held count plus one; a held count is not retried while another board or set is in play, and is written when its own is back; failed counts are held and said once per board; a board file that doesn't parse counts nothing and is said once; no board/set → nothing counted
+- Why: telling a Stock board with edited rooms from standard data; a count changed on one copy of the board and saved from another never reached two
 
 ### StartupOptionsTests.cs
 - Covers: Services/StartupOptions
@@ -4297,8 +4339,14 @@ How to keep it current:
 
 ### TrainStatsScreenTests.cs
 - Covers: Game/Train/TrainStatsScreen, Game/Train/CpApplyCheck
-- Checks: reading the six stats and CP Left off the cursor-painted form (not a half-drawn one); applied / partial / nothing-spent judged from the form, or from CP via `stat`.
-- Why: report `paradigm-20260930-160602` (form took no keystrokes yet the row was counted applied).
+- Checks: reading the six stats and CP Left off the cursor-painted form (not a half-drawn one); each kind of screen recognised by its own text (Character Editor, `Char. Creation` box, Stock's scrolling form, the panel alone, none), the editor and the box read alike, the scrolling form not read; applied / partial / nothing-spent judged from the form, or from CP via `stat`.
+- Why: report `paradigm-20260930-160602` (form took no keystrokes yet the row was counted applied); the user, 2026-10-27 (screens recognised by type, never by realm, in case the game changes them).
+
+### TrainStatsWire.cs
+- Test infrastructure.
+- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen (with the cursor on a chosen box and Exit showing a chosen choice), and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted (and the same box redrawn with no clear), Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
+- Checks: n/a (helper).
+- Why: the trainer tests feed the byte order the reports recorded, not lines made up for the test.
 
 ### TrainerCatalogSelectTests.cs
 - Covers: Game/GameData/TrainerCatalog (TrainerShop)
@@ -4307,13 +4355,24 @@ How to keep it current:
 
 ### TrainerMenuTrackerTests.cs
 - Covers: Game/TrainerMenuTracker
-- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`, echo-prompt skip, exit on prompt / room display / live prompt; MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
-- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field.
+- Checks:
+  - marker entry gated on an outbound `train`/`train stats` within the window (the char-creation row bypasses it); input-menu arm on `train stats`; MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
+  - With the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner wired as AppServices wires it, and the screen read as the terminal session reads it:
+    - room displays, committed prompts and in-place prompts before the trainer screen are held (an earlier Enter's room redraw, party lines, a slow echo with a party line's prompt after it); the exit comes on a prompt / room display / live prompt after the form;
+    - Stock's refusals (not here, tournament mode, stats altered) release at once; a refusal the client doesn't know holds to the 10 s cap, then the late-form window closes;
+    - a form after the cap takes the keyboard back; one after the late-form window doesn't; ForceExit (the link dropping) ends the wait;
+    - a gossip naming the panel, or the panel and "Character Editor", neither marks the form up nor takes the keyboard back;
+    - the cursor-positioned `Char. Creation` box with no marker line is the form, off the screen;
+    - a box left on the screen isn't the answer and holds no longer than the cap; one drawn after a clear is the answer, and so is one redrawn in place with other figures; `ESC[H ESC[J`, ED 1 from the last cell and `ESC c` count as clears;
+    - a late box seen first by the terminal session's screen scan (ObserveScreen) takes the keyboard back as the screen-update order would have through the read's end.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes ManualTimers.Arm (the dispatcher's one-shot timer in the client), so the test decides when HoldCap and LateFormWindow are up.
+- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field; reports `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (released on output that answered earlier sends, with the form opening a moment later).
 
 ### TrainerScreenGateTests.cs
-- Covers: Game/TrainerScreenGate, Services/EngineSendGate
-- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume, holds compose with others, Dispose releases.
-- Why: background sends leaking into the `train stats` form.
+- Covers: Game/TrainerScreenGate, Services/EngineSendGate, Game/Remote/TelepathPacer (Hold / Release by holder)
+- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker); wrapped engine sends no-op then resume once the form (its echo and box fed as bytes through a ServerFeed) is left; holds compose with others; Dispose releases. The telepath pacer is held over the same stretch: a telepath queued before the form isn't written into it, and the trainer letting go leaves an @suicide hold in place.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
+- Why: background sends, and telepaths the pacer writes on its own timer, leaking into the `train stats` form (reports `paradigm-20261026-225703`, `-225718`, `-225733`).
 
 ### TrainerWalkCpPlanTests.cs
 - Covers: Game/TrainerWalkManager (with AutoTrainManager, StatParser, on the ErrandLightWorld stack)

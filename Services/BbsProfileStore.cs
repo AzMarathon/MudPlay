@@ -121,10 +121,14 @@ public sealed class BbsProfileStore
     }
 
     // Persist a BBS profile to BBS/{Name}/bbs.json, creating the folder on
-    // first save.
-    public void Save(BbsProfile profile)
+    // first save. realmRenames: the realms renamed in this copy since it was read
+    // (old name → new), so that what another holder wrote to a realm under its old
+    // name meanwhile is kept under the new one.
+    public void Save(BbsProfile profile) => Save(profile, null);
+
+    public void Save(BbsProfile profile, IReadOnlyDictionary<string, string>? realmRenames)
     {
-        try { SaveFile(profile); }
+        try { SaveFile(profile, realmRenames); }
         finally
         {
             if (profile is not null && PathGuard.Usable(AppPaths.BbsDir, profile.Name))
@@ -132,7 +136,7 @@ public sealed class BbsProfileStore
         }
     }
 
-    private void SaveFile(BbsProfile profile)
+    private void SaveFile(BbsProfile profile, IReadOnlyDictionary<string, string>? realmRenames)
     {
         if (profile is null) throw new ArgumentNullException(nameof(profile));
         if (string.IsNullOrWhiteSpace(profile.Name))
@@ -151,9 +155,18 @@ public sealed class BbsProfileStore
             // this copy was read. With nothing changed here, theirs stands;
             // otherwise write theirs with this copy's changes on top.
             if (JsonNode.DeepEquals(mine, baseline)) return;
-            JsonNode? merged = JsonThreeWayMerge.Merge(baseline, mine, theirs);
+            JsonNode? merged = JsonThreeWayMerge.Merge(baseline, mine, theirs, RealmsMerged(realmRenames));
             if (merged?.Deserialize<BbsProfile>(JsonStore.Options) is { } combined)
             {
+                // Each side removed a different realm, and none is left. A BBS
+                // always has one, and a file with none would get a fresh default
+                // realm on the next read; this copy's realms stand instead.
+                if (combined.Realms.Count == 0)
+                {
+                    combined.Realms.AddRange(mine.Deserialize<BbsProfile>(JsonStore.Options)!.Realms);
+                    _log?.Warn("BBS", $"'{profile.Name}' would have been saved with no realm, another client having "
+                        + "removed the others meanwhile: this copy's realms are kept.");
+                }
                 JsonStore.Save(path, combined);
                 Remember(profile, mine);
                 return;
@@ -162,6 +175,16 @@ public sealed class BbsProfileStore
         JsonStore.Save(path, profile);
         Remember(profile, mine);
     }
+
+    // The realms merge one at a time, by name: the Settings window's copy otherwise
+    // wrote back every realm as it was when the window opened, the counts the
+    // running client wrote since (death floor, deaths the standard list doesn't
+    // allow) with them.
+    private static Dictionary<string, JsonThreeWayMerge.KeyedArray> RealmsMerged(
+        IReadOnlyDictionary<string, string>? realmRenames) => new()
+    {
+        [nameof(BbsProfile.Realms)] = new JsonThreeWayMerge.KeyedArray(nameof(RealmProfile.Name), realmRenames),
+    };
 
     // What each profile handed out or saved held at that moment. A caller keeps a
     // BbsProfile for as long as its window is open (the Settings BBS tab) or the

@@ -34,6 +34,22 @@ internal sealed class ManualClock
         return done.Task;
     }
 
+    // A one-shot tick on this clock, for a component that takes a scheduler
+    // (a Func<TimeSpan, Action, IDisposable>): it runs when the clock reaches it,
+    // in turn with the delays; disposing what this returns first cancels it.
+    public IDisposable Arm(TimeSpan after, Action tick)
+    {
+        ArmedTick armed = new();
+        Delay(after).ContinueWith(_ => { if (!armed.Cancelled) tick(); }, TaskContinuationOptions.ExecuteSynchronously);
+        return armed;
+    }
+
+    private sealed class ArmedTick : IDisposable
+    {
+        public bool Cancelled { get; private set; }
+        public void Dispose() => Cancelled = true;
+    }
+
     // Moves on to the earliest delay and ends it. False when none is waiting.
     public bool RunNext()
     {

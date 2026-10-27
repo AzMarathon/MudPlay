@@ -7,7 +7,7 @@ namespace MudPlay.Views;
 // left of the main window (MainWindow owns its lifecycle + placement); its
 // DataContext is the GuideViewModel, so it's pure bindings — no named-field
 // access. Closed when the guide deactivates.
-public partial class GuideCardWindow : Window
+public partial class GuideCardWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     public GuideCardWindow()
     {

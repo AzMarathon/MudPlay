@@ -541,6 +541,15 @@ public static class KnownPatterns
     // `train stats`").
     public const string TrainStatsAltered = "train.stats-altered";
 
+    // The other refusals of `train stats` Stock prints, the form never opening:
+    // "You may not train your stats here!" (no room, not a trainer, or a trainer
+    // for another class) and "You may not do any training while in tournament
+    // mode!" (GAME_MECHANICS "Trainers: level band, class restriction, and `train
+    // stats`"). Paradigm's wording for these isn't recorded; a line it prints goes
+    // in the same pattern list.
+    public const string TrainStatsNotHere = "train.stats-not-here";
+    public const string TrainStatsTournament = "train.stats-tournament";
+
     // ----- Main menu -----------------------------------------------------
     // BBSes customise the banner version + realm name + prompt text, but
     // the menu options themselves are stable across customisations.

@@ -1,8 +1,42 @@
 # Version history
 
-## 3.186.17
+## 3.186.24
 
 - A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
+
+## 3.186.23
+
+- `train stats` is no longer abandoned on a room display or prompt that answers something sent just before it
+- Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
+- Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
+- Each kind of trainer screen is recognised by what it shows, whatever the realm, the cursor-drawn box included
+- After `train stats` the keyboard is held up to 10 s for the trainer screen; Stock's refusals let it go at once
+- A trainer screen that turns up just after that is still taken back and filled
+- A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
+- A dropped link, a reconnect or a profile change lets go of a trainer screen's hold
+- Telepaths queued just before the trainer screen wait until it closes
+- A training MudPlay started that can't save what it typed now leaves the trainer screen with QUIT, nothing saved
+- Bug reports show how far the game's answer to `train stats` got
+- bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
+
+## 3.186.22
+
+- Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+- An exit the arrival's room display shows open is crossed as it stands, by walks and loops alike
+- A lever door or gate seen open (ours or anyone's) isn't pulled shut again while it can still be open when we get there
+- A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
+- bug reports addressed: paradigm-20261026-220231
+
+## 3.186.20
+
+- A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
+- OK in Settings no longer undoes a realm's death floor or death count written while the window was open, a renamed realm included
+
+## 3.186.18
+
+- Conversation window with a full history opens without freezing
+- Starting on the unnamed profile skips building its game data until something needs it
+- bug reports addressed: Hang-20261026-215238
 
 ## 3.186.16
 
