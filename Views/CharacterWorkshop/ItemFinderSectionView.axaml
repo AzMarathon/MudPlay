@@ -248,6 +248,26 @@
                                               HorizontalAlignment="Stretch"
                                               ToolTip.Tip="Show only items that negate this spell ((none) = off)."/>
                                 </StackPanel>
+                                <!-- Every other bonus column, collapsed so the common
+                                     rows above stay in view. 0 disables a row. -->
+                                <Expander Header="More stats" HorizontalAlignment="Stretch"
+                                          ToolTip.Tip="Show only items with at least this much of a stat (0 = off).">
+                                    <ItemsControl ItemsSource="{Binding MoreStatFilters}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Spacing="4"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:ItemFinderStatFilter">
+                                                <DockPanel>
+                                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter" Value="{Binding Min, Mode=TwoWay}"/>
+                                                    <TextBlock Classes="FieldLabel" Text="{Binding Label}"/>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Expander>
                             </StackPanel>
                         </Border>
                     </StackPanel>

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.186.25
+
+- Item Finder: a More stats filter for every bonus column (Quickness, Charm, resists, …)
+
 ## 3.186.24
 
 - A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
