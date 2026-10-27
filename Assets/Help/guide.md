@@ -5881,7 +5881,10 @@ A **buff** you want kept up only while a pool is topped off is set in the **Buff
 ### Cast when HP full / Cast when mana full
 
 **Default:** unset; target blank; **Cast while resting** on
-**What it does:** Any spell, not just a buff: a utility spell, a spell you cast to train it, a mana burn. It is cast **once**, out of combat, when the pool comes **up to full**, and again only after that pool has **dropped below full and refilled**. "Full" is the **Rest max** level on the Health tab (the same mark the Buff Watchdog's when-full buffs use), not 100%. So a spell that doesn't change the pool (an HP-full utility spell) goes out once and isn't repeated while you stay full, and a mana-full mana burn goes out every time your mana refills.
+**What it does:** Any spell, not just a buff: a utility spell, a spell you cast to train it, a mana burn. It is cast **once**, out of combat, when the pool comes **up to full**, and again only after that pool has **dropped and refilled**. "Full" is the **Rest max** level on the Health tab (the same mark the Buff Watchdog's when-full buffs use), not 100%. So a spell that doesn't change the pool (an HP-full utility spell) goes out once and isn't repeated while you stay full, and a mana-full mana burn goes out every time your mana refills. The two slots don't look at each other's pool: the mana slot goes off whether your HP is full or not.
+
+- **A drop under Rest max** (a fight, a burn) fires it again as soon as the pool is back up to Rest max.
+- **A smaller drop** that leaves the pool above Rest max (a cheap spell's own cost, such as a 5-mana *healing rain* cast at full mana) fires it again once the pool is back at its **top**, its full 100%. It isn't repeated while the pool climbs back.
 
 - **Spell** — the cast code; the suggestions are your class's spells, as on the other pickers.
 - **Target** — what to type after the code, such as a party member's name. Blank casts it with no target (on yourself).
@@ -6033,7 +6036,7 @@ Settings → Party. The **Combat profile** chips at the top switch profiles from
 
 **Default:** `Mid`
 **Available options:** `Front`, `Mid`, `Back`
-**What it does:** Your preferred position in a party. When you join someone's party as a follower, MudPlay sends `frontrank` (Front) or `backrank` (Back). **Mid** is the game's default, so nothing is sent for it. As the leader nothing is sent, because the game keeps a leader in the front rank.
+**What it does:** Your preferred position in a party. When you join someone's party as a follower, MudPlay sends `frontrank` (Front) or `backrank` (Back). **Mid** is the game's default, so nothing is sent for it. As the leader nothing is sent, because the game keeps a leader in the front rank. The command goes out once, on joining; if the game turns it down, its answer is in the program log, and a bug report's Party section shows the rank you want and what was last sent or said about it.
 **When you might change it:** Set it to your role: Front for a fighter who should take the hits, Back for a caster or healer.
 
 ### Minor / Major Party Heal — Single-target and Party (AOE) spells

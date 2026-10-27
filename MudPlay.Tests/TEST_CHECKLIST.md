@@ -600,8 +600,8 @@ How to keep it current:
 
 ### CastWhenFullTests.cs
 - Covers: Game/Spells/CastingDirector's cast-when-full slots (+ CastCoordinator, PromptParser, CombatStateTracker), driven by the game's prompts, room and combat lines, and a ManualClock
-- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
-- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds).
+- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; a cheap spell's own cost, a dip that stays over the mark, re-arms it for the pool's top (not refired while mana climbs there), and a dip that goes on under the mark fires at the mark; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
+- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds); a 5-mana healing rain set to cast when mana is full that never went out again while HP was full (player report, 2026-10-27).
 
 ### CasterMessageMatcherLongLineTests.cs
 - Covers: Game/Spells/CasterMessageMatcher (literal walk)
@@ -2869,8 +2869,8 @@ How to keep it current:
 
 ### PartyManagerTests.cs
 - Covers: Game/PartyManager, Game/PartyMember display props
-- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
-- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to).
+- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; the rank decision on joining (sent, skipped while already counted in a party, the game's refusal or move) recorded for the bug report; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
+- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to); a cleric set to back rank found in the middle after joining a party of two (player report, 2026-10-27).
 
 ### PartyPathItemGateTests.cs
 - Covers: Game/Map/PartyPathItemGate, PartyHandOverMemory

@@ -147,6 +147,48 @@ public sealed class CastWhenFullTests : IDisposable
         Assert.Equal(new[] { "burn", "burn" }, _wire);
     }
 
+    // A cheap spell cast at full mana spends less than takes mana under the rest-max
+    // mark, and with HP full nothing else spends any: its own cost is the dip, and
+    // it goes out again once mana is back at the top, not while mana climbs to it.
+    [Fact]
+    public void ACheapSpell_GoesOutAgainEachTimeManaIsBackAtTheTop()
+    {
+        _spells.CastWhenMaFullSpell = "rain";
+        StatScreen();
+        Prompt(200, 100);
+        Assert.Equal(new[] { "rain" }, _wire);
+
+        NextRound();
+        Prompt(200, 98);    // its own 2 mana: still over the 95 mark
+        NextRound();
+        Prompt(200, 99);
+        NextRound();
+        Assert.Single(_wire);
+        Assert.Contains(_director.DescribeWhenFull(), l => l.Contains("fires when mana is back at its top"));
+
+        Prompt(200, 100);
+
+        Assert.Equal(new[] { "rain", "rain" }, _wire);
+    }
+
+    // A dip that began over the mark and went on under it fires at the mark, as a
+    // rest refills to it.
+    [Fact]
+    public void ADipThatGoesOnUnderTheMark_FiresAtTheMark()
+    {
+        _spells.CastWhenMaFullSpell = "rain";
+        StatScreen();
+        Prompt(200, 100);
+        NextRound();
+        Prompt(200, 98);
+        NextRound();
+        Prompt(200, 40);
+        NextRound();
+        Prompt(200, 96);
+
+        Assert.Equal(new[] { "rain", "rain" }, _wire);
+    }
+
     [Fact]
     public void HeldInCombat_CastOnceTheRoomIsClear()
     {

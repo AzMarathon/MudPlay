@@ -810,6 +810,43 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void FollowerJoin_RankDecisionAndTheGamesAnswer_AreRecorded()
+    {
+        // A "set to back rank but joined in the middle" report turns on whether
+        // `backrank` went out and what the game said to it, so both are kept for
+        // the bug report.
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+
+        _feed.Line("You are now following Raijin.");
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
+
+        _feed.Line("There would not be enough people left in the frontrank if you did that.");
+        Assert.Contains("the game refused a rank change", p.LastRankDecision);
+
+        _feed.Line("You have moved to the back ranks of your group.");
+        Assert.Contains("moved us to the back ranks", p.LastRankDecision);
+    }
+
+    [Fact]
+    public void FollowLine_WhileAlreadyCountedInAParty_RecordsThatNoRankWentOut()
+    {
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+        _feed.Line("You are now following Raijin.");
+        wire.Clear();
+
+        _feed.Line("You are now following Raijin.");
+
+        Assert.Empty(wire);
+        Assert.Contains("already counted us in a party", p.LastRankDecision);
+    }
+
+    [Fact]
     public void LiveRankChange_OtherMember_UpdatesRankImmediately()
     {
         // Observer side: when another party member reranks, the game

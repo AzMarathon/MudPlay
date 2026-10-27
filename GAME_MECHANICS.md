@@ -8994,6 +8994,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 
 **Client use:**
 - `PartyManager.OnMemberRankChanged` reads the other-member line (`KnownPatterns.PartyMemberRankChanged`: front, middle or back) and updates that member's rank without waiting for the next `par`.
+- `PartyManager.OnRankRefused` reads the refusals above (`KnownPatterns.PartyRankRefused`, Stock wording) into the program log and the bug report's *Last rank decision*, beside the `frontrank` / `backrank` the client sends on joining a party as a follower.
 
 ### Following the leader: follow / drag movement
 *Status: CONFIRMED (live follower capture, Darkwood Forest)*

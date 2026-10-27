@@ -906,6 +906,12 @@ public static class DefaultPatterns
         // across all three (front/middle/back).
         yield return new RegexPattern(KnownPatterns.PartySelfRankChanged,
             @"^You have moved to the (?<rank>front|middle|back) ranks of your group\.?\s*$");
+        // The game turning a rank command down, as the Stock DLL words it. The
+        // two-space gap after "rank." is the game's; any run of spaces matches.
+        yield return new RegexPattern(KnownPatterns.PartyRankRefused,
+            @"^(?:You may not enter the backrank of your own party\.|You may not leave your current rank in your own party\."
+            + @"|You are the only one in the (?:front|back) rank\.\s+You may not leave\."
+            + @"|There would not be enough people left in the frontrank if you did that\.)\s*$");
         // "X stops to rest." — third-person rest observation. Given-name only
         // (matches roster matching); the handler scopes it to party members.
         // Self's own action reads "You stop to rest." (different verb), so this

@@ -486,6 +486,7 @@ public static class KnownPatterns
     // update PartyMember.Rank live instead of waiting for the next par poll.
     public const string PartyMemberRankChanged    = "party.member-rank-changed";    // "X just moved to the {front|back} rank in your group." / "X just moved to the middle of your group."
     public const string PartySelfRankChanged      = "party.self-rank-changed";      // "You have moved to the {front|middle|back} ranks of your group." — self's own rerank confirmation
+    public const string PartyRankRefused          = "party.rank-refused";           // the game's refusals of a rank command (GAME_MECHANICS "Party ranks")
     // "X stops to rest." — a party member (roster-scoped by the handler) sat down
     // to rest. Flips PartyMember.Resting the moment it's seen, ahead of the 5s par
     // poll, so a follower can mirror the leader's rest immediately. (The meditate
