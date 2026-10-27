@@ -1103,6 +1103,21 @@ public sealed class RoomGraphManager
                 var exitKey = (target, dir);
                 if (!byExit.TryGetValue(exitKey, out List<ExitAction>? list))
                     byExit[exitKey] = list = new List<ExitAction>();
+
+                // The exit's own action cell can already list this keyword (8/560's
+                // `turn wheel` on its N gate is both its CMD and a D-slot cell). Adding
+                // it again had the engines send it twice per crossing, and the gate was
+                // still shut after every pair (report paradigm-20261026-150710;
+                // GAME_MECHANICS "Multi-action exits and levers" has the door toggle).
+                int listed = list.FindIndex(a => a.StepNumber == 1 && a.RemoteSourceRoom == remote
+                    && a.Commands.Contains(keyword, StringComparer.OrdinalIgnoreCase));
+                if (listed >= 0)
+                {
+                    if (rolled) list[listed] = list[listed] with { Rolled = true };
+                    _log?.Log(LogSeverity.Debug, "RoomGraph",
+                        $"Room {target} {dir}: room-CMD action '{keyword}' is already the exit's action cell; not added twice.");
+                    continue;
+                }
                 list.Add(new ExitAction(StepNumber: 1, new[] { keyword }, remote, Rolled: rolled));
 
                 _log?.Log(LogSeverity.Info, "RoomGraph",
