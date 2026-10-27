@@ -269,6 +269,7 @@ How to keep it current:
     - a form 8 s late, after the echo and a party line's prompt, is filled by the same pass; a form after the cap takes the keyboard back and the same pass fills it;
     - a box left on the screen from before, with only a marker row and no clear, is never typed into;
     - a form showing nothing to raise is walked with Enter and left through SAVE, not left open;
+    - a pass that can't save what the form shows (Strength refused, on a key-by-key Character Editor whose Exit redraws on each Space) walks to Exit with plain Enters, brings it round to QUIT with Space and leaves, nothing saved and the keyboard released; an Exit that never reads QUIT gets nothing but Space and the form is left open; a cursor on no box gets no key past the stop;
     - while a form may still turn up for the user's own `train stats` (the late-form window), Train now sends no second `train stats`;
     - each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
 - Named seam: the `schedule` constructor parameter of TrainerMenuTracker (the dispatcher's one-shot timer in the client) takes ManualClock.Arm here, so the cap and late-form window run on the pass's clock.
@@ -4324,7 +4325,7 @@ How to keep it current:
 
 ### TrainStatsWire.cs
 - Test infrastructure.
-- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen, and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted (and the same box redrawn with no clear), Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
+- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen (with the cursor on a chosen box and Exit showing a chosen choice), and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted (and the same box redrawn with no clear), Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
 - Checks: n/a (helper).
 - Why: the trainer tests feed the byte order the reports recorded, not lines made up for the test.
 

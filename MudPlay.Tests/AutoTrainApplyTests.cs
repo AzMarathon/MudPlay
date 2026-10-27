@@ -617,6 +617,7 @@ public sealed class AutoTrainApplyTests : IDisposable
         ServerFeed game = new(_router, promptScanner: scanner);
         TerminalScreen screen = game.Emulator.Screen;
         _readScreen = () => TrainStatsWire.ScreenText(screen);
+        _manager?.SetCursorReader(() => (screen.CursorY, screen.CursorX));
         _trainer.ReadScreen = _readScreen;
         _trainer.ScreenClears = () => game.Emulator.ScreenClears;
         _trainerHere = false;
@@ -903,6 +904,124 @@ public sealed class AutoTrainApplyTests : IDisposable
         Start(manager.TrainNow);
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.False(manager.IsBusy);
+    }
+
+    // ----- a pass that can't finish leaves the form without saving -------------
+
+    // The Character Editor on the wire, key by key: Strength refuses what is typed
+    // into it (the cursor stays on it, as the game does for a value it won't take),
+    // every other Enter moves the cursor a box on, Space on Exit steps it through
+    // the given choices, and Enter on Exit leaves: saving on SAVE, not on QUIT.
+    private sealed class EditorOnTheWire
+    {
+        public int Field;
+        public int Choice;
+        public bool Saved, Quit;
+        public string[] Choices = { "SAVE", "EDIT", "QUIT" };
+        public bool CursorOffTheBoxes;
+        private readonly ServerFeed _game;
+
+        public EditorOnTheWire(ServerFeed game) => _game = game;
+
+        public void Draw() =>
+            _game.Raw(TrainStatsWire.Form(133, 26, field: CursorOffTheBoxes ? -1 : Field, exit: Choices[Choice]));
+
+        public void Take(string text)
+        {
+            if (text == "train stats" || Saved || Quit) return;
+            if (text == " ")
+            {
+                if (Field == 10) Choice = (Choice + 1) % Choices.Length;
+                Draw();
+                return;
+            }
+            if (Field == 10)
+            {
+                Saved = Choices[Choice] == "SAVE";
+                Quit = Choices[Choice] == "QUIT";
+                _game.Raw(Saved ? TrainStatsWire.Saved() : "\u001b[2J\u001b[HSomeone just entered the Realm.\r\n" + TrainStatsWire.Prompt());
+                return;
+            }
+            if (!(Field == 1 && text.Length > 0)) Field++;
+            Draw();
+        }
+    }
+
+    private EditorOnTheWire EditorKeyByKey(ServerFeed game)
+    {
+        EditorOnTheWire editor = new(game);
+        _onTyped = editor.Take;
+        return editor;
+    }
+
+    // An `@train` pass whose Strength the form refused: the form doesn't show the
+    // plan's row, and SAVE would keep it. The pass walks to Exit with plain Enters,
+    // brings it round to QUIT with Space, and leaves; nothing is saved and the
+    // keyboard is released.
+    [Fact]
+    public void APassThatCantFinish_LeavesTheFormWithQuit_NotSave()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.True(editor.Quit);
+        Assert.False(editor.Saved);
+        Assert.Equal(2, Sent().Count(s => s == " "));
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Equal(0, _committed);
+        Assert.Contains("left without saving", manager.LastApplyNote);
+    }
+
+    // An Exit field that never comes round to QUIT: nothing is pressed on it but
+    // Space, nothing is saved, and the form is left open for the user.
+    [Fact]
+    public void AnExitThatNeverShowsQuit_IsLeftOpen_WithNothingSaved()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+        editor.Choices = new[] { "SAVE", "EDIT" };
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.False(editor.Saved);
+        Assert.False(editor.Quit);
+        Assert.Equal(10, editor.Field);
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Contains("where the plan typed", manager.LastApplyNote);
+    }
+
+    // The cursor isn't on any box the screen can name: no Enter or Space is sent
+    // past the stop, and the form is left open.
+    [Fact]
+    public void ACursorOffTheBoxes_GetsNoKeyPastTheStop()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+        editor.CursorOffTheBoxes = true;
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26, field: -1)));
+        Settle();
+
+        // `train stats`, Family Name and the six stat boxes: nothing after the stop.
+        Assert.Equal(8, Sent().Length);
+        Assert.DoesNotContain(" ", Sent());
+        Assert.False(editor.Saved);
+        Assert.True(_trainer.MenuOwnsKeyboard);
     }
 
     // Moves the pass's clock to the given time after it started, running what

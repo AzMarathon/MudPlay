@@ -36,7 +36,11 @@ internal static class TrainStatsWire
         + Prompt();
 
     // The Character Editor, as the game paints it after each keystroke.
-    public static string Form(int strength, int cpLeft, string familyName = "")
+    // field is the box the game has the cursor on (0 Family Name, 1-6 the stats,
+    // 7-9 the appearance boxes, 10 Exit), and exit what Exit shows; the cursor is
+    // parked on that box's row. A field of -1 parks it off every box (on the
+    // title row).
+    public static string Form(int strength, int cpLeft, string familyName = "", int field = 0, string exit = "SAVE")
     {
         StringBuilder form = new("\u001b[2J\u001b[H");
         Row(form, "    .─────────────────────────────────────.──.");
@@ -58,10 +62,11 @@ internal static class TrainStatsWire
         Row(form, "  │ »  Hair Colour   Black            « │ ───────┤ toggle between choices for");
         Row(form, "  │ »  Eye Colour    Black            « │        └ your physical description");
         Row(form, "  │                                     │");
-        Row(form, $"  │ »  Exit: SAVE «  » CP Left:    {cpLeft,4} « │ ──────── SAVE, EDIT or QUIT");
+        Row(form, $"  │ »  Exit: {exit,-4} «  » CP Left:    {cpLeft,4} « │ ──────── SAVE, EDIT or QUIT");
         Row(form, " ⌐┴─────────────────────────────────.     │");
         Row(form, " \\_________________________________\\___/");
-        return form.Append("\u001b[5;36H").ToString();
+        int row = field switch { < 0 => 2, 0 => 5, <= 6 => 8 + field, <= 9 => 9 + field, _ => 20 };
+        return form.Append($"\u001b[{row};36H").ToString();
     }
 
     // The `Char. Creation` box (captures paradigm-20260805-*), painted with cursor

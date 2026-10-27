@@ -11,6 +11,7 @@
 - A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
 - A dropped link, a reconnect or a profile change lets go of a trainer screen's hold
 - Telepaths queued just before the trainer screen wait until it closes
+- A training MudPlay started that can't save what it typed now leaves the trainer screen with QUIT, nothing saved
 - Bug reports show how far the game's answer to `train stats` got
 - bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
 

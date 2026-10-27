@@ -60,6 +60,7 @@ public sealed class AutoTrainManager : IDisposable
     private readonly Func<TimeSpan, Task> _delay;
     private readonly WireSender _wire = new();
     private Func<string>? _readScreen;
+    private Func<(int Row, int Col)>? _readCursor;
 
     private Phase _phase = Phase.Idle;
     private int _sessionId;
@@ -93,6 +94,18 @@ public sealed class AutoTrainManager : IDisposable
     // as it is drawn, ahead of the stat rows.
     private static readonly TimeSpan FormDrawTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan FormDrawPoll = TimeSpan.FromMilliseconds(50);
+    // Leaving a form the pass can't finish: plain Enters to its Exit field (the form
+    // has eleven fields, so no more than that), then Space until Exit reads QUIT.
+    // The Exit field starts on SAVE and Space toggles SAVE / EDIT / QUIT (GAME_MECHANICS
+    // "The `train stats` screen (Char. Creation box)"); how many presses that takes
+    // isn't recorded, so the field is read after each, up to a few.
+    private const int MaxEntersToExit = 11;
+    private const int MaxSpacesToQuit = 4;
+    private static readonly string[] FieldLabels =
+    {
+        "Family Name", "Strength", "Intellect", "Willpower", "Agility", "Health", "Charm",
+        "Hair Length", "Hair Colour", "Eye Colour",
+    };
     // How long the form gets to show the last typed value before SAVE.
     private static readonly TimeSpan FormSettleTimeout = TimeSpan.FromSeconds(3);
     // How long the form gets to close after SAVE before the keyboard is released
@@ -167,6 +180,10 @@ public sealed class AutoTrainManager : IDisposable
     // the form is read from. The grid belongs to the terminal session, so the
     // main-window view model supplies it alongside the wire sender.
     public void SetScreenReader(Func<string> visibleScreenText) => _readScreen = visibleScreenText;
+
+    // Binds the read of the terminal cursor's row and column (from 0), which says
+    // which of the form's fields the game has the cursor on.
+    public void SetCursorReader(Func<(int Row, int Col)> cursor) => _readCursor = cursor;
 
     // True while a train session (our send → exit → checked) is in flight.
     public bool IsBusy => _phase != Phase.Idle || _verifying;
@@ -634,13 +651,128 @@ public sealed class AutoTrainManager : IDisposable
         TrainStatsScreen? shown = await ReadSettledFormAsync(session);
         if (FormLost(session)) return (false, shown);
         if (shown is not null && shown.Stats.SequenceEqual(_target)) return (true, shown);
-        StopBeforeSave(shown);
+        if (_manualEntry)
+        {
+            // The user opened this form: it is theirs to put right or leave.
+            StopBeforeSave(shown);
+            return (false, shown);
+        }
+        await LeaveWithoutSavingAsync(session, shown);
         return (false, shown);
     }
 
-    // The form doesn't show what the pass meant to save. Nothing more is typed:
-    // the form stays open for the user to put right or leave, and the pass lets go
-    // of it without forcing the keyboard free.
+    // A pass the client started can't save what the form shows: it leaves the form
+    // with QUIT, so an unattended character isn't left in it with the keyboard held.
+    // Only plain Enters (which change nothing) and Space on Exit are sent, each only
+    // once the screen says the cursor is where the key belongs; Enter on Exit goes
+    // only while it reads QUIT, since SAVE would keep what can't be unspent. Short of
+    // that, the form is left open as for the user's own.
+    private async Task LeaveWithoutSavingAsync(int session, TrainStatsScreen? shown)
+    {
+        string why = shown is null
+            ? "the trainer screen could no longer be read before SAVE"
+            : $"the trainer screen shows {Describe(shown.Stats)} where the plan typed {Describe(_target)}";
+        _log?.Warn("AutoTrain", $"Stopped before SAVE — {why}. Leaving the trainer screen without saving.");
+        if (await QuitTheFormAsync(session) is { } failed)
+        {
+            if (_sessionId != session) return;
+            _log?.Warn("AutoTrain", $"Couldn't leave the trainer screen without saving ({failed}).");
+            StopBeforeSave(shown);
+            return;
+        }
+        bool closed = await FormClosedAsync();
+        if (_sessionId != session) return;
+        if (!closed) _trainer.ForceExit("auto-train left the trainer screen with QUIT — exit prompt missed");
+        if (_phase == Phase.Replaying) _phase = Phase.Idle;
+        LastApplyNote = $"{why}; the trainer screen was left without saving";
+        Conclude(CpApplyOutcome.NothingSpent);
+    }
+
+    // Enters to the Exit field, Space to QUIT, then Enter. Null once the Enter on
+    // QUIT has gone; otherwise why it stopped, with nothing pressed on Exit but Space.
+    // Once the form is drawn nothing but its own redraws should reach the screen
+    // (GAME_MECHANICS "The `train stats` screen (Char. Creation box)"), yet a party
+    // line was seen drawn over it, so every key waits for the cursor's row to name
+    // a box: a row anything else wrote over stops the walk instead of guessing.
+    private async Task<string?> QuitTheFormAsync(int session)
+    {
+        for (int enters = 0; ; enters++)
+        {
+            string? row = CursorRow();
+            if (ExitChoice(row) is not null) break;
+            string? field = row is null ? null : FieldLabels.FirstOrDefault(label => row.Contains(label, StringComparison.Ordinal));
+            if (field is null) return "the cursor couldn't be confirmed on a field of the form";
+            if (enters == MaxEntersToExit) return "the Exit field wasn't reached";
+            (int Row, int Col)? before = _readCursor?.Invoke();
+            _log?.Info("AutoTrain", $"Leaving the trainer screen: Enter on {field}.");
+            _wire.Send(string.Empty);
+            if (!await ScreenSettlesAsync(session, () => _readCursor?.Invoke() != before))
+                return _sessionId != session ? "the pass was replaced" : $"the cursor didn't move off {field}";
+        }
+        for (int spaces = 0; ; spaces++)
+        {
+            string? choice = ExitChoice(CursorRow());
+            if (choice is null) return "the cursor left the Exit field";
+            if (choice == "QUIT") break;
+            if (spaces == MaxSpacesToQuit) return "the Exit field never showed QUIT";
+            _log?.Info("AutoTrain", $"Leaving the trainer screen: Space on Exit ({choice}).");
+            _wire.SendKeys(" ");
+            if (!await ScreenSettlesAsync(session, () => ExitChoice(CursorRow()) != choice))
+                return _sessionId != session ? "the pass was replaced" : $"the Exit field stayed on {choice}";
+        }
+        _log?.Info("AutoTrain", "Leaving the trainer screen: Enter on Exit (QUIT).");
+        _wire.Send(string.Empty);
+        return null;
+    }
+
+    // Waits for the game's redraw after a key: the condition holds and the cursor
+    // and its row read the same on two reads in a row (a redraw split across server
+    // reads is read again once it has all come). False when it doesn't within the
+    // settle time, or the pass is no longer this one.
+    private async Task<bool> ScreenSettlesAsync(int session, Func<bool> condition)
+    {
+        DateTimeOffset giveUp = _now() + FormSettleTimeout;
+        (int Row, int Col)? last = null;
+        string? lastRow = null;
+        while (_sessionId == session && _phase == Phase.Replaying)
+        {
+            await _delay(TimeSpan.FromMilliseconds(50));
+            if (_sessionId != session || _phase != Phase.Replaying) return false;
+            (int Row, int Col)? cursor = _readCursor?.Invoke();
+            string? row = CursorRow();
+            if (condition() && cursor == last && row == lastRow) return true;
+            last = cursor;
+            lastRow = row;
+            if (_now() >= giveUp) return false;
+        }
+        return false;
+    }
+
+    // The text of the screen row the cursor is on, or null when it can't be read.
+    private string? CursorRow()
+    {
+        if (_readCursor?.Invoke() is not { } cursor || _readScreen?.Invoke() is not { } screen) return null;
+        string[] rows = screen.Split('\n');
+        return cursor.Row >= 0 && cursor.Row < rows.Length ? rows[cursor.Row] : null;
+    }
+
+    // What the Exit field shows (SAVE, EDIT or QUIT) when the row is the Exit
+    // field's, else null.
+    private static string? ExitChoice(string? row)
+    {
+        if (row is null) return null;
+        int at = row.IndexOf("Exit:", StringComparison.Ordinal);
+        if (at < 0) return null;
+        string rest = row[(at + "Exit:".Length)..].TrimStart();
+        foreach (string choice in new[] { "SAVE", "EDIT", "QUIT" })
+            if (rest.StartsWith(choice, StringComparison.Ordinal)) return choice;
+        return null;
+    }
+
+    // The form doesn't show what the pass meant to save, and it isn't left with
+    // QUIT (the user's own form, or QUIT couldn't be reached). Nothing more is
+    // typed: the form stays open for the user to put right or leave, and the pass
+    // lets go of it without forcing the keyboard free.
     private void StopBeforeSave(TrainStatsScreen? shown)
     {
         LastApplyNote = shown is null
