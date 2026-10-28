@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.187.2**
-> - A swing left unanswered by a dropped link no longer sends a room re-display at the dead connection
-> - Map: Shift+Ctrl+right-click follows a room's down exit and Shift+Alt+right-click its up exit, even when it has both
+> **Version 3.187.3**
+> - Party: a follower also rests or meditates when another member does and the leader has stopped moving
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

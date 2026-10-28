@@ -9256,8 +9256,10 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - When the party **leader** is `@wait`-held and **not poisoned**, the leader rests (or meditates) to use the forced downtime, until the wait clears.
   - A **follower** that sees the leader rest/meditate rests/meditates too, **unless the follower is poisoned** (poison ticks break rest and waste the downtime).
   - Poison blocks resting altogether — see *Health, resting & recovery → Poison prevents resting* (CONFIRMED 2026-08-17), which supersedes this 2026-07-11 note's claim that only these two downtime-rest paths gate on poison.
+  - **A follower that sees another member rest or meditate, with the leader stopped, rests or meditates too** *(**Client policy**, user directive, 2026-10-27)*, rest or meditate as its own settings choose. "Stopped" is read as no follow drag (` -- Following your Party leader <dir> --`) since the member's rest was seen: a member's `par` letter is only as fresh as the last poll, so a rest seen before a drag no longer counts until a later `par` lists it again.
 - **Client use:**
   - The `<name> stops to rest.` line flips `PartyMember.Resting` the instant it's seen, ahead of the 5-second `par` poll, so a follower can mirror the leader's rest immediately.
+  - `PartyRestWatcher.PartyRestingFor` names who the party is resting for (the leader, or a member seen resting since the last drag); `HealthManager` tops off while it names someone (user, 2026-10-27).
 
 ### Party ailment signaling and cross-client sync (MegaMUD parity)
 *Status: CONFIRMED 2026-09-12 (user)*
