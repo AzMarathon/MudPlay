@@ -453,6 +453,12 @@ public sealed class DefaultPatternsTests
         // Multi-word spell name — lazy capture stops at the trailing period.
         Assert.True(p.TryMatch(Line("You read a scroll and learn the spell minor heal."), out MatchResult r2));
         Assert.Equal("minor heal", r2.Groups[0]);
+
+        // A trainer's textblock `learnspell` line has no scroll in it.
+        Assert.True(p.TryMatch(Line("You learn the spell chaos shield."), out MatchResult r3));
+        Assert.Equal("chaos shield", r3.Groups[0]);
+
+        Assert.False(p.TryMatch(Line("You learn the following Kai abilities:"), out _));
     }
 
     [Fact]

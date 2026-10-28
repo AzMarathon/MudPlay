@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.7
+
+- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
+
 ## 3.187.6
 
 - Switching to a just-imported game data set no longer crashes when another program briefly holds a table file
