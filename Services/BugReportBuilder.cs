@@ -1685,6 +1685,7 @@ public static class BugReportBuilder
             string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
                 ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
                 : "Buffs";
+            heading += $" (new buffs: ma>={unifiedBuffs.BlessIfAboveMa})";
             Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(svc, s)}]", s.Spell)));
         }
 

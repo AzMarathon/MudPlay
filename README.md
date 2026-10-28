@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.187.6**
-> - Switching to a just-imported game data set no longer crashes when another program briefly holds a table file
-> - Party: a follower left behind right after its @ok is asked for a fresh one, not waited on for the full window
+> **Version 3.187.7**
+> - Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

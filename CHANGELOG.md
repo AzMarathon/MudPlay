@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.7
+
+- Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
+
 ## 3.187.6
 
 - Switching to a just-imported game data set no longer crashes when another program briefly holds a table file

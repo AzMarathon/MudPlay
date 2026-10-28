@@ -276,6 +276,20 @@
                                     ToolTip.Tip="Print to the terminal every spell your class hasn't learned yet that's within reach — castable now, plus everything up to 5 levels ahead — each as [Spell name - Unlearned, Requires Level XX]."/>
                         </StackPanel>
 
+                        <!-- One mana floor for every buff: new buffs start at it, Set on all
+                             writes it onto every configured buff (each keeps its own after). -->
+                        <StackPanel Orientation="Horizontal" Margin="8,0,8,4" Spacing="6">
+                            <TextBlock Text="{Binding AllBuffsFloorLabel}" VerticalAlignment="Center"/>
+                            <NumericUpDown Value="{Binding AllBuffsFloor, Mode=TwoWay}"
+                                           Minimum="0" Maximum="{Binding AllBuffsFloorMaximum}" Increment="5" FormatString="0"
+                                           Width="110"
+                                           ToolTip.Tip="The mana floor for all your buffs. New buffs start at it. 0 never holds a buff back for mana."/>
+                            <Button Content="Set on all" Padding="8,2"
+                                    IsEnabled="{Binding HasSlots}"
+                                    Command="{Binding SetFloorOnAllBuffsCommand}"
+                                    ToolTip.Tip="Give every configured buff this mana floor. Each buff's edit dialog can still change its own afterwards."/>
+                        </StackPanel>
+
                         <!-- Cast-priority toggle (independent of the row layout) + reset-layout.
                              Drag the grip / use ▲▼ on a row to re-arrange; this button decides
                              whether the engine casts by type (default) or in the shown order. -->

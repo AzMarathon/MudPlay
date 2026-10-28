@@ -34,6 +34,12 @@ public sealed class BuffSettings
     // the exact stored list order (top to bottom). The two modes are identical
     // until the rows are re-arranged.
     public bool PriorityTopDown { get; set; }
+
+    // The Buff Watchdog's one mana floor for every buff: a new buff starts at it, and
+    // "Set on all" writes it onto every slot's own BlessIfAboveMa. Read the same way
+    // as the slot's (percent, or a raw amount per HealthSettings.MaThresholdMode).
+    [SettingRange(0, 100_000)]
+    public int BlessIfAboveMa { get; set; } = BuffSlot.DefaultBlessIfAboveMa;
 }
 
 // One buff slot (self and/or party). Mutable DTO so the Buff Watchdog UI two-way

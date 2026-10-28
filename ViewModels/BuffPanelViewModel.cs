@@ -48,6 +48,33 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _showPartyColumns;
 
+    // The one mana floor for every buff (BuffSettings.BlessIfAboveMa), shown above
+    // the list. Editing it changes only what new buffs start at; "Set on all" also
+    // writes it onto every configured buff.
+    [ObservableProperty]
+    private int _allBuffsFloor = BuffSlot.DefaultBlessIfAboveMa;
+
+    partial void OnAllBuffsFloorChanged(int value)
+    {
+        if (_settings.BlessIfAboveMa == value) return;
+        _settings.BlessIfAboveMa = value;
+        Persist();
+    }
+
+    public string AllBuffsFloorLabel => AppServices.Current.ManaThresholdsAreAbsolute
+        ? "Cast buffs if mana ≥" : "Cast buffs if mana ≥ %";
+    public int AllBuffsFloorMaximum => AppServices.Current.ManaThresholdsAreAbsolute ? 100_000 : 100;
+
+    [RelayCommand]
+    private void SetFloorOnAllBuffs()
+    {
+        foreach (BuffSlot dto in _settings.Slots) dto.BlessIfAboveMa = AllBuffsFloor;
+        foreach (BuffSlotRowViewModel row in Slots) row.Refresh();
+        AppServices.Current.Log.Info("Buffs",
+            $"mana floor {AllBuffsFloor} set on all {_settings.Slots.Count} buff(s)");
+        Persist();
+    }
+
     // Picker source: LEARNED buffs (zero energy — self / single-target / whole-party
     // scopes, plus whole-party cast-on-use items) NOT already slotted. A given buff is
     // one slot: two slots of the same spell would double-track its recast timer, so a
@@ -380,6 +407,11 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             if (_settings.ManualOrder) Slots.Add(row); else InsertSorted(row);
         }
         Renumber();
+
+        // Already the stored value, so the change handler saves nothing.
+        AllBuffsFloor = _settings.BlessIfAboveMa;
+        OnPropertyChanged(nameof(AllBuffsFloorLabel));
+        OnPropertyChanged(nameof(AllBuffsFloorMaximum));
 
         RefreshBuffPicks();
         RefreshMemberTargets();
@@ -822,7 +854,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             IsStockRealm, AppServices.Current.ManaRegenTickSteps,
             rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
             isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute,
-            maxMana: AppServices.Current.PlayerState.MaxMa);
+            maxMana: AppServices.Current.PlayerState.MaxMa)
+        {
+            BlessIfAboveMa = _settings.BlessIfAboveMa,
+        };
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -870,10 +905,10 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         List<(BuffSlot Dto, int ReqLevel, string Name)> toAdd = new();
         foreach (Game.Spells.SelfBlessPick pick in _selfBlessCandidates)
-            toAdd.Add((new BuffSlot { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended },
+            toAdd.Add((new BuffSlot { Spell = pick.Candidate.CastCode, CastOnSelf = pick.Recommended, BlessIfAboveMa = _settings.BlessIfAboveMa },
                 pick.Candidate.ReqLevel, pick.Candidate.Name));
         foreach (Game.Spells.SelfBlessCandidate cand in _partyBlessCandidates)
-            toAdd.Add((new BuffSlot { Spell = cand.CastCode, WholePartyOn = false, CastSolo = false },
+            toAdd.Add((new BuffSlot { Spell = cand.CastCode, WholePartyOn = false, CastSolo = false, BlessIfAboveMa = _settings.BlessIfAboveMa },
                 cand.ReqLevel, cand.Name));
 
         foreach ((BuffSlot dto, _, _) in toAdd.OrderBy(x => x.ReqLevel).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
