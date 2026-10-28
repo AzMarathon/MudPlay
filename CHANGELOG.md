@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.2
+
+- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
+
 ## 3.187.1
 
 - Active GMCP rooms no longer send `rm` on every step

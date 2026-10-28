@@ -1001,12 +1001,15 @@ public static class DefaultPatterns
         // obtained set is cleared too (a fresh character has learned nothing).
         yield return new RegexPattern(KnownPatterns.Reroll,
             @"(?i)^After a LONG thought, you take your own life");
-        // Learn-scroll signal — reading a spell scroll teaches its spell.
-        // Group 1 is the spell's full Name ("harm"), NOT the short cast
-        // code, so it resolves through SpellbookState.MarkObtainedByName.
-        // Lazy capture so the terminating period isn't swallowed.
+        // Learn-scroll signal — reading a spell scroll teaches its spell. A
+        // trainer teaches through a textblock's `learnspell`, whose line is the
+        // same sentence without the "read <scroll> and" part ("You learn the
+        // spell chaos shield."). Group 1 is the spell's full Name ("harm"), NOT
+        // the short cast code, so it resolves through
+        // SpellbookState.MarkObtainedByName. Lazy capture so the terminating
+        // period isn't swallowed.
         yield return new RegexPattern(KnownPatterns.LearnSpell,
-            @"(?i)^You read .+ and learn the spell (.+?)\.\s*$");
+            @"(?i)^You (?:read .+ and )?learn the spell (.+?)\.\s*$");
         // ParaMud's teaching-item wording — `read <item>` on a spellbook item
         // confirms with "You add <name> to your spellbook!". Same signal as the
         // learn-scroll line; group 1 is the full Name (resolved through
