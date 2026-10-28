@@ -134,6 +134,10 @@ public sealed class PartyComebackManager : IDisposable
     // whether their @ok landed just before that move (so it can't be trusted).
     private bool _leftBehind;
     private bool _okPremature;
+    // When each member left behind right after an @ok was last asked for a fresh one.
+    // Left behind right after an @ok again within FollowWaitWindow of that, the fresh
+    // one proved nothing either, and they sit out the whole window (user, 2026-10-28).
+    private readonly Dictionary<string, DateTimeOffset> _freshOkAskedAt = new(StringComparer.OrdinalIgnoreCase);
     // The recovery in flight is a train trip's fetch (BeginRecovery says what that
     // changes), and its room is one we guessed and they haven't named.
     private bool _tripFetch;
@@ -1523,6 +1527,16 @@ public sealed class PartyComebackManager : IDisposable
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
 
+    // For the bug report: who was asked for a fresh @ok after an early one, and how
+    // long ago; null when nobody was.
+    public string? FreshOkAskedSummary => _freshOkAskedAt.Count == 0 ? null
+        : string.Join(", ", _freshOkAskedAt.Select(p => $"{p.Key} {(_now() - p.Value).TotalSeconds:F0}s ago"));
+
+    // A no-limit wait window (0) remembers the ask for the rest of the session.
+    private bool FreshOkAskedRecently(string given) =>
+        _freshOkAskedAt.TryGetValue(given, out DateTimeOffset at)
+        && (FollowWaitWindow <= TimeSpan.Zero || _now() - at < FollowWaitWindow);
+
     private void GoIdle()
     {
         // The pickup is over: a member asked to join who never followed isn't
@@ -1885,12 +1899,24 @@ public sealed class PartyComebackManager : IDisposable
             // An @ok sent just before they were left behind is distrusted because
             // they then failed to move with us. One who has since come to us while
             // we were still on the way back has moved, so theirs is taken as usual.
-            bool distrustOk = _okPremature && !midWalk;
+            // The first time, a fresh @ok asked for now is trusted: the hold may well
+            // have ended in the meantime (report paradigm-20261028-102116: the leader
+            // sat out 90 s for a member free to move). Only a member left behind
+            // right after an @ok again soon after is made to sit out the window.
+            bool premature = _okPremature && !midWalk;
+            bool distrustOk = premature && FreshOkAskedRecently(_senderGiven);
+            if (premature && !distrustOk)
+            {
+                _freshOkAskedAt[_senderGiven] = _now();
+                _log?.Info(LogCategory,
+                    $"{_senderGiven}'s @ok came just before they were left behind — asking for a fresh one; "
+                    + "left behind like that again soon, they wait the full window");
+            }
             LeftBehindRejoined?.Invoke(_senderGiven, distrustOk);
             if (distrustOk)
             {
-                // Their @ok came a moment before they were left behind, so another
-                // one proves nothing — sit out the whole window instead.
+                // A fresh @ok was asked for a moment ago and they were left behind
+                // right after it again, so another proves nothing — sit out the window.
                 _reply($"{GotYou} - your last @ok was too early, waiting the full {FollowWaitWindow.TotalSeconds:0}s");
             }
             else

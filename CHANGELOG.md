@@ -1,5 +1,11 @@
 # Version history
 
+## 3.187.6
+
+- Switching to a just-imported game data set no longer crashes when another program briefly holds a table file
+- Party: a follower left behind right after its @ok is asked for a fresh one, not waited on for the full window
+- bug reports addressed: Crash-20261028-135630, Crash-20261028-135631, Crash-20261028-135632, paradigm-20261028-102116
+
 ## 3.187.4
 
 - Party: a member kneeling to meditate is seen at once, not on the next party list
