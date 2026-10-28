@@ -1410,8 +1410,8 @@ How to keep it current:
 
 ### GameDataCacheSharedReadTests.cs
 - Covers: Services/GameDataCache (shared reads, ActiveLoad, FileStampAsRead)
-- Checks: ActiveLoad moves with every load of a set and nothing else; FileStampAsRead is the file as read, as a prewarm read it, and is forgotten when the next read finds the file gone or unparseable.
-- Why: background index builds racing set loads.
+- Checks: ActiveLoad moves with every load of a set and nothing else; FileStampAsRead is the file as read, as a prewarm read it, and is forgotten when the next read finds the file gone or unparseable; a table file another program holds open is read once it's let go.
+- Why: background index builds racing set loads; Crash-20261028-135630 (a virus scan of a just-imported table crashed the set switch).
 
 ### GameDataCacheSwitchTests.cs
 - Covers: Services/GameDataCache set switch atomicity
@@ -2809,8 +2809,8 @@ How to keep it current:
 
 ### PartyComebackManagerTests.cs
 - Covers: Game/Remote/PartyComebackManager (+ walker, loop, lair, PartyManager)
-- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite (the auto-invite's or one typed by hand) is answered `got you - resuming` once following, `comeback already in progress` while still [Invited] (not for a fresh recruit invited on logging in, nor for an invite echoed into a party already full without the asker's row), with no @forget either way; an invite long after the re-entry isn't the return's; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out.
-- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837).
+- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite (the auto-invite's or one typed by hand) is answered `got you - resuming` once following, `comeback already in progress` while still [Invited] (not for a fresh recruit invited on logging in, nor for an invite echoed into a party already full without the asker's row), with no @forget either way; an invite long after the re-entry isn't the return's; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out; a member left behind right after their @ok is asked for a fresh @ok (@waiting) and trusted, and waits the full window only when that happens again within the wait window.
+- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837, -20261028-102116).
 
 ### PartyDeathRosterCleanupTests.cs
 - Covers: Game/PartyDeathRosterCleanup

@@ -816,6 +816,8 @@ public static class BugReportBuilder
             ? "(nobody)"
             : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>
                 svc.PartyEssentials.OkDistrusted.Contains(m) ? $"{m} (full window, @ok ignored)" : m)));
+        Kv(sb, "Fresh @ok asked after an early one (again soon: full window)",
+            svc.PartyComeback.FreshOkAskedSummary ?? "(nobody)");
         Kv(sb, "Reconnect hold for", svc.PartyDisconnectMovement.PendingMembers.Count == 0
             ? "(nobody)" : string.Join(", ", svc.PartyDisconnectMovement.PendingMembers));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec

@@ -104,6 +104,28 @@ public sealed class GameDataCacheSharedReadTests : IDisposable
         Assert.NotEqual(reimported, cache.ActiveLoad);
     }
 
+    // A virus scan holding a just-imported table open refused the set switch's read
+    // and crashed the client (report Crash-20261028-135630): the read waits for it.
+    [Fact]
+    public void TableFileHeldByAnotherProgram_IsReadOnceLetGo()
+    {
+        string path = Seed("alpha", "Monsters", Monsters("orc"));
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+
+        Lookup lookup;
+        using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            lookup = new Lookup(cache, "Monsters");
+            lookup.WaitUntilBlocked();
+            Thread.Sleep(100);
+        }
+        lookup.Join();
+
+        Assert.Null(lookup.Failure);
+        Assert.Equal("orc", FirstName(lookup.Table));
+    }
+
     [Fact]
     public void FileStampAsRead_IsTheFileAsTheCacheReadIt()
     {

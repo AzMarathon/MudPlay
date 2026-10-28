@@ -940,15 +940,54 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.True(h.Lair.IsActive);   // resumed — the party @wait gate holds it
     }
 
-    // Report paradigm-20260926-195517: the follower's @ok landed a second before
-    // our move left them behind — so a fresh @ok proves nothing.
+    // Left behind right after their @ok: fetched back, they're asked for a fresh
+    // @ok, which is trusted the first time (report paradigm-20261028-102116: the
+    // leader sat out 90 s for a member free to move). Left behind right after an @ok
+    // again soon after (report paradigm-20260926-195517), another @ok proves nothing
+    // and they wait the full window.
     [Fact]
-    public void LeftBehind_RightAfterTheirOk_WaitsTheFullWindow()
+    public void LeftBehind_RightAfterTheirOk_AsksAFreshOk_ThenWaitsTheFullWindowOnARepeat()
     {
         using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 28, 10, 20, 19, TimeSpan.Zero);
+        h.ComebackNow = () => now;
         List<(string, bool)> held = new();
         h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
         h.Comeback.OkedWithin = (_, _) => true;
+        FirstFetchAfterAnEarlyOk(h);
+        Assert.Equal(new[] { ("Tank", false) }, held);
+        Assert.True(Sent(h, "/Tank @waiting"));
+        Assert.False(Sent(h, "too early"));
+        Assert.Equal("Tank 0s ago", h.Comeback.FreshOkAskedSummary);
+
+        now = now.AddSeconds(30);
+        LeftBehindAgainAndFetched(h);
+        Assert.Equal(new[] { ("Tank", false), ("Tank", true) }, held);
+        Assert.True(Sent(h, "too early"));
+    }
+
+    [Fact]
+    public void LeftBehind_RightAfterTheirOk_LongAfterAFreshOkWasAsked_AsksAgain()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 28, 10, 20, 19, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        List<(string, bool)> held = new();
+        h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
+        h.Comeback.OkedWithin = (_, _) => true;
+        FirstFetchAfterAnEarlyOk(h);
+
+        now += h.Comeback.FollowWaitWindow + TimeSpan.FromSeconds(1);
+        LeftBehindAgainAndFetched(h);
+
+        Assert.Equal(new[] { ("Tank", false), ("Tank", false) }, held);
+        Assert.False(Sent(h, "too early"));
+    }
+
+    // Our lair step leaves Tank behind in 1/2; we walk back, find him there, and he
+    // follows again.
+    private static void FirstFetchAfterAnEarlyOk(Harness h)
+    {
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -959,10 +998,16 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Also here: Tank."));
         h.Tracker.SetLocated(new RoomKey(1, 2));
         h.Router.Dispatch(Line("Tank started to follow you."));
+    }
 
-        Assert.Equal(new[] { ("Tank", true) }, held);
-        Assert.False(Sent(h, "/Tank @waiting"));
-        Assert.True(Sent(h, "too early"));
+    // The next step out of 1/2 leaves him behind there again, and he's fetched the same way.
+    private static void LeftBehindAgainAndFetched(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Also here: Tank."));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Router.Dispatch(Line("Tank started to follow you."));
     }
 
     [Fact]

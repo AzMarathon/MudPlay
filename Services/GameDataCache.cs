@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -603,8 +604,7 @@ public sealed partial class GameDataCache
     {
         try
         {
-            using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 0, FileOptions.SequentialScan);
+            using FileStream file = OpenTableFile(path);
             // Of the open file, so they describe the bytes read even if the file is
             // replaced on disk meanwhile.
             TableFileStamp stamp = new(file.Length, File.GetLastWriteTimeUtc(file.SafeFileHandle));
@@ -613,6 +613,34 @@ public sealed partial class GameDataCache
         catch (Exception ex)
         {
             return new ReadOutcome(null, ex, 0, default);
+        }
+    }
+
+    // How long a table file another program holds open is waited for.
+    private static readonly TimeSpan LockedFileWait = TimeSpan.FromSeconds(2);
+
+    // Another program can hold a table file a moment after it is written: on
+    // Windows something outside the client (a virus scan, most likely) had the
+    // 13 MB Monsters.json an import had just written open, the set switch's read
+    // was refused with "being used by another process" and the client crashed,
+    // while a read half a second later succeeded (report Crash-20261028-135630).
+    // So an open refused that way is tried again for a short while; a file that's
+    // gone isn't.
+    private static FileStream OpenTableFile(string path)
+    {
+        Stopwatch clock = Stopwatch.StartNew();
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    bufferSize: 0, FileOptions.SequentialScan);
+            }
+            catch (IOException ex) when (ex is not (FileNotFoundException or DirectoryNotFoundException)
+                                         && clock.Elapsed < LockedFileWait)
+            {
+                Thread.Sleep(Math.Min(attempt, 10) * 10);
+            }
         }
     }
 
