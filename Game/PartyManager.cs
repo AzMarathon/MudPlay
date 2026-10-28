@@ -431,7 +431,8 @@ public sealed partial class PartyManager : IDisposable
         // Live rest observation — flips a member's Resting flag the moment we
         // see "X stops to rest.", ahead of the 5s par poll, so a follower's
         // HealthManager can mirror the leader's rest immediately.
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRestObserved,   OnMemberRestObserved));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRestObserved,     OnMemberRestObserved));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberMeditateObserved, OnMemberMeditateObserved));
         State.Members.CollectionChanged += OnMembersChangedForHpEstimates;
     }
 
@@ -1361,13 +1362,16 @@ public sealed partial class PartyManager : IDisposable
         }
     }
 
-    // "X stops to rest." — flip the matching roster member's Resting flag now,
-    // instead of waiting for the next par poll to catch the posture change. The
-    // pattern matches any resting player in the room; scoping to roster members
-    // here makes a non-party bystander's rest a safe no-op. Only ever sets true —
-    // the par poll owns the clear when the member stands. A non-member match
-    // finds no row and does nothing.
-    private void OnMemberRestObserved(MatchResult result)
+    // "X stops to rest." / "X kneels to meditate." — flip the matching roster
+    // member's Resting or Meditating flag now, instead of waiting for the next par
+    // poll to catch the posture change. The patterns match any player in the room;
+    // scoping to roster members here makes a non-party bystander a safe no-op. The
+    // two flags are exclusive, as par writes them; the par poll owns the clear
+    // when the member stands. A non-member match finds no row and does nothing.
+    private void OnMemberRestObserved(MatchResult result) => OnMemberPostureObserved(result, meditating: false);
+    private void OnMemberMeditateObserved(MatchResult result) => OnMemberPostureObserved(result, meditating: true);
+
+    private void OnMemberPostureObserved(MatchResult result, bool meditating)
     {
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
@@ -1376,7 +1380,8 @@ public sealed partial class PartyManager : IDisposable
         foreach (PartyMember m in State.Members)
         {
             if (!GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase)) continue;
-            m.Resting = true;
+            m.Resting = !meditating;
+            m.Meditating = meditating;
             return;
         }
     }

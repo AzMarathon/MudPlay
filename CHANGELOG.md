@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.4
+
+- Party: a member kneeling to meditate is seen at once, not on the next party list
+
 ## 3.187.3
 
 - Party: a follower also rests or meditates when another member does and the leader has stopped moving

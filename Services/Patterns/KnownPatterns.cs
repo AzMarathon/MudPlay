@@ -487,12 +487,12 @@ public static class KnownPatterns
     public const string PartyMemberRankChanged    = "party.member-rank-changed";    // "X just moved to the {front|back} rank in your group." / "X just moved to the middle of your group."
     public const string PartySelfRankChanged      = "party.self-rank-changed";      // "You have moved to the {front|middle|back} ranks of your group." — self's own rerank confirmation
     public const string PartyRankRefused          = "party.rank-refused";           // the game's refusals of a rank command (GAME_MECHANICS "Party ranks")
-    // "X stops to rest." — a party member (roster-scoped by the handler) sat down
-    // to rest. Flips PartyMember.Resting the moment it's seen, ahead of the 5s par
-    // poll, so a follower can mirror the leader's rest immediately. (The meditate
-    // observation line isn't confirmed yet — add its const + pattern beside this
-    // when the wording is known.)
-    public const string PartyMemberRestObserved   = "party.member-rest-observed";   // "X stops to rest."
+    // "X stops to rest." / "X kneels to meditate." — a party member (roster-scoped
+    // by the handler) sat down to rest or meditate. Flips PartyMember.Resting /
+    // Meditating the moment it's seen, ahead of the 5s par poll, so a follower can
+    // join the party's rest immediately.
+    public const string PartyMemberRestObserved     = "party.member-rest-observed";     // "X stops to rest."
+    public const string PartyMemberMeditateObserved = "party.member-meditate-observed"; // "X kneels to meditate."
 
     // ----- Alignment -----------------------------------------------------
     // "A dark cloud passes over you" — MajorMUD's signal that the local

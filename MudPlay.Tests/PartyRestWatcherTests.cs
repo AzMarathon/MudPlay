@@ -101,6 +101,18 @@ public sealed class PartyRestWatcherTests
     }
 
     [Fact]
+    public void MemberKneelsToMeditate_AfterADrag_CountsAtOnce()
+    {
+        using Harness h = Following();
+        h.ParReply(Row("Arax"), Row("Raijin"));
+        h.Drag();
+
+        h.Line("Raijin kneels to meditate.");
+
+        Assert.Equal("Raijin is meditating", h.Watcher.PartyRestingFor);
+    }
+
+    [Fact]
     public void LeaderResting_CountsWhateverTheDrags()
     {
         using Harness h = Following();

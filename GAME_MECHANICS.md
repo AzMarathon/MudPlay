@@ -9248,10 +9248,10 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - If `You do not see <name> here!` comes back, back that member off until you **move** or they **reappear in `Also here:`** (they unhid). Don't re-fire the cast, and repeat the failure, every round.
 
 ### Resting observed in the party
-*Status: mixed (rest line CONFIRMED; rest-to-use-the-wait is **Client policy**, user directive 2026-07-11)*
+*Status: mixed (rest line CONFIRMED; meditate line CONFIRMED 2026-10-27 (user) · Realm: both; rest-to-use-the-wait is **Client policy**, user directive 2026-07-11)*
 
 - **A party member sitting down to rest is announced to everyone else in the room as `<name> stops to rest.`** *([CONFIRMED])* `<name>` is the given name. The actor's own view uses a different verb form (`You stop to rest.`), so the third-person line never matches the resting player's own row.
-- **The meditate-observation line is not yet confirmed.** Do not guess it.
+- **A party member sitting down to meditate is announced to the room as `<name> kneels to meditate.`** *([CONFIRMED] 2026-10-27, user: "kneels to meditate is the line on both" · Realm: both; first seen in report `paradigm-20261007-183903`)*. (An earlier note said the meditate-observation line was not yet confirmed; superseded 2026-10-27.) It is a different line from the realm exit's `<Name> sits down and meditates.` (*Wire, prompt & command output → Realm exit / logoff sequence*).
 - **Rest-to-use-the-wait.** *(**Client policy**, user directive, 2026-07-11)*
   - When the party **leader** is `@wait`-held and **not poisoned**, the leader rests (or meditates) to use the forced downtime, until the wait clears.
   - A **follower** that sees the leader rest/meditate rests/meditates too, **unless the follower is poisoned** (poison ticks break rest and waste the downtime).
@@ -9259,6 +9259,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - **A follower that sees another member rest or meditate, with the leader stopped, rests or meditates too** *(**Client policy**, user directive, 2026-10-27)*, rest or meditate as its own settings choose. "Stopped" is read as no follow drag (` -- Following your Party leader <dir> --`) since the member's rest was seen: a member's `par` letter is only as fresh as the last poll, so a rest seen before a drag no longer counts until a later `par` lists it again.
 - **Client use:**
   - The `<name> stops to rest.` line flips `PartyMember.Resting` the instant it's seen, ahead of the 5-second `par` poll, so a follower can mirror the leader's rest immediately.
+  - The `<name> kneels to meditate.` line does the same for `PartyMember.Meditating` (`KnownPatterns.PartyMemberMeditateObserved`, `PartyManager.OnMemberMeditateObserved`; user, 2026-10-27). Either line clears the other flag, as `par` writes them.
   - `PartyRestWatcher.PartyRestingFor` names who the party is resting for (the leader, or a member seen resting since the last drag); `HealthManager` tops off while it names someone (user, 2026-10-27).
 
 ### Party ailment signaling and cross-client sync (MegaMUD parity)

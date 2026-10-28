@@ -918,6 +918,9 @@ public static class DefaultPatterns
         // never matches our own row.
         yield return new RegexPattern(KnownPatterns.PartyMemberRestObserved,
             @"^(?<player>\w+) stops to rest\.?\s*$");
+        // "X kneels to meditate." — the meditate counterpart, same shape and scoping.
+        yield return new RegexPattern(KnownPatterns.PartyMemberMeditateObserved,
+            @"^(?<player>\w+) kneels to meditate\.?\s*$");
 
         // ----- Main menu (BBS-customisable but options are stable) -----
         // The "Enter the Realm" row is the universal signature — every
