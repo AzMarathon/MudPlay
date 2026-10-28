@@ -2834,6 +2834,10 @@ public sealed partial class CombatManager : IDisposable
         _currentTarget = null;
         _deadAttackWordWarned = false;
         _engagedSinceLastAttack = false;
+        // A swing the drop left unanswered can't be confirmed now; left armed, the
+        // engage check fired its room re-display at a dead link (hang report
+        // Hang-20261027-165432).
+        _awaitingEngageSince = null;
         ClearAttackSpellCascadeState();
     }
 

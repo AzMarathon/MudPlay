@@ -1,5 +1,11 @@
 # Version history
 
+## 3.187.2
+
+- A swing left unanswered by a dropped link no longer sends a room re-display at the dead connection
+- Map: Shift+Ctrl+right-click follows a room's down exit and Shift+Alt+right-click its up exit, even when it has both
+- bug reports addressed: Hang-20261027-165432
+
 ## 3.187.0
 
 - Waypoint action: wait in a room until the current lap has run at least a set time
