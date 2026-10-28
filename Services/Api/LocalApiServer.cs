@@ -569,14 +569,27 @@ public sealed class LocalApiServer : IAsyncDisposable
     // give — 504 plus "the UI thread isn't responding", which IS the diagnosis.
     // The abandoned read still runs whenever the dispatcher recovers; it only
     // reads state, so nothing minds it arriving late.
+    //
+    // A request may read game data, so the startup draft's put-off set is built
+    // first (AppServices.BuildDeferredGameData), outside the bound: that build takes
+    // seconds, and the first request must not time out on it.
     private static async Task<T> OnUiAsync<T>(Func<T> read)
     {
-        if (Dispatcher.UIThread.CheckAccess()) return read();
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            BuildDeferredGameData();
+            return read();
+        }
+        if (AppServices.CurrentOrNull?.GameData.BuildDeferred == true)
+            await Dispatcher.UIThread.InvokeAsync(BuildDeferredGameData).GetTask().ConfigureAwait(false);
         Task<T> pending = Dispatcher.UIThread.InvokeAsync(read).GetTask();
         if (await Task.WhenAny(pending, Task.Delay(UiReadTimeout)).ConfigureAwait(false) != pending)
             throw new UiUnresponsiveException(UiReadTimeout);
         return await pending.ConfigureAwait(false);
     }
+
+    private static void BuildDeferredGameData() =>
+        AppServices.CurrentOrNull?.BuildDeferredGameData("a local API request");
 
     // Signals "the dispatcher never got to us", mapped to 504 by HandleSafelyAsync.
     private sealed class UiUnresponsiveException(TimeSpan waited)

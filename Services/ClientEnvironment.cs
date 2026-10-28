@@ -76,8 +76,10 @@ public static class ClientEnvironment
     {
         try
         {
-            // A single-file build has no assembly path; the executable stands in.
-            string? path = typeof(ClientEnvironment).Assembly.Location;
+            // A single-file build has no assembly path, or one unpacked at its first
+            // launch, which dates the unpacking: the executable stands in.
+            string? path = Update.BundleExtraction.Current() == Update.BundleExtraction.Layout.NotSingleFile
+                ? typeof(ClientEnvironment).Assembly.Location : null;
             if (string.IsNullOrEmpty(path)) path = Environment.ProcessPath;
             return string.IsNullOrEmpty(path) || !File.Exists(path)
                 ? null

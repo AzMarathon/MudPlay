@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.187.2</Version>
+    <Version>3.188.0</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -43,6 +43,18 @@
          collection on so gen2 sweeps don't stall the UI thread. -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <!-- Windows single-file: Windows can't map an assembly from inside another file,
+       so a client loading its ReadyToRun assemblies out of the exe copies each one
+       into memory of its own (about 90 MB a client, never shared). Unpacked once
+       per version and loaded from disk, every client's copy is the same shared
+       image. Set here rather than on the publish command line so the release build
+       picks it up; Linux and macOS map the bundle directly and keep the plain
+       single file. BundleExtraction says which layout a client runs and removes
+       older versions' unpacked folders. -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true' and $(RuntimeIdentifier.StartsWith('win'))">
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

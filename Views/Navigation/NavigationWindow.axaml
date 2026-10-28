@@ -1602,7 +1602,7 @@
                                                            Foreground="{StaticResource ChromeFgBrush}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
-                                                <!-- Gear marks a command; ⛔ "do not rest"; ⚔ "do not attack"; 💤 "rest up here". -->
+                                                <!-- Gear marks a command; ⛔ "do not rest"; ⚔ "do not attack"; 💤 "rest up here"; ⏱ a lap wait. -->
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                             Spacing="2" Margin="2,0" VerticalAlignment="Center">
                                                     <TextBlock Text="⚙" FontSize="11"
@@ -1621,6 +1621,10 @@
                                                                IsVisible="{Binding HasRestHere}"
                                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                                ToolTip.Tip="{Binding RestHereTip}"/>
+                                                    <TextBlock Text="⏱" FontSize="11"
+                                                               IsVisible="{Binding HasLapWait}"
+                                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                               ToolTip.Tip="{Binding LapWaitTip}"/>
                                                 </StackPanel>
                                                 <Button Grid.Column="3"
                                                         Content="↑" FontSize="13" Padding="7,3" MinWidth="26"
@@ -1742,7 +1746,7 @@
                                                            Foreground="{StaticResource ChromeFgBrush}"
                                                            TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center"/>
-                                                <!-- Gear marks a command; ⛔ "do not rest"; ⚔ "do not attack"; 💤 "rest up here". -->
+                                                <!-- Gear marks a command; ⛔ "do not rest"; ⚔ "do not attack"; 💤 "rest up here"; ⏱ a lap wait. -->
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                             Spacing="2" Margin="2,0" VerticalAlignment="Center">
                                                     <TextBlock Text="⚙" FontSize="11"
@@ -1761,6 +1765,10 @@
                                                                IsVisible="{Binding HasRestHere}"
                                                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                                                ToolTip.Tip="{Binding RestHereTip}"/>
+                                                    <TextBlock Text="⏱" FontSize="11"
+                                                               IsVisible="{Binding HasLapWait}"
+                                                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                                                               ToolTip.Tip="{Binding LapWaitTip}"/>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>

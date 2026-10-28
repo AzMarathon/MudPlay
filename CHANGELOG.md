@@ -1,24 +1,157 @@
 # Version history
 
-## 3.187.2
-
-- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
-
-## 3.187.1
-
-- Active GMCP rooms no longer send `rm` on every step
-
-## 3.187.0
-
-- Server inventory, shop stock, learned spells, effects, abilities and party formation
-- GMCP chat reaches history and triggers once per event
-- Inspect server snapshots and request item cards and usability in BBS settings
-
-## 3.186.0
+## 3.188.0
 
 - GMCP server data with per-package shadow and active modes in BBS settings
 - Scoped text fallback and monster identity recovery across room changes and reconnects
 - Live server vitals, stats, conditions, rooms, occupants and exact monster HP
+- Server inventory, shop stock, learned spells, effects, abilities and party formation
+- GMCP chat reaches history and triggers once per event
+- Inspect server snapshots and request item cards and usability in BBS settings
+- Active GMCP rooms no longer send `rm` on every step
+- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
+
+## 3.187.6
+
+- Switching to a just-imported game data set no longer crashes when another program briefly holds a table file
+- Party: a follower left behind right after its @ok is asked for a fresh one, not waited on for the full window
+- bug reports addressed: Crash-20261028-135630, Crash-20261028-135631, Crash-20261028-135632, paradigm-20261028-102116
+
+## 3.187.4
+
+- Party: a member kneeling to meditate is seen at once, not on the next party list
+
+## 3.187.3
+
+- Party: a follower also rests or meditates when another member does and the leader has stopped moving
+
+## 3.187.2
+
+- A swing left unanswered by a dropped link no longer sends a room re-display at the dead connection
+- Map: Shift+Ctrl+right-click follows a room's down exit and Shift+Alt+right-click its up exit, even when it has both
+- bug reports addressed: Hang-20261027-165432
+
+## 3.187.0
+
+- Waypoint action: wait in a room until the current lap has run at least a set time
+
+## 3.186.30
+
+- A room's command edited in the builder of a paused loop is saved to the loop and kept on resume, restart or stop
+- Heal (rest) goes out while resting, meditating or idle, and for a party follower between fights; only our own walk or loop holds it
+- Cast when mana full goes out again each time mana is back at the top, even when its own cost never drops mana under the full mark
+- Party rank is sent again on a re-invite after the party broke up (every join starts mid); the game's answer is logged
+- bug reports addressed: paradigm-20261027-092353, paradigm-20261027-094915, paradigm-20261027-123536
+
+## 3.186.25
+
+- Item Finder: a More stats filter for every bonus column (Quickness, Charm, resists, …)
+
+## 3.186.24
+
+- A realm's game data set that isn't installed here is kept on save, shown as "(not installed)"
+
+## 3.186.23
+
+- `train stats` is no longer abandoned on a room display or prompt that answers something sent just before it
+- Party telepath replies and `par` polls no longer get typed into the trainer screen's Family Name box
+- Auto-train reads the trainer screen once it is fully drawn, and types nothing when the game answers without one
+- Each kind of trainer screen is recognised by what it shows, whatever the realm, the cursor-drawn box included
+- After `train stats` the keyboard is held up to 10 s for the trainer screen; Stock's refusals let it go at once
+- A trainer screen that turns up just after that is still taken back and filled
+- A trainer screen left on the terminal from before isn't taken for the new one, nor planned from
+- A dropped link, a reconnect or a profile change lets go of a trainer screen's hold
+- Telepaths queued just before the trainer screen wait until it closes
+- A training MudPlay started that can't save what it typed now leaves the trainer screen with QUIT, nothing saved
+- Bug reports show how far the game's answer to `train stats` got
+- bug reports addressed: paradigm-20261026-225703, paradigm-20261026-225718, paradigm-20261026-225733
+
+## 3.186.22
+
+- Loops through a lever exit opened from other rooms walk the lever detour every lap, as a walk-to does, instead of stopping at the shut exit
+- An exit the arrival's room display shows open is crossed as it stands, by walks and loops alike
+- A lever door or gate seen open (ours or anyone's) isn't pulled shut again while it can still be open when we get there
+- A loop never joins partway through a lever detour; a refused lever crossing is walked levers and all, and a loop whose lever room can't be reached isn't started
+- bug reports addressed: paradigm-20261026-220231
+
+## 3.186.20
+
+- A board's count of deaths that contradict the standard arrival list is now saved, so two mark it as having edited rooms
+- OK in Settings no longer undoes a realm's death floor or death count written while the window was open, a renamed realm included
+
+## 3.186.18
+
+- Conversation window with a full history opens without freezing
+- Starting on the unnamed profile skips building its game data until something needs it
+- bug reports addressed: Hang-20261026-215238
+
+## 3.186.16
+
+- Route searches several times faster, with far less memory churn, most of all on Windows
+- Chest Offload's shop trip worked out about 13× faster
+- BBS settings read for a check (PvP, death floor, coin name) are parsed again only when bbs.json changes
+- Hang reports and the program log now name a slow room-change, inventory or Chest Offload step
+- Background route searches no longer risk corrupting the room-spell counter check
+- bug reports addressed: paradigm-20261026-201217
+
+## 3.186.15
+
+- Editing a loop-builder step's action no longer crashes the client when the builder closed while the editor was open
+- Live edits from the running-loop rail, and a loop editor's "Restart now", are dropped if that run has ended meanwhile
+- bug reports addressed: Crash-20261026-212906, Crash-20261026-212908
+
+## 3.186.13
+
+- New Cash + Items setting, on by default: an Enter after killing a monster that can drop an item, to see if it did
+
+## 3.186.12
+
+- Chest Offload no longer freezes the client after a chest open: the shop trip is worked out in the background
+- Gatehouse wheel (and any room command also listed as the exit's action) sent once per try, so the gate opens
+- A walk that's refused on every try now names the step it gave up on
+- bug reports addressed: paradigm-20261026-150710, paradigm-20261026-201217
+
+## 3.186.9
+
+- Startup splash stops animating while the window is minimized
+- Loops folder followed by change notification plus a check every minute, instead of a full rescan every 3 s
+- Game-data names, lair tags and attack names kept once per set instead of once per index
+- Windows build runs its assemblies unpacked, so clients share them; older versions' unpacked copies removed
+- Idle clients, and minimized ones, compact their memory now and then
+
+## 3.186.4
+
+- Picking a Recent destination from the Navigation map's or the terminal's right-click menu now closes the menu
+
+## 3.186.3
+
+- Monsters the shipped list doesn't know (a custom realm's own) now default from their alignment: good ones are Friend (no longer attacked), neutral ones Neutral, evil ones Enemy
+- The shipped list now names every Stock 1.11p and Paradigm 1.9.1 monster, so the ones it sets nothing for stay Enemy
+- A shipped monster default applies only when its name matches the set's monster of that number
+- Bug report and `@relation` log say where a monster's relationship came from
+- Saved Simulator area rankings on custom-realm sets are dropped once, since which monsters get fought changed
+
+## 3.186.1
+
+- Paradigm's party invite messages recorded as the same as Stock's in the game-mechanics reference
+
+## 3.186.0
+
+- New remote command `@relation <monster> [relationship]` reports or sets a monster's relationship for this character, under Alter settings
+- A shared monster name is refused with each one's number; `@relation #<number>` names one
+- A leader also recognises a member it invited back by hand after a reconnect
+
+## 3.185.54
+
+- A follower's @wait reaches the leader again after a reconnect left the client unsure who leads
+- A leader answers a reconnected member's @comeback "got you" when they already followed its invite, instead of "party is full" and @forget
+- bug reports addressed: paradigm-20261025-114837
+
+## 3.185.53
+
+- CP plan's CP Left no longer double-counts the current level's CP or shifts as a stat buff comes and goes
+- Monsters' own appear lines (golden mist's "A mist of gold appears in front of you!" and 31 others) are recognised as arrivals: straight onto the room list, or a room check
+- bug reports addressed: paradigm-20261025-010655, paradigm-20261025-011825
 
 ## 3.185.51
 

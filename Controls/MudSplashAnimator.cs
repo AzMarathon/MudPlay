@@ -65,6 +65,7 @@ public sealed class MudSplashAnimator : IDisposable
     private SplashScene _scene;
     private SplashCanvas _canvas;
     private int _frame;
+    private bool _suspended;
     private bool _disposed;
 
     public MudSplashAnimator(int cols, int rows, bool animate)
@@ -115,8 +116,20 @@ public sealed class MudSplashAnimator : IDisposable
     {
         if (IsPlaying || _disposed) return;
         IsPlaying = true;
-        if (Animate) _timer.Start();
-        else RenderFrame(0);        // static header only
+        if (Animate && !_suspended) _timer.Start();
+        else if (!Animate) RenderFrame(0);        // static header only
+    }
+
+    // While the window is minimized nothing of the splash can be seen, yet the frame
+    // timer would go on drawing it 12 times a second, in every hidden client. Held,
+    // the scene stays on the frame it reached and plays on from there on restore.
+    public void SetSuspended(bool suspended)
+    {
+        if (_suspended == suspended || _disposed) return;
+        _suspended = suspended;
+        if (!IsPlaying || !Animate) return;
+        if (suspended) _timer.Stop();
+        else _timer.Start();
     }
 
     private void OnTick(object? sender, EventArgs e)

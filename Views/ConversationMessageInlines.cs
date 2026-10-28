@@ -69,16 +69,24 @@ public static class ConversationMessageInlines
         EmotesEnabledProperty.Changed.AddClassHandler<TextBlock>((t, _) => Rebuild(t));
         // A picture emote is sized from the row's font and line height, and both are
         // bound after the message is (and change with the font-size setting), so a
-        // row that carries a message is laid out again when either arrives.
-        TextBlock.LineHeightProperty.Changed.AddClassHandler<TextBlock>((t, _) => RebuildIfHosted(t));
-        TextBlock.FontSizeProperty.Changed.AddClassHandler<TextBlock>((t, _) => RebuildIfHosted(t));
+        // row's pictures are sized again when either arrives. Only resized: parsing
+        // the message again for each of them tripled the work of every row built.
+        TextBlock.LineHeightProperty.Changed.AddClassHandler<TextBlock>((t, _) => ResizeEmoteImages(t));
+        TextBlock.FontSizeProperty.Changed.AddClassHandler<TextBlock>((t, _) => ResizeEmoteImages(t));
     }
 
     // Only a TextBlock this behaviour was given a message for; the class handlers
     // above see every TextBlock in the app.
-    private static void RebuildIfHosted(TextBlock target)
+    private static void ResizeEmoteImages(TextBlock target)
     {
-        if (target.IsSet(MessageProperty)) Rebuild(target);
+        if (!target.IsSet(MessageProperty) || target.Inlines is not { } inlines) return;
+        double side = EmoteImageSize(target.FontSize, target.LineHeight);
+        foreach (Inline inline in inlines)
+        {
+            if (inline is not InlineUIContainer { Child: Image img }) continue;
+            img.Width = side;
+            img.Height = side;
+        }
     }
 
     // Rebuild the inline runs: URLs become clickable links; the remaining text is
@@ -87,6 +95,8 @@ public static class ConversationMessageInlines
     // never substituted.
     private static void Rebuild(TextBlock target)
     {
+        using PerformanceMonitor.Scope? scope =
+            AppServices.CurrentOrNull?.Performance.Measure("conversation row: message inlines");
         string message = GetMessage(target) ?? string.Empty;
         bool emotes = GetEmotesEnabled(target);
 

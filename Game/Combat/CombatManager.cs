@@ -20,8 +20,8 @@ namespace MudPlay.Game.Combat;
 // Target selection — single source of truth across the engine:
 //   1. Classifier filters Also-Here to EntityKind.Monster.
 //   2. Each monster's MonsterOverlay is resolved via MonsterOverlaySeedStore
-//      (Defaults tier) merged with SettingsResolver.ResolveGameData (Global /
-//      BBS / Char overrides).
+//      (Defaults tier: the realm seed, else the monster's alignment) merged with
+//      SettingsResolver.ResolveGameData (Global / BBS / Char overrides).
 //   3. Engageable per MonsterEngagement: Enemy, a KillOnSight Neutral, or an
 //      instance the user hand-engaged.
 //   4. Engageable list is sorted by MonsterAttackPriority (First=0 highest,
@@ -1360,6 +1360,20 @@ public sealed partial class CombatManager : IDisposable
             && _now() - _inferredKillPendingAt < ExpKillWindow
                 ? name
                 : null);
+
+    // The monster the user last attacked by hand in this room, while the engine runs
+    // no fight of its own and the room still lists it; null otherwise. Read only by
+    // the post-kill floor check, to name a kill made by hand: the boss timers and the
+    // death-spell nudge keep to DeathAttributionTarget, so a hand fight starts no
+    // boss timer and sends no nudge. Gone once a death has been handled, so a later
+    // death isn't taken for it.
+    public string? HandFoughtTarget =>
+        !EngineOn()
+        && _handFoughtLast is { } byHand
+        && _classifier.Current is { } room
+        && TargetPresent(room, byHand)
+            ? byHand
+            : null;
 
     // The monster the round's combat spell was announced against, or null when the
     // round isn't in spell mode. Distinct from CurrentTarget: a weapon attack and a
@@ -2820,6 +2834,10 @@ public sealed partial class CombatManager : IDisposable
         _currentTarget = null;
         _deadAttackWordWarned = false;
         _engagedSinceLastAttack = false;
+        // A swing the drop left unanswered can't be confirmed now; left armed, the
+        // engage check fired its room re-display at a dead link (hang report
+        // Hang-20261027-165432).
+        _awaitingEngageSince = null;
         ClearAttackSpellCascadeState();
     }
 
@@ -3870,10 +3888,11 @@ public sealed partial class CombatManager : IDisposable
 
     // Pre-emptive sibling of OnCombatLine, keyed on a directionless spawn line
     // ("A slimeworm crashes through the ground into the room!"). RoomEntryWatcher's
-    // arrival parser only handles the "<name> <verb> in from <dir>" form — a spawn's
-    // free-form flavor carries no direction and no cleanly-parseable name, so nothing
-    // adds it to the roster and the mob stays invisible until it swings. That swing is
-    // what OnCombatLine currently recovers on, a full round late (the reported lag: a
+    // handler for the line runs first (a higher TieBreak) and puts a monster on the
+    // roster only for an appear line one monster prints; any other spawn's free-form
+    // flavor carries no direction and no cleanly-parseable name, so the mob stays off
+    // the roster and invisible until it swings. That swing is what OnCombatLine
+    // recovers on, a full round late (the reported lag: a
     // resting mage sat unengaged while ten slimeworms piled in, only engaging once the
     // first bite tripped the empty-room net). Firing the same bare-CR refresh on the
     // spawn line pulls the authoritative "Also here:" a round earlier, before the hit.
@@ -4272,6 +4291,9 @@ public sealed partial class CombatManager : IDisposable
     // the debounced CR re-display, letting the server hand back the true roster.
     public void NoteUnattributedDeath()
     {
+        // Every reader of the death has had it: a later one is no longer the
+        // hand-fought monster's.
+        _handFoughtLast = null;
         // A kill of ours with the attack held. When its exp line came before any
         // *Combat Off* did, in the round the break was typed in, the round beat the
         // break to the game and still landed (_userBreakHoldKillRaced). A
@@ -4723,6 +4745,8 @@ public sealed partial class CombatManager : IDisposable
     // Whom the user last attacked by hand here, for a break typed while the engine
     // holds no target of its own (Auto-Combat off, hand-fighting).
     private string? _userAttackedLast;
+    // The same, for HandFoughtTarget: also forgotten once a death is handled.
+    private string? _handFoughtLast;
     private (DateTimeOffset At, string Text)? _lastUserBreakHoldEnd;
     // An exp line came under the hold before any *Combat Off* did, inside the round
     // the break was typed in: the round beat the break to the game and its kill is
@@ -4871,7 +4895,7 @@ public sealed partial class CombatManager : IDisposable
         if (_disposed) return;
         string? held = _userBreakHold;
         EngageableCandidate? aimedAt = ResolveManualTarget(target ?? held ?? _userAttackedLast);
-        if (aimedAt is { } hit) _userAttackedLast = hit.RawName;
+        if (aimedAt is { } hit) _userAttackedLast = _handFoughtLast = hit.RawName;
         if (held is null) return;
 
         string line = target is null ? word : $"{word} {target}";
@@ -4904,6 +4928,7 @@ public sealed partial class CombatManager : IDisposable
             _log?.Combat(LogCategory, "the game was left — dropping the attack-order / follow room state");
         _awaitingNotLast = false;
         _awaitingFollowAnnounce = false;
+        _handFoughtLast = null;
         LeaveRoomFight();
     }
 
@@ -4934,6 +4959,7 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
         _userAttackedLast = null;
+        _handFoughtLast = null;
         if (_userBreakHold is null) return;
         EndUserBreakHold("we left the room");
         _post(() =>
@@ -4948,6 +4974,7 @@ public sealed partial class CombatManager : IDisposable
     public void ClearUserBreakHold(string why)
     {
         _userAttackedLast = null;
+        _handFoughtLast = null;
         EndUserBreakHold(why);
     }
 

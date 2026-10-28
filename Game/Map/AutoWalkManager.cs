@@ -1554,7 +1554,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     ? _tracker.ShownOpenExits()
                     : null;
                 LogPaidCrossings(source.Key, path, destination);
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable,
+                    heldOpen: _heldDoors is { } held ? (room, dir, moves) => held.IsHeldOpen(room, dir, moves) : null);
             }
         }
         finally
@@ -3186,6 +3187,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void SendCommandStep(CommandStep step)
     {
+        if (step.DoorOrGate is { } gate && _heldDoors is not null
+            && !_heldDoors.MayPullLever(gate, step.Command, $"Walker step {_index + 1}/{_path!.Count}"))
+        {
+            AdvanceStep();
+            return;
+        }
         _stepInFlight = true;
 
         // A cross-room detour's winch pull is a strength roll that can "not budge" —
@@ -3215,6 +3222,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private Action<string>? _roomActionSent;
 
     public void SetRoomActionHook(Action<string> hook) => _roomActionSent = hook;
+
+    // The doors and gates held open, lever gates among them (DoorsHeldOpen): a
+    // lever is not pulled at a gate held open, which the pull would lock, and a
+    // walk planned past one leaves its detour out.
+    private DoorsHeldOpen? _heldDoors;
+
+    public void SetDoorsHeldOpen(DoorsHeldOpen held) => _heldDoors = held;
 
     // Put a sea-captain sailing on the wire. Like the chime teleport it splits
     // the party (leader `.@party <keyword>` relay, then every member types the
@@ -3522,7 +3536,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // truly blocked exit still fails cleanly, just one hop later.
             _log?.Info("Walker",
                 $"step {_index + 1} blocked after {_retryCount} retries; handing off to replan");
-            TryReplanOrFail(RoomConfidence.Confirmed);
+            // Once the re-plans are spent the walk stops here, and the reason names
+            // the way that kept refusing: "tracker entered Confirmed" told the user
+            // nothing about the gate the wheel never opened (report
+            // paradigm-20261026-150710).
+            TryReplanOrFail(RoomConfidence.Confirmed, replansSpentText: () =>
+            {
+                string refusedWay = _path is { } planned && _index < planned.Count && planned[_index] is MoveStep move
+                    ? $"{move.Direction} from {sourceForCurrentStep.Key}"
+                    : $"from {sourceForCurrentStep.Key}";
+                return $"step {_index + 1} ({refusedWay}) was refused on every try and every re-plan; walker stopped";
+            });
             return;
         }
 
@@ -3551,7 +3575,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // same step, so it is worth doing only when the game can be asked where we are.
     // With nobody to ask, or no re-plan left to spend on asking, nothing is counted,
     // changed or failed.
-    private bool TryReplanOrFail(RoomConfidence newConfidence, string when = "mid-step", bool onlyIfAsked = false)
+    //
+    // replansSpentText, when given, words the Failed text in place of the tracker
+    // wording when it is the re-plan budget that ends the walk.
+    private bool TryReplanOrFail(RoomConfidence newConfidence, string when = "mid-step", bool onlyIfAsked = false,
+        Func<string>? replansSpentText = null)
     {
         // A block landing while the character is Confused is the movement-fumble
         // mechanic (GAME_MECHANICS "Confusion fumbles — actions fail and must be
@@ -3571,13 +3599,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         // Re-plan caps avoid infinite ping-pong when manual user
         // typing keeps interfering with the walker's expectations.
-        if ((!confused && _replanCount >= MaxReplansPerWalk)
+        bool replansSpent = !confused && _replanCount >= MaxReplansPerWalk;
+        if (replansSpent
             || _destination is not { } dest
             || _tracker.State.CurrentRoom is not { } here)
         {
             if (onlyIfAsked) return false;
+            bool walkStillPlaced = _destination is not null && _tracker.State.CurrentRoom is not null;
             Raise(new WalkEvent(WalkEventKind.Failed,
-                $"tracker entered {newConfidence} {when}; walker can't continue",
+                replansSpent && walkStillPlaced && replansSpentText is not null
+                    ? replansSpentText()
+                    : $"tracker entered {newConfidence} {when}; walker can't continue",
                 _destination));
             Reset();
             return true;

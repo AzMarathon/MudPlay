@@ -940,15 +940,54 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.True(h.Lair.IsActive);   // resumed — the party @wait gate holds it
     }
 
-    // Report paradigm-20260926-195517: the follower's @ok landed a second before
-    // our move left them behind — so a fresh @ok proves nothing.
+    // Left behind right after their @ok: fetched back, they're asked for a fresh
+    // @ok, which is trusted the first time (report paradigm-20261028-102116: the
+    // leader sat out 90 s for a member free to move). Left behind right after an @ok
+    // again soon after (report paradigm-20260926-195517), another @ok proves nothing
+    // and they wait the full window.
     [Fact]
-    public void LeftBehind_RightAfterTheirOk_WaitsTheFullWindow()
+    public void LeftBehind_RightAfterTheirOk_AsksAFreshOk_ThenWaitsTheFullWindowOnARepeat()
     {
         using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 28, 10, 20, 19, TimeSpan.Zero);
+        h.ComebackNow = () => now;
         List<(string, bool)> held = new();
         h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
         h.Comeback.OkedWithin = (_, _) => true;
+        FirstFetchAfterAnEarlyOk(h);
+        Assert.Equal(new[] { ("Tank", false) }, held);
+        Assert.True(Sent(h, "/Tank @waiting"));
+        Assert.False(Sent(h, "too early"));
+        Assert.Equal("Tank 0s ago", h.Comeback.FreshOkAskedSummary);
+
+        now = now.AddSeconds(30);
+        LeftBehindAgainAndFetched(h);
+        Assert.Equal(new[] { ("Tank", false), ("Tank", true) }, held);
+        Assert.True(Sent(h, "too early"));
+    }
+
+    [Fact]
+    public void LeftBehind_RightAfterTheirOk_LongAfterAFreshOkWasAsked_AsksAgain()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 28, 10, 20, 19, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        List<(string, bool)> held = new();
+        h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
+        h.Comeback.OkedWithin = (_, _) => true;
+        FirstFetchAfterAnEarlyOk(h);
+
+        now += h.Comeback.FollowWaitWindow + TimeSpan.FromSeconds(1);
+        LeftBehindAgainAndFetched(h);
+
+        Assert.Equal(new[] { ("Tank", false), ("Tank", false) }, held);
+        Assert.False(Sent(h, "too early"));
+    }
+
+    // Our lair step leaves Tank behind in 1/2; we walk back, find him there, and he
+    // follows again.
+    private static void FirstFetchAfterAnEarlyOk(Harness h)
+    {
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
@@ -959,10 +998,16 @@ public sealed class PartyComebackManagerTests : IDisposable
         h.Router.Dispatch(Line("Also here: Tank."));
         h.Tracker.SetLocated(new RoomKey(1, 2));
         h.Router.Dispatch(Line("Tank started to follow you."));
+    }
 
-        Assert.Equal(new[] { ("Tank", true) }, held);
-        Assert.False(Sent(h, "/Tank @waiting"));
-        Assert.True(Sent(h, "too early"));
+    // The next step out of 1/2 leaves him behind there again, and he's fetched the same way.
+    private static void LeftBehindAgainAndFetched(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        h.Router.Dispatch(Line("Also here: Tank."));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Router.Dispatch(Line("Tank started to follow you."));
     }
 
     [Fact]
@@ -1157,6 +1202,294 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.False(h.Lair.IsActive);                    // Tank's pickup still in flight
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
+
+    // Report paradigm-20261025-114837, the follower's side: back from a dropped link
+    // and already following again, its @comeback found the leader's party full,
+    // and the leader's @forget took the leader's name off the follower's roster
+    // while the follow went on. The @wait asked for after it is kept, and the next
+    // `par`, which names the leader, sends it.
+    [Fact]
+    public void LeadersForget_WhileWeStillFollow_TheNextParNamesTheLeader_AndTheKeptWaitGoesOut()
+    {
+        using Harness h = NewHarness();
+        h.Party.LocalCharacterName = "Aunty";
+        ServerFeed feed = new(h.Router);
+        h.Party.AttachLineExtractor(feed.Lines);
+        using PartyRestSync rest = new(h.PartyState);
+        List<string> wire = new();
+        rest.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b)));
+        void Par()
+        {
+            feed.Line("You are following Ironbar.");
+            feed.Line("The following people are in your travel party:");
+            feed.Rows(new[]
+            {
+                "  Ironbar                       (Ninja)               [H:100%]  - Frontrank",
+                "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+                "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+            });
+            feed.Prompt("[HP=411/MA=113]:");
+        }
+        feed.Line("You are now following Ironbar.");
+        Par();
+
+        ChatLines.Hear(h.Router, Telepath("Ironbar", "@forget"));
+        Assert.True(h.PartyState.IsInParty);
+        Assert.Null(h.PartyState.LeaderName);
+        rest.RequestWait(WaitReason.Health, resend: true, note: PartyRestSync.ManaNote);
+        Assert.Empty(wire);
+
+        Par();
+
+        Assert.Equal("Ironbar", h.PartyState.LeaderName);
+        Assert.Equal(new[] { "/Ironbar @wait (mana's too low)\r" }, wire);
+    }
+
+    // Report paradigm-20261025-114837, the leader's side: a member back from a
+    // dropped link was invited as they re-entered and followed at once, and their
+    // client's own @comeback came in after. The party of six was full with them in
+    // it, and the request was declined with a @forget that took us off their
+    // roster as their leader. Followed a moment ago and still following, they are
+    // answered as taken back.
+    private static void MemberBackFromADroppedLink(Harness h)
+    {
+        h.Party.LocalCharacterName = "Ironbar";
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        Assert.Contains(h.PartyWire, b => Encoding.Latin1.GetString(b) == "invite Aunty\r");
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
+    // The same return with auto-invite off: the user types `invite Aunty`, and the
+    // game's echo of it is what the leader reads, as it reads the auto-invite's.
+    private static void MemberBackFromADroppedLink_InvitedByHand(Harness h)
+    {
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        Assert.DoesNotContain(h.PartyWire, b => Encoding.Latin1.GetString(b).StartsWith("invite", StringComparison.Ordinal));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
+    [Fact]
+    public void FullParty_InvitedBackByHand_FollowThenComeback_IsAnsweredTakenBack()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink_InvitedByHand(h);
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+        now += TimeSpan.FromSeconds(6);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains("got you - resuming", h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+    }
+
+    [Fact]
+    public void FullParty_InvitedBackByHand_ComebackThenFollow_IsAnsweredInProgress()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink_InvitedByHand(h);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+    }
+
+    // An invite long after the re-entry isn't the return's: the request is judged
+    // as any other.
+    [Fact]
+    public void FullParty_InvitedByHandLongAfterTheReturn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        now += TimeSpan.FromMinutes(1);
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/3"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
+    }
+
+    // A player who logs in and is invited for the first time is no member back from
+    // a dropped link: the invite arms nothing, and their @comeback is judged as any
+    // request.
+    [Fact]
+    public void AFreshRecruit_InvitedByHandOnLoggingIn_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Masta", "Thunder" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Newbie just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Newbie to follow you."));
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Newbie", "@comeback 1/3"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Equal("Newbie", h.Comeback.RecoveringMember);
+    }
+
+    // Stock echoes an invite even when the party had no slot for it: an echo into a
+    // party that is full without the asker's row is no invite on its way.
+    [Fact]
+    public void AnInviteEchoIntoAFullParty_IsNoInviteOnItsWay()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        h.Party.AutoInviteEnabled = false;
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Fresh started to follow you."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Equal(7, h.PartyState.Members.Count);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.DoesNotContain(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.Contains(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+    }
+
+    [Fact]
+    public void FullParty_AMemberAlreadyFollowingAgain_IsAnsweredTakenBack_NotForgotten()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        now += TimeSpan.FromSeconds(6);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains("got you - resuming", h.LastReply);
+        Assert.True(PartyComebackManager.SaysComingOrLater("got you - resuming"));
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+    }
+
+    // Long after the return and the follow, the row alone isn't taken for proof: a
+    // leave line the client missed leaves one behind until the next `par`, and
+    // such a member does need fetching. The request is judged as any other, and
+    // their own row isn't counted against the party.
+    [Fact]
+    public void FullParty_ARequestLongAfterTheReturn_IsJudgedAsAnyRequest_TheirSeatNotCounted()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        now += TimeSpan.FromMinutes(5);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/3"));
+
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
+        Assert.False(Sent(h, "@forget"));
+    }
+
+    // A move of ours since their follow could have left them at an exit, so the
+    // request is judged as any other, even a moment after the follow.
+    [Fact]
+    public void FullParty_AFollowOnReturn_ThenAMoveOfOurs_IsJudgedAsAnyRequest()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        MemberBackFromADroppedLink(h);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        now += TimeSpan.FromSeconds(6);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.DoesNotContain("got you", h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.Equal("Aunty", h.Comeback.RecoveringMember);
+    }
+
+    // The other ordering: their client's @comeback (sent at its first prompt, its
+    // room already confirmed) comes in after our invite on their return and before
+    // they take it. Their row is the [Invited] one the invite gave them: it isn't
+    // counted against them, and the invite and its @join nag are what bring them,
+    // so they are answered as a pickup under way, with no @forget and no walk.
+    [Fact]
+    public void FullParty_AMemberInvitedOnReturn_NotYetFollowing_IsAnsweredInProgress_ThenFollows()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 25, 16, 37, 29, TimeSpan.Zero);
+        h.ComebackNow = () => now;
+        h.Party.LocalCharacterName = "Ironbar";
+        foreach (string member in new[] { "Aunty", "Masta", "Thunder", "Barter", "Blasta" })
+            h.Router.Dispatch(Line($"{member} started to follow you."));
+        StartLair(h);
+        h.Router.Dispatch(Line("Aunty just disconnected!!!."));
+        h.Router.Dispatch(Line("Aunty just entered the Realm."));
+        h.Router.Dispatch(Line("You have invited Aunty to follow you."));
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && m.IsInvited);  // the auto-invite's echo
+        Assert.Equal(6, h.PartyState.Members.Count);
+        now += TimeSpan.FromSeconds(2);
+
+        ChatLines.Hear(h.Router, Telepath("Aunty", "@comeback 1/1"));
+
+        Assert.Contains(PartyComebackManager.AlreadyInProgress, h.LastReply);
+        Assert.False(Sent(h, "@forget"));
+        Assert.DoesNotContain(h.EngineWire, b => Encoding.Latin1.GetString(b).Contains("party is full"));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+
+        h.Router.Dispatch(Line("Aunty started to follow you."));
+
+        Assert.Contains(h.PartyState.Members, m => m.Name == "Aunty" && !m.IsInvited);
+        Assert.Equal(6, h.PartyState.Members.Count);
+    }
+
 
     // ----- followers an exit turned away (leader's screen, Paradigm 2026-10-10) -----
 
@@ -2177,8 +2510,11 @@ public sealed class PartyComebackManagerTests : IDisposable
         for (int i = 1; i <= 5; i++) SeatFollower(h, $"Member{i}");
     }
 
+    // The asking member's own row is their seat on Paradigm too, whatever it reads
+    // (report paradigm-20261025-114837: a member invited on their return was told
+    // the party was full by the row the invite gave them).
     [Fact]
-    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowCounts_PartyIsFull()
+    public void Paradigm_PartyOfSix_TheAskingMembersOwnRowIsTheirSeat_TheyAreFetched()
     {
         using Harness h = NewHarness();
         SeatSix(h, "Tank");
@@ -2186,9 +2522,9 @@ public sealed class PartyComebackManagerTests : IDisposable
 
         ChatLines.Hear(h.Router, Telepath("Tank", "@comeback 1/3"));
 
-        Assert.Contains("my party is full", h.LastReply);
-        Assert.True(Sent(h, "/Tank @forget"));
-        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Contains(PartyComebackManager.ComingForPickup, h.LastReply);
+        Assert.False(Sent(h, "/Tank @forget"));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
     }
 
     // On Stock the member an exit turned away is still on our list: the sixth row

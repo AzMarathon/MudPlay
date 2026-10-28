@@ -4,6 +4,7 @@ using MudPlay.Game.Health;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.Services.Patterns;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -1935,6 +1936,57 @@ public sealed class HealthManagerTests
 
         h.State.Ma = 20;                                          // both: HP is named
         Assert.Equal(PartyRestSync.HpNote, h.Health.PartyWaitNote);
+    }
+
+    // Report paradigm-20261025-114837: back from a dropped link, a follower whose
+    // client had lost its leader's name (the leader's @forget) went below its mana
+    // rest floor, and every @wait it asked for had nobody to go to; the leader
+    // walked on. The @wait is kept, and the next `par`, which names the leader,
+    // puts the leader back and sends it.
+    [Fact]
+    public void Follower_BelowTheManaFloor_WithTheLeaderLost_WaitsOnceParNamesTheLeader()
+    {
+        using Harness h = new();          // percentage mode: MA trigger 30 %, rest-max 95 %
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        ServerFeed feed = new(router);
+        PartyState partyState = new();
+        using PartyManager party = new(router, partyState);
+        party.AttachLineExtractor(feed.Lines);
+        party.LocalCharacterName = "Aunty";
+        using PartyRestSync rest = new(partyState, h.Log);
+        List<string> wire = new();
+        rest.SetWireSender(b => wire.Add(Encoding.Latin1.GetString(b)));
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => partyState.IsInParty && !partyState.SelfIsLeader,
+            requestPartyWait: () => rest.RequestWait(WaitReason.Health, resend: true, note: h.Health.PartyWaitNote),
+            requestPartyOk: () => rest.RequestOk(WaitReason.Health));
+        void Par()
+        {
+            feed.Line("You are following Ironbar.");
+            feed.Line("The following people are in your travel party:");
+            feed.Rows(new[]
+            {
+                "  Ironbar                       (Ninja)               [H:100%]  - Frontrank",
+                "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+                "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+            });
+            feed.Prompt("[HP=411/MA=113]:");
+        }
+
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);
+        feed.Line("You are now following Ironbar.");
+        Par();
+        party.ForgetReconnectMember("Ironbar");
+
+        h.State.Ma = 20;                  // below the 30 % MA rest floor
+        Assert.True(h.ManaGateHeld);
+        Assert.Empty(wire);
+        Assert.Contains(h.Log.Snapshot(), e => e.Severity == LogSeverity.Warn && e.Message.Contains("@wait for Health not sent"));
+
+        Par();
+
+        Assert.Equal(new[] { "/Ironbar @wait (mana's too low)\r" }, wire);
     }
 
     // Report paradigm-20260929-233636: HP bounced 199→203→199 in one burst with the
@@ -5494,7 +5546,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);   // 75% — above trigger, below rest-max
 
         Assert.False(h.HealthGateHeld);     // no floor breach → no gate
@@ -5511,7 +5563,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => false);
+            partyRestingFor: () => null);
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5528,7 +5580,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 200, maxHp: 200);   // full HP, no mana pool
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5546,7 +5598,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 170, maxHp: 200, ma: 50, maxMa: 100); // 85% HP, 50% MA
 
         Assert.Contains("meditate", h.SentLines);
@@ -5564,7 +5616,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 130, maxHp: 200, ma: 90, maxMa: 100); // 65% HP, 90% MA
 
         Assert.Contains("rest", h.SentLines);
@@ -5582,7 +5634,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 130, maxHp: 200, ma: 80, maxMa: 100); // 65% HP, 80% MA
 
         Assert.Contains("meditate", h.SentLines);
@@ -5599,7 +5651,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.State.InCombat = true;
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5617,7 +5669,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5634,7 +5686,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => waits++,
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.Contains("rest", h.SentLines);   // we did opportunistically rest
@@ -5654,7 +5706,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => leaderResting);
+            partyRestingFor: () => leaderResting ? "the leader is resting" : null);
         h.SetPrompt(hp: 150, maxHp: 200);
         Assert.Contains("rest", h.SentLines);
         Assert.True(h.Health.RestInFlight);
@@ -5796,7 +5848,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true,
+            partyRestingFor: () => "the leader is resting",
             isSelfPoisoned: () => true);
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5814,7 +5866,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true,
+            partyRestingFor: () => "the leader is resting",
             isSelfPoisoned: () => false);
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5831,7 +5883,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => false,
+            partyRestingFor: () => null,
             isSelfPoisoned: () => true);
         h.SetPrompt(hp: 50, maxHp: 200);    // 25% — below the 60% rest floor
 
@@ -5971,7 +6023,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         List<string> info = InfoLines(h);
 
         h.SetPrompt(hp: 150, maxHp: 200);

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -664,10 +663,11 @@ public sealed class RoomGraphManager
         // freeze. The results are folded in below in row order, as a plain loop would
         // have. All the readers share is the text they keep: a realm has fifteen
         // rooms to a name, and lair tags and exit hints repeat as much, so each is
-        // kept once for the build.
+        // kept through the load's string pool, which RoomNameIndex keeps its names
+        // through too.
         GameRow[] rows = doc.Rows.ToArray();
         RowRead[] read = new RowRead[rows.Length];
-        ConcurrentDictionary<string, string> texts = new();
+        StringPool texts = _cache.Strings;
         Parallel.For(0, rows.Length,
             static () => new RoomExitSet.Builder(),
             (i, _, exits) =>
@@ -725,7 +725,7 @@ public sealed class RoomGraphManager
         // Fold in guard-monster doors: a placed monster whose greet dialogue
         // opens a door on its own room contributes an `ask` command that the
         // promotion below treats exactly like a lever action.
-        InjectGuardDoorActions(byExit, rooms.Greeters);
+        HashSet<(RoomKey Room, Direction Dir)> guardDoors = InjectGuardDoorActions(byExit, rooms.Greeters);
 
         // Fold in room-CMD reveal actions: a hidden exit whose opener lives in the
         // room's CMD chain (a `remoteaction`, e.g. 9/1012's `clear rubble` revealing
@@ -766,7 +766,13 @@ public sealed class RoomGraphManager
                 : (actions.Select(a => a.StepNumber).Distinct().Count(), false);
 
             actions.Sort(static (a, b) => a.StepNumber.CompareTo(b.StepNumber));
-            var data = new MultiActionExitData(count, specific, actions);
+            // A guard's `ask` is a greet action, not a lever: nothing records that it
+            // flips the door the way a lever's action does, so a guard door is left
+            // out of the lever-gate rules (DoorsHeldOpen.MayPullLever).
+            var data = new MultiActionExitData(count, specific, actions)
+            {
+                DoorOrGate = leverDoor && !guardDoors.Contains((roomKey, dir)) ? (roomKey, dir) : null,
+            };
             RoomExit patched = leverDoor
                 ? exit with { Hint = RoomExitHint.MultiActionHidden, MultiAction = data }
                 : exit with { MultiAction = data };
@@ -994,7 +1000,8 @@ public sealed class RoomGraphManager
     // door is always made routable and the walker reacts to whether the command
     // actually opens it. No-op without a TBInfo source (parameterless / test
     // construction) or when the set has no Monsters table.
-    private void InjectGuardDoorActions(
+    // Returns the guarded exits.
+    private HashSet<(RoomKey Room, Direction Dir)> InjectGuardDoorActions(
         Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit,
         List<(RoomKey Room, Greeter Monster)> greeterRooms)
     {
@@ -1040,6 +1047,7 @@ public sealed class RoomGraphManager
                     ? $" — gated on {AbilityNames.GetName(abilityGate) ?? $"ability {abilityGate}"}; walker issues the command and reacts to whether it opens."
                     : "."));
         }
+        return guardExits.Keys.ToHashSet();
     }
 
     // The monsters that carry a greet, by number: what the guard-door and
@@ -1086,14 +1094,19 @@ public sealed class RoomGraphManager
             Room room = _rooms[key];
 
             // Collapse synonyms (clear/move/push × rubble/mound/rock all reveal the
-            // same exit) to the first keyword per (target room, direction).
-            Dictionary<(int Room, int Dir), (string Keyword, bool Rolled)>? firstByExit = null;
+            // same exit) to the first keyword per (target room, direction), keeping
+            // every synonym to tell whether the exit's own cell already lists one.
+            Dictionary<(int Room, int Dir), (string Keyword, bool Rolled, List<string> Synonyms)>? firstByExit = null;
             foreach (TBInfoActionResolver.RemoteActionExit ra in
                      TBInfoActionResolver.EnumerateRemoteActions(_tbinfo, room.Cmd))
-                (firstByExit ??= new()).TryAdd((ra.RoomNumber, ra.DirectionIndex), (ra.Keyword, ra.Rolled));
+            {
+                firstByExit ??= new();
+                if (firstByExit.TryGetValue((ra.RoomNumber, ra.DirectionIndex), out var first)) first.Synonyms.Add(ra.Keyword);
+                else firstByExit[(ra.RoomNumber, ra.DirectionIndex)] = (ra.Keyword, ra.Rolled, new List<string> { ra.Keyword });
+            }
             if (firstByExit is null) continue;
 
-            foreach (((int roomNum, int dirIdx), (string keyword, bool rolled)) in firstByExit)
+            foreach (((int roomNum, int dirIdx), (string keyword, bool rolled, List<string> synonyms)) in firstByExit)
             {
                 Direction dir = s_directions[dirIdx];
                 RoomKey target = new(key.Map, roomNum);
@@ -1106,6 +1119,22 @@ public sealed class RoomGraphManager
                 var exitKey = (target, dir);
                 if (!byExit.TryGetValue(exitKey, out List<ExitAction>? list))
                     byExit[exitKey] = list = new List<ExitAction>();
+
+                // The exit's own action cell can already list this command, under any of
+                // its synonyms (8/560's `turn wheel` on its N gate is both its CMD and a
+                // D-slot cell). Adding it again had the engines send it twice per
+                // crossing, and the gate was still shut after every pair (report
+                // paradigm-20261026-150710; GAME_MECHANICS "Multi-action exits and
+                // levers" has the door toggle).
+                int listed = list.FindIndex(a => a.StepNumber == 1 && a.RemoteSourceRoom == remote
+                    && a.Commands.Any(c => synonyms.Contains(c, StringComparer.OrdinalIgnoreCase)));
+                if (listed >= 0)
+                {
+                    if (rolled) list[listed] = list[listed] with { Rolled = true };
+                    _log?.Log(LogSeverity.Debug, "RoomGraph",
+                        $"Room {target} {dir}: room-CMD action '{keyword}' is already the exit's action cell; not added twice.");
+                    continue;
+                }
                 list.Add(new ExitAction(StepNumber: 1, new[] { keyword }, remote, Rolled: rolled));
 
                 _log?.Log(LogSeverity.Info, "RoomGraph",
@@ -1826,8 +1855,8 @@ public sealed class RoomGraphManager
         Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
 
     // exits belongs to the reading thread and is empty before and after each row;
-    // texts is the one thing the readers share (see Shared).
-    private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, ConcurrentDictionary<string, string> texts)
+    // texts is the one thing the readers share.
+    private static RowRead ReadRow(GameRow row, RoomExitSet.Builder exits, StringPool texts)
     {
         if (!TryReadInt(row, "Map Number", out int map)) return default;
         if (!TryReadInt(row, "Room Number", out int roomNumber)) return default;
@@ -1839,7 +1868,7 @@ public sealed class RoomGraphManager
         // those — keep them in the graph as null-name so the tracker
         // can learn the real name on first observation. Render through
         // Room.DisplayName for any user-facing label.
-        string name = Shared(texts, TryReadString(row, "Name") ?? string.Empty);
+        string name = texts.Get(TryReadString(row, "Name") ?? string.Empty);
 
         int cmd = TryReadIntOrZero(row, "CMD");
 
@@ -1870,7 +1899,7 @@ public sealed class RoomGraphManager
                 // paradigm-20260729-221044). The real promotion runs in the instance
                 // pass PromoteCmdTeleportExits, which can see _tbinfo and only promotes
                 // exits whose CMD chain genuinely teleports to the exit's target.
-                if (exit.RawHint is { } hint) exit = exit with { RawHint = Shared(texts, hint) };
+                if (exit.RawHint is { } hint) exit = exit with { RawHint = texts.Get(hint) };
                 exits.Set(dir, exit);
                 mask |= 1u << (int)dir;
             }
@@ -1895,7 +1924,7 @@ public sealed class RoomGraphManager
         }
 
         string? lairRaw = TryReadString(row, "Lair");
-        lairRaw = lairRaw is null || IsLairSentinel(lairRaw) ? null : Shared(texts, lairRaw);
+        lairRaw = lairRaw is null || IsLairSentinel(lairRaw) ? null : texts.Get(lairRaw);
 
         Room room = new()
         {
@@ -1913,11 +1942,6 @@ public sealed class RoomGraphManager
         };
         return new RowRead(room, actions, modBucket);
     }
-
-    // The one string the build keeps for this text. Which reader's copy that is
-    // depends on who got there first; the copies read the same.
-    private static string Shared(ConcurrentDictionary<string, string> texts, string text) =>
-        texts.GetOrAdd(text, text);
 
     // MDB exports the empty cell as either a NUL, a literal blank, or
     // whitespace. Treat any of those as "no lair".

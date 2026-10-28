@@ -18,6 +18,7 @@ namespace MudPlay.Game.Map;
 public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) : IRoomFilter
 {
     public bool IsAvoided(RoomKey key) => inner.IsAvoided(key);
+    public IDisposable? BeginSearch() => inner.BeginSearch();
     public bool IsExitHeldOpen(RoomKey from, in RoomExit exit) => inner.IsExitHeldOpen(from, in exit);
 
     public bool IsExitBlocked(in RoomExit exit) => DescribeExitBlock(in exit) != ExitBlockReason.None;

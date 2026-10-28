@@ -36,9 +36,10 @@ public enum ItemFinderLayout { Mixed, Weapon, Armour }
 // Character group (class / usable-at level / alignment, which defer to
 // ItemEquipFilter.CanEquip), a Slot & type group (slot, weapon type, armour type,
 // backstab-capable), and a Filter by stats group — bonus thresholds (HP / mana /
-// regens / damage / accuracy / crits / backstab / AC / DR) kept at-or-above the
-// ticker, hit-magic-level and required-level min/max ranges, and the strength
-// requirement gate kept at-or-below the ticker. Read-only — the finder informs slot
+// regens / damage / accuracy / crits / backstab / AC / DR, plus a "More stats"
+// ticker for every other bonus column) kept at-or-above the ticker, hit-magic-level
+// and required-level min/max ranges, and the strength requirement gate kept
+// at-or-below the ticker. Read-only — the finder informs slot
 // choices; it doesn't write the set.
 public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
 {
@@ -309,6 +310,47 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     // Negate dropdown: NoNegate = off; a spell name keeps only items negating it.
     [ObservableProperty] private string? _selectedNegate = NoNegate;
 
+    // "More stats": a ≥ ticker for every other bonus column the grid shows, in
+    // the grid's column order.
+    public IReadOnlyList<ItemFinderStatFilter> MoreStatFilters { get; } = new ItemFinderStatFilter[]
+    {
+        new("Illumination",      static e => e.Illuminate),
+        new("Strength",          static e => e.Strength),
+        new("Intellect",         static e => e.Intellect),
+        new("Willpower",         static e => e.Willpower),
+        new("Agility",           static e => e.Agility),
+        new("Health",            static e => e.Health),
+        new("Charm",             static e => e.Charm),
+        new("+Min damage",       static e => e.MinDamageBonus),
+        new("+Max damage",       static e => e.MaxDamageBonus),
+        new("Spell damage",      static e => e.SpellDamage),
+        new("+Encumbrance",      static e => e.EncumBonus),
+        new("Stealth",           static e => e.Stealth),
+        new("Spellcasting",      static e => e.Spellcasting),
+        new("Quickness",         static e => e.Quickness),
+        new("Traps",             static e => e.Traps),
+        new("Picklocks",         static e => e.Picklocks),
+        new("Thievery",          static e => e.Thievery),
+        new("Prot. from evil",   static e => e.ProtEvil),
+        new("Prot. from good",   static e => e.ProtGood),
+        new("VileWard",          static e => e.VileWard),
+        new("Dodge",             static e => e.Dodge),
+        new("Magic resist",      static e => e.MagicResist),
+        new("Shock shield",      static e => e.ShockShield),
+        new("Punch accuracy",    static e => e.PunchAccy),
+        new("Punch damage",      static e => e.PunchDmg),
+        new("Kick accuracy",     static e => e.KickAccy),
+        new("Kick damage",       static e => e.KickDmg),
+        new("Jumpkick accuracy", static e => e.JumpKickAccy),
+        new("Jumpkick damage",   static e => e.JumpKickDmg),
+        new("Cold resist",       static e => e.ColdResist),
+        new("Fire resist",       static e => e.FireResist),
+        new("Stone resist",      static e => e.StoneResist),
+        new("Lightning resist",  static e => e.LightningResist),
+        new("Water resist",      static e => e.WaterResist),
+        new("Shadow resist",     static e => e.ShadowResist),
+    };
+
     // ----- Trial gearset (right flyout, default hidden) -----
     // The what-if loadout: one row per equippable slot, each holding a trialled item
     // + a Hold lock. Projects stats + encumbrance without touching real gear.
@@ -424,6 +466,8 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
 
         _filterSuspended = false;
         PropertyChanged += OnFilterPropertyChanged;
+        foreach (ItemFinderStatFilter f in MoreStatFilters)
+            f.PropertyChanged += OnMoreStatChanged;
         ApplyFilter();
         RecomputeTrial();
     }
@@ -585,6 +629,11 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
             _negateIdByLabel[label] = neg.Id;
             NegateOptions.Add(label);
         }
+    }
+
+    private void OnMoreStatChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (!_filterSuspended) ApplyFilter();
     }
 
     private void OnFilterPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -768,6 +817,8 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         if (MinBsMax > 0 && e.BsMax < MinBsMax) return false;
         if (MinAc > 0 && e.Ac < MinAc) return false;
         if (MinDr > 0 && e.Dr < MinDr) return false;
+        foreach (ItemFinderStatFilter f in MoreStatFilters)
+            if (!f.Passes(e)) return false;
 
         if (MaxStrReq > 0 && e.StrReq > MaxStrReq) return false;
         if (FilterByLevelRange)
@@ -806,6 +857,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         MinBsAccuracy = MinBsMin = MinBsMax = MinAc = MinDr = 0;
         MaxStrReq = MinLevelReq = MaxLevelReq = 0;
         SelectedNegate = NoNegate;
+        foreach (ItemFinderStatFilter f in MoreStatFilters) f.Min = 0;
         _filterSuspended = false;
         // Attack type is reset too, so rebuild the catalog (Swings back to base)
         // rather than only re-running the filter over the current projection.

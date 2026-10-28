@@ -171,24 +171,24 @@ public partial class MainWindowViewModel : ObservableObject
 
     // Host the active connection target resolves to. Quick Connect wins over
     // the saved BBS pin when set; otherwise the user's BBS Host stands in.
-    public string Host => _quickConnectTarget?.Host ?? ResolveActiveBbs()?.Host ?? string.Empty;
+    public string Host => _quickConnectTarget?.Host ?? PeekActiveBbs()?.Host ?? string.Empty;
 
     // Port the active connection target resolves to. 0 when nothing is configured.
-    public int Port => _quickConnectTarget?.Port ?? ResolveActiveBbs()?.Port ?? 0;
+    public int Port => _quickConnectTarget?.Port ?? PeekActiveBbs()?.Port ?? 0;
 
     // Name of the dial target — Quick Connect's host:port when active,
     // otherwise the active BBS's display name (or null). Consumed by the
     // title bar and the connect-status banner.
     public string? ActiveBbsName => _quickConnectTarget is { } qc
         ? $"Quick Connect: {qc.Host}:{qc.Port}"
-        : ResolveActiveBbs()?.Name;
+        : PeekActiveBbs()?.Name;
 
     // Optional URL field on the active BBS's BbsProfile.WebsiteUrl. Drives
     // the Help → BBS site menu item's enable state + the actual launch. Quick
     // Connect targets have no website (Quick Connect bypasses the BBS profile
     // store entirely), so this is null in that case.
     public string? BbsWebsiteUrl => _quickConnectTarget is null
-        ? ResolveActiveBbs()?.WebsiteUrl
+        ? PeekActiveBbs()?.WebsiteUrl
         : null;
 
     // True when BbsWebsiteUrl looks launch-able — gates the Help menu item.
@@ -198,7 +198,7 @@ public partial class MainWindowViewModel : ObservableObject
     // entry appears in the Help menu at all — independent of HasBbsWebsite,
     // which only gates its enabled state. Edited under Settings → Toolbar +
     // Shortcuts. Defaults on when there's no active BBS to read.
-    public bool ShowBbsWebsiteInHelp => ResolveActiveBbs()?.ShowWebsiteInHelp ?? true;
+    public bool ShowBbsWebsiteInHelp => PeekActiveBbs()?.ShowWebsiteInHelp ?? true;
 
     // User-editable Help-menu website list (Global tier). Composed into the
     // Help menu by the code-behind, and edited under Settings → Toolbar +
@@ -858,6 +858,10 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SentCommands.TypedAtGamePrompt =
             line => SentCommandTrail.RowIsGamePrompt(
                 CursorRowText(), line, AppServices.Current.CurrentStatlinePromptRegex);
+        // The trainer tracker tells the form answering `train stats` by what the
+        // screen shows, and a screen drawn since the command by its clears.
+        AppServices.Current.TrainerMenu.ReadScreen = BuildVisibleScreenText;
+        AppServices.Current.TrainerMenu.ScreenClears = () => Emulator.ScreenClears;
 
         // Feed the crash reporter a live-state snapshot so a fatal fault's
         // Crash-<timestamp>.md carries the same scrollback / log / engine dump a
@@ -1043,7 +1047,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Seed the BBS-pin sentinel so OnProfileMutatedForBbs can detect
         // the first real change against a known baseline.
-        _lastSeenBbsName = ResolveActiveBbs()?.Name;
+        _lastSeenBbsName = PeekActiveBbs()?.Name;
 
         // Help-menu website list (Global tier). Seed now, then re-read on every
         // global-settings Save so the Toolbar + Shortcuts editor's changes land
@@ -1129,7 +1133,7 @@ public partial class MainWindowViewModel : ObservableObject
         // Recent GOTO destinations flyout, refreshed on every recorded walk (and
         // on profile swap, which GotoHistoryStore fires Changed for).
         RebuildRecentDestinationsMenu();
-        AppServices.Current.GotoHistory.Changed += RebuildRecentDestinationsMenu;
+        AppServices.Current.GotoHistory.Changed += QueueRecentDestinationsRebuild;
 
         // Sys Goto flyout, rebuilt on profile load (character/BBS swap) and on any
         // profile mutation (a credentials edit fires ProfileMutated) so toggling the
@@ -1283,8 +1287,9 @@ public partial class MainWindowViewModel : ObservableObject
         // matching prompt — a prompt that never matches is the very thing it
         // watches for.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.StatlineReconcile.NoteRoomDisplayed();
-        // Ends the walker hold a post-kill floor check put up.
-        _roomDisplayParser.RoomParsed += _ => AppServices.Current.AutoGetItems.NoteRoomDisplayed();
+        // Ends the walker hold a post-kill floor check put up, or settles the look it
+        // owes: the display showed the floor.
+        _roomDisplayParser.RoomParsed += _ => AppServices.Current.FloorCheck.NoteRoomDisplayed();
         // Ends the walker hold a summon-on-death kill put up, when the room came
         // back empty.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
@@ -1571,6 +1576,7 @@ public partial class MainWindowViewModel : ObservableObject
         // It also reads the form it is about to type into: the trained stats and CP
         // Left stand on the terminal grid, which only this session holds.
         AppServices.Current.AutoTrain.SetScreenReader(BuildVisibleScreenText);
+        AppServices.Current.AutoTrain.SetCursorReader(() => (Emulator.Screen.CursorY, Emulator.Screen.CursorX));
         // TrainerWalk sends `train` / `stat` only OUTSIDE the form (bare `train`
         // has no Point Cost Chart, so it never raises MenuOwnsKeyboard; `stat`
         // fires post-training), so it stays on the gate-wrapped pipeline.
@@ -1633,6 +1639,7 @@ public partial class MainWindowViewModel : ObservableObject
         // AutoGetItemsManager's `get <name>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoGetItems.SetWireSender(Named("AutoGetItems"));
+        AppServices.Current.FloorCheck.SetWireSender(Named("FloorCheck"));
         // The hang-up item check's own two sends, `i` and a room redisplay; its
         // gets go out through the auto-get engine above.
         AppServices.Current.HangupItems.SetWireSender(Named("HangupItems"));
@@ -1865,7 +1872,7 @@ public partial class MainWindowViewModel : ObservableObject
         // freeze/resume across the gap.
         AppServices.Current.CastDirector.SetConnectedGate(() => IsConnected);
         AppServices.Current.CleanupLogout.SetAutoLogoutEnabledCheck(
-            () => ResolveActiveBbs()?.ReconnectAfterCleanup ?? false);
+            () => PeekActiveBbs()?.ReconnectAfterCleanup ?? false);
         AppServices.Current.CleanupLogout.SetDisconnectCallback(
             () => _ = DisconnectInternalAsync());
 
@@ -2466,8 +2473,10 @@ public partial class MainWindowViewModel : ObservableObject
         // tracker can never locate us — every state reads "Lost", which
         // misleads a fresh profile into thinking something broke. Surface
         // the real cause instead and point the user at the fix. Clears
-        // automatically once a set loads (RoomGraph.GraphReloaded → here).
-        if (room is null && AppServices.Current.RoomGraph.RoomCount == 0)
+        // automatically once a set loads (RoomGraph.GraphReloaded → here). A set
+        // chosen but not built yet (the startup draft's) is no missing set: the
+        // slot reads as it did with the set built and no room yet.
+        if (room is null && AppServices.Current.RoomGraph.RoomCount == 0 && !AppServices.Current.GameData.BuildDeferred)
             return "Load a game data set to use navigation";
         // The map/room number, not the room name. Names run long ("Newhaven,
         // Arena", …) and were overflowing the narrow status slot; the key is
@@ -2700,6 +2709,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Warn("Connect", "No active BBS — open Settings → BBS + Display first.");
             return;
         }
+        AppServices.Current.BuildDeferredGameData("connecting to the game");
 
         // Per-BBS retry knobs. ReconnectOnFailedConnect gates the loop:
         // when off, the user gets one shot and we surface the error — no
@@ -2933,7 +2943,7 @@ public partial class MainWindowViewModel : ObservableObject
             // takes over: it waits for a safe room, exits to the menu, and
             // drops the carrier for us — so the banner promises the managed
             // flow rather than telling the user to quit manually.
-            bool autoLogout = ResolveActiveBbs()?.ReconnectAfterCleanup ?? false;
+            bool autoLogout = PeekActiveBbs()?.ReconnectAfterCleanup ?? false;
             string banner = autoLogout
                 ? $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - WILL AUTO-LOG-OFF AT A SAFE ROOM, THEN RECONNECT.]"
                 : $"[CLEANUP WARNING - BBS GOES DOWN IN {warning.MinutesRemaining} MIN - QUIT AT A SAFE ROOM TO ARM AUTO-RECONNECT.]";
@@ -3350,6 +3360,10 @@ public partial class MainWindowViewModel : ObservableObject
     private static BbsProfile? ResolveActiveBbs()
         => AppServices.Current.ResolveActiveBbs();
 
+    // For a setting read off the BBS and nothing more (AppServices.PeekActiveBbs).
+    private static BbsProfile? PeekActiveBbs()
+        => AppServices.Current.PeekActiveBbs();
+
     private void RefreshBbsBindings()
     {
         OnPropertyChanged(nameof(Host));
@@ -3363,7 +3377,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         // Mirror the title-bar identity onto the OS process name so
         // multiple instances are distinguishable in ps / top / htop.
-        ProcessTitle.Set(AppServices.Current.Profile.CurrentProfileName, ResolveActiveBbs()?.Name);
+        ProcessTitle.Set(AppServices.Current.Profile.CurrentProfileName, PeekActiveBbs()?.Name);
     }
 
     // ProfileLoaded handler that wires in the Settings → General
@@ -3415,7 +3429,7 @@ public partial class MainWindowViewModel : ObservableObject
     // quick-dialled target.
     private void OnProfileMutatedForBbs()
     {
-        string? current = ResolveActiveBbs()?.Name;
+        string? current = PeekActiveBbs()?.Name;
         if (!string.Equals(current, _lastSeenBbsName, StringComparison.Ordinal))
         {
             ClearQuickConnect();
@@ -3505,6 +3519,8 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 if (ShowSplash) ShowSplash = false;   // session started — dismiss the splash
                 IsConnected = true;
+                // A new session starts at the login, never inside a trainer screen.
+                AppServices.Current.TrainerMenu.ForceExit("connected");
                 // Fresh session — drop any cleanup-watcher state carried
                 // over and clear any pending auto-reconnect schedule.
                 // Do NOT zero _reactiveReconnectCount here: a BBS in
@@ -3606,6 +3622,15 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
                 // Leaving the game takes us off every member list we were still on.
                 if (wasConnected) AppServices.Current.Party.NoteLinkDropped();
+                // A trainer screen open when the link dropped is gone with the link:
+                // its hold would block the menu entry and the re-entry. Guarded like
+                // the hangup note above: its exit events run subscribers here and now.
+                try { AppServices.Current.TrainerMenu.ForceExit("link dropped"); }
+                catch (Exception ex)
+                {
+                    AppServices.Current.Log.Warn("TrainerMenu",
+                        $"Couldn't let go of the trainer screen's hold on the drop ({ex.GetType().Name}: {ex.Message}).");
+                }
                 // A member's @comeback kept for the master switch names a place
                 // from the stay that just ended.
                 AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
@@ -3692,6 +3717,7 @@ public partial class MainWindowViewModel : ObservableObject
                 // back: left standing, the roster is re-issued while offline (the
                 // Auto-Combat toggle, the PvP fight stopped above) and acted on.
                 AppServices.Current.RoomClassifier.NoteGameLeft();
+                AppServices.Current.FloorCheck.NoteGameLeft();
                 // A drop with a Hangup monster in sight turns the watch off for the
                 // first minute back in the game.
                 AppServices.Current.MonsterWatch.NoteDisconnected();
@@ -3981,7 +4007,19 @@ public partial class MainWindowViewModel : ObservableObject
         // Observe outbound for the trainer-menu watcher — it gates on
         // the user's own `train stats` / `train` going out before
         // accepting the "Point Cost Chart" marker as menu confirmation.
-        AppServices.Current.TrainerMenu.ObserveOutbound(data);
+        // It reads the screen and arms a dispatcher timer, so it runs on the UI
+        // thread; a send made off it is noted there, still ahead of any answer
+        // (the answer's read is posted after it). Nothing sent with no link up
+        // reaches a game to answer it.
+        if (IsConnected)
+        {
+            if (Dispatcher.UIThread.CheckAccess()) AppServices.Current.TrainerMenu.ObserveOutbound(data);
+            else
+            {
+                byte[] sent = data.ToArray();
+                Dispatcher.UIThread.Post(() => AppServices.Current.TrainerMenu.ObserveOutbound(sent));
+            }
+        }
         // Suicide-password capture — during the AwaitingNewPassword
         // state, the next bytes the user types ARE the password. We
         // peek here (the bytes still flow to the server unchanged).
@@ -4646,6 +4684,7 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        using PerformanceMonitor.Scope open = AppServices.Current.Performance.Measure("open Conversation window");
         ConversationViewModel vm = new(
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
@@ -4964,8 +5003,8 @@ public partial class MainWindowViewModel : ObservableObject
     {
         ProfileService profile = AppServices.Current.Profile;
         string? bbs = profile.CurrentProfileName is null
-            ? selectedBbs ?? profile.CurrentBbsName ?? ResolveActiveBbs()?.Name
-            : profile.CurrentBbsName ?? ResolveActiveBbs()?.Name;
+            ? selectedBbs ?? profile.CurrentBbsName ?? PeekActiveBbs()?.Name
+            : profile.CurrentBbsName ?? PeekActiveBbs()?.Name;
         return string.IsNullOrWhiteSpace(bbs) ? null : bbs;
     }
 
@@ -5667,6 +5706,22 @@ public partial class MainWindowViewModel : ObservableObject
     // Drives the shared separator below both walk-to flyouts — shown when either
     // Favorites or Recent destinations has rows.
     public bool HasWalkFlyouts => _hasFavorites || _hasRecentDestinations;
+
+    private bool _recentDestinationsRebuildQueued;
+
+    // Picking a recent destination records it, so Changed fires inside the menu click:
+    // rebuilding then detaches the clicked item before Avalonia's close-on-click walks
+    // up from it to the menu, and the menu stays open.
+    private void QueueRecentDestinationsRebuild()
+    {
+        if (_recentDestinationsRebuildQueued) return;
+        _recentDestinationsRebuildQueued = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            _recentDestinationsRebuildQueued = false;
+            RebuildRecentDestinationsMenu();
+        });
+    }
 
     private void RebuildRecentDestinationsMenu()
     {

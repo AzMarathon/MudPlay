@@ -83,7 +83,7 @@ public sealed class RemoteCommandCatalogTests
     public void RemovedFromCatalog(string cmd)
         => Assert.False(RemoteCommandCatalog.TryGetCategory(cmd, out _));
 
-    // ===== Toggle Settings (12 auto-* + @settings + @reset + @atkprio + @atkorder) =====
+    // ===== Toggle Settings (12 auto-* + @settings + @reset + @atkprio + @atkorder + @relation) =====
 
     [Theory]
     [InlineData("@atkprio")]
@@ -101,6 +101,7 @@ public sealed class RemoteCommandCatalogTests
     [InlineData("@auto-search")]
     [InlineData("@settings")]
     [InlineData("@reset")]
+    [InlineData("@relation")]
     public void AlterSettings_TogglesAndState(string cmd)
         => Assert.Equal(PlayerRemoteControls.AlterSettings, Lookup(cmd));
 
@@ -265,6 +266,7 @@ public sealed class RemoteCommandCatalogTests
     [InlineData(PlayerRemoteControls.ExecuteCommands,   "@get-all")]
     [InlineData(PlayerRemoteControls.AlterSettings,     "@auto-combat")]
     [InlineData(PlayerRemoteControls.AlterSettings,     "@reset")]
+    [InlineData(PlayerRemoteControls.AlterSettings,     "@relation")]
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@hangup")]
     [InlineData(PlayerRemoteControls.HangupDisconnect,  "@relog")]
     [InlineData(PlayerRemoteControls.SysopCommands,     "@suicide")]
@@ -294,5 +296,19 @@ public sealed class RemoteCommandCatalogTests
         Assert.Contains(command, tip);
         Assert.Contains("Ticked grants", tip);
         Assert.Contains("Unticked denies", tip);
+    }
+
+    // Alter settings carries @relation, which can make the client hang up or run
+    // (user, 2026-10-25): its box says so, and no other box does.
+    [Fact]
+    public void AlterSettingsTooltip_WarnsOfHangupAndFlee()
+    {
+        ViewModels.GameData.Edit.PlayerEditDialogViewModel vm = new(
+            new PlayerRecord("Test", string.Empty, null, null, null, null, null, null,
+                             DateTime.UtcNow, DateTime.UtcNow));
+
+        Assert.Contains("Careful: @relation can set a monster to Hangup or Flee.", vm.RcAlterSettingsTip);
+        Assert.DoesNotContain("Careful", vm.RcHangupDisconnectTip);
+        Assert.DoesNotContain("Careful", vm.RcExecuteCommandsTip);
     }
 }

@@ -44,9 +44,19 @@ public sealed class AutoTrainApplyTests : IDisposable
     private readonly List<string> _sent = new();
     private readonly List<bool> _explicitResults = new();
     private readonly ManualClock _clock = new();
+    // When the test began, for AdvanceTo.
+    private readonly DateTimeOffset _started;
     private readonly ContinuationPump _pump = new();
     private AutoTrainManager? _manager;
     private string _screen = string.Empty;
+    // What the pass reads the form from: the test's screen text, or the terminal a
+    // game fed as bytes draws on.
+    private Func<string> _readScreen;
+    // Whether `train stats` finds a trainer: the game echoes it and draws the form.
+    private bool _trainerHere = true;
+    // Where that answer arrives: the client's terminal and line extractor, its
+    // rows through the router.
+    private readonly ServerFeed _answers;
     private Action<string>? _onTyped;
     private bool _formCloses = true;
     private int _formSends = -1;
@@ -58,8 +68,16 @@ public sealed class AutoTrainApplyTests : IDisposable
         DefaultPatterns.Seed(_router);
         _parser = new StatParser(_stats);
         _parser.AttachLineExtractor(_feed.Lines);
-        _trainer = new TrainerMenuTracker(_router, new PartyState());
+        // The tracker's cap and late-form ticks run on the pass's clock, under the pump.
+        _trainer = new TrainerMenuTracker(_router, new PartyState(), now: () => _clock.Now.UtcDateTime,
+                                          schedule: (after, tick) => _clock.Arm(after, () => _pump.Run(tick)));
         _profile.LoadDefaultProfile();
+        _readScreen = () => _screen;
+        _answers = new ServerFeed(_router);
+        // The tracker reads the game's answer off the terminal it is drawn on.
+        _trainer.ReadScreen = () => TrainStatsWire.ScreenText(_answers.Emulator.Screen);
+        _trainer.ScreenClears = () => _answers.Emulator.ScreenClears;
+        _started = _clock.Now;
     }
 
     public void Dispose()
@@ -89,20 +107,25 @@ public sealed class AutoTrainApplyTests : IDisposable
                                            new ListedEffectCatalog(new MessageStore(), gameData), _router,
                                            now: () => _clock.Now, delay: _clock.Delay);
         manager.SetWireSender(OnWire);
-        manager.SetScreenReader(() => _screen);
+        manager.SetScreenReader(() => _readScreen());
         manager.PlanCommitted += () => _committed++;
         manager.ApplyTargetsCompleted += _explicitResults.Add;
         return _manager = manager;
     }
 
-    // What the game does with a line the client sends: `train stats` opens the
-    // form, and the return after the form's last field closes it and shows the room.
+    // What the game does with a line the client sends: `train stats` is echoed and
+    // opens the form, and the return after the form's last field closes it and
+    // shows the room.
     private void OnWire(byte[] bytes)
     {
         _trainer.ObserveOutbound(bytes);
         string text = Encoding.Latin1.GetString(bytes).TrimEnd('\r');
         lock (_wireLock) _sent.Add(text);
-        if (text == "train stats") _formSends = 0;
+        if (text == "train stats")
+        {
+            _formSends = 0;
+            if (_trainerHere) GameEchoesAndDrawsTheForm(text);
+        }
         else if (_formSends >= 0 && ++_formSends == FormPayloads)
         {
             _formSends = -1;
@@ -114,6 +137,11 @@ public sealed class AutoTrainApplyTests : IDisposable
     private void Dispatch(string line) =>
         _router.Dispatch(new LineExtractor.EmittedLine(
             line, new CellAttributes[line.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false));
+
+    // The echo on the prompt row, then the form. The pass reads its own screen
+    // text (_screen), so only the rows matter here.
+    private void GameEchoesAndDrawsTheForm(string command) =>
+        _answers.Raw(TrainStatsWire.Echo(command) + TrainStatsWire.Form(133, 26));
 
     private string[] Sent()
     {
@@ -557,6 +585,7 @@ public sealed class AutoTrainApplyTests : IDisposable
     {
         AutoTrainManager manager = Build(paradigm: false);
         CleanStat();
+        _trainerHere = false;
 
         Start(manager.TrainNow);
         Assert.True(manager.IsBusy);
@@ -566,11 +595,447 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Contains("refused", manager.LastApplyNote);
         Assert.Equal(0, _committed);
+        Assert.False(_trainer.MenuOwnsKeyboard);   // the game's own word: no form is coming
 
         // The render wait and the screen's timeout running out afterwards start nothing.
         Settle();
         Assert.False(manager.IsBusy);
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Contains("refused", manager.LastApplyNote);
+    }
+
+    // ----- output already on its way when `train stats` went out ---------------
+
+    // The game's reads, through the wire's prompt scan and the terminal, as the
+    // client takes them, with the tracker's prompt reads wired as AppServices and
+    // the terminal session wire them; the pass reads the form off that terminal.
+    // The game's answers are fed by the test.
+    private ServerFeed GameOnTheWire()
+    {
+        WirePromptScanner scanner = new();
+        scanner.PromptObserved += _ => _trainer.NotifyLivePromptObserved();
+        ServerFeed game = new(_router, promptScanner: scanner);
+        TerminalScreen screen = game.Emulator.Screen;
+        _readScreen = () => TrainStatsWire.ScreenText(screen);
+        _manager?.SetCursorReader(() => (screen.CursorY, screen.CursorX));
+        _trainer.ReadScreen = _readScreen;
+        _trainer.ScreenClears = () => game.Emulator.ScreenClears;
+        _trainerHere = false;
+        _formCloses = false;
+        return game;
+    }
+
+    // The form on the wire: it is painted again with each value typed into it,
+    // SAVE leaves it, and the return after that shows the room. paint draws it
+    // with Strength and CP Left; the Character Editor unless given.
+    private void GameTakesTheForm(ServerFeed game, Func<int, int, string>? paint = null)
+    {
+        paint ??= (strength, cp) => TrainStatsWire.Form(strength, cp);
+        int payloads = 0;
+        _onTyped = text =>
+        {
+            if (text == "train stats") return;
+            payloads++;
+            if (text == "136") game.Raw(paint(136, 1));
+            if (payloads == FormPayloads - 1) game.Raw(TrainStatsWire.Saved());
+            if (payloads == FormPayloads) game.Raw(TrainStatsWire.RoomRedrawn());
+        };
+    }
+
+    private static byte[] Bytes(string line) => Encoding.Latin1.GetBytes(line + "\r");
+
+    // Reports paradigm-20261026-225703 / -225718: a party member trained on the
+    // leader's `@train`. An Enter sent just before `train stats` had its room
+    // display on the way, and it came in after `train stats` went out and before
+    // the game's echo of it. It was taken for the form closing: the pass gave up,
+    // the background engines were let go, and the member's `@train` reply and the
+    // `par` polls were typed into the Family Name box of the form the game drew
+    // next. The room display answers the Enter; the form is the answer to `train
+    // stats`, and the plan is typed into it with nothing else.
+    [Fact]
+    public void ARoomDisplayAlreadyOnItsWay_KeepsTheForm_AndThePlanIsApplied()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.RoomRedrawn()));
+        engine(Bytes(">Ironbar {Trained to level 31.}"));
+        engine(Bytes("par"));
+
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Assert.True(manager.IsBusy);
+        Assert.Equal(new[] { "train stats" }, Sent());
+
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        engine(Bytes("par"));
+        Settle();
+        Assert.False(manager.IsBusy);
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.Null(manager.LastApplyNote);
+        Assert.Equal(FormPayloads + 1, Sent().Length);   // `train stats` and the pass's own keystrokes only
+        Assert.False(_trainer.MenuOwnsKeyboard);
+
+        engine(Bytes("par"));   // back in the world: the engines send again
+        Assert.Equal("par", Sent()[^1]);
+    }
+
+    // Report paradigm-20261026-225733: party lines after `train stats`, each with
+    // the prompt redrawn ahead of it, came before the echo. The first prompt was
+    // taken for the echo and the second for the form closing.
+    [Fact]
+    public void PartyLinesAheadOfTheEcho_KeepTheForm_AndThePlanIsApplied()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.PartyLine("Ironbar looks Thunder up and down.")));
+        Start(() => game.Raw(TrainStatsWire.PartyLine("Thunder just moved to the front rank in your group.")));
+        engine(Bytes(">Ironbar {Trained to level 31.}"));
+        Assert.True(_trainer.MenuOwnsKeyboard);
+
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.Equal(FormPayloads + 1, Sent().Length);
+    }
+
+    // Not at a trainer the game echoes `train stats`, refuses it and leaves its
+    // prompt waiting, in one read: the keyboard goes back and nothing is typed.
+    [Fact]
+    public void NotAtATrainer_TheKeyboardIsReleased_AndNothingIsTyped()
+    {
+        AutoTrainManager manager = Build(paradigm: false);
+        ServerFeed game = GameOnTheWire();
+        EngineSendGate sendGate = new();
+        using TrainerScreenGate screenGate = new(_trainer, sendGate);
+        Action<byte[]> engine = sendGate.WrapEngineSender(OnWire);
+        CleanStat();
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.StockNotATrainer + "\r\n"
+                             + TrainStatsWire.Prompt()));
+
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Equal("the trainer screen didn't open", manager.LastApplyNote);
+
+        Settle();
+        Assert.Equal(new[] { "train stats" }, Sent());
+        engine(Bytes("par"));
+        Assert.Equal("par", Sent()[^1]);
+    }
+
+    // Each kind of trainer screen the game is known to draw is found and typed
+    // into by what it shows, whatever the realm the character is set to: which one
+    // a server draws isn't tied to its realm (user, 2026-10-27). The `Char.
+    // Creation` box is drawn with cursor positioning and its title row never
+    // completes as a line, so only the screen says it is up.
+    [Theory]
+    [InlineData("editor", true)]
+    [InlineData("editor", false)]
+    [InlineData("creation box", true)]
+    [InlineData("creation box", false)]
+    public void EachKindOfTrainerScreen_IsFoundAndTyped_WhateverTheRealm(string kind, bool paradigm)
+    {
+        AutoTrainManager manager = Build(paradigm);
+        ServerFeed game = GameOnTheWire();
+        Func<int, int, string> paint = kind == "editor"
+            ? (strength, cp) => TrainStatsWire.Form(strength, cp)
+            : TrainStatsWire.CreationBox;
+        CleanStat();
+        GameTakesTheForm(game, paint);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + paint(133, 26)));
+        Assert.True(_trainer.FormShown);
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+    }
+
+    // A refusal the client doesn't know (Paradigm's wording isn't recorded): the
+    // hold lasts to the tracker's cap, the pass waits through the late-form window,
+    // and nothing is typed.
+    [Fact]
+    public void AnUnknownRefusal_HoldsToTheCap_AndThePassEndsWithNothingTyped()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + "You can't train that here.\r\n" + TrainStatsWire.Prompt()));
+        AdvanceTo(_trainer.HoldCap - TimeSpan.FromMilliseconds(1));
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Assert.True(manager.IsBusy);
+
+        AdvanceTo(_trainer.HoldCap);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.True(manager.IsBusy);   // a late form is still this pass's
+
+        Settle();
+        Assert.False(manager.IsBusy);
+        Assert.Equal("the trainer screen never opened", manager.LastApplyNote);
+        Assert.Equal(new[] { "train stats" }, Sent());
+    }
+
+    // A slow game: the echo, a party line's prompt and then the form, 8 s after
+    // `train stats`. The hold lasts, and the pass that sent it fills the form.
+    [Fact]
+    public void AFormEightSecondsLate_IsFilledByTheSamePass()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        AdvanceTo(TimeSpan.FromSeconds(7));
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats")));
+        Start(() => game.Raw(TrainStatsWire.PartyLine("Barter casts illuminate!")));
+        AdvanceTo(TimeSpan.FromSeconds(8));
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Start(() => game.Raw(TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+    }
+
+    // The form after the cap let the keyboard go: it takes the keyboard back, and
+    // the `@train` pass that sent `train stats` fills it, Auto-train stats or not.
+    [Fact]
+    public void AFormAfterTheCap_TakesTheKeyboardBack_AndTheSamePassFillsIt()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        AdvanceTo(_trainer.HoldCap + TimeSpan.FromSeconds(2));
+        Assert.False(_trainer.MenuOwnsKeyboard);
+
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Assert.True(_trainer.FormShown);
+        Settle();
+
+        Assert.Equal(new[] { "136" }, Typed());
+        Assert.Equal(1, _committed);
+    }
+
+    // A box left on the screen from an earlier form shows Strength 140 with no CP
+    // left. The game's answer brings only a marker row, the old box's figures
+    // still below it, with no clear: that is no fresh form, so nothing is typed into
+    // it and the cap lets the keyboard go.
+    [Fact]
+    public void ABoxLeftOnTheScreen_IsNeverTypedInto()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        Start(() => game.Raw(TrainStatsWire.CreationBox(140, 0)));
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats")
+            + "   / M A J O R  M U D Character Editor /    \\  ┌─    Point Cost Chart    ─┐\r\n"));
+        Assert.False(_trainer.FormShown);
+        Assert.False(_trainer.ScreenDrawnSinceTrainStats);
+        Settle();
+
+        Assert.Equal(new[] { "train stats" }, Sent());
+        Assert.False(_trainer.MenuOwnsKeyboard);
+    }
+
+    // An `@train` pass whose form shows nothing left to raise (the row already
+    // trained) isn't left open with the keyboard held: it walks the form with
+    // Enter and leaves it through its default SAVE, nothing changed.
+    [Fact]
+    public void AFormWithNothingToRaise_IsLeft_NotLeftOpen()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        GameTakesTheForm(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(136, 1)));
+        Settle();
+
+        Assert.Empty(Typed());
+        Assert.Equal(FormPayloads + 1, Sent().Length);
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+    }
+
+    // The user's own `train stats` found no screen within the cap, and none has
+    // turned up yet: Train now doesn't send another into the form the game may
+    // still draw.
+    [Fact]
+    public void TrainNow_WhileAFormMayStillTurnUp_SendsNoSecondTrainStats()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        GameOnTheWire();
+        CleanStat();
+
+        UserTypesTrainStats();
+        AdvanceTo(_trainer.HoldCap);
+        Assert.True(_trainer.AwaitingLateForm);
+
+        Start(manager.TrainNow);
+        Assert.Equal(new[] { "train stats" }, Sent());
+        Assert.False(manager.IsBusy);
+    }
+
+    // ----- a pass that can't finish leaves the form without saving -------------
+
+    // The Character Editor on the wire, key by key: Strength refuses what is typed
+    // into it (the cursor stays on it, as the game does for a value it won't take),
+    // every other Enter moves the cursor a box on, Space on Exit steps it through
+    // the given choices, and Enter on Exit leaves: saving on SAVE, not on QUIT.
+    private sealed class EditorOnTheWire
+    {
+        public int Field;
+        public int Choice;
+        public bool Saved, Quit;
+        public string[] Choices = { "SAVE", "EDIT", "QUIT" };
+        public bool CursorOffTheBoxes;
+        private readonly ServerFeed _game;
+
+        public EditorOnTheWire(ServerFeed game) => _game = game;
+
+        public void Draw() =>
+            _game.Raw(TrainStatsWire.Form(133, 26, field: CursorOffTheBoxes ? -1 : Field, exit: Choices[Choice]));
+
+        public void Take(string text)
+        {
+            if (text == "train stats" || Saved || Quit) return;
+            if (text == " ")
+            {
+                if (Field == 10) Choice = (Choice + 1) % Choices.Length;
+                Draw();
+                return;
+            }
+            if (Field == 10)
+            {
+                Saved = Choices[Choice] == "SAVE";
+                Quit = Choices[Choice] == "QUIT";
+                _game.Raw(Saved ? TrainStatsWire.Saved() : "\u001b[2J\u001b[HSomeone just entered the Realm.\r\n" + TrainStatsWire.Prompt());
+                return;
+            }
+            if (!(Field == 1 && text.Length > 0)) Field++;
+            Draw();
+        }
+    }
+
+    private EditorOnTheWire EditorKeyByKey(ServerFeed game)
+    {
+        EditorOnTheWire editor = new(game);
+        _onTyped = editor.Take;
+        return editor;
+    }
+
+    // An `@train` pass whose Strength the form refused: the form doesn't show the
+    // plan's row, and SAVE would keep it. The pass walks to Exit with plain Enters,
+    // brings it round to QUIT with Space, and leaves; nothing is saved and the
+    // keyboard is released.
+    [Fact]
+    public void APassThatCantFinish_LeavesTheFormWithQuit_NotSave()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.True(editor.Quit);
+        Assert.False(editor.Saved);
+        Assert.Equal(2, Sent().Count(s => s == " "));
+        Assert.False(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Equal(0, _committed);
+        Assert.Contains("left without saving", manager.LastApplyNote);
+    }
+
+    // An Exit field that never comes round to QUIT: nothing is pressed on it but
+    // Space, nothing is saved, and the form is left open for the user.
+    [Fact]
+    public void AnExitThatNeverShowsQuit_IsLeftOpen_WithNothingSaved()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+        editor.Choices = new[] { "SAVE", "EDIT" };
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26)));
+        Settle();
+
+        Assert.False(editor.Saved);
+        Assert.False(editor.Quit);
+        Assert.Equal(10, editor.Field);
+        Assert.True(_trainer.MenuOwnsKeyboard);
+        Assert.False(manager.IsBusy);
+        Assert.Contains("where the plan typed", manager.LastApplyNote);
+    }
+
+    // The cursor isn't on any box the screen can name: no Enter or Space is sent
+    // past the stop, and the form is left open.
+    [Fact]
+    public void ACursorOffTheBoxes_GetsNoKeyPastTheStop()
+    {
+        AutoTrainManager manager = Build(paradigm: true);
+        ServerFeed game = GameOnTheWire();
+        CleanStat();
+        EditorOnTheWire editor = EditorKeyByKey(game);
+        editor.CursorOffTheBoxes = true;
+
+        Start(manager.TrainNow);
+        Start(() => game.Raw(TrainStatsWire.Echo("train stats") + TrainStatsWire.Form(133, 26, field: -1)));
+        Settle();
+
+        // `train stats`, Family Name and the six stat boxes: nothing after the stop.
+        Assert.Equal(8, Sent().Length);
+        Assert.DoesNotContain(" ", Sent());
+        Assert.False(editor.Saved);
+        Assert.True(_trainer.MenuOwnsKeyboard);
+    }
+
+    // Moves the pass's clock to the given time after it started, running what
+    // comes due on the way and what the pass goes on with after each.
+    private void AdvanceTo(TimeSpan sinceStart)
+    {
+        DateTimeOffset until = _started + sinceStart;
+        _pump.Drain();
+        while (_clock.Now < until)
+        {
+            TimeSpan step = until - _clock.Now;
+            if (step > TimeSpan.FromMilliseconds(10)) step = TimeSpan.FromMilliseconds(10);
+            _clock.Advance(step);
+            _pump.Drain();
+        }
     }
 }

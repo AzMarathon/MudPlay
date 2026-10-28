@@ -70,14 +70,45 @@ public sealed class BfsMapper
     // the layout.
     private Func<RoomKey, bool>? _isBlacklisted;
     private readonly Services.LogService? _log;
+    // Times each search: one on the UI thread is then named in a hang report.
+    private readonly Services.PerformanceMonitor? _performance;
 
     public BfsMapper(RoomGraphManager graph) : this(graph, log: null) { }
 
-    public BfsMapper(RoomGraphManager graph, Services.LogService? log)
+    public BfsMapper(RoomGraphManager graph, Services.LogService? log, Services.PerformanceMonitor? performance = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         _graph = graph;
         _log = log;
+        _performance = performance;
+    }
+
+    // Each search opens one: the filter reads what it reads once for the search
+    // (IRoomFilter.BeginSearch), and the monitor times it.
+    // The timer first, so a filter's readings are never opened without the scope
+    // that closes them.
+    private SearchScope OpenSearch(IRoomFilter? filter, string what,
+        [System.Runtime.CompilerServices.CallerMemberName] string member = "")
+    {
+        Services.PerformanceMonitor.Scope? timed = _performance?.Measure("route search", what, member: member);
+        try
+        {
+            return new SearchScope(filter?.BeginSearch(), timed);
+        }
+        catch
+        {
+            timed?.Dispose();
+            throw;
+        }
+    }
+
+    private readonly struct SearchScope(IDisposable? readings, Services.PerformanceMonitor.Scope? timed) : IDisposable
+    {
+        public void Dispose()
+        {
+            timed?.Dispose();
+            readings?.Dispose();
+        }
     }
 
     // Bind the blacklist predicate. Pass null to disable. Cache is
@@ -170,6 +201,8 @@ public sealed class BfsMapper
         if (source.Equals(destination))
             return returnEmptyWhenAtDestination ? Array.Empty<Direction>() : null;
 
+        using SearchScope search = OpenSearch(filter, "path");
+
         IReadOnlyList<Direction>? path = FindPathRoundClosedRooms(
             source, destination, filter, ignoreExitGates, refuseTeleports, avoidTraps, ignoreAvoids);
         if (path is not null || ignoreExitGates || filter is null) return path;
@@ -261,15 +294,25 @@ public sealed class BfsMapper
         ArgumentNullException.ThrowIfNull(filter);
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return false;
         if (source.Equals(destination)) return false;
+        using SearchScope search = OpenSearch(filter, "cut off");
+        return !ReachOutsideClosedRooms(source, filter, stopAt: destination).Contains(destination);
+    }
 
+    // The rooms the map reaches from source without entering a room closed to
+    // routes, every exit gate set aside and sailings and gateway portals counted as
+    // ways (IsCutOffByClosedRooms). Stops once stopAt is reached.
+    private HashSet<RoomKey> ReachOutsideClosedRooms(RoomKey source, IRoomFilter filter, RoomKey? stopAt)
+    {
+        var reached = new HashSet<RoomKey> { source };
         var seen = new HashSet<RoomKey> { source };
         var queue = new Queue<RoomKey>();
         queue.Enqueue(source);
         bool Reach(RoomKey next)
         {
             if (!seen.Add(next) || _graph.GetRoom(next) is null || filter.IsClosedToRoutes(next)) return false;
+            reached.Add(next);
             queue.Enqueue(next);
-            return next.Equals(destination);
+            return next.Equals(stopAt);
         }
         while (queue.Count > 0)
         {
@@ -281,12 +324,12 @@ public sealed class BfsMapper
                 // open, are no way round anything.
                 if (exit.CastTeleportRandom) continue;
                 if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is not { IsSatisfiable: true }) continue;
-                if (Reach(exit.Target)) return false;
+                if (Reach(exit.Target)) return reached;
             }
             foreach (BoatPassage passage in _graph.BoatPassagesAt(here))
-                if (Reach(passage.ArrivalRoom)) return false;
+                if (Reach(passage.ArrivalRoom)) return reached;
         }
-        return true;
+        return reached;
     }
 
     // The way across rooms closed to routes, for the few walks taken across them:
@@ -303,9 +346,16 @@ public sealed class BfsMapper
     {
         ArgumentNullException.ThrowIfNull(filter);
         if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return null;
+        using SearchScope search = OpenSearch(filter, "crossing");
         if (source.Equals(destination) || filter.IsClosedToRoutes(destination)) return null;
         if (!IsCutOffByClosedRooms(source, destination, filter)) return null;
+        return CrossingSearch(source, destination, filter, refuseTeleports, ignoreAvoids);
+    }
 
+    // FindCrossing's search, once the destination is known to be cut off.
+    private IReadOnlyList<Direction>? CrossingSearch(
+        RoomKey source, RoomKey destination, IRoomFilter filter, bool refuseTeleports, bool ignoreAvoids)
+    {
         var best = new Dictionary<RoomKey, (int Closed, int Hops)> { [source] = (0, 0) };
         var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)> { [source] = (source, default) };
         var frontier = new PriorityQueue<RoomKey, (int Closed, int Hops)>();
@@ -560,7 +610,7 @@ public sealed class BfsMapper
         RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(targets);
-        return HopFloors(source, targets, (here, seen, visit) =>
+        return HopFloors(source, targets, filter, (here, seen, visit) =>
         {
             if (_graph.GetRoom(here) is not { } room) return;
             foreach (RoomExit exit in room.Exits.Values)
@@ -575,7 +625,7 @@ public sealed class BfsMapper
     {
         ArgumentNullException.ThrowIfNull(sources);
         IReadOnlyDictionary<RoomKey, (RoomKey From, Direction Dir)[]> into = ExitsInto();
-        return HopFloors(destination, sources, (here, seen, visit) =>
+        return HopFloors(destination, sources, filter, (here, seen, visit) =>
         {
             if (!into.TryGetValue(here, out (RoomKey From, Direction Dir)[]? ways)) return;
             foreach ((RoomKey from, Direction dir) in ways)
@@ -589,11 +639,12 @@ public sealed class BfsMapper
     // search hasn't reached yet, asking seen before the filter: the filter is the
     // costly part of a step.
     private Dictionary<RoomKey, int> HopFloors(
-        RoomKey start, IReadOnlyCollection<RoomKey> wanted,
+        RoomKey start, IReadOnlyCollection<RoomKey> wanted, IRoomFilter? filter,
         Action<RoomKey, Func<RoomKey, bool>, Action<RoomKey>> neighbours)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(start) is null) return dist;
+        using SearchScope search = OpenSearch(filter, "hop floors");
         HashSet<RoomKey> outstanding = new(wanted);
         dist[start] = 0;
         outstanding.Remove(start);
@@ -650,6 +701,7 @@ public sealed class BfsMapper
     private Dictionary<RoomKey, int> Distances(
         RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets, bool allowGateway)
     {
+        using SearchScope search = OpenSearch(filter, targets is null ? "distances" : "distances to rooms");
         // Each search removes the targets it reaches, so the second needs its own.
         HashSet<RoomKey>? targetsAgain = targets is null ? null : new HashSet<RoomKey>(targets);
         Dictionary<RoomKey, int> through = DistancesCore(
@@ -742,20 +794,43 @@ public sealed class BfsMapper
     // DistanceBetween's: both are breadth-first, so a shortest count doesn't depend
     // on which of several routes was found. Picking the auto-trainer's trainer this
     // way took 50 searches, over half a second on the UI thread.
+    //
+    // FindPath's two searches no map takes: the way out of a room closed to routes
+    // (from such a room, every question is asked of DistanceBetween), and FindPath's
+    // last resort, the walk across those rooms to a place reached no other way. That
+    // one is asked only for a destination neither map has, for a crosser who meets
+    // the rooms' terms; the rooms reached without crossing are mapped once per
+    // source, so a destination among them (no crossing to make) costs no search.
     public Func<RoomKey, RoomKey, int?> DistanceMemo(IRoomFilter? filter = null)
     {
         Dictionary<(RoomKey, RoomKey), int?> answers = new();
         HashSet<RoomKey> askedOnce = new();
         Dictionary<RoomKey, Dictionary<RoomKey, int>> walk = new();
         Dictionary<RoomKey, Dictionary<RoomKey, int>> viaGateway = new();
+        Dictionary<RoomKey, HashSet<RoomKey>> uncrossed = new();
+        bool mayCross = filter?.MayCrossClosedRooms() == true;
+
+        // FindPath's tail: FindCrossing, its cut-off test read from the source's map.
+        int? Crossing(RoomKey source, RoomKey destination)
+        {
+            if (filter is null || filter.TeleportsOnArrival(destination)) return null;
+            if (_graph.GetRoom(source) is null || _graph.GetRoom(destination) is null) return null;
+            if (source.Equals(destination) || filter.IsClosedToRoutes(destination)) return null;
+            if (!uncrossed.TryGetValue(source, out HashSet<RoomKey>? reach))
+                uncrossed[source] = reach = ReachOutsideClosedRooms(source, filter, stopAt: null);
+            if (reach.Contains(destination)) return null;
+            return CrossingSearch(source, destination, filter, refuseTeleports: false, ignoreAvoids: false)?.Count;
+        }
+
         return (source, destination) =>
         {
             if (answers.TryGetValue((source, destination), out int? known)) return known;
+            using SearchScope search = OpenSearch(filter, "distance memo");
             int? d;
             // Distances refuses an avoided source outright, where FindPath walks out
             // of it, so that one is always asked the slow way.
             if (walk.TryGetValue(source, out Dictionary<RoomKey, int>? map)
-                || (!askedOnce.Add(source) && filter?.IsAvoided(source) != true
+                || (!askedOnce.Add(source) && filter?.IsAvoided(source) != true && filter?.IsClosedToRoutes(source) != true
                     && (map = walk[source] = Distances(source, filter, viaBoats: false, targets: null, allowGateway: false)) is not null))
             {
                 if (map.TryGetValue(destination, out int hops)) d = hops;
@@ -763,7 +838,9 @@ public sealed class BfsMapper
                 {
                     if (!viaGateway.TryGetValue(source, out Dictionary<RoomKey, int>? gateway))
                         viaGateway[source] = gateway = Distances(source, filter, viaBoats: false, targets: null, allowGateway: true);
-                    d = gateway.TryGetValue(destination, out int via) ? via : null;
+                    d = gateway.TryGetValue(destination, out int via) ? via
+                        : mayCross ? Crossing(source, destination)
+                        : null;
                 }
             }
             else d = DistanceBetween(source, destination, filter);

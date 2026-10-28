@@ -285,7 +285,8 @@ public sealed class HangupPenaltyTests : IDisposable
         // another test's.
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile(onBbs: a);
-        using BbsSectionViewModel vm = new(store, profile, new PasswordProtector(), new DisplayConfig(), new SettingsService());
+        using BbsSectionViewModel vm = new(store, profile, new PasswordProtector(), new DisplayConfig(), new SettingsService(),
+            new GameDataCache(AppPaths.GameDataRoot));
 
         vm.SelectedBbsName = a;
         Assert.False(vm.HangupPenaltyEnabled);
@@ -339,7 +340,8 @@ public sealed class HangupPenaltyTests : IDisposable
         store.Save(new BbsProfile { Name = board, Host = "a.example", Port = 23 });
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile(onBbs: board);
-        using BbsSectionViewModel vm = new(store, profile, new PasswordProtector(), new DisplayConfig(), new SettingsService());
+        using BbsSectionViewModel vm = new(store, profile, new PasswordProtector(), new DisplayConfig(), new SettingsService(),
+            new GameDataCache(AppPaths.GameDataRoot));
         vm.SelectedBbsName = board;
 
         vm.HangupPvpHpFromPercent = 70;      // past the 50 it started under

@@ -56,7 +56,7 @@ public sealed class RoomEntryWatcher : IDisposable
     private readonly Func<DateTimeOffset> _now;
     private readonly IDisposable _arrivalSub;
     private readonly IDisposable _sneakArrivalSub;
-    private readonly IDisposable _namelessArrivalSub;
+    private readonly IDisposable _spawnArrivalSub;
     private bool _disposed;
 
     // Fires after each arrival is parsed + classified + appended to the
@@ -79,11 +79,10 @@ public sealed class RoomEntryWatcher : IDisposable
         _now = now ?? (static () => DateTimeOffset.Now);
         _arrivalSub = router.Subscribe(KnownPatterns.RoomEntryArrival, OnArrival);
         _sneakArrivalSub = router.Subscribe(KnownPatterns.SneakArrivalNotice, OnSneakArrival);
-        // An arrival worded without a name the pattern can lift out ("The banshee
-        // floats after you!", "A shade materializes in the room."): nobody is added
-        // to the roster, and from here it is known to be short of someone.
-        _namelessArrivalSub = router.Subscribe(KnownPatterns.RoomSpawnArrival,
-            match => _classifier.NoteUnlistedArrival($"an arrival that names nobody: '{match.Text}'"));
+        // Ahead of CombatManager's handler for the same line: a monster put on the
+        // roster here is engaged from the roster, and only a roster still short asks
+        // for the room.
+        _spawnArrivalSub = router.Subscribe(KnownPatterns.RoomSpawnArrival, OnSpawnArrival, tieBreak: 10);
         // Colour-scan fallback for custom, unstructured spawn lines (see class note).
         _router.LineDispatched += OnLineScan;
     }
@@ -171,6 +170,31 @@ public sealed class RoomEntryWatcher : IDisposable
             $"arrival kind={finalKind} name={name} direction={direction}");
         ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
             Name: name, Kind: finalKind, Direction: direction, At: _now()));
+    }
+
+    // An arrival worded without a name the pattern can lift out ("The banshee floats
+    // after you!", "A shade materializes in the room."): nobody is added to the
+    // roster, and from here it is known to be short of someone. A monster's own
+    // appear line names nobody either, but the message table says whose it is, so a
+    // line only one monster prints puts that monster on the roster, unless it is worded
+    // as one already here coming to life (MonsterAppearLines.Replaces): the room is
+    // asked for then, so what it was listed as before doesn't linger beside it.
+    private void OnSpawnArrival(MatchResult match)
+    {
+        MonsterAppearLines.Entry? appear = MonsterAppearLines.Find(match.Text);
+        if (appear is { MonsterName: { } name, Replaces: false }
+            && _classifier.Classify(name) is { Kind: EntityKind.Monster } monster)
+        {
+            _classifier.AppendArrivalEntity(monster, rawWireLine: match.Text);
+            _log?.Info(LogCategory,
+                $"arrival kind=Monster name={monster.ResolvedName} (its appear line, message {appear.MessageNumber})");
+            ArrivalObserved?.Invoke(new RoomEntryArrivalEvent(
+                Name: monster.ResolvedName, Kind: EntityKind.Monster, Direction: "nowhere", At: _now()));
+            return;
+        }
+        _classifier.NoteUnlistedArrival(appear is { Replaces: true }
+            ? $"the {appear.MonsterName}'s appear line, worded as one already here (message {appear.MessageNumber}): '{match.Text}'"
+            : $"an arrival that names nobody: '{match.Text}'");
     }
 
     // "You notice <name> sneaking in from the <dir>." — a player who failed a
@@ -387,6 +411,6 @@ public sealed class RoomEntryWatcher : IDisposable
         _router.LineDispatched -= OnLineScan;
         _arrivalSub.Dispose();
         _sneakArrivalSub.Dispose();
-        _namelessArrivalSub.Dispose();
+        _spawnArrivalSub.Dispose();
     }
 }

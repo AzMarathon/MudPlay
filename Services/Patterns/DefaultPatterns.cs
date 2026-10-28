@@ -527,6 +527,9 @@ public static class DefaultPatterns
         // Paradigm's Manaspring Source prints "A figure materializes from within the
         // swirling mana!" as its room spell summons; a mana wraith brought that way
         // has no arrival line of its own (report paradigm-20261022-174021).
+        // Last, the monsters' own appear lines none of the shapes above read, taken
+        // from the message table ("A mist of gold appears in front of you!", report
+        // paradigm-20261025-011825): MonsterAppearLines.
         yield return new RegexPattern(KnownPatterns.RoomSpawnArrival,
             @"^(?:(?!You )[A-Z][^:""]* into the room"
           + @"|As the Champion of Blood falls, a tower of fire whirls about his body"
@@ -538,7 +541,8 @@ public static class DefaultPatterns
           + @"|crawls out of the .+ corpse|steps out of the shadows|slithers out of the dark pool"
           + @"|arises from its place of rest|rises from its rest"
           // A monster that followed us in: "A sand worm crawls after you!".
-          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$");
+          + @"|\w+ after you(?:[ ,].+)?))[.!]\s*$"
+          + "|" + MonsterAppearLines.Alternation);
 
         // Reactive look-back — another player `look`ed at us. Wording is
         // user-confirmed (not in any imported game-data table); keyed on the
@@ -902,12 +906,21 @@ public static class DefaultPatterns
         // across all three (front/middle/back).
         yield return new RegexPattern(KnownPatterns.PartySelfRankChanged,
             @"^You have moved to the (?<rank>front|middle|back) ranks of your group\.?\s*$");
+        // The game turning a rank command down, as the Stock DLL words it. The
+        // two-space gap after "rank." is the game's; any run of spaces matches.
+        yield return new RegexPattern(KnownPatterns.PartyRankRefused,
+            @"^(?:You may not enter the backrank of your own party\.|You may not leave your current rank in your own party\."
+            + @"|You are the only one in the (?:front|back) rank\.\s+You may not leave\."
+            + @"|There would not be enough people left in the frontrank if you did that\.)\s*$");
         // "X stops to rest." — third-person rest observation. Given-name only
         // (matches roster matching); the handler scopes it to party members.
         // Self's own action reads "You stop to rest." (different verb), so this
         // never matches our own row.
         yield return new RegexPattern(KnownPatterns.PartyMemberRestObserved,
             @"^(?<player>\w+) stops to rest\.?\s*$");
+        // "X kneels to meditate." — the meditate counterpart, same shape and scoping.
+        yield return new RegexPattern(KnownPatterns.PartyMemberMeditateObserved,
+            @"^(?<player>\w+) kneels to meditate\.?\s*$");
 
         // ----- Main menu (BBS-customisable but options are stable) -----
         // The "Enter the Realm" row is the universal signature — every
@@ -1200,6 +1213,10 @@ public static class DefaultPatterns
             @"^You do not have the money required for your training\.");
         yield return new RegexPattern(KnownPatterns.TrainStatsAltered,
             @"^Your stats are unnaturally altered!\s+You may not train stats now\.");
+        yield return new RegexPattern(KnownPatterns.TrainStatsNotHere,
+            @"^You may not train your stats here!$");
+        yield return new RegexPattern(KnownPatterns.TrainStatsTournament,
+            @"^You may not do any training while in tournament mode!$");
     }
 
 }

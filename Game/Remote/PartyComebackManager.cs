@@ -134,6 +134,10 @@ public sealed class PartyComebackManager : IDisposable
     // whether their @ok landed just before that move (so it can't be trusted).
     private bool _leftBehind;
     private bool _okPremature;
+    // When each member left behind right after an @ok was last asked for a fresh one.
+    // Left behind right after an @ok again within FollowWaitWindow of that, the fresh
+    // one proved nothing either, and they sit out the whole window (user, 2026-10-28).
+    private readonly Dictionary<string, DateTimeOffset> _freshOkAskedAt = new(StringComparer.OrdinalIgnoreCase);
     // The recovery in flight is a train trip's fetch (BeginRecovery says what that
     // changes), and its room is one we guessed and they haven't named.
     private bool _tripFetch;
@@ -277,6 +281,7 @@ public sealed class PartyComebackManager : IDisposable
 
         _walker.Event += OnWalkEvent;
         _party.MemberFollowConfirmed += OnMemberFollowConfirmed;
+        _party.State.Members.CollectionChanged += OnRosterChanged;
         // Path B trigger: PartyManager owns reconnect detection and raises this
         // for a dropped member re-entering inside the grace window while we lead —
         // fired before it clears its own grace entry, so there's no race.
@@ -292,6 +297,10 @@ public sealed class PartyComebackManager : IDisposable
         _classifier.EntitiesObserved += OnEntitiesObserved;
         // Path B reply: the probed member's @where answer arrives as a telepath.
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
+        // A member back from a dropped link, as the lines show it, however the
+        // invite went out: by AutoPartyManager / PartyManager, or typed by hand.
+        _subs.Add(router.Subscribe(KnownPatterns.PlayerEnters, OnPlayerEntersRealm));
+        _subs.Add(router.Subscribe(KnownPatterns.PartyYouInvited, OnInviteEcho));
 
         if (!RemoteCommandCatalog.TryGetCategory("@comeback", out Models.GameData.PlayerRemoteControls category))
             throw new InvalidOperationException("RemoteCommandCatalog missing entry for '@comeback'.");
@@ -327,6 +336,7 @@ public sealed class PartyComebackManager : IDisposable
             _engine.ComebackEligibility = null;
         _walker.Event -= OnWalkEvent;
         _party.MemberFollowConfirmed -= OnMemberFollowConfirmed;
+        _party.State.Members.CollectionChanged -= OnRosterChanged;
         _party.MemberReturned -= OnMemberReturned;
         _party.MemberLeftBehind -= OnMemberLeftBehind;
         _tracker.StateChanged -= OnRoomChanged;
@@ -349,6 +359,20 @@ public sealed class PartyComebackManager : IDisposable
         if (ctx.Args.Count > 0 && RoomKey.TryParseWire(ctx.Args[0], out RoomKey parsed))
             target = parsed;
         string given = GivenName(ctx.Sender);
+        if (JustFollowedUs(given))
+        {
+            _log?.Info(LogCategory,
+                $"{given} asked to be fetched{(target is { } at ? $" from {at.Map}/{at.Room}" : "")}, but came back from a dropped link and followed us {(_now() - _followedOnReturn[given].At).TotalSeconds:0}s ago — nothing to fetch, answered as taken back");
+            ctx.Reply($"{GotYou} - resuming");
+            return;
+        }
+        if (InvitedOnReturn(given))
+        {
+            _log?.Info(LogCategory,
+                $"{given} asked to be fetched{(target is { } at ? $" from {at.Map}/{at.Room}" : "")}, but came back from a dropped link and our invite is out to them — nothing to fetch, their follow ends it");
+            ctx.Reply(AlreadyInProgress);
+            return;
+        }
         if (TrainTripOn)
         {
             // The trip's own walk is not stopped for anyone (user, 2026-10-10:
@@ -721,6 +745,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         if (transition.NewRoom is not { } now || transition.PreviousRoom is not { } before || before.Key == now.Key)
             return;
+        _ownMoves++;
         _lastStepGate = null;
         if (_busy || _tracker.LastMoveWasManual || SnapshotRunningEngine().Kind == ResumeKind.None) return;
         foreach ((Direction direction, RoomExit exit) in before.Exits)
@@ -1196,15 +1221,17 @@ public sealed class PartyComebackManager : IDisposable
         }
 
         // Party-full gate — we backfilled the empty slot while they were gone, so
-        // there's no seat to recover them into. On Stock a member an exit turned
-        // away is still on our list (StillOnOurList), so the row we hold for them is
-        // their own seat and not one we refilled.
+        // there's no seat to recover them into. A row the asking member holds
+        // (following, or [Invited]) is their own seat and not one we refilled, on
+        // either realm: on Stock a member an exit turned away is still on our list,
+        // and a member invited on their return holds the row the invite gave them
+        // (report paradigm-20261025-114837).
         int seatsTaken = _party.State.Members.Count;
-        if (seatsTaken >= MaxPartySize && StillOnOurList(senderGiven))
+        if (seatsTaken >= MaxPartySize && MemberInParty(senderGiven))
         {
             seatsTaken--;
             _log?.Info(LogCategory,
-                $"{senderGiven} asks to be fetched and still has a row on our list (Stock keeps a member an exit turned away): their own seat isn't counted against a full party.");
+                $"{senderGiven} asks to be fetched and holds a row on our roster: their own seat isn't counted against a full party.");
         }
         if (seatsTaken >= MaxPartySize)
         {
@@ -1499,6 +1526,16 @@ public sealed class PartyComebackManager : IDisposable
         GoIdle();
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
+
+    // For the bug report: who was asked for a fresh @ok after an early one, and how
+    // long ago; null when nobody was.
+    public string? FreshOkAskedSummary => _freshOkAskedAt.Count == 0 ? null
+        : string.Join(", ", _freshOkAskedAt.Select(p => $"{p.Key} {(_now() - p.Value).TotalSeconds:F0}s ago"));
+
+    // A no-limit wait window (0) remembers the ask for the rest of the session.
+    private bool FreshOkAskedRecently(string given) =>
+        _freshOkAskedAt.TryGetValue(given, out DateTimeOffset at)
+        && (FollowWaitWindow <= TimeSpan.Zero || _now() - at < FollowWaitWindow);
 
     private void GoIdle()
     {
@@ -1830,6 +1867,7 @@ public sealed class PartyComebackManager : IDisposable
         ForgetOnSight(GivenName(name));
         ForgetJoinAsked(GivenName(name));
         _seenFollowingAt[GivenName(name)] = _now();
+        NoteFollowedOnReturn(GivenName(name));
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
@@ -1861,12 +1899,24 @@ public sealed class PartyComebackManager : IDisposable
             // An @ok sent just before they were left behind is distrusted because
             // they then failed to move with us. One who has since come to us while
             // we were still on the way back has moved, so theirs is taken as usual.
-            bool distrustOk = _okPremature && !midWalk;
+            // The first time, a fresh @ok asked for now is trusted: the hold may well
+            // have ended in the meantime (report paradigm-20261028-102116: the leader
+            // sat out 90 s for a member free to move). Only a member left behind
+            // right after an @ok again soon after is made to sit out the window.
+            bool premature = _okPremature && !midWalk;
+            bool distrustOk = premature && FreshOkAskedRecently(_senderGiven);
+            if (premature && !distrustOk)
+            {
+                _freshOkAskedAt[_senderGiven] = _now();
+                _log?.Info(LogCategory,
+                    $"{_senderGiven}'s @ok came just before they were left behind — asking for a fresh one; "
+                    + "left behind like that again soon, they wait the full window");
+            }
             LeftBehindRejoined?.Invoke(_senderGiven, distrustOk);
             if (distrustOk)
             {
-                // Their @ok came a moment before they were left behind, so another
-                // one proves nothing — sit out the whole window instead.
+                // A fresh @ok was asked for a moment ago and they were left behind
+                // right after it again, so another proves nothing — sit out the window.
                 _reply($"{GotYou} - your last @ok was too early, waiting the full {FollowWaitWindow.TotalSeconds:0}s");
             }
             else
@@ -1940,6 +1990,128 @@ public sealed class PartyComebackManager : IDisposable
     // Wraps a telepath reply to the probed member in the same { } meta-braces the
     // engine's SendReply uses, so path-B narration reads like any @-command answer.
     private Action<string> TelepathReply(string given) => msg => _wire.Send($"/{given} {{{WireText.Ascii(msg)}}}");
+
+    // Players by when they last re-entered the realm ("X just entered the Realm."),
+    // pruned past ReturnCrossesComeback as another is added.
+    private readonly Dictionary<string, DateTimeOffset> _enteredAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members back from a dropped link (PartyManager.WasRecentlyPartied) invited
+    // ("You have invited X to follow you.", whoever sent the `invite`: the
+    // auto-invite on their return or the user's own) within ReturnCrossesComeback
+    // of re-entering, by when, until they follow us or their row goes. Pruned past
+    // ReturnCrossesComeback as another is added.
+    private readonly Dictionary<string, DateTimeOffset> _invitedOnReturnAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // Members who followed us ("X started to follow you.") within
+    // ReturnCrossesComeback of that invite: when, and how many moves of ours had
+    // been made by then. Forgotten as their row leaves the roster.
+    private readonly Dictionary<string, (DateTimeOffset At, int Moves)> _followedOnReturn = new(StringComparer.OrdinalIgnoreCase);
+
+    // Room changes of ours (OnRoomChanged), to tell whether we have moved since a
+    // member's follow.
+    private int _ownMoves;
+
+    // How long each step of a return takes after the one before: the re-entry,
+    // our invite, their follow, their client's own @comeback. An auto-invite goes
+    // the moment they re-enter, and their client sends the @comeback at its first
+    // prompt or once its room confirms (PartyRejoinCoordinator.RoomWait). A
+    // client-side bound, not the game's.
+    private static readonly TimeSpan ReturnCrossesComeback = TimeSpan.FromSeconds(30);
+
+    private void OnPlayerEntersRealm(MatchResult result)
+    {
+        if (result.Groups.Count == 0 || GivenName(result.Groups[0]) is not { Length: > 0 } given) return;
+        DateTimeOffset now = _now();
+        foreach (string stale in _enteredAt.Where(kv => now - kv.Value > ReturnCrossesComeback).Select(kv => kv.Key).ToList())
+            _enteredAt.Remove(stale);
+        _enteredAt[given] = now;
+    }
+
+    // Only a member back from a dropped link arms the record: a player who logs in
+    // and is invited for the first time is no return, and their @comeback is judged
+    // as any request.
+    private void OnInviteEcho(MatchResult result)
+    {
+        if (result.Groups.Count == 0 || GivenName(result.Groups[0]) is not { Length: > 0 } given) return;
+        if (!_enteredAt.Remove(given, out DateTimeOffset entered)) return;
+        if (!_party.WasRecentlyPartied(given)) return;
+        DateTimeOffset now = _now();
+        if (now - entered > ReturnCrossesComeback)
+        {
+            _log?.Debug(LogCategory,
+                $"{given} invited {(now - entered).TotalSeconds:0}s after re-entering the realm, past {ReturnCrossesComeback.TotalSeconds:0}s: not taken for their return");
+            return;
+        }
+        foreach (string stale in _invitedOnReturnAt.Where(kv => now - kv.Value > ReturnCrossesComeback).Select(kv => kv.Key).ToList())
+            _invitedOnReturnAt.Remove(stale);
+        _invitedOnReturnAt[given] = now;
+        _log?.Debug(LogCategory,
+            $"{given} invited {(now - entered).TotalSeconds:0}s after coming back from a dropped link: a @comeback crossing it is answered as on its way");
+    }
+
+    private void NoteFollowedOnReturn(string given)
+    {
+        if (!_invitedOnReturnAt.Remove(given, out DateTimeOffset invited)) return;
+        DateTimeOffset now = _now();
+        if (now - invited <= ReturnCrossesComeback) _followedOnReturn[given] = (now, _ownMoves);
+    }
+
+    // The member asking to be fetched re-entered the realm, was invited (by us
+    // or by hand) and followed, each within ReturnCrossesComeback of the step
+    // before, asks within the same of that follow, we have not moved since, and
+    // their row still follows: the invite beat their @comeback, and nobody is
+    // left to fetch. The follow line after the re-entry is
+    // the game's word that they follow us; a row by itself can outlive a leave line
+    // the client missed until the next `par`, and a move of ours since could have
+    // left them at an exit. Taken for a request, a full party answered "my party
+    // is full" with a @forget, and the @forget took us off their roster as their
+    // leader while they still followed, so no @wait of theirs reached us after
+    // (report paradigm-20261025-114837). They are answered as a member whose
+    // pickup is done: GotYou is one of the answers their client reads as coming
+    // (SaysComingOrLater), and, unlike FoundYou, starts no `join` of theirs; their
+    // own follow has already ended their wait on us. Not while we are already
+    // fetching them.
+    private bool JustFollowedUs(string given) =>
+        _followedOnReturn.TryGetValue(given, out (DateTimeOffset At, int Moves) followed)
+        && _now() - followed.At <= ReturnCrossesComeback
+        && followed.Moves == _ownMoves
+        && MemberFollowing(given)
+        && !(_busy && SameName(given, _senderGiven));
+
+    // The member asking re-entered the realm and was invited a moment ago (by us
+    // or by hand), and holds the [Invited] row that invite gave them, not
+    // following yet: their @comeback went out before they took it. The invite and
+    // the @join nag that follows it (AutoPartyManager) are what bring them, so
+    // nothing is walked and nothing is forgotten. They are answered
+    // AlreadyInProgress: their client reads it as coming (SaysComingOrLater) and
+    // waits on their follow, which ends that wait; it starts no `join` and no
+    // second invite. Only while the party, less their own row, has a seat for
+    // them: Stock echoes an invite even when it found no slot (GAME_MECHANICS
+    // "Party commands: `invite`, `join` / `follow`, `leave`, `uninvite`, `disband
+    // party`"), and then no invite is on its way.
+    private bool InvitedOnReturn(string given) =>
+        _invitedOnReturnAt.TryGetValue(given, out DateTimeOffset at)
+        && _now() - at <= ReturnCrossesComeback
+        && MemberInParty(given) && !MemberFollowing(given)
+        && _party.State.Members.Count - 1 < MaxPartySize
+        && !(_busy && SameName(given, _senderGiven));
+
+    private void OnRosterChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _followedOnReturn.Clear();
+            _invitedOnReturnAt.Clear();
+            return;
+        }
+        if (e.Action is not (System.Collections.Specialized.NotifyCollectionChangedAction.Remove
+            or System.Collections.Specialized.NotifyCollectionChangedAction.Replace) || e.OldItems is null) return;
+        foreach (PartyMember m in e.OldItems)
+        {
+            _followedOnReturn.Remove(GivenName(m.Name));
+            _invitedOnReturnAt.Remove(GivenName(m.Name));
+        }
+    }
 
     // On our list as following us (an [Invited] row is on the list and isn't).
     private bool MemberFollowing(string given)

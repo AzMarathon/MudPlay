@@ -135,8 +135,13 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
             catalog = catalog.Append(RemoteCommandManager.RelayBackPrefix + "<command>");
         string[] cmds = catalog.OrderBy(c => c, StringComparer.Ordinal).ToArray();
         if (cmds.Length == 0) return "(no @-commands in this category yet)";
+        // @relation rides on Alter settings (user, 2026-10-25), so the box warns what
+        // it hands over.
+        string warning = cmds.Contains(MonsterRelationshipHandler.Command)
+            ? $"\nCareful: {MonsterRelationshipHandler.Command} can set a monster to Hangup or Flee."
+            : "";
         return $"Ticked grants: {string.Join("  ", cmds)}\n"
-             + $"Unticked denies the same.";
+             + $"Unticked denies the same.{warning}";
     }
 
     // Window title — shows the player's current display name.

@@ -98,15 +98,17 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     private HangupArrivalListTrust Trust =>
         _trust == HangupArrivalListTrust.VanillaStock && _board.Marked ? HangupArrivalListTrust.Unverified : _trust;
     private DateTimeOffset _now = new(2026, 10, 11, 12, 0, 0, TimeSpan.Zero);
-    // The board's count of deaths the standard list doesn't allow.
-    private readonly MudPlay.Models.Settings.RealmProfile _realm = new();
+    // The board's count of deaths the standard list doesn't allow, kept in the
+    // board's file and read afresh from it, as the client reads the active board.
+    private readonly string _boardName = "!mudplay-test-arrivals-" + Path.GetRandomFileName();
     private readonly StandardListContradictions _board;
-    private int BoardContradictions => _board.Count;
+    private int BoardContradictions => _board.Standing().Count;
 
     private int Warnings => _log.Count(e => e.Severity == LogSeverity.Warn);
 
     public ArrivalRoomLearnerTests()
     {
+        ScratchRoot.Require();
         _root = Path.Combine(Path.GetTempPath(), "mudplay-arrivallearner-" + Path.GetRandomFileName());
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
@@ -122,7 +124,11 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
         _store.OnActiveSetChanged("alpha");
         _lookup = new LearnedArrivalLookup(_store,
             room => WalkReach.KnotOnItsMap(graph, room), (from, room) => WalkReach.OnItsMap(graph, from, room));
-        _board = new StandardListContradictions(() => _realm, () => "alpha", save: () => { }, log);
+        BbsProfileStore bbsStore = new();
+        bbsStore.Save(new MudPlay.Models.Settings.BbsProfile { Name = _boardName, Host = "stock.example", Port = 23 });
+        _board = new StandardListContradictions(
+            () => bbsStore.Get(_boardName) is { } bbs && bbs.RealmFor(null) is { } realm ? (bbs, realm) : null,
+            () => "alpha", bbsStore.Save, log);
         _learner = new ArrivalRoomLearner(_tracker, _store, _lookup, () => Trust, graph.CouldBeTakenFor,
             inAlbion: room => room == Kingsport || room == Vault,
             isExitCommandSomewhere: graph.IsExitCommandSomewhere,
@@ -138,6 +144,8 @@ public sealed class ArrivalRoomLearnerTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { /* temp cleanup */ }
+        try { new BbsProfileStore().Delete(_boardName); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best-effort cleanup of a scratch board */ }
     }
 
     // The map is sure of the room, and the death lines are read there.

@@ -116,7 +116,7 @@ How to keep it current:
 
 ### ArrivalRoomLearnerTests.cs
 - Covers: Game/Recovery/ArrivalRoomLearner (with RoomTracker, LearnedArrivalRoomStore, LearnedArrivalLookup, StandardListContradictions)
-- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions; land-wide readings, exceptions and disputes.
+- Checks: learning where a room's dead arrive from a witnessed death. Only the first display after the death counts, with no move or exit command in between and within the window; not arena deaths or unsure rooms. Standard-list and Albion agreement or contradiction; the board is marked edited after two contradictions, counted in a real board file read afresh each time, and the marking death is learned; land-wide readings, exceptions and disputes.
 - Why: corpse recovery routing, so the client walks to where the dead really arrive.
 
 ### AttackEstimatorTests.cs
@@ -160,14 +160,14 @@ How to keep it current:
 - Why: Reports `paradigm-20260815-130733`, `paradigm-20260826-132742`, `paradigm-20260827-125103`, `paradigm-20260914-154019`, `paradigm-20260915-061646`, `paradigm-20260915-124359`, `paradigm-20260916-104923`, `paradigm-20260924-113530`, `paradigm-20260929-115648`, `paradigm-20261008-202210` and `paradigm-20261015-202943`. Also the user's 2026-10-09 ruling on gear that comes back to the pack, and GAME_MECHANICS "Gear swaps interrupt resting, not meditating". Guards against gear thrash and against fighting in rest gear.
 
 ### AutoGetItemRemoteTests.cs
-- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyItemAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
+- Covers: Game/Remote/AutoModeRemoteHandler's `@auto-get <item>` forms, Game/Inventory/AutoGetItemRules, Services/ItemNameStore.FindAllByName, Services/GameDataOverrideApplier.ApplyFieldsAt (with RemoteCommandManager, SettingsResolver and AutoGetItemsManager)
 - Checks: the report reads every tier and says *cannot be taken*; `on` / `off` / `max <n>` / `max none` (either order) are saved at the character tier, never Global, and the auto-get engine then collects the item, leaves it, and stops at the max (held copies counted; `max 0` takes none); off holds over a Global or realm tick, on holds when a Global tick it matched is removed, and a change leaves every other field resolving as before; a change back to the installed defaults clears the character override, unless a lower tier would show through; a seeded item reads the stock seed and returns to it; the log line names the sender. Names: exact (with an article) wins, words in any order, apostrophes left out, two records of one name are one item, a name holding `on` or `max` still works; several matches are refused with the names. A lone `on` / `off` / bare `@auto-get` is still the engine toggle and an item change leaves it alone. A first word of `on` / `off` toggles the engine whatever follows; fields the command doesn't name stay unwritten, and a value the character tier holds for another field survives. An item editor open while `@auto-get` changes the item keeps that change on OK, with Use moved to another tier too, and the editor's value wins for a box changed in both. Refusals (no item, ambiguous, bad, over-9999 or missing max, no name, no named character, no Alter settings) carry their reason, are silent with Warn off, and go back on the channel the command came in on; a success is answered with Warn off; the Auto-All switch off ignores the command unanswered.
 - Why: a party member flags an item for auto-get, or sets its max, remotely for this character (user, 2026-10-17).
 
 ### AutoGetItemsManagerTests.cs
 - Covers: Game/Inventory/AutoGetItemsManager. Also one stray theory for Game/Inventory/InventorySnapshot.ParseKeyEntry, which is a production helper but has nothing to do with this class.
-- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. The post-kill bare-Enter re-look (cooldown, walker hold until the room displays). `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
-- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; the walker leaving before the post-kill survey lands; Roomba headroom.
+- Checks: - `You notice` survey → `get` only for AutoCollect items. Gated by: the master switch, CannotBeTaken, Roomba sweep, look-peek, collect-after-combat deferral (flush or room change), the MaxToGet cap and the encumbrance hard cap / Light bracket (with coin dropped for Auto-sell items). - Stacked piles: per unit on Stock, counted on Paradigm. Wrapped surveys. - Floor dedup across re-renders and confirmations. `CollectNamed` for hang-up drops. Lights Auto-Light wants are got even with Auto-get off or Auto-collect off, only as many copies as wanted, once when also flagged, and never when they can't be taken or auto-discard or auto-sell would get rid of them.
+- Why: four ground orc-heads becoming eight-plus gets (re-render dedup); getting items from a peeked room; Roomba headroom.
 
 ### AutoHazardCounterProvisionerTests.cs
 - Covers: Game/Map/AutoHazardCounterProvisioner (with AutoModeController)
@@ -241,8 +241,9 @@ How to keep it current:
 
 ### AutoPartyManagerTests.cs
 - Covers: Game/AutoPartyManager (with Game/TrainerMenuTracker and Game/Map/MovementCoordinator as real collaborators)
-- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu.
+- Checks: - Inviting players seen in the room (InviteToPartyIfSeen, OnlyWhileNavigating, cooldown, follower gate, peek suppression, uninvite suppression for exactly an hour) and accepting invites (JoinPartyIfInvited, stale-leader re-accept). - The `@join` nag (initial delay, cadence, cap, `{Ok}` / braced / `@`-command replies, join / uninvite / follower cancels, manual-invite echo) and the invite-wait loop hold (gate, timeout uninvite, Stock left-behind exception). - Party reform after a split teleport or a leader reconnect (deferred invite on arrival, origin-room wait, redisplay backstop, disband survival), plus re-inviting after the trainer menu (the game's echo and Character Editor fed as bytes through a ServerFeed, the tracker reading the screen).
 - Why: - Reports `paradigm-20261004-061346`, `stock-20260801-002423`, `stock-20260924-145545`, `stock-20260924-175224`, `paradigm-20260930-192042`, `paradigm-20260923-092317`, `stock-20260731-015726`. - GAME_MECHANICS "A follower who can't move is left behind", and the chime-teleport arrival ordering (Party chapter). - Guards against invite spam, a stranded loop hold, and a leader walking off without a split party.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### AutoSearchManagerTests.cs
 - Covers: Game/Map/AutoSearchManager (with MovementCoordinator)
@@ -256,8 +257,23 @@ How to keep it current:
 
 ### AutoTrainApplyTests.cs
 - Covers: Game/AutoTrainManager (with StatParser, TrainerMenuTracker)
-- Checks: the CP pass plans from the `train stats` form, not a buffed `stat`. SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form. Fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass. After hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
-- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39).
+- Checks:
+  - the CP pass plans from the `train stats` form, not a buffed `stat`;
+  - SAVE only once the form shows what was typed; partial or unaffordable rows are kept; the form closing; never `train stats` into an open form;
+  - fallback to a trusted `stat` and fresh CP; the user's own form; Stock holds on altered stats; the game's refusal ends the pass and releases the keyboard;
+  - after hand `train`s past the plan's last row, the user's own form applies the latest row at or below the level, never one above it.
+  - The game's answer (the echo, then the Character Editor) reaches the router as bytes through a ServerFeed, the tracker reading the form off that terminal; the tracker's ticks run on the pass's ManualClock (ManualClock.Arm) under the pump.
+  - In the tests that read the form off the game's own terminal (TrainStatsWire through a ServerFeed with a WirePromptScanner, a TrainerScreenGate on an EngineSendGate):
+    - a room display, or party lines' prompts, arriving after `train stats` and before its echo keep the form; the plan is typed and applied; no wrapped engine send (the `@train` reply, `par`) reaches the form;
+    - not at a trainer, Stock's refusal releases the keyboard at once, ends the pass and types nothing; a refusal the client doesn't know holds to the 10 s cap, and the pass ends with the late-form window, nothing typed;
+    - a form 8 s late, after the echo and a party line's prompt, is filled by the same pass; a form after the cap takes the keyboard back and the same pass fills it;
+    - a box left on the screen from before, with only a marker row and no clear, is never typed into;
+    - a form showing nothing to raise is walked with Enter and left through SAVE, not left open;
+    - a pass that can't save what the form shows (Strength refused, on a key-by-key Character Editor whose Exit redraws on each Space) walks to Exit with plain Enters, brings it round to QUIT with Space and leaves, nothing saved and the keyboard released; an Exit that never reads QUIT gets nothing but Space and the form is left open; a cursor on no box gets no key past the stop;
+    - while a form may still turn up for the user's own `train stats` (the late-form window), Train now sends no second `train stats`;
+    - each kind of screen (the Character Editor, the cursor-positioned `Char. Creation` box with no marker line) is found and typed into with the realm set to Paradigm or Stock (user, 2026-10-27: the screen isn't tied to the realm).
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker (the dispatcher's one-shot timer in the client) takes ManualClock.Arm here, so the cap and late-form window run on the pass's clock.
+- Why: reports `paradigm-20260930-160602`, `paradigm-20261018-221236` (a plan ending at 35 was never applied at 39), `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (the pass given up on output that answered earlier sends, and party replies typed into the Family Name box).
 
 ### AutoTrainSequenceBuilderTests.cs
 - Covers: Game/AutoTrainSequenceBuilder
@@ -334,10 +350,20 @@ How to keep it current:
 - Checks: shipped connection, reconnect, terminal and realm defaults; JSON round trip; partial JSON falls back to defaults.
 - Why: older bbs.json files must load with sane defaults.
 
+### BbsProfilePeekTests.cs
+- Covers: Services/BbsProfileStore (Peek, and Save dropping what it holds)
+- Checks: with the file unchanged Peek hands back the copy already read, while Get still gives each caller its own; another client's save is seen on the next Peek; a hand edit that keeps the file's length is seen by its write time; a save through the store is seen at once; a deleted board reads as none.
+- Why: the PvP checks at each room arrival and the bash rule a route search reads parsed bbs.json from disk on every call, 70 KB a time, which on Windows cost each search and arrival far more (report paradigm-20261026-201217). Another client's change must still be seen right away.
+
 ### BbsRealmTests.cs
 - Covers: Services/BbsProfileStore, ProfileService, RealmCatalog, Models/Settings/BbsProfile.RealmFor
 - Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades.
 - Why: the realm-tier migration from BBS-tier files.
+
+### BbsRealmMergeTests.cs
+- Covers: Services/JsonThreeWayMerge (keyed arrays, renames), BbsProfileStore.Save, ViewModels/Settings/BbsSectionViewModel, Services/RealmCatalog (Rename, Remove), Game/Recovery/StandardListContradictions
+- Checks: with the Settings BBS tab open on a board, a death count and death floor written by the running client survive an OK that edits another realm field; an edit to the same field in Settings wins; a realm added in Settings is saved beside the count, in order; a realm renamed in Settings keeps the count and floor written to its old name meanwhile; two renames of one realm (Profile Management's at once, then Settings' on OK) leave the first saved and no second realm; a realm removed (Settings simulated by a second store copy that removes it and saves) stays removed while the other realm keeps what was written meanwhile; two removals of different realms leave the saving copy's realms, not none; a long-held copy saved after Profile Management removed a realm doesn't bring it back; only arrays named as keyed merge record by record, others are still taken whole.
+- Why: the Settings window's copy of a board wrote every realm back as it was when the window opened, unmarking a board with edited rooms and losing the refined death floor.
 
 ### BbsRenameCascadeTests.cs
 - Covers: Services/BbsProfileStore.Rename / Get, ProfileService.RenameBbs
@@ -354,6 +380,11 @@ How to keep it current:
 - Covers: ViewModels/Settings/BbsSectionViewModel
 - Checks: credential edits on several boards all commit on Apply; returning to a board shows the staged value; Discard drops edits on boards no longer selected.
 - Why: the first board's username, password and logon steps were silently dropped.
+
+### BbsSectionRealmGameDataSetTests.cs
+- Covers: ViewModels/Settings/BbsSectionViewModel (realm Game data picker)
+- Checks: a realm naming an uninstalled set shows it as "(not installed)" and keeps the name in bbs.json when another field is edited and saved; picking an installed set or the global default saves that.
+- Why: an OK after any realm edit saved null over a set not installed on this machine.
 
 ### BenignChatterMatcherTests.cs
 - Covers: Game/BenignChatterMatcher
@@ -541,6 +572,12 @@ How to keep it current:
 - Checks: ReplaceAll raises one Reset.
 - Why: the O(n²) startup fix.
 
+### BundleExtractionTests.cs
+- Covers: Services/Update/BundleExtraction
+- Checks: the startup clean-up removes other versions' unpacked folders beside this client's own (a full one with a sub-folder, one an earlier clean-up got part way through, and pre-3.186.9 natives-only ones: all three native libraries, or Skia alone) and leaves this client's own, a natives-only one holding an extra file or a sub-folder, one with only the ANGLE library, a natives-only one read within the hour, a natives-only one outside the host's extraction folder, a folder that isn't MudPlay's, and, once the one-time pass for pre-3.186.9 folders has marked itself done (only after a run that left none: not while one was in use), a natives-only folder that turns up later; a client that finds another holding the pass's lock skips the pass, one not named like a bundle id, another Avalonia app's, one unpacked within the hour, and the target of a link (a link inside a removed folder goes as a link); it touches nothing when the extraction base (DOTNET_BUNDLE_EXTRACT_BASE_DIR) sits above the install so the extraction folder is the install folder, or when this client's folder isn't in the host's extraction folder; the layout is told apart (inside the program, unpacked, not single-file, run by the dotnet host).
+- Why: a Windows build unpacks itself per version into the temp folder so its clients share the assemblies' pages; old versions' copies would pile up, and the clean-up must touch nothing else (RAM pass, 2026-10-25). On the Linux test host a mapped file can still be opened exclusively, so "a running client holds it" is stood in for by the test holding the file open with no sharing.
+- Named seam: BundleExtraction.Current's optional base folder and process path, and CleanOld's optional `exePath`, `extractBase`, `nowUtc` and `doneMarker`: the three layouts, the extraction folder's place, the hour's age and the one-time pass's marker have to be checked without being a Windows install or setting the process's environment.
+
 ### CarriedStealthPenaltyTests.cs
 - Covers: Game/Stealth/CarriedStealthPenalty
 - Checks: hopeless-sneak verdict from carried items vs the stealth reading and the user threshold.
@@ -563,8 +600,8 @@ How to keep it current:
 
 ### CastWhenFullTests.cs
 - Covers: Game/Spells/CastingDirector's cast-when-full slots (+ CastCoordinator, PromptParser, CombatStateTracker), driven by the game's prompts, room and combat lines, and a ManualClock
-- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
-- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds).
+- Checks: a slot fires once as its pool comes up to the rest-max mark and logs the decision; no refire while still full; re-armed by a drop (an HP hit, a mana burn's spend) and fired again on refill; a cheap spell's own cost, a dip that stays over the mark, re-arms it for the pool's top (not refired while mana climbs there), and a dip that goes on under the mark fires at the mark; held in combat and cast once the room clears; "Cast while resting" unticked waits out a recovery rest, ticked (the default) casts in it; the target text follows the code with control characters stripped; empty slots and Auto-Bless off cast nothing; an already-cast, fizzle or lost-concentration refusal is tried again while full, not-enough-mana isn't; a profile swap (ResetBuffTracking) re-arms; a Rest max resolving to 0 leaves the slot inactive; the full mark is the rest target (Default-set basis, capped at the real max) through SetRestPoolMaxProviders; a due buff takes the round first, and one passed over for mana holds the slot (logged once, shown in DescribeWhenFull), as does the slot's own unpayable spell.
+- Why: the Spells tab's "Cast when HP full / Cast when mana full" slots (user request, 2026-10-24) — any spell, cast on the transition to full, not spammed while full; review of PR #1123 (the rest-target mark, the mana hold, silent holds); a 5-mana healing rain set to cast when mana is full that never went out again while HP was full (player report, 2026-10-27).
 
 ### CasterMessageMatcherLongLineTests.cs
 - Covers: Game/Spells/CasterMessageMatcher (literal walk)
@@ -579,8 +616,8 @@ How to keep it current:
 
 ### CastingDirectorTests.cs
 - Covers: Game/Spells/CastingDirector (+ CastCoordinator, ConditionTracker, TickEngine)
-- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine.
-- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124); user rulings 2026-10-10 and 2026-10-17.
+- Checks: heal tiers and priorities; mana gates; cures; buff slot walk, timers and margins; burst-settle; pause/resume and restore; party heal, cure and bless; negates; draw items; item casts; a between-round cast sent just ahead of a projected round leaves the slot doubted (BetweenRoundSlotMayBeSpent) until the next tick, on a real TickEngine; the rest-time heal goes out while resting, meditating or idle, and standing it is held only while our own walk or loop moves us (logged once, flagged RestHealHeldForMovement), never for a follower.
+- Why: dozens of reports cited inline (the doubted slot: paradigm-20261023-001124; the follower's standing heal: paradigm-20261027-094915, paradigm-20261027-123536); user rulings 2026-10-10 and 2026-10-17.
 
 ### CharacterCalculatorMatchupProfileTests.cs
 - Covers: Game/Calculators/CharacterCalculator.BuildNormalAttackProfile, MonsterMatchupCalculator
@@ -635,9 +672,9 @@ How to keep it current:
 - Why: confirmed-count bookkeeping.
 
 ### ChestOffloadPlannerTests.cs
-- Covers: Game/Inventory/ChestOffloadPlanner
-- Checks: carried gains; fewest-shops grouping.
-- Why: sell-tour planning.
+- Covers: Game/Inventory/ChestOffloadPlanner, BfsMapper.DistanceMemo
+- Checks: carried gains; fewest-shops grouping; the shop trip (RouteShops) over a real map: nearest shop from the last one visited, steps from where the player stands, shops with no route or no room last; the memo gives the trip a search for every pair gives; no pair is asked twice.
+- Why: sell-tour planning; the Chest Offload tab worked the trip out with about a hundred whole-map searches on the UI thread, freezing the client for 49.7 s after a chest open (report `paradigm-20261026-201217`).
 
 ### ChestOpenTrackerTests.cs
 - Covers: Game/Inventory/ChestOpenTracker, OutboundOpenObserver
@@ -701,9 +738,9 @@ How to keep it current:
 
 ### CombatManagerBreakHoldTests.cs
 - Covers: Game/Combat/CombatManager (user-break hold) + CombatStateTracker, OutboundBreakObserver, HealthManager
-- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves.
+- Checks: what sets the hold (typed, @do, @party); no attack path fires under it; every way it ends; silent-round look-and-judge, the 30 s back-off, and the heartbeat sending a look another re-display's cooldown held back; flee still moves. A hand fight with the engine off names the kill for the floor check only (`HandFoughtTarget`) while `DeathAttributionTarget`, read by the boss timers and the death-spell nudge, stays empty; a handled death and leaving the room forget it, and with the engine on it names nothing.
 - Time: one `ManualClock` read by every component in the harness (combat manager, classifier, cast coordinator, death watcher, state tracker); each fed line lands 1 ms after the last, Tick() is a 5 s round, and nothing waits on real time.
-- Why: user 2026-10-10 rulings on manual break.
+- Why: user 2026-10-10 rulings on manual break; the 2026-10-26 floor check, which needs a hand-fought kill named.
 
 ### CombatManagerRoomChangeHoldTests.cs
 - Covers: Game/Combat/CombatManager (Attack Not Last and the follow Target Priority holds) with RoomTracker, RoomDisplayParser, DeathDetector, RoomEntityClassifier, DarkRoomCombatWatcher, all driven through the terminal and the line extractor
@@ -719,10 +756,10 @@ How to keep it current:
 
 ### CombatManagerTests.cs
 - Covers: Game/Combat/CombatManager (and MartialArtsCommand, EngineSendGate).
-- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR, dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line), fed as bytes through a `ServerFeed`.
+- Checks: - Target pick (Target Order and priority, relationship filter, Min/Max window), the attack wire command, room-clear and re-pick, kill detection (exp line, unattributed death, AoE re-parse). - Attack-last / attack-after re-fire, follow-leader and follow-member targeting, guard redirect, weapon and alternate no-effect chain, magic-hit gating. - Backstab and Hit-and-Run, interrupt resume after Combat Off, engage-verify CR (none once the link has dropped), dark-room CR suppression. - The room re-display for a monster no line brought in (a weapon blow on us or a party member, and none for one on a stranger; Manaspring's summon line, an appear line several monsters share), fed as bytes through a `ServerFeed`. With the harness's `wireRoomEntry`, a `RoomEntryWatcher` built after the combat manager, as in production: an appear line only one monster prints (the golden mist's) puts it on the roster ahead of the combat handler, so it is attacked with no room asked for.
 - Time: one `ManualClock` read by the combat manager, classifier and death watcher; each fed line lands 1 ms after the last, and a test moves it by a round or a window where the engine's guards need it; a round boundary is the real OnCombatTick. No private member is reached by reflection.
 - Spells: the harness resolves the character's spells by cast code as the spell book does (`SpellsByCode`, empty unless a test adds one), so a spell typed as the attack command (`harm`) is recognised as a spell.
-- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021); stops a stalled or doubled attack.
+- Why: many reports (e.g. paradigm-20260814-230258, -20260922-130230, -20261007-185740, stock-20261004-150645, paradigm-20261021-085438, paradigm-20261022-174021, paradigm-20261025-011825); stops a stalled or doubled attack.
 
 ### CombatProfileGroupTests.cs
 - Covers: Game/Combat/CombatProfileGroupCopy, CombatProfileManager; ViewModels/Settings/CombatProfileStagingSession.
@@ -766,13 +803,13 @@ How to keep it current:
 
 ### CombatStateTrackerTests.cs
 - Covers: Game/Combat/CombatStateTracker.
-- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap).
+- Checks: - When the Combat gate holds or releases; engaged-target abandonment; HasHostileMonster / HasRoomNpc; the see-hidden and failed-sneak clears. - Break-before-run when auto-combat is toggled off; monster-count window; the InCombat drive; the idle-stall watchdog, and its log naming the monster the room still shows rather than calling the room empty. - The Party tab's monster cap replacing the Max, as CombatManager reads it (SetPartyMonsterCap). FightEnded fires on every release of a held gate while the gate still holds (a cleared room, a see-hidden clear with auto-attack off, a force-clear), so the post-kill floor check's hold is up before the walker steps.
 - Why: walker hangs or walks off mid-fight (paradigm-20261010-145330, stock-20260914-003246, paradigm-20261007-143049); the misleading watchdog line in Hang-20261020-103254.
 
 ### ComebackRequesterTests.cs
 - Covers: Game/Remote/ComebackRequester (with FollowMoveObserver, MovementRefusalDetector, PartyManager, TooHeavyWaitSignal).
-- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); Stock self-`join`.
-- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609.
+- Checks: - One @comeback when left behind; none for leave, uninvite, own move, death or teleport. - Held / retried / dropped requests; leader answers (refuse vs coming); a leader's `got you` after we already follow again starts no join, wait or give-up; Stock self-`join`.
+- Why: GAME_MECHANICS "@comeback (follower → leader)"; paradigm-20260922-085609; paradigm-20261025-114837.
 
 ### CommandHistoryNavigatorTests.cs
 - Covers: Services/CommandHistoryNavigator.
@@ -836,9 +873,9 @@ How to keep it current:
 - Why: A row bound to the window's view-model left a weak subscription on it each time the list realized the row (over a thousand a second on a busy channel), never swept, so the client grew for as long as the window was open (2026-10-19 memory reports).
 
 ### ConversationViewModelTests.cs
-- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore.
-- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look.
-- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place.
+- Covers: ViewModels/ConversationViewModel, ConversationRowViewModel, ConversationRowLook, ConversationChannelTags; ChatHistoryStore; Services/SessionLogService (talk-log replay).
+- Checks: at the store cap, add and trim happen in place without a Reset; re-pin after a filtered trim; Clear All; yell-direction rows; search and filter; each header filter pill is labelled with the same tag as the rows it filters (`GOS`, `SAY`, `TELE`, `GANG`, `BCAST`, `YELL`, `SERVER`), across every channel that shares a pill: both telepath directions (the row adds its arrow), realm notices and PvP messages, and an action fed through the terminal under `SAY`. A Talk Apply's font, size, colour and emote writes on the Display channel restyle every row once, in place (Replace, no Reset), and later rows get the new look. A 2,000-line talk log, replayed by a real SessionLogService as a named profile's logs open, opens as one row per line in the log's order, each reading as written; a rebuild of the whole list asks once to scroll, to the newest row.
+- Why: the Conversation box jumped on every line; the pills must read like the row chips they show or hide; rows carry their own typography now, so a Settings → Talk change must still reach the open window, in one pass and without losing the reader's place; the window opening on a full backlog froze 8.8 s (Hang-20261026-215238), and its fix must show the same rows.
 - Named seam: ConversationViewModel's optional `post` (where the coalesced restyle runs; the UI dispatcher in production) — the tests run it inline, or queue it to show one Apply posts one restyle.
 
 ### CorpseHandoffTests.cs
@@ -858,13 +895,18 @@ How to keep it current:
 
 ### CpPlanBaselineTrustTests.cs
 - Covers: Game/Calculators/CharacterPlanContext, StatParser marks, ListedEffectCatalog, CpAllocationSectionViewModel, Game/Train/AlteredStatsWait.
-- Checks: when a `stat` baseline is trusted (Paradigm buffs explained, Stock any mark not); an untrusted baseline never rewrites a row; the bounded altered-stats wait.
+- Checks: when a `stat` baseline is trusted (Paradigm buffs explained, Stock any mark not), and the tab's note for each reading; an untrusted baseline never rewrites a row; the bounded altered-stats wait.
 - Why: rows being rewritten or pruned on buffed stats.
 
 ### CpPlanCalculatorTests.cs
 - Covers: Game/Calculators/CpPlanCalculator.
 - Checks: CP cost and carry-over, clamping, overspend trim (edited cell first), ClampRowToBudget.
 - Why: CP plan math.
+
+### CpPlanStatBuffTests.cs
+- Covers: Game/CpPlanBaseline, Game/Calculators/CpPlanCalculator (the CP counted through a level), StatParser (CpThroughLevel, the header's marks, train and CP-gain lines, Hydrate), with Paradigm `stat` screens fed as coloured bytes through a `ServerFeed`.
+- Checks: report `paradigm-20261025-010655`'s plan at level 76 with 57 CP reads 57/6, 102/3, 147/0, 192/7, 237/1 (the level-76 row is spent from the CP in hand); the same grid with the cosmos buff up, after it fizzles, and with its line unknown (held on the last clean `stat`, not priced from INT 200 / WIL 70); with no clean reading yet the latest figures stand; no state while a `stat` prints prices the new CP against the last screen's stats; a `train` line keeps the grid until its `You gain N CPs` lands, and a CP line with no train line since the CP was counted logs a Warn; closing the profile drops a held reading; `Peek` gives `Resolve`'s answer and logs nothing (the bug report's read); a snapshot saved without the counted level counts through its own level.
+- Why: report `paradigm-20261025-010655` (CP Left 51 at level 76, and CP Left moving as the cosmic staff's buff came and went).
 
 ### CpPlanStateTests.cs
 - Covers: ViewModels/CharacterWorkshop/CpPlanState.
@@ -1208,6 +1250,7 @@ How to keep it current:
 - Covers: test infrastructure (the shared world for every errand's light stop)
 - Checks: n/a. An 8-room map (a dark room between start and target, a light shop off the start, a room behind the start, two past the target); the real walker, tracker, loop and Auto-Lair; a real InventoryManager reading server rows through ServerFeed and the router; the real AutoLightProvisioner and AutoLightShopRouter; the errand timers and buy windows on ManualTimers; a settable torch price and clock; a profile started with TestProfiles; NewStop and NewTrainer built as AppServices builds them; a Half-Orc race row; NewTrainer's `stat` parser reading the server rows and its sends (trainer and CP pass) seen by the parser and trainer-screen tracker and recorded in TrainerSent.
 - Why: every errand's test drives the same real planning and buying paths.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### EventEditDialogViewModelTests.cs
 - Covers: ViewModels/Settings/EventEditDialogViewModel
@@ -1241,7 +1284,7 @@ How to keep it current:
 - Why: reports paradigm-20261009-185106 and -220128; user decisions 2026-10-10.
 
 ### EventRemoteHandlerTests.cs
-- Covers: Game/Remote/EventRemoteHandler (@events/@event), EventManager.FindByName/SetEnabled, EventsSectionViewModel/EventEditDialogViewModel follow
+- Covers: Game/Remote/EventRemoteHandler (@events/@event), EventManager.FindByName/SetEnabled (over RoomSearchService.FindAllByName), WireText.Listed for the ambiguity refusal, EventsSectionViewModel/EventEditDialogViewModel follow
 - Checks: list/inspect/switch by name or number; nothing secret leaks; refusals and permissions; Warn/master switch; local API; replies fit one telepath; the open tab/editor follow; persistence; reply-line recognition.
 - Why: remote control of events must not reveal what they send.
 
@@ -1360,10 +1403,15 @@ How to keep it current:
 - Checks: sections seeded and grouped; initial selection; search filter; status text.
 - Why: the Game Data window.
 
+### GameDataCacheDeferredBuildTests.cs
+- Covers: Services/GameDataCache (SwitchSet with deferBuild, BuildDeferred, BuildDeferredSet, ReloadActiveSet)
+- Checks: a put-off switch names the set and serves its tables on demand without firing ActiveSetChanged (nothing built); the first need builds it once; a character on another set builds only that set, one on the draft's set builds it; a switch is never put off while another set is built; a reload builds a put-off set.
+- Why: the unnamed draft a launch comes up on built its whole set (room graph, loops, indexes; 3.4 s in Hang-20261026-215238), thrown away when a character on another set loaded.
+
 ### GameDataCacheSharedReadTests.cs
 - Covers: Services/GameDataCache (shared reads, ActiveLoad, FileStampAsRead)
-- Checks: ActiveLoad moves with every load of a set and nothing else; FileStampAsRead is the file as read, as a prewarm read it, and is forgotten when the next read finds the file gone or unparseable.
-- Why: background index builds racing set loads.
+- Checks: ActiveLoad moves with every load of a set and nothing else; FileStampAsRead is the file as read, as a prewarm read it, and is forgotten when the next read finds the file gone or unparseable; a table file another program holds open is read once it's let go.
+- Why: background index builds racing set loads; Crash-20261028-135630 (a virus scan of a just-imported table crashed the set switch).
 
 ### GameDataCacheSwitchTests.cs
 - Covers: Services/GameDataCache set switch atomicity
@@ -1380,6 +1428,7 @@ How to keep it current:
 - Checks: a game-data change drops the run a fight held, the default task held for the party, and a training trip in a wait; without the hook each would start on the other set's rooms.
 - Why: runs restarting on wrong room numbers.
 - Named seam: PartyTrainCoordinator.RunTripAsync is internal, so the test starts a trip with a set decision: the leader tick's own start needs a running movement engine, MudPlay partners and their status reports.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
 
 ### GameDataDeltaTests.cs
 - Covers: Services/SettingsResolver game-data deltas, ViewModels MonstersSectionViewModel
@@ -1405,6 +1454,11 @@ How to keep it current:
 - Covers: Services/GameDataSetManager
 - Checks: copy/move of loops, messages and record overrides across tiers; validation; active-set reload with what changed; delete set; replaced-set reporting.
 - Why: Manage Sets operations.
+
+### GameDataStringPoolTests.cs
+- Covers: Services/StringPool through GameDataCache.Strings, with Game/Map/RoomGraphManager, Game/GameData/RoomNameIndex and Game/Combat/MonsterCatalog on a fixture set read by the real loader
+- Checks: every room name, lair tag, exit hint and attack name reads exactly as System.Text.Json reads the file (case, doubled and trailing spaces, an accent, a character past the BMP, an empty name, the NUL lair sentinel); a repeated text is one string across rooms, the room graph and the room-name index, and across monsters' attacks; texts differing only in case or whitespace stay apart; a set switch starts a new pool and the rebuilt structures share its strings, not the old set's.
+- Why: the structures built from a loaded set held thousands of copies of the same names, about 2.4 MB a client (RAM pass, 2026-10-25); pooling must lose no text and must not keep an old set's strings alive.
 
 ### GameDataSwitchEndsHeldRunsTests.cs
 - Covers: Game/Map/MovementController.StopForGameDataChange with EventManager, PartyComebackManager
@@ -1596,8 +1650,8 @@ How to keep it current:
 - Why: the grove shadow guard door (Phoenix quest).
 
 ### HangReportTests.cs
-- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking and its program-log lines), Services/HangReport, Services/ProcessResources (ReportLines), Services/ContentSizes, Services/ActivityCounters, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
-- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies; each window opened or closed is logged at Info under `Windows` with the windows then open (short names, repeats counted), and the same list is the status line's; the Memory section carries the native figure, threads and handles, GDI / USER objects, what the windows hold and the session's activity, as the bug report does; a closed window's contents leave the list.
+- Covers: Services/PerformanceMonitor (the UI probe, Measure's scope stack and recent activity, window tracking and its program-log lines, Raise and Named), Game/Map/RoomTracker (each room-change handler timed), Services/HangReport, Services/ProcessResources (ReportLines), Services/ContentSizes, Services/ActivityCounters, Services/ProfileService (AccountSecrets), Services/BugReportBuilder (BuildScrubberOffUiThread)
+- Checks: a UI thread silent past the threshold writes exactly one Hang file, with milestone lines while it lasts; the file names each open scope outermost first with its file, member and line and how long it was open, the recent activity with repeats folded into one row, and the open, last opened and last focused windows; recovery is added to the file, logged and kept for the bug report; nothing is written below the threshold, before the main window opens, or when the probe itself was stopped (a sleep); a freeze already under way when the window opens counts from the arm; inside a known long operation (MeasureLong) nothing is written under 30 s and past it the report names the operation and what it took before; a sleep inside a hang ends its figures, with no recovery claimed; a set switch past 5 s is not a hang once it ends, and a freeze after it is counted from its end; a freeze under way at the arm leaves the start out of its figures, milestones and length; the off-thread scrub, from a profile loaded with saved logins and a suicide password, masks them, follows a save and a mutation notice, empties on close, and masks a whole Hang report's log tail; the Memory section gives working set, private bytes, heap and collections when the hang began and when written, the allocation rate across it and rows from the minutes before, and the program log's line carries the headline; growth through a hang shows in its milestones, its recovery line and the bug report's peak; memory is read on the probe's thread, never the UI thread's; a stall while collecting is written with the innermost scope; a recovery stays in the Hang file when its log line is held; log lines left waiting on a stuck log are dropped and counted, one out at a time; a later hang is a new file, but not within the gap; account details and corpse passwords are masked in the logs and commands copied; without a scrub those are left out and the code location stays; a UI thread blocked on a real thread is read without anything run on it; the probe goes on ticking while the report's file work is stuck on the disk, and the queued lines land in order once it answers; a log write stuck on the UI thread (as the program log's file writer does) holds back neither the report nor the log tail it copies; each window opened or closed is logged at Info under `Windows` with the windows then open (short names, repeats counted), and the same list is the status line's; the Memory section carries the native figure, threads and handles, GDI / USER objects, what the windows hold and the session's activity, as the bug report does; a closed window's contents leave the list; a room change that hangs is named in the report by the handler holding it (RoomTracker through PerformanceMonitor.Raise, a lambda by RoomTracker.Named), and a handler past 50 ms is logged at Debug by name; a room change's handlers that finish under a millisecond stay out of the recent activity, so earlier work stays listed, while a slower one is listed.
 - Why: a freeze leaves no exception for the crash reporter, and the user asked for a report that points straight at the code (2026-10-18); a 26 GB native leak's logs said nothing of the windows open or what held native memory (user, 2026-10-23).
 - Named seam: PerformanceMonitor.ProbeHost and the internal constructor that takes it: the client's probe is a thread of its own pinging the Avalonia dispatcher and writing to the Desktop; the test gives it ManualTimers, a ManualClock, a ping queue it answers by hand, a folder of its own, its WriteAside / RunAside run at once or on a queue it holds (in the client, a writer thread and a thread per log line), and its ReadMemory / ReadPrivateBytes give figures the test moves (in the client, the GC's counters, Environment.WorkingSet and Process.PrivateMemorySize64).
 - Named seam: PerformanceMonitor.NoteWindowOpened / NoteWindowClosed / NoteWindowFocused, internal: the client calls them from Avalonia's window class handlers, which need real windows.
@@ -1649,8 +1703,8 @@ How to keep it current:
 
 ### HealthManagerTests.cs
 - Covers: Game/Health/HealthManager
-- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; freezing the gate while gear swaps change max mana.
-- Why: many paradigm-/stock- reports cited inline; user rulings 2026-09/10
+- Checks: rest and meditate gates with their confirm ticks and pacing; a kai character on Stock rests instead of meditating, logged once, while one on Paradigm and a Stock mana caster meditate (prompts through PromptParser); ShadowRest; rooms whose spell does damage; flee (backward, forward, closed rooms, refused moves, hit-and-run, from a monster or player); the emergency hang-up, wimpy jump and @panic matrix; party wait/ok and opportunistic rests; a follower below its mana floor whose leader was lost (PartyManager + PartyRestSync on a feed) sends its @wait once `par` names the leader; freezing the gate while gear swaps change max mana.
+- Why: many paradigm-/stock- reports cited inline (paradigm-20261025-114837 for the lost leader); user rulings 2026-09/10
 
 ### HealthSettingsTests.cs
 - Covers: Models/Profile/HealthSettings
@@ -1712,6 +1766,11 @@ How to keep it current:
 - Covers: (test helper) builds huge "You notice … here." floor lines and a matching Items table
 - Checks: n/a
 - Why: paradigm-20261009-164508 (floor lines over 2,000 characters)
+
+### IdleCompactionPolicyTests.cs
+- Covers: Services/IdleCompactionPolicy (the decision MemoryMaintenance's idle and minimized compactions follow)
+- Checks: no idle compaction in the first half hour, then one after five stable minutes; a fight, walk or errand restarts the five minutes; more game lines than a quiet room brings hold it to the next quiet sample, a handful don't; at most once per interval; a pause over the bound doubles the interval up to its ceiling and a fast one puts it back; on minimize it runs at once unless something is fighting or moving, not twice within two minutes, and after a slow pause not before the longer interval.
+- Why: a compacting collection stops the client for tens of milliseconds, so it must never land during a fight, a walk or a burst of game output, and must back off on a client whose heap compacts slowly (RAM pass, 2026-10-25).
 
 ### InGameCaptureTests.cs
 - Covers: Game/InGameCapture, CaptureWindow, TranscriptSnapshot.Tail
@@ -1805,7 +1864,7 @@ How to keep it current:
 
 ### ItemFinderViewModelTests.cs
 - Covers: ViewModels/CharacterWorkshop/ItemFinderViewModel
-- Checks: the level filters; the Missing tint against worn gear; the trial-damage readout following the trial gear, stats and target.
+- Checks: the level filters; a More stats row (Quickness) filtering and clearing on Reset; the Missing tint against worn gear; the trial-damage readout following the trial gear, stats and target.
 - Why: Item Finder / Gear Finder wiring
 
 ### ItemMagicIndexTests.cs
@@ -1824,7 +1883,7 @@ How to keep it current:
 - Why: item name resolution
 
 ### ItemOverrideSaveTests.cs
-- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyItemAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
+- Covers: Services/GameDataOverrideApplier.ApplyItemAsync / ApplyFieldsAt, driven by ItemEditDialogViewModel's Save and ItemBatchChanges (with SettingsResolver.ResolveGameDataBelow / ReadGameDataAt)
 - Checks: a character-tier untick over a Global tick is off; a record set back to its installed defaults over a differing Global still yields the defaults, holding only the boxes that differ below; set back with nothing below it clears the override; one box changed leaves the others resolving as before; only changed boxes are saved, so a character save doesn't copy a Global value up and a Global save doesn't copy a character's value down; a realm record set back to its defaults clears; the batch editor saves only its chosen fields, its off over a realm tick is off, back to defaults clears, and its Auto-sell off turns a Global sell detour off too. A save builds on the override file as it stands on disk, not a copy cached before another client changed it. Use moved to another tier copies the shown values there, and OK on the same tier with nothing changed saves nothing. A save that fails to reach the disk leaves the cached record as the file has it. The tiers not saved at are never written.
 - Why: an untick at the character tier left a Global tick showing, and a record set back to its defaults didn't return to them (user, 2026-10-17).
 
@@ -2044,6 +2103,15 @@ How to keep it current:
 - Checks: "I can now train to level: N" on crossing, multi-level bursts, pre-banked levels silent, no repeats, channel → wire verb, profile swap reseeds.
 - Why: avoid login spam.
 
+### LeverGateToggleTests.cs
+- Covers: Game/Map/DoorsHeldOpen with lever gates (MayPullLever, sightings, a pull held from when it went out), LoopRunner and AutoWalkManager at a lever-opened door or gate, and Game/Map/RoomTracker's arrival display read before StateChanged (SetRoom with the display's exits), played against LeverWorld.
+- Checks: a same-room lever whose gate the arrival display shows open is crossed without the lever, and one shown shut is pulled once; a guardroom lever whose gate our pull opened isn't pulled on the next lap inside the 300 s hold, and is after the hold and the gate's relock; a held gate that shut before the run got back is shown shut on arrival and the walker pulls it again, with no bonk; a crossing refused at a gate shown open on arrival (`The gate is closed!`) is walked by the walker, lever pulled again, with no recovery; a gate seen open that no pull of ours opened isn't pulled on a walk through it; a walk leaves the detour out with 100 s of hold left and walks it with 50 s left (2 s a move plus the 60 s margin), pulling the held gate in neither; a gate our pull opened 120 s before its room was shown is held from the pull, its far side too, and one only seen from the sighting; a pull not seen within 300 s doesn't date a later sighting; RoomShown is raised for the room a display confirmed when an engine moved on inside its transition; a walker's second walk through a gate its pull opened leaves the lever and its detour out.
+- Why: the engine flips a lever door or gate on every action, so a second pull locks it (Stock 1.11p handler @0x46c6bb; user, 2026-10-26, Paradigm the same), and a door seen open counts as open for 300 s on both realms (user, 2026-10-18); the arrival-driven "already open" check read no exits (report `paradigm-20261026-220231`).
+
+### LeverWorld.cs
+- Test infrastructure: the game side of a walk or loop through lever exits (rooms shown through a ServerFeed read by RoomDisplayParser, InboundMoveEchoScanner and MovementRefusalDetector; lever exits shut until their action, door and gate levers toggling; commands answered by a prompt; DoorsHeldOpen wired to the tracker and the refusals; a LoopRunner and an optional AutoWalkManager on ManualTimers and a ManualClock).
+- Why: the lever tests run the client's real display, echo, refusal and prompt paths.
+
 ### LightItemIndexTests.cs
 - Covers: Game/Light/LightItemIndex
 - Checks: only light items catalogued, strength/use count/burn time read (any ability slot), case-insensitive lookup, set switch rebuilds.
@@ -2136,8 +2204,8 @@ How to keep it current:
 
 ### LoopBuilderSessionTests.cs
 - Covers: ViewModels/Navigation/LoopBuilderSessionViewModel
-- Checks: clicks expand to a closed cycle, per-waypoint actions and flags ride into the loop, remove/move clicks, unreachable legs block save, a set switch drops the build.
-- Why: building loops on the map.
+- Checks: clicks expand to a closed cycle, per-waypoint actions and flags ride into the loop, remove/move clicks, unreachable legs block save, a set switch drops the build, a row's step is found again through edits, renumbers and moves, and never once it is removed, saved or cleared (even when an identical step takes its place).
+- Why: building loops on the map; a step's action editor stays open while the build changes, and its result must land on that step or nowhere (report Crash-20261026-212906). The view-model's re-check after the editor closes (the same builder still open) runs behind a real Avalonia window, which isn't unit-tested.
 
 ### LoopCombatSuppressionTests.cs
 - Covers: Game/Map/LoopCombatSuppression
@@ -2171,9 +2239,14 @@ How to keep it current:
 
 ### LoopOutsideChangeTests.cs
 - Covers: Game/Map/NavFolderWatcher, LoopManager, LairManager, NavFolderManager
-- Checks: another client's loop/lair writes, deletes, moves seen on the second beat; own writes not echoed; unreadable files and folders handled; running loops keep their copy; walk and parse run off the UI thread.
-- Why: two clients sharing a set's Loops folder.
-- Named seam: NavFolderWatcher.InFlight and the internal constructor taking the walk, the read and the hand-back to the UI thread: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done.
+- Checks: another client's loop/lair writes, deletes, moves seen on the second beat; own writes not echoed; unreadable files and folders handled; running loops keep their copy; walk and parse run off the UI thread. The whole-tree check walks only a changed tree; a change the system tells of is walked on the first quiet beat after a burst and read on the next; a watcher that lost track is followed by a walk and restarted at the next check; with no change notification the check alone still finds a change and the fallback is logged once; a loop file written straight into a real folder is taken in by the app's own FileSystemWatcher with no check due (or the test says it skipped when the system can't start one). A set taken up is walked on its first beat; changes told without end are walked after a few beats anyway; a change told on a check's beat is walked then; a watcher that finishes starting after the set changed is stopped unused; a Loops folder deleted and made again is watched again.
+- Why: two clients sharing a set's Loops folder; following it by notification instead of a full rescan every 3 s in every client (RAM pass, 2026-10-25), with nothing on the folder done on the UI thread and no change lost to a busy folder or a first minute (review of #1135).
+- Named seam: NavFolderWatcher.InFlight, WatchStarting and the internal constructor taking the check interval, the walk, the signature check, the read, the hand-back to the UI thread and the change-notification factory: the poll hands work across threads by design, so a test runs each hop itself and needs the barrier to know a pass is done, and drives the system's notification by hand except in the one test on a real folder.
+
+### LoopRemoteActionExitTests.cs
+- Covers: Game/Map/LoopExpander (a leg through a lever exit whose actions are in other rooms, via RemoteActionPathExpander; the detour spans and unroutable lever rooms of LoopExpander.Plan) and Game/Map/LoopRunner (lever actions and the primed crossing, joining the lap outside a detour, a crossing shown shut handed to AutoWalkManager, flees from a lever room and a waypoint room, a detour skipped at an exit shown open, the start refused for an unroutable lever room; a remote winch through WinchManager), and Game/Map/RoomTracker's re-show of the room stood in; on the treetops rooms 16/543-16/569 and 16/640 of data-Anomaly-v0.61.48-checked and two small room sets; the runs are played against LeverWorld.
+- Checks: the expansion of the Narrow Ledge ↔ rooftop loop types the five-lever chain (`turn knot`, `move branch`, `pull vine`, `push knot`, `tear bark`) each in its own room and crosses every lever exit on the lap after its action, as a plain move; the plan marks the vine gate's detour as leaving the route at 16/545, coming back there with all five actions inside it, and crossing out of 16/551; with the last lever room avoided the leg is unreachable, the lever room is named, and the loop is refused with the exit and the lever room; two laps each pull the chain and cross the vine gate, with no move into a shut exit; a start in 16/565, reached only inside the detour, joins elsewhere and works the whole chain; a `tear bark` that didn't take leaves the gate shown shut on arrival, and that crossing is walked by the walker, chain and all, with no bonk, no recovery and no second trip to the rooftop; a flee out of 16/569 before `tear bark` was taken sends it again on the walk back, and one after it was answered (a fight held the lap) doesn't, nor a waypoint's answered `ask`; a re-show of the room stood in carries the exit it now shows to its transition's listeners; a passage shown open in the room its detour leaves from is crossed on the next lap without the detour; a winch in another room is pulled again after *does not budge* and the loop walks back through the gate once it turns.
+- Why: report `paradigm-20261026-220231`, a loop that expanded its legs as plain moves stopped at 16/551 N with "multi-action exit requires actions in another room, which can't be auto-crossed on this route" (and it had been open on arrival, unread); a re-sent `buy` or lever would buy twice or lock the gate.
 
 ### LoopReconnectRestartRoomTests.cs
 - Covers: Game/Map/LoopRunner's restart after a reconnect through Game/Map/ReconnectRestart (with RoomTracker, WirePromptScanner, AutoWalkManager, EngineRecoveryGate.TryResyncOnce on a ParadigmPositionResolver, PartyReformCoordinator, PartyDisconnectMovementGate; the runner's and the resolver's timers on ManualTimers), on TrackerWireRig: each chunk is read by the prompt scanner before the terminal, as MainWindowViewModel feeds it, so the reconnect's prompt comes ahead of its own room display.
@@ -2187,7 +2260,7 @@ How to keep it current:
 
 ### LoopRunnerTests.cs
 - Covers: Game/Map/LoopRunner
-- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; backing out of the loaded loop's start lets go of it, but not of one loaded since.
+- Checks: start/approach/stop, waypoint commands and delays, recovery (blocked, rm resync, stall watchdog, budgets), disconnect/reconnect resume and holds (the restart waits for the room the reconnect shows and runs after the prompt's lines), flee resume, same-burst pause races, doors/traps/hidden exits, lap timing; a waypoint's lap wait holds after its command for what's left of the lap and is skipped on a lap joined partway round; backing out of the loaded loop's start lets go of it, but not of one loaded since.
 - Why: many reports (paradigm-20260901-*, -20260913-*, -20260927-*, -20261005-194751, -20261014-180148, -20261022-170426, …).
 
 ### LoopSettingsStoreTests.cs
@@ -2197,12 +2270,12 @@ How to keep it current:
 
 ### LoopShareTests.cs
 - Covers: Game/Remote/LoopShareCodec, LoopShareHandler, LoopShareReceiver, RemoteCommandManager (answers)
-- Checks: codec round-trip and hostile payloads, offer → yes/no → send, offer codes verified, telepath-only, result answers and their gating, numbered copies.
+- Checks: codec round-trip (a lap wait included) and hostile payloads, offer → yes/no → send, offer codes verified, telepath-only, result answers and their gating, numbered copies.
 - Why: `@loop send` safety and integrity.
 
 ### LoopSignatureTests.cs
 - Covers: Game/Map/LoopSignature
-- Checks: fixed known hashes, short code, labels and file-held settings excluded, every route/setting change alters it, no collisions.
+- Checks: fixed known hashes (unchanged by the lap-wait field for loops without one), short code, labels and file-held settings excluded, every route/setting change alters it (a lap wait included), no collisions.
 - Why: two client versions must agree on "same loop".
 
 ### LoopSimulatorTests.cs
@@ -2242,7 +2315,7 @@ How to keep it current:
 
 ### ManualClock.cs
 - Test infrastructure.
-- Covers: test helper (clock, Stopwatch timestamp, delays) used by 9 test files.
+- Covers: test helper (clock, Stopwatch timestamp, delays, and Arm: a one-shot tick for a component that takes a scheduler) used by 9 test files.
 - Checks: n/a (helper; all members used). `RegenTrackerTests` / `RegenDiagnosticsRecorderTests` keep private FakeClock copies that could use it.
 - Why: deterministic timing.
 
@@ -2494,7 +2567,7 @@ How to keep it current:
 
 ### MonsterMovementPatternTests.cs
 - Covers: Services/Patterns (DefaultPatterns monster arrival/departure)
-- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't.
+- Checks: Stock appear/leave line shapes match (and Paradigm's Manaspring summon line, report paradigm-20261022-174021), chat doesn't; every `MonsterAppearLines` entry, its `%s` as a direction, reads as a spawn arrival and never as a directional one, and only as a whole line; a name fills `%s` only in a line no single monster prints (report paradigm-20261025-011825).
 - Why: missed arrivals/departures confuse targeting.
 
 ### MonsterObservationCastLineTests.cs
@@ -2506,6 +2579,16 @@ How to keep it current:
 - Covers: Game/Combat/MonsterObservationTracker
 - Checks: hits/misses/no-effect attributed per monster, own negated buffs aren't misses, retraction, landed hit retires physical no-effect.
 - Why: report paradigm-20260910-214553; user 2026-10-17.
+
+### MonsterRelationshipDefaultsTests.cs
+- Covers: Services/MonsterOverlaySeedStore (Load on GameDataCache.ActiveSetChanged and ReloadActiveSet, Resolve, GetOverlay, RelationshipSourceOf, RelationshipSummary, ContentStamp, LocationSuggestions), Game/Combat/MonsterEngagement.DefaultForAlignment, with SettingsResolver, MonsterRelationshipRules, RoomEntityClassifier, CombatManager and MonsterEditDialogViewModel. A paradigm set (Info.json, Monsters.json) and a seed file are written to the scratch data root and read as the client reads them; room displays go through ServerFeed and the attack through the combat engine's wire. Calls ScratchRoot.Require: it deletes its set and BBS folders and the seed file through AppPaths.
+- Checks: a monster the seed doesn't know reads Friend for Good or Lawful Good, Neutral for Neutral, Enemy for Neutral Evil and Chaotic Evil, each sourced "its alignment"; a missing or out-of-range Align stays Enemy; a monster the seed knows by name alone stays Enemy with a Good Align and is fought; a seeded relationship wins over an evil Align, its name matched across case and outer spaces, and a blank seed name isn't checked; a seed entry naming another monster is left out whole (relationship, priority, region, suggestions) and the alignment applies, sourced "seed entry skipped (name differs)"; a seed entry with a location and no relationship keeps the location and takes nothing from alignment; with no seed every monster takes its alignment; a Character-tier override wins and is named as the source; Good and Neutral monsters aren't attacked while an evil one in the same room is; setting the alignment's own relationship leaves no override; the Monster editor shows it as installed; one Info line per load carries the seed / known-with-none / alignment / no-alignment / skipped counts, with the skipped entry at Debug; a re-import that changes an Align is read and moves the stamp kept rankings are checked against.
+- Why: a monster the seed doesn't know defaults from its alignment, one it knows with none set stays Enemy ("keep the seed's enemies as enemy"), and a seed entry counts only for the monster of its name (user, 2026-10-25); a good monster attacked by default, a curated boss or lair monster left alone, or a renumbered set's monster given another's settings is a wrong fight.
+
+### MonsterRelationshipRemoteTests.cs
+- Covers: Game/Remote/MonsterRelationshipHandler (`@relation`), Game/Combat/MonsterRelationshipRules, Services/RoomSearchService.FindAllByName, Services/MonsterOverlaySeedStore.Resolve, Services/GameDataOverrideApplier.ApplyFieldsAt on the Monsters table (with RemoteCommandManager, SettingsResolver, MonsterCatalog, RoomEntityClassifier, CombatManager and MonsterRelationshipWatcher), driven through ChatLines and the reply wire. Calls ScratchRoot.Require: it deletes its BBS folder through AppPaths.
+- Checks: the bare form reports the relationship as the engines read it (none set is Enemy, a Global value shows through) and writes nothing; a change (any case) is saved at the character tier, Relationship alone, never Global, keeps the record's other fields, holds over a Global value, and set back to the installed default clears the override; the same value is answered `already` and writes nothing, so a Global value isn't pinned for the character. The Info log names sender, channel, monster, both values and where the relationship itself came from (the tier holding it, or no seed or alignment); the handler keeps the last remote change for the bug report and forgets it on a profile load and a set switch. The change reaches the combat engine (no swing at a Friend, a swing at an Enemy) and the Hangup and Flee watch at the next room display, and the Monster editor, built as its open path builds it, opens on it. Names: words in any order, apostrophes left out, exact names in play, then exact names out of play, then word matches; `#<number>` picks one of same-named monsters, and a record with no name is labelled `#<number>`. Refusals (no monster, unknown number, ambiguous with numbers, bad relationship word, bare command, no named character, no Alter settings) carry their reason and are silent with Warn off, the permission denial included; a success is answered with Warn off; replies go back on the channel the command came in on; the Auto-All switch off ignores it unanswered.
+- Why: a party member sets how this character treats a monster by remote command (user, 2026-10-25), gated at Alter settings with `@auto-get <item>` and `@atkprio`.
 
 ### MonsterRelationshipWatcherTests.cs
 - Covers: Game/Combat/MonsterRelationshipWatcher (with HealthManager)
@@ -2749,8 +2832,8 @@ How to keep it current:
 
 ### PartyComebackManagerTests.cs
 - Covers: Game/Remote/PartyComebackManager (+ walker, loop, lair, PartyManager)
-- Checks: @comeback and @where recovery; full-party and distance gates; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget.
-- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*).
+- Checks: @comeback and @where recovery; full-party and distance gates; a member back from a dropped link whose @comeback crosses our invite (the auto-invite's or one typed by hand) is answered `got you - resuming` once following, `comeback already in progress` while still [Invited] (not for a fresh recruit invited on logging in, nor for an invite echoed into a party already full without the asker's row), with no @forget either way; an invite long after the re-entry isn't the return's; a move of ours since, or a request long after the return, is judged as any other; a full party never counts the asking member's own row; backtrack; loop and lair gates; train-trip roll; Stock join vs invite; @forget, including the follower's side: a leader's @forget while we still follow, the next `par` naming them again and the @wait kept for them going out; a member left behind right after their @ok is asked for a fresh @ok (@waiting) and trusted, and waits the full window only when that happens again within the wait window.
+- Why: Many reports (paradigm-20260926-195517, -20260928-074527, -20261007-*, -20261025-114837, -20261028-102116).
 
 ### PartyDeathRosterCleanupTests.cs
 - Covers: Game/PartyDeathRosterCleanup
@@ -2809,8 +2892,8 @@ How to keep it current:
 
 ### PartyManagerTests.cs
 - Covers: Game/PartyManager, Game/PartyMember display props
-- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; Stock "listed with" state.
-- Why: Roster correctness; stock-20260801-002423.
+- Checks: Follow, join and leave lines; par parsing (rank, poison, kai, invited); reconciliation; self row; rank lines; the rest and meditate observation lines; the rank decision on joining (sent on every join, a re-invite the client still counted as the old party included; the game's refusal or move) recorded for the bug report; Stock "listed with" state; a `par` opening `You are following X.` gives back a lost leader (and a solo client its leader) only when its rows list them, and never changes a named one.
+- Why: Roster correctness; stock-20260801-002423; paradigm-20261025-114837 (the follower's @wait had no leader to go to); a cleric set to back rank found in the middle after being re-invited to a party of two (player report, 2026-10-27).
 
 ### PartyPathItemGateTests.cs
 - Covers: Game/Map/PartyPathItemGate, PartyHandOverMemory
@@ -2834,13 +2917,18 @@ How to keep it current:
 
 ### PartyRejoinCoordinatorTests.cs
 - Covers: Game/Remote/PartyRejoinCoordinator
-- Checks: Remembered leader; @comeback on reconnect, with the room when confirmed; window; kill switch.
-- Why: paradigm-20260928-074527; dark-room reconnect.
+- Checks: Remembered leader; @comeback on reconnect, with the room when confirmed; window; kill switch; no @comeback once the game says we follow the leader again since the connect (a follow from before the drop still asks).
+- Why: paradigm-20260928-074527; dark-room reconnect; paradigm-20261025-114837.
 
 ### PartyRestSyncTests.cs
 - Covers: Game/PartyRestSync
-- Checks: a follower's @wait / @ok to the leader by given name (never solo or as leader); one @wait per held reason set and an @ok only when the last reason clears; reason notes (bare health unless a pool is named, explicit notes win); Resend; HeldReasons; a stuck reason suppresses later oks; the gang heal request; IsPaused and its Changed event.
-- Why: the party pause protocol: the leader must hold for every follower reason and resume only once all clear.
+- Checks: a follower's @wait / @ok to the leader by given name (never solo or as leader); one @wait per held reason set and an @ok only when the last reason clears; reason notes (bare health unless a pool is named, explicit notes win); Resend; HeldReasons; a stuck reason suppresses later oks; a @wait asked while following a leader the client can't name is kept, warned once and sent when the leader is named, and not sent once released or after leaving the party; a restored leader is told a hold from before the loss and gets an @ok asked for meanwhile, another leader gets neither; a kept wait named with the master switch off goes out on its resync; the gang heal request; IsPaused and its Changed event.
+- Why: the party pause protocol: the leader must hold for every follower reason and resume only once all clear; paradigm-20261025-114837 (every @wait dropped silently while the leader's name was lost).
+
+### PartyRestWatcherTests.cs
+- Covers: Game/PartyRestWatcher, over a real PartyManager
+- Checks: a follower's party counts as resting when the leader rests or meditates, or another member is seen doing so (`par` R / M, `<name> stops to rest.`, `<name> kneels to meditate.`) with no follow drag since; a drag forgets the member's rest until a later `par` lists it again; our own rest and a member's rest while we lead don't count; Health is nudged only when the answer flips.
+- Why: user, 2026-10-27 (a follower rests or meditates with a resting member once the leader has stopped moving).
 
 ### PartySettingsDefaultsTests.cs
 - Covers: Models/Profile/PartySettings, BuffSlot
@@ -2997,6 +3085,11 @@ How to keep it current:
 - Covers: Game/Inventory/PostDeathInventoryRefresh
 - Checks: death marks the inventory stale; reread once a room is known, once per death; a profile swap drops the pending read.
 - Why: report paradigm-20261009-105244.
+
+### PostKillFloorCheckTests.cs
+- Covers: Game/Inventory/PostKillFloorCheck (with MonsterDeathWatcher, MonsterCatalog on a Monsters.json fixture, RoomDisplayParser and RoomTracker on a Rooms.json fixture (MoveOnItsWay, IsPeekSuppressed), CombatStateTracker (HasEngageableHostiles, FightEnded) on a RoomEntityClassifier, AcquisitionGate, RoomRedisplayCoordinator, EngineSendGate.BareEntersSent, AutoModeController and the Cash settings of a TestProfiles profile)
+- Checks: kills fed as the game prints them: a monster with a drop chance gets one bare Enter at the end of the kill's read and the walker is held from the death until the room display (or the release timeout); a monster with no drops, a 0% drop or no known identity gets none. Two kills in one read share one Enter; kills a round apart with the fight still on wait and look once the last kill ends it. The setting is on by default and off sends nothing, while an Auto-collect drop looks at once, mid-fight and whatever the setting. No Enter of its own when the room was shown after the kill, or another engine's Enter went out since the kill's read began, whether its death handler ran after the check's or before it (the walker still waits for its display). An Enter answered before the kill doesn't stand in for the look, even inside the redisplay coordinator's window. No Enter and no hold with a move on its way, queued on a sure tracker or noted while it is unsure. A `look <dir>` peek's display settles nothing. A fight that ends with no kill of ours, read through the real `CombatStateTracker.FightEnded`, holds the walker before the Combat gate lets go and sends the owed look. A death spell's stall: the nudge's Enter isn't the look, which goes once the stall has run out, the walker held throughout. The death's attribution and its source are reported (`LastAttribution`). Nothing when we left the room, the send gate is held, the master switch is off, or the room can't be seen. A display with no look owed leaves another hold alone. The outcome is read through `Describe()`, the bug report's line.
+- Why: the user's 2026-10-26 request to look after killing a monster that can drop an item; a drop prints no line (GAME_MECHANICS "Monster drops land on the ground"); report `paradigm-20261003-005951` (the walker leaving before the post-kill survey lands).
 
 ### ProfileBackupTests.cs
 - Covers: Services/ProfileService.Save (backup)
@@ -3180,7 +3273,7 @@ How to keep it current:
 
 ### RankingStampTests.cs
 - Covers: Game/Simulation/RankingWorld, RankingWorldWatch, Services/RankingStampReader, MonsterOverlaySeedStore.StampOf, RankingCharacter, RankingCheck, RankingReach
-- Checks: world differences; tables stamped as read with mid-load rereads making the world unfit; seed and game-edit stamps; character change groups (the unsimulated cast-when-full slots leave the settings group as it was); reach hash.
+- Checks: world differences; tables stamped as read with mid-load rereads making the world unfit; seed (an unloaded store's is `none`) and game-edit stamps; character change groups (the unsimulated cast-when-full slots leave the settings group as it was); reach hash.
 - Why: kept rankings must match the world and character they were made for.
 
 ### RateTextTests.cs
@@ -3244,7 +3337,7 @@ How to keep it current:
 
 ### RemoteCommandCatalogTests.cs
 - Covers: Game/Remote/RemoteCommandCatalog, PlayerEditDialogViewModel tips
-- Checks: command → permission category; removed commands; bang stripping; help coverage; tooltips list commands.
+- Checks: command → permission category (`@relation` at Alter settings); removed commands; bang stripping; help coverage; tooltips list commands, and only the Alter settings tooltip warns that `@relation` can set Hangup or Flee.
 - Why: the permissions grid must match handlers.
 
 ### RemoteCommandCheckOrderTests.cs
@@ -3346,8 +3439,8 @@ How to keep it current:
 
 ### RoomEntryWatcherTests.cs
 - Covers: Game/Combat/RoomEntryWatcher
-- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned.
-- Why: reports paradigm-20260928-230226 and paradigm-20261020-203400 (`elfu removes shadow`).
+- Checks: arrival forms (articles, in/into, greet text, directions); sneak notice is a player; colour hints; flavor resolution; colour-scan custom spawns; client notices ignored; a known player's yellow gear-swap line naming a monster's item (`shadow bracelet`) is no arrival, fed as wire bytes through ServerFeed, while the same shape from a non-player is still scanned; a monster's own appear line puts the one monster that prints it on the roster (`A mist of gold appears in front of you!`), while one several monsters share, or one worded as a monster already here coming to life (the idol, statue, frost giant lines), leaves the roster short, all fed through ServerFeed.
+- Why: reports paradigm-20260928-230226, paradigm-20261020-203400 (`elfu removes shadow`) and paradigm-20261025-011825 (the golden mist).
 
 ### RoomExitParseTests.cs
 - Covers: Game/Map/RoomExit.TryParseWire, FormatLevelGate, CastsOnWalk
@@ -3366,8 +3459,8 @@ How to keep it current:
 
 ### RoomGraphManagerTests.cs
 - Covers: Game/Map/RoomGraphManager, RoomKey and RoomExit parse, BfsMapper routing
-- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
-- Why: reports paradigm-20260714-091000, -20260728-180730, -20260729-221044.
+- Checks: seeding, reloads and eviction; name and candidate indexes; unreachable pruning; door-tolerant re-anchor; Cmd/Item teleport promotion; lever, guard and greet promotions (a lever door marked as the door or gate its actions open, a guard's ask door not); a room command the exit's action cell already lists, by any of its synonyms, stays one action and keeps its roll; synthesised teleport and gateway edges; Arena block; cast pockets; string sharing; circular textblocks.
+- Why: reports `paradigm-20260714-091000`, `paradigm-20260728-180730`, `paradigm-20260729-221044`, `paradigm-20261026-150710`.
 
 ### RoomHazardIndexTests.cs
 - Covers: Services/RoomHazardIndex (RoomHazard, BuffCounter)
@@ -3382,11 +3475,11 @@ How to keep it current:
 ### RoomRedisplayCoordinatorTests.cs
 - Covers: Game/Inventory/RoomRedisplayCoordinator
 - Checks: The first request sends; a second within the 750 ms window coalesces; a later one sends again.
-- Why: The post-kill drop re-look and the cash re-display would otherwise render the room twice.
+- Why: The post-kill floor check and the cash re-display would otherwise render the room twice.
 
 ### RoomRenameRelearnTests.cs
 - Covers: Game/Map/RoomTracker + RoomGraphManager (learned room names)
-- Checks: A data-unnamed house renamed by its gang, whole or one room at a time, is walked and every room re-learned. A data-named room is never re-learned. Learning needs a move in flight that predicts the room, an echo, or a follow drag. Re-looks of the room being left, look-peeks, held displays with no echo, and teleporting exits must not name the room ahead.
+- Checks: A data-unnamed house renamed by its gang, whole or one room at a time, is walked and every room re-learned. A data-named room is never re-learned. Learning needs a move in flight that predicts the room, an echo, or a follow drag. Re-looks of the room being left, look-peeks, held displays with no echo, and teleporting exits must not name the room ahead. A room taken from a held display carries that display's exits to a listener of its step, not those of the display showing now.
 - Why: Gang houses can be renamed per room, so the stored name is no proof against the walk; this was confirming the tracker in the wrong room.
 
 ### RoomSearchRankingTests.cs
@@ -3492,8 +3585,8 @@ How to keep it current:
 
 ### RouteChoicePlannerTests.cs
 - Covers: Services/RouteChoicePlanner, with Game/Map/BfsMapper, Services/MovementFilter, PathItemShopRouter, LoopExpander, AutoWalkManager (lake crossings)
-- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route; a teleport fork past a trap carries the fewest-traps route unless it is the walk already offered (WithTrapAvoidCard). Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it.
-- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10 and 2026-10-20.
+- Checks: - The fixtures' bare `(Key: N)` locks are stamped key exits, as the seed has most (RoomGraphManager.ApplyBareLockKinds), so their key is the gate. - When the free-vs-gated route card is offered (item, ticket, door key, multi-action and hazard gates; the savings floor) and how each requirement is classified. A party short of an item closes the gate, and sole routes have optional shortcuts and closed-gate items. - Blocked-route planning (level gates named before doors), and the teleport, trap-avoid, avoid-override and lever-detour forks with their deferral to an obtainable route; a teleport fork past a trap carries the fewest-traps route unless it is the walk already offered (WithTrapAvoidCard). Also which gate items to source. - Crystal Lake: never routed into or across except a place only the lake reaches at level 50+ with a boat; loops and destinations kept out of it; BfsMapper.DistanceMemo answers every pair in and across the lake as DistanceBetween does (the way out of a sea room, the crossing to the island).
+- Why: Reports `paradigm-20261007-183903`, `paradigm-20260913-100733`, `paradigm-20261008-173911` / `-174023`, `paradigm-20260911-010954`, `paradigm-20260914-201123`, `paradigm-20260825-125954`, `paradigm-20260915-182554`, `paradigm-20260907-212758`, `paradigm-20260911-095404`, `paradigm-20261003-132224`, `paradigm-20261009-123349` / `-135049` / `-135314`; user, 2026-10-09/10 and 2026-10-20; the Chest Offload trip's distances (report `paradigm-20261026-201217`).
 
 ### RouteDetailsColoringTests.cs
 - Covers: ViewModels/Navigation/RouteDetailsDialogViewModel (monster hit-% colouring)
@@ -3524,6 +3617,11 @@ How to keep it current:
 - Covers: Game/Light/RouteLightScanner
 - Checks: The darkest room on a route sets the light strength needed after worn illumination; unresolved rooms are skipped; a route already seeable needs none.
 - Why: Auto-light decides whether a route needs a light source, and how strong.
+
+### RouteSearchReadingsTests.cs
+- Covers: Services/MovementFilter (BeginSearch and the readings a search holds), Game/Map/BfsMapper (a search opened round FindPath, Distances and the memo), Game/Map/RoomGraphManager (bare key locks and item gates parsed from Rooms.json)
+- Checks: one search reads the realm's bare-lock bash rule and the build once, and routes on them: through two bare locks off a PvP realm, round them on one; a whole map of distances reads once and counts as the route does; whether a gate item is carried is asked once a search and afresh by the next, so a dropped raft sends the next search round; outside a search the filter reads live; a search on another thread reads for itself while one is open on this one.
+- Why: asked per exit, one search of a Paradigm map read bbs.json some 650 times and allocated over 100 MB, half a second and more on Windows, which froze the client on a Chest Offload trip and on room arrivals (report paradigm-20261026-201217). The routes must be the ones the per-exit reads found.
 
 ### RouteStepListTests.cs
 - Covers: ViewModels/Navigation/RouteStepList.Build
@@ -3604,7 +3702,7 @@ How to keep it current:
 
 ### ServerFeed.cs
 - Test infrastructure.
-- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does. Each call is one server read.
+- Covers: test helper: a TerminalEmulator + LineExtractor pair fed CP437 bytes, each from Terminal/Cp437.TryFromUnicode (Line, Rows, Prompt, Coloured, Raw); given a router, it dispatches every row and tells it each read's end (LineExtractor.ReadEnded → MessageRouter.EndRead), as MainWindowViewModel does; given a WirePromptScanner, each read reaches it before the terminal, as in the client. Each call is one server read.
 - Checks: n/a (helper).
 - Why: game output reaches a component through the client's own terminal and line extractor, never a test-only feed.
 
@@ -3895,8 +3993,8 @@ How to keep it current:
 
 ### StandardListContradictionsTests.cs
 - Covers: Game/Recovery/StandardListContradictions
-- Checks: one contradicting death is logged, the second marks the board; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once and keeps the count; no board/set → nothing counted
-- Why: telling a Stock board with edited rooms from standard data
+- Checks: run on a real board file (BbsProfileStore, read afresh on every ask as the client reads the active board) with a character loaded on it. One contradicting death is logged, the second marks the board and both are in bbs.json; the mark survives a profile reload and a restart; the count belongs to the data set; a legacy count with no set counts for nothing; a failed save is logged once, the count is held for the session (Standing: still marked, unsaved) and RetryUnsaved writes it once the file can be written; the next death after a failed save writes the held count plus one; a held count is not retried while another board or set is in play, and is written when its own is back; failed counts are held and said once per board; a board file that doesn't parse counts nothing and is said once; no board/set → nothing counted
+- Why: telling a Stock board with edited rooms from standard data; a count changed on one copy of the board and saved from another never reached two
 
 ### StartupOptionsTests.cs
 - Covers: Services/StartupOptions
@@ -4223,8 +4321,8 @@ How to keep it current:
 
 ### TrackerWireRig.cs
 - Test infrastructure.
-- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's; the gate's timeouts run on ManualTimers.
-- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, and SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor).
+- Covers: test harness: RoomTracker and EngineRecoveryGate wired as the client wires them, with a small game answering every command in text through a real terminal emulator and line extractor, on a manual clock. Each chunk goes to a WirePromptScanner before the terminal, and work posted to the UI thread runs after the chunk, as MainWindowViewModel feeds the live wire; the walker's MovementCoordinator, the router and the game-data cache are shared with the engines a test wires on, and the set can be made a Paradigm realm's and given a TBInfo table; a test can answer commands its own way (a room command, a gate that refuses) and word a room's exits (`closed gate north`); the gate's timeouts run on ManualTimers.
+- Checks: n/a (harness for RoomTrackingRecoveryWireTests, LoopReconnectRestartRoomTests, AutoLairReconnectRestartTests, which builds its lair timer store on the rig's game-data cache, SelfAilmentProofTests, which attaches a ConditionTracker to the rig's line extractor, and WheelGateWalkTests).
 - Why: lets the recovery tests run over the wire the way they do live.
 
 ### TrainBudgetCalculatorTests.cs
@@ -4269,8 +4367,14 @@ How to keep it current:
 
 ### TrainStatsScreenTests.cs
 - Covers: Game/Train/TrainStatsScreen, Game/Train/CpApplyCheck
-- Checks: reading the six stats and CP Left off the cursor-painted form (not a half-drawn one); applied / partial / nothing-spent judged from the form, or from CP via `stat`.
-- Why: report `paradigm-20260930-160602` (form took no keystrokes yet the row was counted applied).
+- Checks: reading the six stats and CP Left off the cursor-painted form (not a half-drawn one); each kind of screen recognised by its own text (Character Editor, `Char. Creation` box, Stock's scrolling form, the panel alone, none), the editor and the box read alike, the scrolling form not read; applied / partial / nothing-spent judged from the form, or from CP via `stat`.
+- Why: report `paradigm-20260930-160602` (form took no keystrokes yet the row was counted applied); the user, 2026-10-27 (screens recognised by type, never by realm, in case the game changes them).
+
+### TrainStatsWire.cs
+- Test infrastructure.
+- Covers: test helper: the game's side of a `train stats` as the Anomaly server put it on the wire in reports `paradigm-20261026-225703`, `-225718`, `-225733`: the prompt redrawn in place, a command's echo, party lines over the prompt row, a bare Enter's room redraw, the Character Editor box painted a row per line after a clear screen (with the cursor on a chosen box and Exit showing a chosen choice), and the SAVE exit. Also the cursor-positioned `Char. Creation` box with its title row left uncompleted (and the same box redrawn with no clear), Stock's scrolling form and refusal (Stock-sourced, `wccmmud.dll` 1.11p), and the screen flattened as the terminal session flattens it.
+- Checks: n/a (helper).
+- Why: the trainer tests feed the byte order the reports recorded, not lines made up for the test.
 
 ### TrainerCatalogSelectTests.cs
 - Covers: Game/GameData/TrainerCatalog (TrainerShop)
@@ -4279,13 +4383,24 @@ How to keep it current:
 
 ### TrainerMenuTrackerTests.cs
 - Covers: Game/TrainerMenuTracker
-- Checks: marker entry gated on an outbound `train`/`train stats` within the window (char-creation row bypasses it); input-menu arm on `train stats`, echo-prompt skip, exit on prompt / room display / live prompt; MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
-- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field.
+- Checks:
+  - marker entry gated on an outbound `train`/`train stats` within the window (the char-creation row bypasses it); input-menu arm on `train stats`; MenuOwnsKeyboard without a marker; ObserveScreen creation box; roster snapshot; ForceExit.
+  - With the game fed as bytes (TrainStatsWire) through a ServerFeed with a WirePromptScanner wired as AppServices wires it, and the screen read as the terminal session reads it:
+    - room displays, committed prompts and in-place prompts before the trainer screen are held (an earlier Enter's room redraw, party lines, a slow echo with a party line's prompt after it); the exit comes on a prompt / room display / live prompt after the form;
+    - Stock's refusals (not here, tournament mode, stats altered) release at once; a refusal the client doesn't know holds to the 10 s cap, then the late-form window closes;
+    - a form after the cap takes the keyboard back; one after the late-form window doesn't; ForceExit (the link dropping) ends the wait;
+    - a gossip naming the panel, or the panel and "Character Editor", neither marks the form up nor takes the keyboard back;
+    - the cursor-positioned `Char. Creation` box with no marker line is the form, off the screen;
+    - a box left on the screen isn't the answer and holds no longer than the cap; one drawn after a clear is the answer, and so is one redrawn in place with other figures; `ESC[H ESC[J`, ED 1 from the last cell and `ESC c` count as clears;
+    - a late box seen first by the terminal session's screen scan (ObserveScreen) takes the keyboard back as the screen-update order would have through the read's end.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes ManualTimers.Arm (the dispatcher's one-shot timer in the client), so the test decides when HoldCap and LateFormWindow are up.
+- Why: report `paradigm-20260906-090057` (keyboard stuck in char mode); report `paradigm-20260815-072308` (ForceExit); a `par` typed into the Family Name field; reports `paradigm-20261026-225703`, `paradigm-20261026-225718`, `paradigm-20261026-225733` (released on output that answered earlier sends, with the form opening a moment later).
 
 ### TrainerScreenGateTests.cs
-- Covers: Game/TrainerScreenGate, Services/EngineSendGate
-- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker), wrapped engine sends no-op then resume, holds compose with others, Dispose releases.
-- Why: background sends leaking into the `train stats` form.
+- Covers: Game/TrainerScreenGate, Services/EngineSendGate, Game/Remote/TelepathPacer (Hold / Release by holder)
+- Checks: the engine send gate holds while the trainer / creation form owns the keyboard (with or without the marker); wrapped engine sends no-op then resume once the form (its echo and box fed as bytes through a ServerFeed) is left; holds compose with others; Dispose releases. The telepath pacer is held over the same stretch: a telepath queued before the form isn't written into it, and the trainer letting go leaves an @suicide hold in place.
+- Named seam: the `schedule` constructor parameter of TrainerMenuTracker takes a ManualTimers' Arm (the dispatcher's one-shot timer in the client), so no dispatcher timer is armed from a test.
+- Why: background sends, and telepaths the pacer writes on its own timer, leaking into the `train stats` form (reports `paradigm-20261026-225703`, `-225718`, `-225733`).
 
 ### TrainerWalkCpPlanTests.cs
 - Covers: Game/TrainerWalkManager (with AutoTrainManager, StatParser, on the ErrandLightWorld stack)
@@ -4396,6 +4511,11 @@ How to keep it current:
 - Covers: Game/Map/WalkReach, RoomGraphManager.IsExitCommandSomewhere
 - Checks: outward reach through every exit type; following room commands only when they stay on the same map; the land of a map and its knots; a 6,400-room case without recursion; exit-command lookup.
 - Why: Paradigm Albion arrival rooms (user, 2026-10-10).
+
+### WheelGateWalkTests.cs
+- Covers: Game/Map/AutoWalkManager crossing a room-command gate through SpecialExitDispatch, with RoomGraphManager.InjectRoomCmdRemoteActions building the exit, on TrackerWireRig (the Dark-Elf Castle gatehouse `8/560` N, `CMD 4100` and its D-slot action cell, the game answering in the report's lines).
+- Checks: the walker turns the wheel once, then moves, and lands beyond the gate; a gate the wheel never opens ends the walk after the step's retry and the two re-plans, one turn per move, with a reason that names the step's direction and room.
+- Why: report `paradigm-20261026-150710` (`turn wheel` went out twice per try, the gate stayed shut, and the walk failed as "tracker entered Confirmed mid-step").
 
 ### WhereReplyParserTests.cs
 - Covers: Game/Remote/WhereReplyParser

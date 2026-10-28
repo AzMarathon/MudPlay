@@ -235,6 +235,13 @@ public sealed class CombatStateTracker : IDisposable
     // against the now-cleared gate (HasEngageableHostiles is already false here).
     public event Action? CombatForceCleared;
 
+    // Fires whenever a held Combat gate is let go (the room cleared, nothing left
+    // in it worth fighting, auto-attack switched off, a stealth runner's clear
+    // done, a force-clear), just before the release lets the walker step. A hold
+    // put up here is in place before that step, whatever ended the fight: a kill
+    // of ours, a party member's last blow, a flee.
+    public event Action? FightEnded;
+
     public CombatStateTracker(
         MessageRouter router,
         MovementCoordinator coordinator,
@@ -851,7 +858,10 @@ public sealed class CombatStateTracker : IDisposable
                 CombatSpentStealth?.Invoke(obs.Source == RoomObservationSource.Death);
             }
             if (wasAsserted)                                              // (3)
+            {
+                FightEnded?.Invoke();
                 _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);
+            }
         }
     }
 
@@ -878,7 +888,7 @@ public sealed class CombatStateTracker : IDisposable
             targetable, min, max, settings.KillAllEngaged, _roomCommitted?.Invoke() ?? false);
     }
 
-    // Engageable = Enemy (the default for a resolved-but-untagged monster) OR a Neutral
+    // Engageable = Enemy (the default for a resolved monster with no relationship) OR a Neutral
     // flagged KillOnSight — see MonsterEngagement. Shopkeepers / quest-givers / friendly NPCs
     // are marked Friend / Neutral / Hangup in the overlay seed; a monster whose Number resolves
     // but whose overlay is missing is treated as fightable, so the engine doesn't sit through a
@@ -903,11 +913,12 @@ public sealed class CombatStateTracker : IDisposable
         return MonsterEngagement.IsEngageable(overlay, userEngaged);
     }
 
-    // On-sight attacker: an Enemy-relationship monster (the default for un-tagged
-    // mobs). These hit us every round we share the room, so they block resting. A
-    // Neutral — even a KillOnSight one we intend to fight — never attacks first, so
-    // it is NOT an attacking hostile (it only hits back once we engage it, which the
-    // InCombat flag then reflects). Backs HasHostileMonster / the rest-block.
+    // On-sight attacker: an Enemy-relationship monster (one the seed knows with none
+    // set, an evil-aligned one it doesn't know, or one with no relationship at all).
+    // These hit us every round we share the room, so they block resting. A Neutral —
+    // even a KillOnSight one we intend to fight — never attacks first, so it is NOT an
+    // attacking hostile (it only hits back once we engage it, which the InCombat flag
+    // then reflects). Backs HasHostileMonster / the rest-block.
     private bool IsAttackingHostile(RoomEntity e)
     {
         if (e.MonsterNumber is not int n) return true;   // unknown → assume enemy (fail-safe)
@@ -988,6 +999,7 @@ public sealed class CombatStateTracker : IDisposable
     {
         if (!_gateAsserted) return;
         _gateAsserted = false;
+        FightEnded?.Invoke();
         _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, reason);
     }
 

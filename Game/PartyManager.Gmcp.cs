@@ -45,7 +45,7 @@ public sealed partial class PartyManager
         foreach (string name in confirmed) MemberFollowConfirmed?.Invoke(name);
         if (inParty && !State.SelfIsLeader && leader is not null && (!wasFollowing || previousLeader != leader))
         {
-            SendRankPreferenceCommand(); FollowingLeader?.Invoke(leader);
+            SendRankPreferenceCommand(leader); FollowingLeader?.Invoke(leader);
         }
         ParReplyRead?.Invoke();
     }

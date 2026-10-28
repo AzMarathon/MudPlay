@@ -459,7 +459,7 @@ public sealed class GameDataChangeDropsHeldStartsTests : IDisposable
         StatParser parser = new(stats);
         InventoryManager inventory = new();
         PartyState partyState = new();
-        TrainerMenuTracker menu = new(router, partyState);
+        TrainerMenuTracker menu = new(router, partyState, schedule: new ManualTimers().Arm);
         ProfileService profile = TestProfiles.Service();
         profile.LoadDefaultProfile();
         AutoTrainManager autoTrain = new(stats, parser, w.Cache, inventory, profile, menu,

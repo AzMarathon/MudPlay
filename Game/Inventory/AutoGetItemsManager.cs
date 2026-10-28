@@ -1,5 +1,4 @@
 using System.Text;
-using Avalonia.Threading;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
@@ -65,19 +64,6 @@ public sealed class AutoGetItemsManager : IDisposable
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _gotSub;
 
-    // Cooldown so an area kill whose several corpses each drop a flagged item
-    // re-surveys the room once, not once per corpse.
-    private const int ReLookCooldownMs = 750;
-    private DateTime _lastReLookAt = DateTime.MinValue;
-
-    // True from a post-kill re-look until the room display it asked for arrives.
-    // The walker is held meanwhile; the timer gives up on a display that never
-    // comes (a dark room prints no exits line).
-    private bool _reLookHeld;
-    public bool IsReLookHeld => _reLookHeld;
-    private DispatcherTimer? _reLookRelease;
-    private const int ReLookReleaseMs = 1500;
-
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
 
@@ -88,7 +74,7 @@ public sealed class AutoGetItemsManager : IDisposable
     // In-flight gets for the current room's floor, keyed by item name — gets we
     // sent but the server hasn't confirmed with `You took <item>.` yet. A burst of
     // "You notice" re-renders (the Cash engine re-displaying to grab ground coin,
-    // our own post-kill re-look, the combat-clear redisplay) all re-list the same
+    // the post-kill floor check, the combat-clear redisplay) all re-list the same
     // still-unprocessed floor items; without this the engine re-sent a get for each,
     // so four ground orc-heads became eight-plus gets. Reconciled against the
     // survey's current count so a genuinely larger pile (a fresh drop) still tops
@@ -107,7 +93,6 @@ public sealed class AutoGetItemsManager : IDisposable
 
     private Action<byte[]>? _wireSender;
     private AcquisitionGate? _gate;
-    private RoomRedisplayCoordinator? _redisplay;
     private bool _disposed;
 
     public AutoGetItemsManager(
@@ -179,15 +164,6 @@ public sealed class AutoGetItemsManager : IDisposable
         _gate = gate;
     }
 
-    // Bind the shared room-redisplay coordinator so the post-kill re-look
-    // coalesces with Cash's combat-clear re-display (one Enter, not two). Optional
-    // — unbound, the engine sends its own Enter.
-    public void SetRoomRedisplay(RoomRedisplayCoordinator coordinator)
-    {
-        ArgumentNullException.ThrowIfNull(coordinator);
-        _redisplay = coordinator;
-    }
-
     // Bind the per-session LineExtractor so the manager can stitch a wrapped
     // "You notice" survey back together.
     public void AttachLineExtractor(Terminal.LineExtractor lines)
@@ -213,7 +189,6 @@ public sealed class AutoGetItemsManager : IDisposable
     // dedup ledger — both belonged to the room we just left.
     public void OnRoomChanged()
     {
-        ReleaseReLookHold();
         _floorInFlight.Clear();
         CancelDeferredCollect("room changed");
     }
@@ -230,64 +205,6 @@ public sealed class AutoGetItemsManager : IDisposable
         _deferred.Clear();
         _gate?.NoteDeferredCleared();
         return true;
-    }
-
-    // Re-survey the room after a kill whose monster could drop an
-    // AutoCollect-flagged item. A drop lands loose on the ground as the item but
-    // isn't announced on the kill line, so a re-render of the "You notice … here."
-    // survey the get path already parses is needed. A bare Enter (carriage return)
-    // re-renders that survey exactly like `look` would but without look's room
-    // description / flavor text, so we send an empty line — Send appends the \r,
-    // making an empty payload a lone Enter. No-op while the master toggle is off;
-    // cooldown-guarded so an area kill re-looks once (the single survey collects
-    // every ground drop at once).
-    public void RequestDropReLook()
-    {
-        if (_disposed || !_isEnabled()) return;
-        DateTime now = DateTime.UtcNow;
-        if ((now - _lastReLookAt).TotalMilliseconds < ReLookCooldownMs) return;
-        _lastReLookAt = now;
-        // The kill clears the Combat gate in this same pass, and a loop's next move
-        // would leave before the survey lands. Held even when Cash sends the Enter.
-        HoldForReLook();
-        // On the last kill, Cash's combat-clear re-display fires the same instant —
-        // one bare Enter re-renders the room for both engines (they read the same
-        // "You notice" survey). Defer to the shared coordinator so the room isn't
-        // displayed twice; if it already rendered, our collect still runs off that
-        // survey.
-        if (_redisplay is not null && !_redisplay.ShouldSend()) return;
-        _log?.Info(LogCategory, "re-look after kill (monster drops a flagged item)");
-        Send("");
-    }
-
-    // A room display finished (its exits line). The "You notice" line comes before
-    // the exits line, so any gets the re-look led to have already gone out and
-    // carry the hold from here.
-    public void NoteRoomDisplayed() => ReleaseReLookHold();
-
-    private void HoldForReLook()
-    {
-        if (_gate is null) return;
-        _reLookHeld = true;
-        _gate.NoteReLookPending();
-        if (_reLookRelease is null)
-        {
-            _reLookRelease = new DispatcherTimer();
-            _reLookRelease.Tick += OnReLookReleaseElapsed;
-        }
-        _reLookRelease.Interval = TimeSpan.FromMilliseconds(ReLookReleaseMs);
-        _reLookRelease.Stop();
-        _reLookRelease.Start();
-    }
-
-    private void OnReLookReleaseElapsed(object? sender, EventArgs e) => ReleaseReLookHold();
-
-    private void ReleaseReLookHold()
-    {
-        if (!_reLookHeld) return;
-        _reLookHeld = false;
-        _reLookRelease?.Stop();
-        _gate?.NoteReLookDone();
     }
 
     // ----- notice parsing ----------------------------------------------
@@ -751,12 +668,6 @@ public sealed class AutoGetItemsManager : IDisposable
         _disposed = true;
         _noticeSub.Dispose();
         _gotSub.Dispose();
-        if (_reLookRelease is not null)
-        {
-            _reLookRelease.Stop();
-            _reLookRelease.Tick -= OnReLookReleaseElapsed;
-            _reLookRelease = null;
-        }
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

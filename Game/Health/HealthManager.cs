@@ -125,7 +125,7 @@ public sealed class HealthManager : IDisposable
         : _maGateAsserted ? PartyRestSync.ManaNote
         : null;
     private Action? _requestPartyOk;            // release leader
-    private Func<bool>? _isLeaderResting;       // follower + leader is resting/meditating
+    private Func<string?>? _partyRestingFor;    // follower + the party has stopped to rest: who for
     private Func<bool>? _isLeaderWaited;        // WE lead + a member has @wait-held us
     private Func<bool>? _isSelfPoisoned;        // local character is currently poisoned
     private Action? _requestPartyHeal;          // follower flee-substitute: broadcast @heal
@@ -486,12 +486,13 @@ public sealed class HealthManager : IDisposable
     // PartyRestSync.RequestWait / RequestOk) self-gate on party membership, so
     // invoking them solo is a safe no-op.
     //
-    // isLeaderResting (optional) reports whether we're a follower and the party
-    // leader is currently resting / meditating. When true and no recovery gate is
-    // held, Evaluate opportunistically tops off to rest-max during the leader's
-    // downtime — a follower mirrors the leader's rest, gated on the auto-heal
-    // master switch AND not being poisoned (isSelfPoisoned). Left null preserves
-    // the old gate-only rest behavior.
+    // partyRestingFor (optional) says, in the log's words, who the party has
+    // stopped to rest for while we follow (the leader resting or meditating, or
+    // another member doing so with the leader not having moved since); null when
+    // nobody. While it names someone and no recovery gate is held, Evaluate
+    // opportunistically tops off to rest-max in the downtime — gated on the
+    // Auto-Rest switch AND not being poisoned (isSelfPoisoned). Left null
+    // preserves the old gate-only rest behavior.
     //
     // isLeaderWaited (optional) reports whether WE lead the party and a member has
     // telepathed @wait, so our movement is held. When true and not poisoned, the
@@ -518,7 +519,7 @@ public sealed class HealthManager : IDisposable
         Func<bool> isPartyFollower,
         Action requestPartyWait,
         Action requestPartyOk,
-        Func<bool>? isLeaderResting = null,
+        Func<string?>? partyRestingFor = null,
         Action? requestPartyHeal = null,
         Func<bool>? isLeaderWaited = null,
         Func<bool>? isSelfPoisoned = null)
@@ -529,7 +530,7 @@ public sealed class HealthManager : IDisposable
         _isPartyFollower = isPartyFollower;
         _requestPartyWait = requestPartyWait;
         _requestPartyOk = requestPartyOk;
-        _isLeaderResting = isLeaderResting;
+        _partyRestingFor = partyRestingFor;
         _requestPartyHeal = requestPartyHeal;
         _isLeaderWaited = isLeaderWaited;
         _isSelfPoisoned = isSelfPoisoned;
@@ -862,6 +863,7 @@ public sealed class HealthManager : IDisposable
         if (_restOwedFromDamagingRoom) waits.Add("a rest put off for the room's spell is owed");
         if (RestWaitingOnSneak) waits.Add("rest waiting on a kept sneak");
         if (_partyWaitSignaled) waits.Add("@wait sent, @ok not yet");
+        if (_partyRestingFor?.Invoke() is { } restingFor) waits.Add($"the party has stopped to rest: {restingFor}");
         if (_partyOkHeldSince is { } okHeld) waits.Add($"@ok held for gear since {okHeld.ToLocalTime():HH:mm:ss}");
         if (_fledThisCombat) waits.Add("fled this combat (waits for it to end)");
         if (_fleeEngine is not null) waits.Add($"fleeing, {_fleeQueue.Count} step(s) left");
@@ -1352,7 +1354,7 @@ public sealed class HealthManager : IDisposable
             _partyWaitSignaled = true;
             _lastWaitResentAt = _now();
             if (_isPartyFollower?.Invoke() == true)
-                _log?.Info(LogCategory, "dropped below a rest floor while following — asking the leader to @wait");
+                _log?.Info(LogCategory, "dropped below a rest floor while following — @wait for the leader (Party logs whether it went out)");
             _requestPartyWait?.Invoke();
         }
         // Never release while a recovery gate is still held — below a rest floor is
@@ -1561,18 +1563,19 @@ public sealed class HealthManager : IDisposable
         }
         _wasPoisoned = selfPoisoned;
 
-        // Opportunistic follower rest: the leader has stopped to rest /
-        // meditate, so we use the downtime to top off too — even above our
+        // Opportunistic follower rest: the party has stopped to rest / meditate
+        // (PartyRestWatcher), so we use the downtime to top off too — even above our
         // own rest-trigger floors, up to rest-max. No gate is asserted (we're
         // not below a floor, so we must NOT @wait a leader who's already
         // voluntarily halted, and we don't hold the movement gate). It only
         // engages when there's actually something to recover; once both pools
         // hit rest-max NeedsOpportunisticTopOff goes false and the post-rest
         // chain fires through the shared !shouldRest recovery branch.
+        string? partyRestingFor = _partyRestingFor?.Invoke();
         bool opportunisticWanted = !anyGate
             && !restOff
             && !selfPoisoned
-            && (_isLeaderResting?.Invoke() ?? false)
+            && partyRestingFor is not null
             && NeedsOpportunisticTopOff(s);
 
         // Leader-waited rest: WE lead and a member has @wait-held us, so we're
@@ -1595,7 +1598,7 @@ public sealed class HealthManager : IDisposable
         bool leaderWaitedRest = leaderWaitedWanted && roomHurts is null;
         if (roomHurts is not null && (opportunisticWanted || leaderWaitedWanted))
             LogRestSkippedForRoomSpell(roomHurts,
-                opportunisticWanted ? "the leader is resting" : "waited on by a member");
+                opportunisticWanted ? partyRestingFor! : "waited on by a member");
 
         bool shouldRest = anyGate || opportunistic || leaderWaitedRest;
         // Gate for the actual send below — a just-asserted, unconfirmed gate
@@ -1751,7 +1754,7 @@ public sealed class HealthManager : IDisposable
 
             string restReason = anyGateConfirmed ? ""
                 : leaderWaitedRest ? " (waited — resting to use the downtime)"
-                : " (opportunistic, leader resting)";
+                : $" (opportunistic, {partyRestingFor})";
             // Every wear stands a resting character up, and resting again starts the
             // rest's timer over (user, 2026-09-29) — so the rest gear goes on first and
             // `rest` follows once the swap has streamed (the swap-done re-evaluate sends
@@ -2793,7 +2796,7 @@ public sealed class HealthManager : IDisposable
             || (maMax > 0 && _state.Ma < maMax);
     }
 
-    // Rest-vs-meditate pick for the opportunistic (leader-resting) path: with no
+    // Rest-vs-meditate pick for the opportunistic (party-resting) path: with no
     // meditate ability it's always rest; otherwise meditate when "meditate before
     // resting" is set and we're short any mana, else meditate when our mana% is
     // below our hp% (recover the more-depleted pool first), else rest. Distinct
@@ -3085,7 +3088,7 @@ public sealed class HealthManager : IDisposable
             && _now() - _lastWaitResentAt >= WaitResendInterval)
         {
             _lastWaitResentAt = _now();
-            _log?.Info(LogCategory, "moved while still recovering — the leader isn't waiting; re-sending @wait");
+            _log?.Info(LogCategory, "moved while still recovering — the leader isn't waiting; @wait again (Party logs whether it went out)");
             _requestPartyWait?.Invoke();
         }
 

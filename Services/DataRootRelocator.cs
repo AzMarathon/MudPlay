@@ -171,7 +171,9 @@ public static class DataRootRelocator
                 {
                     FileName        = exe,
                     UseShellExecute = false,
-                    WorkingDirectory = AppContext.BaseDirectory,
+                    // The executable's folder: on Windows AppContext.BaseDirectory is
+                    // the unpacked copy in the temp folder (BundleExtraction).
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory,
                 });
             }
             catch

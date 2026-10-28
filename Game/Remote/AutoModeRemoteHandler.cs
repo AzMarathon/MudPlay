@@ -294,31 +294,11 @@ public sealed class AutoModeRemoteHandler : IDisposable
     private static string MaxText(int? max) =>
         max is { } n ? n.ToString(CultureInfo.InvariantCulture) : "none";
 
-    // The refusal for a name that fits several items: as many of their names as
-    // fit one telepath, four at most, and how many more there are.
-    private static string AmbiguousItem(string typed, IReadOnlyList<int> found, AutoGetItemRules rules)
-    {
-        string head = $"{AmbiguousOpening}{WireText.Shortened(typed)}' matches {found.Count}";
-        List<string> said = new();
-        int length = head.Length;
-        foreach (int number in found)
-        {
-            string part = $"'{WireText.Ascii(rules.NameOf(number))}'";
-            if (said.Count == MaxNamesInARefusal) break;
-            if (said.Count > 0 && length + 2 + part.Length > RefusalBudget) break;
-            said.Add(part);
-            length += 2 + part.Length;
-        }
-        string more = said.Count < found.Count ? $", +{found.Count - said.Count} more" : "";
-        return $"{head}: {string.Join(", ", said)}{more}";
-    }
-
-    private const int MaxNamesInARefusal = 4;
-
-    // Room for the opening and the names, short of the game's limit on one
-    // telepath by the braces, the "/<player> " it is addressed with and the count
-    // of the names left out.
-    private const int RefusalBudget = 170;
+    // The refusal for a name that fits several items, with as many of their names
+    // as fit one telepath.
+    private static string AmbiguousItem(string typed, IReadOnlyList<int> found, AutoGetItemRules rules) =>
+        WireText.Listed($"{AmbiguousOpening}{WireText.Shortened(typed)}' matches {found.Count}",
+            found.Select(number => $"'{WireText.Ascii(rules.NameOf(number))}'").ToList());
 
     private void HandleAll(RemoteCommandContext ctx)
     {

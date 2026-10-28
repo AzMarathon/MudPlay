@@ -43,6 +43,21 @@ public static class BugReportContext
         Part(sb, () => Kv(sb, "Installed fonts",
             $"{InstalledFontCatalog.Monospace.Count} monospace, {InstalledFontCatalog.Text.Count} text; "
             + InstalledFontCatalog.Source));
+        // What keeps the client's memory down: the last compaction and what it gave
+        // back, how the Loops folder is followed (a walk per change, not per few
+        // seconds), and whether the program runs unpacked (Windows) or from inside
+        // its own file.
+        Part(sb, () =>
+        {
+            string compaction = svc.Memory.LastCompaction is { } c
+                ? $"last compaction {c.At:HH:mm:ss} ({c.Reason}), GC committed {c.CommittedBeforeMb:0.0}→{c.CommittedAfterMb:0.0} MB, paused {c.PauseMs:0} ms"
+                : "no compaction yet";
+            Game.Map.NavFolderWatcher nav = svc.NavWatcher;
+            Kv(sb, "Memory maintenance",
+                $"{compaction}; next idle one at least {svc.Memory.CompactionInterval.TotalMinutes:0} min after it. "
+                + $"Loops folder: {nav.Mode}, last check {Stamp(nav.LastCheckAt)}, last walk {Stamp(nav.LastWalkAt)}. "
+                + $"Program: {Update.BundleExtraction.Describe(Update.BundleExtraction.Current(), HomeRelative(AppContext.BaseDirectory))}");
+        });
 
         Part(sb, () =>
         {
@@ -173,6 +188,9 @@ public static class BugReportContext
             ? "~" + path[home.Length..]
             : path;
     }
+
+    private static string Stamp(DateTimeOffset? at) =>
+        at is { } t ? t.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) : "never";
 
     private static void Part(StringBuilder sb, Action write)
     {

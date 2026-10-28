@@ -209,7 +209,7 @@ internal sealed class ErrandLightWorld : IDisposable
         PlayerStats stats = new() { Level = level, Exp = 5_000_000 };
         StatParser parser = new(stats);
         parser.AttachLineExtractor(Lines);
-        TrainerMenuTracker menu = new(Router, new PartyState());
+        TrainerMenuTracker menu = new(Router, new PartyState(), schedule: Timers.Arm);
         AutoTrainManager autoTrain = new(stats, parser, Cache, Inventory, Profile, menu,
             new ListedEffectCatalog(new MessageStore(), Cache), Router);
         TrainerWalkManager trainer = new(stats, parser, Cache, Profile, Tracker, Bfs, Walker, Loop, Lair,

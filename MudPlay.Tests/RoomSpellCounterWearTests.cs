@@ -42,7 +42,6 @@ public sealed class RoomSpellCounterWearTests
         public bool RoomEmpty { get; set; } = true;
         public bool SendGateLocked { get; set; }
         public int GearNotes { get; private set; }
-        public int UsabilityChanges { get; private set; }
         public HashSet<int> Unwearable { get; } = new();
         public RoomKey? Here { get; private set; }
 
@@ -109,7 +108,6 @@ public sealed class RoomSpellCounterWearTests
             {
                 MasterSwitchOff = () => MasterOff,
             };
-            Wear.UsabilityChanged += () => UsabilityChanges++;
         }
 
         private RoomSpellCounterItem? Describe(string? name) =>
@@ -1360,22 +1358,6 @@ public sealed class RoomSpellCounterWearTests
 
         Assert.Equal(0, counted);
         Assert.Equal(50, plain);
-    }
-
-    [Fact]
-    public void WhatARouteMayCountOn_IsAnnouncedWhenItChanges()
-    {
-        World w = Volcano();
-        w.Pack.Remove("magma amulet");
-        Assert.False(w.Wear.ReadyToEnter(At(3)));
-        int before = w.UsabilityChanges;
-
-        w.Gear.NoteWearRefused();
-        Assert.True(w.UsabilityChanges > before);
-
-        before = w.UsabilityChanges;
-        w.Wear.LiftRefusals("the stat screen was read");
-        Assert.True(w.UsabilityChanges > before);
     }
 
     [Fact]

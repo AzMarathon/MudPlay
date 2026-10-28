@@ -7,7 +7,8 @@ namespace MudPlay.ViewModels.Navigation;
 
 // Small modeless dialog for editing a single loop waypoint's per-row action
 // — a free-form Command to send at the waypoint and a Delay (stored in
-// milliseconds, edited as minutes and seconds) before the loop resumes walking.
+// milliseconds, edited as minutes and seconds) before the loop resumes walking,
+// the room flags, and a lap wait.
 // Spawned from a loop-builder row and from a running-loop rail row.
 //
 // The dialog doesn't write to the row directly — it returns the committed values
@@ -36,9 +37,14 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
     [ObservableProperty] private bool _restHereHp;
     [ObservableProperty] private bool _restHereMana;
 
+    // Hold here until the lap has run this long (LoopWaypoint.LapWaitMs). Independent
+    // of Command and Delay: it reads the lap's clock, not the command's.
+    [ObservableProperty] private long _lapWaitMs;
+
     public WaypointActionEditDialogViewModel(string waypointLabel, string? command, long delayMs, bool doNotRest, bool doNotAttack,
-        bool restHereHp = false, bool restHereMana = false)
+        bool restHereHp = false, bool restHereMana = false, long lapWaitMs = 0)
     {
+        _lapWaitMs = lapWaitMs;
         _restHereHp = restHereHp;
         _restHereMana = restHereMana;
         WaypointLabel = waypointLabel ?? string.Empty;
@@ -58,7 +64,8 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
         // pauses around the command step.
         if (trimmed is null) delay = 0;
         GuideActions.Report(GuideActions.WaypointActionSaved);
-        CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest, DoNotAttack, RestHereHp, RestHereMana));
+        CloseRequested?.Invoke(new WaypointActionEditResult(trimmed, delay, DoNotRest, DoNotAttack, RestHereHp, RestHereMana,
+            Math.Max(0, LapWaitMs)));
     }
 
     [RelayCommand]
@@ -67,4 +74,4 @@ public sealed partial class WaypointActionEditDialogViewModel : ObservableObject
 
 // Committed payload — null Command means "no command attached".
 public sealed record WaypointActionEditResult(string? Command, long DelayMs, bool DoNotRest, bool DoNotAttack,
-    bool RestHereHp, bool RestHereMana);
+    bool RestHereHp, bool RestHereMana, long LapWaitMs);

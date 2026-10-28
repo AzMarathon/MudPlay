@@ -65,6 +65,11 @@ public static class AppPaths
     // (ProfileService.ResetDefaultProfileOnce).
     public static string DefaultProfileResetMarker => Path.Combine(DataRoot, "Global", ".default-profile-reset");
 
+    // Written once a Windows client has removed every folder versions before 3.186.9
+    // unpacked into the temp folder (BundleExtraction.CleanOld): the one-time pass for
+    // them never runs again. In the app's data, not the temp folder a cleaner empties.
+    public static string LegacyUnpackedCopiesRemovedMarker => Path.Combine(DataRoot, "Global", ".legacy-unpacked-copies-removed");
+
     // BBS-tier files (one per BBS).
     public static string BbsDir { get; }
 

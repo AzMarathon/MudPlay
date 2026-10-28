@@ -924,7 +924,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         }
         if (_pendingLoopRing is { } cached && ReferenceEquals(cached.Loop, pending)) return cached.Ring;
         IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(
-            pending.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement);
+            pending.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement, LoopLegMemo.Of(_services.RoomGraph));
         IReadOnlyList<RoomKey>? ring = keys.Count >= 2 ? keys : null;
         _pendingLoopRing = (pending, ring);
         return ring;
@@ -1539,6 +1539,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     public bool HasGotoHistory => GotoHistoryRows.Count > 0;
 
+    private bool _contextRecentRebuildQueued;
+
     private void RefreshGotoHistory()
     {
         GotoHistoryRows.Clear();
@@ -1548,7 +1550,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             GotoHistoryRows.Add(new GotoHistoryRowViewModel(key, $"{name} {key.Map}/{key.Room}"));
         }
         OnPropertyChanged(nameof(HasGotoHistory));
-        RebuildContextRecentDestinations();
+
+        // Picking a recent destination records it, so this runs inside the menu click:
+        // rebuilding now detaches the clicked item before Avalonia's close-on-click
+        // walks up from it to the menu, and the menu stays open.
+        if (_contextRecentRebuildQueued) return;
+        _contextRecentRebuildQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _contextRecentRebuildQueued = false;
+            RebuildContextRecentDestinations();
+        });
     }
 
     // Walk-to sub-lists for the map's room right-click menu: the starred GOTO
@@ -2937,8 +2949,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // the room has zero or more than one such option (show the normal menu, where
     // the user picks). Assumes ContextRoomKey is already set to the clicked room
     // (its setter rebuilt the up/down/teleport context synchronously).
-    public bool TryQuickFloorTeleportShortcut()
+    //
+    // forceDown / forceUp (Shift+Ctrl / Shift+Alt, user 2026-10-27) take that one
+    // exit whatever else the room offers; a room without it shows the menu.
+    public bool TryQuickFloorTeleportShortcut(bool forceDown = false, bool forceUp = false)
     {
+        if (forceDown || forceUp)
+        {
+            if (forceDown && ContextHasDown) { GoDownFloor(); return true; }
+            if (forceUp && ContextHasUp) { GoUpFloor(); return true; }
+            return false;
+        }
+
         // Multiple teleport destinations are a menu of choices, never an auto-pick.
         if (_contextTeleportDests.Count > 1) return false;
 
@@ -5149,7 +5171,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // when the click actually landed, so the row index stays aligned.
             if (builder.Clicks.Count > before)
                 builder.SetClickAction(builder.Clicks.Count - 1,
-                    w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack, w.RestHereHp, w.RestHereMana);
+                    w.Command, w.DelayMs, w.DoNotRest, w.DoNotAttack, w.RestHereHp, w.RestHereMana, w.LapWaitMs);
         }
     }
 
@@ -5545,7 +5567,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task EditBuilderWaypointAction(LoopBuilderRow? row)
     {
-        if (row is null || LoopBuilder is null) return;
+        if (row is null || LoopBuilder is not { } builder) return;
+        // The builder Pause opened on the running loop, still its rooms in its order:
+        // a room's action edited here is an edit of that loop, so it goes to the loop
+        // and its file as a running-loop rail edit does. Kept only in the builder, a
+        // resume, a start from elsewhere or a Stop dropped it (report
+        // paradigm-20261027-092353). Taken now, as those can close the builder while
+        // the dialog is open.
+        Loop? pausedLoop = _loopBuilderOpenedByPause
+            && _services.LoopRunner.CurrentLoop is { } running
+            && !BuilderClicksDifferFrom(builder, running) ? running : null;
+        int openIndex = builder.IndexOfStep(row);
         WaypointActionEditDialogViewModel vm = new(
             waypointLabel: $"{row.Index}. {row.Name}",
             command: row.Command,
@@ -5553,12 +5585,34 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             doNotRest: row.DoNotRest,
             doNotAttack: row.DoNotAttack,
             restHereHp: row.RestHereHp,
-            restHereMana: row.RestHereMana);
+            restHereMana: row.RestHereMana,
+            lapWaitMs: row.LapWaitMs);
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
-        LoopBuilder.SetClickAction(row.Index - 1, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack,
-            result.RestHereHp, result.RestHereMana);
+        LoopWaypoint? loopStep = pausedLoop is not null && openIndex >= 0 && openIndex < pausedLoop.Waypoints.Count
+            && pausedLoop.Waypoints[openIndex].Key.Equals(row.Key) ? pausedLoop.Waypoints[openIndex] : null;
+        if (pausedLoop is not null && loopStep is not null)
+            ApplyWaypointEdit(pausedLoop, loopStep, result, $"waypoint {row.Index} {row.Name} (from the builder of the paused loop)");
+        // The editor is modeless: while it was open the builder can have been saved,
+        // closed or left for a run of its loop (report Crash-20261026-212906), and the
+        // step removed or moved. The edit goes to the step it was opened on or is dropped.
+        if (!ReferenceEquals(LoopBuilder, builder))
+        {
+            if (loopStep is null)
+                _services.Log?.Debug("Navigation",
+                    $"waypoint action edit of builder step {row.Index} {row.Name} dropped: the builder it was opened in has closed");
+            return;
+        }
+        int index = builder.IndexOfStep(row);
+        if (index < 0)
+        {
+            _services.Log?.Debug("Navigation",
+                $"waypoint action edit of builder step {row.Index} {row.Name} dropped: the step is no longer in the loop being built");
+            return;
+        }
+        builder.SetClickAction(index, result.Command, result.DelayMs, result.DoNotRest, result.DoNotAttack,
+            result.RestHereHp, result.RestHereMana, result.LapWaitMs);
     }
 
     // Build the green running-loop rail from the loop's authored waypoints (fixed order
@@ -5578,7 +5632,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 Command: wp.Command, DelayMs: wp.DelayMs,
                 DoNotRest: wp.DoNotRest, DoNotAttack: wp.DoNotAttack,
                 IsCurrentRoom: here is { } h && h.Equals(wp.Key),
-                RestHereHp: wp.RestHereHp, RestHereMana: wp.RestHereMana));
+                RestHereHp: wp.RestHereHp, RestHereMana: wp.RestHereMana, LapWaitMs: wp.LapWaitMs));
         }
     }
 
@@ -5608,10 +5662,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             doNotRest: row.DoNotRest,
             doNotAttack: row.DoNotAttack,
             restHereHp: row.RestHereHp,
-            restHereMana: row.RestHereMana);
+            restHereMana: row.RestHereMana,
+            lapWaitMs: row.LapWaitMs);
         WaypointActionEditResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<WaypointActionEditDialogViewModel, WaypointActionEditResult?>(vm);
         if (result is null) return;
+        // The editor is modeless: the loop can have stopped, or another started, while
+        // it was open. A live edit belongs to the run it was opened on, so with that run
+        // gone it is dropped rather than written into a loop no longer running.
+        if (!ReferenceEquals(_services.LoopRunner.CurrentLoop, loop))
+        {
+            _services.Log?.Debug("Navigation",
+                $"loop live-edit of waypoint {row.Index} {row.Name} dropped: loop '{loop.Name}' is no longer running");
+            return;
+        }
 
         // Rows are built from the loop's authored waypoint list in order, so the row
         // index maps straight in; verify by Key and fall back to a key match for safety.
@@ -5622,14 +5686,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             : wps.FirstOrDefault(w => w.Key.Equals(row.Key));
         if (wp is null) return;
 
+        ApplyWaypointEdit(loop, wp, result, $"waypoint {row.Index} {row.Name}");
+    }
+
+    // A room's action edited on a loop that is running, or was until the edit was
+    // saved: the run takes it if it still holds the loop, and a catalogued loop's
+    // file is written, as the lair toggle is (a transient "Run this loop" instance
+    // stays in memory).
+    private void ApplyWaypointEdit(Loop loop, LoopWaypoint wp, WaypointActionEditResult result, string label)
+    {
         wp.Command     = result.Command;
         wp.DelayMs     = result.DelayMs;
         wp.DoNotRest   = result.DoNotRest;
         wp.DoNotAttack = result.DoNotAttack;
         wp.RestHereHp   = result.RestHereHp;
         wp.RestHereMana = result.RestHereMana;
+        wp.LapWaitMs    = result.LapWaitMs;
 
-        _services.LoopRunner.ReconcileExpandedSteps();
+        if (ReferenceEquals(_services.LoopRunner.CurrentLoop, loop))
+            _services.LoopRunner.ReconcileExpandedSteps();
         // A loop started on other game data than the active one (from before a
         // switch, started again): a loop of its name on this set is another loop, so
         // the change stays with the run and isn't written over that one.
@@ -5653,9 +5728,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.Loops.Save(loop);
 
         _services.Log?.Info("Navigation",
-            $"loop live-edit: waypoint {row.Index} {row.Name} → cmd='{result.Command ?? "(none)"}' " +
+            $"loop live-edit: {label} → cmd='{result.Command ?? "(none)"}' " +
             $"delay={result.DelayMs}ms rest={(result.DoNotRest ? "no" : "ok")} attack={(result.DoNotAttack ? "no" : "ok")} "
-            + $"rest-here={(result.RestHereHp ? "HP" : "")}{(result.RestHereMana ? "MA" : "")}");
+            + $"rest-here={(result.RestHereHp ? "HP" : "")}{(result.RestHereMana ? "MA" : "")} "
+            + $"lap-wait={(result.LapWaitMs > 0 ? LoopDelay.Describe(result.LapWaitMs) : "off")}");
 
         RebuildCurrentNavRows();
     }

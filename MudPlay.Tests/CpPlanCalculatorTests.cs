@@ -21,7 +21,7 @@ public sealed class CpPlanCalculatorTests
     private static readonly CpPlanEntry RaceMax = Uniform(0, 100);
 
     private static IReadOnlyList<CpRowResult> Compute(params CpPlanEntry[] rows) =>
-        CpPlanCalculator.Compute(Baseline, rows, RaceMin, RaceMax, initialCp: 0, RealmType.Stock);
+        CpPlanCalculator.Compute(Baseline, rows, RaceMin, RaceMax, initialCp: 0, cpThroughLevel: 1, RealmType.Stock);
 
     [Fact]
     public void SingleLevel_OnePointRaise_CostsOne()
@@ -50,7 +50,7 @@ public sealed class CpPlanCalculatorTests
         // Plenty of CP, so the race max (not affordability) is the binding limit.
         CpRowResult r = CpPlanCalculator.Compute(
             Baseline, new[] { new CpPlanEntry(2, 150, 40, 40, 40, 40, 40) },
-            RaceMin, RaceMax, initialCp: 100_000, RealmType.Stock)[0];
+            RaceMin, RaceMax, initialCp: 100_000, cpThroughLevel: 1, RealmType.Stock)[0];
 
         Assert.Equal(100, r.Strength);       // clamped to race max
     }
@@ -88,7 +88,7 @@ public sealed class CpPlanCalculatorTests
         // Budget: 10 CP at level 2. STR 40→45 costs 5; INT must fit in the rest.
         IReadOnlyList<CpRowResult> rows = CpPlanCalculator.Compute(
             Baseline, new[] { new CpPlanEntry(2, 45, 49, 40, 40, 40, 40) },
-            RaceMin, RaceMax, initialCp: 0, RealmType.Stock, CpStat.Intellect);
+            RaceMin, RaceMax, initialCp: 0, cpThroughLevel: 1, RealmType.Stock, CpStat.Intellect);
 
         Assert.Equal(45, rows[0].Strength);          // larger raise preserved
         Assert.True(rows[0].Intellect < 49);         // edited cell trimmed to fit
@@ -132,7 +132,7 @@ public sealed class CpPlanCalculatorTests
     public void InitialCp_SeedsEarnedTotal()
     {
         IReadOnlyList<CpRowResult> rows = CpPlanCalculator.Compute(
-            Baseline, new[] { Uniform(2, 40) }, RaceMin, RaceMax, initialCp: 7, RealmType.Stock);
+            Baseline, new[] { Uniform(2, 40) }, RaceMin, RaceMax, initialCp: 7, cpThroughLevel: 1, RealmType.Stock);
 
         Assert.Equal(17, rows[0].CpEarnedTotal);   // 7 unspent + 10 gained at level 2
         Assert.Equal(17, rows[0].CpLeft);          // nothing spent

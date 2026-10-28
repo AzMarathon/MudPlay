@@ -810,6 +810,47 @@ public sealed class PartyManagerTests
     }
 
     [Fact]
+    public void FollowerJoin_RankDecisionAndTheGamesAnswer_AreRecorded()
+    {
+        // A "set to back rank but joined in the middle" report turns on whether
+        // `backrank` went out and what the game said to it, so both are kept for
+        // the bug report.
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+
+        _feed.Line("You are now following Raijin.");
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
+
+        _feed.Line("There would not be enough people left in the frontrank if you did that.");
+        Assert.Contains("the game refused a rank change", p.LastRankDecision);
+
+        _feed.Line("You have moved to the back ranks of your group.");
+        Assert.Contains("moved us to the back ranks", p.LastRankDecision);
+    }
+
+    // A re-invite after the party broke up starts us in the middle rank again, and
+    // the client can still count us in the old party when its follow line arrives:
+    // the rank goes out on that join too.
+    [Fact]
+    public void ReInvite_WhileStillCountedInTheOldParty_SendsTheRankAgain()
+    {
+        var (_, p) = Setup(localCharacterName: "MudPlay");
+        List<byte[]> wire = new();
+        p.SetWireSender(wire.Add);
+        p.LocalRankPreference = Models.Profile.PartyRank.Back;
+        _feed.Line("You are now following Raijin.");
+        _feed.Line("You have moved to the back ranks of your group.");
+        wire.Clear();
+
+        _feed.Line("You are now following Raijin.");
+
+        Assert.Equal("backrank\r", System.Text.Encoding.Latin1.GetString(Assert.Single(wire)));
+        Assert.Contains("sent `backrank`", p.LastRankDecision);
+    }
+
+    [Fact]
     public void LiveRankChange_OtherMember_UpdatesRankImmediately()
     {
         // Observer side: when another party member reranks, the game
@@ -1162,6 +1203,90 @@ public sealed class PartyManagerTests
         _feed.Prompt("[HP=0/MA=0]:");
 
         Assert.Contains(p.State.Members, m => m.IsSelf);
+    }
+
+    // ===== A leader lost while following (report paradigm-20261025-114837) =====
+    // The leader's @forget (ForgetReconnectMember) took the leader's row and name
+    // while the follow went on: the next `par` listed them as a plain member, and
+    // with no leader name the follower's @wait had nobody to go to. The line a
+    // follower's `par` opens with names the leader, and puts them back.
+
+    private void ParOfIronbarsParty()
+    {
+        _feed.Line("You are following Ironbar.");
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
+        {
+            "  Ironbar                       (Ninja)               [H:100%]  - Frontrank",
+            "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+            "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+        });
+        _feed.Prompt("[HP=411/MA=113]:");
+    }
+
+    [Fact]
+    public void ALeaderLostWhileFollowing_IsPutBackByTheNextPar()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Ironbar.");
+        ParOfIronbarsParty();
+        p.ForgetReconnectMember("Ironbar");
+        Assert.True(p.State.IsInParty);
+        Assert.Null(p.State.LeaderName);
+
+        ParOfIronbarsParty();
+
+        Assert.Equal("Ironbar", p.State.LeaderName);
+        Assert.False(p.State.SelfIsLeader);
+        Assert.True(p.State.Members.Single(m => m.Name == "Ironbar").IsLeader);
+    }
+
+    // The par rows are what make a client that counted itself solo a member again;
+    // the opening line, read at the block's end, gives it the leader too.
+    [Fact]
+    public void AParNamingTheLeader_GivesASoloClientItsLeader()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        Assert.False(p.State.IsInParty);
+
+        ParOfIronbarsParty();
+
+        Assert.True(p.State.IsInParty);
+        Assert.Equal("Ironbar", p.State.LeaderName);
+        Assert.False(p.State.SelfIsLeader);
+    }
+
+    // A leader the block's rows don't list isn't taken from its opening line.
+    [Fact]
+    public void AParNamingALeaderItsRowsLeaveOut_RestoresNothing()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Ironbar.");
+        ParOfIronbarsParty();
+        p.ForgetReconnectMember("Ironbar");
+
+        _feed.Line("You are following Ironbar.");
+        _feed.Line("The following people are in your travel party:");
+        _feed.Rows(new[]
+        {
+            "  Aunty                         (Priest)     [M: 42%] [H: 97%]  - Midrank",
+            "  Masta                         (Paladin)    [M: 91%] [H: 90%]  - Midrank",
+        });
+        _feed.Prompt("[HP=411/MA=113]:");
+
+        Assert.Null(p.State.LeaderName);
+    }
+
+    // Who leads is the join line's to say; the par line only fills a missing name.
+    [Fact]
+    public void AParNamingSomeoneElse_LeavesAKnownLeaderAlone()
+    {
+        var (_, p) = Setup(localCharacterName: "Aunty");
+        _feed.Line("You are now following Masta.");
+
+        ParOfIronbarsParty();
+
+        Assert.Equal("Masta", p.State.LeaderName);
     }
 
     // ===== Mystic / monk kai bracket ([K:N%]) parses like mana =====
@@ -1692,6 +1817,22 @@ public sealed class PartyManagerTests
 
         Assert.DoesNotContain(p.State.Members, m => m.Name == "Stranger");
         Assert.All(p.State.Members, m => Assert.False(m.Resting));
+    }
+
+    [Fact]
+    public void MemberMeditateObserved_FlipsMeditatingFlag_AndClearsResting()
+    {
+        // "X kneels to meditate." is the meditate counterpart on both realms
+        // (user, 2026-10-27); a member who rested and now meditates is not both.
+        var (router, p) = Setup(localCharacterName: "Raijin");
+        router.Dispatch(Line("You are now following MudPlay."));
+        PartyMember leader = p.State.Members.Single(m => m.Name == "MudPlay");
+        router.Dispatch(Line("MudPlay stops to rest."));
+
+        router.Dispatch(Line("MudPlay kneels to meditate."));
+
+        Assert.True(leader.Meditating);
+        Assert.False(leader.Resting);
     }
 
     // ===== Solo self row (PartyWindow self-display) =====

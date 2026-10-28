@@ -71,7 +71,7 @@ public sealed partial class NavigationViewModel
             else
             {
                 IReadOnlyList<RoomKey> cycle = LoopExpander.ResolveCycleRoomKeys(
-                    loop.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement);
+                    loop.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement, LoopLegMemo.Of(_services.RoomGraph));
                 _leaderRooms = cycle.Count >= 2 ? cycle : null;
                 List<RoomKey> waypoints = new();
                 foreach (LoopWaypoint w in loop.Waypoints)

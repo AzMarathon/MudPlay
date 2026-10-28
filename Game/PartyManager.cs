@@ -115,6 +115,9 @@ public sealed partial class PartyManager : IDisposable
     // and follows nobody (ListedWithLeader): its rows are recorded, not applied.
     private bool _parListedOnly;
     private DateTimeOffset _parFollowingLineAt = DateTimeOffset.MinValue;
+    private string? _parFollowingName;
+    // The leader the open block's "You are following X." named, read at its end.
+    private string? _parSaidLeader;
     // The following line and the header are one reply; this only has to span them.
     private static readonly TimeSpan ParFollowingLineWindow = TimeSpan.FromSeconds(2);
 
@@ -390,7 +393,7 @@ public sealed partial class PartyManager : IDisposable
         _subs.Add(_router.Subscribe(KnownPatterns.PartyStopsFollowing, OnStopsFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyLeftBehind,     OnLeftBehind));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyYouInvited,     OnYouInvited));
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   _ => _parFollowingLineAt = _now()));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyParFollowing,   OnParFollowing));
         _subs.Add(_router.Subscribe(KnownPatterns.PartyHeader,         OnParHeader));
         // Disconnect / death / reconnect grace window. We watch every "X just
         // disconnected" / "X just entered the Realm" line because a party
@@ -424,10 +427,12 @@ public sealed partial class PartyManager : IDisposable
         // catches up.
         _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRankChanged,    OnMemberRankChanged));
         _subs.Add(_router.Subscribe(KnownPatterns.PartySelfRankChanged,      OnSelfRankChanged));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyRankRefused,          OnRankRefused));
         // Live rest observation — flips a member's Resting flag the moment we
         // see "X stops to rest.", ahead of the 5s par poll, so a follower's
         // HealthManager can mirror the leader's rest immediately.
-        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRestObserved,   OnMemberRestObserved));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberRestObserved,     OnMemberRestObserved));
+        _subs.Add(_router.Subscribe(KnownPatterns.PartyMemberMeditateObserved, OnMemberMeditateObserved));
         State.Members.CollectionChanged += OnMembersChangedForHpEstimates;
     }
 
@@ -680,7 +685,6 @@ public sealed partial class PartyManager : IDisposable
         if (result.Groups.Count == 0) return;
         string leaderName = result.Groups[0];
         if (string.IsNullOrEmpty(leaderName)) return;
-        bool wasInParty = State.IsInParty;
         SetListedWith(null, $"we follow {leaderName}");
         // Same early-set rationale as OnFollowsYou — derived state
         // (IsInParty + LeaderName + SelfIsLeader) needs to be
@@ -693,9 +697,44 @@ public sealed partial class PartyManager : IDisposable
         PartyMember leader = AddOrTouchMember(leaderName);
         leader.IsLeader = true;
         AddSelfIfKnown(isLeader: false);
-        // Initial-join edge — see OnFollowsYou for the rationale.
-        if (!wasInParty) SendRankPreferenceCommand();
+        // Every join starts in the middle rank, a re-invite after the party broke up
+        // included (GAME_MECHANICS "Party ranks"), so the rank goes out on each one.
+        // Sent only on a first join, a re-invite the client still counted as the old
+        // party left a back-rank follower in the middle.
+        SetSelfRank(Models.Profile.PartyRank.Mid);
+        SendRankPreferenceCommand(leaderName);
         FollowingLeader?.Invoke(leaderName);
+    }
+
+    // "You are following X." — the line a follower's `par` opens with: the game's
+    // own word on whom we follow. The block it opens reads it at its end
+    // (RestoreLeaderFromPar).
+    private void OnParFollowing(MatchResult result)
+    {
+        _parFollowingLineAt = _now();
+        _parFollowingName = result.Groups.Count > 0 && result.Groups[0] is { Length: > 0 } name ? name : null;
+    }
+
+    // A `par` that opened with "You are following X." puts back a leader the client
+    // lost while still following: a @forget from the leader (ForgetReconnectMember)
+    // takes the leader's row and name, the next `par` lists them again as a plain
+    // member, and with no leader name nothing addressed to the leader goes out, a
+    // @wait included (report paradigm-20261025-114837). Read at the block's end, as
+    // its rows are what say we are in a party, and only for a leader the rows
+    // list. Only fills a missing leader: who leads is otherwise the join and leave
+    // lines' to say. FollowingLeader isn't raised: the game started no follow, so
+    // the ailment announces aren't made again; PartyRestSync tells the leader a
+    // wait still held (TellRestoredLeader).
+    private void RestoreLeaderFromPar()
+    {
+        string? said = _parSaidLeader;
+        _parSaidLeader = null;
+        if (said is null) return;
+        if (!State.IsInParty || State.SelfIsLeader || !string.IsNullOrEmpty(State.LeaderName)) return;
+        if (!_parBlockNames.Any(n => GivenNameOf(n).Equals(said, StringComparison.OrdinalIgnoreCase))) return;
+        State.LeaderName = said;
+        AddOrTouchMember(said).IsLeader = true;
+        _log?.Info("Party", $"`par` says we follow {said}, and who leads had been lost: {said} is our leader again");
     }
 
     // The master switch (true = off): off, no rank command and no re-invite of a
@@ -703,22 +742,43 @@ public sealed partial class PartyManager : IDisposable
     // here: their callers are.
     public Func<bool>? MasterSwitchOff { get; set; }
 
+    // What the client last did about our rank (sent, skipped, the game's answer),
+    // with its time, for the bug report. null until a party is joined this session.
+    public string? LastRankDecision { get; private set; }
+
+    private void NoteRankDecision(string decision)
+    {
+        LastRankDecision = $"{_now().ToLocalTime():HH:mm:ss} {decision}";
+        _log?.Info("Party", $"rank: {decision}");
+    }
+
     // Send the rerank command (`frontrank` / `backrank`) to the server iff
     // LocalRankPreference is non-Mid and a wire-sender is bound. Mid is the
     // server-side default rank — no command needed when that's the preference.
-    private void SendRankPreferenceCommand()
+    private void SendRankPreferenceCommand(string leaderName)
     {
-        if (_wireSender is null) return;
-        if (MasterSwitchOff?.Invoke() == true) return;
         string? cmd = LocalRankPreference switch
         {
-            Models.Profile.PartyRank.Front => "frontrank\r",
-            Models.Profile.PartyRank.Back  => "backrank\r",
+            Models.Profile.PartyRank.Front => "frontrank",
+            Models.Profile.PartyRank.Back  => "backrank",
             _                              => null,
         };
         if (cmd is null) return;
-        _wireSender(System.Text.Encoding.Latin1.GetBytes(cmd));
+        if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            NoteRankDecision($"joined {leaderName}'s party: `{cmd}` not sent, the master switch is off");
+            return;
+        }
+        _wireSender(System.Text.Encoding.Latin1.GetBytes(cmd + "\r"));
+        NoteRankDecision($"joined {leaderName}'s party: sent `{cmd}` (Settings → Party → Rank is {LocalRankPreference})");
     }
+
+    // The game turned a rank command down (its refusals are in GAME_MECHANICS
+    // "Party ranks"). Only logged: the line says why, and the rank stays as the
+    // game has it.
+    private void OnRankRefused(MatchResult result) =>
+        NoteRankDecision($"the game refused a rank change: \"{result.Text.Trim()}\"");
 
     private void OnStopsFollowing(MatchResult result)
     {
@@ -938,6 +998,8 @@ public sealed partial class PartyManager : IDisposable
         // leader can't be an [Invited] row, and nothing in the block makes us lead.
         bool saysFollowing = _now() - _parFollowingLineAt <= ParFollowingLineWindow;
         _parFollowingLineAt = DateTimeOffset.MinValue;
+        _parSaidLeader = saysFollowing ? _parFollowingName : null;
+        _parFollowingName = null;
         _parFollowing = saysFollowing || _parFollowedLeader is not null;
         if (saysFollowing)
         {
@@ -1300,19 +1362,28 @@ public sealed partial class PartyManager : IDisposable
         if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         Models.Profile.PartyRank rank = ParseRankWord(result.Groups[0]);
+        NoteRankDecision($"the game moved us to the {result.Groups[0]} ranks");
+        SetSelfRank(rank);
+    }
+
+    private void SetSelfRank(Models.Profile.PartyRank rank)
+    {
         foreach (PartyMember m in State.Members)
         {
             if (m.IsSelf) { m.Rank = rank; return; }
         }
     }
 
-    // "X stops to rest." — flip the matching roster member's Resting flag now,
-    // instead of waiting for the next par poll to catch the posture change. The
-    // pattern matches any resting player in the room; scoping to roster members
-    // here makes a non-party bystander's rest a safe no-op. Only ever sets true —
-    // the par poll owns the clear when the member stands. A non-member match
-    // finds no row and does nothing.
-    private void OnMemberRestObserved(MatchResult result)
+    // "X stops to rest." / "X kneels to meditate." — flip the matching roster
+    // member's Resting or Meditating flag now, instead of waiting for the next par
+    // poll to catch the posture change. The patterns match any player in the room;
+    // scoping to roster members here makes a non-party bystander a safe no-op. The
+    // two flags are exclusive, as par writes them; the par poll owns the clear
+    // when the member stands. A non-member match finds no row and does nothing.
+    private void OnMemberRestObserved(MatchResult result) => OnMemberPostureObserved(result, meditating: false);
+    private void OnMemberMeditateObserved(MatchResult result) => OnMemberPostureObserved(result, meditating: true);
+
+    private void OnMemberPostureObserved(MatchResult result, bool meditating)
     {
         if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
@@ -1322,7 +1393,8 @@ public sealed partial class PartyManager : IDisposable
         foreach (PartyMember m in State.Members)
         {
             if (!GivenNameOf(m.Name).Equals(given, StringComparison.OrdinalIgnoreCase)) continue;
-            m.Resting = true;
+            m.Resting = !meditating;
+            m.Meditating = meditating;
             return;
         }
     }
@@ -1573,6 +1645,7 @@ public sealed partial class PartyManager : IDisposable
             return;
         }
         ReconcileMissingFromPar();
+        RestoreLeaderFromPar();
         _parBlockNames.Clear();
         if (read) ParReplyRead?.Invoke();
     }

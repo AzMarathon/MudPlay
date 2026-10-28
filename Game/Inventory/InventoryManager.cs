@@ -139,8 +139,10 @@ public sealed partial class InventoryManager : IDisposable
         Func<string, string?>? slotResolver = null,
         Func<string, bool>? isItemRecordName = null,
         Func<string, bool>? isKey = null,
-        Func<string, bool>? staysWhenSpent = null)
+        Func<string, bool>? staysWhenSpent = null,
+        PerformanceMonitor? performance = null)
     {
+        _performance = performance;
         _isKey = isKey;
         _staysWhenSpent = staysWhenSpent;
         _log = log;
@@ -151,6 +153,22 @@ public sealed partial class InventoryManager : IDisposable
 
     // Fired (outside the lock) whenever the snapshot changes.
     public event Action? Changed;
+
+    // A dozen engines and windows hear these: each handler is timed, so a slow one
+    // is named in a hang report (report paradigm-20261026-201217).
+    private readonly PerformanceMonitor? _performance;
+
+    private void RaiseChanged()
+    {
+        if (_performance is { } performance) performance.Raise(Changed, "inventory changed", _log, "Inventory");
+        else Changed?.Invoke();
+    }
+
+    private void RaiseFullInventoryParsed()
+    {
+        if (_performance is { } performance) performance.Raise(FullInventoryParsed, "inventory read", _log, "Inventory");
+        else FullInventoryParsed?.Invoke();
+    }
 
     // Fired only after an authoritative full `i` dump replaces the snapshot.
     // Consumers that must verify a transaction should not treat incremental
@@ -325,7 +343,7 @@ public sealed partial class InventoryManager : IDisposable
                 _category = EncumbranceLevel.Unknown;
             }
         }
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     // Apply an auto-deposit the moment its `dep <value>` is dispatched at the
@@ -345,7 +363,7 @@ public sealed partial class InventoryManager : IDisposable
             _pendingDepositCopper += copperValue;
             ApplyTransaction(-copperValue);
         }
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     // ----- line processing ---------------------------------------------
@@ -559,7 +577,7 @@ public sealed partial class InventoryManager : IDisposable
             if (TryCoinCount(pickedUp.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(pickedUp.Groups[2].Value, amount);
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -570,7 +588,7 @@ public sealed partial class InventoryManager : IDisposable
             if (TryCoinCount(dropped.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(dropped.Groups[2].Value, -amount);
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -586,7 +604,7 @@ public sealed partial class InventoryManager : IDisposable
             if (TryCoinCount(hidden.Groups[1].Value, out int amount))
             {
                 lock (_lock) AdjustCurrency(hidden.Groups[2].Value, -amount);
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -636,7 +654,7 @@ public sealed partial class InventoryManager : IDisposable
             if (fee > 0)
             {
                 lock (_lock) ApplyTransaction(-fee);
-                Changed?.Invoke();
+                RaiseChanged();
                 _log?.Debug(LogCategory, $"training fee {fee} copper taken off the purse");
             }
             return;
@@ -657,7 +675,7 @@ public sealed partial class InventoryManager : IDisposable
                 long residual = amount - alreadyApplied;
                 if (residual > 0) ApplyTransaction(-residual);
             }
-            Changed?.Invoke();
+            RaiseChanged();
             if (amount > 0) BankDeposited?.Invoke(amount);
             return;
         }
@@ -667,7 +685,7 @@ public sealed partial class InventoryManager : IDisposable
         {
             long amount = ParsePriceToCopper(withdraw.Groups[1].Value);
             lock (_lock) ApplyTransaction(amount);
-            Changed?.Invoke();
+            RaiseChanged();
             if (amount > 0) BankWithdrew?.Invoke(amount);
             return;
         }
@@ -719,7 +737,7 @@ public sealed partial class InventoryManager : IDisposable
                     if (exactDenoms) ApplyBuyDeduction(paid);
                     else ApplyTransaction(-priceCopper);
                 }
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -741,7 +759,7 @@ public sealed partial class InventoryManager : IDisposable
             if (price > 0)
             {
                 lock (_lock) ApplyTransaction(price);
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -1076,8 +1094,8 @@ public sealed partial class InventoryManager : IDisposable
             $"parsed: wealth={wealthCopper} copper, enc={curWeight}/{maxWeight} {category} [{percentage}%], worn={equipped.Count}, carried={carried.Count}, keys={keys.Count}"
             + (readiedLight is { } rl ? $", lit={rl.Name} (Readied/{rl.Readied})" : ""));
         TextInventoryObserved?.Invoke(Snapshot);
-        Changed?.Invoke();
-        FullInventoryParsed?.Invoke();
+        RaiseChanged();
+        RaiseFullInventoryParsed();
     }
 
     // The paired-slot family a worn-slot label belongs to — "Finger" or "Wrist" —
@@ -1112,7 +1130,7 @@ public sealed partial class InventoryManager : IDisposable
             if (--_movesUnderWay == 0 && _changedDuringMove)
             {
                 _changedDuringMove = false;
-                Changed?.Invoke();
+                RaiseChanged();
             }
         }
     }
@@ -1121,7 +1139,7 @@ public sealed partial class InventoryManager : IDisposable
     private void NotifyChanged()
     {
         if (_movesUnderWay > 0) _changedDuringMove = true;
-        else Changed?.Invoke();
+        else RaiseChanged();
     }
 
     // Apply an in-place edit to the worn set, publishing only if it changed.
@@ -1205,7 +1223,7 @@ public sealed partial class InventoryManager : IDisposable
         if (coin.Success && int.TryParse(coin.Groups[1].Value, out int count))
         {
             lock (_lock) AdjustCurrency(coin.Groups[2].Value, sign * count);
-            Changed?.Invoke();
+            RaiseChanged();
             return;
         }
 
@@ -1455,7 +1473,7 @@ public sealed partial class InventoryManager : IDisposable
         if (HandOverCoinNoun(coin) is not { } noun || !int.TryParse(countText, out int count))
             return false;
         lock (_lock) AdjustCurrency(noun, sign * count);
-        Changed?.Invoke();
+        RaiseChanged();
         // The noun's first word is the metal CurrencyHoldings.ToCopper keys on.
         if (givenTo is not null)
         {

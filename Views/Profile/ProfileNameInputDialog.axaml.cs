@@ -2,7 +2,7 @@ using Avalonia.Controls;
 
 namespace MudPlay.Views.Profile;
 
-public partial class ProfileNameInputDialog : Window
+public partial class ProfileNameInputDialog : Window, MudPlay.Services.IShowsNoGameData
 {
     public ProfileNameInputDialog()
     {

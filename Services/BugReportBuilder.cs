@@ -385,20 +385,26 @@ public static class BugReportBuilder
 
     // ----- Section builders ----------------------------------------------
 
+    // The active set as a report names it: whether its build is still put off (the
+    // startup draft's), or why there is none. Read off the UI thread by a hang report.
+    public static string ActiveSetLabel(AppServices svc) => svc.GameData.ActiveSet is { } set
+        ? svc.GameData.BuildDeferred ? $"{set} (not built yet: the unnamed draft hasn't needed it)" : set
+        : svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)";
+
     private static string BuildSession(AppServices svc, RealmType realm, DateTimeOffset now)
     {
         StringBuilder sb = new();
         Kv(sb, "Version", AppInfo.Version);
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
-        Kv(sb, "Active game-data set", svc.GameData.ActiveSet
-            ?? (svc.RefusedGameDataSetNotice is { } refused ? $"(none) - {refused}" : "(none)"));
+        Kv(sb, "Active game-data set", ActiveSetLabel(svc));
         Kv(sb, "Realm-tier game-data overrides", svc.Resolver.CanWriteAt(SettingsTier.Bbs)
             ? "available"
             : "none (no BBS, or the realm's name can't be a folder)");
         Kv(sb, "Game data: long text damaged by an old import",
             svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
         Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());
+        Kv(sb, "Game data: monster relationship defaults", svc.MonsterOverlaySeed.RelationshipSummary);
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
         if (svc.Profile.Current is { StateUnverified: true })
@@ -415,7 +421,7 @@ public static class BugReportBuilder
             : "(none)");
         // PvP: whether the realm is marked for it, and how many players carry a
         // relationship other than the Neutral everyone starts with.
-        Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
+        Kv(sb, "Realm PvP", (svc.PeekActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
         // What the board takes for a hang-up in a fight, as the user recorded it
@@ -552,8 +558,9 @@ public static class BugReportBuilder
         // Direct-input (character) mode: on while a trainer / character-creation
         // stat box owns the keyboard, so arrow keys pass to the wire instead of
         // recalling command history. An "arrows don't move between stat fields"
-        // report hinges on whether this flipped on entering the box.
-        Kv(sb, "Direct-input mode", svc.TrainerMenu.MenuOwnsKeyboard ? "on (trainer/creation box)" : "off");
+        // report hinges on whether this flipped on entering the box. While it waits
+        // on the game's answer to `train stats`, it says how far that answer got.
+        Kv(sb, "Direct-input mode", svc.TrainerMenu.Describe());
         // Death-pile auto-recovery: the toggles + the most recent death record's
         // state, so a "corpse didn't auto-recover" report shows whether it was
         // armed and how the last pile resolved (Recovered / Partial / Missing).
@@ -679,14 +686,15 @@ public static class BugReportBuilder
             .Select(o => $"{o.Room} → {o.Own} (its land: {string.Join(" / ", o.Land)})"));
         string twoInOneLand = string.Join("; ", odd.Where(o => !o.Exception)
             .Select(o => $"{o.Room} → {o.Own}, beside {string.Join(" / ", o.Land)}"));
-        int contradicted = svc.StandardListContradictions.Count;
+        (int contradicted, bool marked, bool unsaved) = svc.StandardListContradictions.Standing();
         return $"{store.Count} room(s) for '{svc.GameData.ActiveSet ?? "(no set)"}', {disputed}; "
             + $"in use with another reading seen beside it: {(challenged.Count == 0 ? "(none)" : string.Join("; ", challenged))}; "
             + $"rooms whose own reading differs from their land's: {(exceptions.Length == 0 ? "(none)" : exceptions)}; "
             + $"lands with two readings: {(twoInOneLand.Length == 0 ? "(none)" : twoInOneLand)}; "
             + $"used by the last hang-up death check: {svc.HangupItems.LastLearnedArrivalUsed ?? "(none)"}; "
             + $"this board's deaths have contradicted the standard list: {contradicted}"
-            + (svc.StandardListContradictions.Marked
+            + (unsaved ? " (not yet written to bbs.json)" : "")
+            + (marked
                 ? " (the list is taken here as on a board with edited rooms: yes only, never no; counted against this set, "
                   + "and pointing the realm at another set starts afresh)"
                 : contradicted > 0
@@ -705,6 +713,10 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // A "wrong rank after joining" report turns on whether the rank command went
+        // out and what the game said to it.
+        Kv(sb, "Rank wanted (Settings → Party)", svc.Party.LocalRankPreference.ToString());
+        Kv(sb, "Last rank decision", svc.Party.LastRankDecision ?? "(none this session)");
         // Stock: a follower an exit turned away stops following and stays on the
         // leader's member list. A "why didn't I rejoin" report turns on whether the
         // client still counted itself as listed.
@@ -732,7 +744,7 @@ public static class BugReportBuilder
         // Board-specific disconnect line, if the active BBS defines one — the
         // config a "party sprinted off after a member dropped" report needs to
         // confirm the custom logoff line was actually taught to the client.
-        Kv(sb, "BBS disconnect pattern", svc.ResolveActiveBbs()?.DisconnectPattern ?? "(built-in lines only)");
+        Kv(sb, "BBS disconnect pattern", svc.PeekActiveBbs()?.DisconnectPattern ?? "(built-in lines only)");
         // Follower reconnect-rejoin state — the leader we'd @comeback on the
         // next reconnect (crash-survivable). A "didn't auto-rejoin after a drop"
         // report hinges on whether the leader was remembered at all.
@@ -792,12 +804,21 @@ public static class BugReportBuilder
         Kv(sb, "Our @wait reasons held (no @ok until all clear)", svc.PartyRest.HeldReasons.Count == 0
             ? "(none)"
             : string.Join(", ", svc.PartyRest.HeldReasons));
+        // Following with no leader name, a @wait has nobody to go to: "the party
+        // didn't stop for my rest" turns on whether one is stuck here.
+        Kv(sb, "Our @wait or @ok kept for a leader we can't name", svc.PartyRest.WaitOwedForUnknownLeader is { } owedWait
+            ? $"{owedWait}: following, but who leads isn't known; it goes out once a `par` names the leader"
+            : svc.PartyRest.OkOwedForUnknownLeader
+                ? "@ok: every reason cleared while who leads isn't known; it goes to that leader once a `par` names them"
+                : "(none)");
         Kv(sb, "Ailment told again on following a leader",
             svc.AilmentSync.LastFollowAnnounce ?? "(not this session)");
         Kv(sb, "Party @wait holding for", svc.PartyEssentials.WaitingMembers.Count == 0
             ? "(nobody)"
             : string.Join(", ", svc.PartyEssentials.WaitingMembers.Select(m =>
                 svc.PartyEssentials.OkDistrusted.Contains(m) ? $"{m} (full window, @ok ignored)" : m)));
+        Kv(sb, "Fresh @ok asked after an early one (again soon: full window)",
+            svc.PartyComeback.FreshOkAskedSummary ?? "(nobody)");
         Kv(sb, "Reconnect hold for", svc.PartyDisconnectMovement.PendingMembers.Count == 0
             ? "(nobody)" : string.Join(", ", svc.PartyDisconnectMovement.PendingMembers));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
@@ -1217,7 +1238,7 @@ public static class BugReportBuilder
 
         sb.Append("Per-monster overlay deltas in the active game-data set — effective overlay (realm seed + tier overrides merged), tagged with the tier that owns each record (")
           .Append(records.Count).Append(")\n\n");
-        if (records.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
+        if (records.Count == 0) sb.Append("_(none)_\n");
 
         foreach ((int n, string id) in records)
         {
@@ -1228,7 +1249,10 @@ public static class BugReportBuilder
 
             List<string> parts = new();
             if (!string.IsNullOrWhiteSpace(o.Name)) parts.Add($"name \"{o.Name}\"");
-            if (o.Relationship is { } rel) parts.Add($"relationship {rel}");
+            if (o.Relationship is not null) parts.Add(RelationshipLabel(svc, n));
+            // The tier says where the override lives; a remote command is who put it there.
+            if (svc.MonsterRelation.Changes.TryGetValue(n, out Game.Remote.MonsterRelationshipHandler.RemoteChange remote))
+                parts.Add(RemoteRelationChange(remote));
             if (o.Priority is { } prio) parts.Add($"priority {prio}");
             if (o.OverridePreAttackSpellId is { } pre and > 0)
                 parts.Add($"debuff {SpellLabel(svc, pre)}{CountSuffix(o.OverridePreAttackCount)}{ManaSuffix(o.OverridePreAttackMinMana)}");
@@ -1247,8 +1271,21 @@ public static class BugReportBuilder
               .Append(string.Join(", ", parts)).Append('\n');
         }
 
+        // A remote change that left no override (set back to what lies below) is not
+        // in the list above, and is still what the monster was last told to be.
+        HashSet<int> listed = records.Select(r => r.Number).ToHashSet();
+        foreach ((int n, Game.Remote.MonsterRelationshipHandler.RemoteChange remote) in
+                 svc.MonsterRelation.Changes.Where(c => !listed.Contains(c.Key)).OrderBy(c => c.Key))
+            sb.Append("- #").Append(n).Append(' ').Append(svc.GameData.FindNameByNumber("Monsters", n) ?? "(unknown)")
+              .Append(" [no override] — ").Append(RemoteRelationChange(remote)).Append('\n');
+
         return sb.ToString();
     }
+
+    private static string RemoteRelationChange(Game.Remote.MonsterRelationshipHandler.RemoteChange remote) =>
+        $"relationship last set by @relation from {remote.Sender} on "
+        + $"{Game.Remote.TransferChannels.NameOf(remote.Channel)} at {remote.At.ToLocalTime():HH:mm:ss} "
+        + $"({remote.From} -> {remote.To})";
 
     // Per-character combat outcomes actually seen against a monster (Monster
     // Intel's "Your Observations") — the personal counterpart to the MDB-sourced
@@ -1275,6 +1312,7 @@ public static class BugReportBuilder
                 : "no weapon swings");
             if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
             if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
+            parts.Add(RelationshipLabel(svc, o.MonsterNumber));
 
             sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
               .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
@@ -1282,6 +1320,13 @@ public static class BugReportBuilder
 
         return sb.ToString();
     }
+
+    // "relationship Friend (from its alignment, Good)": the relationship the engines
+    // read for the monster and where it comes from (an override tier, the seed, the
+    // monster's alignment, or none of them, which reads Enemy).
+    private static string RelationshipLabel(AppServices svc, int monsterNumber) =>
+        $"relationship {svc.MonsterOverlaySeed.Resolve(svc.Resolver, monsterNumber).Relationship ?? Models.GameData.MonsterRelationship.Enemy}"
+        + $" (from {svc.MonsterOverlaySeed.RelationshipSourceOf(svc.Resolver, monsterNumber)})";
 
     // "151 (disrupt)" — an override stores a Spell.Number; annotate it with the
     // Spells-table display name so a triager needn't cross-reference the id.
@@ -1410,6 +1455,7 @@ public static class BugReportBuilder
             string name = svc.GameData.FindNameByNumber("Monsters", r.MonsterNumber) ?? r.Species;
             sb.Append("- #").Append(r.MonsterNumber).Append(' ').Append(name)
               .Append(" — **").Append(r.Assessment).Append("**")
+              .Append(", ").Append(RelationshipLabel(svc, r.MonsterNumber))
               .Append(", Magical ").Append(Lvl(r.Magical))
               .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
               .Append(", attack hit magic normal=").Append(Lvl(r.NormalWeaponHit))
@@ -2023,8 +2069,7 @@ public static class BugReportBuilder
     // for the effects that screen listed, and what couldn't be accounted for.
     private static void AppendPlanBaseline(StringBuilder sb, AppServices svc)
     {
-        var ctx = Game.Calculators.CharacterPlanContext.Resolve(
-            svc.PlayerStats, svc.GameData, svc.Inventory, svc.ListedEffects);
+        Game.Calculators.CpPlanInputs inputs = svc.CpPlanBaseline.Peek(out var ctx);
         sb.Append("\n**CP plan baseline (worked back from the last `stat` screen)**\n\n");
         if (!ctx.HasCharacter)
         {
@@ -2048,6 +2093,17 @@ public static class BugReportBuilder
         sb.Append("- effect lines on that screen: ").Append(s.ActiveEffects.Count == 0
             ? "(none)"
             : string.Join(" | ", s.ActiveEffects.Select(e => e.Timed ? e.Text + " (timed)" : e.Text))).Append('\n');
+        // What the CP Allocation grid is worked from, and the figures it shows, so a
+        // report of CP Left moving can be checked against both.
+        sb.Append("- grid worked from: ").Append(inputs.Held
+            ? "an earlier `stat` that could be worked back (the latest can't): "
+            : "the latest `stat`: ").Append(inputs.Describe())
+          .Append("; live CP ").Append(s.Cp).Append(" counted through level ").Append(s.CpThroughLevel)
+          .Append(", level ").Append(s.Level).Append('\n');
+        if (svc.Profile.Current?.CharacterPlan is { Count: > 0 } plan)
+            sb.Append("- grid as worked now (level earned/left): ").Append(Game.Calculators.CpPlanCalculator.Describe(
+                Game.Calculators.CpPlanCalculator.Compute(inputs.Baseline, plan, ctx.RaceMin, ctx.RaceMax,
+                    inputs.Cp, inputs.CpThroughLevel, ctx.Realm))).Append('\n');
         sb.Append("- plan row due at level ").Append(s.Level).Append(": ")
           .Append(Game.Calculators.CpPlanCalculator.RowDueAt(svc.Profile.Current?.CharacterPlan, s.Level) is { } due
               ? $"the level-{due.Level} row; something to apply with {s.Cp} CP: {(svc.AutoTrain.CanTrainNow ? "yes" : "no")}"
@@ -2149,7 +2205,26 @@ public static class BugReportBuilder
                 .Select(w => $"{w.Key} '{w.Command}' {Game.Map.LoopDelay.Describe(w.DelayMs)}")
                 .ToArray();
             Kv(sb, "Loop command delays", delays.Length == 0 ? "(none)" : string.Join("; ", delays));
-            Kv(sb, "Command delay under way",
+            string[] lapWaits = curLoop.Waypoints
+                .Where(w => w.LapWaitMs > 0)
+                .Select(w => $"{w.Key} until lap time {Game.Map.LoopDelay.Describe(w.LapWaitMs)}")
+                .ToArray();
+            Kv(sb, "Loop lap waits", lapWaits.Length == 0 ? "(none)" : string.Join("; ", lapWaits));
+            // The lever actions the lap types on its detours to the lever exits it
+            // crosses: a loop that stopped at, or walked round, such an exit.
+            IReadOnlyList<string> leverActions = loop.ExitActionCommands;
+            Kv(sb, "Loop lever detours (actions each lap)",
+                leverActions.Count == 0 ? "(none)" : string.Join(", ", leverActions.Select(c => $"'{c}'")));
+            Kv(sb, "Loop step inside a lever detour",
+                loop.CurrentDetour is { } detour
+                    ? $"yes: steps {detour.Start + 1}-{detour.Cross + 1}, for {detour.GateRoom} {detour.GateDir}"
+                      + (detour.OneWay ? " (one-way)" : $", back on the route at step {detour.End + 1}")
+                    : "no");
+            Kv(sb, "Loop lever detours that can't be routed",
+                loop.UnroutableLevers.Count == 0 ? "(none)" : string.Join("; ", loop.UnroutableLevers));
+            Kv(sb, loop.LapWaitUnderWay is { } lapWait
+                    ? $"Lap wait under way (until lap time {Game.Map.LoopDelay.Describe(lapWait.LapTimeMs)}; lap at {Game.Map.LoopDelay.Describe((long)loop.CurrentLapTime.TotalMilliseconds)})"
+                    : "Command delay under way",
                 loop.CommandDelayRemaining is { } left ? $"{Game.Map.LoopDelay.Describe((long)left.TotalMilliseconds)} left" : "(none)");
             // The verdict the engage gates act on, and which room it judged — the
             // room an in-flight loop move is entering, or the tracker's current room.
@@ -2238,7 +2313,11 @@ public static class BugReportBuilder
             : "none yet — using the gear estimate");
         Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
         Kv(sb, "Auto-sell", svc.AutoSell.IsSelling ? "selling here" : "idle");
-        Kv(sb, "Floor check after a kill", svc.AutoGetItems.IsReLookHeld ? "waiting on the room display" : "idle");
+        // "It sat there after a kill" / "it never looked for the drop": what the floor
+        // check owes, and why its last look was sent or skipped. The setting itself
+        // is printed with the Cash settings.
+        Kv(sb, "Floor check after a kill", svc.FloorCheck.Describe());
+        Kv(sb, "Floor check attributed the death to", svc.FloorCheck.LastAttribution ?? "no death yet");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.
@@ -2697,7 +2776,9 @@ public static class BugReportBuilder
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Kv(sb, "Last door key the game showed gone", door.LastKeyLoss ?? "(none since the client started)");
         Kv(sb, "Last bare key lock decision", door.BareLockDecision ?? "(none since the client started)");
-        Kv(sb, "Doors held open (seen open, not yet able to lock again)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
+        // Lever gates are among them, and a lever pulled whose gate hasn't been seen
+        // since is listed too: a lever isn't pulled at a gate held open.
+        Kv(sb, "Doors held open (seen open, not yet able to lock again; lever pulls not yet seen)", svc.DoorsHeldOpen.Describe() is { Count: > 0 } held
             ? string.Join(", ", held) : "none");
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy

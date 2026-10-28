@@ -10,7 +10,7 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The Item Finder's own wiring: the required-level range filter and the Gear
+// The Item Finder's own wiring: the required-level range and More stats filters, and the Gear
 // Finder's trial damage readout, which has to follow the trial set, the attack type
 // and the Configure Estimates inputs.
 public sealed class ItemFinderViewModelTests : IDisposable
@@ -36,11 +36,11 @@ public sealed class ItemFinderViewModelTests : IDisposable
 
     private const string Classes = "[{\"Number\":1,\"Name\":\"Warrior\",\"CombatLVL\":5}]";
 
-    private ItemFinderViewModel NewFinder(InventoryManager inventory)
+    private ItemFinderViewModel NewFinder(InventoryManager inventory, string items = Items)
     {
         string dir = Path.Combine(_root, "realm");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Items.json"), Items);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), items);
         File.WriteAllText(Path.Combine(dir, "Classes.json"), Classes);
         GameDataCache cache = new(_root);
         cache.SwitchSet("realm");
@@ -203,5 +203,29 @@ public sealed class ItemFinderViewModelTests : IDisposable
         finder.SelectedAttackType = "Smash";
         Assert.Equal("1", Value(finder, "Swings / round"));
         Assert.DoesNotContain(finder.TrialDamageRows, r => r.Label == "Crit chance");
+    }
+
+    // Quickness (ability 67) has no fixed ticker; its More stats row filters on it,
+    // and Reset clears it.
+    [Fact]
+    public void MoreStats_Quickness_KeepsItemsWithAtLeastThatMuch()
+    {
+        const string items =
+            "[{\"Number\":1,\"Name\":\"quick boots\",\"ItemType\":0,\"Worn\":4,\"Abil-0\":67,\"AbilVal-0\":10,\"In Game\":1}," +
+            " {\"Number\":2,\"Name\":\"swift cloak\",\"ItemType\":0,\"Worn\":4,\"Abil-0\":67,\"AbilVal-0\":3,\"In Game\":1}," +
+            " {\"Number\":3,\"Name\":\"plain ring\",\"ItemType\":0,\"Worn\":4,\"In Game\":1}]";
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        ItemFinderViewModel finder = NewFinder(inventory, items);
+        Assert.Equal(new[] { "plain ring", "quick boots", "swift cloak" }, Shown(finder));
+
+        ItemFinderStatFilter quickness = finder.MoreStatFilters.Single(f => f.Label == "Quickness");
+        quickness.Min = 1;
+        Assert.Equal(new[] { "quick boots", "swift cloak" }, Shown(finder));
+        quickness.Min = 5;
+        Assert.Equal(new[] { "quick boots" }, Shown(finder));
+
+        finder.ResetCommand.Execute(null);
+        Assert.Equal(0, quickness.Min);
+        Assert.Equal(new[] { "plain ring", "quick boots", "swift cloak" }, Shown(finder));
     }
 }

@@ -8,7 +8,7 @@ namespace MudPlay.Views;
 // Help → Visual Guides: the guide picker (DataContext = GuidePickerViewModel).
 // Modeless; it closes itself when a guide is opened so the step card and the
 // windows the guide points at aren't covered.
-public partial class GuidePickerWindow : Window
+public partial class GuidePickerWindow : Window, MudPlay.Services.IShowsNoGameData
 {
     public GuidePickerWindow()
     {

@@ -422,6 +422,8 @@ public sealed class LoopManager
     // every typed word, in any order ("godfrey bank" → "Bank of Godfrey Loop").
     // One result is a match; several are an ambiguity for the caller to report;
     // none is a miss.
+    // Not RoomSearchService.FindAllByName: the exact step here is the loop table's own
+    // key, which may differ from the name a loop file carries.
     public IReadOnlyList<Loop> FindByName(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return Array.Empty<Loop>();
@@ -629,12 +631,12 @@ public sealed class LoopManager
     // unreachable legs without running it.
     public (IReadOnlyList<LoopStep> Steps, IReadOnlyList<(RoomKey From, RoomKey To)> UnreachableSegments)
         ExpandWaypoints(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
-        => LoopExpander.Expand(waypoints, _bfs, filter);
+        => LoopExpander.Expand(waypoints, _bfs, _graph, filter, LoopLegMemo.Of(_graph));
 
     // The rooms a loop with these waypoints walks through, leg by leg, gaps left
     // where a leg doesn't route (LoopExpander.ResolveLegRoomKeys).
     public IReadOnlyList<RoomKey> ResolveRouteRoomKeys(IReadOnlyList<LoopWaypoint> waypoints, IRoomFilter? filter = null)
-        => LoopExpander.ResolveLegRoomKeys(waypoints, _bfs, _graph, filter);
+        => LoopExpander.ResolveLegRoomKeys(waypoints, _bfs, _graph, filter, LoopLegMemo.Of(_graph));
 
     // ----- internals -------------------------------------------------
 

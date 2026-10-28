@@ -377,11 +377,12 @@ public sealed class MonsterCatalog
         Dictionary<int, MonsterCatalogEntry> map = new();
         HashSet<int> outOfPlay = new();
         GameTable? doc = _cache.GetTable("Monsters");
+        StringPool strings = _cache.Strings;
         if (doc is not null)
             foreach (GameRow row in doc.Rows)
                 if (TryInt(row, "Number", out int number))
                 {
-                    map[number] = BuildEntry(row, number, spellAttType, spellFormulas);
+                    map[number] = BuildEntry(row, number, spellAttType, spellFormulas, strings);
                     if (StrayMonsterRule.IsOutOfPlay(row, _getRoom)) outOfPlay.Add(number);
                 }
 
@@ -393,9 +394,11 @@ public sealed class MonsterCatalog
         return map;
     }
 
+    // An attack's name ("hits", "bites") repeats across thousands of monsters: kept
+    // through the load's string pool, one copy each.
     private static MonsterCatalogEntry BuildEntry(
         GameRow row, int number, IReadOnlyDictionary<int, int> spellAttType,
-        IReadOnlyDictionary<int, SpellFormulaInput> spellFormulas)
+        IReadOnlyDictionary<int, SpellFormulaInput> spellFormulas, StringPool strings)
     {
         // A spell slot / mid-spell casts once when it lands, so its damage is the
         // linked spell's single-cast range (no player per-round energy fold),
@@ -415,7 +418,7 @@ public sealed class MonsterCatalog
                 ? ResolveSpellDamage(accuracy, castLevel, resolveFormula)
                 : (0, 0);
             attacks.Add(new MonsterAttackSlot(
-                Name: ReadString(row, AttNameFields[i]),
+                Name: strings.Get(ReadString(row, AttNameFields[i])),
                 Type: type,
                 Percent: ReadInt(row, AttPercentFields[i]),
                 TruePercent: ReadDouble(row, AttTruePercentFields[i]),
