@@ -2771,11 +2771,10 @@ public sealed class AppServices
     // on the PartyInviteGate waiting for a corpse to "join".
     public Game.PartyDeathRosterCleanup PartyDeathCleanup { get; private set; } = null!;
 
-    // Leader-rest bridge — nudges Health to re-evaluate when
-    // the party leader's rest / meditate posture flips, so a standing-idle
-    // follower opportunistically tops off during the leader's downtime
-    // without waiting on its own next prompt tick.
-    public Game.PartyLeaderRestWatcher PartyLeaderRest { get; private set; } = null!;
+    // Party-rest bridge — nudges Health to re-evaluate when the party stops to
+    // rest or gets going again, so a standing-idle follower opportunistically
+    // tops off in the downtime without waiting on its own next prompt tick.
+    public Game.PartyRestWatcher PartyRestWatch { get; private set; } = null!;
 
     // Fulfillment half of the auto-engine coordination model —
     // requesters post acquisition needs (light source, etc.), fulfilling
@@ -5288,20 +5287,20 @@ public sealed class AppServices
                 RoomTracker.State.CurrentRoom?.Name,
                 movePending: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
 
-        // Leader-rest nudge: a standing-idle follower's own PlayerState may
-        // not change between the 5s par polls that flip the leader's
-        // Resting / Meditating flags, so without this poke Health wouldn't
-        // re-evaluate (and start opportunistically resting) until its next
-        // prompt tick. Edge-triggered — fires only when the leader's posture
-        // actually flips. Process-lifetime singleton (not disposed here).
-        PartyLeaderRest = new Game.PartyLeaderRestWatcher(
-            PartyState, onLeaderRestChanged: () => Health.Evaluate());
+        // Party-rest nudge: a standing-idle follower's own PlayerState may not
+        // change between the 5s par polls that flip the members' Resting /
+        // Meditating flags, so without this poke Health wouldn't re-evaluate (and
+        // start opportunistically resting) until its next prompt tick.
+        // Edge-triggered — fires only when the party's rest actually flips.
+        // Process-lifetime singleton (not disposed here).
+        PartyRestWatch = new Game.PartyRestWatcher(
+            PartyState, Party, Router, onPartyRestChanged: () => Health.Evaluate(), Log);
 
         // Role-aware recovery: as a party follower we top off only to the
         // rest floor (not full) and ping the leader via @wait / @ok so we
         // don't silently hold or release the party. Solo / leader keeps the
         // full rest-max topoff — PartyRestSync self-gates the telepaths.
-        // isLeaderResting drives the inherent "rest while the leader rests"
+        // partyRestingFor drives the inherent "rest while the party rests"
         // opportunistic topoff (gated only by the auto-heal master switch).
         // requestPartyHeal is the follower's flee-substitute: at the run-if-below
         // trigger a follower broadcasts @heal (via PartyRest) instead of running
@@ -5322,7 +5321,7 @@ public sealed class AppServices
             requestPartyWait: () => PartyRest.RequestWait(
                 Game.WaitReason.Health, resend: true, note: Health.PartyWaitNote),
             requestPartyOk: () => PartyRest.RequestOk(Game.WaitReason.Health),
-            isLeaderResting: () => PartyLeaderRest.LeaderIsResting,
+            partyRestingFor: () => PartyRestWatch.PartyRestingFor,
             requestPartyHeal: () => PartyRest.RequestHeal(),
             isLeaderWaited: () => PartyState.SelfIsLeader && PartyEssentials.IsPaused,
             isSelfPoisoned: () => Conditions.IsPoisoned);

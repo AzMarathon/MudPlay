@@ -5546,7 +5546,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);   // 75% — above trigger, below rest-max
 
         Assert.False(h.HealthGateHeld);     // no floor breach → no gate
@@ -5563,7 +5563,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => false);
+            partyRestingFor: () => null);
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5580,7 +5580,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 200, maxHp: 200);   // full HP, no mana pool
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5598,7 +5598,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 170, maxHp: 200, ma: 50, maxMa: 100); // 85% HP, 50% MA
 
         Assert.Contains("meditate", h.SentLines);
@@ -5616,7 +5616,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 130, maxHp: 200, ma: 90, maxMa: 100); // 65% HP, 90% MA
 
         Assert.Contains("rest", h.SentLines);
@@ -5634,7 +5634,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 130, maxHp: 200, ma: 80, maxMa: 100); // 65% HP, 80% MA
 
         Assert.Contains("meditate", h.SentLines);
@@ -5651,7 +5651,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.State.InCombat = true;
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5669,7 +5669,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.DoesNotContain("rest", h.SentLines);
@@ -5686,7 +5686,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => waits++,
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         h.SetPrompt(hp: 150, maxHp: 200);
 
         Assert.Contains("rest", h.SentLines);   // we did opportunistically rest
@@ -5706,7 +5706,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => leaderResting);
+            partyRestingFor: () => leaderResting ? "the leader is resting" : null);
         h.SetPrompt(hp: 150, maxHp: 200);
         Assert.Contains("rest", h.SentLines);
         Assert.True(h.Health.RestInFlight);
@@ -5848,7 +5848,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true,
+            partyRestingFor: () => "the leader is resting",
             isSelfPoisoned: () => true);
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5866,7 +5866,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true,
+            partyRestingFor: () => "the leader is resting",
             isSelfPoisoned: () => false);
         h.SetPrompt(hp: 150, maxHp: 200);
 
@@ -5883,7 +5883,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => false,
+            partyRestingFor: () => null,
             isSelfPoisoned: () => true);
         h.SetPrompt(hp: 50, maxHp: 200);    // 25% — below the 60% rest floor
 
@@ -6023,7 +6023,7 @@ public sealed class HealthManagerTests
             isPartyFollower: () => true,
             requestPartyWait: () => { },
             requestPartyOk: () => { },
-            isLeaderResting: () => true);
+            partyRestingFor: () => "the leader is resting");
         List<string> info = InfoLines(h);
 
         h.SetPrompt(hp: 150, maxHp: 200);

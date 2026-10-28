@@ -1,5 +1,9 @@
 # Version history
 
+## 3.187.3
+
+- Party: a follower also rests or meditates when another member does and the leader has stopped moving
+
 ## 3.187.2
 
 - A swing left unanswered by a dropped link no longer sends a room re-display at the dead connection

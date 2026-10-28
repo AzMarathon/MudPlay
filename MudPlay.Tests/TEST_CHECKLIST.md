@@ -2902,6 +2902,11 @@ How to keep it current:
 - Checks: a follower's @wait / @ok to the leader by given name (never solo or as leader); one @wait per held reason set and an @ok only when the last reason clears; reason notes (bare health unless a pool is named, explicit notes win); Resend; HeldReasons; a stuck reason suppresses later oks; a @wait asked while following a leader the client can't name is kept, warned once and sent when the leader is named, and not sent once released or after leaving the party; a restored leader is told a hold from before the loss and gets an @ok asked for meanwhile, another leader gets neither; a kept wait named with the master switch off goes out on its resync; the gang heal request; IsPaused and its Changed event.
 - Why: the party pause protocol: the leader must hold for every follower reason and resume only once all clear; paradigm-20261025-114837 (every @wait dropped silently while the leader's name was lost).
 
+### PartyRestWatcherTests.cs
+- Covers: Game/PartyRestWatcher, over a real PartyManager
+- Checks: a follower's party counts as resting when the leader rests or meditates, or another member is seen doing so (`par` R / M, `<name> stops to rest.`) with no follow drag since; a drag forgets the member's rest until a later `par` lists it again; our own rest and a member's rest while we lead don't count; Health is nudged only when the answer flips.
+- Why: user, 2026-10-27 (a follower rests or meditates with a resting member once the leader has stopped moving).
+
 ### PartySettingsDefaultsTests.cs
 - Covers: Models/Profile/PartySettings, BuffSlot
 - Checks: the defaults a profile with no Party entry runs on (par poll 5 s on the timer, auto-invite on, rank Mid, 90 s leading wait, vitals gate off, party bless gates off, both nags on); a new party buff slot's defaults.
