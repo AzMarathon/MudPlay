@@ -29,10 +29,11 @@ namespace MudPlay.Services;
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
 // read live at death) matched against the boss list, confirmed by the current room
-// being one of the boss's rooms, or the room it was seen walk into from one of them.
-// Two bosses the game gives one name (BossDef.GameName) are told apart by that room.
-// Every death is the "exp + *Combat Off*" kind, which names no monster of its own;
-// deaths we can't attribute (no engaged name) fall to the tab's manual override.
+// being one of the boss's rooms, a room its own record spawns it in, or a room it
+// was seen walk into from one of those. Two bosses the game gives one name
+// (BossDef.GameName) are told apart by that room. Every death is the "exp +
+// *Combat Off*" kind, which names no monster of its own; deaths we can't attribute
+// (no engaged name) fall to the tab's manual override.
 public sealed class BossTimerStore
 {
     private readonly BossStore _bosses;
@@ -66,13 +67,25 @@ public sealed class BossTimerStore
     // Grab-All isn't double-fired.
     private static readonly TimeSpan FallbackDedupeWindow = TimeSpan.FromSeconds(6);
 
-    // Bosses seen walk into the room we're in from one of their own rooms, by name.
-    // A party member can pull a boss a room out of its rooms and the party kill it
-    // there (report paradigm-20261028-182509: the midnight unicorn came from 17/970
-    // into 17/784 and died there, and no timer started). The arrival line names the
-    // room it left, so a death in the room it walked into is the boss's own. Kept
-    // for the room we're in only.
+    // Where each boss was last seen walk in to outside its own ground, by name. A
+    // monster tied to a player follows them out of its rooms, anywhere its area lets
+    // it go (GAME_MECHANICS "Monster roaming and following"), so the party can kill
+    // it well away from them (report paradigm-20261028-182509: the midnight unicorn
+    // came from 17/970 into 17/784 behind Masta and died there, and no timer
+    // started). An arrival line names the room it left, so each room it is seen walk
+    // into from its ground or from its last such room is where it now is. Dropped
+    // when it dies or walks back onto its ground.
     private readonly Dictionary<string, RoomKey> _strayedInto = new(StringComparer.OrdinalIgnoreCase);
+
+    // The rooms each monster record spawns it in (its Summoned By tokens). A boss
+    // list entry may name only some of a boss's: the lord of the hunt's names his 14
+    // lair rooms, and his record spawns him in 115.
+    private MonsterSpawnIndex? _spawns;
+    public void SetSpawnIndex(MonsterSpawnIndex spawns)
+    {
+        ArgumentNullException.ThrowIfNull(spawns);
+        _spawns = spawns;
+    }
 
     // Active realm's nightly-cleanup config (time-of-day + zone) for "Respawns @
     // Cleanup" bosses. Resolved live so a realm / setting change takes effect without
@@ -104,6 +117,7 @@ public sealed class BossTimerStore
 
     public void OnRealmChanged(string? realmFolder)
     {
+        _strayedInto.Clear();
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
         Load();
         Changed?.Invoke();
@@ -311,8 +325,8 @@ public sealed class BossTimerStore
         }
 
         if (!unnamed && _bosses.Current.FirstOrDefault(d => NameMatches(d.MatchName, engagedName)) is { } elsewhere)
-            _log?.Debug("Bosses", $"'{engagedName}' died in {here}, which isn't a room of boss '{elsewhere.Name}' "
-                + "and it wasn't seen come in from one — no timer");
+            _log?.Debug("Bosses", $"'{engagedName}' died in {here}, which isn't a room of boss '{elsewhere.Name}', "
+                + "and it wasn't seen walk in there — no timer");
 
         // Not a boss of this room by name: it may be what one of them turned into.
         if (unnamed || _deathSummons is null) return;
@@ -379,7 +393,6 @@ public sealed class BossTimerStore
         {
             _bossesPresent.Clear();
             _presentRoom = null;
-            _strayedInto.Clear();
             return;
         }
 
@@ -389,8 +402,6 @@ public sealed class BossTimerStore
         if (_presentRoom != room)
         {
             _presentRoom = room;
-            foreach (string name in _strayedInto.Where(s => s.Value != room).Select(s => s.Key).ToList())
-                _strayedInto.Remove(name);
             _bossesPresent.Clear();
             _bossesPresent.UnionWith(presentNow);
             return;
@@ -463,8 +474,8 @@ public sealed class BossTimerStore
         return present;
     }
 
-    // The bosses seen walk in from their own rooms and the room each walked into,
-    // for the bug report.
+    // The bosses seen walk off their own ground and the room each was last seen
+    // walk into, for the bug report.
     public string StrayedSummary => _strayedInto.Count == 0
         ? "(none)"
         : string.Join(", ", _strayedInto.Select(s => $"{s.Key} into {s.Value}"));
@@ -478,10 +489,15 @@ public sealed class BossTimerStore
             || !here.Exits.TryGetValue(from, out RoomExit exit)) return;
         foreach (BossDef def in _bosses.Current)
         {
-            if (RoomsContain(def, here.Key) || !RoomsContain(def, exit.Target)
-                || !NameMatches(def.MatchName, arrival.Name)) continue;
+            if (!NameMatches(def.MatchName, arrival.Name)) continue;
+            if (OnItsOwnGround(def, here.Key))
+            {
+                _strayedInto.Remove(def.Name);
+                continue;
+            }
+            if (!OnItsGround(def, exit.Target)) continue;
             _strayedInto[def.Name] = here.Key;
-            _log?.Info("Bosses", $"boss '{def.Name}' came in from {exit.Target}, one of its rooms, to {here.Key} "
+            _log?.Info("Bosses", $"boss '{def.Name}' came in from {exit.Target} to {here.Key}, off its own rooms "
                 + "— a death here is its own");
         }
     }
@@ -494,9 +510,14 @@ public sealed class BossTimerStore
         _ => DirectionExtensions.TryFromLongName(word, out Direction d) ? d : null,
     };
 
-    // The boss's own rooms, or the room it was seen walk into from one of them.
+    // Its own ground, or the room it was last seen walk into from there.
     private bool OnItsGround(BossDef def, RoomKey here)
-        => RoomsContain(def, here) || (_strayedInto.TryGetValue(def.Name, out RoomKey strayed) && strayed == here);
+        => OnItsOwnGround(def, here) || (_strayedInto.TryGetValue(def.Name, out RoomKey strayed) && strayed == here);
+
+    // The boss list's rooms for it, or a room its own record spawns it in.
+    private bool OnItsOwnGround(BossDef def, RoomKey here)
+        => RoomsContain(def, here)
+        || (def.MonsterNumber is { } number && _spawns?.MonsterIdsSummonedAt(here).Contains(number) == true);
 
     private static bool RoomsContain(BossDef def, RoomKey key)
     {

@@ -1,8 +1,9 @@
 # Version history
 
-## 3.187.7
+## 3.187.8
 
-- Bosses: a boss pulled out of its rooms and killed where it walked in now starts its timer
+- Bosses: a boss followed out of its rooms and killed where it was seen walk in now starts its timer
+- Bosses: a kill in any room the boss's own record spawns it in starts its timer, not just the listed rooms
 - bug reports addressed: paradigm-20261028-182509
 
 ## 3.187.6

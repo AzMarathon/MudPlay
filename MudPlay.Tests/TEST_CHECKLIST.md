@@ -463,7 +463,7 @@ How to keep it current:
 
 ### BossTimerTests.cs
 - Covers: Game/Map/BossTimerMath, Services/BossTimerStore, Game/Remote/BossTimerQueryHandler, ViewModels BossTimerSyncViewModel/BossRowViewModel/MarkTimer/ManageBosses dialogs, BossCatalog regen
-- Checks: window math per realm; mark/reset/persist across clients; kill detection (name, roster fallback, dark-den exp, a boss pulled out of its rooms); @timer reply format and broadcast budget; the merge window end to end; cleanup bosses; summoned-loot drops.
+- Checks: window math per realm; mark/reset/persist across clients; kill detection (name, roster fallback, dark-den exp, a boss followed off its rooms, a room its own record spawns it in); @timer reply format and broadcast budget; the merge window end to end; cleanup bosses; summoned-loot drops.
 - Why: reports paradigm-20260928-163621, paradigm-20261028-182509 and others; user 2026-10-07 and 2026-10-17 rulings.
 
 ### BoundedRun.cs

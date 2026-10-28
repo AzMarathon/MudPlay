@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.187.7**
-> - Bosses: a boss pulled out of its rooms and killed where it walked in now starts its timer
+> **Version 3.187.8**
+> - Bosses: a boss followed out of its rooms and killed where it was seen walk in now starts its timer
+> - Bosses: a kill in any room the boss's own record spawns it in starts its timer, not just the listed rooms
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.
