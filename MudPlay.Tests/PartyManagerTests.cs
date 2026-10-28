@@ -1819,6 +1819,22 @@ public sealed class PartyManagerTests
         Assert.All(p.State.Members, m => Assert.False(m.Resting));
     }
 
+    [Fact]
+    public void MemberMeditateObserved_FlipsMeditatingFlag_AndClearsResting()
+    {
+        // "X kneels to meditate." is the meditate counterpart on both realms
+        // (user, 2026-10-27); a member who rested and now meditates is not both.
+        var (router, p) = Setup(localCharacterName: "Raijin");
+        router.Dispatch(Line("You are now following MudPlay."));
+        PartyMember leader = p.State.Members.Single(m => m.Name == "MudPlay");
+        router.Dispatch(Line("MudPlay stops to rest."));
+
+        router.Dispatch(Line("MudPlay kneels to meditate."));
+
+        Assert.True(leader.Meditating);
+        Assert.False(leader.Resting);
+    }
+
     // ===== Solo self row (PartyWindow self-display) =====
 
     [Fact]
