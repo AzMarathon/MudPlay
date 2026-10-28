@@ -1,5 +1,10 @@
 # Version history
 
+## 3.187.7
+
+- Bosses: a boss pulled out of its rooms and killed where it walked in now starts its timer
+- bug reports addressed: paradigm-20261028-182509
+
 ## 3.187.6
 
 - Switching to a just-imported game data set no longer crashes when another program briefly holds a table file

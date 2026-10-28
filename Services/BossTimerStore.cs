@@ -29,10 +29,10 @@ namespace MudPlay.Services;
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
 // read live at death) matched against the boss list, confirmed by the current room
-// being one of the boss's rooms. Two bosses the game gives one name (BossDef.GameName)
-// are told apart by that room. Every death is the "exp + *Combat Off*" kind, which
-// names no monster of its own; deaths we can't attribute (no engaged name) fall to
-// the tab's manual override.
+// being one of the boss's rooms, or the room it was seen walk into from one of them.
+// Two bosses the game gives one name (BossDef.GameName) are told apart by that room.
+// Every death is the "exp + *Combat Off*" kind, which names no monster of its own;
+// deaths we can't attribute (no engaged name) fall to the tab's manual override.
 public sealed class BossTimerStore
 {
     private readonly BossStore _bosses;
@@ -65,6 +65,14 @@ public sealed class BossTimerStore
     // is the SAME kill seen twice — skip it so the timer isn't re-stamped and
     // Grab-All isn't double-fired.
     private static readonly TimeSpan FallbackDedupeWindow = TimeSpan.FromSeconds(6);
+
+    // Bosses seen walk into the room we're in from one of their own rooms, by name.
+    // A party member can pull a boss a room out of its rooms and the party kill it
+    // there (report paradigm-20261028-182509: the midnight unicorn came from 17/970
+    // into 17/784 and died there, and no timer started). The arrival line names the
+    // room it left, so a death in the room it walked into is the boss's own. Kept
+    // for the room we're in only.
+    private readonly Dictionary<string, RoomKey> _strayedInto = new(StringComparer.OrdinalIgnoreCase);
 
     // Active realm's nightly-cleanup config (time-of-day + zone) for "Respawns @
     // Cleanup" bosses. Resolved live so a realm / setting change takes effect without
@@ -280,7 +288,7 @@ public sealed class BossTimerStore
         bool unnamed = string.IsNullOrWhiteSpace(engagedName);
         foreach (BossDef def in _bosses.Current)
         {
-            if (!RoomsContain(def, here)) continue;
+            if (!OnItsGround(def, here)) continue;
             bool named = NameMatches(def.MatchName, engagedName);
             if (!named)
             {
@@ -294,6 +302,7 @@ public sealed class BossTimerStore
             // A timed boss starts its respawn countdown; a cleanup boss has none. Both
             // notify BossKilled so Grab-All can fire regardless of respawn type.
             if (def.RespawnType == BossRespawnType.Timed) MarkKilled(def.Name);
+            _strayedInto.Remove(def.Name);
             BossKilled?.Invoke(def);
             // The name that matched is the dead monster's; an unnamed death has none.
             string? sawDie = named ? engagedName : null;
@@ -301,11 +310,15 @@ public sealed class BossTimerStore
             return;
         }
 
+        if (!unnamed && _bosses.Current.FirstOrDefault(d => NameMatches(d.MatchName, engagedName)) is { } elsewhere)
+            _log?.Debug("Bosses", $"'{engagedName}' died in {here}, which isn't a room of boss '{elsewhere.Name}' "
+                + "and it wasn't seen come in from one — no timer");
+
         // Not a boss of this room by name: it may be what one of them turned into.
         if (unnamed || _deathSummons is null) return;
         foreach (BossDef def in _bosses.Current)
         {
-            if (!RoomsContain(def, here)) continue;
+            if (!OnItsGround(def, here)) continue;
             foreach (string summoned in _deathSummons(def))
             {
                 if (!NameMatches(summoned, engagedName)) continue;
@@ -366,6 +379,7 @@ public sealed class BossTimerStore
         {
             _bossesPresent.Clear();
             _presentRoom = null;
+            _strayedInto.Clear();
             return;
         }
 
@@ -375,6 +389,8 @@ public sealed class BossTimerStore
         if (_presentRoom != room)
         {
             _presentRoom = room;
+            foreach (string name in _strayedInto.Where(s => s.Value != room).Select(s => s.Key).ToList())
+                _strayedInto.Remove(name);
             _bossesPresent.Clear();
             _bossesPresent.UnionWith(presentNow);
             return;
@@ -433,7 +449,7 @@ public sealed class BossTimerStore
         HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
         foreach (BossDef def in _bosses.Current)
         {
-            if (!RoomsContain(def, here)) continue;
+            if (!OnItsGround(def, here)) continue;
             foreach (RoomEntity e in obs.Entities)
             {
                 if (e.Kind != EntityKind.Monster) continue;
@@ -446,6 +462,41 @@ public sealed class BossTimerStore
         }
         return present;
     }
+
+    // The bosses seen walk in from their own rooms and the room each walked into,
+    // for the bug report.
+    public string StrayedSummary => _strayedInto.Count == 0
+        ? "(none)"
+        : string.Join(", ", _strayedInto.Select(s => $"{s.Key} into {s.Value}"));
+
+    // A monster walked into the room we're in. here is null while a move is in
+    // flight, when the room the line was printed in isn't known.
+    public void OnMonsterArrived(RoomEntryArrivalEvent arrival, Room? here)
+    {
+        if (arrival.Kind != EntityKind.Monster || here is null) return;
+        if (ArrivalDirection(arrival.Direction) is not { } from
+            || !here.Exits.TryGetValue(from, out RoomExit exit)) return;
+        foreach (BossDef def in _bosses.Current)
+        {
+            if (RoomsContain(def, here.Key) || !RoomsContain(def, exit.Target)
+                || !NameMatches(def.MatchName, arrival.Name)) continue;
+            _strayedInto[def.Name] = here.Key;
+            _log?.Info("Bosses", $"boss '{def.Name}' came in from {exit.Target}, one of its rooms, to {here.Key} "
+                + "— a death here is its own");
+        }
+    }
+
+    // The exit an arrival came in through: `from the northeast`, `from above`.
+    private static Direction? ArrivalDirection(string word) => word.ToLowerInvariant() switch
+    {
+        "above" or "upwards" => Direction.U,
+        "below" or "downwards" => Direction.D,
+        _ => DirectionExtensions.TryFromLongName(word, out Direction d) ? d : null,
+    };
+
+    // The boss's own rooms, or the room it was seen walk into from one of them.
+    private bool OnItsGround(BossDef def, RoomKey here)
+        => RoomsContain(def, here) || (_strayedInto.TryGetValue(def.Name, out RoomKey strayed) && strayed == here);
 
     private static bool RoomsContain(BossDef def, RoomKey key)
     {

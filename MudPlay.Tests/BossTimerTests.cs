@@ -349,6 +349,65 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
+    // Report paradigm-20261028-182509: the party waited in 17/784 while Masta went
+    // northeast into 17/970, one of the midnight unicorn's rooms, and came back with it.
+    private static Room Room(RoomKey key, params (Direction Dir, RoomKey To)[] exits) => new()
+    {
+        Key = key, Name = "Blackwood Forest",
+        Exits = exits.ToDictionary(e => e.Dir, e => new RoomExit(e.To, RoomExitHint.None, RawHint: null)),
+    };
+
+    private static RoomEntryArrivalEvent Arrival(string name, string from) =>
+        new(name, EntityKind.Monster, from, DateTimeOffset.UtcNow);
+
+    private static readonly RoomKey Edge = new(17, 784);
+    private static readonly Room EdgeRoom = Room(Edge, (Direction.NE, new RoomKey(17, 970)), (Direction.E, new RoomKey(17, 971)));
+
+    private void SeedUnicorn()
+    {
+        SeedGameData(RealmType.ParaMud, ("midnight unicorn", 816, 6, 1));
+        SeedBosses(Boss("midnight unicorn", number: 816, rooms: ["17/969", "17/970"]));
+    }
+
+    [Fact]
+    public void BossPulledOutOfItsRooms_KilledWhereItWalkedIn_StartsTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "northeast"), EdgeRoom);
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.NotNull(timers.KilledAt("midnight unicorn"));
+    }
+
+    [Fact]
+    public void BossNamedMonster_InFromARoomNotItsOwn_StartsNoTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "east"), EdgeRoom);
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.Null(timers.KilledAt("midnight unicorn"));
+    }
+
+    [Fact]
+    public void BossWalkedIn_ThenWeMoved_ADeathBackThereLaterStartsNoTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), Edge, "Blackwood Forest");
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "northeast"), EdgeRoom);
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.RoomChange), new RoomKey(17, 971), "Blackwood Forest");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.RoomChange), Edge, "Blackwood Forest");
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.Null(timers.KilledAt("midnight unicorn"));
+    }
+
     private static RoomEntitiesObservation Roster(
         RoomObservationSource source, params string[] monsterNames) => new(
         "Also here: …",
