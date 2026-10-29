@@ -21,6 +21,8 @@
 - With server room data, a move just after a `look <dir>` that showed nothing is no longer left unconfirmed
 - A downed party member who is invited back and accepts no longer gets asked `@health` every 5 s
 - `trai stats` and the other short forms of `train stats` give the trainer form the arrow keys and space bar
+- With the server's room list, a kill no longer sends an extra Enter to re-read the room
+- With the server's vitals, level-up announcements fire again
 - bug reports addressed: Hang-20261029-110908, paradigm-20261029-142922, paradigm-20261029-150822, stock-20261029-170825
 
 ## 3.189.2

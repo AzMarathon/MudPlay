@@ -98,6 +98,10 @@ public sealed class RoomEntityClassifier : IDisposable
     public event Action<RoomEntitiesObservation>? TextObserved;
     public Func<bool>? GmcpOwnsOccupants { get; set; }
 
+    // The server's room list is the roster: it comes on its own after any change, so
+    // nothing needs to ask the room to be shown again for it.
+    public bool ServerOwnsRoster => GmcpOwnsOccupants?.Invoke() == true;
+
     public void ApplyGmcp(IReadOnlyList<RoomEntity> entities, bool walkedOut = false)
     {
         entities = entities.Select(WithDataNumber).ToArray();

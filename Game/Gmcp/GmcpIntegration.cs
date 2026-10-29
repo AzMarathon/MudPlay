@@ -239,8 +239,12 @@ public sealed partial class GmcpIntegration
             : ManaType.Mana;
         _player.ApplyGmcpVitals(value.GetProperty("hp").GetInt32(), value.GetProperty("maxhp").GetInt32(),
             value.GetProperty("mana").GetInt32(), maxMana, manaType);
-        _stats.ApplyGmcpVitals(value);
+        _stats.ApplyGmcpVitals(value, expGainCounts: _vitalsGeneration == State.SessionGeneration);
+        _vitalsGeneration = State.SessionGeneration;
     }
+
+    // The session whose vitals were last applied; -1 before any.
+    private int _vitalsGeneration = -1;
 
     private static readonly (string Field, Models.GameData.MessageFlags Flag)[] StatusFlags =
     [

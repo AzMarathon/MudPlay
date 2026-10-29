@@ -686,6 +686,31 @@ public sealed class CombatManagerTests
         Assert.Equal("large brigand", h.Combat.CurrentTarget);
     }
 
+    // With the server's room list as the roster (GMCP Active), a kill asked for the
+    // room to be shown again, an extra Enter on every kill: the classifier won't drop
+    // a monster the server lists, so the death fell through to the re-display. The
+    // server's list drops it itself, a tick behind the death line (54 ms at the
+    // median over 83 kills in export gmcp-20261029-152626, recorded in Shadow, where
+    // the text roster drops it and nothing is sent).
+    [Fact]
+    public void Kill_WithTheServersRoomList_AsksForNoReDisplay()
+    {
+        using Harness h = new(wireDeathWatcher: true);
+        h.AddMonster(1, "giant rat");
+        h.Classifier.GmcpOwnsOccupants = () => true;
+        h.Classifier.ApplyGmcp(new[] { new RoomEntity("giant rat", "giant rat", EntityKind.Monster, 1, 8022) });
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.Clock.Advance(ARound);
+        h.Feed("You gain 20 experience.");
+        h.Feed("*Combat Off*");
+
+        Assert.Equal(0, h.CrRefreshSends);
+        Assert.Null(h.Combat.CurrentTarget);
+        h.Classifier.ApplyGmcp(Array.Empty<RoomEntity>());
+        Assert.Equal(0, h.CrRefreshSends);
+    }
+
     // The other side: a guard's kill looks the same, and the re-display it asks for
     // still lists the chief, so the chase goes on.
     [Fact]

@@ -21,6 +21,8 @@
 - With server room data, a move just after a `look <dir>` that showed nothing is no longer left unconfirmed
 - A downed party member who is invited back and accepts no longer gets asked `@health` every 5 s
 - `trai stats` and the other short forms of `train stats` give the trainer form the arrow keys and space bar
+- With the server's room list, a kill no longer sends an extra Enter to re-read the room
+- With the server's vitals, level-up announcements fire again
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

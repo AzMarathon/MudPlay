@@ -543,6 +543,35 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
     }
 
+    // Crossing the level line the game prints only the gain line, and with the
+    // server's vitals owned the gain line stands down, so nothing raised the gain and
+    // the level-up announcement went quiet (export gmcp-20261029-152755). A rise in
+    // the server's exp within a session is the gain; a session's first vitals only
+    // re-anchors, since it can carry exp earned elsewhere.
+    [Fact]
+    public void ActiveVitals_ARiseInExp_IsAGain_ButNotTheSessionsFirstVitals()
+    {
+        using Session session = new();
+        List<long> gains = new();
+        session.StatParser.ExperienceGained += gains.Add;
+        object Vitals(long exp) => new { hp = 24, maxhp = 32, mana = 21, maxmana = 22, manaType = "mana", level = 1, exp, expNeeded = 1850 };
+
+        session.Replay("01-handshake");
+        session.Send("Anomaly.Char.Vitals", Vitals(1842));
+        session.Text("You gain 15 experience.\r\n");
+        session.Send("Anomaly.Char.Vitals", Vitals(1857));
+        session.Send("Anomaly.Char.Vitals", Vitals(1857));
+
+        Assert.Equal(1857, session.Stats.Exp);
+        Assert.Equal(1857, gains.Last());
+        int gainsBefore = gains.Count;
+
+        session.Gmcp.Disconnected();
+        session.Replay("09-reconnect");
+        session.Send("Anomaly.Char.Vitals", Vitals(5000));
+        Assert.Equal(gainsBefore, gains.Count);
+    }
+
     // A monster that walks out is gone from the server's roster as it is from the
     // text's after its "just left" line, and is read as that departure. Read as the
     // room re-read, a boss that wandered off was missing from it, and the boss
