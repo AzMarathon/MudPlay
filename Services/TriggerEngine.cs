@@ -454,8 +454,11 @@ public sealed class TriggerEngine
         _                             => null,
     };
 
+    // A text chat line arrives here twice, as text and as the classified entry; a
+    // second copy would halve how many lines the queue can tell apart.
     private void RememberClassified(ChatLogEntry entry)
     {
+        if (_recentChat.Contains((entry.Timestamp, entry.RawText))) return;
         _recentChat.Enqueue((entry.Timestamp, entry.RawText));
         while (_recentChat.Count > RecentChatCapacity) _recentChat.Dequeue();
     }

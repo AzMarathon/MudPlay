@@ -1043,13 +1043,14 @@ public sealed class CombatStateTracker : IDisposable
 
     private void OnAnyCombatLine(MatchResult match)
     {
-        if (GmcpOwnsStatus?.Invoke() == true) return;
         if (_isNotCombatLine?.Invoke(match.Text) == true) return;
         // A damage/miss line is proof the fight is live — refresh the
-        // watchdog's activity stamp so it never fires mid-fight.
+        // watchdog's activity stamp so it never fires mid-fight. Server status
+        // owning InCombat doesn't change that: it reports combat only when it
+        // flips, so a long fight's lines are all that keep it from reading stalled.
         _lastCombatActivityAt = _now();
         _lastCombatActivityDesc = "combat line";
-        if (!_state.InCombat) _state.InCombat = true;
+        if (GmcpOwnsStatus?.Invoke() != true && !_state.InCombat) _state.InCombat = true;
         // The fight is where we stand. A pursuer kept across our move raises no
         // observation in the new room, so this is what moves the gate's room with it.
         if (_gateAsserted) _gateRoom = _currentRoom?.Invoke();
@@ -1076,7 +1077,9 @@ public sealed class CombatStateTracker : IDisposable
     {
         IsServerEngaged = combat;
         _state.InCombat = combat;
-        if (combat) _lastCombatActivityAt = _now();
+        if (!combat) return;
+        _lastCombatActivityAt = _now();
+        _lastCombatActivityDesc = "server combat status";
     }
 
     private void OnCombatStatus(MatchResult match)

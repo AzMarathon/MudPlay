@@ -51,7 +51,7 @@ public sealed partial class GmcpIntegrationTests
         private readonly RoomDisplayParser _display;
         private readonly EncumbranceParser _encumbrance;
 
-        public Session(bool active = true)
+        public Session(bool active = true, ManualClock? clock = null)
         {
             Directory.CreateDirectory(_root);
             MessageRouter router = new(); Router = router; DefaultPatterns.Seed(router);
@@ -67,7 +67,8 @@ public sealed partial class GmcpIntegrationTests
             MonsterMessageStore monsters = new();
             Classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), Tracker, Log);
             Classifier.AttachLineExtractor(Feed.Lines);
-            Combat = new(router, new MovementCoordinator(Log), Classifier, monsters, Player, () => true, Log);
+            Combat = new(router, new MovementCoordinator(Log), Classifier, monsters, Player, () => true,
+                resolveOverlay: null, Log, clock is null ? null : () => clock.Now);
             _encumbrance = new(router, Player, Log);
             Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log);
             Stealth = new(router, Player, Log);
@@ -490,6 +491,31 @@ public sealed partial class GmcpIntegrationTests
         Assert.NotNull(session.Gmcp.LairEligibility(room).EligibleAt);
         session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,999" });
         Assert.False(session.Gmcp.LairEligibility(room).Known);
+    }
+
+    // The server reports combat only when it flips, so a long fight carries one
+    // status with combat on; its rounds' lines are what show the stall watchdog the
+    // fight is still going.
+    [Fact]
+    public void ActiveStatus_ALongFightsLinesKeepTheStallWatchdogFromClearingIt()
+    {
+        ManualClock clock = new();
+        using Session session = new(clock: clock); session.Replay("01-handshake");
+        List<string> wire = new();
+        session.Combat.SetWireSender(bytes => wire.Add(Encoding.Latin1.GetString(bytes)));
+        Dictionary<string, JsonElement> status = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        status["combat"] = JsonSerializer.SerializeToElement(true);
+        session.Send("Anomaly.Char.Status", status);
+
+        for (int round = 0; round < 4; round++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(5));
+            session.Text("You hit the giant rat for 5 damage!\r\n");
+            session.Combat.OnCombatTick();
+        }
+
+        Assert.True(session.Player.InCombat);
+        Assert.Empty(wire);
     }
 
     [Fact]

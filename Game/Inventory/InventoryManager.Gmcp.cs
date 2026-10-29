@@ -34,7 +34,8 @@ public sealed partial class InventoryManager
             _loaded = true; _lastUpdated = DateTimeOffset.Now;
         }
         _log?.Debug(LogCategory, $"server inventory: {carried.Count} carried, {worn.Count} worn, {keys.Count} keys");
-        Changed?.Invoke(); if (fullSnapshot) FullInventoryParsed?.Invoke();
+        RaiseChanged();
+        if (fullSnapshot) RaiseFullInventoryParsed();
     }
 
     public void ResetGmcpItems()
@@ -45,7 +46,7 @@ public sealed partial class InventoryManager
             _equipped = Array.Empty<EquippedItem>(); _carried = Array.Empty<string>(); _keys = Array.Empty<string>(); _loaded = false;
             _readiedLight = null; _litSinceRead = null; _curWeight = _maxWeight = _percentage = 0; _category = EncumbranceLevel.Unknown;
         }
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     private static string ServerSlot(string slot) => slot switch

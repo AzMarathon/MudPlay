@@ -117,7 +117,8 @@ public sealed partial class GmcpIntegration
         {
             int id = effect.GetProperty("spell").GetInt32();
             if (!ids.Contains(id)) continue;
-            return (true, effect.GetProperty("roundsLeft").ValueKind == JsonValueKind.Null ? null : _effectsObserved.AddSeconds(effect.GetProperty("roundsLeft").GetInt32() * 3L));
+            return (true, effect.GetProperty("roundsLeft").ValueKind == JsonValueKind.Null ? null
+                : _effectsObserved.AddSeconds(effect.GetProperty("roundsLeft").GetInt32() * SpellCalculator.SpellRoundSecondsWallClock));
         }
         return (false, null);
     }
@@ -129,7 +130,7 @@ public sealed partial class GmcpIntegration
         foreach (JsonElement effect in effects.GetProperty("effects").EnumerateArray())
         {
             if (effect.GetProperty("roundsLeft").ValueKind == JsonValueKind.Null) continue;
-            long seconds = effect.GetProperty("roundsLeft").GetInt32() * 3L;
+            double seconds = effect.GetProperty("roundsLeft").GetInt32() * SpellCalculator.SpellRoundSecondsWallClock;
             int id = effect.GetProperty("spell").GetInt32();
             KnownSpell spell = _book is null ? default : _book.Available.FirstOrDefault(s => s.Number == id);
             string code = spell.Number == 0 ? effect.GetProperty("name").GetString()! : spell.Short;

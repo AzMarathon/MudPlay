@@ -136,7 +136,7 @@ public sealed partial class GmcpIntegrationTests
     }
 
     [Fact]
-    public void ServerEffects_UseThreeSecondRoundsAndShowUnknownSpellWithoutInventingCasterOrLevel()
+    public void ServerEffects_RunOnLiveSpellRoundsAndShowUnknownSpellWithoutInventingCasterOrLevel()
     {
         using Session s = new(); EnterMilestone2(s);
         s.Gmcp.Receive(new("Anomaly.Spells.List", GmcpMilestone2StateTests.Example("Anomaly.Spells.List")));
@@ -150,7 +150,8 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(2, s.Director.SnapshotActiveBuffs().Count);
         var timer = s.Director.SnapshotActiveBuffs().Single(t => t.Short == spell.Short);
         Assert.Equal(30, timer.TotalSec);
-        Assert.InRange(timer.Until, before.AddSeconds(30), DateTime.UtcNow.AddSeconds(30));
+        Assert.InRange(timer.Until, before.AddSeconds(10 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock),
+            DateTime.UtcNow.AddSeconds(10 * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock));
         Assert.Contains(s.Director.SnapshotActiveBuffs(), t => t.Short == "Unknown blessing" && t.TotalSec == 60);
         s.Send("Anomaly.Char.Effects", new { effects = new[] {
             new { spell = spell.Number, name = spell.Name, roundsLeft = (int?)null, magnitude = 37, caster = (string?)null }
