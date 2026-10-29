@@ -1102,6 +1102,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             {
                 SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
             }
+            // A built-in board's logon steps come filled in, so typing a username and
+            // password and pressing OK is all its login needs.
+            if (_loaded.TryGetValue(bbsName, out BbsProfile? board))
+                foreach (MenuStep step in BuiltInBbses.LogonStepsFor(board))
+                    MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
         }
 
         RefreshImportSources(bbsName);

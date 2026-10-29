@@ -6,7 +6,7 @@ New to MudPlay? Here's the short path from launch to playing — and where the r
 
 On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a small **floating card just left of the main window** (it never covers or shrinks the terminal). It walks you through each step click-by-click: it **glows the exact control to use next** — the menu item, the **Add** button, the **host/port** fields — and as you do each one (clicking **OK** or **Apply** for the last) it **ticks that line (☑)** and moves the glow to the next. When a step's checklist is complete the tour **advances to the next step on its own**. **Back / Next** move between steps manually. Only the steps you're missing show (plus a final **Connect**). The usual order:
 
-1. **Add a BBS** — File → Profile Management → **Add** (under **BBSes**). That opens Settings; fill in the host/IP + port and click **OK**.
+1. **Add a BBS** — File → Profile Management → **Add** (under **BBSes**). That opens Settings; fill in the host/IP + port and click **OK**. **Anomaly Mud** and **Paradigm** are already in the list on a new install, so on those boards there is nothing to add.
 2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**. On a new install you are on the unnamed default profile, so the character you add **is loaded** and Profile Management **closes**: what you set up from here is kept on it.
 3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from. If Profile Management is still open, the import closes it first: with it open the import's file picker could end up out of reach, and the client looked frozen.
 
@@ -98,6 +98,8 @@ BBS **connection details** (host, port, redial, display, credentials) and each r
 The division of labour: **Profile Management** is where BBSes and realms are created, renamed, removed, and where characters are put on them; **Settings** is where a selected BBS's and realm's details are edited (realms can be added, renamed and removed there too, and the BBS renamed). Selecting a BBS in Settings **only** edits that board — it never moves your character (use **Move to BBS** for that).
 
 ## Setting up a BBS
+
+**Built-in boards.** MudPlay comes with **Anomaly** (`playanomalymud.com` port 2324) and **Paradigm** (`paramud.mudinfo.net` port 2323) in the BBS list, logon steps included: add your character under one, type its **username and password** under *Character profile settings* on the BBS tab, press **OK**, and connect. On Paradigm the login stops at the character list, since which slot is yours is up to you; add a step for `{ Character Selection }` sending your slot number to skip it. Each board is added once: remove it and it stays removed. One you already set up under another name (the same host and port) isn't added twice, and its characters get the same logon steps when they have no login saved yet.
 
 First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **BBS settings…**, or by double-clicking the board in the list). Fill in:
 

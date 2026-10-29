@@ -206,6 +206,10 @@ public sealed class GlobalSettings
     // re-opens it on demand regardless of this flag. Read by MainWindow on open.
     public bool FirstRunTutorialDismissed { get; set; }
 
+    // The built-in boards (BuiltInBbses) already added to this install's BBS list,
+    // so one the user removes isn't added back on the next launch.
+    public List<string> BuiltInBbsesAdded { get; set; } = new();
+
     // Step reached / finished per Visual Guide (Help → Visual Guides).
     public GuideProgress Guides { get; set; } = new();
 

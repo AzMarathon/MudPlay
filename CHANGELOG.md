@@ -1,5 +1,10 @@
 # Version history
 
+## 3.188.0
+
+- Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
+- No account, character or password ships with them
+
 ## 3.187.8
 
 - Bosses: a boss followed out of its rooms and killed where it was seen walk in now starts its timer

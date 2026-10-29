@@ -562,6 +562,11 @@ How to keep it current:
 - Checks: arrival marks; raw-wire rendering; heartbeat cadence; startup lines; home-relative paths.
 - Why: report wire/context sections.
 
+### BuiltInBbsesTests.cs
+- Covers: Services/BuiltInBbses
+- Checks: a built-in board is added once and stays removed once the user deletes it; the same host and port under another name is not added twice; a board gets its own copy of the logon steps, matched on host and port; the shipped steps send only credential tokens and one-key menu picks.
+- Why: Anomaly Mud and Paradigm come set up on a new install, with no one's account or password in them.
+
 ### BulkCommandPacerTests.cs
 - Covers: Game/Inventory/BulkCommandPacer
 - Checks: window of 6; release per prompt; min gap; answer timeout; rate-limit backoff; owner cancel; mayGo veto.
