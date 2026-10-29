@@ -1046,11 +1046,11 @@ public sealed class CombatStateTracker : IDisposable
         if (_isNotCombatLine?.Invoke(match.Text) == true) return;
         // A damage/miss line is proof the fight is live — refresh the
         // watchdog's activity stamp so it never fires mid-fight. Server status
-        // owning InCombat doesn't change that: it reports combat only when it
-        // flips, so a long fight's lines are all that keep it from reading stalled.
+        // reports combat only when it flips, so a long fight's lines are all that
+        // keep it from reading stalled.
         _lastCombatActivityAt = _now();
         _lastCombatActivityDesc = "combat line";
-        if (GmcpOwnsStatus?.Invoke() != true && !_state.InCombat) _state.InCombat = true;
+        if (!_state.InCombat) _state.InCombat = true;
         // The fight is where we stand. A pursuer kept across our move raises no
         // observation in the new room, so this is what moves the gate's room with it.
         if (_gateAsserted) _gateRoom = _currentRoom?.Invoke();
@@ -1073,11 +1073,14 @@ public sealed class CombatStateTracker : IDisposable
     // swinging (a `break` then only draws "Your command had no effect.").
     public bool IsServerEngaged { get; private set; }
     public Func<bool>? GmcpOwnsStatus { get; set; }
+    // The server's flag is its auto-attack state, which a mid-fight cast turns off
+    // with the monster still alive, as *Combat Off* does. So, as on the text path,
+    // it can start a fight but never ends one: InCombat ends when the room clears.
     public void ApplyGmcpCombat(bool combat)
     {
         IsServerEngaged = combat;
-        _state.InCombat = combat;
         if (!combat) return;
+        if (!_state.InCombat) _state.InCombat = true;
         _lastCombatActivityAt = _now();
         _lastCombatActivityDesc = "server combat status";
     }

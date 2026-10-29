@@ -675,6 +675,42 @@ public sealed partial class GmcpIntegrationTests
         Assert.Empty(wire);
     }
 
+    // The server's combat flag is its auto-attack state: a cast mid-fight turns it
+    // off with the monster still standing, as *Combat Off* does. It starts a fight
+    // but doesn't end one; the room clearing does.
+    [Fact]
+    public void ActiveStatus_CombatOffMidFight_LeavesTheFightOnUntilTheRoomClears()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        Dictionary<string, JsonElement> status = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        status["combat"] = JsonSerializer.SerializeToElement(true);
+        session.Send("Anomaly.Char.Status", status);
+        Assert.True(session.Player.InCombat);
+
+        status["combat"] = JsonSerializer.SerializeToElement(false);
+        session.Send("Anomaly.Char.Status", status);
+        Assert.True(session.Player.InCombat);
+        Assert.False(session.Combat.IsServerEngaged);
+
+        session.Send("Anomaly.Mob.Gone", new { uid = 102, room = session.Gmcp.State.CurrentRoom, why = "died" });
+        Assert.False(session.Player.InCombat);
+    }
+
+    // A monster's swing at us is a fight whatever the server's flag says.
+    [Fact]
+    public void ActiveStatus_ACombatLineStartsTheFightEvenWithTheServerFlagOff()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.False(session.Player.InCombat);
+
+        session.Text("The large giant rat bites you for 3 damage!\r\n");
+
+        Assert.True(session.Player.InCombat);
+    }
+
     [Fact]
     public void ActiveStealth_IsNotClearedByTheTextArrivalWatchdog()
     {
