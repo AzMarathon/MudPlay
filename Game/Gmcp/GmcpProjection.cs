@@ -66,15 +66,21 @@ internal static class GmcpProjection
             _ => RoomExitHint.None,
         };
         string? phrase = edge.GetProperty("phrase").GetString();
+        // The server has no kind for a trap, a teleport or a ticket and calls such an
+        // exit "normal" (export gmcp-20261029-143336 shows the kinds it does send). Read
+        // as plain, the walker would step onto a trap undisarmed or walk a ticket gate
+        // it can't pass, so the graph's reading stands, with its ticket and commands.
+        if (hint == RoomExitHint.None && prior.Hint is RoomExitHint.Trap or RoomExitHint.Teleport or RoomExitHint.Ticket)
+            return prior with { Target = target };
         return prior with
         {
             Target = target,
             Hint = hint,
             KeyItemId = key > 0 ? key : hasGate ? OptionalInt(gate, "item") : 0,
             CanBash = hasDoor && door.GetProperty("bashable").GetBoolean(),
-            // The toll is in copper; the exit keeps it in gold.
+            // The toll is in copper; the exit keeps it in gold. The server sends no
+            // fare, so a boat's is kept from the graph.
             TollGold = OptionalInt(edge, "toll") / 100,
-            FareCopper = 0,
             TextCommands = phrase is null ? null : new[] { phrase },
             MinLevel = hasGate ? OptionalInt(gate, "minLevel") : 0,
             MaxLevel = hasGate ? OptionalInt(gate, "maxLevel") : 0,

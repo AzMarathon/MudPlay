@@ -699,6 +699,43 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(0u, projected.ExitMask & (1u << (int)Direction.Teleport));
     }
 
+    // The server names no kind for a trap, a teleport or a ticket (the kinds it sends
+    // are in export gmcp-20261029-143336), so it calls those exits "normal". Read as
+    // plain, they lost what the walker acts on: the trap's disarm, the ticket gate and
+    // its item, a boat's fare. An exit the server does name keeps the server's reading.
+    [Theory]
+    [InlineData(RoomExitHint.Trap)]
+    [InlineData(RoomExitHint.Teleport)]
+    [InlineData(RoomExitHint.Ticket)]
+    public void RoomProjection_KeepsTheGraphsTrapTeleportAndTicketExits(RoomExitHint known)
+    {
+        JsonElement value = GmcpStateTests.Frames("01-handshake").First(frame => frame.TryGetProperty("pkg", out JsonElement package)
+            && package.GetString() == "Anomaly.Room.Info").GetProperty("msg");
+        JsonElement edge = value.GetProperty("exits")[0];
+        Assert.Equal("normal", edge.GetProperty("kind").GetString());
+        Direction direction = Enum.Parse<Direction>(edge.GetProperty("dir").GetString()!, ignoreCase: true);
+        RoomKey target = GmcpProjection.Key(edge.GetProperty("to").GetString()!);
+        Room previous = new() { Key = GmcpProjection.Key(value.GetProperty("room").GetString()!), Name = "Town Square",
+            Exits = new Dictionary<Direction, RoomExit>
+            {
+                [direction] = new(target, known, "raw", KeyItemId: 1234, TrapDamage: 40, FareCopper: 500,
+                                  TextCommands: new[] { "go portal" }),
+            } };
+
+        RoomExit projected = GmcpProjection.Room(value, previous).Exits[direction];
+
+        Assert.Equal(known, projected.Hint);
+        Assert.Equal(1234, projected.KeyItemId);
+        Assert.Equal(40, projected.TrapDamage);
+        Assert.Equal(500, projected.FareCopper);
+        Assert.Equal(new[] { "go portal" }, projected.TextCommands);
+
+        // Once the exit leads somewhere else, the graph's reading no longer applies.
+        Room moved = previous with { Exits = new Dictionary<Direction, RoomExit>
+            { [direction] = previous.Exits[direction] with { Target = new RoomKey(99, 99) } } };
+        Assert.Equal(RoomExitHint.None, GmcpProjection.Room(value, moved).Exits[direction].Hint);
+    }
+
     [Fact]
     public void RoomSnapshot_UpdatesGraphAndPreservesLockedAndHiddenExits()
     {
