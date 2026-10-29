@@ -142,8 +142,12 @@ public static class DefaultPatterns
             @"^You are too sick to (?:rest|meditate)!");
         yield return new RegexPattern(KnownPatterns.MeditateNotNeeded,
             @"^Meditation will not help at this time\.");
+        // The game's own line only. Our telepath echo ("[HP=…]:/Boss @wait (too heavy
+        // to move)") and a party member's unquoted telepath carry the phrase too, and
+        // read as a refusal they restarted the wait each time it was sent, a flood
+        // (report paradigm-20261028-190625).
         yield return new RegexPattern(KnownPatterns.MovementFailedHeavy,
-            @"^[^""]*too heavy to move");
+            @"^You are too heavy to move(?: anywhere)?[.!]?\s*$");
         // Fully anchored to the standalone period form — a move made while
         // blind renders exactly this line and nothing else. The exclamation
         // onset ("You are blind!") ends in '!' so it can't match, and the

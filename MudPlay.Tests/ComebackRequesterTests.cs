@@ -235,18 +235,6 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
-    [Fact]
-    public void HeavyThenNoLongerFollowing_SendsComeback()
-    {
-        using Harness h = NewHarness();
-        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
-
-        h.Feed("Your pack is too heavy to move.");
-        h.Feed("You are no longer following MudPlay.");
-
-        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
-    }
-
     // The game's own two wordings: a follow move's refusal on Stock, and a typed
     // move's (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
     [Theory]
@@ -903,8 +891,8 @@ public sealed class ComebackRequesterTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
-        // A player gossiping the phrase is quoted — the ^[^"]* anchor
-        // means it never matches MovementFailedHeavy, so no arming.
+        // A player gossiping the phrase isn't the game's own refusal line, so it
+        // never matches MovementFailedHeavy and nothing arms.
         h.Feed("Raijin gossips \"my pack is too heavy to move lol\".");
         h.Feed("You are no longer following MudPlay.");
 
