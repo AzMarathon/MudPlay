@@ -761,6 +761,35 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(2000, session.Inventory.Snapshot.Encumbrance.MaxWeight);
     }
 
+    // With the server's party owned a `par` reply is dropped, so the poller asks the
+    // server for its party snapshot instead, which answers as the reply would. Off
+    // the server's party, `par` goes out as before.
+    [Fact]
+    public void ActiveGroup_ThePartyPollAsksTheServerInsteadOfSendingPar()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        List<string> requests = new();
+        session.Gmcp.SetSender((package, payload) =>
+        {
+            requests.Add(package + " " + JsonSerializer.Serialize(payload));
+            return Task.CompletedTask;
+        });
+        List<string> wire = new();
+        using PartyPoller poller = new(session.Chat, session.Party.State, session.Party, session.Log, schedule: new ManualTimers().Arm);
+        poller.SetWireSender(bytes => wire.Add(Encoding.Latin1.GetString(bytes)));
+        poller.AskServerForParty = session.Gmcp.RequestGroup;
+
+        Assert.True(poller.RequestPar("a party heal check"));
+        Assert.Empty(wire);
+        Assert.Contains(requests, r => r.StartsWith("Anomaly.Request", StringComparison.Ordinal) && r.Contains("Anomaly.Group.Members", StringComparison.Ordinal));
+
+        session.Gmcp.State.SetMode("Anomaly.Group.Members", GmcpMode.Off);
+        session.Party.State.IsInParty = true;
+        Assert.True(poller.RequestPar("a party heal check"));
+        Assert.Equal(["par\r"], wire);
+    }
+
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it
     // off with the monster still standing, as *Combat Off* does. It starts a fight
     // but doesn't end one; the room clearing does.
