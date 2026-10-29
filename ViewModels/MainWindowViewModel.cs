@@ -2838,6 +2838,9 @@ public partial class MainWindowViewModel : ObservableObject
         CharacterProfile? character = AppServices.Current.Profile.Current;
         BbsCredentials? creds = null;
         character?.BbsCredentials?.TryGetValue(bbs.Name, out creds);
+        (creds, string? setupNote) = BuiltInBbses.LogonFor(
+            creds, bbs.RealmFor(character?.Realm), AppServices.Current.Settings.Current.DefaultGameDataSet);
+        if (setupNote is not null) AppServices.Current.Log.Info("LoginAuto", $"'{bbs.Name}': {setupNote}.");
 
         LoginAutomator? automator = LoginAutomator.TryBuild(
             creds,

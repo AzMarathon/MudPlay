@@ -3085,6 +3085,10 @@ public sealed class AppServices
         // switch, and a probe must never run before its target exists.
         AutoModeController = new Game.AutoModeController(Profile, Log);
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
+        int builtInsKnown = Settings.Current.BuiltInBbsesAdded.Count;
+        foreach (string name in BuiltInBbses.AddMissing(Bbs, Settings.Current.BuiltInBbsesAdded, BuiltInBbses.All))
+            bootstrapLog.Info("BBS", $"Added the built-in board '{name}' to the BBS list.");
+        if (Settings.Current.BuiltInBbsesAdded.Count != builtInsKnown) Settings.Save();
         Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
         // Startup head start: parse the big MDB tables for whatever profile "Auto-load

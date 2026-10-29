@@ -6,7 +6,7 @@ New to MudPlay? Here's the short path from launch to playing — and where the r
 
 On a brand-new install — no BBS, no character, or no game data imported yet — a **guided setup tour** appears in a small **floating card just left of the main window** (it never covers or shrinks the terminal). It walks you through each step click-by-click: it **glows the exact control to use next** — the menu item, the **Add** button, the **host/port** fields — and as you do each one (clicking **OK** or **Apply** for the last) it **ticks that line (☑)** and moves the glow to the next. When a step's checklist is complete the tour **advances to the next step on its own**. **Back / Next** move between steps manually. Only the steps you're missing show (plus a final **Connect**). The usual order:
 
-1. **Add a BBS** — File → Profile Management → **Add** (under **BBSes**). That opens Settings; fill in the host/IP + port and click **OK**.
+1. **Add a BBS** — File → Profile Management → **Add** (under **BBSes**). That opens Settings; fill in the host/IP + port and click **OK**. **Anomaly Mud** and **Paradigm** are already in the list on a new install, so on those boards there is nothing to add.
 2. **Add a character** — back in Profile Management, add a character under your BBS, name it, and **Save**. On a new install you are on the unnamed default profile, so the character you add **is loaded** and Profile Management **closes**: what you set up from here is kept on it.
 3. **Import game data** — Game Data → **Import .mdb**, then pick your MajorMUD `.mdb` file. That's all it takes — it's what the automation reads from. If Profile Management is still open, the import closes it first: with it open the import's file picker could end up out of reach, and the client looked frozen.
 
@@ -98,6 +98,16 @@ BBS **connection details** (host, port, redial, display, credentials) and each r
 The division of labour: **Profile Management** is where BBSes and realms are created, renamed, removed, and where characters are put on them; **Settings** is where a selected BBS's and realm's details are edited (realms can be added, renamed and removed there too, and the BBS renamed). Selecting a BBS in Settings **only** edits that board — it never moves your character (use **Move to BBS** for that).
 
 ## Setting up a BBS
+
+**Built-in boards.** MudPlay comes with **Anomaly** (`playanomalymud.com` port 2324) and **Paradigm** (`paramud.mudinfo.net` port 2323) in the BBS list: add your character under one, type its **username and password** under *Character profile settings* on the BBS tab, press **OK**, and connect. Each board is added once: remove it and it stays removed, and one you already set up under another name (the same host and port) isn't added twice.
+
+**Logon setups.** The logon steps a board's characters start with go by the realm's **game data set** (the realm's own, or the global default when the realm uses that), not by the host and port, which a board can change. A set imported from Anomaly's or Paradigm's data gets that board's setup; any other set, or none yet, gets the **Stock** one:
+
+- **Anomaly** — the account name, the password, then `1` at `Selection:`.
+- **Paradigm** — the username, the password, `P` at `P : Paradigm`, then `1` at `{ Realm Selection }`. The login stops at the character list, since which slot is yours is up to you; add a step for `{ Character Selection }` sending your slot number to skip it.
+- **Stock** — `Otherwise type "new":` sends `{username}`, `Enter your password:` sends `{password}`, and `Main System Menu (TOP)` sends `m`. It fills in only the steps: a Stock board's host and port are yours to type.
+
+Picking the realm's game data set fills in only what's blank: an empty host and port (Anomaly and Paradigm), and logon steps the character hasn't set. Steps the client filled in itself and you haven't touched count as blank, even once saved with your login. So a character set up before its game data was imported starts on the Stock steps and moves to Anomaly's or Paradigm's when that data arrives, on the tab or at the next connect. A host you typed, steps you edited, or a setup you applied by hand stay as they are, and with no game data installed nothing is replaced. To put a setup in over what's there, use **Apply setup** beside the **Connection** heading: Anomaly and Paradigm set the host, port and logon steps, Stock only the logon steps. Like any edit on the tab, nothing is saved until you press **OK**. A character that connects with no login saved walks the setup its realm's game data calls for, leaving the username and password for you to type.
 
 First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **BBS settings…**, or by double-clicking the board in the list). Fill in:
 

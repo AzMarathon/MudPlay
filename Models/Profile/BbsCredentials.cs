@@ -30,6 +30,12 @@ public sealed class BbsCredentials
     // and the door-game entry prompt before the MajorMUD session is live.
     public List<MenuStep> MenuNavSteps { get; set; } = new();
 
+    // The logon setup (BuiltInBbses) the client filled MenuNavSteps in from on its
+    // own, or null once the player applied one by hand. While the steps are still
+    // exactly that setup's, they aren't the player's: the setup the realm's game
+    // data calls for takes their place.
+    public string? AutoLogonSetup { get; set; }
+
     // The individual SYSOP powers this character actually holds on this BBS. Each
     // is an independent capability the client only exercises when its box is
     // checked (the underlying `sys …` command is refused / meaningless without

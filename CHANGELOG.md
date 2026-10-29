@@ -1,5 +1,12 @@
 # Version history
 
+## 3.189.0
+
+- Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
+- A board's logon steps follow its realm's game data (Anomaly, Paradigm, else Stock), filled in only where blank
+- Apply setup beside the BBS tab's Connection heading puts a setup in over what's there
+- No account, character or password ships with them
+
 ## 3.188.2
 
 - Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
