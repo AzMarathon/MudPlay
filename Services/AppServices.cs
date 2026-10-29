@@ -4893,6 +4893,7 @@ public sealed class AppServices
         BossTimers.BossLootDropped += FireBossGrabAll;
         BossTimers.SetDeathSummonResolver(def =>
             BossDeathChain(def).Skip(1).Select(m => m.Name).ToList());
+        BossTimers.SetSpawnIndex(MonsterSpawns);
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -5286,6 +5287,9 @@ public sealed class AppServices
             BossTimers.OnRoomEntitiesObserved(obs, RoomTracker.State.CurrentRoom?.Key,
                 RoomTracker.State.CurrentRoom?.Name,
                 movePending: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
+        // A boss that follows a player off its own rooms dies where it was seen walk in.
+        RoomEntry.ArrivalObserved += e => BossTimers.OnMonsterArrived(e,
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending ? null : RoomTracker.State.CurrentRoom);
 
         // Party-rest nudge: a standing-idle follower's own PlayerState may not
         // change between the 5s par polls that flip the members' Resting /
