@@ -3954,8 +3954,8 @@ How to keep it current:
 
 ### SpellListParserTests.cs
 - Covers: Game/Spells/SpellListParser
-- Checks: How `spells`/`pow` blocks commit the obtained set: header variants (padded, Kai), block end on prompt, blank line or non-row; a header with no rows never wipes the set; "You have no spells." clears it; snapshot replace; noise before the header ignored; multi-word names. Also IsSpellListLine recognition.
-- Why: A report that `sp` didn't update the book because of the padded column header; the learned-spell list feeding casting.
+- Checks: How `spells`/`pow` blocks commit the obtained set: header variants (padded, Kai), block end on prompt, blank line or non-row; a header with no rows never wipes the set; "You have no spells." clears it; snapshot replace; noise before the header ignored; multi-word names; a listed spell the game data gives the class no way to learn (the AMud warlock's chaos shield) still marked learned. Also IsSpellListLine recognition.
+- Why: A report that `sp` didn't update the book because of the padded column header; a warlock's trainer-bought chaos shield that `sp` listed and the book dropped; the learned-spell list feeding casting.
 
 ### SpellReqLevelIndexTests.cs
 - Covers: Game/Combat/SpellReqLevelIndex
@@ -3979,8 +3979,8 @@ How to keep it current:
 
 ### SpellbookStateTests.cs
 - Covers: Game/Spells/SpellbookState, Game/Spells/KnownSpellCatalog
-- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). Also AvailablePicks with the Learned flag, and Changed events.
-- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug.
+- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. Also AvailablePicks with the Learned flag, and Changed events.
+- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
 
 ### SpellsGameDataTabTests.cs
 - Covers: ViewModels/GameData/Edit/MessageEditDialogViewModel (InitialTabIndex); ViewModels/GameData/Tables/SpellsSectionViewModel → ViewModels/GameData/Edit/SpellInfoRowsBuilder

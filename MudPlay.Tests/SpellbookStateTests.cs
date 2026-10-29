@@ -44,12 +44,13 @@ public sealed class SpellbookStateTests : IDisposable
         SpellRow(200, "barkskin", "bark", magery: 3, mageryLvl: 1, reqLevel: 1),
     ];
 
-    private (KnownSpellCatalog catalog, SpellbookState book) New(object[]? spells = null)
+    private (KnownSpellCatalog catalog, SpellbookState book) New(object[]? spells = null, object[]? tbInfo = null)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells ?? _spells));
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(_classes));
+        if (tbInfo is not null) File.WriteAllText(Path.Combine(dir, "TBInfo.json"), JsonSerializer.Serialize(tbInfo));
 
         GameDataCache cache = new(_root);
         cache.SwitchSet("set");
@@ -377,6 +378,76 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.True(book.IsObtained(chao.Number));
         Assert.True(BuffClassifier.IsSelfBuff(chao.Targets));
         Assert.True(BuffClassifier.IsAnyBuff(chao));
+    }
+
+    // The AMud data's warlock chaos shield #5573: no Learnable, no Learned From, no
+    // Classes. Only Naram Fireblade's trainer step ties it to the warlock.
+    private static Dictionary<string, object> UnrecordedChaosShield()
+    {
+        Dictionary<string, object> row = SpellRow(5573, "chaos shield", "chao", magery: 1, mageryLvl: 2, reqLevel: 37, abil0: 7);
+        row["Targets"] = 1;
+        row["Learnable"] = 0;
+        row["Classes"] = "\0";
+        return row;
+    }
+
+    private static readonly object[] _warlockTrainer =
+    [
+        new Dictionary<string, object>
+        {
+            ["Number"] = 12106,
+            ["Action"] = "class 11:minlevel 37:failability 1005573:price 450000:learnspell 5573:message 13061",
+        },
+    ];
+
+    [Fact]
+    public void TrainerTaughtSpell_WithNoLearnableRecord_IsInTheClassList()
+    {
+        object[] spells =
+        [
+            SpellRow(405, "chaos shield", "chao", magery: 1, mageryLvl: 3, reqLevel: 21, abil0: 7),
+            UnrecordedChaosShield(),
+        ];
+        SpellbookState book = New(spells, _warlockTrainer).book;
+        book.Refresh(classNumber: 11, level: 38);
+
+        Assert.Contains(book.ClassSpells, s => s.Number == 5573);
+        Assert.Equal(5573, book.MarkObtainedByName("chaos shield")?.Number);
+        Assert.True(book.IsObtained(5573));
+        Assert.Empty(book.LearnedOutsideClassData);
+    }
+
+    // With no trainer step either, the game's own word that the spell is learned
+    // still puts it in the book, as the row the class's magery reaches, until a
+    // reroll, the one way a learned spell is lost.
+    [Fact]
+    public void LearnedSpell_TheDataGivesNoWayToLearn_IsKeptUntilAReroll()
+    {
+        object[] spells =
+        [
+            SpellRow(100, "starlight", "star", magery: 1, mageryLvl: 1, reqLevel: 2),
+            SpellRow(405, "chaos shield", "chao", magery: 1, mageryLvl: 3, reqLevel: 21, abil0: 7),
+            UnrecordedChaosShield(),
+            SpellRow(101, "high arc", "high", magery: 1, mageryLvl: 3, reqLevel: 5),
+        ];
+        SpellbookState book = New(spells).book;
+        book.Refresh(classNumber: 11, level: 38);
+        Assert.DoesNotContain(book.ClassSpells, s => s.Name == "chaos shield");
+
+        IReadOnlyList<string> unknown = book.SetObtainedByNames(["starlight", "chaos shield", "high arc"]);
+
+        Assert.Equal(["high arc"], unknown);
+        Assert.True(book.IsObtained(5573));
+        Assert.Equal(5573, book.FindByCastCode("chao")?.Number);
+        Assert.Equal([5573], book.LearnedOutsideClassData.Select(s => s.Number));
+        book.Refresh(classNumber: 11, level: 39);
+        book.Reseed(classNumber: 11, level: 39);
+        Assert.True(book.IsObtained(5573));
+
+        book.ClearObtained();
+
+        Assert.DoesNotContain(book.ClassSpells, s => s.Number == 5573);
+        Assert.Empty(book.LearnedOutsideClassData);
     }
 
     // ----- AvailablePicks (Settings spell-picker suggestion source) -----

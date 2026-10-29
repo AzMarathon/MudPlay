@@ -35,6 +35,9 @@ public sealed partial class SpellbookState
     // The class list as our alignment reading filters it, before learned spells are
     // folded in. ComposeAvailable builds Available from it.
     private IReadOnlyList<KnownSpell> _alignedSpells = Array.Empty<KnownSpell>();
+    // Learned spells the class list doesn't hold, found by name across the table
+    // and folded into it (ResolveLearned).
+    private KnownSpell[] _learnedOutsideClassData = [];
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
     // Cast-on-use items for the active class. GetClassCastItems is a full Items-table
     // scan, and the casting decision pass hits GetCastItems several times per pass
@@ -71,6 +74,10 @@ public sealed partial class SpellbookState
     // lists these (its own boxes filter by alignment), and the game's `sp` list and
     // learn line resolve against them.
     public IReadOnlyList<KnownSpell> ClassSpells => _classSpells;
+
+    // The learned spells the game data gives the class no way to learn, which the
+    // `sp` list or a learn line put in the book anyway.
+    public IReadOnlyList<KnownSpell> LearnedOutsideClassData => _learnedOutsideClassData;
 
     // The Available spells as distinct (by cast-code) SpellPick entries, ordered
     // by name — the suggestion source for the Settings spell-picker typeahead
@@ -269,6 +276,12 @@ public sealed partial class SpellbookState
         _classSpells = CharAlign == 0
             ? _alignedSpells
             : _catalog.Query(ClassNumber, level: 0, charAlign: 0);
+        _learnedOutsideClassData = _obtainedNames
+            .Where(name => FindClassSpellByName(name) is null)
+            .Select(name => _catalog.FindCastableByName(ClassNumber, name))
+            .OfType<KnownSpell>()
+            .ToArray();
+        AddToClassList(_learnedOutsideClassData);
         // Class-scoped cast-item list is a full Items scan — resolve it once here,
         // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
         // are free. GetClassCastItems keys only on class, so this is its full input.
@@ -301,6 +314,7 @@ public sealed partial class SpellbookState
             ComposeGmcpSpells();
             return;
         }
+        DropUnlearnedOutsiders();
         List<KnownSpell> list = new(_alignedSpells);
         if (_obtainedNames.Count > 0 && !ReferenceEquals(_classSpells, _alignedSpells))
         {
@@ -333,6 +347,42 @@ public sealed partial class SpellbookState
         return null;
     }
 
+    // A spell the game says is learned resolves even when the data doesn't put it
+    // in the class list: the game's word outranks the data's learnability gates.
+    private KnownSpell? ResolveLearned(string name)
+    {
+        if (FindClassSpellByName(name) is { } listed) return listed;
+        if (_catalog.FindCastableByName(ClassNumber, name) is not { } found) return null;
+        _learnedOutsideClassData = [.. _learnedOutsideClassData, found];
+        AddToClassList([found]);
+        return found;
+    }
+
+    private void AddToClassList(IReadOnlyList<KnownSpell> spells)
+    {
+        if (spells.Count == 0) return;
+        bool shared = ReferenceEquals(_classSpells, _alignedSpells);
+        List<KnownSpell> merged = new(_classSpells);
+        merged.AddRange(spells);
+        merged.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
+        _classSpells = merged;
+        if (shared) _alignedSpells = merged;
+    }
+
+    // Such a spell is in the class list only while it's learned. Only a reroll
+    // unlearns a spell (GAME_MECHANICS "The `spells` / `sp` command output"), and
+    // that clears the learned names.
+    private void DropUnlearnedOutsiders()
+    {
+        HashSet<int> gone = _learnedOutsideClassData
+            .Where(s => !_obtainedNames.Contains(s.Name)).Select(s => s.Number).ToHashSet();
+        if (gone.Count == 0) return;
+        _learnedOutsideClassData = _learnedOutsideClassData.Where(s => !gone.Contains(s.Number)).ToArray();
+        bool shared = ReferenceEquals(_classSpells, _alignedSpells);
+        _classSpells = _classSpells.Where(s => !gone.Contains(s.Number)).ToList();
+        if (shared) _alignedSpells = _classSpells;
+    }
+
     // Re-derive the obtained number cache from the authoritative obtained names
     // against the current Available list — the step that lets obtained spells
     // survive a data-set renumber (their names re-resolve to the new numbers).
@@ -363,22 +413,29 @@ public sealed partial class SpellbookState
     }
 
     // Replace the obtained set with exactly the spells named in names (the
-    // authoritative snapshot from a spells / pow block). Names that don't resolve
-    // to an available spell are ignored. No-ops (no event) when the resolved set
-    // matches the current one. The canonical names are retained as the source of
-    // truth so the set survives a later data-set renumber (see Reseed).
-    public void SetObtainedByNames(IEnumerable<string> names)
+    // authoritative snapshot from a spells / pow block). Returns the names that
+    // resolve to no spell the class can cast, which are left out. No-ops (no event)
+    // when the resolved set matches the current one. The canonical names are
+    // retained as the source of truth so the set survives a later data-set
+    // renumber (see Reseed).
+    public IReadOnlyList<string> SetObtainedByNames(IEnumerable<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
         HashSet<string> nextNames = new(StringComparer.OrdinalIgnoreCase);
+        List<string> unknown = new();
+        int adopted = _learnedOutsideClassData.Length;
         foreach (string name in names)
-            if (FindClassSpellByName(name) is { } s) nextNames.Add(s.Name);
+        {
+            if (ResolveLearned(name) is { } s) nextNames.Add(s.Name);
+            else unknown.Add(name);
+        }
 
-        if (nextNames.SetEquals(_obtainedNames)) return;
+        if (nextNames.SetEquals(_obtainedNames) && adopted == _learnedOutsideClassData.Length) return unknown;
         _obtainedNames.Clear();
         _obtainedNames.UnionWith(nextNames);
         ComposeAvailable();
         Changed?.Invoke();
+        return unknown;
     }
 
     // Seed the authoritative obtained-name set directly from a persisted snapshot,
@@ -405,8 +462,9 @@ public sealed partial class SpellbookState
     // Changed only when the spell was newly added.
     public KnownSpell? MarkObtainedByName(string name)
     {
-        if (FindClassSpellByName(name) is not { } match) return null;
-        if (_obtainedNames.Add(match.Name))
+        int adopted = _learnedOutsideClassData.Length;
+        if (ResolveLearned(name) is not { } match) return null;
+        if (_obtainedNames.Add(match.Name) || adopted != _learnedOutsideClassData.Length)
         {
             ComposeAvailable();
             Changed?.Invoke();
