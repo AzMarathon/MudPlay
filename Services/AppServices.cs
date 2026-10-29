@@ -372,6 +372,7 @@ public sealed class AppServices
     // Sole writer of the state's HP / MA / position / mana-type fields
     // (the single-writer IL scan enforces this).
     public Game.PromptParser Player { get; }
+    public Game.Gmcp.GmcpIntegration Gmcp { get; }
 
     // Client-side terminal line buffer. Routes user keystrokes through
     // a local 254-char accumulator that only flushes to the wire on
@@ -4893,6 +4894,7 @@ public sealed class AppServices
         BossTimers.BossLootDropped += FireBossGrabAll;
         BossTimers.SetDeathSummonResolver(def =>
             BossDeathChain(def).Skip(1).Select(m => m.Name).ToList());
+        BossTimers.SetSpawnIndex(MonsterSpawns);
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -5286,6 +5288,9 @@ public sealed class AppServices
             BossTimers.OnRoomEntitiesObserved(obs, RoomTracker.State.CurrentRoom?.Key,
                 RoomTracker.State.CurrentRoom?.Name,
                 movePending: RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
+        // A boss that follows a player off its own rooms dies where it was seen walk in.
+        RoomEntry.ArrivalObserved += e => BossTimers.OnMonsterArrived(e,
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending ? null : RoomTracker.State.CurrentRoom);
 
         // Party-rest nudge: a standing-idle follower's own PlayerState may not
         // change between the 5s par polls that flip the members' Resting /
@@ -11098,6 +11103,13 @@ public sealed class AppServices
         // Once, with the version that stopped the default profile being written: it
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
+        Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log);
+        Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
+        Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
+        LairTimers.GmcpEligibility = Gmcp.LairEligibility;
+        PromptScanner.PromptObserved += Gmcp.ObservePrompt;
+        Profile.ProfileClosed += Gmcp.Disconnected;
+
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
 
         // A launch that comes up on the unnamed draft chooses its game-data set but

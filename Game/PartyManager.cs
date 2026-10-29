@@ -563,6 +563,7 @@ public sealed partial class PartyManager : IDisposable
 
     private void SyncSelfFromPlayerState()
     {
+        if (GmcpOwnsGroup?.Invoke() == true && State.IsInParty) return;
         if (_playerState is null) return;
         foreach (PartyMember m in State.Members)
         {
@@ -613,6 +614,7 @@ public sealed partial class PartyManager : IDisposable
     // flip PartyState.SelfIsLeader + LeaderName accordingly.
     private void OnFollowsYou(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -662,6 +664,7 @@ public sealed partial class PartyManager : IDisposable
     // the actual roster without the chip.
     private void OnYouInvited(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -678,6 +681,7 @@ public sealed partial class PartyManager : IDisposable
     // PartyState.LeaderName to X.
     private void OnYouFollowing(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string leaderName = result.Groups[0];
         if (string.IsNullOrEmpty(leaderName)) return;
@@ -778,6 +782,7 @@ public sealed partial class PartyManager : IDisposable
 
     private void OnStopsFollowing(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -797,6 +802,7 @@ public sealed partial class PartyManager : IDisposable
     // for them rather than walking on.
     private void OnLeftBehind(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -813,6 +819,7 @@ public sealed partial class PartyManager : IDisposable
     // separately.
     private void OnFollowerRemoved(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -828,6 +835,7 @@ public sealed partial class PartyManager : IDisposable
     // client still thought it was following).
     private void OnYouNoLongerFollowing(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         if (string.IsNullOrEmpty(result.Groups[0])) return;
         // The line is printed by what takes a follower off every member list.
@@ -841,6 +849,7 @@ public sealed partial class PartyManager : IDisposable
     // what the per-row handlers saw. Idempotent — already-empty state is a no-op.
     private void OnPartyDissolved(MatchResult _)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         // Also flush the par-block state machine. Without this, _parState
         // can carry over from a previous in-party par-block (BBS output
         // doesn't emit a blank line between the par table and the next
@@ -973,6 +982,7 @@ public sealed partial class PartyManager : IDisposable
 
     private void OnParHeader(MatchResult _)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         // Safety net — if the previous par block is somehow still open (its
         // terminating prompt line never arrived), reconcile it before the new
         // block clears the captured names, so a departed member isn't carried
@@ -1122,7 +1132,7 @@ public sealed partial class PartyManager : IDisposable
             return;
         }
         bool selfLeads = State.SelfIsLeader;
-        RemoveMember(given);
+        if (GmcpOwnsGroup?.Invoke() != true) RemoveMember(given);
         _recentlyDisconnected[given] = _now();
         // Leader-only: a follower's own movement is already held by FollowerGate,
         // so a second wait gate there would only linger to timeout.
@@ -1336,6 +1346,7 @@ public sealed partial class PartyManager : IDisposable
     // we just dropped).
     private void OnMemberRankChanged(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count < 2) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -1348,6 +1359,7 @@ public sealed partial class PartyManager : IDisposable
     // appears).
     private void OnSelfRankChanged(MatchResult result)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         Models.Profile.PartyRank rank = ParseRankWord(result.Groups[0]);
         NoteRankDecision($"the game moved us to the {result.Groups[0]} ranks");
@@ -1373,6 +1385,7 @@ public sealed partial class PartyManager : IDisposable
 
     private void OnMemberPostureObserved(MatchResult result, bool meditating)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -1417,6 +1430,7 @@ public sealed partial class PartyManager : IDisposable
 
     private void HandleLine(string text, bool isPromptLine = false)
     {
+        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (_parState != ParState.ReadingRows) return;
         // The statline prompt ([HP=...]:) is the real par-block terminator.
         // MajorMUD ends the table by returning to the prompt, not by emitting a

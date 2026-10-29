@@ -349,6 +349,108 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.KilledAt("ogre king"));
     }
 
+    // Report paradigm-20261028-182509: the party waited in 17/784 while Masta went
+    // northeast into 17/970, one of the midnight unicorn's rooms, and came back with it.
+    private static Room Room(RoomKey key, params (Direction Dir, RoomKey To)[] exits) => new()
+    {
+        Key = key, Name = "Blackwood Forest",
+        Exits = exits.ToDictionary(e => e.Dir, e => new RoomExit(e.To, RoomExitHint.None, RawHint: null)),
+    };
+
+    private static RoomEntryArrivalEvent Arrival(string name, string from) =>
+        new(name, EntityKind.Monster, from, DateTimeOffset.UtcNow);
+
+    private static readonly RoomKey Edge = new(17, 784);
+    private static readonly Room EdgeRoom = Room(Edge, (Direction.NE, new RoomKey(17, 970)), (Direction.E, new RoomKey(17, 971)));
+
+    private void SeedUnicorn()
+    {
+        SeedGameData(RealmType.ParaMud, ("midnight unicorn", 816, 6, 1));
+        SeedBosses(Boss("midnight unicorn", number: 816, rooms: ["17/969", "17/970"]));
+    }
+
+    [Fact]
+    public void BossPulledOutOfItsRooms_KilledWhereItWalkedIn_StartsTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "northeast"), EdgeRoom);
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.NotNull(timers.KilledAt("midnight unicorn"));
+    }
+
+    [Fact]
+    public void BossNamedMonster_InFromARoomNotItsOwn_StartsNoTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "east"), EdgeRoom);
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.Null(timers.KilledAt("midnight unicorn"));
+    }
+
+    private static readonly RoomKey Beyond = new(17, 971);
+    private static readonly Room BeyondRoom = Room(Beyond, (Direction.W, Edge), (Direction.SE, new RoomKey(17, 972)));
+
+    // A monster tied to a player follows them anywhere its area lets it go, so the
+    // boss can be led several rooms off its own.
+    [Fact]
+    public void BossFollowsThePartyTwoRoomsOut_StartsItsTimerWhereItDies()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "northeast"), EdgeRoom);
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.RoomChange), Beyond, "Blackwood Forest");
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "west"), BeyondRoom);
+        timers.OnMonsterDied(Death(), Beyond, engagedName: "midnight unicorn");
+
+        Assert.NotNull(timers.KilledAt("midnight unicorn"));
+    }
+
+    [Fact]
+    public void BossWalksBackOntoItsRooms_ADeathWhereItHadStrayedStartsNoTimer()
+    {
+        SeedUnicorn();
+        var (_, timers, _) = NewStores();
+        Room home = Room(new RoomKey(17, 970), (Direction.SW, Edge), (Direction.NE, new RoomKey(17, 969)));
+
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "northeast"), EdgeRoom);
+        timers.OnMonsterArrived(Arrival("midnight unicorn", "southwest"), home);
+        timers.OnMonsterDied(Death(), Edge, engagedName: "midnight unicorn");
+
+        Assert.Null(timers.KilledAt("midnight unicorn"));
+    }
+
+    // The boss list names the lord of the hunt's 14 lair rooms; his own record spawns
+    // him in 115 (its Summoned By `Group:` tokens).
+    [Fact]
+    public void BossKilledInARoomItsOwnRecordSpawnsItIn_StartsTimer()
+    {
+        string dir = AppPaths.GameDataSetDir(_set);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), JsonSerializer.Serialize(new[]
+        {
+            new Dictionary<string, object>
+            {
+                ["Name"] = "Lord of the Hunt", ["Number"] = 329, ["RegenTime"] = 170, ["GameLimit"] = 1,
+                ["Summoned By"] = "Group: 3/669,Group: 3/670,[23-1-5][1]Group(lair): 3/671,Group: 3/715",
+            },
+        }));
+        File.WriteAllText(Path.Combine(dir, "Info.json"), JsonSerializer.Serialize(new[] { new { Legit = 2 } }));
+        SeedBosses(Boss("lord of the hunt", number: 329, rooms: "3/671"));
+        var (_, timers, cache) = NewStores();
+        timers.SetSpawnIndex(new MonsterSpawnIndex(cache));
+
+        timers.OnMonsterDied(Death(), new RoomKey(3, 715), engagedName: "Lord of the Hunt");
+
+        Assert.NotNull(timers.KilledAt("lord of the hunt"));
+    }
+
     private static RoomEntitiesObservation Roster(
         RoomObservationSource source, params string[] monsterNames) => new(
         "Also here: …",

@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Session.Reset","payload":{"scope":"all"},"expect":{"reject":"schema"},"why":"a full reset says why"}

@@ -67,6 +67,7 @@ public sealed partial class RoomDisplayParser : IDisposable
     // subscribes here to read the neighbour's obvious-exits fingerprint that the
     // look revealed. Consumers must not mutate tracker state from this handler.
     public event Action<RoomObservation>? RoomParsed;
+    public Func<bool>? GmcpOwnsRoom { get; set; }
 
     public RoomDisplayParser(LineExtractor lines, RoomTracker tracker, LogService? log = null)
     {
@@ -115,7 +116,7 @@ public sealed partial class RoomDisplayParser : IDisposable
                     closedDoors.Count > 0 ? closedDoors : null,
                     secretPassages.Count > 0 ? secretPassages : null);
                 RoomParsed?.Invoke(observation);
-                _tracker.NoteRoomObserved(observation, line.Timestamp);
+                if (GmcpOwnsRoom?.Invoke() != true) _tracker.NoteRoomObserved(observation, line.Timestamp);
                 _log?.Info("RoomDisplay",
                     $"observed: '{name}' exits={{{string.Join(",", dirs)}}}"
                     + (openDoors.Count > 0 ? $" openDoors={{{string.Join(",", openDoors)}}}" : "")

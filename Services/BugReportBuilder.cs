@@ -174,6 +174,7 @@ public static class BugReportBuilder
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
+            new("Server data (GMCP)", SafeSection(() => svc.Gmcp.Describe())),
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
@@ -2578,6 +2579,8 @@ public static class BugReportBuilder
                 + $"{Game.GameData.BossCatalog.EffectiveRegenHours(svc.GameData, def)?.ToString() ?? "?"}h, "
                 + $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
                 + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
+        // A kill outside a boss's own rooms counts only in the room it was seen walk into.
+        Kv(sb, "Bosses seen walk in from their own rooms", svc.BossTimers.StrayedSummary);
 
         return sb.ToString();
     }

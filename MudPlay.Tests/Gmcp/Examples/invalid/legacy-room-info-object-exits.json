@@ -1,0 +1,1 @@
+{"pkg":"Room.Info","payload":{"num":"1,1","map":1,"room":1,"name":"x","exits":[{"dir":"n"}]},"expect":{"reject":"schema"},"why":"the frozen legacy shape keeps exits as strings (review point 1)"}
