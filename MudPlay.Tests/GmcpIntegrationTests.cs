@@ -396,18 +396,21 @@ public sealed partial class GmcpIntegrationTests
         room["room"] = JsonSerializer.SerializeToElement("1,2");
         session.Send("Anomaly.Room.Info", room);
         session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        session.Text("Town Square\r\nObvious exits: north, south\r\n");
         Assert.Equal(1, answers);
         Assert.False(session.Tracker.HasQueuedMoves);
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
         Assert.NotNull(session.Graph.GetRoom(new RoomKey(1, 1)));
     }
 
-    // Room.Info comes a few milliseconds ahead of the arriving room's occupants.
+    // Room.Info comes ahead of the arriving room's occupants and its text display.
     // Confirmed at once, the room let a loop take its next step past a monster
-    // nobody knew was there (report paradigm-20261029-071539): the move is answered
-    // only once the occupants are in, and they're known when it is.
+    // nobody knew was there (report paradigm-20261029-071539). The move is answered
+    // at the text display's exits, as on the text path, so the floor survey ("You
+    // notice … here.", which the server's room data doesn't carry) and the server's
+    // roster are both in by then.
     [Fact]
-    public void ArrivingRoom_IsConfirmedOnlyOnceItsOccupantsAreKnown()
+    public void ArrivingRoom_IsConfirmedOnlyOnceItsTextDisplayIsRead()
     {
         using Session session = new();
         session.Replay("07-recovery-request");
@@ -428,11 +431,13 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(RoomConfidence.Pending, session.Tracker.State.Confidence);
 
         session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = new[] { monster }, players = Array.Empty<object>() });
-        Assert.Null(monsterKnownWhenConfirmed);     // the roster isn't the server's until the monster's live state is in
-
         Dictionary<string, JsonElement> live = liveBaseline.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         live["room"] = JsonSerializer.SerializeToElement("1,2");
         session.Send("Anomaly.Mob.Update", live);
+        Assert.True(session.Combat.HasRoomNpc);
+        Assert.Null(monsterKnownWhenConfirmed);     // the roster alone doesn't answer the move
+
+        session.Text("Rat Den\r\nYou notice a rusty dagger here.\r\nAlso here: large giant rat.\r\nObvious exits: south\r\n");
         Assert.True(monsterKnownWhenConfirmed);
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
     }

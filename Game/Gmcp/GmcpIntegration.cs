@@ -43,7 +43,7 @@ public sealed partial class GmcpIntegration
     private bool _roomApplied;
     private bool _hadRoomAuthority;
     private bool _occupantsApplied;
-    // A new room's snapshot held back until its occupants are known (see ApplyRoomOnceOccupantsKnown).
+    // A new room's snapshot held back until its text display is read (see ApplyRoomOnceTextShown).
     private bool _roomHeld;
     private int _generation;
 
@@ -199,7 +199,8 @@ public sealed partial class GmcpIntegration
                 ApplyStatus(State.Snapshot(applying)!.Value);
             }
             // Occupants before the room: the room's confirmation is what lets a walk
-            // take its next step, so who is in it has to be known first.
+            // take its next step, so who is in it has to be known first (a reset or
+            // refresh that brings both).
             if ((package == "*" || package == "Anomaly.Room.Occupants" || package.StartsWith("Anomaly.Mob", StringComparison.Ordinal))
                 && OwnsOccupants())
             {
@@ -207,12 +208,11 @@ public sealed partial class GmcpIntegration
                 _occupantsApplied = true;
                 _classifier.ApplyGmcp(GmcpProjection.Entities(State));
                 _hp?.NotifyGmcpChanged();
-                ReleaseHeldRoom("the server's occupants are in");
             }
             if (Applies(package, "Anomaly.Room.Info"))
             {
                 applying = "Anomaly.Room.Info";
-                ApplyRoomOnceOccupantsKnown(State.Snapshot(applying)!.Value);
+                ApplyRoomOnceTextShown(State.Snapshot(applying)!.Value);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
@@ -258,17 +258,20 @@ public sealed partial class GmcpIntegration
         _encumbrance.ApplyGmcp(Enum.Parse<EncumbranceLevel>(band, ignoreCase: true));
     }
 
-    // Room.Info comes a few milliseconds ahead of the arriving room's Room.Occupants
-    // and its text display. Confirmed at once, the room let a loop walk on past a
-    // monster nobody knew was there yet (report paradigm-20261029-071539). A new room
-    // is held until its occupants are known: the server's roster when that is owned,
-    // else the text display, whose "Also here:" is read before its exits. A change to
-    // the room we're in (a door, a refresh) needs no wait. A dark or blind
-    // arrival's one-line display lets it through too.
-    private void ApplyRoomOnceOccupantsKnown(JsonElement value)
+    // Room.Info comes ahead of the arriving room's occupants and its text display.
+    // Confirmed at once, the room let a loop walk on past a monster nobody knew was
+    // there yet (report paradigm-20261029-071539). A new room is held until its text
+    // display has been read, as the text path confirms it at "Obvious exits:": by
+    // then its "You notice … here." (floor items, which the server's room data
+    // doesn't carry) and "Also here:" are in, and the server's roster with them. A
+    // dark or blind arrival's one-line display lets it through too. Only a room
+    // that answers a move of ours waits: a change to the room we're in (a door, a
+    // refresh) or a snapshot with no move behind it (entering the game, re-anchoring
+    // after a reconnect) lands at once, as nothing walks on from it.
+    private void ApplyRoomOnceTextShown(JsonElement value)
     {
         bool newRoom = _tracker.State.CurrentRoom?.Key != GmcpProjection.Key(value.GetProperty("room").GetString()!);
-        if (newRoom && !OwnsOccupants())
+        if (newRoom && _tracker.HasQueuedMoves)
         {
             _roomHeld = true;
             return;
