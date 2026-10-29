@@ -13,6 +13,11 @@
 - A follower's drag with server room data no longer leaves a move stuck in flight
 - The server's monster numbers are checked against the game data, so a friendly NPC isn't read as an enemy
 - With the server's room list, a monster arriving mid-move no longer starts a fight in the old room, and walking out of a fight is noticed
+- A boss that walks out under the server's room list no longer starts its timer as if killed
+- The Conversation window no longer freezes the client when a profile change reloads its history
+- A kai class reads its spell list with `pow`, and nothing is sent before the character has mana or kai
+- Game Data → Monsters: lair respawn and monsters-per-lair filters and a Lair Respawn column; the old Respawn filter is Regen time (hours)
+- bug reports addressed: Hang-20261029-110908, paradigm-20261029-142922
 
 ## 3.189.2
 

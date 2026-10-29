@@ -514,6 +514,33 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
     }
 
+    // A monster that walks out is gone from the server's roster as it is from the
+    // text's after its "just left" line, and is read as that departure. Read as the
+    // room re-read, a boss that wandered off was missing from it, and the boss
+    // timers' fallback started its timer as for a kill (export gmcp-20261029-143336:
+    // `Anomaly.Mob.Gone` with "why":"left" 16 ms after "just left to the east"). A
+    // death stays a re-read of the room, which is what that fallback looks for.
+    [Theory]
+    [InlineData("left", RoomObservationSource.Departure)]
+    [InlineData("died", RoomObservationSource.AlsoHere)]
+    public void ActiveRoster_AMonsterThatWalkedOut_IsADeparture(string why, RoomObservationSource expected)
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        JsonElement occupants = session.Gmcp.State.Snapshot("Anomaly.Room.Occupants")!.Value;
+        long uid = occupants.GetProperty("mobs")[0].GetProperty("uid").GetInt64();
+        string room = occupants.GetProperty("room").GetString()!;
+        int before = session.Classifier.Current!.Value.Entities.Count;
+        List<RoomObservationSource> sources = new();
+        session.Classifier.EntitiesObserved += obs => sources.Add(obs.Source);
+
+        session.Send("Anomaly.Mob.Gone", new { uid, room, why });
+
+        Assert.Equal(expected, Assert.Single(sources));
+        Assert.Equal(before - 1, session.Classifier.Current!.Value.Entities.Count);
+    }
+
     // Walking out of a fight into an empty room: the text path reads that as a
     // room-change wipe, which tells the walker a fight was walked out on. With the
     // server's roster owned no such read came, and the walker walked on.

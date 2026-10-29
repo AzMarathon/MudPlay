@@ -150,11 +150,17 @@ public partial class ConversationWindow : Window, MudPlay.Services.IShowsNoGameD
         }
     }
 
-    private void OnScrollToRow(ConversationRowViewModel row)
+    // Asked once per added row, but every ask is for the newest row, so one queued
+    // scroll serves a burst: it goes to whatever row is newest when it runs. A scroll
+    // per row jumped the list to each of them in turn, re-creating the rows there.
+    private bool _scrollQueued;
+
+    private void OnScrollToRow(ConversationRowViewModel _)
     {
-        if (_rowsList is null) return;
+        if (_rowsList is null || _scrollQueued) return;
         if (DataContext is not ConversationViewModel { AutoScroll: true }) return;
         if (!_followTail) return;   // reading history — leave the view where it is
+        _scrollQueued = true;
         // Defer the scroll. Calling ScrollIntoView synchronously while the
         // virtualizing panel is mid-update (a chat line arriving as the row is
         // added, or the panel still materialising on open) re-enters the layout
@@ -163,7 +169,9 @@ public partial class ConversationWindow : Window, MudPlay.Services.IShowsNoGameD
         // panel finish its layout first.
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            _scrollQueued = false;
             if (!_followTail) return;   // the user scrolled up while this was queued
+            if (DataContext is not ConversationViewModel { Rows: [.., ConversationRowViewModel row] }) return;
             _pinning = true;
             _rowsList?.ScrollIntoView(row);
             // ScrollIntoView only scrolls far enough to reveal the row, leaving

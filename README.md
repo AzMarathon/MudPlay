@@ -13,6 +13,10 @@
 > - A follower's drag with server room data no longer leaves a move stuck in flight
 > - The server's monster numbers are checked against the game data, so a friendly NPC isn't read as an enemy
 > - With the server's room list, a monster arriving mid-move no longer starts a fight in the old room, and walking out of a fight is noticed
+- A boss that walks out under the server's room list no longer starts its timer as if killed
+- The Conversation window no longer freezes the client when a profile change reloads its history
+- A kai class reads its spell list with `pow`, and nothing is sent before the character has mana or kai
+- Game Data → Monsters: lair respawn and monsters-per-lair filters and a Lair Respawn column; the old Respawn filter is Regen time (hours)
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

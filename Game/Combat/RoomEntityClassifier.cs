@@ -98,15 +98,19 @@ public sealed class RoomEntityClassifier : IDisposable
     public event Action<RoomEntitiesObservation>? TextObserved;
     public Func<bool>? GmcpOwnsOccupants { get; set; }
 
-    public void ApplyGmcp(IReadOnlyList<RoomEntity> entities)
+    public void ApplyGmcp(IReadOnlyList<RoomEntity> entities, bool walkedOut = false)
     {
         entities = entities.Select(WithDataNumber).ToArray();
         // A roster that changes while our move is in flight isn't the room we land
         // in read anew (it can be the room we're leaving): on the text path it's an
         // arrival line, which waits for the move. The room's confirmation reads it
-        // as the new room's (OnRoomTrackerStateChanged).
-        RoomObservationSource source = _roomTracker is { HasQueuedMoves: true }
-            ? RoomObservationSource.Arrival : RoomObservationSource.AlsoHere;
+        // as the new room's (OnRoomTrackerStateChanged). One the server sends because
+        // a monster walked out is that monster's departure, as its "just left" line
+        // is on the text path: read as the room re-read, a boss that wandered off was
+        // missing from it and its timer started as for a kill.
+        RoomObservationSource source = _roomTracker is { HasQueuedMoves: true } ? RoomObservationSource.Arrival
+            : walkedOut ? RoomObservationSource.Departure
+            : RoomObservationSource.AlsoHere;
         RoomEntitiesObservation observation = new("", entities, _now(), source);
         if (Current is { } current && current.Entities.SequenceEqual(entities)) return;
         Current = observation;

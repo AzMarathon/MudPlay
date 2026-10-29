@@ -210,7 +210,8 @@ public sealed partial class GmcpIntegration
                 IReadOnlyList<RoomEntity> roster = GmcpProjection.Entities(State, notListed: name => _party?.IsTheLeaderWeFollow(name) == true);
                 // The held room's list waits for the room, which reads it.
                 if (_roomHeld) _classifier.HoldGmcpUntilRoomConfirmed(roster);
-                else _classifier.ApplyGmcp(roster);
+                else _classifier.ApplyGmcp(roster,
+                    walkedOut: package == "Anomaly.Mob.Gone" && State.LastGoneWalkedOut);
                 _hp?.NotifyGmcpChanged();
             }
             if (Applies(package, "Anomaly.Room.Info"))
