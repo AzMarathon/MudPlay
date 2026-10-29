@@ -76,7 +76,7 @@ public sealed partial class GmcpIntegration
         // A room too dark to see, or a blind move, shows one line and nobody in it.
         foreach (string shownNobody in new[] { Services.Patterns.KnownPatterns.RoomPitchBlack,
                      Services.Patterns.KnownPatterns.RoomVeryDark, Services.Patterns.KnownPatterns.BlindMoveStarved })
-            router.Subscribe(shownNobody, _ => ReleaseHeldRoom("its display shows nobody"));
+            router.Subscribe(shownNobody, _ => ReleaseHeldRoom("its display shows nobody", shownDark: true));
     }
 
     public void SetSender(Func<string, object, Task> send) => _send = send;
@@ -279,7 +279,7 @@ public sealed partial class GmcpIntegration
 
     // Also runs from the text lines, outside Apply, so it hands a bad snapshot back
     // to text the way Apply does.
-    private void ReleaseHeldRoom(string how)
+    private void ReleaseHeldRoom(string how, bool shownDark = false)
     {
         if (!_roomHeld) return;
         _roomHeld = false;
@@ -287,7 +287,7 @@ public sealed partial class GmcpIntegration
         _log.Debug("GMCP", $"Arriving room confirmed: {how}.");
         try
         {
-            ApplyRoom(State.Snapshot("Anomaly.Room.Info")!.Value);
+            ApplyRoom(State.Snapshot("Anomaly.Room.Info")!.Value, shownDark);
         }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
                                        or ArgumentException or KeyNotFoundException)
@@ -297,14 +297,14 @@ public sealed partial class GmcpIntegration
         }
     }
 
-    private void ApplyRoom(JsonElement value)
+    private void ApplyRoom(JsonElement value, bool shownDark = false)
     {
         RoomKey key = GmcpProjection.Key(value.GetProperty("room").GetString()!);
         Room room = GmcpProjection.Room(value, _graph.GetRoom(key));
         _graph.SetGmcpRoom(room);
         _roomApplied = true;
         _hadRoomAuthority = true;
-        _tracker.ApplyGmcpRoom(room, GmcpProjection.Observation(value));
+        _tracker.ApplyGmcpRoom(room, GmcpProjection.Observation(value), shownDark);
     }
 
     // ----- Shadow comparisons ----------------------------------------------

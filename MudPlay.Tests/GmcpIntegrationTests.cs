@@ -67,6 +67,9 @@ public sealed partial class GmcpIntegrationTests
             GameDataCache cache = new(_root);
             Graph = new(cache);
             Tracker = new(Graph);
+            // As the client wires it: a too-dark line marks the room dark.
+            router.Subscribe(KnownPatterns.RoomPitchBlack, _ => Tracker.NoteDarkRoomEntered());
+            router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
             MonsterMessageStore monsters = new();
             Classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), Tracker, Log);
             Classifier.AttachLineExtractor(Feed.Lines);
@@ -459,7 +462,8 @@ public sealed partial class GmcpIntegrationTests
     }
 
     // A room too dark to see shows one line in place of its display: no "Also
-    // here:" and no exits line to wait for, so that line lets the held room through.
+    // here:" and no exits line to wait for, so that line lets the held room through,
+    // and the darkness it reported stays.
     [Fact]
     public void ArrivingDarkRoom_WithTheRosterOnTheText_IsConfirmedByItsCantSeeLine()
     {
@@ -478,6 +482,7 @@ public sealed partial class GmcpIntegrationTests
 
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
+        Assert.True(session.Tracker.IsInDarkRoom);
     }
 
     [Fact]
