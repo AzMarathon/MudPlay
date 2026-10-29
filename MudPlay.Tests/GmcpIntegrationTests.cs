@@ -483,6 +483,61 @@ public sealed partial class GmcpIntegrationTests
         Assert.False(session.Tracker.HasQueuedMoves);
     }
 
+    // A roster change while our move is in flight (a monster walking into the room
+    // we're leaving, or the new room's list ahead of its text) isn't the room we land
+    // in read anew: on the text path it's an arrival line, which waits for the move.
+    // Read as a fresh roster, it told combat we had landed, and a fight could open
+    // in the room we were leaving. Once the room is confirmed, its list is read as
+    // that room's own.
+    [Fact]
+    public void ActiveRoster_ARosterChangeMidMoveIsAnArrival_TheConfirmedRoomIsReadAnew()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        JsonElement monster = session.Gmcp.State.Snapshot("Anomaly.Room.Occupants")!.Value.GetProperty("mobs")[0];
+        List<RoomObservationSource> sources = new();
+        session.Classifier.EntitiesObserved += obs => sources.Add(obs.Source);
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Room.Occupants", new { room = session.Gmcp.State.CurrentRoom, mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        Assert.Equal([RoomObservationSource.Arrival], sources);
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = new[] { monster }, players = Array.Empty<object>() });
+        session.Text("Rat Den\r\nAlso here: large giant rat.\r\nObvious exits: south\r\n");
+
+        Assert.Equal(RoomObservationSource.AlsoHere, sources[^1]);
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+    }
+
+    // Walking out of a fight into an empty room: the text path reads that as a
+    // room-change wipe, which tells the walker a fight was walked out on. With the
+    // server's roster owned no such read came, and the walker walked on.
+    [Fact]
+    public void ActiveRoster_WalkingOutOfAFightIntoAnEmptyRoom_IsNoticed()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        List<string> abandoned = new();
+        session.Combat.EngagedTargetAbandoned += abandoned.Add;
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        session.Text("Empty Hall\r\nObvious exits: south\r\n");
+
+        Assert.NotEmpty(abandoned);
+    }
+
     // With the roster on the text, the text display's "Also here:" is read before
     // its exits line, which is what lets the held room through.
     [Fact]

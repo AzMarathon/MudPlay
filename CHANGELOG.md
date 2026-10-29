@@ -12,6 +12,7 @@
 - The server's room roster leaves out hidden players and the leader you follow, as the game's room list does
 - A follower's drag with server room data no longer leaves a move stuck in flight
 - The server's monster numbers are checked against the game data, so a friendly NPC isn't read as an enemy
+- With the server's room list, a monster arriving mid-move no longer starts a fight in the old room, and walking out of a fight is noticed
 
 ## 3.189.2
 

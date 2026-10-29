@@ -101,7 +101,13 @@ public sealed class RoomEntityClassifier : IDisposable
     public void ApplyGmcp(IReadOnlyList<RoomEntity> entities)
     {
         entities = entities.Select(WithDataNumber).ToArray();
-        RoomEntitiesObservation observation = new("", entities, _now());
+        // A roster that changes while our move is in flight isn't the room we land
+        // in read anew (it can be the room we're leaving): on the text path it's an
+        // arrival line, which waits for the move. The room's confirmation reads it
+        // as the new room's (OnRoomTrackerStateChanged).
+        RoomObservationSource source = _roomTracker is { HasQueuedMoves: true }
+            ? RoomObservationSource.Arrival : RoomObservationSource.AlsoHere;
+        RoomEntitiesObservation observation = new("", entities, _now(), source);
         if (Current is { } current && current.Entities.SequenceEqual(entities)) return;
         Current = observation;
         SetRosterWhole(true);
@@ -621,7 +627,11 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private void OnRoomTrackerStateChanged(RoomTransition transition)
     {
-        if (GmcpOwnsOccupants?.Invoke() == true) return;
+        if (GmcpOwnsOccupants?.Invoke() == true)
+        {
+            ObserveServerRosterOnRoomChange(transition);
+            return;
+        }
         // Only act on true location changes — confidence-only flips
         // (Located ↔ Lost without a real room swap) don't qualify.
         if (transition.PreviousRoom is null) return;     // initial location set
@@ -945,6 +955,29 @@ public sealed class RoomEntityClassifier : IDisposable
     // toggle that only re-runs the combat tracker leaves a sibling gate (e.g. the
     // deferred-cash Acquisition hold) asserted, stalling the walker until a manual
     // room re-display. No-op before the first observation.
+    // The server's list for the room we're stepping into, ahead of its text: kept
+    // without being read, so nothing (a combat gate, a fight walked out on) is
+    // decided on it before the room is confirmed, which reads it.
+    public void HoldGmcpUntilRoomConfirmed(IReadOnlyList<RoomEntity> entities) =>
+        Current = new RoomEntitiesObservation("", entities.Select(WithDataNumber).ToArray(), _now(),
+            RoomObservationSource.Arrival);
+
+    // With the server's roster owned, the room's confirmation follows its text, so
+    // Current is already the server's list for the room we stepped into. It is read
+    // here as the text path reads a room change: an empty room as a room-change
+    // wipe (combat lands, a fight walked out on is noticed, the surprise round
+    // re-opens), an occupied one as that room's own fresh read, now that the
+    // tracker points at it.
+    private void ObserveServerRosterOnRoomChange(RoomTransition transition)
+    {
+        if (transition.PreviousRoom is null || transition.NewRoom is null) return;
+        if (transition.PreviousRoom.Key.Equals(transition.NewRoom.Key)) return;
+        IReadOnlyList<RoomEntity> entities = Current?.Entities ?? Array.Empty<RoomEntity>();
+        Current = new RoomEntitiesObservation("", entities, _now(),
+            entities.Count == 0 ? RoomObservationSource.RoomChange : RoomObservationSource.AlsoHere);
+        EntitiesObserved?.Invoke(Current.Value);
+    }
+
     public void ReemitCurrent()
     {
         if (Current is { } obs) EntitiesObserved?.Invoke(obs);
