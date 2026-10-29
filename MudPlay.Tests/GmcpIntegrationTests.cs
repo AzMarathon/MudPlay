@@ -790,6 +790,36 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(["par\r"], wire);
     }
 
+    // The server lists every occupant; "Also here:" leaves out a hidden player until
+    // a search reveals them, and never lists the leader we follow. The roster the
+    // client acts on is the one the text would give (GAME_MECHANICS "Hiding" and
+    // "Co-location and the `Also here:` line").
+    [Fact]
+    public void ActiveRoster_LeavesOutAHiddenPlayerAndTheLeaderWeFollow()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        session.Party.State.IsInParty = true;
+        session.Party.State.LeaderName = "Boss Hogg";
+
+        session.Send("Anomaly.Room.Occupants", new
+        {
+            room = session.Gmcp.State.CurrentRoom,
+            mobs = new[] { new { uid = 102, hidden = false } },
+            players = new[] { new { name = "Sneaky", hidden = true }, new { name = "Boss", hidden = false }, new { name = "Bystander", hidden = false } },
+        });
+
+        Assert.Equal(["Bystander"], session.Classifier.Current!.Value.Entities.Where(e => e.Kind == EntityKind.Player).Select(e => e.RawName));
+
+        session.Send("Anomaly.Room.Occupants", new
+        {
+            room = session.Gmcp.State.CurrentRoom,
+            mobs = new[] { new { uid = 102, hidden = false } },
+            players = new[] { new { name = "Sneaky", hidden = false } },
+        });
+        Assert.Contains(session.Classifier.Current!.Value.Entities, e => e.RawName == "Sneaky");   // a search revealed them
+    }
+
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it
     // off with the monster still standing, as *Combat Off* does. It starts a fight
     // but doesn't end one; the room clearing does.

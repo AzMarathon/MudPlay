@@ -101,10 +101,14 @@ internal static class GmcpProjection
         return new(value.GetProperty("name").GetString()!, shown, open, closed);
     }
 
-    // The room's occupants, monsters first. A monster with no static information
-    // yet is left out. visibleOnly drops the hidden ones the text doesn't show
-    // either (textVisible), for a shadow comparison with the text's roster.
-    public static IReadOnlyList<RoomEntity> Entities(GmcpState state, bool visibleOnly = false, IReadOnlySet<string>? textVisible = null)
+    // The room's occupants, monsters first, as "Also here:" would list them. A
+    // monster with no static information yet is left out. A hidden player stays off
+    // until a search reveals them (monsters can't hide), and so does the leader we
+    // follow, whom the game never lists (notListed). visibleOnly is the shadow
+    // comparison with the text's roster: a hidden monster the text doesn't show is
+    // dropped, and a hidden player the text shows after all is kept.
+    public static IReadOnlyList<RoomEntity> Entities(GmcpState state, bool visibleOnly = false, IReadOnlySet<string>? textVisible = null,
+        Func<string, bool>? notListed = null)
     {
         List<RoomEntity> result = new();
         if (state.Snapshot("Anomaly.Room.Occupants") is not { } occupants) return result;
@@ -119,7 +123,8 @@ internal static class GmcpProjection
         foreach (JsonElement player in occupants.GetProperty("players").EnumerateArray())
         {
             string name = player.GetProperty("name").GetString()!;
-            if (visibleOnly && player.GetProperty("hidden").GetBoolean() && textVisible?.Contains(name) != true) continue;
+            if (player.GetProperty("hidden").GetBoolean() && !(visibleOnly && textVisible?.Contains(name) == true)) continue;
+            if (notListed?.Invoke(name) == true) continue;
             result.Add(new(name, name, EntityKind.Player, null));
         }
         return result;

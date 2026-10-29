@@ -7,6 +7,7 @@
 - The leader still goes back for a member left behind under the server's party
 - Coin weight and auto-deposits are tracked with the server's inventory
 - The party check asks the server instead of sending `par`
+- The server's room roster leaves out hidden players and the leader you follow, as the game's room list does
 
 ## 3.189.2
 

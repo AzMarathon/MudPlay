@@ -207,7 +207,7 @@ public sealed partial class GmcpIntegration
             {
                 applying = "Anomaly.Room.Occupants";
                 _occupantsApplied = true;
-                _classifier.ApplyGmcp(GmcpProjection.Entities(State));
+                _classifier.ApplyGmcp(GmcpProjection.Entities(State, notListed: name => _party?.IsTheLeaderWeFollow(name) == true));
                 _hp?.NotifyGmcpChanged();
             }
             if (Applies(package, "Anomaly.Room.Info"))

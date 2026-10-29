@@ -5498,6 +5498,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - *Sneaking* lets you **move** silently and open on a target you approach, but does **not** remove your name from the room's `Also here:` line — others still see you listed there.
   - *Hidden* removes your name from `Also here:` (you're invisible in the room) but you **cannot move** while hidden.
   - A **player** has to `search` the room to reveal (unhide) you; **monsters do not search rooms**, so a monster that walks into a room you're hidden in never reveals you — it just becomes a backstab target.
+  - **Monsters can't hide** *([CONFIRMED] 2026-10-29, user)*. Only a player is ever missing from `Also here:` for being hidden, and they show there once a search reveals them. The Anomaly server's `Room.Occupants` lists hidden occupants too, flagged `hidden`, so a server roster has to leave a hidden player out the way the text does. **Client use:** `GmcpProjection.Entities` leaves a `hidden` player off the roster until the server shows them unhidden.
   - A monster's passive **see-hidden** ability is a separate thing: it reveals a stealthed character to the whole room on sight, defeating the opener (see *Combat → Backstab*).
 - **Command** *([OBSERVED] — the client issues it)*: `hid` — attempt to hide.
 - **The bare verb hides the player; with an object it stashes the object** *([CONFIRMED] 2026-09-26, user)*.
@@ -8942,7 +8943,7 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
   - "Actively" is a full row. An `[Invited]` row is on the list and not following (*`par` output block*), so it says nothing about the room, and a member the reply leaves out is not in the party at all.
   - Nothing on record contradicts it on either realm. On Stock the engine prints a full row from the follow fields alone, with no room test (*`par` output block*), and a follow move it refuses ends the follow in the same tick (*A follower who can't move is left behind*), so the two agree. The one open case is Paradigm's dropped (0 HP) member, whom `par` is believed to keep listing though only a `drag` moves them (*Dropped ally rescue*, `[NEEDS CONFIRMATION]` there).
 - **A party member may be missing from `Also here:` for two reasons, and neither means they left the room.** *(2026-08-28, user — report `stock-20260828-124347` + scrollback)*
-  1. **The leader you're FOLLOWING is never listed in `Also here:`.** The game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. The reverse also holds: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one).
+  1. **The leader you're FOLLOWING is never listed in `Also here:`.** The game prints `You are following <leader>.` as a separate status line instead, and `Also here:` shows only the *other* occupants. The reverse also holds: when **you** lead, your followers **do** appear in your `Also here:` (you follow no one). **Client use:** the server's `Room.Occupants` lists them, and `GmcpProjection.Entities` leaves them out (`PartyManager.IsTheLeaderWeFollow`).
   2. **A member who is HIDING is removed from `Also here:`** (see *Movement & navigation → Hiding — sneak vs hide, the hide state machine, and search reveals*). They're still in the room and in `par`.
 
 **Client use:**

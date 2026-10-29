@@ -1727,6 +1727,12 @@ public sealed partial class PartyManager : IDisposable
     }
 
     // First whitespace-delimited token. "Raijin WuzHere" → "Raijin"; "Raijin" → "Raijin".
+    // Whether name is the leader we follow, whom the game never lists in our room's
+    // "Also here:" (GAME_MECHANICS "Co-location and the `Also here:` line").
+    public bool IsTheLeaderWeFollow(string name) =>
+        State is { IsInParty: true, SelfIsLeader: false, LeaderName: { } leader }
+        && GivenNameOf(leader).Equals(GivenNameOf(name), StringComparison.OrdinalIgnoreCase);
+
     private static string GivenNameOf(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;
