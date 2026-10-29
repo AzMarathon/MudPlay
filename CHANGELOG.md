@@ -1,5 +1,10 @@
 # Version history
 
+## 3.189.1
+
+- Too heavy to move: our own @wait echo no longer restarts the wait, which flooded @wait and `i`
+- bug reports addressed: paradigm-20261028-190625
+
 ## 3.189.0
 
 - Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type

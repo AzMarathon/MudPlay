@@ -4979,7 +4979,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 ### Too heavy to move (over max encumbrance)
 *Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (not recorded for Stock)*
 
-- **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the phrase `too heavy to move` on an unquoted line.)*
+- **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the whole line, `You are too heavy to move`, an optional ` anywhere` and an optional `.` / `!`.)* (An earlier note said the client matched the phrase anywhere on an unquoted line; superseded 2026-10-28: our own `@wait (too heavy to move)` telepath echoes back on the prompt line and matched, restarting the wait each time it was sent — report `paradigm-20261028-190625`.)
 - **It is not a hold.** `freedom` / `cure paralysis` don't clear it.
 - **Globe of darkness is not a blindness** *([CONFIRMED] 2026-10-08, user: "its a spell that removes illu from you, effectively making you blind, but it isnt enumerated as a blind"; data [OBSERVED] 2026-10-08, Stock 1.11p and Paradigm 1.9.1)*.
   - **globe of darkness #440** carries IlluTarget (54) −9999 and Illumination (13) −9999, AC −5 and Accuracy −15, and no BlindUser (107). It takes the light away, so the room can't be seen, but `site` (cure blindness #87: ability 73 on 107) does not lift it. **darkness #933** has the same abilities.

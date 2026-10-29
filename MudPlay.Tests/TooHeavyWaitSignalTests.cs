@@ -12,7 +12,9 @@ namespace MudPlay.Tests;
 // A weakness or frail (Encum% cut) can push a character over max encumbrance: "You
 // are too heavy to move". Not a hold — our own movement waits, a follower tells the
 // leader to @wait, and both end once a fresh `i` shows the weight back under the max
-// (reports paradigm-20260926-195517, paradigm-20261003-201253).
+// (reports paradigm-20260926-195517, paradigm-20261003-201253). Only the game's own
+// refusal line counts: our telepath echo and a member's telepath carry the phrase
+// too (report paradigm-20261028-190625).
 public sealed class TooHeavyWaitSignalTests
 {
     private sealed class Harness : IDisposable
@@ -21,8 +23,9 @@ public sealed class TooHeavyWaitSignalTests
         public PartyState Party { get; } = new();
         public PartyRestSync Rest { get; }
         public InventoryManager Inv { get; } = new(log: null);
-        // The game's output, fed the way the client receives it.
-        public ServerFeed Server { get; } = new();
+        // The game's output, fed the way the client receives it, to the inventory
+        // reader and the router alike.
+        public ServerFeed Server { get; }
         public MovementCoordinator Coordinator { get; } = new();
         public TooHeavyWaitSignal Signal { get; }
         // What Signal put on the wire, through the sender the client binds.
@@ -33,6 +36,7 @@ public sealed class TooHeavyWaitSignalTests
 
         public Harness()
         {
+            Server = new ServerFeed(Router);
             DefaultPatterns.Seed(Router);
             Inv.AttachLineExtractor(Server.Lines);
             Rest = new PartyRestSync(Party);
@@ -177,5 +181,50 @@ public sealed class TooHeavyWaitSignalTests
         h.Game("You picked up 5 copper farthings.");   // an incremental change, not a fresh `i`
 
         Assert.True(h.Signal.IsTooHeavy);
+    }
+
+    [Theory]
+    [InlineData("You are too heavy to move!")]
+    [InlineData("You are too heavy to move anywhere!")]
+    public void TheGamesRefusalLine_StartsTheWait(string line)
+    {
+        using Harness h = new();
+
+        h.Server.Line(line);
+
+        Assert.True(h.Signal.IsTooHeavy);
+    }
+
+    // The game redraws the prompt with what we typed after it, so our own @wait
+    // comes back as a line carrying the phrase. Read as a refusal, it sent the
+    // @wait and an `i` again, whose echo did the same: ten of each a second.
+    [Fact]
+    public void OurOwnWaitTelepathEcho_DoesNotSendItAgain()
+    {
+        using Harness h = new();
+        h.Signal.NoteCapacityDebuffApplied();
+        h.Inventory(cur: 5731, max: 5616);
+        int waits = h.RestWire.Count;
+        int reads = h.InventoryReads;
+
+        h.Server.Raw("\x1b[79D\x1b[K[HP=548/MA=477]:/Boss @wait (too heavy to move)\r\n");
+        h.Server.Raw("\x1b[79D\x1b[K[HP=548/MA=477]:i\r\n");
+
+        Assert.Equal(waits, h.RestWire.Count);
+        Assert.Equal(reads, h.InventoryReads);
+    }
+
+    [Theory]
+    [InlineData("Blasta telepaths: @wait (too heavy to move)")]
+    [InlineData("Raijin gossips: my pack is too heavy to move lol")]
+    public void SomeoneElseNamingThePhrase_IsNotARefusal(string line)
+    {
+        using Harness h = new();
+
+        h.Server.Line(line);
+
+        Assert.False(h.Signal.IsTooHeavy);
+        Assert.Empty(h.RestWire);
+        Assert.Equal(0, h.InventoryReads);
     }
 }

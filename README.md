@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.0**
-> - Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
-> - A board's logon steps follow its realm's game data (Anomaly, Paradigm, else Stock), filled in only where blank
-> - Apply setup beside the BBS tab's Connection heading puts a setup in over what's there
-> - No account, character or password ships with them
+> **Version 3.189.1**
+> - Too heavy to move: our own @wait echo no longer restarts the wait, which flooded @wait and `i`
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -4328,8 +4328,8 @@ How to keep it current:
 
 ### TooHeavyWaitSignalTests.cs
 - Covers: Game/TooHeavyWaitSignal (with Game/PartyRestSync, Game/Map/MovementCoordinator)
-- Checks: "too heavy to move" sends `@wait (too heavy to move)`, holds our movement and reads `i`; capacity debuff applied / ended reads `i`; release and `@ok` only on a fresh `i` showing weight under max.
-- Why: reports `paradigm-20260926-195517`, `paradigm-20261003-201253`.
+- Checks: the game's refusal line (`You are too heavy to move!` / `…anywhere!`) sends `@wait (too heavy to move)`, holds our movement and reads `i`; our own `@wait` echoed back on the redrawn prompt, a member's telepath and a gossip naming the phrase start nothing; capacity debuff applied / ended reads `i`; release and `@ok` only on a fresh `i` showing weight under max.
+- Why: reports `paradigm-20260926-195517`, `paradigm-20261003-201253`; `paradigm-20261028-190625` (the echo restarted the wait, flooding `@wait` and `i` ten times a second).
 
 ### ToolbarRowViewModelTests.cs
 - Covers: ViewModels/Settings/ToolbarRowViewModel (in ToolbarSectionViewModel.cs)
