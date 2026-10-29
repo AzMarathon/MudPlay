@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.2**
-> - With server room data, a step waits for who is in the room, so a loop no longer walks past a monster standing in it
+> **Version 3.189.3**
+> - With server data Active, a mid-fight cast no longer ends the fight early
+> - A room step no longer replays the old inventory and party as fresh reads
+> - The leader still goes back for a member left behind under the server's party
+> - Coin weight and auto-deposits are tracked with the server's inventory
+> - The party check asks the server instead of sending `par`
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

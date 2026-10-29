@@ -5174,6 +5174,12 @@ Activate both **Room.Occupants** and **Mob** to use server-provided monsters for
 
 With **Room.Info** active, a room you step into counts as reached only once its text display has been read (or its too-dark or blind line), just as without server data. By then the items on the floor and who is in the room are known. The server sends the room a moment ahead of both, so going on the room alone let a walk or loop step straight past a monster standing in it, and the items on the floor are only in the text.
 
+Some things still come from the game's own lines with a package active, because the server's data doesn't say them:
+
+- **Char.Status:** the server's combat flag goes off for a mid-fight cast with the monster still standing, as `*Combat Off*` does. So it can start a fight but never ends one: a fight ends when the room is clear, as without server data.
+- **Group.Members:** the server's party list is the roster, but a member who stops following or is left behind is still read from the game's line. The leader still goes back for them, and they can still be re-invited on their return. The party check asks the server for its party list instead of sending `par`.
+- **Items.List:** your carrying weight still comes from `i`. Coins you pick up, drop or deposit change it as they would without server data. An automatic deposit counts against your purse as soon as it's sent, so the walk home is planned on what you have left.
+
 **Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
 
 
