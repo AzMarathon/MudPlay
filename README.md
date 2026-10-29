@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.1**
-> - Too heavy to move: our own @wait echo no longer restarts the wait, which flooded @wait and `i`
+> **Version 3.189.2**
+> - With server room data, a step waits for who is in the room, so a loop no longer walks past a monster standing in it
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

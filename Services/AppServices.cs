@@ -11112,7 +11112,7 @@ public sealed class AppServices
         // Once, with the version that stopped the default profile being written: it
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
-        Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log);
+        Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log, Router);
         Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
         Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
         LairTimers.GmcpEligibility = Gmcp.LairEligibility;

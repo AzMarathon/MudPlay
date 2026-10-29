@@ -2,15 +2,20 @@ namespace MudPlay.Game.Map;
 
 public sealed partial class RoomTracker
 {
-    public void ApplyGmcpRoom(Room room, RoomObservation observation)
+    // shownDark: the room's text was a dark room's or blind move's one-line display,
+    // which has just set the darkness this snapshot can't tell; it stays.
+    public void ApplyGmcpRoom(Room room, RoomObservation observation, bool shownDark = false)
     {
         DateTimeOffset when = _now();
         bool moved = State.CurrentRoom?.Key != room.Key;
         bool answered = moved && _pending.TryDequeue(out _);
         SetRoom(room, _pending.IsEmpty ? RoomConfidence.Confirmed : RoomConfidence.Pending,
             when, "server room snapshot", isStrictAnchor: true);
-        IsInDarkRoom = false;
-        EnteredBlind = false;
+        if (!shownDark)
+        {
+            IsInDarkRoom = false;
+            EnteredBlind = false;
+        }
         State.OpenDoorDirections = observation.OpenDoorDirections;
         State.ClosedDoorDirections = observation.ClosedDoorDirections;
         State.ObservedExitDirections = observation.Exits;

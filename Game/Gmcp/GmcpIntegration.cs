@@ -43,12 +43,15 @@ public sealed partial class GmcpIntegration
     private bool _roomApplied;
     private bool _hadRoomAuthority;
     private bool _occupantsApplied;
+    // A new room's snapshot held back until its text display is read (see ApplyRoomOnceTextShown).
+    private bool _roomHeld;
     private int _generation;
 
     public GmcpState State { get; } = new();
 
     public GmcpIntegration(PromptParser player, StatParser stats, RoomGraphManager graph, RoomTracker tracker,
-        RoomEntityClassifier classifier, CombatStateTracker combat, EncumbranceParser encumbrance, LogService log)
+        RoomEntityClassifier classifier, CombatStateTracker combat, EncumbranceParser encumbrance, LogService log,
+        MessageRouter router)
     {
         _player = player;
         _stats = stats;
@@ -70,6 +73,10 @@ public sealed partial class GmcpIntegration
         State.Diagnostic += message => log.Warn("GMCP", message);
         State.Changed += Apply;
         State.Communication += OnCommunication;
+        // A room too dark to see, or a blind move, shows one line and nobody in it.
+        foreach (string shownNobody in new[] { Services.Patterns.KnownPatterns.RoomPitchBlack,
+                     Services.Patterns.KnownPatterns.RoomVeryDark, Services.Patterns.KnownPatterns.BlindMoveStarved })
+            router.Subscribe(shownNobody, _ => ReleaseHeldRoom("its display shows nobody", shownDark: true));
     }
 
     public void SetSender(Func<string, object, Task> send) => _send = send;
@@ -191,11 +198,9 @@ public sealed partial class GmcpIntegration
                 applying = "Anomaly.Char.Status";
                 ApplyStatus(State.Snapshot(applying)!.Value);
             }
-            if (Applies(package, "Anomaly.Room.Info"))
-            {
-                applying = "Anomaly.Room.Info";
-                ApplyRoom(State.Snapshot(applying)!.Value);
-            }
+            // Occupants before the room: the room's confirmation is what lets a walk
+            // take its next step, so who is in it has to be known first (a reset or
+            // refresh that brings both).
             if ((package == "*" || package == "Anomaly.Room.Occupants" || package.StartsWith("Anomaly.Mob", StringComparison.Ordinal))
                 && OwnsOccupants())
             {
@@ -203,6 +208,11 @@ public sealed partial class GmcpIntegration
                 _occupantsApplied = true;
                 _classifier.ApplyGmcp(GmcpProjection.Entities(State));
                 _hp?.NotifyGmcpChanged();
+            }
+            if (Applies(package, "Anomaly.Room.Info"))
+            {
+                applying = "Anomaly.Room.Info";
+                ApplyRoomOnceTextShown(State.Snapshot(applying)!.Value);
             }
         }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
@@ -248,14 +258,56 @@ public sealed partial class GmcpIntegration
         _encumbrance.ApplyGmcp(Enum.Parse<EncumbranceLevel>(band, ignoreCase: true));
     }
 
-    private void ApplyRoom(JsonElement value)
+    // Room.Info comes ahead of the arriving room's occupants and its text display.
+    // Confirmed at once, the room let a loop walk on past a monster nobody knew was
+    // there yet (report paradigm-20261029-071539). A new room is held until its text
+    // display has been read, as the text path confirms it at "Obvious exits:": by
+    // then its "You notice … here." (floor items, which the server's room data
+    // doesn't carry) and "Also here:" are in, and the server's roster with them. A
+    // dark or blind arrival's one-line display lets it through too. Only a room
+    // that answers a move of ours waits: a change to the room we're in (a door, a
+    // refresh) or a snapshot with no move behind it (entering the game, re-anchoring
+    // after a reconnect) lands at once, as nothing walks on from it.
+    private void ApplyRoomOnceTextShown(JsonElement value)
+    {
+        bool newRoom = _tracker.State.CurrentRoom?.Key != GmcpProjection.Key(value.GetProperty("room").GetString()!);
+        if (newRoom && _tracker.HasQueuedMoves)
+        {
+            _roomHeld = true;
+            return;
+        }
+        _roomHeld = false;
+        ApplyRoom(value);
+    }
+
+    // Also runs from the text lines, outside Apply, so it hands a bad snapshot back
+    // to text the way Apply does.
+    private void ReleaseHeldRoom(string how, bool shownDark = false)
+    {
+        if (!_roomHeld) return;
+        _roomHeld = false;
+        if (!State.Owns("Anomaly.Room.Info")) return;
+        _log.Debug("GMCP", $"Arriving room confirmed: {how}.");
+        try
+        {
+            ApplyRoom(State.Snapshot("Anomaly.Room.Info")!.Value, shownDark);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
+                                       or ArgumentException or KeyNotFoundException)
+        {
+            _log.Warn("GMCP", $"Cannot apply Anomaly.Room.Info: {ex.Message}; returning affected state to text.");
+            State.SetMode("Anomaly.Room.Info", GmcpMode.Off);
+        }
+    }
+
+    private void ApplyRoom(JsonElement value, bool shownDark = false)
     {
         RoomKey key = GmcpProjection.Key(value.GetProperty("room").GetString()!);
         Room room = GmcpProjection.Room(value, _graph.GetRoom(key));
         _graph.SetGmcpRoom(room);
         _roomApplied = true;
         _hadRoomAuthority = true;
-        _tracker.ApplyGmcpRoom(room, GmcpProjection.Observation(value));
+        _tracker.ApplyGmcpRoom(room, GmcpProjection.Observation(value), shownDark);
     }
 
     // ----- Shadow comparisons ----------------------------------------------
@@ -269,6 +321,7 @@ public sealed partial class GmcpIntegration
 
     public void ObserveRoom(RoomObservation observation)
     {
+        if (!_tracker.IsPeekSuppressed()) ReleaseHeldRoom("the text display showed who is here");
         if (_tracker.IsPeekSuppressed() || State.Mode("Anomaly.Room.Info") != GmcpMode.Shadow
             || State.Snapshot("Anomaly.Room.Info") is not { } value)
             return;

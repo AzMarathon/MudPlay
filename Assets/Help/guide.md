@@ -5172,6 +5172,8 @@ In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for 
 
 Activate both **Room.Occupants** and **Mob** to use server-provided monsters for targeting. The client waits for each listed monster's static information and complete live baseline before using the roster. Returning to a room reuses static information but requires fresh live state. **Mob** active mode also supplies exact HP to the existing monster HP readouts.
 
+With **Room.Info** active, a room you step into counts as reached only once its text display has been read (or its too-dark or blind line), just as without server data. By then the items on the floor and who is in the room are known. The server sends the room a moment ahead of both, so going on the room alone let a walk or loop step straight past a monster standing in it, and the items on the floor are only in the text.
+
 **Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
 
 

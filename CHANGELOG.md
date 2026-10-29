@@ -1,5 +1,10 @@
 # Version history
 
+## 3.189.2
+
+- With server room data, a step waits for who is in the room, so a loop no longer walks past a monster standing in it
+- bug reports addressed: paradigm-20261029-071539
+
 ## 3.189.1
 
 - Too heavy to move: our own @wait echo no longer restarts the wait, which flooded @wait and `i`

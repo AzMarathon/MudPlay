@@ -67,13 +67,16 @@ public sealed partial class GmcpIntegrationTests
             GameDataCache cache = new(_root);
             Graph = new(cache);
             Tracker = new(Graph);
+            // As the client wires it: a too-dark line marks the room dark.
+            router.Subscribe(KnownPatterns.RoomPitchBlack, _ => Tracker.NoteDarkRoomEntered());
+            router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
             MonsterMessageStore monsters = new();
             Classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), Tracker, Log);
             Classifier.AttachLineExtractor(Feed.Lines);
             Combat = new(router, new MovementCoordinator(Log), Classifier, monsters, Player, () => true,
                 resolveOverlay: null, Log, clock is null ? null : () => clock.Now);
             _encumbrance = new(router, Player, Log);
-            Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log);
+            Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log, router);
             Stealth = new(router, Player, Log);
             Gmcp.BindConsumers(Conditions, Stealth, Hp);
             Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase));
@@ -392,10 +395,99 @@ public sealed partial class GmcpIntegrationTests
             .GetProperty("msg").EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         room["room"] = JsonSerializer.SerializeToElement("1,2");
         session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        session.Text("Town Square\r\nObvious exits: north, south\r\n");
         Assert.Equal(1, answers);
         Assert.False(session.Tracker.HasQueuedMoves);
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
         Assert.NotNull(session.Graph.GetRoom(new RoomKey(1, 1)));
+    }
+
+    // Room.Info comes ahead of the arriving room's occupants and its text display.
+    // Confirmed at once, the room let a loop take its next step past a monster
+    // nobody knew was there (report paradigm-20261029-071539). The move is answered
+    // at the text display's exits, as on the text path, so the floor survey ("You
+    // notice … here.", which the server's room data doesn't carry) and the server's
+    // roster are both in by then.
+    [Fact]
+    public void ArrivingRoom_IsConfirmedOnlyOnceItsTextDisplayIsRead()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        JsonElement monster = session.Gmcp.State.Snapshot("Anomaly.Room.Occupants")!.Value.GetProperty("mobs")[0];
+        JsonElement liveBaseline = GmcpStateTests.Frames("07-recovery-request").Last(f =>
+            f.TryGetProperty("pkg", out JsonElement package) && package.GetString() == "Anomaly.Mob.Update"
+            && f.GetProperty("msg").GetProperty("full").GetBoolean()).GetProperty("msg");
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        bool? monsterKnownWhenConfirmed = null;
+        session.Tracker.MoveConfirmed += () => monsterKnownWhenConfirmed = session.Combat.HasRoomNpc;
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Room.Info", room);
+        Assert.Null(monsterKnownWhenConfirmed);
+        Assert.Equal(RoomConfidence.Pending, session.Tracker.State.Confidence);
+
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = new[] { monster }, players = Array.Empty<object>() });
+        Dictionary<string, JsonElement> live = liveBaseline.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        live["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Send("Anomaly.Mob.Update", live);
+        Assert.True(session.Combat.HasRoomNpc);
+        Assert.Null(monsterKnownWhenConfirmed);     // the roster alone doesn't answer the move
+
+        session.Text("Rat Den\r\nYou notice a rusty dagger here.\r\nAlso here: large giant rat.\r\nObvious exits: south\r\n");
+        Assert.True(monsterKnownWhenConfirmed);
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+    }
+
+    // With the roster on the text, the text display's "Also here:" is read before
+    // its exits line, which is what lets the held room through.
+    [Fact]
+    public void ArrivingRoom_WithTheRosterOnTheText_IsConfirmedByTheTextDisplay()
+    {
+        using Session session = new();
+        session.Replay("01-handshake");
+        session.Gmcp.State.SetMode("Anomaly.Room.Occupants", GmcpMode.Shadow);
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        int entitiesWhenConfirmed = -1;
+        session.Tracker.MoveConfirmed += () => entitiesWhenConfirmed = session.Classifier.Current?.Entities.Count ?? 0;
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Room.Info", room);
+        Assert.Equal(-1, entitiesWhenConfirmed);
+
+        session.Text("Darkwood Forest\r\nAlso here: nasty baby green dragon.\r\nObvious exits: northwest, southeast\r\n");
+        Assert.True(entitiesWhenConfirmed > 0);
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+    }
+
+    // A room too dark to see shows one line in place of its display: no "Also
+    // here:" and no exits line to wait for, so that line lets the held room through,
+    // and the darkness it reported stays.
+    [Fact]
+    public void ArrivingDarkRoom_WithTheRosterOnTheText_IsConfirmedByItsCantSeeLine()
+    {
+        using Session session = new();
+        session.Replay("01-handshake");
+        session.Gmcp.State.SetMode("Anomaly.Room.Occupants", GmcpMode.Shadow);
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Tracker.NoteMoveSent(Direction.N);
+        session.Send("Anomaly.Room.Info", room);
+        Assert.Equal(RoomConfidence.Pending, session.Tracker.State.Confidence);
+
+        session.Text("The room is very dark - you can't see anything\r\n");
+
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
+        Assert.True(session.Tracker.IsInDarkRoom);
     }
 
     [Fact]
