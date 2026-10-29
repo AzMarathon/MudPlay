@@ -454,6 +454,21 @@ public sealed class StealthManager : IDisposable
     // (either state, sneaking only once the room confirmed it), so consumers
     // wanting "sneaking specifically" use this.
     public bool IsSneaking => _stateValue == StealthState.Sneaking;
+    public Func<bool>? GmcpOwnsStatus { get; set; }
+
+    public void ApplyGmcpStealth(bool sneaking, bool hidden)
+    {
+        bool changed = _state.IsSneaking != (sneaking && !hidden) || _state.IsHidden != hidden;
+        _awaitingArrivalConfirm = false;
+        _sneakConfirmedThisRoom = sneaking;
+        _sneakUnderHide = sneaking && hidden;
+        _state.IsSneaking = sneaking && !hidden;
+        _state.IsHidden = hidden;
+        if (hidden || sneaking || _stateValue is not (StealthState.AttemptingSneak or StealthState.AttemptingHide))
+            Transition(hidden ? StealthState.Hidden : sneaking ? StealthState.Sneaking : StealthState.Idle);
+        if (sneaking || hidden) ReleaseCooldownHold("server confirmed stealth");
+        if (changed) SneakEntry?.Invoke(sneaking);
+    }
 
     // Called by an external observer (RoomTracker via AppServices) when the
     // player's room changes. If we believed we were sneaking but didn't observe
@@ -486,7 +501,8 @@ public sealed class StealthManager : IDisposable
         if (_stateValue == StealthState.Hidden)
             NoteHideBroken();
 
-        if (_stateValue == StealthState.Sneaking && (!_sneakConfirmedThisRoom || _awaitingArrivalConfirm))
+        if (_stateValue == StealthState.Sneaking && (!_sneakConfirmedThisRoom || _awaitingArrivalConfirm)
+            && GmcpOwnsStatus?.Invoke() != true)
         {
             _log?.Info(LogCategory, "silent sneak loss — new room without 'Sneaking...' confirm");
             Transition(StealthState.Idle);
@@ -1103,6 +1119,7 @@ public sealed class StealthManager : IDisposable
 
     private void OnSneaking(MatchResult _)
     {
+        if (GmcpOwnsStatus?.Invoke() == true) return;
         // `Sneaking...` on room entry — post-move confirmation we
         // arrived unseen. Re-arms the silent-loss watchdog.
         _awaitingArrivalConfirm = false;
@@ -1274,6 +1291,7 @@ public sealed class StealthManager : IDisposable
 
     private void OnHideInitiate(MatchResult _)
     {
+        if (GmcpOwnsStatus?.Invoke() == true) return;
         if (_staleHideAcks > 0)
         {
             _staleHideAcks--;

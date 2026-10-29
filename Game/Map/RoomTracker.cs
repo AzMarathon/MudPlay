@@ -36,7 +36,7 @@ namespace MudPlay.Game.Map;
 // KNEW, not something we deduced. Every NoteMoveSent appends a step. The profile
 // flushes to disk on the normal save cycle (app close, settings Apply, explicit
 // save).
-public sealed class RoomTracker
+public sealed partial class RoomTracker
 {
     // Maximum back-to-back moves we'll track in flight. Anything beyond this is
     // dropped to keep the queue bounded — a sustained observation drought past

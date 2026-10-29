@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Comm.Line","payload":{"channel":"say","from":"Gpriest","to":null},"expect":{"reject":"schema"},"why":"a chat line carries its text"}

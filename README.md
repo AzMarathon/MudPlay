@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.187.7**
+> **Version 3.188.2**
 > - Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
 <!-- current-version:end -->
 

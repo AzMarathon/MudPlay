@@ -174,6 +174,7 @@ public static class BugReportBuilder
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
+            new("Server data (GMCP)", SafeSection(() => svc.Gmcp.Describe())),
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
@@ -1497,6 +1498,9 @@ public static class BugReportBuilder
         Kv(sb, "Spell book", $"class #{book.ClassNumber}, level {book.Level}, alignment gate {alignGate}; "
             + $"{book.ClassSpells.Count} spell(s) in the class list, {book.Available.Count} usable under that gate, "
             + $"{book.ObtainedCount} learned");
+        if (book.LearnedOutsideClassData.Count > 0)
+            Kv(sb, "Learned spells the game data gives the class no way to learn",
+                string.Join(", ", book.LearnedOutsideClassData.Select(s => $"{s.Short.Trim()} ({s.Name} #{s.Number})")));
         HashSet<string> slottedCodes = new(
             (svc.Profile.Current?.PartyBuffs?.Slots ?? new List<Models.Profile.BuffSlot>())
                 .Where(slot => !string.IsNullOrWhiteSpace(slot.Spell)).Select(slot => slot.Spell!.Trim()),
@@ -2579,6 +2583,8 @@ public static class BugReportBuilder
                 + $"{Game.GameData.BossCatalog.EffectiveRegenHours(svc.GameData, def)?.ToString() ?? "?"}h, "
                 + $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
                 + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
+        // A kill outside a boss's own rooms counts only in the room it was seen walk into.
+        Kv(sb, "Bosses seen walk in from their own rooms", svc.BossTimers.StrayedSummary);
 
         return sb.ToString();
     }

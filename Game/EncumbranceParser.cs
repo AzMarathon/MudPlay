@@ -11,6 +11,8 @@ namespace MudPlay.Game;
 public sealed partial class EncumbranceParser : IDisposable
 {
     private readonly PlayerState _state;
+    public Func<bool>? GmcpOwnsStatus { get; set; }
+    public void ApplyGmcp(EncumbranceLevel level) => _state.Encumbrance = level;
     private readonly LogService? _log;
     private readonly IDisposable _sub;
 
@@ -42,6 +44,7 @@ public sealed partial class EncumbranceParser : IDisposable
 
     private void OnMatch(MatchResult match)
     {
+        if (GmcpOwnsStatus?.Invoke() == true) return;
         EncumbranceLevel level = ParseLevel(match.Text);
         if (level == EncumbranceLevel.Unknown) return;
         if (_state.Encumbrance == level) return;

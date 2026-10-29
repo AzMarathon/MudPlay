@@ -23,6 +23,8 @@ public sealed class BbsProfile
     [SettingRange(1, 65535)]
     public int Port { get; set; } = 23;
 
+    public Dictionary<string, Game.Gmcp.GmcpMode> GmcpModes { get; set; } = new();
+
     // Optional URL the user wants the Help → {BBS site} ↗ menu entry to
     // open (the BBS's web site, wiki, Discord — whatever the operator
     // publishes). null leaves the entry disabled (when shown). Edited under

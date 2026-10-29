@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Session.Reset","payload":{"scope":"room"},"expect":{"reject":"schema"},"why":"a room reset names the new room"}
