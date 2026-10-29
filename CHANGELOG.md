@@ -11,6 +11,12 @@
 - Active GMCP rooms no longer send `rm` on every step
 - A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
 
+## 3.187.8
+
+- Bosses: a boss followed out of its rooms and killed where it was seen walk in now starts its timer
+- Bosses: a kill in any room the boss's own record spawns it in starts its timer, not just the listed rooms
+- bug reports addressed: paradigm-20261028-182509
+
 ## 3.187.6
 
 - Switching to a just-imported game data set no longer crashes when another program briefly holds a table file
