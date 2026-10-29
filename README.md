@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.3**
+> **Version 3.190.1**
 > - Windows open on the client's monitor: centred over the window they were opened from, or at their remembered spot moved onto that monitor
 <!-- current-version:end -->
 

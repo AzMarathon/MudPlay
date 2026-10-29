@@ -91,6 +91,14 @@ public sealed partial class GmcpIntegration
         }
     }
 
+    // The party poller's ask while the server's party is owned (PartyPoller.AskServerForParty).
+    public bool RequestGroup()
+    {
+        if (!State.Owns("Anomaly.Group.Members")) return false;
+        _ = SendRequestAsync("Anomaly.Group.Members");
+        return true;
+    }
+
     // Asks for the card of every item carried, worn or for sale that has none yet.
     private void RequestMissingCards()
     {

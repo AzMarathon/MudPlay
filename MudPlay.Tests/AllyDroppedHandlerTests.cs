@@ -334,6 +334,36 @@ public sealed class AllyDroppedHandlerTests
         Assert.DoesNotContain("MudPlay", h.Handler.DownedGivenNames);
     }
 
+    // The report's sequence: the ally drops, their link drops with them, they come
+    // back to the realm and are invited, and accept a minute later. Invited first,
+    // their row is already on the roster when they accept, so the accept flips it in
+    // place. The rescue missed that and asked their health every 5 s until they
+    // were healed to the bar (report paradigm-20261029-150822).
+    [Fact]
+    public void InvitedBackAfterADrop_AcceptingEndsTheRescue()
+    {
+        using Harness h = new("Fujin");
+        ServerFeed game = new(h.Router);
+        game.Line("You have invited Raijin to follow you.");
+        game.Line("Raijin started to follow you.");
+        h.Drop("Raijin");
+        h.Aid("Raijin");
+        game.Line("Raijin just disconnected!!!");
+        game.Line("Raijin just entered the Realm.");
+        game.Line("You have invited Raijin to follow you.");
+        Assert.True(h.GateAsserted);
+        Assert.True(Assert.Single(h.Party.Members, m => m.Name == "Raijin").IsInvited);
+
+        game.Line("Raijin started to follow you.");
+
+        Assert.False(h.GateAsserted);
+        Assert.Empty(h.Handler.DownedGivenNames);
+        h.Wire.Clear();
+        h.Clock += TimeSpan.FromSeconds(30);
+        h.Timers.Advance(TimeSpan.FromSeconds(30));
+        Assert.False(h.WireHas("/Raijin @health\r"));
+    }
+
     [Fact]
     public void InvitedPlaceholder_DoesNotReleaseHold()
     {

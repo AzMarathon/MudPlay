@@ -1,0 +1,28 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        x:Class="MudPlay.Views.GmcpMonitorWindow"
+        x:DataType="vm:GmcpMonitorViewModel"
+        Title="GMCP Monitor"
+        Width="1000" Height="560"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+
+    <DockPanel LastChildFill="True" Margin="8">
+        <DockPanel DockPanel.Dock="Top" LastChildFill="True" Margin="0,0,0,6">
+            <CheckBox DockPanel.Dock="Right" Margin="12,0,0,0" Content="Record"
+                      IsChecked="{Binding Recording, Mode=TwoWay}"
+                      ToolTip.Tip="Record what the server sends over GMCP. Off at every launch, so nothing is kept unless you ask for it; tick it before connecting to record from the handshake."/>
+            <Button DockPanel.Dock="Right" Content="Export…" Click="OnExport"
+                    IsEnabled="{Binding CanExport}"
+                    ToolTip.Tip="Save everything recorded since the handshake as a .jsonl file: the server's GMCP and text in the order they came, and what the client sent over GMCP. What you typed isn't recorded, and your saved login is masked."/>
+            <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        </DockPanel>
+        <TextBlock x:Name="ExportResult" DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,6" IsVisible="False"/>
+        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,4" Opacity="0.7" FontSize="11"
+                   Text="Latest frames: milliseconds since the handshake, ← from the server, → from the client. The export has every frame in full."/>
+        <ScrollViewer x:Name="FrameScroll" HorizontalScrollBarVisibility="Auto">
+            <SelectableTextBlock Text="{Binding Frames}" FontFamily="monospace" FontSize="12"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

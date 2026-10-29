@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
+using MudPlay.Game;
 using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
 using MudPlay.Models.GameData;
@@ -59,7 +60,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "OurPriority",   // our set attack priority (First/High/Normal/Low/Last), overlay-resolved
         "KillOnSight",   // our kill-on-sight flag (✓ when set)
         "DontBackstab",  // our don't-backstab flag (✓ when set)
-        "RegenTime",     // "Rgn" — respawn timer
+        "RegenTime",     // the monster's own regen wait, in hours (a boss's timer; not the lair clock)
         "EXP",           // "65000 (20x)" — base reward with its multiplier (see ComputeRowCells)
         "HP",
         "AcDr",          // synthesised "AC/DR"
@@ -73,6 +74,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "Lairs",         // synthesised: Σ TotalLairs across the monster's lair groups
         "AvgLairSize",   // synthesised: lair-count-weighted average mobs per lair
         "BiggestLair",   // synthesised: largest mob count across the monster's lair groups
+        "LairRespawn",   // synthesised: its lair rooms' respawn clocks from their Delay, by realm
         "Mag",           // synthesised hitmag level from ability code 28
         "Undead",        // raw MDB flag (0 = living), rendered + filterable
     };
@@ -86,7 +88,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["OurPriority"]  = "Priority",
             ["KillOnSight"]  = "Kill-on-sight",
             ["DontBackstab"] = "No Backstab",
-            ["RegenTime"]  = "Respawn",
+            ["RegenTime"]  = "Regen (hours)",
             ["EXP"]        = "Exp",
             ["AcDr"]       = "AC/DR",
             ["MagicRes"]   = "Magic Res",
@@ -99,6 +101,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["Lairs"]       = "# Lairs",
             ["AvgLairSize"] = "Avg Lair Size",
             ["BiggestLair"] = "Biggest Lair",
+            ["LairRespawn"] = "Lair Respawn",
             ["R"]           = "Runic",
             ["P"]           = "Platinum",
             ["G"]           = "Gold",
@@ -133,6 +136,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["EXP"]        = FormatThousands,
             ["HP"]         = FormatThousands,
             ["AvgLairExp"] = FormatThousands,
+            ["LairRespawn"] = FormatLairRespawn,
             ["Efficiency"] = FormatThousands,
             // Most monsters have none; blank reads better than a column of zeros.
             ["BSDefense"]  = static raw => raw is null or "" or "0" ? "" : raw,
@@ -152,6 +156,17 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         };
 
     private static string? BlankZero(string? raw) => raw is "0" ? "" : raw;
+
+    // "90" or "90-270" seconds → "1m 30s" or "1m 30s – 4m 30s".
+    internal static string? FormatLairRespawn(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return raw;
+        string[] parts = raw.Split('-');
+        return string.Join(" – ", parts.Select(p => int.TryParse(p, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int sec) ? Clock(sec) : p));
+
+        static string Clock(int sec) => sec < 60 ? $"{sec}s" : sec % 60 == 0 ? $"{sec / 60}m" : $"{sec / 60}m {sec % 60}s";
+    }
 
     // Thousands-separated display for big counts ("300,000"); 0 / blank render empty.
     // The raw value stays comma-free, so the leading-int threshold filters read it
@@ -253,7 +268,14 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             {
                 new RangeFilter("Lair Exp", "AvgLairExp"),
                 new RangeFilter("# Lairs", "Lairs"),
-                new RangeFilter("Respawn (sec)", "RegenTime"),
+                new RangeFilter("Lair respawn (sec)", "LairRespawn",
+                    "How soon its lairs fill again after a kill, from each lair room's delay; a monster in several lairs is tested by its fastest"),
+                new RangeFilter("Avg monsters per lair", "AvgLairSize",
+                    "The most monsters its lairs hold at once, averaged over its lair rooms"),
+                new RangeFilter("Most monsters in a lair", "BiggestLair",
+                    "The most monsters its biggest lair holds at once"),
+                new RangeFilter("Regen time (hours)", "RegenTime",
+                    "The monster's own wait before it can come back, in hours. Only a one-at-a-time monster (a boss) waits it out; it isn't the lair clock"),
             },
             bools: new[]
             {
@@ -306,8 +328,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // RoomGraphManager.LairSizeByMonster snapshot so the per-room lair size matches
     // the monster record's Spawns-In list — the Lairs table's group-level "Mobs" field
     // is a different quantity and gave wrong "Biggest Lair" values. Captured each load.
-    private System.Collections.Generic.IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> _lairIndex
-        = new Dictionary<int, (int, long, int)>();
+    private System.Collections.Generic.IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay)> _lairIndex
+        = new Dictionary<int, (int, long, int, int, int)>();
 
     protected override void PopulateRows(System.Collections.Generic.IList<GameDataRow> rows)
     {
@@ -327,7 +349,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     private void CaptureRoomIndexes()
     {
         _lairIndex = _roomGraph?.LairSizeByMonster
-            ?? new Dictionary<int, (int, long, int)>();
+            ?? new Dictionary<int, (int, long, int, int, int)>();
         _placedIndex = _roomGraph?.PlacedRoomsByMonster
             ?? new Dictionary<int, IReadOnlyList<RoomKey>>();
     }
@@ -391,12 +413,22 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["KillOnSight"]  = overlay.KillOnSight  == true ? "✓" : null,
             ["DontBackstab"] = overlay.DontBackstab == true ? "✓" : null,
         };
-        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax) lair)
+        if (_lairIndex.TryGetValue(ReadInt(element, "Number"), out (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay) lair)
             && lair.Count > 0)
         {
             cells["Lairs"]       = lair.Count.ToString(Inv);
             cells["AvgLairSize"] = ((double)lair.SumMax / lair.Count).ToString("0.#", Inv);
             cells["BiggestLair"] = lair.MaxMax.ToString(Inv);
+            if (lair.MinDelay > 0)
+            {
+                RealmType realm = _cache.ActiveRealm;
+                int fastest = LairTimerStore.RespawnSecondsForDelay(lair.MinDelay, realm);
+                int slowest = LairTimerStore.RespawnSecondsForDelay(lair.MaxDelay, realm);
+                // Seconds, the fastest first: the range filter reads the leading number.
+                cells["LairRespawn"] = fastest == slowest
+                    ? fastest.ToString(Inv)
+                    : $"{fastest.ToString(Inv)}-{slowest.ToString(Inv)}";
+            }
         }
         return cells;
     }

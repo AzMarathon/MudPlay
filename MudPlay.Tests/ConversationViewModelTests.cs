@@ -301,6 +301,57 @@ public sealed class ConversationViewModelTests
         }
     }
 
+    // A profile change with the window open clears the history and replays the new
+    // character's talk log into it. Replayed a line at a time, every line asked the
+    // window to scroll, and each scroll re-created the rows at both ends of the list:
+    // 2,000 of them froze the client for over a minute (Hang-20261029-110908). The
+    // replay arrives as one rebuild that scrolls once, to the newest row.
+    [Fact]
+    public void ProfileChangeWithTheWindowOpen_ReplaysTheTalkLogAsOneRebuild_ThatScrollsOnce()
+    {
+        ScratchRoot.Require();
+        string board = "convo-test-" + Guid.NewGuid().ToString("N");
+        const string before = "Before", after = "After";
+        string talkLog = Path.Combine(AppPaths.LogsDir, $"{after}.{board}.talk.log");
+        try
+        {
+            ProfileService profile = TestProfiles.Loaded();
+            profile.SaveAs(board, after);
+            profile.SaveAs(board, before);
+            Directory.CreateDirectory(AppPaths.LogsDir);
+            File.WriteAllLines(talkLog, Enumerable.Range(0, 2_000).Select(i =>
+                SessionLogService.FormatChatLine(new ChatLogEntry(T0.AddSeconds(i), ChatChannel.Gossip, "Speaker", $"line {i}", $"line {i}"))));
+
+            (MessageRouter router, ChatHistoryStore history) = NewStore();
+            ChatRouter chat = new(router);
+            using SessionLogService sessionLog = new(profile, chat, history, new Game.Cash.TransactionHistoryTracker(),
+                                                     new LogService(), () => new TalkSettings());
+            using ConversationViewModel vm = NewViewModel(history);
+            Assert.Empty(vm.Rows);
+
+            List<ConversationRowViewModel> scrolledTo = new();
+            vm.ScrollToRowRequested += scrolledTo.Add;
+            List<NotifyCollectionChangedAction> changes = new();
+            ((INotifyCollectionChanged)history.Entries).CollectionChanged += (_, e) => changes.Add(e.Action);
+
+            profile.Load(board, after);
+
+            Assert.Equal(2_000, vm.Rows.Count);
+            for (int i = 0; i < 2_000; i++) Assert.Equal($"line {i}", vm.Rows[i].MessageText);
+            Assert.Equal(new[] { NotifyCollectionChangedAction.Reset, NotifyCollectionChangedAction.Reset }, changes);
+            Assert.Same(vm.Rows[^1], Assert.Single(scrolledTo));
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(talkLog)) File.Delete(talkLog);
+                if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+            }
+            catch (IOException) { /* best-effort temp cleanup */ }
+        }
+    }
+
     // The backlog a profile load replays from its character's talk log
     // (SessionLogService, opened as the profile loads) is what the window opens on: a
     // row per line, in the log's order, reading as the line was written

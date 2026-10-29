@@ -183,7 +183,9 @@
                                        ToolTip.Tip="How long a dead connection may go unnoticed before the socket is torn down and 'Server stops responding' / 'Carrier is lost' reconnect fires. Seconds of wire silence before TCP keepalive probes start (idle case; declared dead ~30s later), and it also caps the case where you're actively sending into a server that has vanished — so a lost carrier is caught within about this window (+30s) instead of the kernel's ~13-minute retransmit default. 0 skips the idle keepalive probing but still caps dead-connection detection at ~60s."/>
                     </Grid>
 
+                    <StackPanel IsVisible="{Binding GmcpOffered}">
                     <TextBlock Classes="GroupHeader" Text="Live server data (GMCP)"/>
+                    <TextBlock Text="{Binding GmcpStatus}" TextWrapping="Wrap" Margin="0,0,0,4"/>
                     <TextBlock Text="Off: text only · Shadow: compare · Active: use server data. Applies on next connection."
                                TextWrapping="Wrap" Margin="0,0,0,6"/>
                     <ItemsControl ItemsSource="{Binding GmcpPackages}">
@@ -201,6 +203,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6">
                         <Button Content="Refresh current server data" Command="{Binding RefreshGmcpCommand}"/>
                         <Button Content="Inspect current server data" Command="{Binding InspectGmcpCommand}"/>
+                    </StackPanel>
                     </StackPanel>
 
                     <TextBlock Classes="GroupHeader" Text="Reconnect when"/>

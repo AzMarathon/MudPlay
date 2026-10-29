@@ -599,6 +599,11 @@ public sealed partial class PartyPoller : IDisposable
         StartParTick();
     }
 
+    // Asks the server for its party snapshot in place of `par` while the server's
+    // party is owned: that snapshot answers as a `par` reply would, and the reply to
+    // a `par` would be dropped. False when it didn't ask, so `par` goes out.
+    public Func<bool>? AskServerForParty { get; set; }
+
     private bool SendPar(bool healthRead)
     {
         if (_wireSender is null) return false;
@@ -607,7 +612,7 @@ public sealed partial class PartyPoller : IDisposable
         if (InTrainerMenu) return false;
         Func<bool>? gate = healthRead ? IsParPollEnabled : IsAutomationEnabled;
         if (gate is not null && !gate()) return false;
-        _wireSender(Encoding.Latin1.GetBytes("par\r"));
+        if (AskServerForParty?.Invoke() != true) _wireSender(Encoding.Latin1.GetBytes("par\r"));
         _parUnansweredSince = _now();
         return true;
     }

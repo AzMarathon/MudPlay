@@ -144,7 +144,7 @@ The **terminal** is the center of MudPlay — everything the game sends, rendere
 
 ## The terminal and status bar
 
-Type a command and press **Enter**: the line is sent to the game whole (in a full-screen form such as the trainer's stats screen, keys go straight through). The **numpad** is pre-wired to compass movement out of the box. The terminal has a few input conveniences:
+Type a command and press **Enter**: the line is sent to the game whole (in a full-screen form such as the trainer's stats screen, opened by `train stats` or any of its short forms such as `trai st`, keys go straight through, so the arrows and the space bar work in it). The **numpad** is pre-wired to compass movement out of the box. The terminal has a few input conveniences:
 
 - **Paste** — **Ctrl+V** or **Shift+Insert**. A single line drops onto your input; a multi-line paste sends each complete line as its own command, and leaves any text after the last line break on your input for you to finish with Enter.
 - **Tab-complete** — completes what you're typing against the START of your carried, worn, and key-ring item names (`drop emerald-` + **Tab** → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`). Keep typing to narrow it — `drop padded h` + **Tab** → `drop padded helm`. A stack's count (`2 padded helm`) and a leading "a"/"an" are skipped, so you match on the name; a count you type yourself (`drop 5 padded h`) is left as is. Press it again, or **Shift+Tab**, to step through other matches; toggle it off in **Settings → General**. It works the same in the Conversation window's input box.
@@ -4006,9 +4006,9 @@ The **Monsters** table carries a full column set for browsing and filtering mons
 - **Landmass**, **Region**, **Area** (right after the name) — where the monster lives, as the hierarchy Landmass → Region → Area (for example *Mainland → Volcano → Infernal Cavern*). The Paradigm set ships them filled in for every monster that has a spawn room or that something summons from a known room; the monster's most common place wins when it appears in several. In the Paradigm set every monster in this table has one. They are labels only — nothing in combat or navigation reads them — and they are searchable in the Filter… box. A monster with nothing set reads blank; fill it in from its record (below). If you've already customised this table's columns, the three start **unticked** — switch them on from **Columns ▾** (or **Reset to defaults**).
 - **Relationship** — how *your* overlay tells the engine to treat this monster: **Enemy** / **Neutral** / **Friend** / **Flee** / **Hangup**, resolved across all four tiers just like the combat engine reads it, so a monster on the shipped list with none set shows **Enemy**, one the list doesn't know shows the relationship its alignment gives it (Friend for good, Neutral for neutral, Enemy for evil or no alignment; see *Where a monster's relationship comes from* under the monster record), and any relationship you or a shipped default set shows through here without opening the record.
 - **Priority** — your attack-priority for this species (**First / High / Normal / Low / Last**), resolved across all four tiers like Relationship; **Kill-on-sight** and **No Backstab** — each reads **✓** when you've set that per-monster flag, blank otherwise.
-- **Respawn** (respawn timer), **Exp** (experience per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **BS Def** (backstab defence: what a backstab's to-hit meets on top of a quarter of the monster's AC; blank when it has none).
+- **Regen (hours)** (the monster's own wait before it can come back, in hours: only a one-at-a-time monster such as a boss waits it out, and it isn't the lair clock), **Exp** (experience per kill — base × multiplier), **HP**, **AC/DR**, **Dodge**, **Magic Res**, **BS Def** (backstab defence: what a backstab's to-hit meets on top of a quarter of the monster's AC; blank when it has none).
 - **Acc (typ/max)** (typical/highest attack accuracy), **Avg Damage**, **Exp Eff** (an exp-per-effort efficiency score).
-- **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**.
+- **Lair Exp**, **# Lairs**, **Avg Lair Size**, **Biggest Lair**, **Lair Respawn** (how soon its lairs fill again after a kill, from each lair room's delay as the realm reads it: Stock waits the delay plus 30 seconds, Paradigm a minute less; a monster in lairs with different delays shows the fastest and the slowest).
 - **Mag-wpn req** (the HitMagic level a weapon must meet to land a hit), and **Undead**.
 
 Every game-data record table — Monsters, Items, Spells, Rooms, Classes, Races, Lairs, Shops, and the like — has a **Columns ▾** button at its **top-right**: a picker to check/uncheck which columns show, so you can tailor each table to just the stats you care about. (The engine-backed utility tabs — Macros, Triggers, Aliases, Players, Incomplete Messages, Unrecognized Lines, Flavor Prefixes — and the derived **Quest Flags** table keep their fixed columns, so they have no picker; Quest Flags has no Use column either.)
@@ -4024,7 +4024,7 @@ It also carries a **filter sidebar** on the right — drag its left edge to resi
 - **Elemental defenses** — Cold / Fire / Stone / Lightning / Water resist %. These are **signed**: a *negative* resist means the monster is **vulnerable** (takes extra of that element), so bracket the max at −1 to find things a given element shreds.
 - **Casting & immunity** — Magic-weapon requirement, Spell immunity level, and a **Casts spells** toggle.
 - **Type & alignment** — Type (Solo / Leader / Follower / Stationary) and Alignment dropdowns, plus **Undead**, **Animal**, and **Non-living** checkboxes.
-- **Loot & lairs** — Lair Exp / # Lairs / Respawn ranges; a **Drops an item** toggle; a **Placed in** toggle that keeps only the monsters some room places as its fixed resident (the rooms listed under **Placed In** in the monster's record, such as a boss in its home room or a shopkeeper); and a **Cash** dropdown: **(any)**, **Drops cash** (the monster carries coins) or **No cash** (it carries none). While **Drops cash** is picked, **Currency** checkboxes (Runic, Platinum, Gold, Silver, Copper) narrow it to monsters carrying *any* of the ticked coins; with none ticked, any coin counts. The coins are the ones on the record's **Cash (up to)** line; turn on the **Runic** … **Copper** and **Placed in** columns from **Columns ▾** to see them in the grid.
+- **Loot & lairs** — Lair Exp, # Lairs, **Lair respawn (sec)** (tested by the monster's fastest lair), **Avg monsters per lair**, **Most monsters in a lair** and **Regen time (hours)** ranges; a **Drops an item** toggle; a **Placed in** toggle that keeps only the monsters some room places as its fixed resident (the rooms listed under **Placed In** in the monster's record, such as a boss in its home room or a shopkeeper); and a **Cash** dropdown: **(any)**, **Drops cash** (the monster carries coins) or **No cash** (it carries none). While **Drops cash** is picked, **Currency** checkboxes (Runic, Platinum, Gold, Silver, Copper) narrow it to monsters carrying *any* of the ticked coins; with none ticked, any coin counts. The coins are the ones on the record's **Cash (up to)** line; turn on the **Runic** … **Copper** and **Placed in** columns from **Columns ▾** to see them in the grid.
 
 Every numeric filter is a **min / max range** — either box can be blank for no limit on that side, so `HP 500–2000` brackets a band, `AC ≤ 20` finds easy kills, and a lone minimum works like the old "at least N". Hover any label for what the stat means. **Reset** (top-right of the panel) clears every filter and the search box at once. The **Filter…** text box at the top is separate: it **finds** a specific monster within the curated list, while the sidebar decides which monsters are in it.
 
@@ -4551,8 +4551,8 @@ Open **Buff Watchdog** from the **View** menu (right after Party), or a toolbar 
 
 The Buff Watchdog only offers buffs you have **actually learned**, and MudPlay learns that from the game's own spell list (`sp`, or `pow` for a kai class). On a **new profile** nothing is known yet, so there is nothing to add:
 
-- **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal.
-- **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` yourself does the same.
+- **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal, or `pow` for a kai class such as a Mystic. A character with no mana or kai yet (a level-1 Mystic has none) has nothing to list, so the read waits until a stat screen shows some.
+- **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` (or `pow`) yourself does the same.
 - **After that it stays current on its own**: a spell you learn from a trainer or a scroll is picked up as it happens.
 - **The game's list wins over the game data.** Some data sets don't record that your class can learn a spell (several AMud trainer spells, the warlock's chaos shield among them). A spell the trainer teaches your class, or that `sp` or the game's learn line says you have, is in your spell book and offered anyway. It stays there until you reroll.
 
@@ -4701,6 +4701,12 @@ A **drag bar** sits between the config table and the timer bars — grab it to r
 None of this is automation, so it happens with Auto-All off as well; putting timers back casts nothing. Switching to a character with nothing saved starts the watchdog empty.
 
 The window is a live view — it refreshes about once a second while open. *When* a buff may cast — its mana floor, and whether it casts in a recovery rest or a fight — is set on the buff itself, in its edit dialog, and holds for casts on you and on the party alike.
+
+## GMCP Monitor
+
+**Tools → GMCP Monitor…** records what the server sends over GMCP: every server-data message both ways, and the server's text in between, in the order they came. Recording is **off** until you tick **Record**, at every launch, so nothing piles up unless you ask for it. Tick it before connecting to record from the GMCP handshake, or any time to record from that moment. The window shows the latest frames: milliseconds since the handshake, ← from the server, → from MudPlay. A new handshake starts a new recording, and when GMCP ends the recording is kept until the next one.
+
+**Export…** saves the whole recording as a `.jsonl` file to send with a report about server data. What you type is never recorded, since it carries your login and every command, and your saved login is masked the same way a bug report masks it. If the masking can't be done, nothing is exported.
 
 ## Wire Inspector (F5)
 
@@ -5166,7 +5172,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 On servers that offer the Anomaly GMCP contract, MudPlay can receive character and room data alongside the normal terminal text. Other servers continue to use text parsing.
 
-In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. Changes apply on the next connection:
+In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. The section shows only for a board whose server has completed a GMCP handshake with MudPlay at least once, since on any other board the modes would do nothing. Its first line says whether you're connected to that server now and which contract it speaks. Changes apply on the next connection:
 
 - **Off:** use text for that package without shadow comparisons.
 - **Shadow** (default): keep using text and compare the fields both sources carry. Differences appear under **GMCP shadow** in the program log. Extra server information, such as hidden exits or exact monster HP, is not compared with text that never reports it.
@@ -5175,6 +5181,12 @@ In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for 
 Activate both **Room.Occupants** and **Mob** to use server-provided monsters for targeting. The client waits for each listed monster's static information and complete live baseline before using the roster. Returning to a room reuses static information but requires fresh live state. **Mob** active mode also supplies exact HP to the existing monster HP readouts.
 
 With **Room.Info** active, a room you step into counts as reached only once its text display has been read (or its too-dark or blind line), just as without server data. By then the items on the floor and who is in the room are known. The server sends the room a moment ahead of both, so going on the room alone let a walk or loop step straight past a monster standing in it, and the items on the floor are only in the text.
+
+Some things still come from the game's own lines with a package active, because the server's data doesn't say them:
+
+- **Char.Status:** the server's combat flag goes off for a mid-fight cast with the monster still standing, as `*Combat Off*` does. So it can start a fight but never ends one: a fight ends when the room is clear, as without server data.
+- **Group.Members:** the server's party list is the roster, but a member who stops following or is left behind is still read from the game's line. The leader still goes back for them, and they can still be re-invited on their return. The party check asks the server for its party list instead of sending `par`.
+- **Items.List:** your carrying weight still comes from `i`. Coins you pick up, drop or deposit change it as they would without server data. An automatic deposit counts against your purse as soon as it's sent, so the walk home is planned on what you have left.
 
 **Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
 

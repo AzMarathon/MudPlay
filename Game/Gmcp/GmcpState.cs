@@ -28,6 +28,11 @@ public sealed class GmcpState
     public string? Boot { get; private set; }
     public string? ServerContract { get; private set; }
     public string? CurrentRoom { get; private set; }
+
+    // What Changed carries for a room-scoped reset: the room's snapshots are gone,
+    // nothing else changed. "*" would have every cached snapshot applied again as
+    // if fresh, on every step.
+    public const string RoomReset = "Anomaly.Session.Reset room";
     public bool Compatible { get; private set; }
     public bool InSession { get; private set; }
     public int SessionGeneration { get; private set; }
@@ -178,7 +183,8 @@ public sealed class GmcpState
             case "room":
                 ClearRoom();
                 CurrentRoom = value.GetProperty("room").GetString();
-                break;
+                Changed?.Invoke(RoomReset);
+                return;
         }
         Changed?.Invoke("*");
     }
@@ -205,13 +211,18 @@ public sealed class GmcpState
         return true;
     }
 
+    // Whether the last monster gone walked out ("why":"left") rather than died or was
+    // removed: the roster without it is then a departure, not a re-read of the room.
+    public bool LastGoneWalkedOut { get; private set; }
+
     // A monster that left keeps its static information for when it comes back; one
     // that died or was removed doesn't.
     private void ReceiveMonsterGone(JsonElement value)
     {
         long uid = value.GetProperty("uid").GetInt64();
         _live.Remove(uid);
-        if (value.GetProperty("why").GetString() != "left") _static.Remove(uid);
+        LastGoneWalkedOut = value.GetProperty("why").GetString() == "left";
+        if (!LastGoneWalkedOut) _static.Remove(uid);
         if (Snapshot("Anomaly.Room.Occupants") is not { } occupants) return;
         _snapshots["Anomaly.Room.Occupants"] = JsonSerializer.SerializeToElement(new
         {

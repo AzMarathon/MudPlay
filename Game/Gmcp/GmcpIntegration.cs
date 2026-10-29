@@ -143,8 +143,9 @@ public sealed partial class GmcpIntegration
         && (State.Snapshot("Anomaly.Room.Occupants")!.Value.GetProperty("mobs").GetArrayLength() == 0
             || State.Mode("Anomaly.Mob") == GmcpMode.Active);
 
-    // Runs on every change of the state: package is the one that changed, or "*"
-    // for a reset or a hello that touches them all.
+    // Runs on every change of the state: package is the one that changed, "*" for a
+    // reset or a hello that touches them all, or GmcpState.RoomReset when only the
+    // room's snapshots went.
     private void Apply(string package)
     {
         if (!State.Owns("Anomaly.Char.Status")) _conditions?.ApplyGmcpFlags(null);
@@ -206,7 +207,11 @@ public sealed partial class GmcpIntegration
             {
                 applying = "Anomaly.Room.Occupants";
                 _occupantsApplied = true;
-                _classifier.ApplyGmcp(GmcpProjection.Entities(State));
+                IReadOnlyList<RoomEntity> roster = GmcpProjection.Entities(State, notListed: name => _party?.IsTheLeaderWeFollow(name) == true);
+                // The held room's list waits for the room, which reads it.
+                if (_roomHeld) _classifier.HoldGmcpUntilRoomConfirmed(roster);
+                else _classifier.ApplyGmcp(roster,
+                    walkedOut: package == "Anomaly.Mob.Gone" && State.LastGoneWalkedOut);
                 _hp?.NotifyGmcpChanged();
             }
             if (Applies(package, "Anomaly.Room.Info"))
@@ -234,8 +239,12 @@ public sealed partial class GmcpIntegration
             : ManaType.Mana;
         _player.ApplyGmcpVitals(value.GetProperty("hp").GetInt32(), value.GetProperty("maxhp").GetInt32(),
             value.GetProperty("mana").GetInt32(), maxMana, manaType);
-        _stats.ApplyGmcpVitals(value);
+        _stats.ApplyGmcpVitals(value, expGainCounts: _vitalsGeneration == State.SessionGeneration);
+        _vitalsGeneration = State.SessionGeneration;
     }
+
+    // The session whose vitals were last applied; -1 before any.
+    private int _vitalsGeneration = -1;
 
     private static readonly (string Field, Models.GameData.MessageFlags Flag)[] StatusFlags =
     [
@@ -264,21 +273,31 @@ public sealed partial class GmcpIntegration
     // display has been read, as the text path confirms it at "Obvious exits:": by
     // then its "You notice … here." (floor items, which the server's room data
     // doesn't carry) and "Also here:" are in, and the server's roster with them. A
-    // dark or blind arrival's one-line display lets it through too. Only a room
-    // that answers a move of ours waits: a change to the room we're in (a door, a
-    // refresh) or a snapshot with no move behind it (entering the game, re-anchoring
-    // after a reconnect) lands at once, as nothing walks on from it.
+    // dark or blind arrival's one-line display lets it through too. The snapshot
+    // also comes ahead of the text that says why we moved: a follower's "--
+    // Following your Party leader <dir> --" (export gmcp-20261029-070501), and a
+    // death's lives line. Applied first, a drag left a phantom move queued from the
+    // new room for the rest of the drag. So any move from a known room waits for its
+    // text; only a snapshot with no position before it (entering the game) lands at
+    // once, and so does a change to the room we're in (a door, a refresh).
     private void ApplyRoomOnceTextShown(JsonElement value)
     {
-        bool newRoom = _tracker.State.CurrentRoom?.Key != GmcpProjection.Key(value.GetProperty("room").GetString()!);
-        if (newRoom && _tracker.HasQueuedMoves)
+        RoomKey key = GmcpProjection.Key(value.GetProperty("room").GetString()!);
+        bool newRoom = _tracker.State.CurrentRoom?.Key != key;
+        if (newRoom && _tracker.State.CurrentRoom is not null)
         {
+            // The map learns the room now; only our place on it waits.
+            _graph.SetGmcpRoom(GmcpProjection.Room(value, _graph.GetRoom(key)));
             _roomHeld = true;
             return;
         }
         _roomHeld = false;
         ApplyRoom(value);
     }
+
+    private bool IsTheHeldRoomsDisplay(RoomObservation observation) =>
+        _roomHeld && State.Snapshot("Anomaly.Room.Info") is { } held
+        && string.Equals(held.GetProperty("name").GetString()?.Trim(), observation.Name.Trim(), StringComparison.OrdinalIgnoreCase);
 
     // Also runs from the text lines, outside Apply, so it hands a bad snapshot back
     // to text the way Apply does.
@@ -321,7 +340,12 @@ public sealed partial class GmcpIntegration
 
     public void ObserveRoom(RoomObservation observation)
     {
-        if (!_tracker.IsPeekSuppressed()) ReleaseHeldRoom("the text display showed who is here");
+        // The held room's own display: the server answers in order and sends a room's
+        // data just ahead of its display, so a peek can't come between them. The peek
+        // flag alone kept it held when a `look <dir>` showed nothing (no exit that way)
+        // and a move followed within the flag's 3 s.
+        if (!_tracker.IsPeekSuppressed() || IsTheHeldRoomsDisplay(observation))
+            ReleaseHeldRoom("the text display showed who is here");
         if (_tracker.IsPeekSuppressed() || State.Mode("Anomaly.Room.Info") != GmcpMode.Shadow
             || State.Snapshot("Anomaly.Room.Info") is not { } value)
             return;

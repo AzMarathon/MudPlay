@@ -539,14 +539,15 @@ public sealed class RoomGraphManager
     public IEnumerable<RoomKey> RoomKeys => _rooms.Keys;
 
     // Per-monster lair-size aggregate: for each monster named in a room's lair
-    // tag, how many such rooms name it (Count) and the sum / biggest of those
-    // rooms' per-room "(Max N)" caps. Built once in BuildSecondaryIndexes (all
+    // tag, how many such rooms name it (Count), the sum / biggest of those
+    // rooms' per-room "(Max N)" caps, and the shortest / longest of their lair
+    // clocks (each room's Delay, 0 when none has one). Built once in BuildSecondaryIndexes (all
     // rooms are present up front and lair tags are static), so it's an immutable
     // snapshot the Monsters game-data table can read from its worker-thread build
     // without racing the live, UI-thread-only room dictionary. Key = monster number.
-    private IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> _lairSizeByMonster
-        = new Dictionary<int, (int, long, int)>();
-    public IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax)> LairSizeByMonster => _lairSizeByMonster;
+    private IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay)> _lairSizeByMonster
+        = new Dictionary<int, (int, long, int, int, int)>();
+    public IReadOnlyDictionary<int, (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay)> LairSizeByMonster => _lairSizeByMonster;
 
     // Per-monster placement: the rooms whose NPC field names the monster as their
     // fixed resident, sorted by map then room. Built with the lair snapshot and for
@@ -987,7 +988,7 @@ public sealed class RoomGraphManager
         _boatPassages.Clear();
         _castPocketEntrances.Clear();
         _placedRoomsByMonster = new Dictionary<int, IReadOnlyList<RoomKey>>();
-        _lairSizeByMonster = new Dictionary<int, (int, long, int)>();
+        _lairSizeByMonster = new Dictionary<int, (int, long, int, int, int)>();
     }
 
     // Recognise placed guardian monsters whose greet dialogue opens a door on
@@ -1796,9 +1797,12 @@ public sealed class RoomGraphManager
                 + "back to themselves; nothing was read past them. The set's text blocks are damaged there.");
     }
 
+    // The shorter of two lair clocks, a room with none (0) giving way to one that has one.
+    private static int MinDelayOf(int a, int b) => a == 0 ? b : b == 0 ? a : Math.Min(a, b);
+
     private void BuildSecondaryIndexes()
     {
-        var lairSize = new Dictionary<int, (int Count, long SumMax, int MaxMax)>();
+        var lairSize = new Dictionary<int, (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay)>();
         var placed = new Dictionary<int, List<RoomKey>>();
         foreach (Room room in _rooms.Values)
         {
@@ -1832,10 +1836,12 @@ public sealed class RoomGraphManager
             if (room.HasLair)
             {
                 int lairMax = RoomTooltipBuilder.TryParseLairMax(room.RawLairTag, out int m) ? m : 0;
+                int delay = Math.Max(0, room.Delay);
                 foreach (int id in LairMonsterIds(room.RawLairTag))
-                    lairSize[id] = lairSize.TryGetValue(id, out (int Count, long SumMax, int MaxMax) a)
-                        ? (a.Count + 1, a.SumMax + lairMax, Math.Max(a.MaxMax, lairMax))
-                        : (1, lairMax, lairMax);
+                    lairSize[id] = lairSize.TryGetValue(id, out (int Count, long SumMax, int MaxMax, int MinDelay, int MaxDelay) a)
+                        ? (a.Count + 1, a.SumMax + lairMax, Math.Max(a.MaxMax, lairMax),
+                           MinDelayOf(a.MinDelay, delay), Math.Max(a.MaxDelay, delay))
+                        : (1, lairMax, lairMax, delay, delay);
             }
         }
         _lairSizeByMonster = lairSize;
