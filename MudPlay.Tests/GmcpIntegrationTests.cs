@@ -697,6 +697,25 @@ public sealed partial class GmcpIntegrationTests
         Assert.NotEqual(DateTimeOffset.MinValue, session.Inventory.Snapshot.LastUpdated);
     }
 
+    // The server's party snapshot owns the roster, but only the text says why a
+    // member went: left behind, the leader goes back for them, and either way they
+    // stay in the grace window a returning member is re-invited from.
+    [Fact]
+    public void ActiveGroup_TheGamesDepartureLines_StillSayWhyAMemberWent()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        Assert.True(session.Party.State.SelfIsLeader);
+        List<string> leftBehind = new();
+        session.Party.MemberLeftBehind += leftBehind.Add;
+
+        session.Text("Gpriest is no longer following you.\r\n");
+
+        Assert.Equal(["Gpriest"], leftBehind);
+        Assert.True(session.Party.WasRecentlyPartied("Gpriest"));
+        Assert.Contains(session.Party.State.Members, m => m.Name == "Gpriest");   // the roster waits for the snapshot
+    }
+
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it
     // off with the monster still standing, as *Combat Off* does. It starts a fight
     // but doesn't end one; the room clearing does.
