@@ -716,6 +716,51 @@ public sealed partial class GmcpIntegrationTests
         Assert.Contains(session.Party.State.Members, m => m.Name == "Gpriest");   // the roster waits for the snapshot
     }
 
+    // The server's inventory sets the coins but carries no weight, which comes from
+    // the text's `i`. Coins weigh one per three, so a snapshot that moves the purse
+    // moves the weight as a text coin line does; with the snapshot owned, those
+    // lines don't.
+    [Fact]
+    public void ActiveItems_CoinsMoveTheWeightAndADepositIsReckonedAtOnce()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        session.Text("You are carrying 30 copper farthings.\r\nYou have no keys.\r\nWealth: 30 copper farthings\r\nEncumbrance: 300/2000 - None [15%]\r\n");
+        Dictionary<string, JsonElement> items = session.Gmcp.State.Snapshot("Anomaly.Items.List")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        Dictionary<string, JsonElement> coins = items["coins"].EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        int weightBefore = session.Inventory.Snapshot.Encumbrance.CurrentWeight;
+        long coinsBefore = session.Inventory.Snapshot.Currency.TotalCoinCount;
+        coins["copper"] = JsonSerializer.SerializeToElement(coins["copper"].GetInt32() + 300);
+        items["coins"] = JsonSerializer.SerializeToElement(coins);
+
+        session.Send("Anomaly.Items.List", items);
+
+        Assert.Equal(weightBefore + (int)((coinsBefore + 300) / 3 - coinsBefore / 3), session.Inventory.Snapshot.Encumbrance.CurrentWeight);
+
+        // An auto-deposit is reckoned when it's sent: the snapshot only follows the
+        // deposit's text, and the walk home is planned before then.
+        long wealth = session.Inventory.Snapshot.Currency.TotalCopperValue;
+        session.Inventory.NoteAutoDeposit(100);
+        Assert.Equal(wealth - 100, session.Inventory.Snapshot.Currency.TotalCopperValue);
+    }
+
+    // Handing the inventory back to text keeps the weight reading, which was the
+    // text's all along; zeroed, it left coin collection ungated until the next `i`.
+    [Fact]
+    public void ItemsHandedBackToText_KeepTheWeightReading()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        session.Text("You are carrying 30 copper farthings.\r\nYou have no keys.\r\nWealth: 30 copper farthings\r\nEncumbrance: 300/2000 - None [15%]\r\n");
+        int weight = session.Inventory.Snapshot.Encumbrance.CurrentWeight;
+        Assert.True(weight > 0);
+
+        session.Gmcp.State.SetMode("Anomaly.Items.List", GmcpMode.Off);
+
+        Assert.Equal(weight, session.Inventory.Snapshot.Encumbrance.CurrentWeight);
+        Assert.Equal(2000, session.Inventory.Snapshot.Encumbrance.MaxWeight);
+    }
+
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it
     // off with the monster still standing, as *Combat Off* does. It starts a fight
     // but doesn't end one; the room clearing does.

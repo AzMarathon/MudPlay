@@ -32,12 +32,16 @@ public sealed partial class InventoryManager
 
         lock (_lock)
         {
+            long oldCoins = TotalCoins();
             _copper = coins.GetProperty("copper").GetInt32();
             _silver = coins.GetProperty("silver").GetInt32();
             _gold = coins.GetProperty("gold").GetInt32();
             _platinum = coins.GetProperty("platinum").GetInt32();
             _runic = coins.GetProperty("runic").GetInt32();
             _wealthCopper = ComputeWealth(_copper, _silver, _gold, _platinum, _runic);
+            // The weight reading comes from the text's `i`; the coins move it as a
+            // text coin line would.
+            if (_maxWeight > 0) ApplyWeightDelta(oldCoins);
             // The readied light is carried but held apart, as the text read holds it;
             // one no longer carried isn't readied.
             if (_readiedLight is { } light)
@@ -58,7 +62,9 @@ public sealed partial class InventoryManager
         if (fullSnapshot) RaiseFullInventoryParsed();
     }
 
-    // The server's inventory is owned no longer: nothing is known until the next `i`.
+    // The server's inventory is owned no longer: nothing is known until the next `i`
+    // but the weight, which came from the text's `i` all along and is kept, as a
+    // dropped connection keeps it.
     public void ResetGmcpItems()
     {
         lock (_lock)
@@ -72,8 +78,6 @@ public sealed partial class InventoryManager
             _loaded = false;
             _readiedLight = null;
             _litSinceRead = null;
-            _curWeight = _maxWeight = _percentage = 0;
-            _category = EncumbranceLevel.Unknown;
         }
         RaiseChanged();
     }

@@ -354,14 +354,16 @@ public sealed partial class InventoryManager : IDisposable
     // (pre-deposit) figure would route it through a toll it can no longer afford.
     // The echo, when it arrives, reconciles against _pendingDepositCopper so the
     // coin isn't subtracted twice. A non-positive value is a no-op.
+    // With the server's inventory owned it still applies: the snapshot only follows
+    // the deposit's text, and the return leg is planned on the purse before then.
+    // The next snapshot replaces the prediction with the server's purse.
     public void NoteAutoDeposit(long copperValue)
     {
-        if (GmcpOwnsItems?.Invoke() == true) return;
         if (copperValue <= 0) return;
         lock (_lock)
         {
             _pendingDepositCopper += copperValue;
-            ApplyTransaction(-copperValue);
+            ApplyTransaction(-copperValue, predicted: true);
         }
         RaiseChanged();
     }
@@ -1619,9 +1621,11 @@ public sealed partial class InventoryManager : IDisposable
         ApplyWeightDelta(oldCoins);
     }
 
-    private void ApplyTransaction(long copperDelta)
+    // predicted: the client's own reckoning, not a text line the server's
+    // inventory stands in for.
+    private void ApplyTransaction(long copperDelta, bool predicted = false)
     {
-        if (GmcpOwnsItems?.Invoke() == true) return;
+        if (!predicted && GmcpOwnsItems?.Invoke() == true) return;
         long oldCoins = TotalCoins();
 
         long wealth = Math.Max(0, _wealthCopper + copperDelta);
