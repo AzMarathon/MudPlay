@@ -3447,11 +3447,17 @@ public partial class MainWindowViewModel : ObservableObject
         RefreshBbsBindings();
     }
 
+    // GMCP went away while it owned state: a `look` rebuilds the room from text.
     private static async Task RefreshTextAfterGmcpAsync(TelnetClient client)
     {
-        try { await client.SendTextAsync("look\r\n"); }
+        try
+        {
+            await client.SendTextAsync("look\r\n");
+        }
         catch (Exception ex) when (ex is System.IO.IOException or System.Net.Sockets.SocketException or ObjectDisposedException)
-        { AppServices.Current.Log.Warn("GMCP", $"Text resync failed: {ex.Message}"); }
+        {
+            AppServices.Current.Log.Warn("GMCP", $"Text resync failed: {ex.Message}");
+        }
     }
 
     private TelnetClient BuildTelnetClient()

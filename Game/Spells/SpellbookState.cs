@@ -296,7 +296,11 @@ public sealed partial class SpellbookState
     // and can't tell them apart.
     private void ComposeAvailable()
     {
-        if (_gmcpSpells is not null) { ComposeGmcpSpells(); return; }
+        if (_gmcpSpells is not null)
+        {
+            ComposeGmcpSpells();
+            return;
+        }
         List<KnownSpell> list = new(_alignedSpells);
         if (_obtainedNames.Count > 0 && !ReferenceEquals(_classSpells, _alignedSpells))
         {

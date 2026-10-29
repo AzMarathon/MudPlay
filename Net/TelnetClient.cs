@@ -206,7 +206,8 @@ public sealed class TelnetClient : IAsyncDisposable
         try
         {
             await WriteRawAsync(new byte[] { IAC, DO, OptGmcp }).ConfigureAwait(false);
-            await SendGmcpAsync("Core.Hello", new { client = "MudPlay", version = ClientVersion, contract = GmcpProtocol.ContractVersion }).ConfigureAwait(false);
+            await SendGmcpAsync("Core.Hello",
+                new { client = "MudPlay", version = ClientVersion, contract = GmcpProtocol.ContractVersion }).ConfigureAwait(false);
             await SendGmcpAsync("Core.Supports.Set", GmcpProtocol.Supports).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)

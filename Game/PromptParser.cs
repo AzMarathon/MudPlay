@@ -132,7 +132,9 @@ public sealed class PromptParser : IDisposable
     }
 
     public void ApplyGmcpPosition(bool resting, bool meditating)
-        => State.Position = meditating ? PlayerPosition.Meditating : resting ? PlayerPosition.Resting : PlayerPosition.Standing;
+        => State.Position = meditating ? PlayerPosition.Meditating
+            : resting ? PlayerPosition.Resting
+            : PlayerPosition.Standing;
 
     public void Dispose()
     {

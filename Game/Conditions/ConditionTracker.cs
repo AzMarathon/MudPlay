@@ -157,9 +157,18 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     [ObservableProperty]
     [field: Owner(typeof(ConditionTracker))]
     private MessageFlags _activeFlags;
+    // The server's status flags, which override the records' for the conditions it
+    // reports (GmcpMask); null while the server doesn't own the status.
     private MessageFlags? _gmcpFlags;
-    private const MessageFlags GmcpMask = MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.Poisoned | MessageFlags.Diseased;
-    public void ApplyGmcpFlags(MessageFlags? flags) { if (_gmcpFlags == flags) return; _gmcpFlags = flags; RecomputeFlags(); }
+    private const MessageFlags GmcpMask =
+        MessageFlags.Blinded | MessageFlags.Confused | MessageFlags.Poisoned | MessageFlags.Diseased;
+
+    public void ApplyGmcpFlags(MessageFlags? flags)
+    {
+        if (_gmcpFlags == flags) return;
+        _gmcpFlags = flags;
+        RecomputeFlags();
+    }
 
     // ----- Per-flag computed helpers — keep CastingDirector & friends
     // readable without sprinkling .HasFlag() everywhere.

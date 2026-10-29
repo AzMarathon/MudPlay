@@ -103,7 +103,9 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         try { await AppServices.Current.Gmcp.RefreshAsync(); }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException or ObjectDisposedException)
-        { AppServices.Current.Log.Warn("GMCP", $"Refresh failed: {ex.Message}"); }
+        {
+            AppServices.Current.Log.Warn("GMCP", $"Refresh failed: {ex.Message}");
+        }
     }
 
     private Views.GmcpDataWindow? _gmcpDataWindow;
@@ -111,13 +113,18 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [RelayCommand]
     private void InspectGmcp()
     {
-        if (_gmcpDataWindow is { } open) { DialogService.RaiseOrClose(open); return; }
+        if (_gmcpDataWindow is { } open)
+        {
+            DialogService.RaiseOrClose(open);
+            return;
+        }
         _gmcpDataWindow = new Views.GmcpDataWindow { DataContext = new GmcpDataViewModel(AppServices.Current.Gmcp) };
         _gmcpDataWindow.Closed += (_, _) => _gmcpDataWindow = null;
         _gmcpDataWindow.Show();
     }
 
-    public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } = Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
+    public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } =
+        Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
 
     // Max-redials / redial-pause tickers grey out while InfiniteRetries forces
     // its own count + pause; the XAML binds their IsEnabled here.
@@ -410,7 +417,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         ArgumentNullException.ThrowIfNull(globalSettings);
         ArgumentNullException.ThrowIfNull(gameData);
         _bbsStore = bbsStore;
-        foreach (GmcpPackageOption option in GmcpPackages) option.PropertyChanged += (_, _) => { PushToCache(); Dirty(); };
+        foreach (GmcpPackageOption option in GmcpPackages)
+            option.PropertyChanged += (_, _) =>
+            {
+                PushToCache();
+                Dirty();
+            };
         _profile = profile;
         _passwords = passwords;
         _display = display;
@@ -810,7 +822,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         InfiniteRetries = profile.InfiniteRetries;
         CleanupPeriodMinutes = profile.CleanupPeriodMinutes;
         NoResponseTimeoutSeconds = profile.NoResponseTimeoutSeconds;
-        foreach (GmcpPackageOption option in GmcpPackages) option.Mode = profile.GmcpModes?.GetValueOrDefault(option.Package, Game.Gmcp.GmcpMode.Shadow) ?? Game.Gmcp.GmcpMode.Shadow;
+        foreach (GmcpPackageOption option in GmcpPackages)
+            option.Mode = profile.GmcpModes?.GetValueOrDefault(option.Package, Game.Gmcp.GmcpMode.Shadow) ?? Game.Gmcp.GmcpMode.Shadow;
         ReconnectOnFailedConnect = profile.ReconnectOnFailedConnect;
         ReconnectOnCarrierLost = profile.ReconnectOnCarrierLost;
         ReconnectOnNoResponse = profile.ReconnectOnNoResponse;

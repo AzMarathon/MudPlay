@@ -107,7 +107,13 @@ public sealed partial class AbilBreakdownParser : IDisposable
 
     private void HandleLine(string text, bool isPromptLine)
     {
-        if (GmcpOwnsAbilities?.Invoke() == true) { _pending.Clear(); _pendingTotal = false; return; }
+        // The server owns the breakdowns: a text block half read is dropped.
+        if (GmcpOwnsAbilities?.Invoke() == true)
+        {
+            _pending.Clear();
+            _pendingTotal = false;
+            return;
+        }
         // The prompt is the universal end-of-response marker; close any block.
         if (isPromptLine)
         {

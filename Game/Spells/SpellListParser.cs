@@ -84,7 +84,13 @@ public sealed class SpellListParser : IDisposable
 
     private void HandleLine(string text, bool isPromptLine)
     {
-        if (GmcpOwnsSpells?.Invoke() == true) { _state = State.Idle; _namesThisBlock.Clear(); return; }
+        // The server owns the spell list: a text block half read is dropped.
+        if (GmcpOwnsSpells?.Invoke() == true)
+        {
+            _state = State.Idle;
+            _namesThisBlock.Clear();
+            return;
+        }
         // The prompt is the universal "server done responding" marker —
         // close any open block on it (same shape as WhoListParser).
         if (isPromptLine)

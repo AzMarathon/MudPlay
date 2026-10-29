@@ -5,10 +5,16 @@ using MudPlay.Game.Gmcp;
 
 namespace MudPlay.ViewModels;
 
+// The read-only "Current server data" window: the selected package's snapshot, or
+// for an item number its card or usability answer, refreshed as the state changes.
 public sealed partial class GmcpDataViewModel : ObservableObject, IDisposable
 {
     private readonly GmcpIntegration _gmcp;
-    public IReadOnlyList<string> Packages { get; } = GmcpIntegration.Packages.Where(p => p is not ("Anomaly.Mob" or "Anomaly.Comm.Line")).ToArray();
+
+    // The monster family and chat are not snapshots, so there's nothing to show.
+    public IReadOnlyList<string> Packages { get; } =
+        GmcpIntegration.Packages.Where(p => p is not ("Anomaly.Mob" or "Anomaly.Comm.Line")).ToArray();
+
     [ObservableProperty] private string _selectedPackage = "Anomaly.Items.List";
     [ObservableProperty] private string _itemNumber = "";
     [ObservableProperty] private string _body = "";
@@ -16,7 +22,9 @@ public sealed partial class GmcpDataViewModel : ObservableObject, IDisposable
 
     public GmcpDataViewModel(GmcpIntegration gmcp)
     {
-        _gmcp = gmcp; gmcp.State.Changed += OnChanged; Update();
+        _gmcp = gmcp;
+        gmcp.State.Changed += OnChanged;
+        Update();
     }
 
     partial void OnSelectedPackageChanged(string value) => Update();
@@ -26,34 +34,65 @@ public sealed partial class GmcpDataViewModel : ObservableObject, IDisposable
     private void Update()
     {
         GmcpState state = _gmcp.State;
-        Status = state.Compatible && state.InSession ? $"Connected · contract {state.ServerContract} · {state.Mode(SelectedPackage)}" : "No compatible server session";
+        Status = state.Compatible && state.InSession
+            ? $"Connected · contract {state.ServerContract} · {state.Mode(SelectedPackage)}"
+            : "No compatible server session";
         if (SelectedPackage == "Anomaly.Items.Usable") Status += " · last requested response; query again after character changes";
+
         JsonElement? data = state.Snapshot(SelectedPackage);
         if (int.TryParse(ItemNumber, out int id))
         {
-            if (SelectedPackage == "Anomaly.Items.Detail") data = state.ItemCards.TryGetValue(id, out JsonElement card) ? card : null;
-            if (SelectedPackage == "Anomaly.Items.Usable") data = state.ItemUsability.TryGetValue(id, out JsonElement usable) ? usable : null;
+            if (SelectedPackage == "Anomaly.Items.Detail")
+                data = state.ItemCards.TryGetValue(id, out JsonElement card) ? card : null;
+            if (SelectedPackage == "Anomaly.Items.Usable")
+                data = state.ItemUsability.TryGetValue(id, out JsonElement usable) ? usable : null;
         }
-        Body = data is { } value ? JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }) : "No current data. Item cards and usability can be requested by item number.";
+        Body = data is { } value
+            ? JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true })
+            : "No current data. Item cards and usability can be requested by item number.";
     }
 
-    [RelayCommand] private async Task ItemCard() => await Request(true);
-    [RelayCommand] private async Task ItemUsability() => await Request(false);
-    [RelayCommand] private async Task Refresh()
+    [RelayCommand]
+    private async Task ItemCard() => await Request(card: true);
+
+    [RelayCommand]
+    private async Task ItemUsability() => await Request(card: false);
+
+    [RelayCommand]
+    private async Task Refresh()
     {
-        try { await _gmcp.RefreshAsync(); }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException) { Status = "Refresh failed: " + ex.Message; }
+        try
+        {
+            await _gmcp.RefreshAsync();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException)
+        {
+            Status = "Refresh failed: " + ex.Message;
+        }
     }
+
     private async Task Request(bool card)
     {
-        if (!int.TryParse(ItemNumber, out int num) || num <= 0) { Status = "Enter a positive item number."; return; }
-        if (!_gmcp.State.Compatible || !_gmcp.State.InSession) { Status = "Connect to a compatible server first."; return; }
+        if (!int.TryParse(ItemNumber, out int num) || num <= 0)
+        {
+            Status = "Enter a positive item number.";
+            return;
+        }
+        if (!_gmcp.State.Compatible || !_gmcp.State.InSession)
+        {
+            Status = "Connect to a compatible server first.";
+            return;
+        }
         SelectedPackage = card ? "Anomaly.Items.Detail" : "Anomaly.Items.Usable";
         try
         {
-            if (card) await _gmcp.RequestItemDetailAsync(num); else await _gmcp.RequestItemUsabilityAsync(num);
+            if (card) await _gmcp.RequestItemDetailAsync(num);
+            else await _gmcp.RequestItemUsabilityAsync(num);
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException) { Status = "Request failed: " + ex.Message; }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or ArgumentException)
+        {
+            Status = "Request failed: " + ex.Message;
+        }
     }
 
     public void Dispose() => _gmcp.State.Changed -= OnChanged;

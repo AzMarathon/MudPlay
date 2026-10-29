@@ -61,7 +61,9 @@ public sealed class SpellBookRowViewModel
                 }
             if (bands.Count > 0) EffectText = string.Join("; ", bands) + " (before target resists)";
         }
-        FormulaText = serverRead is null ? BuildFormula(spell.Formula) : "Live server values for this character; damage and healing are before target resists.";
+        FormulaText = serverRead is null
+            ? BuildFormula(spell.Formula)
+            : "Live server values for this character; damage and healing are before target resists.";
     }
 
     // The spell's Spells.Number — used to look up the item that teaches it.

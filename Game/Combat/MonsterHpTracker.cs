@@ -85,7 +85,11 @@ public sealed class MonsterHpTracker
             if (e.RuntimeId is { } uid)
             {
                 Instance? retained = _room.FirstOrDefault(i => i.RuntimeId == uid);
-                if (retained is not null) { next.Add(retained); continue; }
+                if (retained is not null)
+                {
+                    next.Add(retained);
+                    continue;
+                }
                 int? liveMax = GmcpRead?.Invoke(uid)?.MaxHp;
                 if ((liveMax ?? _maxHp(number)) is { } maximum)
                     next.Add(new Instance(e.RawName, e.ResolvedName, maximum, _regen(number)) { RuntimeId = uid });
@@ -155,7 +159,11 @@ public sealed class MonsterHpTracker
     public IReadOnlyList<(int Id, string Name, int Hp)> RoomMonsters()
     {
         DateTimeOffset now = _now();
-        return _room.Select(i => { Advance(i, now); return (i.Id, i.Name, Live(i)?.BestGuess ?? i.Hp); }).ToList();
+        return _room.Select(i =>
+        {
+            Advance(i, now);
+            return (i.Id, i.Name, Live(i)?.BestGuess ?? i.Hp);
+        }).ToList();
     }
 
     // The running estimate for the first monster of this name, or null when there's
