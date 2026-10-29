@@ -8,6 +8,7 @@ using MudPlay.Models.Settings;
 using MudPlay.Net;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -38,6 +39,8 @@ public sealed partial class GmcpIntegrationTests
         public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
         public ManualTimers Timers { get; } = new();
         public GmcpIntegration Gmcp { get; }
+        // Fed as the connection feeds it (MainWindowViewModel.ArmConnection).
+        public GmcpMonitor Monitor { get; } = new();
         public TelnetClient Telnet { get; } = new();
         public Game.Inventory.InventoryManager Inventory { get; }
         public Game.Inventory.AutoBuyManager Shop { get; }
@@ -100,9 +103,15 @@ public sealed partial class GmcpIntegrationTests
             Scanner.PromptObserved += Gmcp.ObservePrompt;
             Gmcp.Configure(GmcpIntegration.Packages.ToDictionary(p => p, _ => active ? GmcpMode.Active : GmcpMode.Shadow));
             Telnet.DataReceived += Display;
+            Telnet.GmcpReceived += Monitor.NoteReceived;
+            Telnet.GmcpNegotiated += Monitor.NoteHandshake;
             Telnet.GmcpReceived += message => { lock (_dispatch) Gmcp.Receive(message); };
             Telnet.GmcpNegotiated += enabled => { lock (_dispatch) { if (!enabled) Gmcp.Disconnected(); } };
-            Gmcp.SetSender((package, payload) => Telnet.SendGmcpAsync(package, payload));
+            Gmcp.SetSender((package, payload) =>
+            {
+                Monitor.NoteSent(package, payload);
+                return Telnet.SendGmcpAsync(package, payload);
+            });
         }
 
         public void Send(string package, object payload) => Gmcp.Receive(new(package, JsonSerializer.SerializeToElement(payload)));
@@ -116,7 +125,12 @@ public sealed partial class GmcpIntegrationTests
                 Feed.Emulator.Feed(bytes.Span);
             }
         }
-        public void Text(string text) { Scanner.Append(Encoding.ASCII.GetBytes(text)); Feed.Raw(text); }
+        public void Text(string text)
+        {
+            Monitor.NoteText(Cp437.Encode(text));
+            Scanner.Append(Encoding.ASCII.GetBytes(text));
+            Feed.Raw(text);
+        }
         private void Wire(byte[] bytes)
         {
             byte[] output = new byte[Math.Max(1, bytes.Length)];
@@ -139,9 +153,12 @@ public sealed partial class GmcpIntegrationTests
                 else if (kind == "text") Text(frame.GetProperty("text").GetString()! + "\r\n");
             }
         }
-        public void ReplayCapture(string name)
+        public void ReplayCapture(string name) =>
+            ReplayCaptureFile(Path.Combine(AppContext.BaseDirectory, "Gmcp", "Captured", name + ".jsonl"));
+
+        public void ReplayCaptureFile(string path)
         {
-            foreach (string line in File.ReadLines(Path.Combine(AppContext.BaseDirectory, "Gmcp", "Captured", name + ".jsonl")).Skip(1))
+            foreach (string line in File.ReadLines(path).Skip(1))
             {
                 using JsonDocument document = JsonDocument.Parse(line);
                 JsonElement frame = document.RootElement;
@@ -818,6 +835,54 @@ public sealed partial class GmcpIntegrationTests
             players = new[] { new { name = "Sneaky", hidden = false } },
         });
         Assert.Contains(session.Classifier.Current!.Value.Entities, e => e.RawName == "Sneaky");   // a search revealed them
+    }
+
+    // Tools → GMCP Monitor records the session from the handshake on and exports it
+    // in the capture format the tests replay: an export of a walk replayed into a
+    // fresh client gives that client the same server messages and text, escape
+    // sequences included, in the same order.
+    [Fact]
+    public void GmcpMonitor_ExportReplaysToTheSameState()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "mudplay-gmcp-monitor-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(folder);
+        try
+        {
+            using Session recorded = new();
+            recorded.ReplayCapture("02-walk");
+            Assert.True(recorded.Monitor.IsRecording);
+            string export = recorded.Monitor.Export(text => text, "test");
+            string path = Path.Combine(folder, "walk.jsonl");
+            File.WriteAllText(path, export);
+
+            using Session replayed = new();
+            replayed.ReplayCaptureFile(path);
+
+            Assert.Equal(
+                recorded.Monitor.Snapshot().Select(f => (f.FromServer, f.Package, f.Body)),
+                replayed.Monitor.Snapshot().Select(f => (f.FromServer, f.Package, f.Body)));
+            Assert.Contains(recorded.Monitor.Snapshot(), f => f.Package is null && f.Body.Contains("Obvious exits", StringComparison.Ordinal));
+            Assert.Contains(recorded.Monitor.Snapshot(), f => f.Package == "Anomaly.Room.Info");
+            Assert.Contains("\\u001b[", export, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    // The export masks what the bug report masks (here the account name the login
+    // prompt echoes), in the text and in the server's messages alike.
+    [Fact]
+    public void GmcpMonitor_ExportIsMasked()
+    {
+        using Session session = new();
+        session.ReplayCapture("02-walk");
+
+        string export = session.Monitor.Export(text => text.Replace("gmage", "[redacted]", StringComparison.OrdinalIgnoreCase), "test");
+
+        Assert.DoesNotContain("gmage", export, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"dir\":\"c2s\",\"kind\":\"text\"", export, StringComparison.Ordinal);
     }
 
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it

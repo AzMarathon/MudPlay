@@ -1232,6 +1232,7 @@ public partial class MainWindowViewModel : ObservableObject
         layouts.RegisterOpener("spellbook", OpenSpellBook);
         layouts.RegisterOpener("transactions", OpenTransactionHistory);
         layouts.RegisterOpener("wireinspector", OpenWireInspector);
+        layouts.RegisterOpener("gmcpmonitor", OpenGmcpMonitor);
         layouts.RegisterOpener("workshop", OpenWorkshop);
         _monsterLookParser.TargetObserved += OnMonsterLookTarget;
         AppServices.Current.MonsterHpEstimates.EstimateChanged += OnMonsterEstimateChanged;
@@ -3479,7 +3480,17 @@ public partial class MainWindowViewModel : ObservableObject
         // that touches UI state through the dispatcher so bindings stay safe.
         AppServices.Current.Gmcp.Disconnected();
         AppServices.Current.Gmcp.Configure(activeBbs?.GmcpModes ?? new());
-        AppServices.Current.Gmcp.SetSender((package, payload) => client.SendGmcpAsync(package, payload));
+        GmcpMonitor monitor = AppServices.Current.GmcpMonitor;
+        AppServices.Current.Gmcp.SetSender((package, payload) =>
+        {
+            monitor.NoteSent(package, payload);
+            return client.SendGmcpAsync(package, payload);
+        });
+        // The monitor records on the read loop, ahead of the posts, so it keeps the
+        // order the server's GMCP and text came in.
+        client.GmcpReceived += message => monitor.NoteReceived(message);
+        client.GmcpNegotiated += monitor.NoteHandshake;
+        client.DataReceived += data => monitor.NoteText(data.Span);
         client.GmcpReceived += message => Dispatcher.UIThread.Post(() =>
         {
             if (ReferenceEquals(_telnet, client)) AppServices.Current.Gmcp.Receive(message);
@@ -6389,6 +6400,25 @@ public partial class MainWindowViewModel : ObservableObject
         };
         window.Closed += (_, _) => _wireInspector = null;
         _wireInspector = window;
+        window.Show(main);
+    }
+
+    // Tools → GMCP Monitor. Single instance, as the Wire Inspector.
+    private GmcpMonitorWindow? _gmcpMonitor;
+
+    [RelayCommand]
+    private void OpenGmcpMonitor()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+        if (_gmcpMonitor is { } existing)
+        {
+            RaiseOrClose(existing);
+            return;
+        }
+        GmcpMonitorWindow window = new() { DataContext = new GmcpMonitorViewModel(AppServices.Current.GmcpMonitor) };
+        window.Closed += (_, _) => _gmcpMonitor = null;
+        _gmcpMonitor = window;
         window.Show(main);
     }
 

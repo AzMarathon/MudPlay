@@ -322,6 +322,8 @@ public sealed class AppServices
     // connection. Feeds the Wire Inspector window and the bug report's raw-wire
     // capture.
     public WireBuffer Wire { get; }
+    // Tools → GMCP Monitor: what the server sends from each GMCP handshake on.
+    public GmcpMonitor GmcpMonitor { get; } = new();
     public Game.InGameCapture InGameCapture { get; private set; } = null!;
     private const string BoardMenuHold = "at the board's menu";
 

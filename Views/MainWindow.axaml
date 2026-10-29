@@ -237,6 +237,8 @@
                 <Separator/>
                 <MenuItem Header="Program Log…" InputGesture="{Binding LogPaneGesture}" Command="{Binding OpenLogPaneCommand}"/>
                 <MenuItem Header="Wire Inspector…"             Command="{Binding OpenWireInspectorCommand}"/>
+                <MenuItem Header="GMCP Monitor…"               Command="{Binding OpenGmcpMonitorCommand}"
+                          ToolTip.Tip="What the server sends over GMCP, from the handshake on, with an export to share."/>
                 <Separator/>
                 <MenuItem Header="Clear chatlog"               Command="{Binding ClearChatlogCommand}"/>
                 <MenuItem Header="Open Logs folder…"           Command="{Binding OpenLogsFolderCommand}"/>
