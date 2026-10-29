@@ -235,20 +235,33 @@ public sealed class TrainerMenuTrackerTests
         Assert.False(fired);
     }
 
-    [Fact]
-    public void OutboundTrainStats_ArmsInputMenuEntered_BeforeAnyMarker()
+    // The character-mode switch is driven by the command, not the marker:
+    // on a cursor-positioned full-screen menu the "Point Cost Chart" row
+    // completes too late (or never inline), so arming must happen the
+    // instant `train stats` goes out — before any line comes back. `trai` is the
+    // game's shortest `train` and `st` its shortest `stats`; typed `trai stats` opened the form with the
+    // keyboard in line mode, so arrows and Space did nothing in it (report
+    // stock-20261029-170825). `tra` is no command and `trac` is track.
+    [Theory]
+    [InlineData("train stats\r", 1)]
+    [InlineData("trai stats\r", 1)]
+    [InlineData("TRAI  Stats\r", 1)]
+    [InlineData("train st\r", 1)]
+    [InlineData("trai sta\r", 1)]
+    [InlineData("train stat\r", 1)]
+    [InlineData("train s\r", 0)]
+    [InlineData("tra stats\r", 0)]
+    [InlineData("trac stats\r", 0)]
+    [InlineData("trai\r", 0)]   // the level train is a line prompt, not the form
+    public void OutboundTrainStats_ArmsInputMenuEntered_BeforeAnyMarker(string sent, int expected)
     {
-        // The character-mode switch is driven by the command, not the marker:
-        // on a cursor-positioned full-screen menu the "Point Cost Chart" row
-        // completes too late (or never inline), so arming must happen the
-        // instant `train stats` goes out — before any line comes back.
         var (tracker, router, _) = Setup();
         int entered = 0;
         tracker.InputMenuEntered += () => entered++;
 
-        tracker.ObserveOutbound(Encoding.Latin1.GetBytes("train stats\r"));
+        tracker.ObserveOutbound(Encoding.Latin1.GetBytes(sent));
 
-        Assert.Equal(1, entered);
+        Assert.Equal(expected, entered);
     }
 
     [Fact]

@@ -291,6 +291,10 @@ public sealed partial class GmcpIntegration
         ApplyRoom(value);
     }
 
+    private bool IsTheHeldRoomsDisplay(RoomObservation observation) =>
+        _roomHeld && State.Snapshot("Anomaly.Room.Info") is { } held
+        && string.Equals(held.GetProperty("name").GetString()?.Trim(), observation.Name.Trim(), StringComparison.OrdinalIgnoreCase);
+
     // Also runs from the text lines, outside Apply, so it hands a bad snapshot back
     // to text the way Apply does.
     private void ReleaseHeldRoom(string how, bool shownDark = false)
@@ -332,7 +336,12 @@ public sealed partial class GmcpIntegration
 
     public void ObserveRoom(RoomObservation observation)
     {
-        if (!_tracker.IsPeekSuppressed()) ReleaseHeldRoom("the text display showed who is here");
+        // The held room's own display: the server answers in order and sends a room's
+        // data just ahead of its display, so a peek can't come between them. The peek
+        // flag alone kept it held when a `look <dir>` showed nothing (no exit that way)
+        // and a move followed within the flag's 3 s.
+        if (!_tracker.IsPeekSuppressed() || IsTheHeldRoomsDisplay(observation))
+            ReleaseHeldRoom("the text display showed who is here");
         if (_tracker.IsPeekSuppressed() || State.Mode("Anomaly.Room.Info") != GmcpMode.Shadow
             || State.Snapshot("Anomaly.Room.Info") is not { } value)
             return;

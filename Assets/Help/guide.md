@@ -144,7 +144,7 @@ The **terminal** is the center of MudPlay — everything the game sends, rendere
 
 ## The terminal and status bar
 
-Type a command and press **Enter**: the line is sent to the game whole (in a full-screen form such as the trainer's stats screen, keys go straight through). The **numpad** is pre-wired to compass movement out of the box. The terminal has a few input conveniences:
+Type a command and press **Enter**: the line is sent to the game whole (in a full-screen form such as the trainer's stats screen, opened by `train stats` or any of its short forms such as `trai st`, keys go straight through, so the arrows and the space bar work in it). The **numpad** is pre-wired to compass movement out of the box. The terminal has a few input conveniences:
 
 - **Paste** — **Ctrl+V** or **Shift+Insert**. A single line drops onto your input; a multi-line paste sends each complete line as its own command, and leaves any text after the last line break on your input for you to finish with Enter.
 - **Tab-complete** — completes what you're typing against the START of your carried, worn, and key-ring item names (`drop emerald-` + **Tab** → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`). Keep typing to narrow it — `drop padded h` + **Tab** → `drop padded helm`. A stack's count (`2 padded helm`) and a leading "a"/"an" are skipped, so you match on the name; a count you type yourself (`drop 5 padded h`) is left as is. Press it again, or **Shift+Tab**, to step through other matches; toggle it off in **Settings → General**. It works the same in the Conversation window's input box.

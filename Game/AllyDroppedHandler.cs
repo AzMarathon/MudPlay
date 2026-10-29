@@ -407,21 +407,35 @@ public sealed partial class AllyDroppedHandler : IDisposable
 
     private void OnMembersChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action != NotifyCollectionChangedAction.Add) return;
-        if (e.NewItems is null) return;
-        // A downed ally genuinely rejoining the roster ends the rescue — normal
-        // party-heal covers them from here. A bare [Invited] placeholder is NOT a
-        // rejoin: a mortally-wounded ally can't accept the invite, so releasing the
-        // rescue on it would stop the @health poll and name-heal targeting while
-        // they're still down. Hold until they actually join / recover / time out.
-        foreach (object? item in e.NewItems)
+        if (e.OldItems is not null)
+            foreach (PartyMember m in e.OldItems.OfType<PartyMember>()) m.PropertyChanged -= OnMemberPropertyChanged;
+        if (e.Action != NotifyCollectionChangedAction.Add || e.NewItems is null) return;
+        foreach (PartyMember m in e.NewItems.OfType<PartyMember>())
         {
-            if (item is not PartyMember m) continue;
-            if (m.IsInvited) continue;
-            if (string.IsNullOrEmpty(m.Name)) continue;
-            _owed.Remove(GivenName(m.Name));
-            Resolve(GivenName(m.Name), "rejoined roster");
+            m.PropertyChanged += OnMemberPropertyChanged;
+            ResolveIfJoined(m);
         }
+    }
+
+    // An ally who comes back to the realm is usually invited before they can accept,
+    // so their row is already on the roster as [Invited]: accepting flips it in place
+    // rather than adding it. Missing that, the rescue never saw them rejoin and asked
+    // their health every 5 s until they were healed (report paradigm-20261029-150822).
+    private void OnMemberPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PartyMember.IsInvited) && sender is PartyMember m) ResolveIfJoined(m);
+    }
+
+    // A downed ally genuinely rejoining the roster ends the rescue — normal
+    // party-heal covers them from here. A bare [Invited] placeholder is NOT a
+    // rejoin: a mortally-wounded ally can't accept the invite, so releasing the
+    // rescue on it would stop the @health poll and name-heal targeting while
+    // they're still down. Hold until they actually join / recover / time out.
+    private void ResolveIfJoined(PartyMember m)
+    {
+        if (m.IsInvited || string.IsNullOrEmpty(m.Name)) return;
+        _owed.Remove(GivenName(m.Name));
+        Resolve(GivenName(m.Name), "rejoined roster");
     }
 
     // ----- @health poll --------------------------------------------------
@@ -548,6 +562,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
         _subs.Clear();
         _party.PropertyChanged -= OnPartyPropertyChanged;
         _party.Members.CollectionChanged -= OnMembersChanged;
+        foreach (PartyMember m in _party.Members) m.PropertyChanged -= OnMemberPropertyChanged;
         _chat.EntryClassified -= OnChatEntry;
         StopPollTimer();
         if (_downed.Count > 0)

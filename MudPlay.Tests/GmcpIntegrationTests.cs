@@ -427,6 +427,35 @@ public sealed partial class GmcpIntegrationTests
     // at the text display's exits, as on the text path, so the floor survey ("You
     // notice … here.", which the server's room data doesn't carry) and the server's
     // roster are both in by then.
+    // A `look <dir>` that shows nothing (no exit that way) leaves the peek flag armed
+    // for 3 s. A move inside that window got its room from the server, but its display
+    // read as the peek, so the room stayed held and the move unanswered. A peek can't
+    // come between the server's room and its display (export gmcp-20261029-150551:
+    // a peek sends no GMCP at all), so the held room's display answers the move.
+    [Fact]
+    public void ArrivingRoom_AfterALookThatShowedNothing_IsConfirmedByItsDisplay()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Tracker.NoteLookSent();
+        session.Text("You don't see anything special that way.\r\n[HP=9/MA=2]:");
+
+        session.Tracker.NoteMoveSent(Direction.N);
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        room["name"] = JsonSerializer.SerializeToElement("Rat Den");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        Assert.Equal(RoomConfidence.Pending, session.Tracker.State.Confidence);
+
+        session.Text("\r\nRat Den\r\nObvious exits: south\r\n[HP=9/MA=2]:");
+
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+        Assert.NotEqual(RoomConfidence.Pending, session.Tracker.State.Confidence);
+    }
+
     [Fact]
     public void ArrivingRoom_IsConfirmedOnlyOnceItsTextDisplayIsRead()
     {

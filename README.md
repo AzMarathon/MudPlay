@@ -18,6 +18,9 @@
 - The Conversation window no longer freezes the client when a profile change reloads its history
 - A kai class reads its spell list with `pow`, and nothing is sent before the character has mana or kai
 - Game Data → Monsters: lair respawn and monsters-per-lair filters and a Lair Respawn column; the old Respawn filter is Regen time (hours)
+- With server room data, a move just after a `look <dir>` that showed nothing is no longer left unconfirmed
+- A downed party member who is invited back and accepts no longer gets asked `@health` every 5 s
+- `trai stats` and the other short forms of `train stats` give the trainer form the arrow keys and space bar
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -18,7 +18,10 @@
 - The Conversation window no longer freezes the client when a profile change reloads its history
 - A kai class reads its spell list with `pow`, and nothing is sent before the character has mana or kai
 - Game Data → Monsters: lair respawn and monsters-per-lair filters and a Lair Respawn column; the old Respawn filter is Regen time (hours)
-- bug reports addressed: Hang-20261029-110908, paradigm-20261029-142922
+- With server room data, a move just after a `look <dir>` that showed nothing is no longer left unconfirmed
+- A downed party member who is invited back and accepts no longer gets asked `@health` every 5 s
+- `trai stats` and the other short forms of `train stats` give the trainer form the arrow keys and space bar
+- bug reports addressed: Hang-20261029-110908, paradigm-20261029-142922, paradigm-20261029-150822, stock-20261029-170825
 
 ## 3.189.2
 
