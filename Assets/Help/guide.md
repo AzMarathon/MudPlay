@@ -4700,6 +4700,12 @@ None of this is automation, so it happens with Auto-All off as well; putting tim
 
 The window is a live view — it refreshes about once a second while open. *When* a buff may cast — its mana floor, and whether it casts in a recovery rest or a fight — is set on the buff itself, in its edit dialog, and holds for casts on you and on the party alike.
 
+## GMCP Monitor
+
+**Tools → GMCP Monitor…** records what the server sends over GMCP, starting from each GMCP handshake: every server-data message both ways, and the server's text in between, in the order they came. The window shows the latest frames: milliseconds since the handshake, ← from the server, → from MudPlay. A new handshake starts a new recording, and when GMCP ends the recording is kept until the next one.
+
+**Export…** saves the whole recording as a `.jsonl` file to send with a report about server data. What you type is never recorded, since it carries your login and every command, and your saved login is masked the same way a bug report masks it. If the masking can't be done, nothing is exported.
+
 ## Wire Inspector (F5)
 
 Press **F5** to open the **Wire Inspector** — a troubleshooting view of the data the server sends, in up to three panes you toggle with the **Raw / Stripped / Classified** checkboxes:
@@ -5164,7 +5170,7 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 On servers that offer the Anomaly GMCP contract, MudPlay can receive character and room data alongside the normal terminal text. Other servers continue to use text parsing.
 
-In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. Changes apply on the next connection:
+In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. The section shows only for a board whose server has completed a GMCP handshake with MudPlay at least once, since on any other board the modes would do nothing. Its first line says whether you're connected to that server now and which contract it speaks. Changes apply on the next connection:
 
 - **Off:** use text for that package without shadow comparisons.
 - **Shadow** (default): keep using text and compare the fields both sources carry. Differences appear under **GMCP shadow** in the program log. Extra server information, such as hidden exits or exact monster HP, is not compared with text that never reports it.

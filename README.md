@@ -1,7 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.3**
+> **Version 3.190.0**
+> - Tools → GMCP Monitor records what the server sends from the handshake on, with an export to share
+> - Settings shows the GMCP modes only for a board whose server offers GMCP, with its connection status
 > - With server data Active, a mid-fight cast no longer ends the fight early
 > - A room step no longer replays the old inventory and party as fresh reads
 > - The leader still goes back for a member left behind under the server's party

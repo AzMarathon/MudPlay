@@ -3493,7 +3493,15 @@ public partial class MainWindowViewModel : ObservableObject
         client.DataReceived += data => monitor.NoteText(data.Span);
         client.GmcpReceived += message => Dispatcher.UIThread.Post(() =>
         {
-            if (ReferenceEquals(_telnet, client)) AppServices.Current.Gmcp.Receive(message);
+            if (!ReferenceEquals(_telnet, client)) return;
+            AppServices.Current.Gmcp.Receive(message);
+            if (message.Package == "Anomaly.Server" && AppServices.Current.Gmcp.State.Compatible
+                && ResolveActiveBbs() is { GmcpOffered: false } board)
+            {
+                board.GmcpOffered = true;
+                AppServices.Current.Bbs.Save(board);
+                AppServices.Current.Log.Info("GMCP", $"'{board.Name}' offers server data; its modes now show in Settings → BBS.");
+            }
         });
         client.GmcpNegotiated += enabled =>
         {
