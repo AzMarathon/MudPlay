@@ -1,8 +1,28 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.189.2**
-> - With server room data, a step waits for who is in the room, so a loop no longer walks past a monster standing in it
+> **Version 3.190.0**
+> - Tools → GMCP Monitor records what the server sends, with an export to share; off until Record is ticked
+> - Settings shows the GMCP modes only for a board whose server offers GMCP, with its connection status
+> - With server data Active, a mid-fight cast no longer ends the fight early
+> - A room step no longer replays the old inventory and party as fresh reads
+> - The leader still goes back for a member left behind under the server's party
+> - Coin weight and auto-deposits are tracked with the server's inventory
+> - The party check asks the server instead of sending `par`
+> - The server's room roster leaves out hidden players and the leader you follow, as the game's room list does
+> - A follower's drag with server room data no longer leaves a move stuck in flight
+> - The server's monster numbers are checked against the game data, so a friendly NPC isn't read as an enemy
+> - With the server's room list, a monster arriving mid-move no longer starts a fight in the old room, and walking out of a fight is noticed
+- A boss that walks out under the server's room list no longer starts its timer as if killed
+- Server room data no longer wipes the map's trap, teleport, ticket and boat-fare exits
+- The Conversation window no longer freezes the client when a profile change reloads its history
+- A kai class reads its spell list with `pow`, and nothing is sent before the character has mana or kai
+- Game Data → Monsters: lair respawn and monsters-per-lair filters and a Lair Respawn column; the old Respawn filter is Regen time (hours)
+- With server room data, a move just after a `look <dir>` that showed nothing is no longer left unconfirmed
+- A downed party member who is invited back and accepts no longer gets asked `@health` every 5 s
+- `trai stats` and the other short forms of `train stats` give the trainer form the arrow keys and space bar
+- With the server's room list, a kill no longer sends an extra Enter to re-read the room
+- With the server's vitals, level-up announcements fire again
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

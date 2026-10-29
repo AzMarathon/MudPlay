@@ -88,6 +88,16 @@ public sealed class KnownSpellCatalog
         return ResolveClassMagery(number, out _) != MageryNone;
     }
 
+    // Whether a class's magic is kai, by class name; null when the name isn't a class
+    // in the active set. Read from the class, not the character's kai pool: a Mystic
+    // has no kai at level 1 (paradigm-20261029-142922).
+    public bool? ClassIsKai(string? className)
+    {
+        if (string.IsNullOrWhiteSpace(className)) return null;
+        if (ResolveClassNumber(className) is not { } number) return null;
+        return ResolveClassMagery(number, out _) == MageryKai;
+    }
+
     // The level at which a class first learns a room attack: a spell aimed at
     // everything in the room (Targets 9 / 11 / 12) that costs combat energy, so it
     // repeats every round and hits players outside the caster's party. 0 when the

@@ -8,6 +8,7 @@ using MudPlay.Models.Settings;
 using MudPlay.Net;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -38,6 +39,9 @@ public sealed partial class GmcpIntegrationTests
         public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
         public ManualTimers Timers { get; } = new();
         public GmcpIntegration Gmcp { get; }
+        // Fed as the connection feeds it (MainWindowViewModel.ArmConnection), and
+        // recording, as the player's Record box would have it.
+        public GmcpMonitor Monitor { get; } = new() { Enabled = true };
         public TelnetClient Telnet { get; } = new();
         public Game.Inventory.InventoryManager Inventory { get; }
         public Game.Inventory.AutoBuyManager Shop { get; }
@@ -100,9 +104,15 @@ public sealed partial class GmcpIntegrationTests
             Scanner.PromptObserved += Gmcp.ObservePrompt;
             Gmcp.Configure(GmcpIntegration.Packages.ToDictionary(p => p, _ => active ? GmcpMode.Active : GmcpMode.Shadow));
             Telnet.DataReceived += Display;
+            Telnet.GmcpReceived += Monitor.NoteReceived;
+            Telnet.GmcpNegotiated += Monitor.NoteHandshake;
             Telnet.GmcpReceived += message => { lock (_dispatch) Gmcp.Receive(message); };
             Telnet.GmcpNegotiated += enabled => { lock (_dispatch) { if (!enabled) Gmcp.Disconnected(); } };
-            Gmcp.SetSender((package, payload) => Telnet.SendGmcpAsync(package, payload));
+            Gmcp.SetSender((package, payload) =>
+            {
+                Monitor.NoteSent(package, payload);
+                return Telnet.SendGmcpAsync(package, payload);
+            });
         }
 
         public void Send(string package, object payload) => Gmcp.Receive(new(package, JsonSerializer.SerializeToElement(payload)));
@@ -116,7 +126,12 @@ public sealed partial class GmcpIntegrationTests
                 Feed.Emulator.Feed(bytes.Span);
             }
         }
-        public void Text(string text) { Scanner.Append(Encoding.ASCII.GetBytes(text)); Feed.Raw(text); }
+        public void Text(string text)
+        {
+            Monitor.NoteText(Cp437.Encode(text));
+            Scanner.Append(Encoding.ASCII.GetBytes(text));
+            Feed.Raw(text);
+        }
         private void Wire(byte[] bytes)
         {
             byte[] output = new byte[Math.Max(1, bytes.Length)];
@@ -139,9 +154,12 @@ public sealed partial class GmcpIntegrationTests
                 else if (kind == "text") Text(frame.GetProperty("text").GetString()! + "\r\n");
             }
         }
-        public void ReplayCapture(string name)
+        public void ReplayCapture(string name) =>
+            ReplayCaptureFile(Path.Combine(AppContext.BaseDirectory, "Gmcp", "Captured", name + ".jsonl"));
+
+        public void ReplayCaptureFile(string path)
         {
-            foreach (string line in File.ReadLines(Path.Combine(AppContext.BaseDirectory, "Gmcp", "Captured", name + ".jsonl")).Skip(1))
+            foreach (string line in File.ReadLines(path).Skip(1))
             {
                 using JsonDocument document = JsonDocument.Parse(line);
                 JsonElement frame = document.RootElement;
@@ -409,6 +427,35 @@ public sealed partial class GmcpIntegrationTests
     // at the text display's exits, as on the text path, so the floor survey ("You
     // notice … here.", which the server's room data doesn't carry) and the server's
     // roster are both in by then.
+    // A `look <dir>` that shows nothing (no exit that way) leaves the peek flag armed
+    // for 3 s. A move inside that window got its room from the server, but its display
+    // read as the peek, so the room stayed held and the move unanswered. A peek can't
+    // come between the server's room and its display (export gmcp-20261029-150551:
+    // a peek sends no GMCP at all), so the held room's display answers the move.
+    [Fact]
+    public void ArrivingRoom_AfterALookThatShowedNothing_IsConfirmedByItsDisplay()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Tracker.NoteLookSent();
+        session.Text("You don't see anything special that way.\r\n[HP=9/MA=2]:");
+
+        session.Tracker.NoteMoveSent(Direction.N);
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        room["name"] = JsonSerializer.SerializeToElement("Rat Den");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        Assert.Equal(RoomConfidence.Pending, session.Tracker.State.Confidence);
+
+        session.Text("\r\nRat Den\r\nObvious exits: south\r\n[HP=9/MA=2]:");
+
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+        Assert.NotEqual(RoomConfidence.Pending, session.Tracker.State.Confidence);
+    }
+
     [Fact]
     public void ArrivingRoom_IsConfirmedOnlyOnceItsTextDisplayIsRead()
     {
@@ -440,6 +487,140 @@ public sealed partial class GmcpIntegrationTests
         session.Text("Rat Den\r\nYou notice a rusty dagger here.\r\nAlso here: large giant rat.\r\nObvious exits: south\r\n");
         Assert.True(monsterKnownWhenConfirmed);
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+    }
+
+    // A follower's drag: the server's room comes ahead of "-- Following your Party
+    // leader <dir> --" and the display (export gmcp-20261029-070501). Applied at
+    // once, the room took no move, and the drag line then queued one from the new
+    // room, left in flight for the rest of the drag.
+    [Fact]
+    public void FollowerDrag_TheLeadersRoomWaitsForTheDragLine_AndLeavesNoMoveInFlight()
+    {
+        using Session session = new();
+        using FollowMoveObserver drags = new(session.Router, session.Tracker);
+        session.Replay("01-handshake");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        session.Send("Anomaly.Room.Info", room);
+        session.Text("-- Following your Party leader north --\r\nTown Square\r\nObvious exits: south\r\n");
+
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
+        Assert.False(session.Tracker.HasQueuedMoves);
+    }
+
+    // A roster change while our move is in flight (a monster walking into the room
+    // we're leaving, or the new room's list ahead of its text) isn't the room we land
+    // in read anew: on the text path it's an arrival line, which waits for the move.
+    // Read as a fresh roster, it told combat we had landed, and a fight could open
+    // in the room we were leaving. Once the room is confirmed, its list is read as
+    // that room's own.
+    [Fact]
+    public void ActiveRoster_ARosterChangeMidMoveIsAnArrival_TheConfirmedRoomIsReadAnew()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        JsonElement monster = session.Gmcp.State.Snapshot("Anomaly.Room.Occupants")!.Value.GetProperty("mobs")[0];
+        List<RoomObservationSource> sources = new();
+        session.Classifier.EntitiesObserved += obs => sources.Add(obs.Source);
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Room.Occupants", new { room = session.Gmcp.State.CurrentRoom, mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        Assert.Equal([RoomObservationSource.Arrival], sources);
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = new[] { monster }, players = Array.Empty<object>() });
+        session.Text("Rat Den\r\nAlso here: large giant rat.\r\nObvious exits: south\r\n");
+
+        Assert.Equal(RoomObservationSource.AlsoHere, sources[^1]);
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+    }
+
+    // Crossing the level line the game prints only the gain line, and with the
+    // server's vitals owned the gain line stands down, so nothing raised the gain and
+    // the level-up announcement went quiet (export gmcp-20261029-152755). A rise in
+    // the server's exp within a session is the gain; a session's first vitals only
+    // re-anchors, since it can carry exp earned elsewhere.
+    [Fact]
+    public void ActiveVitals_ARiseInExp_IsAGain_ButNotTheSessionsFirstVitals()
+    {
+        using Session session = new();
+        List<long> gains = new();
+        session.StatParser.ExperienceGained += gains.Add;
+        object Vitals(long exp) => new { hp = 24, maxhp = 32, mana = 21, maxmana = 22, manaType = "mana", level = 1, exp, expNeeded = 1850 };
+
+        session.Replay("01-handshake");
+        session.Send("Anomaly.Char.Vitals", Vitals(1842));
+        session.Text("You gain 15 experience.\r\n");
+        session.Send("Anomaly.Char.Vitals", Vitals(1857));
+        session.Send("Anomaly.Char.Vitals", Vitals(1857));
+
+        Assert.Equal(1857, session.Stats.Exp);
+        Assert.Equal(1857, gains.Last());
+        int gainsBefore = gains.Count;
+
+        session.Gmcp.Disconnected();
+        session.Replay("09-reconnect");
+        session.Send("Anomaly.Char.Vitals", Vitals(5000));
+        Assert.Equal(gainsBefore, gains.Count);
+    }
+
+    // A monster that walks out is gone from the server's roster as it is from the
+    // text's after its "just left" line, and is read as that departure. Read as the
+    // room re-read, a boss that wandered off was missing from it, and the boss
+    // timers' fallback started its timer as for a kill (export gmcp-20261029-143336:
+    // `Anomaly.Mob.Gone` with "why":"left" 16 ms after "just left to the east"). A
+    // death stays a re-read of the room, which is what that fallback looks for.
+    [Theory]
+    [InlineData("left", RoomObservationSource.Departure)]
+    [InlineData("died", RoomObservationSource.AlsoHere)]
+    public void ActiveRoster_AMonsterThatWalkedOut_IsADeparture(string why, RoomObservationSource expected)
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        JsonElement occupants = session.Gmcp.State.Snapshot("Anomaly.Room.Occupants")!.Value;
+        long uid = occupants.GetProperty("mobs")[0].GetProperty("uid").GetInt64();
+        string room = occupants.GetProperty("room").GetString()!;
+        int before = session.Classifier.Current!.Value.Entities.Count;
+        List<RoomObservationSource> sources = new();
+        session.Classifier.EntitiesObserved += obs => sources.Add(obs.Source);
+
+        session.Send("Anomaly.Mob.Gone", new { uid, room, why });
+
+        Assert.Equal(expected, Assert.Single(sources));
+        Assert.Equal(before - 1, session.Classifier.Current!.Value.Entities.Count);
+    }
+
+    // Walking out of a fight into an empty room: the text path reads that as a
+    // room-change wipe, which tells the walker a fight was walked out on. With the
+    // server's roster owned no such read came, and the walker walked on.
+    [Fact]
+    public void ActiveRoster_WalkingOutOfAFightIntoAnEmptyRoom_IsNoticed()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        List<string> abandoned = new();
+        session.Combat.EngagedTargetAbandoned += abandoned.Add;
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        session.Tracker.NoteMoveSent(Direction.N);
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+        session.Send("Anomaly.Room.Info", room);
+        session.Send("Anomaly.Room.Occupants", new { room = "1,2", mobs = Array.Empty<object>(), players = Array.Empty<object>() });
+        session.Text("Empty Hall\r\nObvious exits: south\r\n");
+
+        Assert.NotEmpty(abandoned);
     }
 
     // With the roster on the text, the text display's "Also here:" is read before
@@ -576,11 +757,50 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(0u, projected.ExitMask & (1u << (int)Direction.Teleport));
     }
 
+    // The server names no kind for a trap, a teleport or a ticket (the kinds it sends
+    // are in export gmcp-20261029-143336), so it calls those exits "normal". Read as
+    // plain, they lost what the walker acts on: the trap's disarm, the ticket gate and
+    // its item, a boat's fare. An exit the server does name keeps the server's reading.
+    [Theory]
+    [InlineData(RoomExitHint.Trap)]
+    [InlineData(RoomExitHint.Teleport)]
+    [InlineData(RoomExitHint.Ticket)]
+    public void RoomProjection_KeepsTheGraphsTrapTeleportAndTicketExits(RoomExitHint known)
+    {
+        JsonElement value = GmcpStateTests.Frames("01-handshake").First(frame => frame.TryGetProperty("pkg", out JsonElement package)
+            && package.GetString() == "Anomaly.Room.Info").GetProperty("msg");
+        JsonElement edge = value.GetProperty("exits")[0];
+        Assert.Equal("normal", edge.GetProperty("kind").GetString());
+        Direction direction = Enum.Parse<Direction>(edge.GetProperty("dir").GetString()!, ignoreCase: true);
+        RoomKey target = GmcpProjection.Key(edge.GetProperty("to").GetString()!);
+        Room previous = new() { Key = GmcpProjection.Key(value.GetProperty("room").GetString()!), Name = "Town Square",
+            Exits = new Dictionary<Direction, RoomExit>
+            {
+                [direction] = new(target, known, "raw", KeyItemId: 1234, TrapDamage: 40, FareCopper: 500,
+                                  TextCommands: new[] { "go portal" }),
+            } };
+
+        RoomExit projected = GmcpProjection.Room(value, previous).Exits[direction];
+
+        Assert.Equal(known, projected.Hint);
+        Assert.Equal(1234, projected.KeyItemId);
+        Assert.Equal(40, projected.TrapDamage);
+        Assert.Equal(500, projected.FareCopper);
+        Assert.Equal(new[] { "go portal" }, projected.TextCommands);
+
+        // Once the exit leads somewhere else, the graph's reading no longer applies.
+        Room moved = previous with { Exits = new Dictionary<Direction, RoomExit>
+            { [direction] = previous.Exits[direction] with { Target = new RoomKey(99, 99) } } };
+        Assert.Equal(RoomExitHint.None, GmcpProjection.Room(value, moved).Exits[direction].Hint);
+    }
+
     [Fact]
     public void RoomSnapshot_UpdatesGraphAndPreservesLockedAndHiddenExits()
     {
         using Session session = new();
         session.Replay("02-walk");
+        // The recording leaves out the room text a real server prints after each step.
+        session.Text("Rat Warren\r\nAlso here: large giant rat, large giant rat.\r\nObvious exits: up\r\n");
         Assert.Equal(GmcpProjection.Key(session.Gmcp.State.CurrentRoom!), session.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
         Assert.NotNull(session.Graph.GetRoom(session.Tracker.State.CurrentRoom.Key));
@@ -673,6 +893,256 @@ public sealed partial class GmcpIntegrationTests
 
         Assert.True(session.Player.InCombat);
         Assert.Empty(wire);
+    }
+
+    // A room reset only takes the room's snapshots away. Raised as a change to every
+    // package, it applied the cached inventory and party again on each step, as a
+    // fresh `i` read and a `par` reply that answered waits with data from before
+    // the move.
+    [Fact]
+    public void RoomReset_DoesNotReplayTheInventoryOrPartyAsFreshReads()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        Assert.True(session.Gmcp.State.Owns("Anomaly.Items.List"));
+        Assert.True(session.Gmcp.State.Owns("Anomaly.Group.Members"));
+        int reads = 0, parReplies = 0;
+        session.Inventory.FullInventoryParsed += () => reads++;
+        session.Party.ParReplyRead += () => parReplies++;
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+
+        Assert.Equal(0, reads);
+        Assert.Equal(0, parReplies);
+        Assert.NotEqual(DateTimeOffset.MinValue, session.Inventory.Snapshot.LastUpdated);
+    }
+
+    // The server's party snapshot owns the roster, but only the text says why a
+    // member went: left behind, the leader goes back for them, and either way they
+    // stay in the grace window a returning member is re-invited from.
+    [Fact]
+    public void ActiveGroup_TheGamesDepartureLines_StillSayWhyAMemberWent()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        Assert.True(session.Party.State.SelfIsLeader);
+        List<string> leftBehind = new();
+        session.Party.MemberLeftBehind += leftBehind.Add;
+
+        session.Text("Gpriest is no longer following you.\r\n");
+
+        Assert.Equal(["Gpriest"], leftBehind);
+        Assert.True(session.Party.WasRecentlyPartied("Gpriest"));
+        Assert.Contains(session.Party.State.Members, m => m.Name == "Gpriest");   // the roster waits for the snapshot
+    }
+
+    // The server's inventory sets the coins but carries no weight, which comes from
+    // the text's `i`. Coins weigh one per three, so a snapshot that moves the purse
+    // moves the weight as a text coin line does; with the snapshot owned, those
+    // lines don't.
+    [Fact]
+    public void ActiveItems_CoinsMoveTheWeightAndADepositIsReckonedAtOnce()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        session.Text("You are carrying 30 copper farthings.\r\nYou have no keys.\r\nWealth: 30 copper farthings\r\nEncumbrance: 300/2000 - None [15%]\r\n");
+        Dictionary<string, JsonElement> items = session.Gmcp.State.Snapshot("Anomaly.Items.List")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        Dictionary<string, JsonElement> coins = items["coins"].EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        int weightBefore = session.Inventory.Snapshot.Encumbrance.CurrentWeight;
+        long coinsBefore = session.Inventory.Snapshot.Currency.TotalCoinCount;
+        coins["copper"] = JsonSerializer.SerializeToElement(coins["copper"].GetInt32() + 300);
+        items["coins"] = JsonSerializer.SerializeToElement(coins);
+
+        session.Send("Anomaly.Items.List", items);
+
+        Assert.Equal(weightBefore + (int)((coinsBefore + 300) / 3 - coinsBefore / 3), session.Inventory.Snapshot.Encumbrance.CurrentWeight);
+
+        // An auto-deposit is reckoned when it's sent: the snapshot only follows the
+        // deposit's text, and the walk home is planned before then.
+        long wealth = session.Inventory.Snapshot.Currency.TotalCopperValue;
+        session.Inventory.NoteAutoDeposit(100);
+        Assert.Equal(wealth - 100, session.Inventory.Snapshot.Currency.TotalCopperValue);
+    }
+
+    // Handing the inventory back to text keeps the weight reading, which was the
+    // text's all along; zeroed, it left coin collection ungated until the next `i`.
+    [Fact]
+    public void ItemsHandedBackToText_KeepTheWeightReading()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        session.Text("You are carrying 30 copper farthings.\r\nYou have no keys.\r\nWealth: 30 copper farthings\r\nEncumbrance: 300/2000 - None [15%]\r\n");
+        int weight = session.Inventory.Snapshot.Encumbrance.CurrentWeight;
+        Assert.True(weight > 0);
+
+        session.Gmcp.State.SetMode("Anomaly.Items.List", GmcpMode.Off);
+
+        Assert.Equal(weight, session.Inventory.Snapshot.Encumbrance.CurrentWeight);
+        Assert.Equal(2000, session.Inventory.Snapshot.Encumbrance.MaxWeight);
+    }
+
+    // With the server's party owned a `par` reply is dropped, so the poller asks the
+    // server for its party snapshot instead, which answers as the reply would. Off
+    // the server's party, `par` goes out as before.
+    [Fact]
+    public void ActiveGroup_ThePartyPollAsksTheServerInsteadOfSendingPar()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        List<string> requests = new();
+        session.Gmcp.SetSender((package, payload) =>
+        {
+            requests.Add(package + " " + JsonSerializer.Serialize(payload));
+            return Task.CompletedTask;
+        });
+        List<string> wire = new();
+        using PartyPoller poller = new(session.Chat, session.Party.State, session.Party, session.Log, schedule: new ManualTimers().Arm);
+        poller.SetWireSender(bytes => wire.Add(Encoding.Latin1.GetString(bytes)));
+        poller.AskServerForParty = session.Gmcp.RequestGroup;
+
+        Assert.True(poller.RequestPar("a party heal check"));
+        Assert.Empty(wire);
+        Assert.Contains(requests, r => r.StartsWith("Anomaly.Request", StringComparison.Ordinal) && r.Contains("Anomaly.Group.Members", StringComparison.Ordinal));
+
+        session.Gmcp.State.SetMode("Anomaly.Group.Members", GmcpMode.Off);
+        session.Party.State.IsInParty = true;
+        Assert.True(poller.RequestPar("a party heal check"));
+        Assert.Equal(["par\r"], wire);
+    }
+
+    // The server lists every occupant; "Also here:" leaves out a hidden player until
+    // a search reveals them, and never lists the leader we follow. The roster the
+    // client acts on is the one the text would give (GAME_MECHANICS "Hiding" and
+    // "Co-location and the `Also here:` line").
+    [Fact]
+    public void ActiveRoster_LeavesOutAHiddenPlayerAndTheLeaderWeFollow()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        session.Party.State.IsInParty = true;
+        session.Party.State.LeaderName = "Boss Hogg";
+
+        session.Send("Anomaly.Room.Occupants", new
+        {
+            room = session.Gmcp.State.CurrentRoom,
+            mobs = new[] { new { uid = 102, hidden = false } },
+            players = new[] { new { name = "Sneaky", hidden = true }, new { name = "Boss", hidden = false }, new { name = "Bystander", hidden = false } },
+        });
+
+        Assert.Equal(["Bystander"], session.Classifier.Current!.Value.Entities.Where(e => e.Kind == EntityKind.Player).Select(e => e.RawName));
+
+        session.Send("Anomaly.Room.Occupants", new
+        {
+            room = session.Gmcp.State.CurrentRoom,
+            mobs = new[] { new { uid = 102, hidden = false } },
+            players = new[] { new { name = "Sneaky", hidden = false } },
+        });
+        Assert.Contains(session.Classifier.Current!.Value.Entities, e => e.RawName == "Sneaky");   // a search revealed them
+    }
+
+    // Tools → GMCP Monitor records the session from the handshake on and exports it
+    // in the capture format the tests replay: an export of a walk replayed into a
+    // fresh client gives that client the same server messages and text, escape
+    // sequences included, in the same order.
+    [Fact]
+    public void GmcpMonitor_ExportReplaysToTheSameState()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "mudplay-gmcp-monitor-" + Path.GetRandomFileName());
+        Directory.CreateDirectory(folder);
+        try
+        {
+            using Session recorded = new();
+            recorded.ReplayCapture("02-walk");
+            Assert.True(recorded.Monitor.IsRecording);
+            string export = recorded.Monitor.Export(text => text, "test");
+            string path = Path.Combine(folder, "walk.jsonl");
+            File.WriteAllText(path, export);
+
+            using Session replayed = new();
+            replayed.ReplayCaptureFile(path);
+
+            Assert.Equal(
+                recorded.Monitor.Snapshot().Select(f => (f.FromServer, f.Package, f.Body)),
+                replayed.Monitor.Snapshot().Select(f => (f.FromServer, f.Package, f.Body)));
+            Assert.Contains(recorded.Monitor.Snapshot(), f => f.Package is null && f.Body.Contains("Obvious exits", StringComparison.Ordinal));
+            Assert.Contains(recorded.Monitor.Snapshot(), f => f.Package == "Anomaly.Room.Info");
+            Assert.Contains("\\u001b[", export, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    // The monitor is off until the player turns it on, so it isn't one more log
+    // growing on its own: off, a session records nothing; turned on mid-session,
+    // it records from then.
+    [Fact]
+    public void GmcpMonitor_RecordsNothingUntilTurnedOn()
+    {
+        using Session session = new();
+        session.Monitor.Enabled = false;
+        session.Replay("01-handshake");
+        Assert.Empty(session.Monitor.Snapshot());
+        Assert.False(session.Monitor.IsRecording);
+
+        session.Monitor.Enabled = true;
+        session.Text("You notice a rusty dagger here.\r\n");
+
+        GmcpMonitor.Frame frame = Assert.Single(session.Monitor.Snapshot());
+        Assert.Contains("rusty dagger", frame.Body, StringComparison.Ordinal);
+        Assert.True(session.Monitor.IsRecording);
+        Assert.False(new GmcpMonitor().Enabled);
+    }
+
+    // The export masks what the bug report masks (here the account name the login
+    // prompt echoes), in the text and in the server's messages alike.
+    [Fact]
+    public void GmcpMonitor_ExportIsMasked()
+    {
+        using Session session = new();
+        session.ReplayCapture("02-walk");
+
+        string export = session.Monitor.Export(text => text.Replace("gmage", "[redacted]", StringComparison.OrdinalIgnoreCase), "test");
+
+        Assert.DoesNotContain("gmage", export, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"dir\":\"c2s\",\"kind\":\"text\"", export, StringComparison.Ordinal);
+    }
+
+    // The server's combat flag is its auto-attack state: a cast mid-fight turns it
+    // off with the monster still standing, as *Combat Off* does. It starts a fight
+    // but doesn't end one; the room clearing does.
+    [Fact]
+    public void ActiveStatus_CombatOffMidFight_LeavesTheFightOnUntilTheRoomClears()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.True(session.Combat.HasRoomNpc);
+        Dictionary<string, JsonElement> status = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        status["combat"] = JsonSerializer.SerializeToElement(true);
+        session.Send("Anomaly.Char.Status", status);
+        Assert.True(session.Player.InCombat);
+
+        status["combat"] = JsonSerializer.SerializeToElement(false);
+        session.Send("Anomaly.Char.Status", status);
+        Assert.True(session.Player.InCombat);
+        Assert.False(session.Combat.IsServerEngaged);
+
+        session.Send("Anomaly.Mob.Gone", new { uid = 102, room = session.Gmcp.State.CurrentRoom, why = "died" });
+        Assert.False(session.Player.InCombat);
+    }
+
+    // A monster's swing at us is a fight whatever the server's flag says.
+    [Fact]
+    public void ActiveStatus_ACombatLineStartsTheFightEvenWithTheServerFlagOff()
+    {
+        using Session session = new();
+        session.Replay("07-recovery-request");
+        Assert.False(session.Player.InCombat);
+
+        session.Text("The large giant rat bites you for 3 damage!\r\n");
+
+        Assert.True(session.Player.InCombat);
     }
 
     [Fact]

@@ -98,13 +98,47 @@ public sealed class RoomEntityClassifier : IDisposable
     public event Action<RoomEntitiesObservation>? TextObserved;
     public Func<bool>? GmcpOwnsOccupants { get; set; }
 
-    public void ApplyGmcp(IReadOnlyList<RoomEntity> entities)
+    // The server's room list is the roster: it comes on its own after any change, so
+    // nothing needs to ask the room to be shown again for it.
+    public bool ServerOwnsRoster => GmcpOwnsOccupants?.Invoke() == true;
+
+    public void ApplyGmcp(IReadOnlyList<RoomEntity> entities, bool walkedOut = false)
     {
-        RoomEntitiesObservation observation = new("", entities, _now());
+        entities = entities.Select(WithDataNumber).ToArray();
+        // A roster that changes while our move is in flight isn't the room we land
+        // in read anew (it can be the room we're leaving): on the text path it's an
+        // arrival line, which waits for the move. The room's confirmation reads it
+        // as the new room's (OnRoomTrackerStateChanged). One the server sends because
+        // a monster walked out is that monster's departure, as its "just left" line
+        // is on the text path: read as the room re-read, a boss that wandered off was
+        // missing from it and its timer started as for a kill.
+        RoomObservationSource source = _roomTracker is { HasQueuedMoves: true } ? RoomObservationSource.Arrival
+            : walkedOut ? RoomObservationSource.Departure
+            : RoomObservationSource.AlsoHere;
+        RoomEntitiesObservation observation = new("", entities, _now(), source);
         if (Current is { } current && current.Entities.SequenceEqual(entities)) return;
         Current = observation;
         SetRosterWhole(true);
         EntitiesObserved?.Invoke(observation);
+    }
+
+    // The server numbers some monsters apart from the game data: 100160 for the data's
+    // #3160 Noble Paladin Winterhawk (capture 14-milestone2-client-active; items too:
+    // its 100582 is the data's #4582 dust goggles, export gmcp-20261029-065005). Its
+    // number counts when the active data has it under that name; otherwise the
+    // monster is placed as the text's "Also here:" name would be. An unplaced number
+    // read as an enemy, so a friendly NPC could be attacked. A name the data can't
+    // place keeps the server's number, unless the data has another monster there.
+    private RoomEntity WithDataNumber(RoomEntity entity)
+    {
+        if (entity.Kind != EntityKind.Monster || entity.MonsterNumber is not { } number) return entity;
+        string? atNumber = _gameData?.FindNameByNumber("Monsters", number);
+        if (atNumber is not null && string.Equals(atNumber.Trim(), entity.ResolvedName.Trim(), StringComparison.OrdinalIgnoreCase))
+            return entity;
+        RoomEntity placed = Classify(entity.RawName, "");
+        if (placed.Kind == EntityKind.Monster && placed.MonsterNumber is { } dataNumber)
+            return entity with { MonsterNumber = dataNumber };
+        return atNumber is null ? entity : entity with { MonsterNumber = null };
     }
 
     // Last observation parsed, or null when no "Also here:" line has been seen
@@ -601,7 +635,11 @@ public sealed class RoomEntityClassifier : IDisposable
 
     private void OnRoomTrackerStateChanged(RoomTransition transition)
     {
-        if (GmcpOwnsOccupants?.Invoke() == true) return;
+        if (GmcpOwnsOccupants?.Invoke() == true)
+        {
+            ObserveServerRosterOnRoomChange(transition);
+            return;
+        }
         // Only act on true location changes — confidence-only flips
         // (Located ↔ Lost without a real room swap) don't qualify.
         if (transition.PreviousRoom is null) return;     // initial location set
@@ -925,6 +963,29 @@ public sealed class RoomEntityClassifier : IDisposable
     // toggle that only re-runs the combat tracker leaves a sibling gate (e.g. the
     // deferred-cash Acquisition hold) asserted, stalling the walker until a manual
     // room re-display. No-op before the first observation.
+    // The server's list for the room we're stepping into, ahead of its text: kept
+    // without being read, so nothing (a combat gate, a fight walked out on) is
+    // decided on it before the room is confirmed, which reads it.
+    public void HoldGmcpUntilRoomConfirmed(IReadOnlyList<RoomEntity> entities) =>
+        Current = new RoomEntitiesObservation("", entities.Select(WithDataNumber).ToArray(), _now(),
+            RoomObservationSource.Arrival);
+
+    // With the server's roster owned, the room's confirmation follows its text, so
+    // Current is already the server's list for the room we stepped into. It is read
+    // here as the text path reads a room change: an empty room as a room-change
+    // wipe (combat lands, a fight walked out on is noticed, the surprise round
+    // re-opens), an occupied one as that room's own fresh read, now that the
+    // tracker points at it.
+    private void ObserveServerRosterOnRoomChange(RoomTransition transition)
+    {
+        if (transition.PreviousRoom is null || transition.NewRoom is null) return;
+        if (transition.PreviousRoom.Key.Equals(transition.NewRoom.Key)) return;
+        IReadOnlyList<RoomEntity> entities = Current?.Entities ?? Array.Empty<RoomEntity>();
+        Current = new RoomEntitiesObservation("", entities, _now(),
+            entities.Count == 0 ? RoomObservationSource.RoomChange : RoomObservationSource.AlsoHere);
+        EntitiesObserved?.Invoke(Current.Value);
+    }
+
     public void ReemitCurrent()
     {
         if (Current is { } obs) EntitiesObserved?.Invoke(obs);

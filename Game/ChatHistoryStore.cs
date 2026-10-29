@@ -28,7 +28,7 @@ public sealed class ChatHistoryStore : IDisposable
     private const int MaxEntries = 5_000;
 
     private readonly ChatRouter _router;
-    private readonly ObservableCollection<ChatLogEntry> _entries = new();
+    private readonly EntryCollection _entries = new();
     private DateOnly _lastDate;
     private bool _disposed;
 
@@ -83,15 +83,30 @@ public sealed class ChatHistoryStore : IDisposable
         if (historical.Count == 0) return;
 
         bool wasEmpty = _entries.Count == 0;
-        for (int i = 0; i < historical.Count; i++)
-            _entries.Insert(i, historical[i]);
-        while (_entries.Count > MaxEntries)
-            _entries.RemoveAt(_entries.Count - 1);
+        _entries.ReplaceAll(historical.Concat(_entries).Take(MaxEntries).ToList());
 
         // Anchor the rollover clock to the newest seeded row so the first live
         // entry only draws a separator when it genuinely crosses into a new day.
         if (wasEmpty)
             _lastDate = DateOnly.FromDateTime(historical[^1].Timestamp.LocalDateTime);
+    }
+
+    // The replay lands as one Reset. Inserted a line at a time, it had a Conversation
+    // window open across a profile change rebuild and scroll once per replayed line:
+    // 2,000 scrolls, each re-creating the rows at both ends of the list, froze the
+    // client for over a minute (Hang-20261029-110908).
+    private sealed class EntryCollection : ObservableCollection<ChatLogEntry>
+    {
+        public void ReplaceAll(IReadOnlyList<ChatLogEntry> entries)
+        {
+            CheckReentrancy();
+            Items.Clear();
+            foreach (ChatLogEntry entry in entries) Items.Add(entry);
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(Count)));
+            OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs("Item[]"));
+            OnCollectionChanged(new System.Collections.Specialized.NotifyCollectionChangedEventArgs(
+                System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
+        }
     }
 
     // Wipe every entry. Called on a profile change (SessionLogService re-scopes the

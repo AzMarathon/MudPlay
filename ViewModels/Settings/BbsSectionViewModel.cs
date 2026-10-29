@@ -127,6 +127,24 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     public IReadOnlyList<GmcpPackageOption> GmcpPackages { get; } =
         Game.Gmcp.GmcpIntegration.Packages.Select(p => new GmcpPackageOption(p)).ToArray();
 
+    // The server-data modes show only for a board whose server has completed a GMCP
+    // handshake (BbsProfile.GmcpOffered); every other board would only be offered
+    // settings that do nothing.
+    [ObservableProperty] private bool _gmcpOffered;
+    [ObservableProperty] private string _gmcpStatus = string.Empty;
+
+    private void LoadGmcpState(BbsProfile profile)
+    {
+        Game.Gmcp.GmcpState? state = AppServices.CurrentOrNull?.Gmcp.State;
+        bool connectedHere = state is { Compatible: true }
+            && AppServices.CurrentOrNull?.Connection.Connected == true
+            && string.Equals(profile.Name, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase);
+        GmcpOffered = profile.GmcpOffered || connectedHere;
+        GmcpStatus = connectedHere
+            ? $"Server data: contract {state!.ServerContract}, {(state.InSession ? "in the game" : "connected")}."
+            : "This board's server offered GMCP on an earlier connection; not connected to it now.";
+    }
+
     // Max-redials / redial-pause tickers grey out while InfiniteRetries forces
     // its own count + pause; the XAML binds their IsEnabled here.
     public bool RedialTickersEnabled => !InfiniteRetries;
@@ -833,6 +851,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         NoResponseTimeoutSeconds = profile.NoResponseTimeoutSeconds;
         foreach (GmcpPackageOption option in GmcpPackages)
             option.Mode = profile.GmcpModes?.GetValueOrDefault(option.Package, Game.Gmcp.GmcpMode.Shadow) ?? Game.Gmcp.GmcpMode.Shadow;
+        LoadGmcpState(profile);
         ReconnectOnFailedConnect = profile.ReconnectOnFailedConnect;
         ReconnectOnCarrierLost = profile.ReconnectOnCarrierLost;
         ReconnectOnNoResponse = profile.ReconnectOnNoResponse;

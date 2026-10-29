@@ -256,6 +256,21 @@ public sealed class TrainerMenuTracker : IDisposable
         _lateTick?.Dispose();
     }
 
+    // Whether a command line is `train` (false) or `train stats` (true), as the game
+    // spells them: `trai` is its shortest `train`, and `st` its shortest `stats`
+    // (GAME_MECHANICS "Command words and abbreviations"); null for anything else.
+    // Typed `trai stats` drew the form with the keyboard still in line mode, so its
+    // arrows recalled history and Space went into the line (report
+    // stock-20261029-170825).
+    private static bool? TrainWords(string line) =>
+        line.Split(' ', StringSplitOptions.RemoveEmptyEntries) switch
+        {
+            [var verb] when verb.ToLowerInvariant() is "trai" or "train" => false,
+            [var verb, var what] when verb.ToLowerInvariant() is "trai" or "train"
+                && what.ToLowerInvariant() is "st" or "sta" or "stat" or "stats" => true,
+            _ => null,
+        };
+
     // Called by the wire-send path so we can spot the user's own outbound
     // train stats / train command. This is the gate that prevents chat-noise
     // false positives — without an outbound train command the menu-marker
@@ -265,7 +280,7 @@ public sealed class TrainerMenuTracker : IDisposable
         if (bytes.IsEmpty || bytes.Length > 32) return;
         string raw = Encoding.Latin1.GetString(bytes);
         string cmd = raw.TrimEnd('\r', '\n', '\0').Trim().ToLowerInvariant();
-        if (cmd != "train stats" && cmd != "train") return;
+        if (TrainWords(cmd) is not { } trainStats) return;
         _expectingMenuSince = _now();
         _log?.Log(LogSeverity.Info, "TrainerMenu",
             $"Observed outbound `{cmd}` — armed menu-marker watch for {ExpectingMenuWindow.TotalSeconds:0} s.");
@@ -275,7 +290,7 @@ public sealed class TrainerMenuTracker : IDisposable
         // teardown — too late). Arm character-mode input off the command itself
         // so arrow keys reach the wire immediately, realm-independently. Bare
         // `train` opens a different (line-driven) prompt, so it doesn't arm input.
-        if (cmd == "train stats")
+        if (trainStats)
         {
             // A form already drawn stays drawn: a second `train stats` goes into it.
             if (_answer != FormAnswer.Form)
@@ -438,7 +453,7 @@ public sealed class TrainerMenuTracker : IDisposable
     private void OnLineDispatched(LineExtractor.EmittedLine line)
     {
         if (_answer != FormAnswer.Pending || !_inputMenuActive || !_router.LineIsCommandEcho) return;
-        if (!line.Text.Trim().Equals("train stats", StringComparison.OrdinalIgnoreCase)) return;
+        if (TrainWords(line.Text.Trim()) != true) return;
         _answer = FormAnswer.Echoed;
         _log?.Info("TrainerMenu", "The game echoed `train stats` — waiting for the trainer screen.");
     }

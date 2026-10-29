@@ -111,6 +111,51 @@ public sealed class GameDataTableSectionTests : IDisposable
         Assert.True(string.IsNullOrEmpty(loner.Get("BiggestLair")));
     }
 
+    // A lair room with its Delay, the minutes its lair waits after a kill before refilling.
+    private static string LairRoomWithDelay(int room, int max, int monsterId, int delay)
+        => LairRoom(17, room, max, monsterId).Replace("\"Delay\":0", $"\"Delay\":{delay}");
+
+    // The lair clock is each lair room's Delay, read by realm (GAME_MECHANICS "Lair
+    // respawn timers"), not the monster's own RegenTime: that is a boss's wait, in hours.
+    // The old "Respawn (sec)" filter read RegenTime, so a lair farmer bracketing respawn
+    // got the boss timer instead. The lair columns filter as the grid shows them.
+    [Theory]
+    [InlineData(0, "150-330", "2m 30s – 5m 30s")]   // Stock: Delay min + 30 s
+    [InlineData(2, "90-270", "1m 30s – 4m 30s")]    // Paradigm: (Delay − 1) min + 30 s
+    public async Task LairRespawn_ComesFromTheLairRoomsDelay_ByRealm_AndFilters(int legit, string raw, string shown)
+    {
+        SeedMonsters("v1.11p",
+            "[{\"Number\":830,\"Name\":\"spectre\",\"RegenTime\":15},{\"Number\":831,\"Name\":\"wisp\"}]");
+        SeedTable("v1.11p", "Info", $"[{{\"Legit\":{legit}}}]");
+        SeedTable("v1.11p", "Rooms",
+            "[" + LairRoomWithDelay(61, 2, 830, 5) + "," + LairRoomWithDelay(62, 6, 830, 2) + ","
+                + LairRoomWithDelay(63, 3, 830, 0) + "," + LairRoomWithDelay(64, 8, 831, 9) + "]");
+        _cache.SwitchSet("v1.11p");
+        RoomGraphManager graph = new(_cache);
+        graph.OnActiveSetChanged("v1.11p");
+        MonstersSectionViewModel vm = new(_cache, roomGraph: graph);
+        await vm.LoadAsync();
+
+        GameDataRow spectre = vm.AllRows.Single(r => r.Get("Name") == "spectre");
+        Assert.Equal(raw, spectre.Get("LairRespawn"));
+        Assert.Equal(shown, MonstersSectionViewModel.FormatLairRespawn(spectre.Get("LairRespawn")));
+
+        Range(vm, "LairRespawn").Max = 200;           // the fastest lair is tested
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "spectre" }, Names(vm));
+
+        Range(vm, "LairRespawn").Max = null;
+        Range(vm, "BiggestLair").Min = 7;
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "wisp" }, Names(vm));
+
+        Range(vm, "BiggestLair").Min = null;
+        Range(vm, "AvgLairSize").Max = 4;             // spectre averages 3.7
+        Range(vm, "RegenTime").Min = 1;               // spectre's own regen, 15 hours
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.Equal(new[] { "spectre" }, Names(vm));
+    }
+
     [Fact]
     public async Task SearchText_FiltersByNameColumn()
     {

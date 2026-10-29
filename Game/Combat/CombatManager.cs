@@ -4400,6 +4400,17 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // The server's room list drops the dead monster itself, a tick behind the
+        // death line (54 ms at the median over 83 kills, export
+        // gmcp-20261029-152626), so a re-display asked for here was an extra Enter
+        // on every kill.
+        if (_classifier.ServerOwnsRoster)
+        {
+            _log?.Combat(LogCategory,
+                $"unattributed death attributed to '{presumedDead}' — the server's room list will drop it");
+            return;
+        }
+
         // Target name matched no roster slot (flavored / shared wording the
         // RawName doesn't cover). Force the debounced room re-display so the
         // server hands us the true roster now.

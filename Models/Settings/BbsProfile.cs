@@ -25,6 +25,10 @@ public sealed class BbsProfile
 
     public Dictionary<string, Game.Gmcp.GmcpMode> GmcpModes { get; set; } = new();
 
+    // The board's server has completed a GMCP handshake with a contract the client
+    // takes: the Settings BBS tab shows the server-data modes only for such a board.
+    public bool GmcpOffered { get; set; }
+
     // Optional URL the user wants the Help → {BBS site} ↗ menu entry to
     // open (the BBS's web site, wiki, Discord — whatever the operator
     // publishes). null leaves the entry disabled (when shown). Edited under

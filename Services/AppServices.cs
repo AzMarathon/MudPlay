@@ -322,6 +322,8 @@ public sealed class AppServices
     // connection. Feeds the Wire Inspector window and the bug report's raw-wire
     // capture.
     public WireBuffer Wire { get; }
+    // Tools → GMCP Monitor: what the server sends from each GMCP handshake on.
+    public GmcpMonitor GmcpMonitor { get; } = new();
     public Game.InGameCapture InGameCapture { get; private set; } = null!;
     private const string BoardMenuHold = "at the board's menu";
 
@@ -11114,6 +11116,7 @@ public sealed class AppServices
         // of that profile.
         Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log, Router);
         Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
+        PartyPoller.AskServerForParty = Gmcp.RequestGroup;
         Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
         LairTimers.GmcpEligibility = Gmcp.LairEligibility;
         PromptScanner.PromptObserved += Gmcp.ObservePrompt;
@@ -14397,8 +14400,10 @@ public sealed class AppServices
     }
 
     // The command that lists what the character has learned: `sp` for a mana class,
-    // `pow` for a kai one (SpellListParser reads either).
-    public string SpellListCommand => PlayerStats.MaxKai > 0 ? "pow" : "sp";
+    // `pow` for a kai one (SpellListParser reads either). The class decides; the kai
+    // pool only stands in when the class isn't in the game data.
+    public string SpellListCommand =>
+        (SpellCatalog.ClassIsKai(PlayerStats.Class) ?? PlayerStats.MaxKai > 0) ? "pow" : "sp";
 
     // A new profile knows every spell its class can learn but not which of them this
     // character has: that comes only from the game's own list, which nothing asked
@@ -14409,6 +14414,9 @@ public sealed class AppServices
     private void ReadSpellListIfNeverSeen()
     {
         if (_spellListAsked || Spellbook.ObtainedCount > 0 || Spellbook.ClassSpells.Count == 0) return;
+        // No mana or kai yet (a level-1 Mystic's kai is 0/0): nothing learned to list,
+        // so the read waits for a stat screen that shows a pool.
+        if (PlayerStats.MaxMana == 0 && PlayerStats.MaxKai == 0) return;
         // Before the latch, so the read is still owed at the next stat screen.
         if (AutoModeController.Blocks("Info polls")) return;
         _spellListAsked = true;

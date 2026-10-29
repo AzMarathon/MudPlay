@@ -780,9 +780,11 @@ public sealed partial class PartyManager : IDisposable
     private void OnRankRefused(MatchResult result) =>
         NoteRankDecision($"the game refused a rank change: \"{result.Text.Trim()}\"");
 
+    // With the server's party owning the roster, these lines still say what
+    // happened (a member left or was left behind), which no snapshot does: only the
+    // roster change itself is left to the snapshot.
     private void OnStopsFollowing(MatchResult result)
     {
-        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
@@ -792,7 +794,7 @@ public sealed partial class PartyManager : IDisposable
         // inside the window, the Re-invite-lost-members flow picks
         // them up.
         _recentlyDisconnected[name] = _now();
-        RemoveMember(name);
+        if (GmcpOwnsGroup?.Invoke() != true) RemoveMember(name);
     }
 
     // "X is no longer following you." — a follower who couldn't move when we did
@@ -802,13 +804,12 @@ public sealed partial class PartyManager : IDisposable
     // for them rather than walking on.
     private void OnLeftBehind(MatchResult result)
     {
-        if (GmcpOwnsGroup?.Invoke() == true) return;
         if (result.Groups.Count == 0) return;
         string name = result.Groups[0];
         if (string.IsNullOrEmpty(name)) return;
         bool leading = State.SelfIsLeader;
         _recentlyDisconnected[name] = _now();
-        RemoveMember(name);
+        if (GmcpOwnsGroup?.Invoke() != true) RemoveMember(name);
         if (leading && AutoInviteEnabled) MemberLeftBehind?.Invoke(GivenNameOf(name));
     }
 
@@ -849,7 +850,11 @@ public sealed partial class PartyManager : IDisposable
     // what the per-row handlers saw. Idempotent — already-empty state is a no-op.
     private void OnPartyDissolved(MatchResult _)
     {
-        if (GmcpOwnsGroup?.Invoke() == true) return;
+        if (GmcpOwnsGroup?.Invoke() == true)
+        {
+            NoteDissolvedMembersForReinvite();
+            return;
+        }
         // Also flush the par-block state machine. Without this, _parState
         // can carry over from a previous in-party par-block (BBS output
         // doesn't emit a blank line between the par table and the next
@@ -878,23 +883,26 @@ public sealed partial class PartyManager : IDisposable
         // re-entry handler (OnPlayerEnters) gates on SelfIsLeader at
         // that point, so a returning member only gets auto-invited if
         // we're still leader / soloed at that moment.
-        if (State.SelfIsLeader)
-        {
-            DateTimeOffset now = _now();
-            foreach (PartyMember m in State.Members)
-            {
-                if (m.IsSelf) continue;
-                string given = GivenNameOf(m.Name);
-                if (string.IsNullOrEmpty(given)) continue;
-                // Key by given name to match the lookup in OnPlayerEnters
-                // ("X just entered the Realm" only carries the given
-                // name). The existing per-player disconnect-stamp uses
-                // the same convention.
-                _recentlyDisconnected[given] = now;
-            }
-        }
+        NoteDissolvedMembersForReinvite();
         ResetPartyMembership();
         ParReplyRead?.Invoke();
+    }
+
+    private void NoteDissolvedMembersForReinvite()
+    {
+        if (!State.SelfIsLeader) return;
+        DateTimeOffset now = _now();
+        foreach (PartyMember m in State.Members)
+        {
+            if (m.IsSelf) continue;
+            string given = GivenNameOf(m.Name);
+            if (string.IsNullOrEmpty(given)) continue;
+            // Key by given name to match the lookup in OnPlayerEnters
+            // ("X just entered the Realm" only carries the given
+            // name). The existing per-player disconnect-stamp uses
+            // the same convention.
+            _recentlyDisconnected[given] = now;
+        }
     }
 
     // Wipe the tracked party to the solo state. Shared by the dissolve handler and
@@ -1719,6 +1727,12 @@ public sealed partial class PartyManager : IDisposable
     }
 
     // First whitespace-delimited token. "Raijin WuzHere" → "Raijin"; "Raijin" → "Raijin".
+    // Whether name is the leader we follow, whom the game never lists in our room's
+    // "Also here:" (GAME_MECHANICS "Co-location and the `Also here:` line").
+    public bool IsTheLeaderWeFollow(string name) =>
+        State is { IsInParty: true, SelfIsLeader: false, LeaderName: { } leader }
+        && GivenNameOf(leader).Equals(GivenNameOf(name), StringComparison.OrdinalIgnoreCase);
+
     private static string GivenNameOf(string name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty;

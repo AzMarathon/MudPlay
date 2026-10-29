@@ -12,7 +12,14 @@ public sealed partial class StatParser
         ("agility", StatSet.Agility), ("health", StatSet.Health), ("charm", StatSet.Charm),
     ];
 
-    public void ApplyGmcpVitals(JsonElement value)
+    // expGainCounts: these vitals follow others of the same session, so a rise in exp
+    // is a gain earned, as a "You gain N experience." line is on the text path (whose
+    // handler stands down while the server owns the vitals). Level-up announcements
+    // ride on it, and went quiet under the server's vitals (export
+    // gmcp-20261029-152755: crossing the level line, the game prints only the gain
+    // line). A session's first vitals can carry exp earned elsewhere, or another
+    // character's, so it re-anchors without counting, as a stat screen does.
+    public void ApplyGmcpVitals(JsonElement value, bool expGainCounts = false)
     {
         Stats.Hits = value.GetProperty("hp").GetInt32();
         Stats.MaxHits = value.GetProperty("maxhp").GetInt32();
@@ -31,9 +38,12 @@ public sealed partial class StatParser
             Stats.LevelPercent = 0;
         }
         Stats.Level = level;
-        Stats.Exp = value.GetProperty("exp").GetInt64();
+        long exp = value.GetProperty("exp").GetInt64();
+        long gained = exp - Stats.Exp;
+        Stats.Exp = exp;
         Stats.ExpToNext = Math.Max(0, value.GetProperty("expNeeded").GetInt64() - Stats.Exp);
         HasParsed = true;
+        if (expGainCounts && gained > 0) ExperienceGained?.Invoke(Stats.Exp);
     }
 
     public void ApplyGmcpStats(JsonElement value)
