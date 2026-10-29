@@ -99,6 +99,7 @@ public sealed partial class AutoBuyManager : IDisposable
     public static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(5);
 
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -114,9 +115,11 @@ public sealed partial class AutoBuyManager : IDisposable
         Func<bool> isEnabled,
         LogService? log = null,
         Func<bool>? isParadigm = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         _now = now ?? (() => DateTimeOffset.Now);
+        _schedule = schedule ?? Services.DispatcherTicks.Once;
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
         ArgumentNullException.ThrowIfNull(countCarried);
@@ -159,21 +162,17 @@ public sealed partial class AutoBuyManager : IDisposable
     {
         string text = line.Text.TrimEnd();
 
-        if (text == ShopHeader && _awaitingGmcpList) CancelGmcpRead();
-        if (!_capturing)
+        // A header always starts a new read: one still open, or still waiting on
+        // the server's list, is superseded by it.
+        if (text == ShopHeader)
         {
-            if (text == ShopHeader)
-            {
-                _capturing = true;
-                _body.Clear();
-                if (GmcpOwnsShop?.Invoke() == true)
-                {
-                    _awaitingGmcpList = true;
-                    RequestGmcpShop?.Invoke();
-                }
-            }
+            _capturing = true;
+            _body.Clear();
+            if (GmcpOwnsShop?.Invoke() == true) BeginGmcpShopRead();
+            else EndGmcpShopWait();
             return;
         }
+        if (!_capturing) return;
 
         // A prompt, or a blank line after the table body, closes the readout.
         if (line.IsPromptLine) { FinishCapture(); return; }
@@ -197,10 +196,16 @@ public sealed partial class AutoBuyManager : IDisposable
 
     private void FinishCapture()
     {
-        if (_awaitingGmcpList) return;
         _capturing = false;
-        IReadOnlyList<ShopListParser.StockRow> stock = GmcpOwnsShop?.Invoke() == true ? _gmcpStock : ShopListParser.Parse(_body);
+        IReadOnlyList<ShopListParser.StockRow> stock = ShopListParser.Parse(_body);
         _body.Clear();
+        // While the server's list is awaited the text table is only its fallback.
+        if (_awaitingGmcpList) _heldTextStock = stock;
+        else ListStock(stock);
+    }
+
+    private void ListStock(IReadOnlyList<ShopListParser.StockRow> stock)
+    {
         StockListed?.Invoke(stock);
 
         if (!_isEnabled() || _wireSender is null) return;

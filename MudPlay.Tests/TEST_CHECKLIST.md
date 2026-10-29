@@ -1614,7 +1614,7 @@ How to keep it current:
 
 ### GmcpMilestone2IntegrationTests.cs
 - Covers: GmcpIntegration (milestone 2) through InventoryManager, AutoBuyManager, SpellbookState, SpellListParser, PartyManager, ChatRouter, TriggerEngine, AbilBreakdownParser and CastingDirector.
-- Checks: synthetic and captured milestone-2 wire replay into the existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers on live spell rounds (`SpellCalculator.SpellRoundSecondsWallClock`, as the text buff timers), unmapped item-buff fallback, inspector requests/errors, oversized item IDs and fresh shop reads.
+- Checks: synthetic and captured milestone-2 wire replay into the existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers on live spell rounds (`SpellCalculator.SpellRoundSecondsWallClock`, as the text buff timers), unmapped item-buff fallback, inspector requests/errors, oversized item IDs and fresh shop reads; a `list` with no server answer is read from its text table once the wait runs out, and a late answer starts nothing more.
 - Why: server inventory, shop, spell, effect, party, chat and ability data must reach the owners the text path feeds, once, and hand back to text on a reset or a fault.
 
 ### GmcpMilestone2LiveTests.cs

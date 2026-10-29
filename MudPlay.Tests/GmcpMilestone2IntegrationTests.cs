@@ -218,6 +218,33 @@ public sealed partial class GmcpIntegrationTests
         Assert.StartsWith("Refresh failed:", view.Status);
     }
 
+    // The server's list can fail to come (a request on a dropping link, an answer
+    // lost to a reset): the read is then answered by the text table it held.
+    [Fact]
+    public void ExplicitList_WithNoServerAnswer_IsReadFromTheTextTable()
+    {
+        using Session s = new(); EnterMilestone2(s);
+        s.Send("Anomaly.Shop.List", new { room = "1,1", shop = 6, name = "Test shop", items = Array.Empty<object>() });
+        s.Gmcp.SetSender((_, _) => Task.CompletedTask);
+        List<IReadOnlyList<MudPlay.Game.Inventory.ShopListParser.StockRow>> lists = new();
+        s.Shop.StockListed += lists.Add;
+
+        s.Text("The following items are for sale here:\r\n\r\n"
+            + "Item".PadRight(24) + "Quantity".PadRight(16) + "Price\r\n"
+            + new string('-', 47) + "\r\n"
+            + "torch".PadRight(24) + "4".PadRight(16) + "10 copper farthings\r\n\r\n");
+        Assert.Empty(lists);
+
+        s.Timers.Advance(MudPlay.Game.Inventory.AutoBuyManager.GmcpShopWait);
+        MudPlay.Game.Inventory.ShopListParser.StockRow row = Assert.Single(Assert.Single(lists));
+        Assert.Equal("torch", row.Name);
+        Assert.Equal(4, row.Quantity);
+
+        // The server's answer coming late starts nothing more.
+        s.Send("Anomaly.Shop.List", new { room = "1,1", shop = 6, name = "Test shop", items = Array.Empty<object>() });
+        Assert.Single(lists);
+    }
+
     [Fact]
     public void FailedShopRequest_DoesNotLeaveTheNextExplicitReadStuck()
     {

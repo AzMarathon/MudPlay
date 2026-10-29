@@ -36,6 +36,7 @@ public sealed partial class GmcpIntegrationTests
         public Game.Conditions.ConditionTracker Conditions { get; } = new(new MessageStore());
         public Game.Stealth.StealthManager Stealth { get; }
         public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
+        public ManualTimers Timers { get; } = new();
         public GmcpIntegration Gmcp { get; }
         public TelnetClient Telnet { get; } = new();
         public Game.Inventory.InventoryManager Inventory { get; }
@@ -74,7 +75,7 @@ public sealed partial class GmcpIntegrationTests
             Stealth = new(router, Player, Log);
             Gmcp.BindConsumers(Conditions, Stealth, Hp);
             Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase)); Inventory.AttachLineExtractor(Feed.Lines);
-            Shop = new(router, _ => null, _ => 0, () => false, Log); Shop.AttachLineExtractor(Feed.Lines);
+            Shop = new(router, _ => null, _ => 0, () => false, Log, schedule: Timers.Arm); Shop.AttachLineExtractor(Feed.Lines);
             Book = new(new Game.Spells.KnownSpellCatalog(cache));
             SpellParser = new(Book, Log); SpellParser.AttachLineExtractor(Feed.Lines);
             Party = new(router, new PartyState(), Log) { LocalCharacterName = "Tester" }; Party.AttachLineExtractor(Feed.Lines);

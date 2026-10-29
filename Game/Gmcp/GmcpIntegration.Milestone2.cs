@@ -62,7 +62,7 @@ public sealed partial class GmcpIntegration
         catch (Exception ex) when (ex is IOException or InvalidOperationException or ObjectDisposedException)
         {
             if (num is { } id) _requestedCards.Remove(id);
-            if (package == "Anomaly.Shop.List") _shop?.CancelGmcpRead();
+            if (package == "Anomaly.Shop.List") _shop?.FallBackToTextShop("the server shop request failed");
             _log.Warn("GMCP", $"Request {package} failed: {ex.Message}");
         }
     }
