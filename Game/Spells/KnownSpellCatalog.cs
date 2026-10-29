@@ -134,15 +134,40 @@ public sealed class KnownSpellCatalog
         if (doc is null) return results;
 
         int classMagery = ResolveClassMagery(classNumber, out int classMageryLvl);
+        // A trainer's `class N … learnspell S` step is itself the record that class N
+        // learns S: some sets leave such a row with no Learnable, Learned From or
+        // Classes (the AMud data's warlock chaos shield #5573).
+        IReadOnlyDictionary<int, int> taught = BuildTeachLevelsForClass(classNumber);
         foreach (GameRow row in doc.Rows)
         {
-            if (!IsUsable(row, classNumber, classMagery, classMageryLvl, level, charAlign, andLearnable: true))
+            bool taughtToClass = taught.ContainsKey(ReadInt(row, "Number"));
+            if (!IsUsable(row, classNumber, classMagery, classMageryLvl, level, charAlign, taughtToClass))
                 continue;
             results.Add(ToKnownSpell(row));
         }
 
         results.Sort(CompareByReqLevelThenName);
         return results;
+    }
+
+    // The spell called name that classNumber's magery reaches, from the whole table,
+    // or null when none does. For a spell the game itself says the character has
+    // (the `sp` list, a learn line): how it was learned no longer matters, only
+    // which of the same-named rows the class can cast.
+    public KnownSpell? FindCastableByName(int classNumber, string name)
+    {
+        GameTable? doc = _cache.GetTable("Spells");
+        if (doc is null || classNumber < 1 || string.IsNullOrWhiteSpace(name)) return null;
+        int classMagery = ResolveClassMagery(classNumber, out int classMageryLvl);
+        string target = name.Trim();
+        foreach (GameRow row in doc.Rows)
+        {
+            if (!string.Equals(ReadString(row, "Name")?.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!MageryReaches(ReadInt(row, "Magery"), ReadInt(row, "MageryLVL"), classMagery, classMageryLvl)) continue;
+            if (!ClassesAllow(ReadString(row, "Classes"), classNumber)) continue;
+            return ToKnownSpell(row);
+        }
+        return null;
     }
 
     // Query's own ordering — ReqLevel then Name — extracted so SpellbookState can
@@ -766,13 +791,13 @@ public sealed class KnownSpellCatalog
     private static readonly Regex CastedByTextblock =
         new(@"Textblock\s*#(\d+)", RegexOptions.IgnoreCase);
 
-    // MajorMUD's spell-usability rule: can classNumber use this spell at level
-    // / charAlign, and (when andLearnable) is it actually learnable. classMagery
-    // / classMageryLvl are the pre-resolved magery type / level for
-    // classNumber.
+    // MajorMUD's spell-usability rule: can classNumber learn and use this spell at
+    // level / charAlign. classMagery / classMageryLvl are the pre-resolved magery
+    // type / level for classNumber. taughtToClass (a trainer step teaches it to the
+    // class) stands in for the Learnable flag.
     private bool IsUsable(
         GameRow row, int classNumber, int classMagery, int classMageryLvl,
-        int level, int charAlign, bool andLearnable)
+        int level, int charAlign, bool taughtToClass)
     {
         if (classNumber < 1) return true;       // no class → treat as usable
         if (level < 0) level = 0;
@@ -785,37 +810,25 @@ public sealed class KnownSpellCatalog
         string? learnedFrom = ReadString(row, "Learned From");
         string? classes = ReadString(row, "Classes");
 
+        if (taughtToClass) learnable = 1;
+
         // Learnable gate: a spell is learnable when Learnable==1, OR it has a
         // LearnedFrom source (length >= 5), OR it's a Kai spell with autolearn
         // enabled and a real level requirement.
-        if (andLearnable)
-        {
-            bool notLearnable = learnable == 0
-                && (learnedFrom?.Length ?? 0) < 5
-                && (spellMagery != MageryKai
-                    || (spellMagery == MageryKai && (_disableKaiAutolearn || reqLevel < 1)));
-            if (notLearnable) return false;
-        }
+        bool notLearnable = learnable == 0
+            && (learnedFrom?.Length ?? 0) < 5
+            && (spellMagery != MageryKai
+                || (spellMagery == MageryKai && (_disableKaiAutolearn || reqLevel < 1)));
+        if (notLearnable) return false;
 
-        // Magery check (skipped entirely when the spell has no magery).
+        if (!MageryReaches(spellMagery, spellMageryLvl, classMagery, classMageryLvl)) return false;
         if (spellMagery != 0)
         {
-            if (classMagery == MageryNone) return false;
-            // The magery-mismatch exception requires Spells.Magery==0, which is
-            // impossible inside this branch — so a mismatch is always
-            // disqualifying.
-            if (classMagery != spellMagery) return false;
-            if (classMageryLvl > 0 && classMageryLvl < spellMageryLvl) return false;
             if (classMagery != MageryKai && learnable == 0) return false;
             if (classMagery == MageryKai && _disableKaiAutolearn && learnable == 0) return false;
         }
 
-        // Explicit class-token restriction (data version assumed >= 1.7). A
-        // non-"(*)" Classes field limits the spell to the listed class numbers.
-        if (classes is not null && classes.Length > 2 && classes != "(*)")
-        {
-            if (!classes.Contains($"({classNumber})", StringComparison.OrdinalIgnoreCase)) return false;
-        }
+        if (!ClassesAllow(classes, classNumber)) return false;
 
         if (level > 0 && level < reqLevel) return false;
 
@@ -845,6 +858,22 @@ public sealed class KnownSpellCatalog
 
         return true;
     }
+
+    // A spell with no magery is anyone's; otherwise the class's magery must be the
+    // spell's, at the spell's magery level or above. (The magery-mismatch exception
+    // requires Spells.Magery==0, so a mismatch is always disqualifying.)
+    private static bool MageryReaches(int spellMagery, int spellMageryLvl, int classMagery, int classMageryLvl)
+    {
+        if (spellMagery == 0) return true;
+        if (classMagery == MageryNone || classMagery != spellMagery) return false;
+        return classMageryLvl == 0 || classMageryLvl >= spellMageryLvl;
+    }
+
+    // Explicit class-token restriction (data version assumed >= 1.7). A non-"(*)"
+    // Classes field limits the spell to the listed class numbers.
+    private static bool ClassesAllow(string? classes, int classNumber)
+        => classes is null || classes.Length <= 2 || classes == "(*)"
+        || classes.Contains($"({classNumber})", StringComparison.OrdinalIgnoreCase);
 
     // Project a Spells row into a KnownSpell + its formula inputs.
     private static KnownSpell ToKnownSpell(GameRow row)

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.188.1
+
+- Trainer spells the game data doesn't tie to a class (AMud's warlock chaos shield) are in its spell book
+- A spell `sp` or a learn line names is marked learned even when the data says the class can't learn it
+
 ## 3.188.0
 
 - GMCP server data with per-package shadow and active modes in BBS settings

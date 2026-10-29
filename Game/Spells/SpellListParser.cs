@@ -169,9 +169,12 @@ public sealed class SpellListParser : IDisposable
             return;
         }
 
-        _book.SetObtainedByNames(_namesThisBlock);
+        IReadOnlyList<string> unknown = _book.SetObtainedByNames(_namesThisBlock);
         TextSpellsObserved?.Invoke(_namesThisBlock.ToArray());
         _log?.Info("SpellListParser", $"spell list complete — {_namesThisBlock.Count} spell(s) obtained");
+        if (unknown.Count > 0)
+            _log?.Log(LogSeverity.Warn, "SpellListParser",
+                $"listed spell(s) the game data has no castable record of for this class, left out: {string.Join(", ", unknown)}");
         _log?.Log(LogSeverity.Debug, "SpellListParser", $"obtained spells: {string.Join(", ", _namesThisBlock)}");
         _namesThisBlock.Clear();
         _state = State.Idle;

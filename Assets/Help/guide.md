@@ -4542,6 +4542,7 @@ The Buff Watchdog only offers buffs you have **actually learned**, and MudPlay l
 - **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal.
 - **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` yourself does the same.
 - **After that it stays current on its own**: a spell you learn from a trainer or a scroll is picked up as it happens.
+- **The game's list wins over the game data.** Some data sets don't record that your class can learn a spell (several AMud trainer spells, the warlock's chaos shield among them). A spell the trainer teaches your class, or that `sp` or the game's learn line says you have, is in your spell book and offered anyway. It stays there until you reroll.
 
 The other reasons it gives: your character hasn't been read yet (enter the game first), your class has no buff spells and you carry no item that casts one, none of the spells you've learned is a buff, or every buff you've learned is already on the list. The **Spell Book** (F2) shows the same learned / not-learned picture for every spell of your class.
 

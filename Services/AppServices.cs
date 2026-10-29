@@ -3306,15 +3306,20 @@ public sealed class AppServices
         // the next `spells` poll. Group 1 carries the full spell Name.
         Router.Subscribe(Services.Patterns.KnownPatterns.LearnSpell, m =>
         {
-            if (m.Groups.Count > 0) Spellbook.MarkObtainedByName(m.Groups[0]);
+            if (m.Groups.Count > 0) MarkLearned(m.Groups[0]);
         });
         // ParaMud teaching-item wording ("You add <name> to your spellbook!") —
         // same effect as the learn-scroll line, so the picker's unlearned guard
         // clears the moment the spell is learned mid-session.
         Router.Subscribe(Services.Patterns.KnownPatterns.LearnSpellFromItem, m =>
         {
-            if (m.Groups.Count > 0) Spellbook.MarkObtainedByName(m.Groups[0]);
+            if (m.Groups.Count > 0) MarkLearned(m.Groups[0]);
         });
+        void MarkLearned(string name)
+        {
+            if (Spellbook.MarkObtainedByName(name) is null)
+                Log.Warn("Spellbook", $"learned \"{name}\", which the game data has no castable record of for this class");
+        }
         // Alignment staleness — "A dark cloud passes over you" flags the
         // Player Workshop's displayed alignment stale until the next `who`
         // re-observes our own row. Long-lived so the line is caught even when
