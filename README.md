@@ -10,6 +10,8 @@
 > - Coin weight and auto-deposits are tracked with the server's inventory
 > - The party check asks the server instead of sending `par`
 > - The server's room roster leaves out hidden players and the leader you follow, as the game's room list does
+> - A follower's drag with server room data no longer leaves a move stuck in flight
+> - The server's monster numbers are checked against the game data, so a friendly NPC isn't read as an enemy
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

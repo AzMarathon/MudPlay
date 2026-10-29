@@ -100,11 +100,31 @@ public sealed class RoomEntityClassifier : IDisposable
 
     public void ApplyGmcp(IReadOnlyList<RoomEntity> entities)
     {
+        entities = entities.Select(WithDataNumber).ToArray();
         RoomEntitiesObservation observation = new("", entities, _now());
         if (Current is { } current && current.Entities.SequenceEqual(entities)) return;
         Current = observation;
         SetRosterWhole(true);
         EntitiesObserved?.Invoke(observation);
+    }
+
+    // The server numbers some monsters apart from the game data: 100160 for the data's
+    // #3160 Noble Paladin Winterhawk (capture 14-milestone2-client-active; items too:
+    // its 100582 is the data's #4582 dust goggles, export gmcp-20261029-065005). Its
+    // number counts when the active data has it under that name; otherwise the
+    // monster is placed as the text's "Also here:" name would be. An unplaced number
+    // read as an enemy, so a friendly NPC could be attacked. A name the data can't
+    // place keeps the server's number, unless the data has another monster there.
+    private RoomEntity WithDataNumber(RoomEntity entity)
+    {
+        if (entity.Kind != EntityKind.Monster || entity.MonsterNumber is not { } number) return entity;
+        string? atNumber = _gameData?.FindNameByNumber("Monsters", number);
+        if (atNumber is not null && string.Equals(atNumber.Trim(), entity.ResolvedName.Trim(), StringComparison.OrdinalIgnoreCase))
+            return entity;
+        RoomEntity placed = Classify(entity.RawName, "");
+        if (placed.Kind == EntityKind.Monster && placed.MonsterNumber is { } dataNumber)
+            return entity with { MonsterNumber = dataNumber };
+        return atNumber is null ? entity : entity with { MonsterNumber = null };
     }
 
     // Last observation parsed, or null when no "Also here:" line has been seen

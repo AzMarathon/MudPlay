@@ -265,15 +265,21 @@ public sealed partial class GmcpIntegration
     // display has been read, as the text path confirms it at "Obvious exits:": by
     // then its "You notice … here." (floor items, which the server's room data
     // doesn't carry) and "Also here:" are in, and the server's roster with them. A
-    // dark or blind arrival's one-line display lets it through too. Only a room
-    // that answers a move of ours waits: a change to the room we're in (a door, a
-    // refresh) or a snapshot with no move behind it (entering the game, re-anchoring
-    // after a reconnect) lands at once, as nothing walks on from it.
+    // dark or blind arrival's one-line display lets it through too. The snapshot
+    // also comes ahead of the text that says why we moved: a follower's "--
+    // Following your Party leader <dir> --" (export gmcp-20261029-070501), and a
+    // death's lives line. Applied first, a drag left a phantom move queued from the
+    // new room for the rest of the drag. So any move from a known room waits for its
+    // text; only a snapshot with no position before it (entering the game) lands at
+    // once, and so does a change to the room we're in (a door, a refresh).
     private void ApplyRoomOnceTextShown(JsonElement value)
     {
-        bool newRoom = _tracker.State.CurrentRoom?.Key != GmcpProjection.Key(value.GetProperty("room").GetString()!);
-        if (newRoom && _tracker.HasQueuedMoves)
+        RoomKey key = GmcpProjection.Key(value.GetProperty("room").GetString()!);
+        bool newRoom = _tracker.State.CurrentRoom?.Key != key;
+        if (newRoom && _tracker.State.CurrentRoom is not null)
         {
+            // The map learns the room now; only our place on it waits.
+            _graph.SetGmcpRoom(GmcpProjection.Room(value, _graph.GetRoom(key)));
             _roomHeld = true;
             return;
         }

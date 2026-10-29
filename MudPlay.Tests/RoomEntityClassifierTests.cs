@@ -422,6 +422,36 @@ public sealed class RoomEntityClassifierTests
         return (cache, dir);
     }
 
+    // The server's roster numbers some monsters apart from the game data: 100160 for
+    // the data's #3160 Noble Paladin Winterhawk. Its number counts only when the data
+    // has it under that name; otherwise the monster is placed by name, as the text's
+    // "Also here:" would place it. A name the data can't place keeps the server's
+    // number, unless the data has another monster at that number.
+    [Fact]
+    public void ServerRoster_MonsterNumbers_AreCheckedAgainstTheGameData()
+    {
+        (GameDataCache cache, string dir) = MonstersTable(
+            """[ { "Number": 4, "Name": "carrion beast" }, { "Number": 3160, "Name": "Noble Paladin Winterhawk" }, { "Number": 500, "Name": "cave bear" } ]""");
+        try
+        {
+            using Harness h = new(cache);
+
+            h.Classifier.ApplyGmcp(
+            [
+                new RoomEntity("thin carrion beast", "carrion beast", EntityKind.Monster, 4, 1),
+                new RoomEntity("Noble Paladin Winterhawk", "Noble Paladin Winterhawk", EntityKind.Monster, 100160, 2),
+                new RoomEntity("frost wyrm", "frost wyrm", EntityKind.Monster, 777, 3),
+                new RoomEntity("ember imp", "ember imp", EntityKind.Monster, 500, 4),
+            ]);
+
+            Assert.Equal([4, 3160, 777, null], h.Classifier.Current!.Value.Entities.Select(e => e.MonsterNumber));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
     // A monster whose Monsters-table row exists but whose leading flavor word
     // isn't in any MonsterMessageRecord resolves by stripping the first word.
     [Fact]

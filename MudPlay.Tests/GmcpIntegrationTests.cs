@@ -459,6 +459,29 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
     }
 
+    // A follower's drag: the server's room comes ahead of "-- Following your Party
+    // leader <dir> --" and the display (export gmcp-20261029-070501). Applied at
+    // once, the room took no move, and the drag line then queued one from the new
+    // room, left in flight for the rest of the drag.
+    [Fact]
+    public void FollowerDrag_TheLeadersRoomWaitsForTheDragLine_AndLeavesNoMoveInFlight()
+    {
+        using Session session = new();
+        using FollowMoveObserver drags = new(session.Router, session.Tracker);
+        session.Replay("01-handshake");
+        Dictionary<string, JsonElement> room = session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value
+            .EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
+        room["room"] = JsonSerializer.SerializeToElement("1,2");
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+        session.Send("Anomaly.Room.Info", room);
+        session.Text("-- Following your Party leader north --\r\nTown Square\r\nObvious exits: south\r\n");
+
+        Assert.Equal(new RoomKey(1, 2), session.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
+        Assert.False(session.Tracker.HasQueuedMoves);
+    }
+
     // With the roster on the text, the text display's "Also here:" is read before
     // its exits line, which is what lets the held room through.
     [Fact]
@@ -598,6 +621,8 @@ public sealed partial class GmcpIntegrationTests
     {
         using Session session = new();
         session.Replay("02-walk");
+        // The recording leaves out the room text a real server prints after each step.
+        session.Text("Rat Warren\r\nAlso here: large giant rat, large giant rat.\r\nObvious exits: up\r\n");
         Assert.Equal(GmcpProjection.Key(session.Gmcp.State.CurrentRoom!), session.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
         Assert.NotNull(session.Graph.GetRoom(session.Tracker.State.CurrentRoom.Key));
