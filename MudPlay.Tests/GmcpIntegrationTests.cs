@@ -675,6 +675,28 @@ public sealed partial class GmcpIntegrationTests
         Assert.Empty(wire);
     }
 
+    // A room reset only takes the room's snapshots away. Raised as a change to every
+    // package, it applied the cached inventory and party again on each step, as a
+    // fresh `i` read and a `par` reply that answered waits with data from before
+    // the move.
+    [Fact]
+    public void RoomReset_DoesNotReplayTheInventoryOrPartyAsFreshReads()
+    {
+        using Session session = new();
+        session.Replay("13-milestone2");
+        Assert.True(session.Gmcp.State.Owns("Anomaly.Items.List"));
+        Assert.True(session.Gmcp.State.Owns("Anomaly.Group.Members"));
+        int reads = 0, parReplies = 0;
+        session.Inventory.FullInventoryParsed += () => reads++;
+        session.Party.ParReplyRead += () => parReplies++;
+
+        session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
+
+        Assert.Equal(0, reads);
+        Assert.Equal(0, parReplies);
+        Assert.NotEqual(DateTimeOffset.MinValue, session.Inventory.Snapshot.LastUpdated);
+    }
+
     // The server's combat flag is its auto-attack state: a cast mid-fight turns it
     // off with the monster still standing, as *Combat Off* does. It starts a fight
     // but doesn't end one; the room clearing does.

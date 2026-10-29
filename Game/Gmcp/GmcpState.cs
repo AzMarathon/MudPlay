@@ -28,6 +28,11 @@ public sealed class GmcpState
     public string? Boot { get; private set; }
     public string? ServerContract { get; private set; }
     public string? CurrentRoom { get; private set; }
+
+    // What Changed carries for a room-scoped reset: the room's snapshots are gone,
+    // nothing else changed. "*" would have every cached snapshot applied again as
+    // if fresh, on every step.
+    public const string RoomReset = "Anomaly.Session.Reset room";
     public bool Compatible { get; private set; }
     public bool InSession { get; private set; }
     public int SessionGeneration { get; private set; }
@@ -178,7 +183,8 @@ public sealed class GmcpState
             case "room":
                 ClearRoom();
                 CurrentRoom = value.GetProperty("room").GetString();
-                break;
+                Changed?.Invoke(RoomReset);
+                return;
         }
         Changed?.Invoke("*");
     }

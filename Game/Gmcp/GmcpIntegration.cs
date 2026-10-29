@@ -143,8 +143,9 @@ public sealed partial class GmcpIntegration
         && (State.Snapshot("Anomaly.Room.Occupants")!.Value.GetProperty("mobs").GetArrayLength() == 0
             || State.Mode("Anomaly.Mob") == GmcpMode.Active);
 
-    // Runs on every change of the state: package is the one that changed, or "*"
-    // for a reset or a hello that touches them all.
+    // Runs on every change of the state: package is the one that changed, "*" for a
+    // reset or a hello that touches them all, or GmcpState.RoomReset when only the
+    // room's snapshots went.
     private void Apply(string package)
     {
         if (!State.Owns("Anomaly.Char.Status")) _conditions?.ApplyGmcpFlags(null);
