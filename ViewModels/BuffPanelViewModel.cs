@@ -204,8 +204,23 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _spellbook.Changed += OnSpellbookChanged;
         AppServices.Current.Inventory.FullInventoryParsed += OnInventoryReloaded;
         AppServices.Current.CastDirector.BuffNegated += OnBuffNegated;
+        AppServices.Current.CombatProfiles.Changed += OnCombatProfilesChanged;
 
         Load();
+    }
+
+    // Health's mana thresholds live in the combat profile, so a Settings save or a
+    // profile switch can turn the floor between a percent and an amount mid-game.
+    private void OnCombatProfilesChanged()
+    {
+        if (Dispatcher.UIThread.CheckAccess()) RefreshFloorUnit();
+        else Dispatcher.UIThread.Post(() => { if (!_disposed) RefreshFloorUnit(); });
+    }
+
+    private void RefreshFloorUnit()
+    {
+        OnPropertyChanged(nameof(AllBuffsFloorLabel));
+        OnPropertyChanged(nameof(AllBuffsFloorMaximum));
     }
 
     // The casting engine marked a member as negating a buff: tint their box at once.
@@ -410,8 +425,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
 
         // Already the stored value, so the change handler saves nothing.
         AllBuffsFloor = _settings.BlessIfAboveMa;
-        OnPropertyChanged(nameof(AllBuffsFloorLabel));
-        OnPropertyChanged(nameof(AllBuffsFloorMaximum));
+        RefreshFloorUnit();
 
         RefreshBuffPicks();
         RefreshMemberTargets();
@@ -1066,5 +1080,6 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _spellbook.Changed -= OnSpellbookChanged;
         AppServices.Current.Inventory.FullInventoryParsed -= OnInventoryReloaded;
         AppServices.Current.CastDirector.BuffNegated -= OnBuffNegated;
+        AppServices.Current.CombatProfiles.Changed -= OnCombatProfilesChanged;
     }
 }

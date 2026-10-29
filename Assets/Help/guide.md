@@ -4548,7 +4548,7 @@ The other reasons it gives: your character hasn't been read yet (enter the game 
 
 ### Building the buff list
 
-**Cast buffs if mana ≥** (above the list) is one mana floor for all your buffs. Every new buff starts at it, and **Set on all** gives every configured buff that floor in one click. `0` means mana never holds a buff back. Each buff's edit dialog can still give that one buff its own floor afterwards.
+**Cast buffs if mana ≥** (above the list) is one mana floor for all your buffs. Every new buff starts at it, and **Set on all** gives every configured buff that floor in one click. `0` means mana never holds a buff back. Each buff's edit dialog can still give that one buff its own floor afterwards. Like each buff's own floor, it is a percent of max mana, or an amount when Settings → Health reads mana thresholds as amounts. Switch that in Settings, or change combat profile, and the box follows as soon as you save, with the Buff Watchdog still open.
 
 Click **＋ Add buff** to open the Add-buff dialog:
 
