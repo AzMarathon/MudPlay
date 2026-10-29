@@ -99,9 +99,15 @@ The division of labour: **Profile Management** is where BBSes and realms are cre
 
 ## Setting up a BBS
 
-**Built-in boards.** MudPlay comes with **Anomaly** (`playanomalymud.com` port 2324) and **Paradigm** (`paramud.mudinfo.net` port 2323) in the BBS list, logon steps included: add your character under one, type its **username and password** under *Character profile settings* on the BBS tab, press **OK**, and connect. On Paradigm the login stops at the character list, since which slot is yours is up to you; add a step for `{ Character Selection }` sending your slot number to skip it. Each board is added once: remove it and it stays removed. One you already set up under another name (the same host and port) isn't added twice, and its characters get the same logon steps when they have no login saved yet.
+**Built-in boards.** MudPlay comes with **Anomaly** (`playanomalymud.com` port 2324) and **Paradigm** (`paramud.mudinfo.net` port 2323) in the BBS list: add your character under one, type its **username and password** under *Character profile settings* on the BBS tab, press **OK**, and connect. Each board is added once: remove it and it stays removed, and one you already set up under another name (the same host and port) isn't added twice.
 
-**Stock boards.** Any other board you add is taken for a Stock one. A character with no login saved for it starts with the Stock logon steps filled in: `Otherwise type "new":` sends `{username}`, `Enter your password:` sends `{password}`, and `Main System Menu (TOP)` sends `m`. You still type the board's host and port yourself. Edit or delete the steps if your board's menus differ.
+**Logon setups.** The logon steps a board's characters start with go by the realm's **game data set** (the realm's own, or the global default when the realm uses that), not by the host and port, which a board can change. A set imported from Anomaly's or Paradigm's data gets that board's setup; any other set, or none yet, gets the **Stock** one:
+
+- **Anomaly** — the account name, the password, then `1` at `Selection:`.
+- **Paradigm** — the username, the password, `P` at `P : Paradigm`, then `1` at `{ Realm Selection }`. The login stops at the character list, since which slot is yours is up to you; add a step for `{ Character Selection }` sending your slot number to skip it.
+- **Stock** — `Otherwise type "new":` sends `{username}`, `Enter your password:` sends `{password}`, and `Main System Menu (TOP)` sends `m`. It fills in only the steps: a Stock board's host and port are yours to type.
+
+Picking the realm's game data set fills in only what's blank: an empty host and port (Anomaly and Paradigm), and logon steps the character hasn't set. Steps the client filled in itself and you haven't touched count as blank. A host you typed or steps you edited stay as they are. To put a setup in over what's there, use **Apply setup** beside the **Connection** heading: Anomaly and Paradigm set the host, port and logon steps, Stock only the logon steps. Like any edit on the tab, nothing is saved until you press **OK**. A character that connects with no login saved walks the setup its realm's game data calls for, leaving the username and password for you to type.
 
 First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **BBS settings…**, or by double-clicking the board in the list). Fill in:
 

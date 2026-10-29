@@ -3,7 +3,8 @@
 ## 3.189.0
 
 - Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
-- Any other board's characters start with the Stock logon steps filled in
+- A board's logon steps follow its realm's game data (Anomaly, Paradigm, else Stock), filled in only where blank
+- Apply setup beside the BBS tab's Connection heading puts a setup in over what's there
 - No account, character or password ships with them
 
 ## 3.188.2

@@ -3,19 +3,26 @@ using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
 
-// The boards MudPlay comes with: Anomaly Mud and Paradigm. Each is added to the BBS
-// list once per install. A character with no login saved for a board gets its logon
-// steps from here, that board's own or the Stock ones, so a new player only types a
-// username and password.
+// The boards MudPlay comes with, Anomaly Mud and Paradigm, and the logon setups:
+// theirs and the Stock one. Each board is added to the BBS list once per install.
+// A board's characters get the setup its realm's game data names, Anomaly or
+// Paradigm, else Stock, so a new player only types a username and password.
 // No account, character or password ships: the steps send {username} / {password},
 // which resolve from the character's own saved credentials at connect time.
 public static class BuiltInBbses
 {
-    public sealed record Preset(string Name, string Host, int Port, string? WebsiteUrl, IReadOnlyList<MenuStep> LogonSteps)
+    // Host is null for a setup that is only logon steps (Stock).
+    public sealed record Preset(string Name, string? Host, int Port, string? WebsiteUrl, IReadOnlyList<MenuStep> LogonSteps)
     {
-        // Same host and port, whatever the user named the board.
+        // Same host and port, whatever the user named the board. Only keeps a board
+        // from being added on top of one already listed: which setup a board gets
+        // goes by its game data, since a board can move host or port.
         public bool IsBoardOf(BbsProfile bbs) =>
-            bbs.Port == Port && string.Equals(bbs.Host.Trim(), Host, StringComparison.OrdinalIgnoreCase);
+            Host is not null && bbs.Port == Port && string.Equals(bbs.Host.Trim(), Host, StringComparison.OrdinalIgnoreCase);
+
+        // A fresh copy of the logon steps, for a character to own and edit.
+        public List<MenuStep> CopyLogonSteps() =>
+            LogonSteps.Select(s => new MenuStep { WaitForPattern = s.WaitForPattern, Send = s.Send }).ToList();
     }
 
     // Paradigm's character pick is left out: it is a slot on the player's own
@@ -38,22 +45,32 @@ public static class BuiltInBbses
     ];
 
     // Every other board is taken for a Stock one: the BBS login prompts every Stock
-    // MajorMUD board shows (user, 2026-10-28), then `m` from the main menu.
-    public static IReadOnlyList<MenuStep> StockLogonSteps { get; } =
+    // MajorMUD board shows (user, 2026-10-28), then `m` from the main menu. Only the
+    // steps: a Stock board's host and port are the player's own.
+    public static Preset Stock { get; } = new("Stock", null, 0, null,
     [
         new() { WaitForPattern = "Otherwise type \"new\":", Send = "{username}" },
         new() { WaitForPattern = "Enter your password:", Send = "{password}" },
         new() { WaitForPattern = "Main System Menu (TOP)", Send = "m" },
-    ];
+    ]);
 
-    // The built-in board this BBS is, or null.
-    public static Preset? For(BbsProfile bbs) => All.FirstOrDefault(p => p.IsBoardOf(bbs));
+    // Every setup the BBS tab's Apply setup menu offers.
+    public static IReadOnlyList<Preset> Setups { get; } = [.. All, Stock];
 
-    // A fresh copy of the board's logon steps, for a character to own and edit: a
-    // built-in board's own, else the Stock ones.
-    public static List<MenuStep> LogonStepsFor(BbsProfile bbs) =>
-        (For(bbs)?.LogonSteps ?? StockLogonSteps)
-            .Select(s => new MenuStep { WaitForPattern = s.WaitForPattern, Send = s.Send }).ToList();
+    public static Preset? Named(string? name) =>
+        Setups.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    // The setup for a game data set: the board its data was exported for, when the
+    // set's Info names Anomaly or Paradigm, else Stock.
+    public static Preset ForGameDataSet(string? set) =>
+        GameDataRealm.BoardName(set) is { } board
+        && All.FirstOrDefault(p => string.Equals(p.Name, board, StringComparison.OrdinalIgnoreCase)) is { } preset
+            ? preset : Stock;
+
+    // The setup for a realm: its own game data set, or the global default set when
+    // the realm uses that.
+    public static Preset ForRealm(RealmProfile? realm, string? globalDefaultSet) =>
+        ForGameDataSet(realm?.ActiveGameDataSet ?? globalDefaultSet);
 
     // Add each preset not added before, and return the names added. A preset is
     // added once: one the user removed stays removed, and one whose name or board
@@ -74,7 +91,7 @@ public static class BuiltInBbses
             store.Save(new BbsProfile
             {
                 Name = preset.Name,
-                Host = preset.Host,
+                Host = preset.Host ?? string.Empty,
                 Port = preset.Port,
                 WebsiteUrl = preset.WebsiteUrl,
                 Realms = [new RealmProfile { Name = preset.Name }],

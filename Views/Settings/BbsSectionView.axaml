@@ -98,7 +98,25 @@
                                Text="Stored with this BBS and shared by every character that connects to it."/>
                     <Border Classes="SettingsSectionRule"/>
 
-                    <TextBlock Classes="GroupHeader" Text="Connection"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Classes="GroupHeader" Text="Connection"/>
+                        <!-- A setup is filled in on its own only where nothing is set yet;
+                             this puts one in over what's there. -->
+                        <DropDownButton Content="Apply setup" Padding="8,1" FontSize="11"
+                                        VerticalAlignment="Bottom" Margin="0,0,0,4"
+                                        ToolTip.Tip="Put a board's setup in over what's here: Anomaly and Paradigm fill in the host, port and logon steps, Stock only the logon steps. Nothing is saved until you press OK.">
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="Bottom">
+                                    <MenuItem Header="Anomaly — host, port and logon steps"
+                                              Command="{Binding ApplyLogonSetupCommand}" CommandParameter="Anomaly"/>
+                                    <MenuItem Header="Paradigm — host, port and logon steps"
+                                              Command="{Binding ApplyLogonSetupCommand}" CommandParameter="Paradigm"/>
+                                    <MenuItem Header="Stock — logon steps only"
+                                              Command="{Binding ApplyLogonSetupCommand}" CommandParameter="Stock"/>
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </StackPanel>
 
                     <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
                         <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Name:"/>

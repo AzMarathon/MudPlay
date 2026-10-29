@@ -381,6 +381,11 @@ How to keep it current:
 - Checks: credential edits on several boards all commit on Apply; returning to a board shows the staged value; Discard drops edits on boards no longer selected.
 - Why: the first board's username, password and logon steps were silently dropped.
 
+### BbsSectionLogonSetupTests.cs
+- Covers: ViewModels/Settings/BbsSectionViewModel (logon setups), Services/BuiltInBbses
+- Checks: on a new board, picking a realm set whose Info names Anomaly fills the blank host, port and the untouched Stock prefill with Anomaly's; a typed host and edited steps stay when a set is picked; Apply setup puts Paradigm's host, port and steps in over what's there, Stock replaces only the steps, and OK saves the host.
+- Why: a board's logon setup goes by its realm's game data and fills in only what isn't set, with a manual Apply setup in the Connection header (user, 2026-10-28).
+
 ### BbsSectionRealmGameDataSetTests.cs
 - Covers: ViewModels/Settings/BbsSectionViewModel (realm Game data picker)
 - Checks: a realm naming an uninstalled set shows it as "(not installed)" and keeps the name in bbs.json when another field is edited and saved; picking an installed set or the global default saves that.
@@ -569,8 +574,8 @@ How to keep it current:
 
 ### BuiltInBbsesTests.cs
 - Covers: Services/BuiltInBbses
-- Checks: a built-in board is added once and stays removed once the user deletes it; the same host and port under another name is not added twice; a board gets its own copy of the logon steps, matched on host and port; any other board gets the Stock steps (`Otherwise type "new":`, `Enter your password:`, `Main System Menu (TOP)` → `m`); the shipped steps send only credential tokens and one-key menu picks.
-- Why: Anomaly Mud and Paradigm come set up on a new install, and a Stock board starts with its login menu filled in (user, 2026-10-28), with no one's account or password in them.
+- Checks: a built-in board is added once and stays removed once the user deletes it; the same host and port under another name is not added twice; the setup goes by a set's Info board name (Anomaly, Paradigm, anything else or no set → Stock), a realm on the global default goes by the global set, and copied steps are the caller's own; the Stock steps (`Otherwise type "new":`, `Enter your password:`, `Main System Menu (TOP)` → `m`) carry no host; every shipped setup sends only credential tokens and one-key menu picks.
+- Why: Anomaly Mud and Paradigm come set up on a new install, and a board's logon setup follows its game data rather than a host and port that can change (user, 2026-10-28), with no one's account or password in them.
 
 ### BulkCommandPacerTests.cs
 - Covers: Game/Inventory/BulkCommandPacer

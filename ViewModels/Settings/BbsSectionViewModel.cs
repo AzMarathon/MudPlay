@@ -221,6 +221,12 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     private string? _missingSetOption;
     private static string NotInstalledOption(string set) => $"{set} (not installed)";
 
+    // The picker's choice as the realm stores it: null for the global default.
+    private string? StoredRealmSet() =>
+        RealmGameDataSet == GlobalDefaultSet ? null
+        : RealmGameDataSet == _missingSetOption ? _missingSet
+        : RealmGameDataSet;
+
     // Realm renames / removals made in the window, applied on OK: a rename moves
     // the realm's data folder and re-points its characters; a removal deletes the
     // characters that play it (confirmed by name when it was staged) and its folder.
@@ -1071,6 +1077,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         _pendingPassword = null;
         _credentialsTouched = false;
+        _prefilledSetup = null;
         MenuNavSteps.Clear();
         SysopGotos.Clear();
         if (!HasProfile)
@@ -1138,12 +1145,16 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             {
                 SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
             }
-            // The board's logon steps come filled in (a built-in board's own, else the
-            // Stock ones), so typing a username and password and pressing OK is all
-            // its login needs.
+            // The logon steps come filled in, the setup the realm's game data calls
+            // for, so typing a username and password and pressing OK is all the login
+            // needs.
             if (_loaded.TryGetValue(bbsName, out BbsProfile? board))
-                foreach (MenuStep step in BuiltInBbses.LogonStepsFor(board))
-                    MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
+            {
+                string? realm = string.Equals(bbsName, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase)
+                    ? _profile.Current?.Realm : null;
+                _prefilledSetup = BuiltInBbses.ForRealm(board.RealmFor(realm), _globalSettings.Current.DefaultGameDataSet);
+                AddLogonSteps(_prefilledSetup);
+            }
         }
 
         RefreshImportSources(bbsName);
@@ -1301,9 +1312,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
         if (SelectedRealm() is not { } realm) return;
         RealmProfile defaults = new();
-        realm.ActiveGameDataSet = RealmGameDataSet == GlobalDefaultSet ? null
-            : RealmGameDataSet == _missingSetOption ? _missingSet
-            : RealmGameDataSet;
+        realm.ActiveGameDataSet = StoredRealmSet();
         realm.GameEntryCommand = string.IsNullOrWhiteSpace(GameEntryCommand)
             ? defaults.GameEntryCommand : GameEntryCommand.Trim();
         realm.GameExitCommand = string.IsNullOrWhiteSpace(GameExitCommand)
@@ -1456,7 +1465,67 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnCleanupTimeZoneIdChanged(string value)       { PushToCache(); Dirty(); }
     partial void OnDisconnectPatternChanged(string? value)      { PushToCache(); Dirty(); }
     partial void OnRunicCurrencyNameChanged(string value)       { PushToCache(); Dirty(); }
-    partial void OnRealmGameDataSetChanged(string value)        { PushToCache(); Dirty(); }
+    partial void OnRealmGameDataSetChanged(string value)
+    {
+        PushToCache();
+        Dirty();
+        if (!_suppressDirty)
+            FillSetupWhereBlank(BuiltInBbses.ForGameDataSet(StoredRealmSet() ?? _globalSettings.Current.DefaultGameDataSet));
+    }
+
+    // ----- Logon setups ---------------------------------------------------
+
+    // The setup the logon steps were filled in from when the character had no login
+    // saved for the board. Unedited, they still count as blank, so picking the
+    // realm's game data afterwards can put the right setup in their place.
+    private BuiltInBbses.Preset? _prefilledSetup;
+
+    private void AddLogonSteps(BuiltInBbses.Preset setup)
+    {
+        foreach (MenuStep step in setup.CopyLogonSteps())
+            MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
+    }
+
+    private bool LogonStepsAreBlank() =>
+        MenuNavSteps.Count == 0
+        || (_prefilledSetup is { } prefilled
+            && MenuNavSteps.Select(s => (s.WaitForPattern, s.Send))
+                .SequenceEqual(prefilled.LogonSteps.Select(s => (s.WaitForPattern, s.Send))));
+
+    // A game data set chosen for the realm fills in only what's blank: a host
+    // already typed, or logon steps already set, stay as they are.
+    private void FillSetupWhereBlank(BuiltInBbses.Preset setup)
+    {
+        if (setup.Host is not null && string.IsNullOrWhiteSpace(Host))
+        {
+            Host = setup.Host;
+            Port = setup.Port;
+        }
+        if (!HasProfile || !LogonStepsAreBlank()) return;
+        if (MenuNavSteps.Count > 0 && _prefilledSetup == setup) return;
+        MenuNavSteps.Clear();
+        AddLogonSteps(setup);
+        _prefilledSetup = null;
+        CredentialsDirty();
+    }
+
+    // The chosen setup over what's there, the host and port too for a board's
+    // setup. Pending like any other edit until OK.
+    [RelayCommand]
+    private void ApplyLogonSetup(string name)
+    {
+        if (_suppressDirty || BuiltInBbses.Named(name) is not { } setup) return;
+        if (setup.Host is not null)
+        {
+            Host = setup.Host;
+            Port = setup.Port;
+        }
+        if (!HasProfile) return;
+        MenuNavSteps.Clear();
+        AddLogonSteps(setup);
+        _prefilledSetup = null;
+        CredentialsDirty();
+    }
 
     // Confirm flags are Global-tier, not per-BBS — they don't push into
     // the per-BBS cache, just mark the section dirty so Apply commits

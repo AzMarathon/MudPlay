@@ -2842,9 +2842,11 @@ public partial class MainWindowViewModel : ObservableObject
         // the username and password are left for the user to type.
         if (creds is null)
         {
-            creds = new BbsCredentials { MenuNavSteps = BuiltInBbses.LogonStepsFor(bbs) };
-            string source = BuiltInBbses.For(bbs) is { } builtIn ? $"the built-in {builtIn.Name}" : "the Stock";
-            AppServices.Current.Log.Debug("LoginAuto", $"No login saved for '{bbs.Name}' — using {source} logon steps.");
+            BuiltInBbses.Preset setup = BuiltInBbses.ForRealm(
+                bbs.RealmFor(character?.Realm), AppServices.Current.Settings.Current.DefaultGameDataSet);
+            creds = new BbsCredentials { MenuNavSteps = setup.CopyLogonSteps() };
+            AppServices.Current.Log.Debug("LoginAuto",
+                $"No login saved for '{bbs.Name}' — using the {setup.Name} logon steps its realm's game data calls for.");
         }
 
         LoginAutomator? automator = LoginAutomator.TryBuild(

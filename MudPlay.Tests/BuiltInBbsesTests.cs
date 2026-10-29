@@ -7,8 +7,8 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The boards MudPlay comes with: added to the BBS list once per install, never on
-// top of the same board under another name, and their logon steps (and the Stock
-// steps every other board gets) carry no account or password of anyone's.
+// top of the same board under another name. The logon setup goes by the realm's
+// game data, and no setup carries anyone's account or password.
 public sealed class BuiltInBbsesTests : IDisposable
 {
     private readonly string _tag = Path.GetRandomFileName().Replace(".", "");
@@ -20,6 +20,23 @@ public sealed class BuiltInBbsesTests : IDisposable
     public void Dispose()
     {
         foreach (string name in _made) _store.Delete(name);
+        foreach (string set in _sets)
+        {
+            try { Directory.Delete(AppPaths.GameDataSetDir(set), recursive: true); }
+            catch (IOException) { /* best-effort cleanup of a scratch folder */ }
+        }
+    }
+
+    private readonly List<string> _sets = [];
+
+    private string WriteSet(string kind, string custom)
+    {
+        string set = $"!mudplay-test-{kind}-{_tag}";
+        _sets.Add(set);
+        string dir = AppPaths.GameDataSetDir(set);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Info.json"), $$"""[ { "Custom": "{{custom}}", "Legit": 2 } ]""");
+        return set;
     }
 
     private BuiltInBbses.Preset Preset(string name)
@@ -54,7 +71,7 @@ public sealed class BuiltInBbsesTests : IDisposable
         BuiltInBbses.Preset preset = Preset($"builtin-{_tag}");
         string mine = $"mine-{_tag}";
         _made.Add(mine);
-        _store.Save(new BbsProfile { Name = mine, Host = preset.Host.ToUpperInvariant() + " ", Port = preset.Port });
+        _store.Save(new BbsProfile { Name = mine, Host = preset.Host!.ToUpperInvariant() + " ", Port = preset.Port });
         List<string> added = [];
 
         Assert.Empty(BuiltInBbses.AddMissing(_store, added, [preset]));
@@ -62,37 +79,38 @@ public sealed class BuiltInBbsesTests : IDisposable
         Assert.Contains(preset.Name, added);
     }
 
+    // The setup goes by the realm's game data, the board its Info names, never the
+    // host and port, which a board can change. Anything else is Stock.
     [Fact]
-    public void ABuiltInBoard_GetsItsOwnCopyOfTheLogonSteps_MatchedOnHostAndPort()
+    public void ASetsBoardName_PicksTheSetup_AndAnythingElseIsStock()
     {
-        BbsProfile paramud = new() { Name = "Paramud", Host = "Paramud.MudInfo.net", Port = 2323 };
+        string anomaly = WriteSet("anomaly", "Anomaly");
+        string paradigm = WriteSet("paradigm", "Paradigm");
+        string stock = WriteSet("stock", "Default");
 
-        List<MenuStep> steps = BuiltInBbses.LogonStepsFor(paramud);
-        Assert.Equal(["{username}", "{password}", "P", "1"], steps.Select(s => s.Send));
-        steps[0].Send = "changed";
-        Assert.Equal("{username}", BuiltInBbses.LogonStepsFor(paramud)[0].Send);
+        Assert.Equal("Anomaly", BuiltInBbses.ForGameDataSet(anomaly).Name);
+        Assert.Equal("Paradigm", BuiltInBbses.ForGameDataSet(paradigm).Name);
+        Assert.Same(BuiltInBbses.Stock, BuiltInBbses.ForGameDataSet(stock));
+        Assert.Same(BuiltInBbses.Stock, BuiltInBbses.ForGameDataSet($"not-installed-{_tag}"));
+        Assert.Same(BuiltInBbses.Stock, BuiltInBbses.ForGameDataSet(null));
+        // A realm on the global default goes by the global set.
+        Assert.Equal("Paradigm", BuiltInBbses.ForRealm(new RealmProfile(), paradigm).Name);
+        Assert.Equal("Anomaly", BuiltInBbses.ForRealm(new RealmProfile { ActiveGameDataSet = anomaly }, paradigm).Name);
 
-    }
-
-    // Any other board, Paradigm's host on another port included, is taken for a Stock
-    // one: its BBS login prompts, then the main menu's `m`.
-    [Fact]
-    public void AnyOtherBoard_GetsTheStockLogonSteps()
-    {
-        BbsProfile mine = new() { Name = "My Stock board", Host = "paramud.mudinfo.net", Port = 23 };
-
-        List<MenuStep> steps = BuiltInBbses.LogonStepsFor(mine);
-
+        List<MenuStep> steps = BuiltInBbses.Stock.CopyLogonSteps();
         Assert.Equal(["Otherwise type \"new\":", "Enter your password:", "Main System Menu (TOP)"],
             steps.Select(s => s.WaitForPattern));
         Assert.Equal(["{username}", "{password}", "m"], steps.Select(s => s.Send));
+        steps[0].Send = "changed";
+        Assert.Equal("{username}", BuiltInBbses.Stock.LogonSteps[0].Send);
     }
 
     [Fact]
     public void TheShippedLogonSteps_SendOnlyCredentialTokensAndMenuKeys()
     {
-        Assert.Equal(["Anomaly", "Paradigm"], BuiltInBbses.All.Select(p => p.Name));
-        foreach (MenuStep step in BuiltInBbses.All.SelectMany(p => p.LogonSteps).Concat(BuiltInBbses.StockLogonSteps))
+        Assert.Equal(["Anomaly", "Paradigm", "Stock"], BuiltInBbses.Setups.Select(p => p.Name));
+        Assert.Null(BuiltInBbses.Stock.Host);
+        foreach (MenuStep step in BuiltInBbses.Setups.SelectMany(p => p.LogonSteps))
             Assert.True(step.Send is "{username}" or "{password}" || step.Send.Length == 1,
                 $"'{step.Send}' is neither a credential token nor a menu key");
     }
