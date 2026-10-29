@@ -30,11 +30,14 @@ namespace MudPlay.Services;
 // then. At startup the profile can load before the main window is up; the reopen
 // waits for it.
 //
-// Restore is screen-aware: a saved position still visible on a connected monitor
-// is honoured as-is (a window intentionally parked on a second screen reopens
-// there), but one whose monitor was unplugged — or that now falls off every
-// screen and can't be grabbed — is re-anchored next to the main UI and clamped
-// fully on-screen, so the app never opens split across a monitor that's gone.
+// Restore is screen-aware: a window opens on the main window's screen. A saved
+// position on that screen is honoured as-is; one saved on another screen opens at
+// the same spot on the main window's (so moving the client to the other monitor
+// brings its windows with it); one whose monitor was unplugged, or that now falls
+// off every screen and can't be grabbed, is re-anchored next to the main UI and
+// clamped fully on-screen. A window with no saved position opens centred over the
+// window it was opened from (WindowPlacement). The main window itself keeps its
+// saved screen.
 //
 // Tiny windows (under 80×60) and zero-sized windows are rejected on capture —
 // those are usually transient measurements during the teardown sequence, not
@@ -75,6 +78,12 @@ public sealed class WindowLayoutStore
     private IReadOnlyList<string>? _pendingOpen;
     private bool _suspendCapture;
 
+    // Where the main window was put at startup. Until the platform reports it
+    // there, its Position still reads where the window manager first mapped it
+    // (0,0 under XWayland on KDE), so windows reopened in that moment would be
+    // placed against the wrong screen.
+    private PixelPoint? _mainRestoredTo;
+
     // Ids whose height is content-driven (SizeToContent="Height"). Their saved
     // width + position restore, but a saved height is never re-applied — pinning it
     // would freeze SizeToContent, so the window couldn't shrink/grow as its panels
@@ -83,6 +92,10 @@ public sealed class WindowLayoutStore
         new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _autoSizeIds =
         new(StringComparer.OrdinalIgnoreCase);
+
+    // Every window attached, open or not yet shown: these are placed here, not by
+    // WindowPlacement's catch-all.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Window, string> _attached = new();
 
     // Edge-snapping / cluster-move for the panel windows. Registered per window in
     // AttachWindow; notified before a programmatic reposition so it doesn't read a
@@ -136,6 +149,31 @@ public sealed class WindowLayoutStore
         Dispatcher.UIThread.Post(() => MatchOpenWindows(saved));
     }
 
+    // Run once the main window is where it was restored to (at most a second on),
+    // so what opens next is placed against its real screen.
+    private void AfterMainSettles(Window main, Action run)
+    {
+        if (_mainRestoredTo is not { } target || main.Position == target)
+        {
+            Dispatcher.UIThread.Post(run);
+            return;
+        }
+        bool done = false;
+        void Run()
+        {
+            if (done) return;
+            done = true;
+            main.PositionChanged -= OnMoved;
+            run();
+        }
+        void OnMoved(object? sender, PixelPointEventArgs e)
+        {
+            if (e.Point == target) Dispatcher.UIThread.Post(Run);
+        }
+        main.PositionChanged += OnMoved;
+        DispatcherTimer.RunOnce(Run, TimeSpan.FromSeconds(1));
+    }
+
     private void MatchOpenWindows(IReadOnlyList<string> saved)
     {
         (List<string> toOpen, List<string> toClose) = PlanOpenWindows(saved, _open.Keys, _openers.Keys);
@@ -183,17 +221,18 @@ public sealed class WindowLayoutStore
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (autoHeight) _autoHeightIds.Add(id);
         if (autoSize) _autoSizeIds.Add(id);
+        _attached.AddOrUpdate(window, id);
         _snap?.Register(window, id);
 
         window.Opened += (_, _) =>
         {
             _open[id] = window;
-            RestoreOnto(window, id);
+            RestoreOnto(window, id, opening: true);
             // A profile loaded before the main window was up: reopen its windows now.
             if (id.Equals(MainWindowId, StringComparison.OrdinalIgnoreCase) && _pendingOpen is { } pending)
             {
                 _pendingOpen = null;
-                Dispatcher.UIThread.Post(() => MatchOpenWindows(pending));
+                AfterMainSettles(window, () => MatchOpenWindows(pending));
             }
         };
         window.Closing += (_, _) => { if (!_suspendCapture) CaptureFrom(window, id); };
@@ -249,9 +288,18 @@ public sealed class WindowLayoutStore
             RestoreOnto(window, id);
     }
 
-    private void RestoreOnto(Window window, string id)
+    // Whether window is placed by this store (it was attached).
+    public bool Places(Window window) => _attached.TryGetValue(window, out _);
+
+    // opening: the window is being shown now, not re-laid-out by a profile load,
+    // so one with no saved position is placed over the window it opened from.
+    private void RestoreOnto(Window window, string id, bool opening = false)
     {
-        if (!_bounds.TryGetValue(id, out WindowBounds? layout)) return;
+        if (!_bounds.TryGetValue(id, out WindowBounds? layout))
+        {
+            if (opening) PlaceNew(window, id);
+            return;
+        }
 
         // Content-sized windows restore no size at all, and content-auto-height
         // ones width only — setting a sized dimension would clobber SizeToContent
@@ -272,25 +320,37 @@ public sealed class WindowLayoutStore
         // dropped it wherever the window manager felt like — and the position
         // also decides which monitor it maximizes onto.
         //
-        // X+Y both zero is the "never positioned" sentinel — let the WM place it
-        // (CenterOwner) rather than pinning to the desktop origin.
+        // X+Y both zero is the "never positioned" sentinel: placed like a window
+        // with nothing saved rather than pinned to the desktop origin.
         if (layout.X != 0 || layout.Y != 0)
-        {
-            PixelPoint resolved = ResolvePosition(window, layout);
-            // Tell the snap manager this is our reposition, not a user drag, so a
-            // profile-load re-layout of the main window doesn't haul the cluster.
-            _snap?.ExpectMove(id, resolved);
-            window.Position = resolved;
-        }
+            MoveTo(window, id, ResolvePosition(window, id, layout));
+        else if (opening)
+            PlaceNew(window, id);
 
         window.WindowState = layout.Maximized
             ? WindowState.Maximized
             : WindowState.Normal;
     }
 
-    // Turn a saved position into an on-screen one. Honour a position still
-    // visible on a connected monitor; otherwise re-anchor next to the main UI.
-    private PixelPoint ResolvePosition(Window window, WindowBounds layout)
+    private void PlaceNew(Window window, string id)
+    {
+        if (WindowPlacement.CenteredOnAnchor(window) is { } at) MoveTo(window, id, at);
+    }
+
+    private void MoveTo(Window window, string id, PixelPoint at)
+    {
+        // Tell the snap manager this is our reposition, not a user drag, so a
+        // profile-load re-layout of the main window doesn't haul the cluster.
+        _snap?.ExpectMove(id, at);
+        if (id.Equals(MainWindowId, StringComparison.OrdinalIgnoreCase)) _mainRestoredTo = at;
+        window.Position = at;
+    }
+
+    // Turn a saved position into an on-screen one. Honour a position on the main
+    // window's screen (any connected one for the main window itself), move one on
+    // another screen onto the main window's, and re-anchor one off every screen
+    // next to the main UI.
+    private PixelPoint ResolvePosition(Window window, string id, WindowBounds layout)
     {
         PixelPoint saved = new((int)layout.X, (int)layout.Y);
 
@@ -302,14 +362,19 @@ public sealed class WindowLayoutStore
         // scale by the target screen to compare against the physical-pixel
         // working area.
         double scale = screens.ScreenFromPoint(saved)?.Scaling ?? window.DesktopScaling;
-        PixelSize frame = new(
-            (int)Math.Ceiling(window.Width * scale),
-            (int)Math.Ceiling(window.Height * scale));
+        PixelSize frame = WindowPlacement.FramePixels(window, scale);
         PixelRect rect = new(saved, frame);
 
-        return IsReachable(screens, rect)
-            ? saved
-            : ReanchorNextToMain(screens, window, frame);
+        if (!IsReachable(screens, rect)) return ReanchorNextToMain(screens, window, frame);
+        if (WindowPlacement.MainScreen(window) is { } home && screens.ScreenFromBounds(rect) is { } at
+            && at.Bounds != home.Bounds)
+        {
+            PixelPoint moved = WindowPlacement.OntoScreen(rect, at.Bounds, home.Bounds, home.WorkingArea);
+            AppServices.CurrentOrNull?.Log.Debug("Windows",
+                $"'{id}' was saved on another screen: opened on the main window's, at {moved.X},{moved.Y}.");
+            return moved;
+        }
+        return saved;
     }
 
     private static bool IsReachable(Screens screens, PixelRect rect)
@@ -343,11 +408,7 @@ public sealed class WindowLayoutStore
                 area.X + Math.Max(0, (area.Width - frame.Width) / 2),
                 area.Y + Math.Max(0, (area.Height - frame.Height) / 2));
 
-        int maxX = Math.Max(area.X, area.Right - frame.Width);
-        int maxY = Math.Max(area.Y, area.Bottom - frame.Height);
-        return new PixelPoint(
-            Math.Clamp(start.X, area.X, maxX),
-            Math.Clamp(start.Y, area.Y, maxY));
+        return WindowPlacement.ClampInto(start, frame, area);
     }
 
     private void CaptureFrom(Window window, string id)

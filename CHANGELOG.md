@@ -1,5 +1,9 @@
 # Version history
 
+## 3.189.3
+
+- Windows open on the client's monitor: centred over the window they were opened from, or at their remembered spot moved onto that monitor
+
 ## 3.189.2
 
 - With server room data, a step waits for who is in the room, so a loop no longer walks past a monster standing in it
