@@ -507,6 +507,11 @@ How to keep it current:
 - Checks: category buckets; manual/top-down ordering; stable remover-first reorder.
 - Why: cast order matches the shown order; Stock collision ordering.
 
+### BuffSettingsFloorTests.cs
+- Covers: Models/Profile/BuffSettings (BlessIfAboveMa), read and written through ProfileService
+- Checks: a profile saved before the Buff Watchdog's shared mana floor existed loads it at the per-buff default (50); a floor of 0 survives a create and a reload.
+- Why: the Buff Watchdog's one mana floor for every buff, which new buffs start at and Set on all writes onto every buff.
+
 ### BuffSlotRowViewModelTests.cs
 - Covers: ViewModels/BuffSlotRowViewModel
 - Checks: name abbreviation and recast text; All/Self independence; member auto-assign; solo visibility; overwrite tooltip; self-activation hook; learned flag; negated marks.
@@ -2394,7 +2399,7 @@ How to keep it current:
 
 ### MegaMudProfileImporterTests.cs
 - Covers: Services/MegaMudProfileImporter, MegaMudIni, MegaMudImportPlan
-- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
+- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs (MegaMUD's bless mana floor on each buff and as the Buff Watchdog's shared floor), left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
 - Why: MegaMUD character import; MegaMUD's when-full commands behave as the cast-when-full slots do (user, 2026-10-24).
 
 ### MeleeMatchupProfilesTests.cs

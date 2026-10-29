@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.188.1**
-> - Trainer spells the game data doesn't tie to a class (AMud's warlock chaos shield) are in its spell book
-> - A spell `sp` or a learn line names is marked learned even when the data says the class can't learn it
+> **Version 3.188.2**
+> - Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

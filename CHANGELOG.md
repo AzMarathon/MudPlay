@@ -1,5 +1,9 @@
 # Version history
 
+## 3.188.2
+
+- Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
+
 ## 3.188.1
 
 - Trainer spells the game data doesn't tie to a class (AMud's warlock chaos shield) are in its spell book
