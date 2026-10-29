@@ -62,6 +62,9 @@ public partial class App : Application
             // directly-shown ones); the main window is excluded so its own input
             // is untouched.
             MudPlay.Controls.DialogKeyboardFallthrough.Install(mainWindow);
+            // Every other window opens on the main window's monitor, over the window
+            // it was opened from.
+            MudPlay.Services.WindowPlacement.Install(mainWindow, MudPlay.Services.AppServices.Current.WindowLayouts.Places);
 
             // DialogService parents every modeless dialog to the main window so
             // closing main tears down its children.

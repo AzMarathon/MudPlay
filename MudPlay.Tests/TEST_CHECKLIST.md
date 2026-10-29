@@ -4584,6 +4584,11 @@ How to keep it current:
 - Checks: which window geometry is saved, across normal, minimized, maximized and collapsed sizes.
 - Why: report paradigm-20260827-081318 (minimized windows at -32000).
 
+### WindowPlacementTests.cs
+- Covers: Services/WindowPlacement (OntoScreen, CenteredOver, ClampInto)
+- Checks: a window saved on the other monitor opens at the same spot on the client's monitor, kept inside its working area; a new window opens centred over the client; a window larger than the screen keeps its corner on it.
+- Why: on two monitors windows opened on the first one, away from the client, and had to be dragged across (user, 2026-10-29).
+
 ### WindowSnapManagerTests.cs
 - Covers: Services/WindowSnapManager
 - Checks: edge-snap search, never snapping a title bar off the working area, flush adjacency, the cluster BFS.

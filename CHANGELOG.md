@@ -1,5 +1,9 @@
 # Version history
 
+## 3.190.1
+
+- Windows open on the client's monitor: centred over the window they were opened from, or at their remembered spot moved onto that monitor
+
 ## 3.190.0
 
 - Tools → GMCP Monitor records what the server sends, with an export to share; off until Record is ticked
