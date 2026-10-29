@@ -2838,13 +2838,13 @@ public partial class MainWindowViewModel : ObservableObject
         CharacterProfile? character = AppServices.Current.Profile.Current;
         BbsCredentials? creds = null;
         character?.BbsCredentials?.TryGetValue(bbs.Name, out creds);
-        // A character that never saved a login for a built-in board still walks its
-        // menus; the username and password are left for the user to type.
-        if (creds is null && BuiltInBbses.For(bbs) is { } builtIn)
+        // A character that never saved a login for the board still walks its menus;
+        // the username and password are left for the user to type.
+        if (creds is null)
         {
             creds = new BbsCredentials { MenuNavSteps = BuiltInBbses.LogonStepsFor(bbs) };
-            AppServices.Current.Log.Debug("LoginAuto",
-                $"No login saved for '{bbs.Name}' — using the built-in {builtIn.Name} logon steps.");
+            string source = BuiltInBbses.For(bbs) is { } builtIn ? $"the built-in {builtIn.Name}" : "the Stock";
+            AppServices.Current.Log.Debug("LoginAuto", $"No login saved for '{bbs.Name}' — using {source} logon steps.");
         }
 
         LoginAutomator? automator = LoginAutomator.TryBuild(

@@ -7,8 +7,8 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // The boards MudPlay comes with: added to the BBS list once per install, never on
-// top of the same board under another name, and their logon steps carry no
-// account or password of anyone's.
+// top of the same board under another name, and their logon steps (and the Stock
+// steps every other board gets) carry no account or password of anyone's.
 public sealed class BuiltInBbsesTests : IDisposable
 {
     private readonly string _tag = Path.GetRandomFileName().Replace(".", "");
@@ -72,14 +72,27 @@ public sealed class BuiltInBbsesTests : IDisposable
         steps[0].Send = "changed";
         Assert.Equal("{username}", BuiltInBbses.LogonStepsFor(paramud)[0].Send);
 
-        Assert.Empty(BuiltInBbses.LogonStepsFor(new BbsProfile { Host = "paramud.mudinfo.net", Port = 23 }));
+    }
+
+    // Any other board, Paradigm's host on another port included, is taken for a Stock
+    // one: its BBS login prompts, then the main menu's `m`.
+    [Fact]
+    public void AnyOtherBoard_GetsTheStockLogonSteps()
+    {
+        BbsProfile mine = new() { Name = "My Stock board", Host = "paramud.mudinfo.net", Port = 23 };
+
+        List<MenuStep> steps = BuiltInBbses.LogonStepsFor(mine);
+
+        Assert.Equal(["Otherwise type \"new\":", "Enter your password:", "Main System Menu (TOP)"],
+            steps.Select(s => s.WaitForPattern));
+        Assert.Equal(["{username}", "{password}", "m"], steps.Select(s => s.Send));
     }
 
     [Fact]
     public void TheShippedLogonSteps_SendOnlyCredentialTokensAndMenuKeys()
     {
         Assert.Equal(["Anomaly", "Paradigm"], BuiltInBbses.All.Select(p => p.Name));
-        foreach (MenuStep step in BuiltInBbses.All.SelectMany(p => p.LogonSteps))
+        foreach (MenuStep step in BuiltInBbses.All.SelectMany(p => p.LogonSteps).Concat(BuiltInBbses.StockLogonSteps))
             Assert.True(step.Send is "{username}" or "{password}" || step.Send.Length == 1,
                 $"'{step.Send}' is neither a credential token nor a menu key");
     }

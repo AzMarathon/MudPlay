@@ -101,6 +101,8 @@ The division of labour: **Profile Management** is where BBSes and realms are cre
 
 **Built-in boards.** MudPlay comes with **Anomaly** (`playanomalymud.com` port 2324) and **Paradigm** (`paramud.mudinfo.net` port 2323) in the BBS list, logon steps included: add your character under one, type its **username and password** under *Character profile settings* on the BBS tab, press **OK**, and connect. On Paradigm the login stops at the character list, since which slot is yours is up to you; add a step for `{ Character Selection }` sending your slot number to skip it. Each board is added once: remove it and it stays removed. One you already set up under another name (the same host and port) isn't added twice, and its characters get the same logon steps when they have no login saved yet.
 
+**Stock boards.** Any other board you add is taken for a Stock one. A character with no login saved for it starts with the Stock logon steps filled in: `Otherwise type "new":` sends `{username}`, `Enter your password:` sends `{password}`, and `Main System Menu (TOP)` sends `m`. You still type the board's host and port yourself. Edit or delete the steps if your board's menus differ.
+
 First **add the board** in **Profile Management** (File → Profile Management → BBSes → Add) — that's where BBSes are created, renamed, and removed now. Add drops you straight into **Settings → BBS + Display** for the new board (you can get back there any time with **BBS settings…**, or by double-clicking the board in the list). Fill in:
 
 - its **host** and **port**;

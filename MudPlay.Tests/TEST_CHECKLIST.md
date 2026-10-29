@@ -569,8 +569,8 @@ How to keep it current:
 
 ### BuiltInBbsesTests.cs
 - Covers: Services/BuiltInBbses
-- Checks: a built-in board is added once and stays removed once the user deletes it; the same host and port under another name is not added twice; a board gets its own copy of the logon steps, matched on host and port; the shipped steps send only credential tokens and one-key menu picks.
-- Why: Anomaly Mud and Paradigm come set up on a new install, with no one's account or password in them.
+- Checks: a built-in board is added once and stays removed once the user deletes it; the same host and port under another name is not added twice; a board gets its own copy of the logon steps, matched on host and port; any other board gets the Stock steps (`Otherwise type "new":`, `Enter your password:`, `Main System Menu (TOP)` → `m`); the shipped steps send only credential tokens and one-key menu picks.
+- Why: Anomaly Mud and Paradigm come set up on a new install, and a Stock board starts with its login menu filled in (user, 2026-10-28), with no one's account or password in them.
 
 ### BulkCommandPacerTests.cs
 - Covers: Game/Inventory/BulkCommandPacer
