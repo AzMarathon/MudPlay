@@ -30,6 +30,7 @@ public sealed class SpellbookStateTests : IDisposable
     private static readonly object[] _classes =
     [
         ClassRow(1, "Warrior", magery: 0, mageryLvl: 0),
+        ClassRow(11, "Warlock", magery: 1, mageryLvl: 2),
         ClassRow(12, "Mage", magery: 1, mageryLvl: 3),
         ClassRow(13, "Druid", magery: 3, mageryLvl: 3),
     ];
@@ -345,6 +346,37 @@ public sealed class SpellbookStateTests : IDisposable
         ];
         File.WriteAllText(Path.Combine(dir, "Spells.json"), JsonSerializer.Serialize(spells));
         File.WriteAllText(Path.Combine(dir, "Classes.json"), JsonSerializer.Serialize(classes));
+    }
+
+    // Paradigm has two "chaos shield" rows on `chao`: the mage-3 one cast on a player
+    // (#405) and the warlock's own mage-2 self buff (#5573, classes 10 and 11). A
+    // warlock learning it from the trainer must get the warlock's row, a self buff.
+    [Fact]
+    public void SameNamedTwin_ClassOwnRowWins_AsALearnedSelfBuff()
+    {
+        static Dictionary<string, object> Buff(Dictionary<string, object> row, int targets, string classes)
+        {
+            row["Targets"] = targets;
+            row["Dur"] = 40;
+            row["Classes"] = classes;
+            return row;
+        }
+        object[] spells =
+        [
+            Buff(SpellRow(405, "chaos shield", "chao", magery: 1, mageryLvl: 3, reqLevel: 21, abil0: 7), 2, "(*)"),
+            Buff(SpellRow(5573, "chaos shield", "chao", magery: 1, mageryLvl: 2, reqLevel: 37, abil0: 7), 1, "(11),(10)"),
+        ];
+        SpellbookState book = New(spells).book;
+        book.Refresh(classNumber: 11, level: 38);
+
+        KnownSpell? learned = book.MarkObtainedByName("chaos shield");
+
+        Assert.Equal(5573, learned?.Number);
+        KnownSpell chao = book.FindByCastCode("chao")!.Value;
+        Assert.Equal(5573, chao.Number);
+        Assert.True(book.IsObtained(chao.Number));
+        Assert.True(BuffClassifier.IsSelfBuff(chao.Targets));
+        Assert.True(BuffClassifier.IsAnyBuff(chao));
     }
 
     // ----- AvailablePicks (Settings spell-picker suggestion source) -----

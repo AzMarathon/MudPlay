@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Shop.List","payload":{"room":"1,1","shop":null,"name":null,"items":[{"num":14,"name":"chainmail hauberk","price":{"amount":80,"currency":"gold"},"stock":25,"max":25,"restockMinutes":180,"canUse":true,"cannotUseBecause":[]}]},"expect":{"reject":"schema"},"why":"outside a shop the list is empty"}

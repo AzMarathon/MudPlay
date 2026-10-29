@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Group.Members","payload":{"leader":"Tester","members":[{"name":"Tester","class":"Warrior","membership":"member","rank":"leader","hpPct":100,"manaPct":null,"manaType":null,"poisoned":false,"resting":false,"meditating":false,"here":true}]},"expect":{"reject":"schema"},"why":"rank is the formation (front/middle/back); leadership is the top-level leader"}

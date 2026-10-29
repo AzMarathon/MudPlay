@@ -1,0 +1,7 @@
+{"recording":1,"source":"synthetic","contract":"1.0.0","scenario":"11-legacy-client","description":"A client that says DO GMCP but never sends Core.Supports.Set gets exactly today's four legacy packages in today's shapes, nothing else.","server":null,"captured":null,"supersededBy":null}
+{"t":120,"dir":"s2c","kind":"negotiation","telnet":"IAC WILL GMCP","expect":"valid"}
+{"t":240,"dir":"c2s","kind":"negotiation","telnet":"IAC DO GMCP","expect":"valid"}
+{"t":360,"dir":"s2c","kind":"gmcp","pkg":"Char.Vitals","msg":{"hp":150,"maxhp":150,"mana":0,"maxmana":0,"level":12},"expect":"valid"}
+{"t":480,"dir":"s2c","kind":"gmcp","pkg":"Char.Status","msg":{"combat":false,"resting":false},"expect":"valid"}
+{"t":600,"dir":"s2c","kind":"gmcp","pkg":"Room.Info","msg":{"num":"1,301","map":1,"room":301,"name":"Rat Warren","exits":["u"]},"expect":"valid"}
+{"t":720,"dir":"s2c","kind":"gmcp","pkg":"Room.Chars","msg":{"monsters":[{"name":"giant rat","display":"large giant rat","align":0}],"players":[]},"expect":"valid"}

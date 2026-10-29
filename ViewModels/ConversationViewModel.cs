@@ -345,7 +345,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private bool ChannelAllowed(ChatChannel c) => c switch
     {
         ChatChannel.Gossip            => ShowGossip,
-        ChatChannel.Local             => ShowLocal,
+        ChatChannel.Local or ChatChannel.Party => ShowLocal,
         ChatChannel.TelepathIncoming  => ShowTelepath,
         ChatChannel.TelepathOutgoing  => ShowTelepath,
         ChatChannel.Gangpath          => ShowGangpath,
@@ -507,6 +507,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         {
             [ChatChannel.Gossip]            = LookupBrush(app, "AccentCyanBrush"),
             [ChatChannel.Local]             = LookupBrush(app, "ChromeFgBrush"),
+            [ChatChannel.Party]             = LookupBrush(app, "ChromeFgBrush"),
             [ChatChannel.TelepathIncoming]  = LookupBrush(app, "AccentMagentaBrush"),
             [ChatChannel.TelepathOutgoing]  = LookupBrush(app, "AccentMagentaBrush"),
             [ChatChannel.Gangpath]          = LookupBrush(app, "AccentGreenBrush"),
@@ -552,7 +553,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private static string? GroupKey(ChatChannel c) => c switch
     {
         ChatChannel.Gossip           => "Gossip",
-        ChatChannel.Local            => "Local",
+        ChatChannel.Local or ChatChannel.Party => "Local",
         ChatChannel.TelepathIncoming => "Telepath",
         ChatChannel.TelepathOutgoing => "Telepath",
         ChatChannel.Gangpath         => "Gangpath",

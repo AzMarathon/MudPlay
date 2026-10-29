@@ -51,7 +51,7 @@ namespace MudPlay.Game.Spells;
 // HealthManager's passive rest has its own switch (AutoRest). When
 // the spell pickers on the Spells tab are empty, the engine no-ops without further
 // checks.
-public sealed class CastingDirector : IDisposable
+public sealed partial class CastingDirector : IDisposable
 {
     // LogService category — appears as [CastDirector] rows per evaluation +
     // decision.
@@ -1551,10 +1551,16 @@ public sealed class CastingDirector : IDisposable
     // thread (same thread every _activeUntil write runs on), so no lock is needed.
     public IReadOnlyList<ActiveBuffTimer> SnapshotActiveBuffs()
     {
-        List<ActiveBuffTimer> list = new(_activeUntil.Count);
+        // With the server owning effects its timers come first, and a self-buff of ours
+        // the server can name is its, not ours.
+        bool serverEffects = GmcpOwnsEffects?.Invoke() == true;
+        List<ActiveBuffTimer> list = serverEffects
+            ? new(GmcpTimers?.Invoke() ?? Array.Empty<ActiveBuffTimer>())
+            : new(_activeUntil.Count);
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
         {
             bool ours = kv.Key.Target.Length == 0;
+            if (ours && serverEffects && GmcpSelfEffect?.Invoke(kv.Key.Short).Present is not null) continue;
             (DateTime Until, bool Restored, DateTime RanOnUntil) mark = default;
             bool carried = ours && IsCarried(kv.Key.Short, out mark);
             list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
@@ -1570,9 +1576,13 @@ public sealed class CastingDirector : IDisposable
     // is armed and hasn't run out. The auto-light engine asks before casting its
     // room-light spell, a slot this director never maintains itself.
     public bool IsSelfBuffUp(string shortCode)
-        => !string.IsNullOrWhiteSpace(shortCode)
-           && _activeUntil.TryGetValue(("", shortCode.Trim()), out (DateTime Until, int MarginSec, int TotalSec) t)
-           && t.Until > _now();
+    {
+        if (GmcpOwnsEffects?.Invoke() == true && GmcpSelfEffect?.Invoke(shortCode).Present is bool present)
+            return present;
+        return !string.IsNullOrWhiteSpace(shortCode)
+            && _activeUntil.TryGetValue(("", shortCode.Trim()), out (DateTime Until, int MarginSec, int TotalSec) t)
+            && t.Until > _now();
+    }
 
     // True when a buff on targetKey ("" = self) is due to be (re)cast: either never
     // confirmed-active, or within the slot's recast lead of expiry. The lead is the
@@ -1582,6 +1592,22 @@ public sealed class CastingDirector : IDisposable
     // due changes nothing.
     private bool IsRecastDue(string targetKey, string spellShort)
     {
+        if (targetKey.Length == 0 && GmcpOwnsEffects?.Invoke() == true && GmcpSelfEffect is not null)
+        {
+            (bool? present, DateTime? until) = GmcpSelfEffect(spellShort);
+            // The server's effects say whether the buff is up and until when; a cast
+            // of it still awaiting its answer isn't sent again meanwhile.
+            if (present is { } knownPresent)
+            {
+                if (_pendingSelfBuffShort == spellShort && _now() - _pendingSelfBuffArmedAt < PendingSelfBuffRejectionWindow)
+                    return false;
+                int margin = _activeUntil.TryGetValue(("", spellShort), out var previous)
+                    ? previous.MarginSec
+                    : DefaultRecastMarginSec;
+                return !knownPresent
+                    || until is { } end && (end - _now()).TotalSeconds <= EffectiveMargin("", spellShort, margin);
+            }
+        }
         if (targetKey.Length == 0 && _drawPendingUntil.TryGetValue(spellShort, out DateTime waitEnds)
             && _now() < waitEnds)
             return false;

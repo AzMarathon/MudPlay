@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Char.Vitals","payload":"{\"hp\": 150,","expect":{"reject":"malformed-json"},"why":"cut-off JSON"}

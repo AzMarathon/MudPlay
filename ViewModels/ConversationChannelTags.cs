@@ -13,6 +13,7 @@ public static class ConversationChannelTags
     {
         ChatChannel.Gossip            => "GOS",
         ChatChannel.Local             => "SAY",
+        ChatChannel.Party             => "PARTY",
         ChatChannel.TelepathIncoming  => "TELE",
         ChatChannel.TelepathOutgoing  => "TELE",
         ChatChannel.Gangpath          => "GANG",

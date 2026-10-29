@@ -5147,6 +5147,28 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
+### Live server data (GMCP)
+
+On servers that offer the Anomaly GMCP contract, MudPlay can receive character and room data alongside the normal terminal text. Other servers continue to use text parsing.
+
+In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. Changes apply on the next connection:
+
+- **Off:** use text for that package without shadow comparisons.
+- **Shadow** (default): keep using text and compare the fields both sources carry. Differences appear under **GMCP shadow** in the program log. Extra server information, such as hidden exits or exact monster HP, is not compared with text that never reports it.
+- **Active:** use a valid server snapshot for that package. Until the snapshot arrives, or after its scoped reset, text parsing resumes for that package. An incompatible contract or GMCP being disabled restores text parsing.
+
+Activate both **Room.Occupants** and **Mob** to use server-provided monsters for targeting. The client waits for each listed monster's static information and complete live baseline before using the roster. Returning to a room reuses static information but requires fresh live state. **Mob** active mode also supplies exact HP to the existing monster HP readouts.
+
+**Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
+
+
+Contract **1.1.0** also supplies inventory and worn items, shop stock, learned spells, active effects, abilities and party formation. Item and shop usability is the server's current reading. Spell damage and healing bands are **before target resistances**. Effect magnitude is the value of the effect, not a caster level; an unknown caster stays unknown. Item or draw tokens that cannot be mapped to a server spell keep their existing buff tracking. Party HP can be negative when someone is down.
+
+**Inspect server data…** opens a read-only view of current snapshots. Enter an item number and choose **Item card** for static information or **Item usability** for the character's current eligibility. Cards survive room changes and are cleared on a full reset or item-card reset. Usability responses are discarded when your level or alignment changes; ask again afterwards. A shop's data expires when you leave its room; outside a shop its current reading is empty. Automatic buying still starts only after an explicit `list` readout. With **Shop.List** active, a `list` takes its stock from a fresh server list; if none arrives within 3 seconds, or the request fails, the shop's text table is read instead.
+
+**Comm.Line** carries individual chat events. Active mode routes one copy to chat history and triggers while normal text remains in the terminal. Repeated identical messages remain separate messages; refresh and mode changes never replay them. Directed says continue through text because contract 1.1.0 does not carry their directed recipient. Following a communication reset or malformed event, text handles chat until the next full session reset so the source cannot switch halfway through a message.
+
+
 Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Move to BBS*).
 
 To make each setting's persistence level obvious, the tab is split into three banner-headed sections:
@@ -5733,7 +5755,7 @@ Two things are deliberately shared rather than duplicated. **Min enemies belongs
 
 **Picking a spell (learned-spell guard):** each slot is a typeahead — start typing a **cast-code or name** and it lists your class's spells (it commits the 4-letter code). Spells your character **hasn't learned yet** are shown **struck through and dimmed** in the list, and if a slot is pointed at one the box **outlines red** as a warning — so you can't quietly misconfigure a slot with a spell you can technically learn but haven't (the value is still saved; the red outline is only a heads-up). The same picker and guard are on **Settings → Spells** (heals, cures, bless).
 
-The guard needs to know what you've learned: type `spells` (or `stat`) in the game once so it can read your spell list — until then nothing is flagged. It also updates the moment you learn a spell mid-session (reading a teaching item, e.g. *"You add agony to your spellbook!"*).
+The guard needs to know what you've learned: type `spells` (or `stat`) in the game once so it can read your spell list — until then nothing is flagged. It also updates the moment you learn a spell mid-session (reading a teaching item, e.g. *"You add agony to your spellbook!"*, or buying it from a trainer, *"You learn the spell chaos shield."*).
 
 **How the cascade works each round:** A pending backstab always wins first. Then, whichever action type (spell or physical) your Action Order setting prefers gets tried; on the spell side, the order is Multi-attack 1 → Multi-attack 2 → Normal attack → Alternate attack, falling through to the weapon if nothing can fire.
 

@@ -372,6 +372,7 @@ public sealed class AppServices
     // Sole writer of the state's HP / MA / position / mana-type fields
     // (the single-writer IL scan enforces this).
     public Game.PromptParser Player { get; }
+    public Game.Gmcp.GmcpIntegration Gmcp { get; }
 
     // Client-side terminal line buffer. Routes user keystrokes through
     // a local 254-char accumulator that only flushes to the wire on
@@ -3300,8 +3301,8 @@ public sealed class AppServices
         // rather than waiting for the stat poll so a same-class reroll
         // doesn't keep spells the new character can't have yet.
         Router.Subscribe(Services.Patterns.KnownPatterns.Reroll, _ => Spellbook.ClearObtained());
-        // Learn-scroll signal — mark the spell obtained the moment the
-        // "…and learn the spell <name>." line fires, without waiting for
+        // Learn-scroll / trainer signal — mark the spell obtained the moment
+        // the "…learn the spell <name>." line fires, without waiting for
         // the next `spells` poll. Group 1 carries the full spell Name.
         Router.Subscribe(Services.Patterns.KnownPatterns.LearnSpell, m =>
         {
@@ -11102,6 +11103,13 @@ public sealed class AppServices
         // Once, with the version that stopped the default profile being written: it
         // goes back to the installed defaults. Ahead of the load below, which may be
         // of that profile.
+        Gmcp = new Game.Gmcp.GmcpIntegration(Player, Stats, RoomGraph, RoomTracker, RoomClassifier, CombatTracker, Encumbrance, Log);
+        Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
+        Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
+        LairTimers.GmcpEligibility = Gmcp.LairEligibility;
+        PromptScanner.PromptObserved += Gmcp.ObservePrompt;
+        Profile.ProfileClosed += Gmcp.Disconnected;
+
         Models.Profile.CharacterProfile? defaultProfileBeforeReset = Profile.ResetDefaultProfileOnce();
 
         // A launch that comes up on the unnamed draft chooses its game-data set but

@@ -1,5 +1,16 @@
 # Version history
 
+## 3.188.0
+
+- GMCP server data with per-package shadow and active modes in BBS settings
+- Scoped text fallback and monster identity recovery across room changes and reconnects
+- Live server vitals, stats, conditions, rooms, occupants and exact monster HP
+- Server inventory, shop stock, learned spells, effects, abilities and party formation
+- GMCP chat reaches history and triggers once per event
+- Inspect server snapshots and request item cards and usability in BBS settings
+- Active GMCP rooms no longer send `rm` on every step
+- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
+
 ## 3.187.8
 
 - Bosses: a boss followed out of its rooms and killed where it was seen walk in now starts its timer

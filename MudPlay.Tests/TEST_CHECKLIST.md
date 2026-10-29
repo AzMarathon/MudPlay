@@ -1606,6 +1606,41 @@ How to keep it current:
 - Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds; infernal darkness (both seeds) and Stock's sandstorm are not blindness, a gruesome curse is (checked against the Spells data, 2026-10-23).
 - Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
+### GmcpIntegrationTests.cs
+- Milestone 2 extends the real session harness with inventory, shop, spellbook, effects, party, chat and ability owners; both chat and normal text lanes use the router.
+- Covers: GMCP integration through PromptParser, StatParser, RoomTracker, RoomEntityClassifier and their consumers.
+- Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, a per-step room reset keeping the known position (no `rm` resync), combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence; a long fight's combat lines keep the idle-stall watchdog off while server status owns combat (status reports combat only when it flips). Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
+- Why: negotiated data must reach existing automation models without creating competing writers or disabling unrelated text parsing.
+
+### GmcpMilestone2IntegrationTests.cs
+- Covers: GmcpIntegration (milestone 2) through InventoryManager, AutoBuyManager, SpellbookState, SpellListParser, PartyManager, ChatRouter, TriggerEngine, AbilBreakdownParser and CastingDirector.
+- Checks: synthetic and captured milestone-2 wire replay into the existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers on live spell rounds (`SpellCalculator.SpellRoundSecondsWallClock`, as the text buff timers), unmapped item-buff fallback, inspector requests/errors, oversized item IDs and fresh shop reads; a `list` with no server answer is read from its text table once the wait runs out, and a late answer starts nothing more.
+- Why: server inventory, shop, spell, effect, party, chat and ability data must reach the owners the text path feeds, once, and hand back to text on a reset or a fault.
+
+### GmcpMilestone2LiveTests.cs
+- Covers: GmcpIntegration (milestone 2) against the isolated Anomaly test host; opt-in, skipped in normal runs.
+- Checks: shadow comparisons, and active inventory, item queries, party formation, buffs, repeated chat and actual shop stock.
+- Why: the replays prove the client's handling only; these show the live server and client agree.
+- Run: coordinate the host window in contract STATUS, then use `Gmcp/run-live.py` shadow filter followed by active filter. Disposable credentials enter through stdin/environment; raw login captures stay outside this repository.
+
+### GmcpMilestone2StateTests.cs
+- Covers: GmcpState, GmcpContract (the 1.1.0 packages).
+- Checks: tagged 1.1.0 examples, large synthetic snapshots, event lifetime, card resets, room-bound shops, usability invalidation (kept through vitals ticks, dropped on a level or alignment change), negative HP and present zero ability sources.
+- Why: a payload the contract doesn't validate, or one kept past its reset, must never take state away from text.
+- Run: `dotnet test --filter FullyQualifiedName~GmcpMilestone2StateTests` with a fresh scratch data root.
+
+### GmcpStateTests.cs
+- Covers: Game/Gmcp/GmcpState and embedded contract checks.
+- Checks: contract replay sequences, static/live cache lifetimes, stale-room rejection, full baselines versus deltas, package resets, incompatible versions and disconnects.
+- Why: returning monsters and reconnects must reconstruct complete state before a package becomes authoritative. Fixtures are synthetic and do not certify the server.
+
+### GmcpTransportTests.cs
+- Core.Hello advertises contract 1.1.0 and milestone-2 capability modules.
+- Covers: Net/TelnetClient and GMCP UTF-8 framing.
+- Checks: every fragmentation boundary, literal UTF-8, display/message ordering, malformed/oversize/unterminated recovery, larger incoming snapshots, escaped IAC, WONT/WILL transitions and real-socket Hello/Supports/recovery requests.
+- Why: GMCP frames must stay out of terminal text and survive arbitrary network reads.
+- Named seam: TelnetClient.Interpret is the read loop's incremental decoder; direct chunk feeding makes every fragmentation boundary deterministic rather than depending on TCP packet coalescing.
+
 ### GotoHistoryStoreTests.cs
 - Covers: Game/Map/GotoHistoryStore
 - Checks: newest-first, promote, cap 10, write-back as "map/room", ignored with no profile, hydrate.
@@ -2153,6 +2188,11 @@ How to keep it current:
 - Covers: ViewModels/GameData/Tables/LocationFilters, CategoryFilter
 - Checks: Landmass → Region → Area narrowing, "(not set)", reload keeps picks, commit-then-filter, clear.
 - Why: Monsters tab location filters.
+
+### LiveGmcpFactAttribute.cs
+- Covers: opt-in isolated-host test discovery.
+- Checks: live account-dependent integration is skipped unless disposable test credentials are supplied through the environment.
+- Why: normal test runs must not connect to a user's realm or store credentials in source.
 
 ### LogDiagnosticsTests.cs
 - Covers: Services/LogService, LogDiagnosticState, Models/Settings LogDiagnosticsSettings
