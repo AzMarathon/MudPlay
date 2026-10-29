@@ -39,7 +39,7 @@ namespace MudPlay.Game.Inventory;
 // Master switch: Auto Get Items (AutoActionDefaults.AutoGetItems). UI-thread only
 // (MessageRouter + LineExtractor both marshal upstream), so the pump state needs no
 // lock.
-public sealed class AutoBuyManager : IDisposable
+public sealed partial class AutoBuyManager : IDisposable
 {
     // LogService category — [AutoBuy] rows per queued / bought item.
     public const string LogCategory = "AutoBuy";
@@ -99,6 +99,7 @@ public sealed class AutoBuyManager : IDisposable
     public static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(5);
 
     private readonly Func<DateTimeOffset> _now;
+    private readonly Func<TimeSpan, Action, IDisposable> _schedule;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -114,9 +115,11 @@ public sealed class AutoBuyManager : IDisposable
         Func<bool> isEnabled,
         LogService? log = null,
         Func<bool>? isParadigm = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
         _now = now ?? (() => DateTimeOffset.Now);
+        _schedule = schedule ?? Services.DispatcherTicks.Once;
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
         ArgumentNullException.ThrowIfNull(countCarried);
@@ -159,15 +162,17 @@ public sealed class AutoBuyManager : IDisposable
     {
         string text = line.Text.TrimEnd();
 
-        if (!_capturing)
+        // A header always starts a new read: one still open, or still waiting on
+        // the server's list, is superseded by it.
+        if (text == ShopHeader)
         {
-            if (text == ShopHeader)
-            {
-                _capturing = true;
-                _body.Clear();
-            }
+            _capturing = true;
+            _body.Clear();
+            if (GmcpOwnsShop?.Invoke() == true) BeginGmcpShopRead();
+            else EndGmcpShopWait();
             return;
         }
+        if (!_capturing) return;
 
         // A prompt, or a blank line after the table body, closes the readout.
         if (line.IsPromptLine) { FinishCapture(); return; }
@@ -194,6 +199,13 @@ public sealed class AutoBuyManager : IDisposable
         _capturing = false;
         IReadOnlyList<ShopListParser.StockRow> stock = ShopListParser.Parse(_body);
         _body.Clear();
+        // While the server's list is awaited the text table is only its fallback.
+        if (_awaitingGmcpList) _heldTextStock = stock;
+        else ListStock(stock);
+    }
+
+    private void ListStock(IReadOnlyList<ShopListParser.StockRow> stock)
+    {
         StockListed?.Invoke(stock);
 
         if (!_isEnabled() || _wireSender is null) return;

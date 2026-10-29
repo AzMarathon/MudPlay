@@ -27,6 +27,8 @@ namespace MudPlay.Game.Spells;
 // "You have no spells." / "You have no powers." clears the obtained set outright.
 public sealed class SpellListParser : IDisposable
 {
+    public Func<bool>? GmcpOwnsSpells { get; set; }
+    public event Action<IReadOnlyList<string>>? TextSpellsObserved;
     private readonly SpellbookState _book;
     private readonly LogService? _log;
     private LineExtractor? _lines;
@@ -82,6 +84,13 @@ public sealed class SpellListParser : IDisposable
 
     private void HandleLine(string text, bool isPromptLine)
     {
+        // The server owns the spell list: a text block half read is dropped.
+        if (GmcpOwnsSpells?.Invoke() == true)
+        {
+            _state = State.Idle;
+            _namesThisBlock.Clear();
+            return;
+        }
         // The prompt is the universal "server done responding" marker —
         // close any open block on it (same shape as WhoListParser).
         if (isPromptLine)
@@ -105,6 +114,7 @@ public sealed class SpellListParser : IDisposable
             _namesThisBlock.Clear();
             _state = State.Idle;
             _book.ClearObtained();
+            TextSpellsObserved?.Invoke(Array.Empty<string>());
             _log?.Info("SpellListParser", "spell list empty — obtained set cleared");
             return;
         }
@@ -159,8 +169,12 @@ public sealed class SpellListParser : IDisposable
             return;
         }
 
-        _book.SetObtainedByNames(_namesThisBlock);
+        IReadOnlyList<string> unknown = _book.SetObtainedByNames(_namesThisBlock);
+        TextSpellsObserved?.Invoke(_namesThisBlock.ToArray());
         _log?.Info("SpellListParser", $"spell list complete — {_namesThisBlock.Count} spell(s) obtained");
+        if (unknown.Count > 0)
+            _log?.Log(LogSeverity.Warn, "SpellListParser",
+                $"listed spell(s) the game data has no castable record of for this class, left out: {string.Join(", ", unknown)}");
         _log?.Log(LogSeverity.Debug, "SpellListParser", $"obtained spells: {string.Join(", ", _namesThisBlock)}");
         _namesThisBlock.Clear();
         _state = State.Idle;

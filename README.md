@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.188.0**
+> **Version 3.189.0**
 > - Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
+> - Any other board's characters start with the Stock logon steps filled in
 > - No account, character or password ships with them
 <!-- current-version:end -->
 

@@ -1,9 +1,30 @@
 # Version history
 
-## 3.188.0
+## 3.189.0
 
 - Anomaly Mud and Paradigm come built in: board, port and logon steps set, only a username and password to type
+- Any other board's characters start with the Stock logon steps filled in
 - No account, character or password ships with them
+
+## 3.188.2
+
+- Buff Watchdog: one mana floor sets every buff at once, and new buffs start at it
+
+## 3.188.1
+
+- Trainer spells the game data doesn't tie to a class (AMud's warlock chaos shield) are in its spell book
+- A spell `sp` or a learn line names is marked learned even when the data says the class can't learn it
+
+## 3.188.0
+
+- GMCP server data with per-package shadow and active modes in BBS settings
+- Scoped text fallback and monster identity recovery across room changes and reconnects
+- Live server vitals, stats, conditions, rooms, occupants and exact monster HP
+- Server inventory, shop stock, learned spells, effects, abilities and party formation
+- GMCP chat reaches history and triggers once per event
+- Inspect server snapshots and request item cards and usability in BBS settings
+- Active GMCP rooms no longer send `rm` on every step
+- A spell bought from a trainer counts as learned at once, so the Buff Watchdog offers it
 
 ## 3.187.8
 

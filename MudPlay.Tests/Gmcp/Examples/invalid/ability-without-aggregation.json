@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Char.Abilities","payload":{"abilities":[{"id":2,"name":"AC","total":24,"sources":{"granted":null,"worn":24,"spells":null}}]},"expect":{"reject":"schema"},"why":"total is the engine's aggregation, which the entry names"}

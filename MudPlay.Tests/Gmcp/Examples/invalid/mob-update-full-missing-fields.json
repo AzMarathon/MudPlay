@@ -1,0 +1,1 @@
+{"pkg":"Anomaly.Mob.Update","payload":{"uid":102,"room":"1,301","full":true,"hp":12},"expect":{"reject":"schema"},"why":"full:true must carry every live field (A.9)"}

@@ -21,6 +21,7 @@ internal static class TelnetProtocol
     public const byte OptEcho      = 1;   // Server echoes user input.
     public const byte OptSupGa     = 3;   // Suppress Go-Ahead — assume full-duplex.
     public const byte OptTermType  = 24;  // Send terminal type string (e.g. "ansi-bbs").
+    public const byte OptGmcp      = 201;
     public const byte OptNaws      = 31;  // Negotiate About Window Size.
 
     // --- TERMINAL-TYPE sub-negotiation sub-codes ------------------------

@@ -4544,10 +4544,13 @@ The Buff Watchdog only offers buffs you have **actually learned**, and MudPlay l
 - **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal.
 - **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` yourself does the same.
 - **After that it stays current on its own**: a spell you learn from a trainer or a scroll is picked up as it happens.
+- **The game's list wins over the game data.** Some data sets don't record that your class can learn a spell (several AMud trainer spells, the warlock's chaos shield among them). A spell the trainer teaches your class, or that `sp` or the game's learn line says you have, is in your spell book and offered anyway. It stays there until you reroll.
 
 The other reasons it gives: your character hasn't been read yet (enter the game first), your class has no buff spells and you carry no item that casts one, none of the spells you've learned is a buff, or every buff you've learned is already on the list. The **Spell Book** (F2) shows the same learned / not-learned picture for every spell of your class.
 
 ### Building the buff list
+
+**Cast buffs if mana ≥** (above the list) is one mana floor for all your buffs. Every new buff starts at it, and **Set on all** gives every configured buff that floor in one click. `0` means mana never holds a buff back. Each buff's edit dialog can still give that one buff its own floor afterwards. Like each buff's own floor, it is a percent of max mana, or an amount when Settings → Health reads mana thresholds as amounts. Switch that in Settings, or change combat profile, and the box follows as soon as you save, with the Buff Watchdog still open.
 
 Click **＋ Add buff** to open the Add-buff dialog:
 
@@ -4555,7 +4558,7 @@ Click **＋ Add buff** to open the Add-buff dialog:
 - **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off). It can also be **negative**, which recasts that many seconds *after* the buff wears off — e.g. `-30` on a 60s buff recasts it every 90s, letting it lapse on purpose to **spread out mana use**. The Watchdog bar shows the post-expiry wait as a **red** extension (see *The buff bars* below).
 - **Set conditions** — per-slot gates. The first four are on every buff; the rest only appear for the spell that uses them:
   - **Priority buff** — off (the default), the buff casts with your other buffs, at the **Buffing** row of the spell type priority (Settings → Spells). Ticked, it casts at the **Priority buffs** row instead, which by default sits between the major and the minor self heal. Tick it on the one or two buffs that matter more than topping off a little HP. A priority buff has a **★** beside its timer bar. The tick also decides which buffs a loop set to **Wait for priority buff spells** casts before it walks into a lair: the ticked ones that are due go out first, the rest wait (see *Entire Loop Settings*).
-  - **Cast if mana ≥** — this buff is only cast once your mana is at or above this value (default **50%** for a new buff), so mana recovers past a floor before it goes on upkeep. Each buff has its own: a cheap bless can go out at 30% while an expensive one waits for 80%. `0` never holds it back. It is a percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as amounts (the label drops the `%`). Beside the box is what it comes to against your max mana right now, e.g. *125/250*. A free item-cast buff ignores it. Separately from this floor, a buff whose spell costs more mana than you have right now is waited for, and the buffs behind it in the list wait with it, so cheap upkeep can't spend the mana it needs. The one exception is a loop standing outside a lair (see *Entire Loop Settings*): there it is passed over and the next due buff you can pay for goes out in its place.
+  - **Cast if mana ≥** — this buff is only cast once your mana is at or above this value (a new buff starts at the **Cast buffs if mana ≥** value above the list, 50% until you change it), so mana recovers past a floor before it goes on upkeep. Each buff has its own: a cheap bless can go out at 30% while an expensive one waits for 80%. `0` never holds it back. It is a percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as amounts (the label drops the `%`). Beside the box is what it comes to against your max mana right now, e.g. *125/250*. A free item-cast buff ignores it. Separately from this floor, a buff whose spell costs more mana than you have right now is waited for, and the buffs behind it in the list wait with it, so cheap upkeep can't spend the mana it needs. The one exception is a loop standing outside a lair (see *Entire Loop Settings*): there it is passed over and the next due buff you can pay for goes out in its place.
   - **Cast while resting** — off (the default), this buff waits out a **triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up); ticked, it is cast during one too. An idle rest never holds a buff. The cast stands you up for a moment; MudPlay lies back down and rests on to your rest max.
   - **Cast during combat** — off (the default), this buff waits until the fight is over; ticked, it is also cast mid-fight (the cast spends that round's between-round slot). Tick it on the buffs worth a round and leave the rest for after the fight.
 
@@ -5149,6 +5152,28 @@ Every brand-new character profile starts with the numpad wired to compass moveme
 
 ## BBS + Display (Connection & Network)
 
+### Live server data (GMCP)
+
+On servers that offer the Anomaly GMCP contract, MudPlay can receive character and room data alongside the normal terminal text. Other servers continue to use text parsing.
+
+In **Settings → BBS + Display → Live server data (GMCP)** choose a mode for each package. Changes apply on the next connection:
+
+- **Off:** use text for that package without shadow comparisons.
+- **Shadow** (default): keep using text and compare the fields both sources carry. Differences appear under **GMCP shadow** in the program log. Extra server information, such as hidden exits or exact monster HP, is not compared with text that never reports it.
+- **Active:** use a valid server snapshot for that package. Until the snapshot arrives, or after its scoped reset, text parsing resumes for that package. An incompatible contract or GMCP being disabled restores text parsing.
+
+Activate both **Room.Occupants** and **Mob** to use server-provided monsters for targeting. The client waits for each listed monster's static information and complete live baseline before using the roster. Returning to a room reuses static information but requires fresh live state. **Mob** active mode also supplies exact HP to the existing monster HP readouts.
+
+**Refresh current server data** requests fresh snapshots and both static information and live baselines for monsters in the current room. If GMCP is disabled during active play, MudPlay requests a `look` to rebuild the text room state. The terminal continues to display the server's normal output in every mode.
+
+
+Contract **1.1.0** also supplies inventory and worn items, shop stock, learned spells, active effects, abilities and party formation. Item and shop usability is the server's current reading. Spell damage and healing bands are **before target resistances**. Effect magnitude is the value of the effect, not a caster level; an unknown caster stays unknown. Item or draw tokens that cannot be mapped to a server spell keep their existing buff tracking. Party HP can be negative when someone is down.
+
+**Inspect server data…** opens a read-only view of current snapshots. Enter an item number and choose **Item card** for static information or **Item usability** for the character's current eligibility. Cards survive room changes and are cleared on a full reset or item-card reset. Usability responses are discarded when your level or alignment changes; ask again afterwards. A shop's data expires when you leave its room; outside a shop its current reading is empty. Automatic buying still starts only after an explicit `list` readout. With **Shop.List** active, a `list` takes its stock from a fresh server list; if none arrives within 3 seconds, or the request fails, the shop's text table is read instead.
+
+**Comm.Line** carries individual chat events. Active mode routes one copy to chat history and triggers while normal text remains in the terminal. Repeated identical messages remain separate messages; refresh and mode changes never replay them. Directed says continue through text because contract 1.1.0 does not carry their directed recipient. Following a communication reset or malformed event, text handles chat until the next full session reset so the source cannot switch halfway through a message.
+
+
 Settings → "BBS + Display" — despite the plain "BBS" name in some places, this tab also carries terminal-size/scrollback settings, the per-character credentials + logon steps, and the four global confirmation-prompt checkboxes. **Adding, removing, and renaming BBSes now lives in Profile Management** (View → Profile Management, or the button on this tab's left rail); this tab's list is for **selecting** a saved BBS to edit its details, and selecting one here only edits it — it never moves your loaded character (that's Profile Management's *Move to BBS*).
 
 To make each setting's persistence level obvious, the tab is split into three banner-headed sections:
@@ -5735,7 +5760,7 @@ Two things are deliberately shared rather than duplicated. **Min enemies belongs
 
 **Picking a spell (learned-spell guard):** each slot is a typeahead — start typing a **cast-code or name** and it lists your class's spells (it commits the 4-letter code). Spells your character **hasn't learned yet** are shown **struck through and dimmed** in the list, and if a slot is pointed at one the box **outlines red** as a warning — so you can't quietly misconfigure a slot with a spell you can technically learn but haven't (the value is still saved; the red outline is only a heads-up). The same picker and guard are on **Settings → Spells** (heals, cures, bless).
 
-The guard needs to know what you've learned: type `spells` (or `stat`) in the game once so it can read your spell list — until then nothing is flagged. It also updates the moment you learn a spell mid-session (reading a teaching item, e.g. *"You add agony to your spellbook!"*).
+The guard needs to know what you've learned: type `spells` (or `stat`) in the game once so it can read your spell list — until then nothing is flagged. It also updates the moment you learn a spell mid-session (reading a teaching item, e.g. *"You add agony to your spellbook!"*, or buying it from a trainer, *"You learn the spell chaos shield."*).
 
 **How the cascade works each round:** A pending backstab always wins first. Then, whichever action type (spell or physical) your Action Order setting prefers gets tried; on the spell side, the order is Multi-attack 1 → Multi-attack 2 → Normal attack → Alternate attack, falling through to the weapon if nothing can fire.
 

@@ -34,6 +34,7 @@ public sealed class SpellListParserTests : IDisposable
     private static readonly object[] _classes =
     [
         ClassRow(1, "Warrior", magery: 0, mageryLvl: 0),
+        ClassRow(11, "Warlock", magery: 1, mageryLvl: 2),
         ClassRow(12, "Mage", magery: 1, mageryLvl: 3),
     ];
 
@@ -42,9 +43,19 @@ public sealed class SpellListParserTests : IDisposable
         SpellRow(100, "starlight", "star", magery: 1, mageryLvl: 1, reqLevel: 2),
         SpellRow(101, "high arc", "high", magery: 1, mageryLvl: 3, reqLevel: 5),
         SpellRow(103, "gated", "lvlg", magery: 1, mageryLvl: 1, reqLevel: 20),
+        // The AMud data's warlock chaos shield: no Learnable, Learned From or Classes,
+        // so the data gives no class a way to learn it.
+        UnrecordedRow(SpellRow(5573, "chaos shield", "chao", magery: 1, mageryLvl: 2, reqLevel: 37)),
     ];
 
-    private SpellbookState NewBook()
+    private static Dictionary<string, object> UnrecordedRow(Dictionary<string, object> row)
+    {
+        row["Learnable"] = 0;
+        row["Classes"] = "\0";
+        return row;
+    }
+
+    private SpellbookState NewBook(int classNumber = 12, int level = 5)
     {
         string dir = Path.Combine(_root, "set");
         Directory.CreateDirectory(dir);
@@ -55,8 +66,32 @@ public sealed class SpellListParserTests : IDisposable
         cache.SwitchSet("set");
         KnownSpellCatalog catalog = new(cache);
         SpellbookState book = new(catalog);
-        book.Refresh(classNumber: 12, level: 5); // Mage
+        book.Refresh(classNumber, level); // a Mage unless a test says otherwise
         return book;
+    }
+
+    // The game's own list outranks the data: a warlock's `sp` naming chaos shield
+    // marks it learned though no record lets the class learn it.
+    [Fact]
+    public void ListedSpell_TheDataGivesTheClassNoWayToLearn_IsMarkedLearned()
+    {
+        SpellbookState book = NewBook(classNumber: 11, level: 38);
+        using SpellListParser parser = new(book);
+        parser.AttachLineExtractor(_feed.Lines);
+        Assert.DoesNotContain(book.ClassSpells, s => s.Number == 5573);
+
+        _feed.Rows(new[]
+        {
+            "You have the following spells:",
+            "Level Mana Short Spell Name",
+            "  2    5  star starlight",
+            " 37   20  chao chaos shield",
+        });
+        _feed.Prompt();
+
+        Assert.True(book.IsObtained(100));
+        Assert.True(book.IsObtained(5573));
+        Assert.Contains(book.Available, s => s.Number == 5573);
     }
 
     // ----- happy path ---------------------------------------------------

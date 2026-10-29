@@ -174,6 +174,7 @@ public static class BugReportBuilder
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),
             new("Inventory", SafeSection(() => BuildInventory(svc))),
+            new("Server data (GMCP)", SafeSection(() => svc.Gmcp.Describe())),
             new("Movement engine", SafeSection(() => BuildMovement(svc))),
             new("Navigation engines", SafeSection(() => BuildNavigationEngines(svc))),
             new("Auto-mode", SafeSection(() => BuildAutoMode(svc))),
@@ -1497,6 +1498,9 @@ public static class BugReportBuilder
         Kv(sb, "Spell book", $"class #{book.ClassNumber}, level {book.Level}, alignment gate {alignGate}; "
             + $"{book.ClassSpells.Count} spell(s) in the class list, {book.Available.Count} usable under that gate, "
             + $"{book.ObtainedCount} learned");
+        if (book.LearnedOutsideClassData.Count > 0)
+            Kv(sb, "Learned spells the game data gives the class no way to learn",
+                string.Join(", ", book.LearnedOutsideClassData.Select(s => $"{s.Short.Trim()} ({s.Name} #{s.Number})")));
         HashSet<string> slottedCodes = new(
             (svc.Profile.Current?.PartyBuffs?.Slots ?? new List<Models.Profile.BuffSlot>())
                 .Where(slot => !string.IsNullOrWhiteSpace(slot.Spell)).Select(slot => slot.Spell!.Trim()),
@@ -1685,6 +1689,7 @@ public static class BugReportBuilder
             string heading = unifiedBuffs.ManualOrder || unifiedBuffs.PriorityTopDown
                 ? $"Buffs (layout: {(unifiedBuffs.ManualOrder ? "manual" : "auto")}; priority: {(unifiedBuffs.PriorityTopDown ? "top→bottom" : "default")})"
                 : "Buffs";
+            heading += $" (new buffs: ma>={unifiedBuffs.BlessIfAboveMa})";
             Group(heading, unifiedBuffs.Slots.Select(s => ($"buff {++buffNo} [{BuffScope(svc, s)}]", s.Spell)));
         }
 

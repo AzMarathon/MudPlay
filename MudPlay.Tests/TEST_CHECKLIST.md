@@ -507,6 +507,11 @@ How to keep it current:
 - Checks: category buckets; manual/top-down ordering; stable remover-first reorder.
 - Why: cast order matches the shown order; Stock collision ordering.
 
+### BuffSettingsFloorTests.cs
+- Covers: Models/Profile/BuffSettings (BlessIfAboveMa), read and written through ProfileService
+- Checks: a profile saved before the Buff Watchdog's shared mana floor existed loads it at the per-buff default (50); a floor of 0 survives a create and a reload.
+- Why: the Buff Watchdog's one mana floor for every buff, which new buffs start at and Set on all writes onto every buff.
+
 ### BuffSlotRowViewModelTests.cs
 - Covers: ViewModels/BuffSlotRowViewModel
 - Checks: name abbreviation and recast text; All/Self independence; member auto-assign; solo visibility; overwrite tooltip; self-activation hook; learned flag; negated marks.
@@ -1611,6 +1616,41 @@ How to keep it current:
 - Checks: a shadow's globe of darkness is not blindness; a blind globe still blinds; infernal darkness (both seeds) and Stock's sandstorm are not blindness, a gruesome curse is (checked against the Spells data, 2026-10-23).
 - Why: a nanati shadow's globe set Blinded and asked for a cure; a darkness flagged Blinded would have the cleric cure what cure blindness can't lift.
 
+### GmcpIntegrationTests.cs
+- Milestone 2 extends the real session harness with inventory, shop, spellbook, effects, party, chat and ability owners; both chat and normal text lanes use the router.
+- Covers: GMCP integration through PromptParser, StatParser, RoomTracker, RoomEntityClassifier and their consumers.
+- Checks: active package authority, scoped text fallback, identity/lives/CP remaining on text, room snapshots, a per-step room reset keeping the known position (no `rm` resync), combat roster/death, exact HP, conditions/stealth, shadow comparisons, refresh requests and BBS setting persistence; a long fight's combat lines keep the idle-stall watchdog off while server status owns combat (status reports combat only when it flips). Opt-in live runs exercise darkness, a locked door, combat/rest, a hidden exit, WONT and reconnects on disposable accounts.
+- Why: negotiated data must reach existing automation models without creating competing writers or disabling unrelated text parsing.
+
+### GmcpMilestone2IntegrationTests.cs
+- Covers: GmcpIntegration (milestone 2) through InventoryManager, AutoBuyManager, SpellbookState, SpellListParser, PartyManager, ChatRouter, TriggerEngine, AbilBreakdownParser and CastingDirector.
+- Checks: synthetic and captured milestone-2 wire replay into the existing owners; text authority, chat/history/triggers exactly once in both delivery orders, reset fallback, item transactions, shared spell codes, ability aggregation, effect timers on live spell rounds (`SpellCalculator.SpellRoundSecondsWallClock`, as the text buff timers), unmapped item-buff fallback, inspector requests/errors, oversized item IDs and fresh shop reads; a `list` with no server answer is read from its text table once the wait runs out, and a late answer starts nothing more.
+- Why: server inventory, shop, spell, effect, party, chat and ability data must reach the owners the text path feeds, once, and hand back to text on a reset or a fault.
+
+### GmcpMilestone2LiveTests.cs
+- Covers: GmcpIntegration (milestone 2) against the isolated Anomaly test host; opt-in, skipped in normal runs.
+- Checks: shadow comparisons, and active inventory, item queries, party formation, buffs, repeated chat and actual shop stock.
+- Why: the replays prove the client's handling only; these show the live server and client agree.
+- Run: coordinate the host window in contract STATUS, then use `Gmcp/run-live.py` shadow filter followed by active filter. Disposable credentials enter through stdin/environment; raw login captures stay outside this repository.
+
+### GmcpMilestone2StateTests.cs
+- Covers: GmcpState, GmcpContract (the 1.1.0 packages).
+- Checks: tagged 1.1.0 examples, large synthetic snapshots, event lifetime, card resets, room-bound shops, usability invalidation (kept through vitals ticks, dropped on a level or alignment change), negative HP and present zero ability sources.
+- Why: a payload the contract doesn't validate, or one kept past its reset, must never take state away from text.
+- Run: `dotnet test --filter FullyQualifiedName~GmcpMilestone2StateTests` with a fresh scratch data root.
+
+### GmcpStateTests.cs
+- Covers: Game/Gmcp/GmcpState and embedded contract checks.
+- Checks: contract replay sequences, static/live cache lifetimes, stale-room rejection, full baselines versus deltas, package resets, incompatible versions and disconnects.
+- Why: returning monsters and reconnects must reconstruct complete state before a package becomes authoritative. Fixtures are synthetic and do not certify the server.
+
+### GmcpTransportTests.cs
+- Core.Hello advertises contract 1.1.0 and milestone-2 capability modules.
+- Covers: Net/TelnetClient and GMCP UTF-8 framing.
+- Checks: every fragmentation boundary, literal UTF-8, display/message ordering, malformed/oversize/unterminated recovery, larger incoming snapshots, escaped IAC, WONT/WILL transitions and real-socket Hello/Supports/recovery requests.
+- Why: GMCP frames must stay out of terminal text and survive arbitrary network reads.
+- Named seam: TelnetClient.Interpret is the read loop's incremental decoder; direct chunk feeding makes every fragmentation boundary deterministic rather than depending on TCP packet coalescing.
+
 ### GotoHistoryStoreTests.cs
 - Covers: Game/Map/GotoHistoryStore
 - Checks: newest-first, promote, cap 10, write-back as "map/room", ignored with no profile, hydrate.
@@ -2159,6 +2199,11 @@ How to keep it current:
 - Checks: Landmass → Region → Area narrowing, "(not set)", reload keeps picks, commit-then-filter, clear.
 - Why: Monsters tab location filters.
 
+### LiveGmcpFactAttribute.cs
+- Covers: opt-in isolated-host test discovery.
+- Checks: live account-dependent integration is skipped unless disposable test credentials are supplied through the environment.
+- Why: normal test runs must not connect to a user's realm or store credentials in source.
+
 ### LogDiagnosticsTests.cs
 - Covers: Services/LogService, LogDiagnosticState, Models/Settings LogDiagnosticsSettings
 - Checks: Debug/Combat gated by toggles, Info/Warn/Error always on, Changed events, DTO defaults.
@@ -2359,7 +2404,7 @@ How to keep it current:
 
 ### MegaMudProfileImporterTests.cs
 - Covers: Services/MegaMudProfileImporter, MegaMudIni, MegaMudImportPlan
-- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs, left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
+- Checks: ini parsing, active profile becomes live settings, combat profiles, buff slots, other tabs (MegaMUD's bless mana floor on each buff and as the Buff Watchdog's shared floor), left-behind lines, encrypted login, redial/cleanup onto the BBS, review edits, party rank, rest-command advice; HpFullCmd / MaFullCmd land in the cast-when-full slots (a target after the code split into the target box, "Cast while resting" at its default, no when-full buff made), listed as carried over and re-read from a review edit. Sections are read back through SettingsSection, as the engines and the Settings tabs read them, and the import stores their enums as numbers.
 - Why: MegaMUD character import; MegaMUD's when-full commands behave as the cast-when-full slots do (user, 2026-10-24).
 
 ### MeleeMatchupProfilesTests.cs
@@ -3919,8 +3964,8 @@ How to keep it current:
 
 ### SpellListParserTests.cs
 - Covers: Game/Spells/SpellListParser
-- Checks: How `spells`/`pow` blocks commit the obtained set: header variants (padded, Kai), block end on prompt, blank line or non-row; a header with no rows never wipes the set; "You have no spells." clears it; snapshot replace; noise before the header ignored; multi-word names. Also IsSpellListLine recognition.
-- Why: A report that `sp` didn't update the book because of the padded column header; the learned-spell list feeding casting.
+- Checks: How `spells`/`pow` blocks commit the obtained set: header variants (padded, Kai), block end on prompt, blank line or non-row; a header with no rows never wipes the set; "You have no spells." clears it; snapshot replace; noise before the header ignored; multi-word names; a listed spell the game data gives the class no way to learn (the AMud warlock's chaos shield) still marked learned. Also IsSpellListLine recognition.
+- Why: A report that `sp` didn't update the book because of the padded column header; a warlock's trainer-bought chaos shield that `sp` listed and the book dropped; the learned-spell list feeding casting.
 
 ### SpellReqLevelIndexTests.cs
 - Covers: Game/Combat/SpellReqLevelIndex
@@ -3944,8 +3989,8 @@ How to keep it current:
 
 ### SpellbookStateTests.cs
 - Covers: Game/Spells/SpellbookState, Game/Spells/KnownSpellCatalog
-- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). Also AvailablePicks with the Learned flag, and Changed events.
-- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug.
+- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. Also AvailablePicks with the Learned flag, and Changed events.
+- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
 
 ### SpellsGameDataTabTests.cs
 - Covers: ViewModels/GameData/Edit/MessageEditDialogViewModel (InitialTabIndex); ViewModels/GameData/Tables/SpellsSectionViewModel → ViewModels/GameData/Edit/SpellInfoRowsBuilder
