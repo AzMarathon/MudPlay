@@ -4702,7 +4702,7 @@ The window is a live view — it refreshes about once a second while open. *When
 
 ## GMCP Monitor
 
-**Tools → GMCP Monitor…** records what the server sends over GMCP, starting from each GMCP handshake: every server-data message both ways, and the server's text in between, in the order they came. The window shows the latest frames: milliseconds since the handshake, ← from the server, → from MudPlay. A new handshake starts a new recording, and when GMCP ends the recording is kept until the next one.
+**Tools → GMCP Monitor…** records what the server sends over GMCP: every server-data message both ways, and the server's text in between, in the order they came. Recording is **off** until you tick **Record**, at every launch, so nothing piles up unless you ask for it. Tick it before connecting to record from the GMCP handshake, or any time to record from that moment. The window shows the latest frames: milliseconds since the handshake, ← from the server, → from MudPlay. A new handshake starts a new recording, and when GMCP ends the recording is kept until the next one.
 
 **Export…** saves the whole recording as a `.jsonl` file to send with a report about server data. What you type is never recorded, since it carries your login and every command, and your saved login is masked the same way a bug report masks it. If the masking can't be done, nothing is exported.
 

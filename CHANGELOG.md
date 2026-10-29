@@ -2,7 +2,7 @@
 
 ## 3.190.0
 
-- Tools → GMCP Monitor records what the server sends from the handshake on, with an export to share
+- Tools → GMCP Monitor records what the server sends, with an export to share; off until Record is ticked
 - Settings shows the GMCP modes only for a board whose server offers GMCP, with its connection status
 - With server data Active, a mid-fight cast no longer ends the fight early
 - A room step no longer replays the old inventory and party as fresh reads

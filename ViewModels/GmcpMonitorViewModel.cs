@@ -22,6 +22,18 @@ public sealed partial class GmcpMonitorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _frames = string.Empty;
     [ObservableProperty] private bool _canExport;
 
+    // The Record box: recording is off until it's ticked.
+    public bool Recording
+    {
+        get => _monitor.Enabled;
+        set
+        {
+            if (_monitor.Enabled == value) return;
+            _monitor.Enabled = value;
+            OnPropertyChanged();
+        }
+    }
+
     public GmcpMonitorViewModel(GmcpMonitor monitor)
     {
         _monitor = monitor;
@@ -40,11 +52,16 @@ public sealed partial class GmcpMonitorViewModel : ObservableObject, IDisposable
         IReadOnlyList<GmcpMonitor.Frame> frames = _monitor.Snapshot();
         int server = frames.Count(f => f.FromServer && f.Package is not null);
         string since = _monitor.Since is { } at ? at.ToString("HH:mm:ss") : string.Empty;
-        Status = _monitor.Since is null
-            ? "No GMCP handshake yet this session. Recording starts when the server offers GMCP."
-            : (_monitor.IsRecording ? $"Recording since {since}" : $"GMCP ended; recorded from {since}")
-              + $" · {frames.Count:N0} frames, {server:N0} GMCP from the server"
-              + (_monitor.Dropped > 0 ? $" · {_monitor.Dropped:N0} oldest dropped" : string.Empty);
+        string counts = $" · {frames.Count:N0} frames, {server:N0} GMCP from the server"
+            + (_monitor.Dropped > 0 ? $" · {_monitor.Dropped:N0} oldest dropped" : string.Empty);
+        Status = !_monitor.Enabled
+            ? "Recording is off. Tick Record to record from now, or before connecting to record from the handshake."
+              + (frames.Count > 0 ? counts : string.Empty)
+            : !_monitor.InSession
+                ? (_monitor.Since is null
+                    ? "Recording, waiting for the server to offer GMCP."
+                    : $"GMCP ended; recorded from {since}" + counts)
+                : $"Recording since {(_monitor.RecordingSince ?? _monitor.Since)?.ToString("HH:mm:ss")}" + counts;
         CanExport = frames.Count > 0;
 
         StringBuilder text = new();

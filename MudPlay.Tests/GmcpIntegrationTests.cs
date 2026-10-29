@@ -39,8 +39,9 @@ public sealed partial class GmcpIntegrationTests
         public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
         public ManualTimers Timers { get; } = new();
         public GmcpIntegration Gmcp { get; }
-        // Fed as the connection feeds it (MainWindowViewModel.ArmConnection).
-        public GmcpMonitor Monitor { get; } = new();
+        // Fed as the connection feeds it (MainWindowViewModel.ArmConnection), and
+        // recording, as the player's Record box would have it.
+        public GmcpMonitor Monitor { get; } = new() { Enabled = true };
         public TelnetClient Telnet { get; } = new();
         public Game.Inventory.InventoryManager Inventory { get; }
         public Game.Inventory.AutoBuyManager Shop { get; }
@@ -894,6 +895,27 @@ public sealed partial class GmcpIntegrationTests
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+
+    // The monitor is off until the player turns it on, so it isn't one more log
+    // growing on its own: off, a session records nothing; turned on mid-session,
+    // it records from then.
+    [Fact]
+    public void GmcpMonitor_RecordsNothingUntilTurnedOn()
+    {
+        using Session session = new();
+        session.Monitor.Enabled = false;
+        session.Replay("01-handshake");
+        Assert.Empty(session.Monitor.Snapshot());
+        Assert.False(session.Monitor.IsRecording);
+
+        session.Monitor.Enabled = true;
+        session.Text("You notice a rusty dagger here.\r\n");
+
+        GmcpMonitor.Frame frame = Assert.Single(session.Monitor.Snapshot());
+        Assert.Contains("rusty dagger", frame.Body, StringComparison.Ordinal);
+        Assert.True(session.Monitor.IsRecording);
+        Assert.False(new GmcpMonitor().Enabled);
     }
 
     // The export masks what the bug report masks (here the account name the login

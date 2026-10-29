@@ -12,6 +12,10 @@ namespace MudPlay.Services;
 // in the capture format the tests replay (MudPlay.Tests/Gmcp/Captured). What we
 // type is never recorded: it carries the login and every command.
 //
+// Off until the player turns it on (the window's Record box), at every launch, so
+// it isn't one more log growing on its own; on before connecting, it records from
+// the handshake.
+//
 // Thread-safe: the telnet read loop records, the window reads.
 public sealed class GmcpMonitor
 {
@@ -24,12 +28,32 @@ public sealed class GmcpMonitor
     private readonly Queue<Frame> _frames = new();
     private readonly Stopwatch _clock = new();
     private bool _recording;
+    private bool _enabled;
     private int _dropped;
 
-    // The handshake that started the recording, local time; null before the first.
+    // The handshake that started the session, local time; null before the first.
     public DateTimeOffset? Since { get; private set; }
 
+    // When recording began in this session: the handshake when Record was on
+    // before it, else the moment Record was ticked. Null while not recording.
+    public DateTimeOffset? RecordingSince { get; private set; }
+
     public event Action? Changed;
+
+    public bool Enabled
+    {
+        get { lock (_gate) return _enabled; }
+        set
+        {
+            lock (_gate)
+            {
+                if (_enabled == value) return;
+                _enabled = value;
+                RecordingSince = value && _recording ? DateTimeOffset.Now : null;
+            }
+            Changed?.Invoke();
+        }
+    }
 
     // A new handshake starts a new recording; GMCP switched off ends it, keeping
     // what was recorded for export.
@@ -45,6 +69,7 @@ public sealed class GmcpMonitor
                 Since = DateTimeOffset.Now;
             }
             _recording = enabled;
+            RecordingSince = enabled && _enabled ? Since : RecordingSince;
         }
         Changed?.Invoke();
     }
@@ -70,7 +95,7 @@ public sealed class GmcpMonitor
     {
         lock (_gate)
         {
-            if (!_recording) return;
+            if (!_recording || !_enabled) return;
             _frames.Enqueue(frame with { Milliseconds = _clock.ElapsedMilliseconds });
             if (_frames.Count > Capacity)
             {
@@ -82,6 +107,12 @@ public sealed class GmcpMonitor
     }
 
     public bool IsRecording
+    {
+        get { lock (_gate) return _recording && _enabled; }
+    }
+
+    // A GMCP session is up, recorded or not.
+    public bool InSession
     {
         get { lock (_gate) return _recording; }
     }
