@@ -2838,16 +2838,9 @@ public partial class MainWindowViewModel : ObservableObject
         CharacterProfile? character = AppServices.Current.Profile.Current;
         BbsCredentials? creds = null;
         character?.BbsCredentials?.TryGetValue(bbs.Name, out creds);
-        // A character that never saved a login for the board still walks its menus;
-        // the username and password are left for the user to type.
-        if (creds is null)
-        {
-            BuiltInBbses.Preset setup = BuiltInBbses.ForRealm(
-                bbs.RealmFor(character?.Realm), AppServices.Current.Settings.Current.DefaultGameDataSet);
-            creds = new BbsCredentials { MenuNavSteps = setup.CopyLogonSteps() };
-            AppServices.Current.Log.Debug("LoginAuto",
-                $"No login saved for '{bbs.Name}' — using the {setup.Name} logon steps its realm's game data calls for.");
-        }
+        (creds, string? setupNote) = BuiltInBbses.LogonFor(
+            creds, bbs.RealmFor(character?.Realm), AppServices.Current.Settings.Current.DefaultGameDataSet);
+        if (setupNote is not null) AppServices.Current.Log.Info("LoginAuto", $"'{bbs.Name}': {setupNote}.");
 
         LoginAutomator? automator = LoginAutomator.TryBuild(
             creds,

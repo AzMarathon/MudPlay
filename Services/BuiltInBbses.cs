@@ -1,3 +1,4 @@
+using System.IO;
 using MudPlay.Models.Profile;
 using MudPlay.Models.Settings;
 
@@ -23,6 +24,10 @@ public static class BuiltInBbses
         // A fresh copy of the logon steps, for a character to own and edit.
         public List<MenuStep> CopyLogonSteps() =>
             LogonSteps.Select(s => new MenuStep { WaitForPattern = s.WaitForPattern, Send = s.Send }).ToList();
+
+        // Whether steps are exactly this setup's, unedited.
+        public bool HasSteps(IEnumerable<MenuStep> steps) =>
+            steps.Select(s => (s.WaitForPattern, s.Send)).SequenceEqual(LogonSteps.Select(s => (s.WaitForPattern, s.Send)));
     }
 
     // Paradigm's character pick is left out: it is a slot on the player's own
@@ -71,6 +76,39 @@ public static class BuiltInBbses
     // the realm uses that.
     public static Preset ForRealm(RealmProfile? realm, string? globalDefaultSet) =>
         ForGameDataSet(realm?.ActiveGameDataSet ?? globalDefaultSet);
+
+    // As ForGameDataSet, or null when no such set is installed: with no data to go
+    // by, steps already in place are left as they are.
+    public static Preset? ForInstalledSet(string? set) =>
+        set is not null && Directory.Exists(AppPaths.GameDataSetDir(set)) ? ForGameDataSet(set) : null;
+
+    // The setup a saved login's steps were filled in from by the client, while
+    // they're still exactly that setup's; null when the player set them.
+    public static Preset? AutoFilled(BbsCredentials login) =>
+        Named(login.AutoLogonSetup) is { } setup && setup.HasSteps(login.MenuNavSteps) ? setup : null;
+
+    // The login connect walks, and what was decided, for the log (null when the
+    // saved login is used as it is). With no login saved, the setup the realm's
+    // game data calls for, its username and password left for the player to type.
+    // Saved steps the client filled in itself, still unedited, give way to the
+    // setup installed data now calls for; the change is made on the saved login.
+    public static (BbsCredentials Login, string? Note) LogonFor(BbsCredentials? saved, RealmProfile? realm, string? globalDefaultSet)
+    {
+        if (saved is null)
+        {
+            Preset setup = ForRealm(realm, globalDefaultSet);
+            return (new BbsCredentials { MenuNavSteps = setup.CopyLogonSteps() },
+                $"no login saved, so the {setup.Name} logon steps its realm's game data calls for");
+        }
+        if (AutoFilled(saved) is { } filled
+            && ForInstalledSet(realm?.ActiveGameDataSet ?? globalDefaultSet) is { } wanted && wanted != filled)
+        {
+            saved.MenuNavSteps = wanted.CopyLogonSteps();
+            saved.AutoLogonSetup = wanted.Name;
+            return (saved, $"the {filled.Name} logon steps filled in for it, unedited, replaced by the {wanted.Name} ones its realm's game data calls for");
+        }
+        return (saved, null);
+    }
 
     // Add each preset not added before, and return the names added. A preset is
     // added once: one the user removed stays removed, and one whose name or board

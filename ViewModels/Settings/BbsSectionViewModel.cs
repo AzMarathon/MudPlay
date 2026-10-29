@@ -63,6 +63,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         public bool SysopGodLives;
         public bool SysopGoto;
         public List<MenuStep> MenuNavSteps = new();
+        public string? AutoLogonSetup;
         public List<SysopGotoLocation> SysopGotos = new();
     }
 
@@ -625,6 +626,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             ? null
             : _passwords.Protect(staged.Username);
         cred.MenuNavSteps = staged.MenuNavSteps;
+        cred.AutoLogonSetup = staged.AutoLogonSetup;
         cred.SysopStatus = staged.SysopStatus;
         cred.SysopGodLives = staged.SysopGodLives;
         cred.SysopGoto = staged.SysopGoto;
@@ -773,6 +775,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             SysopGodLives = SysopGodLives,
             SysopGoto = SysopGoto,
             MenuNavSteps = MenuNavSteps.Select(vm => vm.ToModel()).ToList(),
+            AutoLogonSetup = AutoSetupShown()?.Name,
             SysopGotos = SysopGotos.Select(vm => vm.ToModel()).ToList(),
         };
 
@@ -1077,7 +1080,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     {
         _pendingPassword = null;
         _credentialsTouched = false;
-        _prefilledSetup = null;
+        _autoFilledSetup = null;
         MenuNavSteps.Clear();
         SysopGotos.Clear();
         if (!HasProfile)
@@ -1100,6 +1103,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             SysopGoto = staged.SysopGoto;
             foreach (MenuStep step in staged.MenuNavSteps)
                 MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
+            _autoFilledSetup = BuiltInBbses.Named(staged.AutoLogonSetup);
             foreach (SysopGotoLocation loc in staged.SysopGotos)
                 SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
             RefreshImportSources(bbsName);
@@ -1127,6 +1131,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             {
                 MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
             }
+            // Steps the client filled in itself show as connect will walk them: the
+            // setup installed game data calls for now takes their place.
+            _autoFilledSetup = BuiltInBbses.AutoFilled(cred);
+            if (_autoFilledSetup is not null && _loaded.TryGetValue(bbsName, out BbsProfile? savedBoard))
+                FillSetupWhereBlank(BuiltInBbses.ForInstalledSet(RealmSetFor(savedBoard, bbsName)), stepsOnly: true);
             foreach (SysopGotoLocation loc in cred.SysopGotos)
             {
                 SysopGotos.Add(SysopGotoRowViewModel.FromModel(loc, CredentialsDirty, RoomName));
@@ -1150,10 +1159,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             // needs.
             if (_loaded.TryGetValue(bbsName, out BbsProfile? board))
             {
-                string? realm = string.Equals(bbsName, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase)
-                    ? _profile.Current?.Realm : null;
-                _prefilledSetup = BuiltInBbses.ForRealm(board.RealmFor(realm), _globalSettings.Current.DefaultGameDataSet);
-                AddLogonSteps(_prefilledSetup);
+                _autoFilledSetup = BuiltInBbses.ForGameDataSet(RealmSetFor(board, bbsName));
+                AddLogonSteps(_autoFilledSetup);
             }
         }
 
@@ -1470,15 +1477,28 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         PushToCache();
         Dirty();
         if (!_suppressDirty)
-            FillSetupWhereBlank(BuiltInBbses.ForGameDataSet(StoredRealmSet() ?? _globalSettings.Current.DefaultGameDataSet));
+            FillSetupWhereBlank(BuiltInBbses.ForInstalledSet(StoredRealmSet() ?? _globalSettings.Current.DefaultGameDataSet));
     }
 
     // ----- Logon setups ---------------------------------------------------
 
-    // The setup the logon steps were filled in from when the character had no login
-    // saved for the board. Unedited, they still count as blank, so picking the
-    // realm's game data afterwards can put the right setup in their place.
-    private BuiltInBbses.Preset? _prefilledSetup;
+    // The setup the client filled the shown logon steps in from on its own (a
+    // character with no login saved, or one saved that way). While the steps are
+    // still exactly that setup's they count as blank, so the setup the realm's game
+    // data calls for can take their place. Null once the player applies one by hand.
+    private BuiltInBbses.Preset? _autoFilledSetup;
+
+    private BuiltInBbses.Preset? AutoSetupShown() =>
+        _autoFilledSetup is { } setup && setup.HasSteps(MenuNavSteps.Select(vm => vm.ToModel())) ? setup : null;
+
+    // The game data set of the realm the loaded character plays on the board (the
+    // board's first realm for another board), or the global default it uses.
+    private string? RealmSetFor(BbsProfile board, string bbsName)
+    {
+        string? realm = string.Equals(bbsName, _profile.CurrentBbsName, StringComparison.OrdinalIgnoreCase)
+            ? _profile.Current?.Realm : null;
+        return board.RealmFor(realm)?.ActiveGameDataSet ?? _globalSettings.Current.DefaultGameDataSet;
+    }
 
     private void AddLogonSteps(BuiltInBbses.Preset setup)
     {
@@ -1486,26 +1506,21 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
             MenuNavSteps.Add(MenuStepEditorViewModel.FromModel(step, CredentialsDirty));
     }
 
-    private bool LogonStepsAreBlank() =>
-        MenuNavSteps.Count == 0
-        || (_prefilledSetup is { } prefilled
-            && MenuNavSteps.Select(s => (s.WaitForPattern, s.Send))
-                .SequenceEqual(prefilled.LogonSteps.Select(s => (s.WaitForPattern, s.Send))));
-
     // A game data set chosen for the realm fills in only what's blank: a host
-    // already typed, or logon steps already set, stay as they are.
-    private void FillSetupWhereBlank(BuiltInBbses.Preset setup)
+    // already typed, or logon steps the player set, stay as they are. Null (no
+    // data installed to go by) fills nothing.
+    private void FillSetupWhereBlank(BuiltInBbses.Preset? setup, bool stepsOnly = false)
     {
-        if (setup.Host is not null && string.IsNullOrWhiteSpace(Host))
+        if (setup is null) return;
+        if (!stepsOnly && setup.Host is not null && string.IsNullOrWhiteSpace(Host))
         {
             Host = setup.Host;
             Port = setup.Port;
         }
-        if (!HasProfile || !LogonStepsAreBlank()) return;
-        if (MenuNavSteps.Count > 0 && _prefilledSetup == setup) return;
+        if (!HasProfile || (MenuNavSteps.Count > 0 && AutoSetupShown() is null) || AutoSetupShown() == setup) return;
         MenuNavSteps.Clear();
         AddLogonSteps(setup);
-        _prefilledSetup = null;
+        _autoFilledSetup = setup;
         CredentialsDirty();
     }
 
@@ -1523,7 +1538,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         if (!HasProfile) return;
         MenuNavSteps.Clear();
         AddLogonSteps(setup);
-        _prefilledSetup = null;
+        _autoFilledSetup = null;
         CredentialsDirty();
     }
 

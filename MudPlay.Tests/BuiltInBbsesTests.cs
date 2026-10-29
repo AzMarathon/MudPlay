@@ -105,6 +105,44 @@ public sealed class BuiltInBbsesTests : IDisposable
         Assert.Equal("{username}", BuiltInBbses.Stock.LogonSteps[0].Send);
     }
 
+    // What connect walks. With no login saved, the setup the realm's data calls for.
+    // Saved steps the client filled in, still unedited, give way to the setup
+    // installed data now calls for; with no data to go by they stay, and steps the
+    // player applied or edited are never replaced.
+    [Fact]
+    public void ConnectReplacesOnlyStepsTheClientFilledIn_WhenInstalledDataCallsForAnother()
+    {
+        string anomaly = WriteSet("anomaly", "Anomaly");
+        RealmProfile onAnomaly = new() { ActiveGameDataSet = anomaly };
+
+        (BbsCredentials none, string? noneNote) = BuiltInBbses.LogonFor(null, new RealmProfile(), null);
+        Assert.True(BuiltInBbses.Stock.HasSteps(none.MenuNavSteps));
+        Assert.NotNull(noneNote);
+
+        BbsCredentials filled = new() { MenuNavSteps = BuiltInBbses.Stock.CopyLogonSteps(), AutoLogonSetup = "Stock" };
+        Assert.Null(BuiltInBbses.LogonFor(filled, new RealmProfile(), null).Note);
+        Assert.True(BuiltInBbses.Stock.HasSteps(filled.MenuNavSteps));
+
+        (BbsCredentials swapped, string? swapNote) = BuiltInBbses.LogonFor(filled, onAnomaly, null);
+        Assert.Same(filled, swapped);
+        Assert.NotNull(swapNote);
+        Assert.True(BuiltInBbses.All[0].HasSteps(filled.MenuNavSteps));
+        Assert.Equal("Anomaly", filled.AutoLogonSetup);
+
+        BbsCredentials noData = new() { MenuNavSteps = BuiltInBbses.All[0].CopyLogonSteps(), AutoLogonSetup = "Anomaly" };
+        Assert.Null(BuiltInBbses.LogonFor(noData, new RealmProfile { ActiveGameDataSet = $"not-installed-{_tag}" }, null).Note);
+        Assert.True(BuiltInBbses.All[0].HasSteps(noData.MenuNavSteps));
+
+        BbsCredentials applied = new() { MenuNavSteps = BuiltInBbses.Stock.CopyLogonSteps() };
+        BuiltInBbses.LogonFor(applied, onAnomaly, null);
+        Assert.True(BuiltInBbses.Stock.HasSteps(applied.MenuNavSteps));
+
+        BbsCredentials edited = new() { MenuNavSteps = BuiltInBbses.Stock.CopyLogonSteps(), AutoLogonSetup = "Stock" };
+        edited.MenuNavSteps[2].Send = "g";
+        BuiltInBbses.LogonFor(edited, onAnomaly, null);
+        Assert.Equal("g", edited.MenuNavSteps[2].Send);
+    }
+
     [Fact]
     public void TheShippedLogonSteps_SendOnlyCredentialTokensAndMenuKeys()
     {

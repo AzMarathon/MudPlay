@@ -22,7 +22,8 @@ public sealed class BbsSectionLogonSetupTests : IDisposable
     private readonly string _board;
     private readonly string _anomalySet;
     private readonly string _paradigmSet;
-    private readonly BbsSectionViewModel _vm;
+    private readonly ProfileService _profile;
+    private BbsSectionViewModel _vm;
 
     public BbsSectionLogonSetupTests()
     {
@@ -32,11 +33,18 @@ public sealed class BbsSectionLogonSetupTests : IDisposable
         _paradigmSet = WriteSet("paradigm", "Paradigm");
         BbsProfileStore store = new();
         store.Save(new BbsProfile { Name = _board, Realms = { new RealmProfile { Name = "Main" } } });
-        ProfileService profile = TestProfiles.Service();
-        profile.LoadDefaultProfile(onBbs: _board);
-        _vm = new BbsSectionViewModel(store, profile, new PasswordProtector(), new DisplayConfig(),
+        _profile = TestProfiles.Service();
+        _profile.LoadDefaultProfile(onBbs: _board);
+        _vm = NewTab();
+    }
+
+    // The tab as the Settings window opens it, on the board.
+    private BbsSectionViewModel NewTab()
+    {
+        BbsSectionViewModel vm = new(new BbsProfileStore(), _profile, new PasswordProtector(), new DisplayConfig(),
             new SettingsService(), new GameDataCache());
-        _vm.SelectedBbsName = _board;
+        vm.SelectedBbsName = _board;
+        return vm;
     }
 
     public void Dispose()
@@ -103,5 +111,32 @@ public sealed class BbsSectionLogonSetupTests : IDisposable
         Assert.Equal(["{username}", "{password}", "m"], Sends());
         _vm.Apply();
         Assert.Equal("paramud.mudinfo.net", new BbsProfileStore().Get(_board)!.Host);
+    }
+
+    // A login saved with the steps the client filled in shows the setup installed
+    // data calls for; one the player applied by hand is saved as theirs and stays.
+    [Fact]
+    public void SavedStepsTheClientFilledIn_GiveWayToTheRealmsData_AndAppliedOnesStay()
+    {
+        _vm.Username = "hero";
+        _vm.Apply();
+        Assert.Equal("Stock", _profile.Current!.BbsCredentials![_board].AutoLogonSetup);
+
+        BbsProfileStore store = new();
+        BbsProfile board = store.Get(_board)!;
+        board.Realms[0].ActiveGameDataSet = _anomalySet;
+        store.Save(board);
+        _vm.Dispose();
+        _vm = NewTab();
+
+        Assert.Equal(["{username}", "{password}", "1"], Sends());
+
+        _vm.ApplyLogonSetupCommand.Execute("Stock");
+        _vm.Apply();
+        Assert.Null(_profile.Current!.BbsCredentials![_board].AutoLogonSetup);
+        _vm.Dispose();
+        _vm = NewTab();
+
+        Assert.Equal(["{username}", "{password}", "m"], Sends());
     }
 }
