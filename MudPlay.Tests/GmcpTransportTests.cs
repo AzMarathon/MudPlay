@@ -35,8 +35,10 @@ public sealed class GmcpTransportTests
     public void OversizeMalformedAndUnterminatedFrames_DoNotPoisonNextMessage()
     {
         TelnetClient client = new();
-        List<string> errors = new(); List<GmcpMessage> messages = new();
-        client.Log += errors.Add; client.GmcpReceived += messages.Add;
+        List<string> errors = new();
+        List<GmcpMessage> messages = new();
+        client.Log += errors.Add;
+        client.GmcpReceived += messages.Add;
         byte[] output = new byte[20000];
         client.Interpret(new byte[] { 255, 251, 201 }, output);
         byte[] Raw(string body) => new byte[] { 255, 250, 201 }.Concat(Encoding.UTF8.GetBytes(body)).Concat(new byte[] { 255, 240 }).ToArray();
@@ -54,7 +56,8 @@ public sealed class GmcpTransportTests
     [Fact]
     public void LargeServerSnapshot_IsAcceptedBeyondTheHostsOutgoingRequestLimit()
     {
-        TelnetClient client = new(); List<GmcpMessage> messages = new();
+        TelnetClient client = new();
+        List<GmcpMessage> messages = new();
         client.GmcpReceived += messages.Add;
         byte[] output = new byte[20000];
         client.Interpret(new byte[] { 255, 251, 201 }, output);
@@ -68,7 +71,8 @@ public sealed class GmcpTransportTests
     [Fact]
     public void MalformedSubnegotiation_RemainderNeverBecomesTerminalText()
     {
-        TelnetClient client = new(); byte[] output = new byte[100];
+        TelnetClient client = new();
+        byte[] output = new byte[100];
         byte[] malformed = new byte[] { 255, 250, 201, 65, 255, 42 }.Concat(Encoding.ASCII.GetBytes("not terminal text")).Concat(new byte[] { 255, 240 }).ToArray();
         Assert.Equal(0, client.Interpret(malformed, output));
         Assert.Equal(2, client.Interpret(Encoding.ASCII.GetBytes("ok"), output));
@@ -77,7 +81,8 @@ public sealed class GmcpTransportTests
     [Fact]
     public void Wont_RevokesNegotiationAndWillEnablesFreshHandshake()
     {
-        TelnetClient client = new(); List<bool> transitions = new();
+        TelnetClient client = new();
+        List<bool> transitions = new();
         client.GmcpNegotiated += transitions.Add;
         byte[] output = new byte[32];
         client.Interpret(new byte[] { 255, 251, 201, 255, 251, 201, 255, 252, 201, 255, 251, 201 }, output);
@@ -87,7 +92,8 @@ public sealed class GmcpTransportTests
     [Fact]
     public async Task RealSocket_NegotiatesHelloAndSupportsAndSendsRecoveryRequest()
     {
-        using TcpListener listener = new(IPAddress.Loopback, 0); listener.Start();
+        using TcpListener listener = new(IPAddress.Loopback, 0);
+        listener.Start();
         await using TelnetClient client = new() { ClientVersion = "test" };
         Task<TcpClient> accept = listener.AcceptTcpClientAsync();
         await client.ConnectAsync("127.0.0.1", ((IPEndPoint)listener.LocalEndpoint).Port);
@@ -95,15 +101,18 @@ public sealed class GmcpTransportTests
         NetworkStream stream = peer.GetStream();
         await stream.WriteAsync(new byte[] { 255, 251, 201 });
         using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(5));
-        List<byte> received = new(); byte[] buffer = new byte[4096];
+        List<byte> received = new();
+        byte[] buffer = new byte[4096];
         while (!Encoding.UTF8.GetString(received.ToArray()).Contains("Anomaly.Mob 1", StringComparison.Ordinal))
         {
             int count = await stream.ReadAsync(buffer, timeout.Token);
-            Assert.True(count > 0); received.AddRange(buffer[..count]);
+            Assert.True(count > 0);
+            received.AddRange(buffer[..count]);
         }
         string text = Encoding.UTF8.GetString(received.ToArray());
         Assert.Equal(new byte[] { 255, 253, 201 }, received.Take(3));
-        Assert.Contains("Core.Hello", text); Assert.Contains("\"contract\":\"1.1.0\"", text);
+        Assert.Contains("Core.Hello", text);
+        Assert.Contains("\"contract\":\"1.1.0\"", text);
         Assert.Contains("Core.Supports.Set", text);
         await client.SendGmcpAsync("Anomaly.Request", new { package = "Anomaly.Mob.Info", uid = 102 });
         int requestLength = await stream.ReadAsync(buffer, timeout.Token);

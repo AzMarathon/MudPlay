@@ -7,7 +7,8 @@ namespace MudPlay.Tests;
 
 public sealed class GmcpMilestone2StateTests
 {
-    internal static JsonElement Example(string package) => JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Gmcp", "Examples", "valid", package + ".json"))).RootElement.Clone();
+    internal static JsonElement Example(string package) => JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+        "Gmcp", "Examples", "valid", package + ".json"))).RootElement.Clone();
     internal static GmcpState Enter()
     {
         GmcpState state = new();
@@ -36,8 +37,10 @@ public sealed class GmcpMilestone2StateTests
     public void FullMilestone2Recording_AcceptsLargeSnapshotsAndKeepsBothRepeatedEvents()
     {
         GmcpState state = new();
-        List<string> errors = new(); List<JsonElement> lines = new();
-        state.Diagnostic += errors.Add; state.Communication += lines.Add;
+        List<string> errors = new();
+        List<JsonElement> lines = new();
+        state.Diagnostic += errors.Add;
+        state.Communication += lines.Add;
         GmcpStateTests.Replay(state, "13-milestone2");
         Assert.Empty(errors);
         Assert.Equal(60, state.Snapshot("Anomaly.Spells.List")!.Value.GetProperty("spells").GetArrayLength());
@@ -50,7 +53,8 @@ public sealed class GmcpMilestone2StateTests
     [Fact]
     public void Cards_SurviveRoomChangesButNotReloadOrCharacterReset()
     {
-        GmcpState state = Enter(); state.Receive(new("Anomaly.Items.Detail", Example("Anomaly.Items.Detail")));
+        GmcpState state = Enter();
+        state.Receive(new("Anomaly.Items.Detail", Example("Anomaly.Items.Detail")));
         GmcpStateTests.Send(state, "Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
         Assert.Single(state.ItemCards);
         GmcpStateTests.Send(state, "Anomaly.Session.Reset", new { scope = "package", package = "Anomaly.Items.Detail" });
@@ -111,14 +115,17 @@ public sealed class GmcpMilestone2StateTests
     [Fact]
     public void RefreshOrModeChanges_DoNotReplayCommunication()
     {
-        GmcpState state = Enter(); int events = 0; state.Communication += _ => events++;
+        GmcpState state = Enter();
+        int events = 0;
+        state.Communication += _ => events++;
         state.SetMode("Anomaly.Comm.Line", GmcpMode.Active);
         Assert.True(state.OwnsCommunication);
         state.Receive(new("Anomaly.Comm.Line", Example("Anomaly.Comm.Line")));
         state.SetMode("Anomaly.Comm.Line", GmcpMode.Shadow);
         state.SetMode("Anomaly.Comm.Line", GmcpMode.Active);
         Assert.Equal(1, events);
-        state.Disconnected(); Assert.False(state.OwnsCommunication);
+        state.Disconnected();
+        Assert.False(state.OwnsCommunication);
     }
     [Fact]
     public void InvalidShopScopeAndPartyPercent_RestoreOnlyAffectedTextAuthority()

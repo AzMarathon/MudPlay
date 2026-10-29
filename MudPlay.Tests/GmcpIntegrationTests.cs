@@ -55,7 +55,9 @@ public sealed partial class GmcpIntegrationTests
         public Session(bool active = true, ManualClock? clock = null)
         {
             Directory.CreateDirectory(_root);
-            MessageRouter router = new(); Router = router; DefaultPatterns.Seed(router);
+            MessageRouter router = new();
+            Router = router;
+            DefaultPatterns.Seed(router);
             Feed.Lines.LineEmitted += router.Dispatch;
             Feed.Lines.ChatLineEmitted += router.Dispatch;
             Feed.Lines.ReadEnded += router.EndRead;
@@ -74,12 +76,18 @@ public sealed partial class GmcpIntegrationTests
             Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log);
             Stealth = new(router, Player, Log);
             Gmcp.BindConsumers(Conditions, Stealth, Hp);
-            Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase)); Inventory.AttachLineExtractor(Feed.Lines);
-            Shop = new(router, _ => null, _ => 0, () => false, Log, schedule: Timers.Arm); Shop.AttachLineExtractor(Feed.Lines);
+            Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase));
+            Inventory.AttachLineExtractor(Feed.Lines);
+            Shop = new(router, _ => null, _ => 0, () => false, Log, schedule: Timers.Arm);
+            Shop.AttachLineExtractor(Feed.Lines);
             Book = new(new Game.Spells.KnownSpellCatalog(cache));
-            SpellParser = new(Book, Log); SpellParser.AttachLineExtractor(Feed.Lines);
-            Party = new(router, new PartyState(), Log) { LocalCharacterName = "Tester" }; Party.AttachLineExtractor(Feed.Lines);
-            Chat = new(router, log: Log); Abilities = new(Log); Abilities.AttachLineExtractor(Feed.Lines);
+            SpellParser = new(Book, Log);
+            SpellParser.AttachLineExtractor(Feed.Lines);
+            Party = new(router, new PartyState(), Log) { LocalCharacterName = "Tester" };
+            Party.AttachLineExtractor(Feed.Lines);
+            Chat = new(router, log: Log);
+            Abilities = new(Log);
+            Abilities.AttachLineExtractor(Feed.Lines);
             Cast = new(router, Log);
             Director = new(Player, Cast, () => new Models.Profile.SpellsSettings(), () => new Models.Profile.HealthSettings(), () => false, Log);
             Gmcp.BindMilestone2(Inventory, Shop, Book, SpellParser, Party, Chat, Abilities, Director);
@@ -123,7 +131,8 @@ public sealed partial class GmcpIntegrationTests
                 string? kind = frame.GetProperty("kind").GetString();
                 if (frame.TryGetProperty("raw", out JsonElement raw)) Wire(Convert.FromBase64String(raw.GetString()!));
                 else if (kind == "gmcp") Wire(ServerPacket(frame.GetProperty("pkg").GetString()!, frame.GetProperty("msg")));
-                else if (kind == "negotiation") Wire(new byte[] { 255, frame.GetProperty("telnet").GetString()!.Contains("WONT", StringComparison.Ordinal) ? (byte)252 : (byte)251, 201 });
+                else if (kind == "negotiation") Wire(new byte[] { 255, frame.GetProperty("telnet").GetString()!.Contains("WONT",
+                    StringComparison.Ordinal) ? (byte)252 : (byte)251, 201 });
                 else if (kind == "text") Text(frame.GetProperty("text").GetString()! + "\r\n");
             }
         }
@@ -142,7 +151,8 @@ public sealed partial class GmcpIntegrationTests
                 {
                     string[] tokens = frame.GetProperty("telnet").GetString()!.Split(' ');
                     byte command = tokens[1] switch { "DO" => 253, "DONT" => 254, "WILL" => 251, "WONT" => 252, _ => 0 };
-                    byte option = tokens[2] switch { "GMCP" => 201, "ECHO" => 1, "SGA" => 3, "BINARY" => 0, "NAWS" => 31, "LINEMODE" => 34, "TTYPE" => 24, _ => byte.Parse(tokens[2]) };
+                    byte option = tokens[2] switch { "GMCP" => 201, "ECHO" => 1, "SGA" => 3, "BINARY" => 0, "NAWS" => 31, "LINEMODE" =>
+                        34, "TTYPE" => 24, _ => byte.Parse(tokens[2]) };
                     Wire(new byte[] { 255, command, option });
                 }
             }
@@ -150,9 +160,22 @@ public sealed partial class GmcpIntegrationTests
 
         public void Dispose()
         {
-            Director.Dispose(); Cast.Dispose(); Inventory.Dispose(); Shop.Dispose(); SpellParser.Dispose(); Party.Dispose(); Chat.Dispose(); Abilities.Dispose();
-            Conditions.Dispose(); Stealth.Dispose();
-            _display.Dispose(); _encumbrance.Dispose(); Combat.Dispose(); Classifier.Dispose(); StatParser.Dispose(); Prompt.Dispose();
+            Director.Dispose();
+            Cast.Dispose();
+            Inventory.Dispose();
+            Shop.Dispose();
+            SpellParser.Dispose();
+            Party.Dispose();
+            Chat.Dispose();
+            Abilities.Dispose();
+            Conditions.Dispose();
+            Stealth.Dispose();
+            _display.Dispose();
+            _encumbrance.Dispose();
+            Combat.Dispose();
+            Classifier.Dispose();
+            StatParser.Dispose();
+            Prompt.Dispose();
             Directory.Delete(_root, recursive: true);
         }
     }
@@ -175,14 +198,19 @@ public sealed partial class GmcpIntegrationTests
         Assert.True(host == "127.0.0.1" || host == "192.168.1.100" && port == 2350, "Live tests only run against the isolated host or its local recording proxy.");
         await session.Telnet.ConnectAsync(host, port);
         await Until(() => session.Transcript.Contains("account name", StringComparison.OrdinalIgnoreCase), "test account prompt", ended: () => session.Telnet.EndedBecause);
-        session.ClearText(); await session.Telnet.SendTextAsync(account + "\r\n");
+        session.ClearText();
+        await session.Telnet.SendTextAsync(account + "\r\n");
         await Until(() => session.Transcript.Contains("password", StringComparison.OrdinalIgnoreCase), "test password prompt", ended: () => session.Telnet.EndedBecause);
-        session.ClearText(); await session.Telnet.SendTextAsync(password + "\r\n");
+        session.ClearText();
+        await session.Telnet.SendTextAsync(password + "\r\n");
         await Until(() => session.Transcript.Contains("Selection:", StringComparison.OrdinalIgnoreCase), "test board menu", ended: () => session.Telnet.EndedBecause);
-        session.ClearText(); await session.Telnet.SendTextAsync("1\r\n");
+        session.ClearText();
+        await session.Telnet.SendTextAsync("1\r\n");
         await Until(() => session.Transcript.Contains("[MMUDREBORN]:", StringComparison.OrdinalIgnoreCase), "test realm menu", ended: () => session.Telnet.EndedBecause);
-        session.ClearText(); await session.Telnet.SendTextAsync("e\r\n");
-        await Until(() => session.Read(() => session.Gmcp.State.Owns("Anomaly.Room.Info") || session.Gmcp.State.Snapshot("Anomaly.Room.Info") is not null), "initial server snapshots", ended: () => session.Telnet.EndedBecause);
+        session.ClearText();
+        await session.Telnet.SendTextAsync("e\r\n");
+        await Until(() => session.Read(() => session.Gmcp.State.Owns("Anomaly.Room.Info")
+            || session.Gmcp.State.Snapshot("Anomaly.Room.Info") is not null), "initial server snapshots", ended: () => session.Telnet.EndedBecause);
         await Until(() => session.Read(() => session.Gmcp.State.RosterComplete), "complete initial monster baselines", ended: () => session.Telnet.EndedBecause);
     }
 
@@ -191,7 +219,8 @@ public sealed partial class GmcpIntegrationTests
         JsonElement room = session.Read(() => session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value);
         string destination = room.GetProperty("exits").EnumerateArray().Single(e => e.GetProperty("dir").GetString() == direction).GetProperty("to").GetString()!;
         await session.Telnet.SendTextAsync(direction + "\r\n");
-        await Until(() => session.Read(() => session.Gmcp.State.CurrentRoom == destination && session.Gmcp.State.Owns("Anomaly.Room.Info") && session.Gmcp.State.RosterComplete), "movement to server-provided exit destination");
+        await Until(() => session.Read(() => session.Gmcp.State.CurrentRoom == destination
+            && session.Gmcp.State.Owns("Anomaly.Room.Info") && session.Gmcp.State.RosterComplete), "movement to server-provided exit destination");
     }
 
     [LiveGmcpFact]
@@ -210,18 +239,23 @@ public sealed partial class GmcpIntegrationTests
             Assert.NotEqual(JsonValueKind.Null, Door().ValueKind);
             for (int attempt = 0; attempt < 5 && Door().GetProperty("state").GetString() != "open"; attempt++)
             {
-                await session.Telnet.SendTextAsync("pick n\r\n"); await Task.Delay(1100);
-                await session.Telnet.SendTextAsync("open n\r\n"); await Task.Delay(1100);
+                await session.Telnet.SendTextAsync("pick n\r\n");
+                await Task.Delay(1100);
+                await session.Telnet.SendTextAsync("open n\r\n");
+                await Task.Delay(1100);
             }
             Assert.Equal("open", Door().GetProperty("state").GetString());
-            await Move(session, "n"); await Move(session, "s");
+            await Move(session, "n");
+            await Move(session, "s");
             foreach (string direction in new[] { "e", "s", "s", "s" }) await Move(session, direction);
             Assert.Equal("1,1", session.Read(() => session.Gmcp.State.CurrentRoom));
             foreach (string direction in new[] { "s", "s", "w", "w", "s", "s" }) await Move(session, direction);
             Assert.Equal("1,123", session.Read(() => session.Gmcp.State.CurrentRoom));
-            RoomEntity target = session.Read(() => session.Classifier.Current!.Value.Entities.First(e => e.Kind == EntityKind.Monster && !e.RawName.Contains("guard", StringComparison.OrdinalIgnoreCase)));
+            RoomEntity target = session.Read(() => session.Classifier.Current!.Value.Entities.First(e => e.Kind == EntityKind.Monster
+                && !e.RawName.Contains("guard", StringComparison.OrdinalIgnoreCase)));
             await session.Telnet.SendTextAsync("attack " + target.RawName + "\r\n");
-            await Until(() => session.Read(() => target.RuntimeId is { } uid && !session.Gmcp.State.StaticMonsters.ContainsKey(uid)), "monster death and identity eviction", seconds: 90);
+            await Until(() => session.Read(() => target.RuntimeId is { } uid && !session.Gmcp.State.StaticMonsters.ContainsKey(uid)),
+                "monster death and identity eviction", seconds: 90);
             await session.Telnet.SendTextAsync("rest\r\n");
             await Until(() => session.Read(() => session.Player.Position == PlayerPosition.Resting), "server-driven resting state");
             foreach (string direction in new[] { "s", "w", "w" }) await Move(session, direction);
@@ -229,7 +263,8 @@ public sealed partial class GmcpIntegrationTests
             JsonElement hidden = session.Read(() => session.Gmcp.State.Snapshot("Anomaly.Room.Info")!.Value)
                 .GetProperty("exits").EnumerateArray().Single(e => e.GetProperty("dir").GetString() == "u");
             Assert.True(hidden.GetProperty("hidden").GetBoolean());
-            await Move(session, "u"); await Move(session, "d");
+            await Move(session, "u");
+            await Move(session, "d");
             foreach (string direction in new[] { "n", "n", "n", "n", "n", "e", "e", "e", "e" }) await Move(session, direction);
             Assert.Equal("1,1", session.Read(() => session.Gmcp.State.CurrentRoom));
             Assert.DoesNotContain(session.Log.Snapshot(), entry => entry.Source == "GMCP" && entry.Message.Contains("Cannot apply", StringComparison.Ordinal));
@@ -266,7 +301,8 @@ public sealed partial class GmcpIntegrationTests
             await Login(sysop, Environment.GetEnvironmentVariable("MUDPLAY_GMCP_SYSOP_ACCOUNT")!, Environment.GetEnvironmentVariable("MUDPLAY_GMCP_SYSOP_PASSWORD")!);
             await sysop.Telnet.SendTextAsync("sysop configure gmcp off\r\n");
             await Until(() => session.Read(() => !session.Gmcp.State.Compatible), "WONT fallback");
-            session.ClearText(); await session.Telnet.SendTextAsync("look\r\n");
+            session.ClearText();
+            await session.Telnet.SendTextAsync("look\r\n");
             await Until(() => session.Transcript.Contains("[HP=", StringComparison.Ordinal), "text fallback prompt");
             Assert.False(session.Read(() => session.Gmcp.State.Owns("Anomaly.Char.Vitals")));
             await sysop.Telnet.SendTextAsync("sysop configure gmcp on\r\n");
@@ -327,25 +363,32 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ActiveVitals_OverrideTextOnlyUntilTheirOwnPackageIsReset()
     {
-        using Session session = new(); session.Replay("01-handshake");
-        Assert.Equal(150, session.Player.Hp); Assert.Equal(150, session.Player.MaxHp);
-        session.Text("[HP=3]:\r\n"); Assert.Equal(150, session.Player.Hp);
+        using Session session = new();
+        session.Replay("01-handshake");
+        Assert.Equal(150, session.Player.Hp);
+        Assert.Equal(150, session.Player.MaxHp);
+        session.Text("[HP=3]:\r\n");
+        Assert.Equal(150, session.Player.Hp);
         session.Send("Anomaly.Session.Reset", new { scope = "package", package = "Anomaly.Char.Vitals" });
-        session.Text("[HP=7]:\r\n"); Assert.Equal(7, session.Player.Hp);
+        session.Text("[HP=7]:\r\n");
+        Assert.Equal(7, session.Player.Hp);
         Assert.True(session.Gmcp.State.Owns("Anomaly.Char.Status"));
     }
 
     [Fact]
     public void RoomReset_DoesNotLoseTheMoveItsBaselineMustConfirm()
     {
-        using Session session = new(); session.Replay("01-handshake");
-        int answers = 0; session.Tracker.MoveConfirmed += () => answers++;
+        using Session session = new();
+        session.Replay("01-handshake");
+        int answers = 0;
+        session.Tracker.MoveConfirmed += () => answers++;
         session.Tracker.NoteMoveSent(Direction.N);
         session.Send("Anomaly.Session.Reset", new { scope = "room", room = "1,2" });
         // Between the reset and the arriving room the position is still known; an Unknown here sends the walker into an rm resync each step.
         Assert.NotEqual(RoomConfidence.Unknown, session.Tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), session.Tracker.State.CurrentRoom!.Key);
-        Dictionary<string, JsonElement> room = GmcpStateTests.Frames("01-handshake").First(f => f.TryGetProperty("pkg", out JsonElement package) && package.GetString() == "Anomaly.Room.Info")
+        Dictionary<string, JsonElement> room = GmcpStateTests.Frames("01-handshake").First(f =>
+            f.TryGetProperty("pkg", out JsonElement package) && package.GetString() == "Anomaly.Room.Info")
             .GetProperty("msg").EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         room["room"] = JsonSerializer.SerializeToElement("1,2");
         session.Send("Anomaly.Room.Info", room);
@@ -358,7 +401,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void CharacterReset_DropsOldMovementBeforeTheNewCharactersBaseline()
     {
-        using Session session = new(); session.Replay("01-handshake");
+        using Session session = new();
+        session.Replay("01-handshake");
         session.Tracker.NoteMoveSent(Direction.N);
         session.Send("Anomaly.Session.Reset", new { scope = "all", reason = "character" });
         Assert.False(session.Tracker.HasQueuedMoves);
@@ -373,23 +417,31 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ActiveStats_KeepUnprovidedIdentityLivesAndCpOnText()
     {
-        using Session session = new(); session.Replay("01-handshake");
-        Assert.Equal(70, session.Stats.Strength); Assert.Equal(12, session.Stats.Level);
-        Assert.Equal(24, session.Stats.ArmourClass); Assert.Equal(4, session.Stats.MaxArmourClass);
+        using Session session = new();
+        session.Replay("01-handshake");
+        Assert.Equal(70, session.Stats.Strength);
+        Assert.Equal(12, session.Stats.Level);
+        Assert.Equal(24, session.Stats.ArmourClass);
+        Assert.Equal(4, session.Stats.MaxArmourClass);
         session.StatParser.ObserveOutbound(Encoding.ASCII.GetBytes("stat\r"));
         session.Text("Name: Test Hero                  Lives/CP:           8/15\r\n");
         session.Text("Class: Warrior        Level: 1        Stealth:            65\r\n");
         session.Text("Strength:   3       Agility:   4          Tracking:     0\r\n");
-        Assert.Equal("Test Hero", session.Stats.Name); Assert.Equal(8, session.Stats.Lives); Assert.Equal(15, session.Stats.Cp);
-        Assert.Equal(70, session.Stats.Strength); Assert.Equal(12, session.Stats.Level);
+        Assert.Equal("Test Hero", session.Stats.Name);
+        Assert.Equal(8, session.Stats.Lives);
+        Assert.Equal(15, session.Stats.Cp);
+        Assert.Equal(70, session.Stats.Strength);
+        Assert.Equal(12, session.Stats.Level);
     }
 
     [Fact]
     public void ActiveRoster_ReachesCombatModelsAndDeathClearsTheGate()
     {
-        using Session session = new(); session.Replay("07-recovery-request");
+        using Session session = new();
+        session.Replay("07-recovery-request");
         RoomEntity monster = Assert.Single(session.Classifier.Current!.Value.Entities.Where(e => e.Kind == EntityKind.Monster));
-        Assert.Equal(102, monster.RuntimeId); Assert.Equal(12, monster.MonsterNumber);
+        Assert.Equal(102, monster.RuntimeId);
+        Assert.Equal(12, monster.MonsterNumber);
         Assert.True(session.Combat.HasRoomNpc);
         session.Send("Anomaly.Mob.Gone", new { uid = 102, room = session.Gmcp.State.CurrentRoom, why = "died" });
         Assert.Empty(session.Classifier.Current!.Value.Entities);
@@ -399,10 +451,12 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void WontAndReconnect_RestoreTextThenFreshServerState()
     {
-        using Session session = new(); session.Replay("07-recovery-request");
+        using Session session = new();
+        session.Replay("07-recovery-request");
         session.Gmcp.Disconnected();
         session.Text("[HP=9/MA=2]:\r\n");
-        Assert.Equal(9, session.Player.Hp); Assert.Empty(session.Gmcp.State.StaticMonsters);
+        Assert.Equal(9, session.Player.Hp);
+        Assert.Empty(session.Gmcp.State.StaticMonsters);
         Assert.Null(session.Classifier.Current);
         session.Replay("09-reconnect");
         Assert.True(session.Gmcp.State.RosterComplete);
@@ -412,7 +466,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void RoomProjection_PreservesCommandTeleportsAndKnownRemoteActionRequirements()
     {
-        JsonElement value = GmcpStateTests.Frames("01-handshake").First(frame => frame.TryGetProperty("pkg", out JsonElement package) && package.GetString() == "Anomaly.Room.Info").GetProperty("msg");
+        JsonElement value = GmcpStateTests.Frames("01-handshake").First(frame => frame.TryGetProperty("pkg", out JsonElement package)
+            && package.GetString() == "Anomaly.Room.Info").GetProperty("msg");
         Dictionary<string, JsonElement> fields = value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         List<Dictionary<string, JsonElement>> exits = value.GetProperty("exits").EnumerateArray().Select(e => e.EnumerateObject().ToDictionary(p => p.Name, p => p.Value)).ToList();
         exits[0]["kind"] = JsonSerializer.SerializeToElement("hidden");
@@ -432,7 +487,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void RoomSnapshot_UpdatesGraphAndPreservesLockedAndHiddenExits()
     {
-        using Session session = new(); session.Replay("02-walk");
+        using Session session = new();
+        session.Replay("02-walk");
         Assert.Equal(GmcpProjection.Key(session.Gmcp.State.CurrentRoom!), session.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(RoomConfidence.Confirmed, session.Tracker.State.Confidence);
         Assert.NotNull(session.Graph.GetRoom(session.Tracker.State.CurrentRoom.Key));
@@ -441,7 +497,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ShadowMode_ReportsOnlyComparableTextFieldsAndDoesNotOwnModels()
     {
-        using Session session = new(active: false); session.Replay("01-handshake");
+        using Session session = new(active: false);
+        session.Replay("01-handshake");
         Assert.False(session.Player.HasPromptData);
         session.Text("[HP=4]:\r\n");
         Assert.Equal(4, session.Player.Hp);
@@ -452,7 +509,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ShadowVisibility_UsesTheTextWhenAHiddenOccupantIsActuallyVisible()
     {
-        using Session session = new(active: false); session.Replay("07-recovery-request");
+        using Session session = new(active: false);
+        session.Replay("07-recovery-request");
         session.Send("Anomaly.Room.Occupants", new { room = session.Gmcp.State.CurrentRoom, mobs = new[] { new { uid = 102, hidden = true } }, players = Array.Empty<object>() });
         session.Text("Also here: large giant rat.\r\n");
         Assert.DoesNotContain(session.Log.Snapshot(), entry => entry.Source == "GMCP shadow");
@@ -461,7 +519,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void CurrentMonsterHp_ComesFromLiveBaselineAndDeltaWithoutDoubleCountingTextDamage()
     {
-        using Session session = new(); session.Replay("07-recovery-request");
+        using Session session = new();
+        session.Replay("07-recovery-request");
         RoomEntity monster = session.Classifier.Current!.Value.Entities.Single(e => e.Kind == EntityKind.Monster);
         Assert.Equal(12, session.Hp.Estimate(monster.RawName));
         session.Send("Anomaly.Mob.Update", new { uid = monster.RuntimeId, room = session.Gmcp.State.CurrentRoom, full = false, hp = 5 });
@@ -472,12 +531,15 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ActiveStatus_UpdatesConditionsAndStealthAndReleasesThemOnFallback()
     {
-        using Session session = new(); session.Replay("01-handshake");
+        using Session session = new();
+        session.Replay("01-handshake");
         Dictionary<string, JsonElement> value = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         foreach (string field in new[] { "blind", "poisoned", "diseased", "confused", "sneaking" }) value[field] = JsonSerializer.SerializeToElement(true);
         session.Send("Anomaly.Char.Status", value);
-        Assert.True(session.Conditions.IsBlinded); Assert.True(session.Conditions.IsPoisoned);
-        Assert.True(session.Conditions.IsDiseased); Assert.True(session.Conditions.IsConfused);
+        Assert.True(session.Conditions.IsBlinded);
+        Assert.True(session.Conditions.IsPoisoned);
+        Assert.True(session.Conditions.IsDiseased);
+        Assert.True(session.Conditions.IsConfused);
         Assert.True(session.Stealth.IsSneaking);
         session.Gmcp.Disconnected();
         Assert.False(session.Conditions.IsBlinded);
@@ -486,7 +548,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void LairDeadline_IsEligibilityForCurrentRoomAndExpiresWithRoomState()
     {
-        using Session session = new(); session.Replay("07-recovery-request");
+        using Session session = new();
+        session.Replay("07-recovery-request");
         RoomKey room = GmcpProjection.Key(session.Gmcp.State.CurrentRoom!);
         Assert.True(session.Gmcp.LairEligibility(room).Known);
         Assert.NotNull(session.Gmcp.LairEligibility(room).EligibleAt);
@@ -501,7 +564,8 @@ public sealed partial class GmcpIntegrationTests
     public void ActiveStatus_ALongFightsLinesKeepTheStallWatchdogFromClearingIt()
     {
         ManualClock clock = new();
-        using Session session = new(clock: clock); session.Replay("01-handshake");
+        using Session session = new(clock: clock);
+        session.Replay("01-handshake");
         List<string> wire = new();
         session.Combat.SetWireSender(bytes => wire.Add(Encoding.Latin1.GetString(bytes)));
         Dictionary<string, JsonElement> status = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
@@ -522,7 +586,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public void ActiveStealth_IsNotClearedByTheTextArrivalWatchdog()
     {
-        using Session session = new(); session.Replay("01-handshake");
+        using Session session = new();
+        session.Replay("01-handshake");
         Dictionary<string, JsonElement> status = session.Gmcp.State.Snapshot("Anomaly.Char.Status")!.Value.EnumerateObject().ToDictionary(p => p.Name, p => p.Value);
         status["sneaking"] = JsonSerializer.SerializeToElement(true);
         session.Send("Anomaly.Char.Status", status);
@@ -535,7 +600,8 @@ public sealed partial class GmcpIntegrationTests
     [Fact]
     public async Task ExplicitRefresh_RequestsSnapshotsAndMonsterBaselines()
     {
-        using Session session = new(); session.Replay("07-recovery-request");
+        using Session session = new();
+        session.Replay("07-recovery-request");
         List<(string Package, JsonElement Payload)> requests = new();
         session.Gmcp.SetSender((package, payload) => { requests.Add((package, JsonSerializer.SerializeToElement(payload))); return Task.CompletedTask; });
         await session.Gmcp.RefreshAsync();
