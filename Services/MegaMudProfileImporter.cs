@@ -350,6 +350,8 @@ public static class MegaMudProfileImporter
         profile.PartyBuffs ??= new BuffSettings();
         List<BuffSlot> slots = profile.PartyBuffs.Slots;
         int blessAbove = p.IntOr("Health", "ManaBless%", BuffSlot.DefaultBlessIfAboveMa);
+        // MegaMUD's one floor for every bless is the Buff Watchdog's shared one too.
+        profile.PartyBuffs.BlessIfAboveMa = blessAbove;
         bool resting = p.Raw("Other", "BlessResting") == "1";
         bool combat = p.Raw("Other", "BlessCombat") != "0";
 

@@ -215,6 +215,7 @@ public sealed class MegaMudProfileImporterTests
         Assert.False(slots[2].CastOnSelf);
         Assert.True(slots[2].AllMembers);
         Assert.All(slots, s => Assert.Equal(40, s.BlessIfAboveMa));
+        Assert.Equal(40, made.PartyBuffs.BlessIfAboveMa);
         Assert.All(slots, s => Assert.False(s.BlessWhileResting));
         Assert.All(slots, s => Assert.True(s.BlessDuringCombat));
     }
