@@ -491,6 +491,8 @@ public static class MegaMudProfileImporter
         p.Flag(s, "CanDisarmTraps", g, "Disarm traps if able", v => other.UtilizeDisarmTrapsIfAble = v);
         p.Int(s, "DisarmMax", g, "Most trap disarm attempts", v => other.MaxTrapDisarmAttempts = Math.Max(1, v));
         p.Int(s, "PickMax", g, "Most picklock attempts", v => other.MaxPickAttempts = Math.Max(1, v));
+        // MegaMUD's 0 is no searching (user, 2026-10-29) and MudPlay's 0 is no limit,
+        // so a 0 comes in as the fewest searches there are.
         p.Int(s, "SearchMax", g, "Most hidden-exit searches", v => other.MaxHiddenSearchAttempts = Math.Max(1, v));
         p.Skip(s, "BashMax", g, "Most door bash attempts", "no matching MudPlay setting is mapped for it yet");
         p.SkipUnlessZero(s, "AutoTrain", g, "Auto-train", "needs a training plan first: set it on the Workshop's CP Allocation tab");

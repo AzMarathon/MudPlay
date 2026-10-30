@@ -7,7 +7,7 @@
 > - GMCP shadow compares vitals as the server sends them, so regen ticks no longer flood the warnings
 > - An exit taken by a command (`go path`) no longer counts as a shown exit with server room data
 > - The status bar's last-tick regen items show a dash instead of vanishing when no recent tick is known
-> - Settings → Other gets a Hidden exit max searches setting, and saving that tab no longer resets it
+> - Settings → Other gets a Hidden exit max searches setting (0 is no limit), and saving that tab no longer resets it
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -166,10 +166,14 @@ public sealed class HiddenExitRevealManager : IDisposable
         Reset();
     }
 
+    // A limit of 0 is no limit (user, 2026-10-29): the search goes on until the exit
+    // shows, the walk is stopped or the room is left.
+    private bool OutOfSearches => _maxAttemptsProvider() is > 0 and var max && _attempts >= max;
+
     private void OnSearchFailedPattern(MatchResult _)
     {
         if (_current is not { } cur) return;
-        if (_attempts >= _maxAttemptsProvider())
+        if (OutOfSearches)
         {
             cur.Reply(new HiddenSearchResult.Failed(
                 $"exit {DirectionShort(cur.Direction)} never revealed after {_attempts} sea attempts"));
@@ -255,7 +259,7 @@ public sealed class HiddenExitRevealManager : IDisposable
         _attempts++;
         _wire.Send($"sea {DirectionShort(cur.Direction)}");
         _log?.Info("Hidden",
-            $"sea {DirectionShort(cur.Direction)} (attempt {_attempts}/{_maxAttemptsProvider()}).");
+            $"sea {DirectionShort(cur.Direction)} (attempt {_attempts}/{(_maxAttemptsProvider() > 0 ? _maxAttemptsProvider() : "no limit")}).");
     }
 
     private void OnTrackerStateChanged(RoomTransition transition)
@@ -291,7 +295,7 @@ public sealed class HiddenExitRevealManager : IDisposable
 
         // Still not visible — retry or exhaust (a blind or rest hold waits instead).
         if (_heldForBlindness || _heldForRest) return;
-        if (_attempts >= _maxAttemptsProvider())
+        if (OutOfSearches)
         {
             cur.Reply(new HiddenSearchResult.Failed(
                 $"exit {DirectionShort(cur.Direction)} never revealed after {_attempts} sea attempts"));

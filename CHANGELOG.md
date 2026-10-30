@@ -7,7 +7,7 @@
 - GMCP shadow compares vitals as the server sends them, so regen ticks no longer flood the warnings
 - An exit taken by a command (`go path`) no longer counts as a shown exit with server room data
 - The status bar's last-tick regen items show a dash instead of vanishing when no recent tick is known
-- Settings → Other gets a Hidden exit max searches setting, and saving that tab no longer resets it
+- Settings → Other gets a Hidden exit max searches setting (0 is no limit), and saving that tab no longer resets it
 - bug reports addressed: Crash-20261029-161814, paradigm-20261029-213729, paradigm-20261029-230237
 
 ## 3.190.1

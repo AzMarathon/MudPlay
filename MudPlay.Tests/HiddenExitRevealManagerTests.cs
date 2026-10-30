@@ -204,6 +204,23 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
         Assert.IsType<HiddenSearchResult.Failed>(result);
     }
 
+    // A limit of 0 is no limit (user, 2026-10-29): the search goes on past any count
+    // until the exit shows. A MegaMUD import could leave a profile at 1 search with no
+    // way to raise it (report paradigm-20261029-230237).
+    [Fact]
+    public void Reveal_WithNoLimit_KeepsSearching_UntilTheExitShows()
+    {
+        Harness h = new(_root) { MaxAttempts = 0 };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        HiddenSearchResult? result = null;
+        h.Mgr.Enqueue(Direction.N, "walker", r => result = r);
+
+        for (int i = 0; i < 49; i++) h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.Equal(50, h.Sent.Count);
+        Assert.Null(result);
+    }
+
     [Fact]
     public void Reveal_OnSearchSucceededPattern_FiresRevealed_WhenServerDoesNotRedisplayRoom()
     {

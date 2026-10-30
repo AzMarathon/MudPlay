@@ -1780,8 +1780,8 @@ How to keep it current:
 
 ### HiddenExitRevealManagerTests.cs
 - Covers: Game/Map/HiddenExitRevealManager
-- Checks: `sea` is sent; a find is recognised from the room redisplay or the success line; the retry cap; leaving the room mid-search; waits while blind or resting; StopAll.
-- Why: paradigm-20260924-135311, paradigm-20260714-121106
+- Checks: `sea` is sent; a find is recognised from the room redisplay or the success line; the retry cap, and a cap of 0 searching on past any count; leaving the room mid-search; waits while blind or resting; StopAll.
+- Why: paradigm-20260924-135311, paradigm-20260714-121106; paradigm-20261029-230237 (0 is no limit, user 2026-10-29)
 
 ### HostileNameTests.cs
 - Covers: Services/ProfileService, BbsProfileStore, RealmCatalog, GameDataSetManager, MdbImporter, GameDataCache, LoopManager, SettingsResolver

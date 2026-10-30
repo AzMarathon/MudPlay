@@ -78,7 +78,8 @@ public sealed class OtherSettings
     // Walker max sea <dir> retries when revealing a hidden exit ((Hidden)
     // modifier) along the path. Default 20 — mirrors the trap-search cap since
     // it's the same verb, kept separate so the user can tune them independently.
-    [SettingRange(1, 100)]
+    // 0 is no limit.
+    [SettingRange(0, 100)]
     public int MaxHiddenSearchAttempts { get; set; } = 20;
 
     // Note: the former "search rooms if item needed" opt-in was retired — arming

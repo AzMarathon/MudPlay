@@ -6971,8 +6971,8 @@ With more than one able member, the first to report the way clear moves you on, 
 ### Hidden exit max searches
 
 **Default:** 20
-**Available options:** 1–100
-**What it does:** Caps how many times a walk or loop sends `search <dir>` for a hidden exit it needs and hasn't found yet, before it stops at that exit. A search can fail even when your skill is up to it, so a low cap can stop a walk at an exit it would have found with a few more tries. A MegaMUD profile import takes MegaMUD's own search limit, which can be as low as 1.
+**Available options:** 0–100; **0** is no limit
+**What it does:** Caps how many times a walk or loop sends `search <dir>` for a hidden exit it needs and hasn't found yet, before it stops at that exit. A search can fail even when your skill is up to it, so a low cap can stop a walk at an exit it would have found with a few more tries. At **0** it keeps searching until the exit shows, you stop the walk, or you leave the room. A MegaMUD profile import takes MegaMUD's own search limit; MegaMUD's 0 (no searching) comes in as 1, since 0 here means no limit.
 
 ### Pick locks instead of bashing
 
@@ -7735,7 +7735,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max pick / Pick over bash | 10 / false | 1–100 / bool | `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
-| Hidden exit max searches | 20 | 1–100 | `MaxHiddenSearchAttempts` | Models/Profile/OtherSettings.cs |
+| Hidden exit max searches | 20 | 0–100 (0 = no limit) | `MaxHiddenSearchAttempts` | Models/Profile/OtherSettings.cs |
 | Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |

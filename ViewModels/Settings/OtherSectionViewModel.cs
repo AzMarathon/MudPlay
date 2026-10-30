@@ -250,7 +250,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             UtilizeDisarmTrapsIfAble = UtilizeDisarmTrapsIfAble,
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
-            MaxHiddenSearchAttempts = Math.Clamp(MaxHiddenSearchAttempts, 1, 100),
+            MaxHiddenSearchAttempts = Math.Clamp(MaxHiddenSearchAttempts, 0, 100),
             SneakStandDownChance  = Math.Clamp(SneakStandDownChance,  0, 95),
             PicklocksOverBash     = PicklocksOverBash,
             HideWhenDiscarding    = HideWhenDiscarding,
