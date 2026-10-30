@@ -593,9 +593,9 @@ How to keep it current:
 - Why: the O(n²) startup fix.
 
 ### BundleExtractionTests.cs
-- Covers: Services/Update/BundleExtraction
-- Checks: the startup clean-up removes other versions' unpacked folders beside this client's own (a full one with a sub-folder, one an earlier clean-up got part way through, and pre-3.186.9 natives-only ones: all three native libraries, or Skia alone) and leaves this client's own, a natives-only one holding an extra file or a sub-folder, one with only the ANGLE library, a natives-only one read within the hour, a natives-only one outside the host's extraction folder, a folder that isn't MudPlay's, and, once the one-time pass for pre-3.186.9 folders has marked itself done (only after a run that left none: not while one was in use), a natives-only folder that turns up later; a client that finds another holding the pass's lock skips the pass, one not named like a bundle id, another Avalonia app's, one unpacked within the hour, and the target of a link (a link inside a removed folder goes as a link); it touches nothing when the extraction base (DOTNET_BUNDLE_EXTRACT_BASE_DIR) sits above the install so the extraction folder is the install folder, or when this client's folder isn't in the host's extraction folder; the layout is told apart (inside the program, unpacked, not single-file, run by the dotnet host).
-- Why: a Windows build unpacks itself per version into the temp folder so its clients share the assemblies' pages; old versions' copies would pile up, and the clean-up must touch nothing else (RAM pass, 2026-10-25). On the Linux test host a mapped file can still be opened exclusively, so "a running client holds it" is stood in for by the test holding the file open with no sharing.
+- Covers: Services/Update/BundleExtraction, Services/Update/UnpackedCopyHold
+- Checks: a client's hold on its unpacked copy takes every file, sub-folders too, and another version's clean-up leaves a held folder until the hold is let go; the startup clean-up removes other versions' unpacked folders beside this client's own (a full one with a sub-folder, one an earlier clean-up got part way through, and pre-3.186.9 natives-only ones: all three native libraries, or Skia alone) and leaves this client's own, a natives-only one holding an extra file or a sub-folder, one with only the ANGLE library, a natives-only one read within the hour, a natives-only one outside the host's extraction folder, a folder that isn't MudPlay's, and, once the one-time pass for pre-3.186.9 folders has marked itself done (only after a run that left none: not while one was in use), a natives-only folder that turns up later; a client that finds another holding the pass's lock skips the pass, one not named like a bundle id, another Avalonia app's, one unpacked within the hour, and the target of a link (a link inside a removed folder goes as a link); it touches nothing when the extraction base (DOTNET_BUNDLE_EXTRACT_BASE_DIR) sits above the install so the extraction folder is the install folder, or when this client's folder isn't in the host's extraction folder; the layout is told apart (inside the program, unpacked, not single-file, run by the dotnet host).
+- Why: a Windows build unpacks itself per version into the temp folder so its clients share the assemblies' pages; old versions' copies would pile up, and the clean-up must touch nothing else (RAM pass, 2026-10-25). A temp-file clean-up removed assemblies a client running overnight hadn't loaded yet, and it crashed on its first click in the CP plan grid (reports Crash-20261030-084406, Crash-20261030-084407). On the Linux test host a mapped file can still be opened exclusively, so "a running client holds it" is stood in for by the test holding the file open with no sharing.
 - Named seam: BundleExtraction.Current's optional base folder and process path, and CleanOld's optional `exePath`, `extractBase`, `nowUtc` and `doneMarker`: the three layouts, the extraction folder's place, the hour's age and the one-time pass's marker have to be checked without being a Windows install or setting the process's environment.
 
 ### CarriedStealthPenaltyTests.cs
@@ -900,8 +900,8 @@ How to keep it current:
 
 ### CorpseHandoffTests.cs
 - Covers: Game/Recovery/CorpseHandoffManager, CorpseRecoveryLines, CorpseHandoffPlan; BugReportScrub; SentCommandTrail; CommandHistory; DoHandler.
-- Checks: another player's corpse is recorded from the recovery lines; the password stays out of storage, log, trail and history; gives are planned per realm and struck off on confirmation.
-- Why: handing a friend's gear back without leaking their password.
+- Checks: another player's corpse is recorded from the recovery lines; the command is read in the short form the game takes (`recover <name> <password>`) and the long form, never the owner's `recover corpse <name>`; the password stays out of storage, log, trail and history, the short form masked where a command stands and prose with "recover" left alone; gives are planned per realm and struck off on confirmation.
+- Why: handing a friend's gear back without leaking their password; report `bug-report-recover-corpse-for-another-player` (the game refuses the long form, and the short one was neither recorded nor masked).
 
 ### CountedCommandTests.cs
 - Covers: Game/Inventory/CountedCommand.
@@ -935,7 +935,7 @@ How to keep it current:
 
 ### CrashReporterTests.cs
 - Covers: Services/CrashReporter.Build.
-- Checks: the crash report's header, inner and aggregate faults, the build and log path, the null-exception and no-state fallbacks; a report built while the program log's disk is stuck doesn't return until the last line before the crash is on it.
+- Checks: the crash report's header, inner and aggregate faults, the file a missing-file fault names (its message can be empty: reports Crash-20261030-084406, Crash-20261030-084407), the build and log path, the null-exception and no-state fallbacks; a report built while the program log's disk is stuck doesn't return until the last line before the crash is on it.
 - Why: crash reports must stay readable, and the log they name must hold the lines before the crash.
 - Named seam: `CrashReporter.Build`'s optional `programLogBound` (default `ProgramLogFile.CrashDrainBound`). The test gives the wait a minute, so a loaded machine answering the stuck disk late can't run out the 2 s bound and fail it (it did, twice under the full suite, 2026-10-23).
 
@@ -4004,8 +4004,8 @@ How to keep it current:
 
 ### SpellbookStateTests.cs
 - Covers: Game/Spells/SpellbookState, Game/Spells/KnownSpellCatalog
-- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. Also AvailablePicks with the Learned flag, and Changed events.
-- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
+- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. While the server's spell list (GMCP) stands, the class's spells still to learn stay listed beside the server's learned ones, less a twin of a learned spell's cast code. Also AvailablePicks with the Learned flag, and Changed events.
+- Why: Reports `paradigm-20261003-215442` (alignment lag), `paradigm-20261030-111436` (Buy spells found nothing to buy while the server's list stood) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
 
 ### SpellsGameDataTabTests.cs
 - Covers: ViewModels/GameData/Edit/MessageEditDialogViewModel (InitialTabIndex); ViewModels/GameData/Tables/SpellsSectionViewModel → ViewModels/GameData/Edit/SpellInfoRowsBuilder
@@ -4288,8 +4288,8 @@ How to keep it current:
 
 ### TimeAnalysisTrackerTests.cs
 - Covers: Game/Combat/TimeAnalysisTracker
-- Checks: activity split (waiting, moving window, attacking, resting HP or mana); affliction time tracked alongside, separately; the activity buckets sum to time on; counting starts on entering the game, pauses on suspend, and reset works; the Changed event.
-- Why: the Time Analysis panel (MegaMUD parity).
+- Checks: activity split (waiting, moving window, a move on its way counted as moving until it lands, attacking, resting HP or mana); affliction time tracked alongside, separately; the activity buckets sum to time on; Waiting split by the cause that held each stretch, adding up to it; counting starts on entering the game, pauses on suspend, and reset works; the Changed event.
+- Why: the Time Analysis panel (MegaMUD parity); Waiting's breakdown on hover (user, 2026-10-30); report `paradigm-20261030-133853` (the second between a kill and the next room's display was booked to Waiting, once a fight).
 
 ### TimeZoneAbbreviationTests.cs
 - Covers: Services/TimeZoneAbbreviation

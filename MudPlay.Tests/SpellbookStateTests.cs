@@ -450,6 +450,30 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.Empty(book.LearnedOutsideClassData);
     }
 
+    // ----- the server's spell list (GMCP) ---------------------------------
+
+    // The server lists only learned spells. The book still lists what the class can
+    // learn beside them, or a scroll trip finds nothing left to buy (report
+    // paradigm-20261030-111436); a twin of a learned spell's cast code stays out.
+    [Fact]
+    public void ServerSpellList_KeepsTheClassSpellsStillToLearn()
+    {
+        object[] spells = [.. _spells, SpellRow(102, "starfall", "star", magery: 1, mageryLvl: 1, reqLevel: 9)];
+        SpellbookState book = New(spells).book;
+        book.Refresh(classNumber: 12, level: 5);
+        JsonElement server = JsonSerializer.SerializeToElement(new
+        {
+            spells = new[] { new { id = 100, @short = "star", name = "starlight", level = 2, cost = 4, energy = 300, delivery = "self" } },
+        });
+
+        book.ApplyGmcpSpells(server);
+
+        Assert.Equal(new[] { "starlight", "high arc", "gated" }, Names(book.Available));
+        Assert.True(book.IsObtained(100));
+        Assert.False(book.IsObtained(101));
+        Assert.Equal(4, book.Available[0].Formula.ManaCost);
+    }
+
     // ----- AvailablePicks (Settings spell-picker suggestion source) -----
 
     [Fact]

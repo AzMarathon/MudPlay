@@ -482,20 +482,25 @@
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding DurationText}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Moving"/>
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Moving"
+                                   ToolTip.Tip="Time travelling: from a move going out until the next room shows, and the few seconds after."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding MovingText}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Attacking"/>
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Attacking"
+                                   ToolTip.Tip="Time in combat, from the first swing or hit until the room is clear."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding AttackingText}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Resting"/>
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Resting"
+                                   ToolTip.Tip="Time resting or meditating; the breakdown below splits it into HP and mana."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding RestingText}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
-                        <TextBlock Grid.Column="0" Classes="lbl" Text="Waiting"/>
-                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding WaitingText}"/>
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Waiting"
+                                   ToolTip.Tip="{Binding WaitingTip}"/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding WaitingText}"
+                                   ToolTip.Tip="{Binding WaitingTip}"/>
                     </Grid>
 
                     <TextBlock Classes="sub" Text="Breakdown"/>

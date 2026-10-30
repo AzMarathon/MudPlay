@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.192.0**
-> - Triggers can apply to only this character, every character on the realm, or every character on the BBS
-> - Of triggers sharing a name the nearest is used, so a character can change or switch off a shared one for itself
-> - A shared trigger edited on one client works on the others within a second or two
+> **Version 3.192.6**
+> - No more crash on a click after a long session on Windows: the client keeps its unpacked files open so temp clean-up can't remove them
+> - A crash report on a missing file names the file
+> - Buy spells finds the scrolls for spells still to learn after the server's spell list stood in for the text's
+> - Recovering a friend's corpse with `recover <name> <password>`, the form the game takes, is recorded for hand-back and its password masked
+> - Session Stats: hovering over Waiting shows what held you still and for how long; the other categories say what counts
+> - Session Stats: a move on its way counts as Moving, no longer as a second of Waiting after every kill
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

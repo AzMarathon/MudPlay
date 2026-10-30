@@ -1,5 +1,15 @@
 # Version history
 
+## 3.192.6
+
+- No more crash on a click after a long session on Windows: the client keeps its unpacked files open so temp clean-up can't remove them
+- A crash report on a missing file names the file
+- Buy spells finds the scrolls for spells still to learn after the server's spell list stood in for the text's
+- Recovering a friend's corpse with `recover <name> <password>`, the form the game takes, is recorded for hand-back and its password masked
+- Session Stats: hovering over Waiting shows what held you still and for how long; the other categories say what counts
+- Session Stats: a move on its way counts as Moving, no longer as a second of Waiting after every kill
+- bug reports addressed: Crash-20261030-084406, Crash-20261030-084407, paradigm-20261030-111436, bug-report-recover-corpse-for-another-player, paradigm-20261030-133853
+
 ## 3.192.0
 
 - Triggers can apply to only this character, every character on the realm, or every character on the BBS

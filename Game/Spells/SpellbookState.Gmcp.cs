@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace MudPlay.Game.Spells;
 
 // The server's learned spells (Anomaly.Spells.List): while it is applied, the
-// available list is the server's, each spell over its game-data record with the
+// learned spells are the server's, each over its game-data record with the
 // server's cost, energy, level and delivery.
 public sealed partial class SpellbookState
 {
@@ -61,6 +61,21 @@ public sealed partial class SpellbookState
             _obtained.Add(id);
             _obtainedNames.Add(spell.Name);
         }
+        // The server names only what is learned; what the class can still learn stays
+        // listed as the text's book lists it, so the shop trip and the unlearned
+        // reports still see it. A cast code a learned spell owns rules its twins out.
+        HashSet<int> learned = new(_obtained);
+        Dictionary<string, string> learnedByCode = new(StringComparer.OrdinalIgnoreCase);
+        foreach (KnownSpell s in known)
+            if (!string.IsNullOrWhiteSpace(s.Short)) learnedByCode.TryAdd(s.Short.Trim(), s.Name);
+        foreach (KnownSpell s in _alignedSpells)
+        {
+            if (learned.Contains(s.Number)) continue;
+            if (learnedByCode.TryGetValue(s.Short.Trim(), out string? owner)
+                && !string.Equals(owner, s.Name, StringComparison.OrdinalIgnoreCase)) continue;
+            known.Add(s);
+        }
+        known.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
         _available = known;
         _classSpells = catalog.Values.OrderBy(s => s.ReqLevel).ThenBy(s => s.Number).ToArray();
         RebuildAvailablePicks();

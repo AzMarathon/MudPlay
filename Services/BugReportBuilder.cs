@@ -1377,6 +1377,14 @@ public static class BugReportBuilder
         Kv(sb, "Sneak entries", $"{a.SneakHeld} held of {a.SneakEntries}");
         Kv(sb, "Trap disarms", $"{a.TrapsDisarmed} disarmed of {a.DisarmAttempts} attempts");
         Kv(sb, "Walk steps", a.AverageStep is { } step ? $"{a.Steps} timed, avg {step.TotalSeconds:F2}s" : "(none timed)");
+        // Time Analysis, with what each stretch of Waiting was booked to: the answer
+        // to a "Waiting counts the wrong thing" report.
+        Game.Combat.TimeAnalysisStats t = svc.TimeAnalysis.Snapshot();
+        static string H(TimeSpan span) => $"{(int)span.TotalHours:D2}:{span.Minutes:D2}:{span.Seconds:D2}";
+        Kv(sb, "Time analysis", $"on {H(t.TimeOn)}: moving {H(t.Moving)}, attacking {H(t.Attacking)}, "
+            + $"resting HP {H(t.RestingHp)}, resting mana {H(t.RestingMa)}, waiting {H(t.Waiting)}");
+        Kv(sb, "Waiting by cause", t.WaitingBy.Count == 0 ? "(none)"
+            : string.Join("; ", t.WaitingBy.Select(w => $"{w.Cause} {H(w.Time)}")));
         return sb.ToString();
     }
 

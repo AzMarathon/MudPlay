@@ -56,7 +56,8 @@ public static class BugReportContext
             Kv(sb, "Memory maintenance",
                 $"{compaction}; next idle one at least {svc.Memory.CompactionInterval.TotalMinutes:0} min after it. "
                 + $"Loops folder: {nav.Mode}, last check {Stamp(nav.LastCheckAt)}, last walk {Stamp(nav.LastWalkAt)}. "
-                + $"Program: {Update.BundleExtraction.Describe(Update.BundleExtraction.Current(), HomeRelative(AppContext.BaseDirectory))}");
+                + $"Program: {Update.BundleExtraction.Describe(Update.BundleExtraction.Current(), HomeRelative(AppContext.BaseDirectory))}"
+                + (svc.UnpackedCopy is { } hold ? $"; {hold.Describe()}" : string.Empty));
         });
 
         Part(sb, () =>

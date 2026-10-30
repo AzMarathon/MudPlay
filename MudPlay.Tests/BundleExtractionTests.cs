@@ -165,6 +165,29 @@ public sealed class BundleExtractionTests : IDisposable
         Assert.True(File.Exists(Marker));
     }
 
+    // A client holds every file of its unpacked copy, sub-folders too, so a temp-file
+    // clean-up can't take one it hasn't loaded yet, and another version's clean-up
+    // leaves the folder while it runs.
+    [Fact]
+    public void AHeldUnpackedCopy_IsLeftByAnotherVersionsCleanUp_UntilItsClientHasGone()
+    {
+        string current = Folder("Cur1234abcde", "MudPlay.dll");
+        string running = Folder("RunningOlder", "MudPlay.dll", "System.Private.CoreLib.dll", "System.ComponentModel.Annotations.dll");
+        FolderIn(running, "cs", "Avalonia.resources.dll");
+
+        List<string> lines;
+        using (UnpackedCopyHold hold = UnpackedCopyHold.Take(running))
+        {
+            Assert.Equal(4, hold.Held);
+            Assert.Equal(0, hold.NotHeld);
+            lines = Clean(current, Exe, Base, ADayOn);
+        }
+
+        Assert.Equal(new[] { "left RunningOlder in " + Parent + " for now: a running client holds its System.Private.CoreLib.dll" }, lines);
+        Assert.True(File.Exists(Path.Combine(running, "System.ComponentModel.Annotations.dll")));
+        Assert.Equal(new[] { "removed RunningOlder from " + Parent + " (an earlier version's unpacked copy)" }, Clean(current, Exe, Base, ADayOn));
+    }
+
     // Ten clients starting together: the one holding the lock does the pass.
     [Fact]
     public void TheOneTimePass_IsSkippedByAClientThatFindsAnotherDoingIt()

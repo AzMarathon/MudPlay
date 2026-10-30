@@ -2,21 +2,29 @@ using System.Text.RegularExpressions;
 
 namespace MudPlay.Game.Recovery;
 
-// The wire text of Paradigm's `recover corpse`, shared by our own pile's recovery
+// The wire text of Paradigm's `recover`, shared by our own pile's recovery
 // (DeathRecoveryManager) and the hand-back of another player's corpse
 // (CorpseHandoffManager). Another player's corpse prints the same lines as our own
 // (GAME_MECHANICS "Corpse recovery (`recover corpse`)").
 public static partial class CorpseRecoveryLines
 {
-    // `recover corpse <name> <password>`: the form for another player's corpse, one
-    // line holding just the command. A password is one word (GAME_MECHANICS
-    // "Corpse recovery (`recover corpse`)").
-    public static bool TryParseRecoverWithPassword(string? command, out string name, out string password)
+    // `recover <name> <password>`, the form the game takes for another player's
+    // corpse, or `recover corpse <name> <password>`, which it refuses: one line
+    // holding just the command. A password is one word. `recover corpse <name>` is
+    // the owner's own form, not a name and a password (GAME_MECHANICS "Corpse
+    // recovery (`recover corpse`)").
+    public static bool TryParseRecoverWithPassword(string? command, out string name, out string password) =>
+        TryParseRecoverWithPassword(command, out _, out name, out password);
+
+    // form: what precedes the password, as typed (`recover xsboost `), so a mask or
+    // a recall keeps the form the user chose.
+    private static bool TryParseRecoverWithPassword(string? command, out string form, out string name, out string password)
     {
-        name = password = string.Empty;
+        form = name = password = string.Empty;
         if (command is null || command.IndexOf('\n') >= 0) return false;
         Match m = RecoverWithPasswordRegex().Match(command);
         if (!m.Success) return false;
+        form = m.Groups["form"].Value;
         name = m.Groups["name"].Value;
         password = m.Groups["password"].Value;
         return true;
@@ -27,26 +35,30 @@ public static partial class CorpseRecoveryLines
     // report). Taken a line at a time, so a `recover corpse <name>` with no password
     // never reaches into the line after it. A line that is the command is masked
     // whole; one that only quotes it (`/raijin @do recover corpse …`, a log line)
-    // has the word after the name masked.
+    // has the word after the name masked. A quoted short form is masked only where a
+    // command stands (EmbeddedShortRecoverRegex) and ends,
+    // so prose with "recover" in it keeps its words.
     public static string Redact(string text)
     {
-        if (string.IsNullOrEmpty(text) || text.IndexOf("corpse", StringComparison.OrdinalIgnoreCase) < 0) return text;
+        if (string.IsNullOrEmpty(text) || text.IndexOf("recover", StringComparison.OrdinalIgnoreCase) < 0) return text;
         if (text.IndexOf('\n') < 0) return RedactLine(text);
         string[] lines = text.Split('\n');
         for (int i = 0; i < lines.Length; i++) lines[i] = RedactLine(lines[i]);
         return string.Join('\n', lines);
     }
 
-    private static string RedactLine(string line) =>
-        TryParseRecoverWithPassword(line, out string name, out _)
-            ? $"recover corpse {name} {Services.BugReportScrub.Mask}"
-            : EmbeddedRecoverRegex().Replace(line, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
+    private static string RedactLine(string line)
+    {
+        if (TryParseRecoverWithPassword(line, out string form, out _, out _)) return form + Services.BugReportScrub.Mask;
+        line = EmbeddedRecoverRegex().Replace(line, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
+        return EmbeddedShortRecoverRegex().Replace(line, m => m.Groups["lead"].Value + Services.BugReportScrub.Mask);
+    }
 
     // The command with its password left off, for the Up-arrow recall: a mask sent
     // back to the game would be taken as the password.
     public static string WithoutPassword(string command) =>
-        TryParseRecoverWithPassword(command, out string name, out _)
-            ? $"recover corpse {name}"
+        TryParseRecoverWithPassword(command, out string form, out _, out _)
+            ? form.TrimEnd()
             : command;
 
     // `You begin to pick through the corpse of <Name>...`, the first line of a
@@ -69,7 +81,7 @@ public static partial class CorpseRecoveryLines
     public static string GivenName(string? name) =>
         string.IsNullOrWhiteSpace(name) ? string.Empty : name.Trim().Split(' ')[0];
 
-    [GeneratedRegex(@"^[ \t]*recover[ \t]+corpse[ \t]+(?<name>\S+)[ \t]+(?<password>\S+)[ \t\r]*$",
+    [GeneratedRegex(@"^[ \t]*(?<form>recover[ \t]+(?:corpse[ \t]+)?(?!corpse[ \t])(?<name>\S+)[ \t]+)(?<password>\S+)[ \t\r]*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex RecoverWithPasswordRegex();
 
@@ -78,6 +90,13 @@ public static partial class CorpseRecoveryLines
     [GeneratedRegex(@"(?<lead>\brecover[ \t]+corpse[ \t]+[^\s'"";|`]+[ \t]+)(?!\[redacted\])[^\s;|`]+",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex EmbeddedRecoverRegex();
+
+    // The short form quoted where a command stands and ending there: after the line's
+    // start, a quote, `;`, `|`, `:` (a prompt's echo) or `@do`, and followed by the
+    // line's end or one of those.
+    [GeneratedRegex(@"(?<lead>(?:^|['""`;|:]|@do[ \t])[ \t]*recover[ \t]+(?!corpse[ \t])[^\s'"";|`]+[ \t]+)(?!\[redacted\])[^\s;|`]+?(?=['""`]?[ \t\r]*(?:$|[;|`]))",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+    private static partial Regex EmbeddedShortRecoverRegex();
 
     [GeneratedRegex(@"^You begin to pick through the corpse of (?<name>.+?)\.\.\.$", RegexOptions.CultureInvariant)]
     private static partial Regex BegunRegex();

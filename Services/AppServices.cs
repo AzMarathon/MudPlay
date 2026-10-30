@@ -238,6 +238,10 @@ public sealed class AppServices
     // GlobalSettings.AutoCheckForUpdates) set its availability flag; the splash banner
     // and the main window's title-bar crawl read it. It never installs on its own.
     public Services.Update.UpdateService Update { get; }
+    // A Windows client's unpacked copy, held open for the client's life so a temp-file
+    // clean-up can't remove an assembly it hasn't loaded yet. Null on a build that
+    // isn't running unpacked, and until startup has taken it.
+    public Services.Update.UnpackedCopyHold? UnpackedCopy { get; private set; }
 
     // Tees Log to a rolling on-disk file (Logs/{ts}-program.log) so a
     // hard hang / kill leaves a post-mortem trail the in-memory ring can't.
@@ -1643,8 +1647,9 @@ public sealed class AppServices
     // What ShopSpellOffers was last built from. The build is an Items scan, a Shops
     // read per selling shop and a pass over the room graph, and both the planner and
     // the Auto-Trainer tab ask for it repeatedly. The set is told by its load, not
-    // its name: a set imported again over itself keeps the name.
-    private (GameDataCache.Load Set, int Class, int Align, int Charm, int Rooms) _shopSpellOffersKey;
+    // its name: a set imported again over itself keeps the name. The book's list is
+    // told by reference: it is built anew whenever it changes.
+    private (GameDataCache.Load Set, IReadOnlyList<Game.Spells.KnownSpell> Spells, int Charm, int Rooms) _shopSpellOffersKey;
     private IReadOnlyList<Game.Train.ShopSpellOffer> _shopSpellOffers = Array.Empty<Game.Train.ShopSpellOffer>();
 
     // Every spell the loaded character's class can learn from a scroll some shop
@@ -1652,7 +1657,7 @@ public sealed class AppServices
     public IReadOnlyList<Game.Train.ShopSpellOffer> ShopSpellOffers()
     {
         GameDataCache.Load load = GameData.ActiveLoad;
-        (GameDataCache.Load, int, int, int, int) key = (load, Spellbook.ClassNumber, Spellbook.CharAlign,
+        (GameDataCache.Load, IReadOnlyList<Game.Spells.KnownSpell>, int, int) key = (load, Spellbook.Available,
             PlayerStats.Charm, RoomGraph.Rooms.Count());
         if (key == _shopSpellOffersKey) return _shopSpellOffers;
         // The cache's load moves before the room graph and the shop stock are
@@ -3046,14 +3051,16 @@ public sealed class AppServices
         // After the switches above, so an auto-collected program log carries it.
         Services.Update.BundleExtraction.Layout bundle = Services.Update.BundleExtraction.Current();
         Log.Info("Startup", "program: " + Services.Update.BundleExtraction.Describe(bundle));
-        // Older versions' unpacked copies, off the UI thread: a folder of them is
-        // hundreds of files.
+        // This client's unpacked copy held, then older versions' removed, off the UI
+        // thread: a folder of them is hundreds of files.
         if (bundle == Services.Update.BundleExtraction.Layout.Extracted && OperatingSystem.IsWindows()
             && Services.Update.UpdatePlatform.IsSelfContainedInstall())
             _ = Task.Run(() =>
             {
                 try
                 {
+                    UnpackedCopy = Services.Update.UnpackedCopyHold.Take(AppContext.BaseDirectory);
+                    Log.Info("Startup", "program: " + UnpackedCopy.Describe());
                     foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
                         Log.Info("Update", line);
                 }
@@ -6516,6 +6523,7 @@ public sealed class AppServices
         };
         RoomTracker.StateChanged += Game.Map.RoomTracker.Named("time analysis", t =>
         {
+            TimeAnalysis.NoteMoveInFlight(t.NewConfidence == Game.Map.RoomConfidence.Pending);
             if (t.NewRoom is not null && !ReferenceEquals(t.NewRoom, t.PreviousRoom))
                 TimeAnalysis.NoteRoomChanged();
         });
@@ -6523,6 +6531,9 @@ public sealed class AppServices
         // — subsequent prompts no-op), so BBS-menu / login time never counts.
         // Same WirePromptScanner the EventScheduler uses for its in-game latch.
         PromptScanner.PromptObserved += _ => TimeAnalysis.NoteInGame();
+        // Why we stand still, read each second: the holds change with no event of
+        // their own the tracker hears.
+        Tick.HeartbeatElapsed += () => TimeAnalysis.NoteWaitCause(TimeAnalysisWaitCause());
         // Same in-game gate resumes the party wall-clock cadences (par poll +
         // @health) once we're back in the realm after a disconnect — they were
         // suspended on the drop so nothing leaks into the login-menu nav.
@@ -12024,6 +12035,23 @@ public sealed class AppServices
         };
 
         return mv with { PauseReason = reason };
+    }
+
+    // What Time Analysis books a stretch of Waiting to: the hold the Navigation top
+    // bar would name (NavActivity), a pause, a fight that has no swing in it yet or
+    // any more, a walk between steps, or nothing running at all.
+    private string TimeAnalysisWaitCause()
+    {
+        (string text, ViewModels.Navigation.NavActivityKind kind) = ViewModels.Navigation.NavActivity.Describe(
+            MovementCoordinator.AssertedGates, MovementCoordinator.IsPaused, Conditions.IsMovementPrevented);
+        return kind switch
+        {
+            ViewModels.Navigation.NavActivityKind.Paused => "paused",
+            ViewModels.Navigation.NavActivityKind.Fighting => "a fight here, not swinging",
+            ViewModels.Navigation.NavActivityKind.Waiting => ViewModels.Navigation.NavActivity.HoldSuffix(text, kind) ?? text,
+            _ when MovementControl.IsIdle => Game.Combat.TimeAnalysisTracker.NothingRunning,
+            _ => "a walk or loop between steps",
+        };
     }
 
     // Live read of the master auto-combat toggle — the same GeneralSettings
