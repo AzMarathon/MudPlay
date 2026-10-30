@@ -900,8 +900,8 @@ How to keep it current:
 
 ### CorpseHandoffTests.cs
 - Covers: Game/Recovery/CorpseHandoffManager, CorpseRecoveryLines, CorpseHandoffPlan; BugReportScrub; SentCommandTrail; CommandHistory; DoHandler.
-- Checks: another player's corpse is recorded from the recovery lines; the password stays out of storage, log, trail and history; gives are planned per realm and struck off on confirmation.
-- Why: handing a friend's gear back without leaking their password.
+- Checks: another player's corpse is recorded from the recovery lines; the command is read in the short form the game takes (`recover <name> <password>`) and the long form, never the owner's `recover corpse <name>`; the password stays out of storage, log, trail and history, the short form masked where a command stands and prose with "recover" left alone; gives are planned per realm and struck off on confirmation.
+- Why: handing a friend's gear back without leaking their password; report `bug-report-recover-corpse-for-another-player` (the game refuses the long form, and the short one was neither recorded nor masked).
 
 ### CountedCommandTests.cs
 - Covers: Game/Inventory/CountedCommand.
@@ -4004,8 +4004,8 @@ How to keep it current:
 
 ### SpellbookStateTests.cs
 - Covers: Game/Spells/SpellbookState, Game/Spells/KnownSpellCatalog
-- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. Also AvailablePicks with the Learned flag, and Changed events.
-- Why: Reports `paradigm-20261003-215442` (alignment lag) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
+- Checks: The class list ignores the level gate; alignment gating with learned spells surviving drift; word-spell siblings ruled out once one is learned. The obtained set is name-backed and survives a set renumber (Reseed) and an early profile load (SeedObtainedNames). A same-named twin resolves to the class's own row. A trainer's `learnspell` step puts a spell with no Learnable record in the class list, and a learned spell the data gives the class no way to learn is held in the book until a reroll. While the server's spell list (GMCP) stands, the class's spells still to learn stay listed beside the server's learned ones, less a twin of a learned spell's cast code. Also AvailablePicks with the Learned flag, and Changed events.
+- Why: Reports `paradigm-20261003-215442` (alignment lag), `paradigm-20261030-111436` (Buy spells found nothing to buy while the server's list stood) and `paradigm-20260820-055007` (learned spells lost on upgrade); the set-swap renumber bug; the warlock's trainer-bought chaos shield, missing from the book on the AMud data.
 
 ### SpellsGameDataTabTests.cs
 - Covers: ViewModels/GameData/Edit/MessageEditDialogViewModel (InitialTabIndex); ViewModels/GameData/Tables/SpellsSectionViewModel → ViewModels/GameData/Edit/SpellInfoRowsBuilder

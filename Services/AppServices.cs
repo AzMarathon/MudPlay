@@ -1647,8 +1647,9 @@ public sealed class AppServices
     // What ShopSpellOffers was last built from. The build is an Items scan, a Shops
     // read per selling shop and a pass over the room graph, and both the planner and
     // the Auto-Trainer tab ask for it repeatedly. The set is told by its load, not
-    // its name: a set imported again over itself keeps the name.
-    private (GameDataCache.Load Set, int Class, int Align, int Charm, int Rooms) _shopSpellOffersKey;
+    // its name: a set imported again over itself keeps the name. The book's list is
+    // told by reference: it is built anew whenever it changes.
+    private (GameDataCache.Load Set, IReadOnlyList<Game.Spells.KnownSpell> Spells, int Charm, int Rooms) _shopSpellOffersKey;
     private IReadOnlyList<Game.Train.ShopSpellOffer> _shopSpellOffers = Array.Empty<Game.Train.ShopSpellOffer>();
 
     // Every spell the loaded character's class can learn from a scroll some shop
@@ -1656,7 +1657,7 @@ public sealed class AppServices
     public IReadOnlyList<Game.Train.ShopSpellOffer> ShopSpellOffers()
     {
         GameDataCache.Load load = GameData.ActiveLoad;
-        (GameDataCache.Load, int, int, int, int) key = (load, Spellbook.ClassNumber, Spellbook.CharAlign,
+        (GameDataCache.Load, IReadOnlyList<Game.Spells.KnownSpell>, int, int) key = (load, Spellbook.Available,
             PlayerStats.Charm, RoomGraph.Rooms.Count());
         if (key == _shopSpellOffersKey) return _shopSpellOffers;
         // The cache's load moves before the room graph and the shop stock are

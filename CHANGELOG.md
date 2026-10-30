@@ -1,10 +1,12 @@
 # Version history
 
-## 3.192.2
+## 3.192.4
 
 - No more crash on a click after a long session on Windows: the client keeps its unpacked files open so temp clean-up can't remove them
 - A crash report on a missing file names the file
-- bug reports addressed: Crash-20261030-084406, Crash-20261030-084407
+- Buy spells finds the scrolls for spells still to learn after the server's spell list stood in for the text's
+- Recovering a friend's corpse with `recover <name> <password>`, the form the game takes, is recorded for hand-back and its password masked
+- bug reports addressed: Crash-20261030-084406, Crash-20261030-084407, paradigm-20261030-111436, bug-report-recover-corpse-for-another-player
 
 ## 3.192.0
 

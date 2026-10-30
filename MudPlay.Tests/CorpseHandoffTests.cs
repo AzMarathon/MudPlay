@@ -72,7 +72,7 @@ public sealed class CorpseHandoffTests
 
         public void Recover(string owner, params string[] items)
         {
-            Manager.ObserveCommand($"recover corpse {owner.ToLowerInvariant()} {Password}", usersOwn: true);
+            Manager.ObserveCommand($"recover {owner.ToLowerInvariant()} {Password}", usersOwn: true);
             Manager.OnLine($"You begin to pick through the corpse of {owner}...");
             Manager.NoteCoinsPicked("platinum", 51);
             Manager.NoteCoinsPicked("gold", 53);
@@ -98,8 +98,11 @@ public sealed class CorpseHandoffTests
     [InlineData("RECOVER CORPSE Raijin secret", true, "Raijin", "secret")]
     [InlineData("recover corpse raijin two words", false, "", "")]           // a password is one word
     [InlineData("recover corpse raijin\nsecret", false, "", "")]
-    [InlineData("recover corpse raijin", false, "", "")]
-    [InlineData("recover raijin secret", false, "", "")]
+    [InlineData("recover corpse raijin", false, "", "")]                     // the owner's own form
+    [InlineData("recover raijin secret", true, "raijin", "secret")]          // the form the game takes
+    [InlineData("  Recover Raijin secret\r", true, "Raijin", "secret")]
+    [InlineData("recover raijin", false, "", "")]
+    [InlineData("recover raijin two words", false, "", "")]
     public void Command_ParsesNameAndPassword(string command, bool ok, string name, string password)
     {
         Assert.Equal(ok, CorpseRecoveryLines.TryParseRecoverWithPassword(command, out string n, out string p));
@@ -116,6 +119,24 @@ public sealed class CorpseHandoffTests
         Assert.Equal("look", CorpseRecoveryLines.Redact("look"));
         Assert.Equal("@do from Raijin: 'recover corpse raijin [redacted]",
             CorpseRecoveryLines.Redact("@do from Raijin: 'recover corpse raijin pa'ss'"));
+    }
+
+    // The short form, the one the game takes, is masked as the long one is, and keeps
+    // its form; prose with "recover" in it, and the owner's `recover corpse <name>`,
+    // keep their words.
+    [Theory]
+    [InlineData("recover raijin " + Password, "recover raijin [redacted]")]
+    [InlineData("@do from Raijin: 'recover raijin pa'ss'", "@do from Raijin: 'recover raijin [redacted]'")]
+    [InlineData("/raijin @do recover raijin " + Password, "/raijin @do recover raijin [redacted]")]
+    [InlineData("look;recover raijin " + Password + ";n", "look;recover raijin [redacted];n")]
+    [InlineData("[HP=150]:recover raijin " + Password, "[HP=150]:recover raijin [redacted]")]
+    [InlineData("sent `recover raijin " + Password + "` to the game", "sent `recover raijin [redacted]` to the game")]
+    [InlineData("Recover Now still walks there", "Recover Now still walks there")]
+    [InlineData("You recover your senses.", "You recover your senses.")]
+    [InlineData("recover corpse raijin", "recover corpse raijin")]
+    public void ShortForm_IsMaskedWhereACommandStands(string line, string masked)
+    {
+        Assert.Equal(masked, CorpseRecoveryLines.Redact(line));
     }
 
     [Fact]
@@ -317,6 +338,7 @@ public sealed class CorpseHandoffTests
     [InlineData("recover corpse raijin " + Password, "recover corpse raijin")]
     [InlineData("look;recover corpse raijin " + Password, "look;recover corpse raijin")]
     [InlineData("recover corpse raijin " + Password + ";n", "recover corpse raijin;n")]
+    [InlineData("recover raijin " + Password, "recover raijin")]
     [InlineData("look;n", "look;n")]
     public void History_DropsThePasswordFromEveryStep(string typed, string kept)
     {
