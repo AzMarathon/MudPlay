@@ -113,8 +113,8 @@ public sealed class SpellListParser : IDisposable
             // Authoritative "no spells/powers" — clear regardless of state.
             _namesThisBlock.Clear();
             _state = State.Idle;
-            _book.ClearObtained();
             TextSpellsObserved?.Invoke(Array.Empty<string>());
+            _book.ClearObtained();
             _log?.Info("SpellListParser", "spell list empty — obtained set cleared");
             return;
         }
@@ -169,8 +169,10 @@ public sealed class SpellListParser : IDisposable
             return;
         }
 
-        IReadOnlyList<string> unknown = _book.SetObtainedByNames(_namesThisBlock);
+        // Ahead of the write: a server list the GMCP Shadow fallback put in the book
+        // is handed back first, or the book would go on composing from it.
         TextSpellsObserved?.Invoke(_namesThisBlock.ToArray());
+        IReadOnlyList<string> unknown = _book.SetObtainedByNames(_namesThisBlock);
         _log?.Info("SpellListParser", $"spell list complete — {_namesThisBlock.Count} spell(s) obtained");
         if (unknown.Count > 0)
             _log?.Log(LogSeverity.Warn, "SpellListParser",

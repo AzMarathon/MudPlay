@@ -33,6 +33,9 @@ public sealed class MonsterHpTracker
 
     private List<Instance> _room = new();
     public Func<long, MonsterHpRead?>? GmcpRead { get; set; }
+    // The server's id for the one monster of a name in its room roster, when it has
+    // one: how a monster read from the text reaches the server's HP.
+    public Func<string, long?>? ServerIdFor { get; set; }
     private MonsterHpRead? Live(Instance monster) => monster.RuntimeId is { } uid ? GmcpRead?.Invoke(uid) : null;
 
     // Raised when an instance's estimate moves on damage, with its name — the status
@@ -100,8 +103,17 @@ public sealed class MonsterHpTracker
                 next.Add(q.Dequeue());
                 continue;
             }
-            if (_maxHp(number) is not int max) continue;
-            next.Add(new Instance(e.RawName, e.ResolvedName, max, _regen(number)));
+            if (_maxHp(number) is int max)
+            {
+                next.Add(new Instance(e.RawName, e.ResolvedName, max, _regen(number)));
+                continue;
+            }
+            // With no max HP in the game data there is nothing to estimate from, so the
+            // server's reading stands in. Only for a name listed once here and once in
+            // the server's roster: two of a name can't be told apart across the two.
+            if (newCount[e.RawName] == 1 && ServerIdFor?.Invoke(e.RawName) is { } serverId
+                && GmcpRead?.Invoke(serverId) is { } read)
+                next.Add(new Instance(e.RawName, e.ResolvedName, read.MaxHp, _regen(number)) { RuntimeId = serverId });
         }
         _room = next;
     }

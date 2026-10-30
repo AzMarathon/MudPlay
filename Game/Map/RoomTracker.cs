@@ -2089,7 +2089,7 @@ public sealed partial class RoomTracker
 
     // Tier-3 manual override — the user pointed at a room on the map and said
     // "I'm here". Hard sets the current room and promotes to Confirmed.
-    public void SetLocated(RoomKey key, DateTimeOffset? whenUtc = null)
+    public void SetLocated(RoomKey key, DateTimeOffset? whenUtc = null, string reason = "manual locate")
     {
         DateTimeOffset when = whenUtc ?? _now();
 
@@ -2102,7 +2102,22 @@ public sealed partial class RoomTracker
         }
 
         ClearPendingAndSteps();
-        SetRoom(room, RoomConfidence.Confirmed, when, "manual locate", isStrictAnchor: true);
+        SetRoom(room, RoomConfidence.Confirmed, when, reason, isStrictAnchor: true);
+    }
+
+    // The room the server's data has us in (GMCP Room.Info), given the name of the
+    // display being read; null when there is none or it names another room. Taken
+    // where reading the displays has run out (Lost, or no single room fits), so the
+    // text stays first. AppServices answers nothing while an engine drives: the
+    // recovery gate asks the server itself (GmcpPositionLocator).
+    public Func<string, RoomKey?>? ServerRoom { get; set; }
+
+    private bool TryServerRoom(RoomObservation observation, DateTimeOffset when, string why)
+    {
+        if (ServerRoom?.Invoke(observation.Name) is not { } key || _graph.GetRoom(key) is not { } room) return false;
+        ClearPendingAndSteps();
+        SetRoom(room, RoomConfidence.Confirmed, when, $"server room data: {why}", isStrictAnchor: true);
+        return true;
     }
 
     // A room worked out from a walked footprint (the recovery gate's tier-2 forward
@@ -2600,6 +2615,7 @@ public sealed partial class RoomTracker
         {
             if (TryReplayRecover(observation, when)) return;
             if (TryReanchorByName(observation, when, "suspect strike limit")) return;
+            if (TryServerRoom(observation, when, "suspect strike limit")) return;
             SetRoom(room: null, RoomConfidence.Lost, when,
                 $"suspect strike limit ({SuspectStrikeLimit}) reached; replay + name re-anchor failed");
             return;
@@ -2654,6 +2670,7 @@ public sealed partial class RoomTracker
                 // The fold matches exits as a subset, so a room no exact search finds
                 // (a hidden exit showing) can still keep candidates, or converge.
                 if (TryPassiveGridLocate(observation, answered, when)) return;
+                if (TryServerRoom(observation, when, "no graph candidate")) return;
                 SetRoom(room: null, RoomConfidence.Lost, when, "no graph candidate; replay + name re-anchor failed");
                 break;
 
@@ -2662,6 +2679,7 @@ public sealed partial class RoomTracker
                 // display. With no engine driving, narrow across the moves we're
                 // making by hand before giving up; a convergence re-anchors us.
                 if (TryPassiveGridLocate(observation, answered, when)) return;
+                if (TryServerRoom(observation, when, $"{candidates.Count} rooms read like it")) return;
                 // Still ambiguous — drop into Suspect with no anchor room (we never
                 // had one). Counter stays distinct so the next observation can
                 // either resolve or trip Lost on its own merits.

@@ -36,7 +36,7 @@ public sealed partial class GmcpIntegrationTests
         public CombatStateTracker Combat { get; }
         public Game.Conditions.ConditionTracker Conditions { get; } = new(new MessageStore());
         public Game.Stealth.StealthManager Stealth { get; }
-        public MonsterHpTracker Hp { get; } = new(_ => 100, _ => 0);
+        public MonsterHpTracker Hp { get; }
         public ManualTimers Timers { get; } = new();
         public GmcpIntegration Gmcp { get; }
         // Fed as the connection feeds it (MainWindowViewModel.ArmConnection), and
@@ -56,7 +56,10 @@ public sealed partial class GmcpIntegrationTests
         private readonly RoomDisplayParser _display;
         private readonly EncumbranceParser _encumbrance;
 
-        public Session(bool active = true, ManualClock? clock = null)
+        // rooms and monsterTable, when given, are the game data's Rooms and Monsters
+        // tables, imported as the active set; maxHp is the game data's max HP lookup.
+        public Session(bool active = true, ManualClock? clock = null, string? rooms = null, string? monsterTable = null,
+            Func<int, int?>? maxHp = null)
         {
             Directory.CreateDirectory(_root);
             MessageRouter router = new();
@@ -69,19 +72,30 @@ public sealed partial class GmcpIntegrationTests
             StatParser = new(Stats, Log, schedule: new ManualTimers().Arm);
             StatParser.AttachLineExtractor(Feed.Lines);
             GameDataCache cache = new(_root);
+            if (rooms is not null || monsterTable is not null)
+            {
+                string set = Path.Combine(_root, "alpha");
+                Directory.CreateDirectory(set);
+                if (rooms is not null) File.WriteAllText(Path.Combine(set, "Rooms.json"), rooms);
+                if (monsterTable is not null) File.WriteAllText(Path.Combine(set, "Monsters.json"), monsterTable);
+                cache.SwitchSet("alpha");
+            }
             Graph = new(cache);
+            if (rooms is not null) Graph.OnActiveSetChanged("alpha");
             Tracker = new(Graph);
             // As the client wires it: a too-dark line marks the room dark.
             router.Subscribe(KnownPatterns.RoomPitchBlack, _ => Tracker.NoteDarkRoomEntered());
             router.Subscribe(KnownPatterns.RoomVeryDark, _ => Tracker.NoteDarkRoomEntered());
             MonsterMessageStore monsters = new();
-            Classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), Tracker, Log);
+            Classifier = new(router, monsters, new PlayerDatabase(new ProfileService(), () => null), Tracker, Log,
+                gameData: monsterTable is null ? null : cache);
             Classifier.AttachLineExtractor(Feed.Lines);
             Combat = new(router, new MovementCoordinator(Log), Classifier, monsters, Player, () => true,
                 resolveOverlay: null, Log, clock is null ? null : () => clock.Now);
             _encumbrance = new(router, Player, Log);
             Gmcp = new(Prompt, StatParser, Graph, Tracker, Classifier, Combat, _encumbrance, Log, router);
             Stealth = new(router, Player, Log);
+            Hp = new(maxHp ?? (_ => 100), _ => 0);
             Gmcp.BindConsumers(Conditions, Stealth, Hp);
             Inventory = new(Log, isKey: name => name.Contains("key", StringComparison.OrdinalIgnoreCase));
             Inventory.AttachLineExtractor(Feed.Lines);
@@ -853,16 +867,20 @@ public sealed partial class GmcpIntegrationTests
         Assert.NotNull(session.Graph.GetRoom(session.Tracker.State.CurrentRoom.Key));
     }
 
+    // Shadow is a fallback: the server's vitals stand in until the text's first prompt,
+    // and from it the text is the source and the server's vitals are only compared.
     [Fact]
-    public void ShadowMode_ReportsOnlyComparableTextFieldsAndDoesNotOwnModels()
+    public void ShadowVitals_StandInUntilTheFirstPrompt_ThenAreOnlyCompared()
     {
         using Session session = new(active: false);
         session.Replay("01-handshake");
-        Assert.False(session.Player.HasPromptData);
+        Assert.True(session.Player.HasPromptData);
+        Assert.Equal(150, session.Player.Hp);
         session.Text("[HP=4]:\r\n");
         Assert.Equal(4, session.Player.Hp);
         // Compared as the server's vitals arrive, against the prompt before them.
         session.Send("Anomaly.Char.Vitals", session.Gmcp.State.Snapshot("Anomaly.Char.Vitals")!.Value);
+        Assert.Equal(4, session.Player.Hp);
         Assert.Contains(session.Log.Snapshot(), item => item.Source == "GMCP shadow" && item.Message.Contains("Char.Vitals.hp", StringComparison.Ordinal));
         Assert.DoesNotContain(session.Log.Snapshot(), item => item.Source == "GMCP shadow" && item.Message.Contains("drop", StringComparison.OrdinalIgnoreCase));
     }

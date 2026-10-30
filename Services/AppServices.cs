@@ -375,6 +375,8 @@ public sealed class AppServices
     // (the single-writer IL scan enforces this).
     public Game.PromptParser Player { get; }
     public Game.Gmcp.GmcpIntegration Gmcp { get; }
+    // Built beside Gmcp; the recovery hooks wired before it read it only when asked.
+    public Game.Gmcp.GmcpPositionLocator GmcpLocator { get; private set; } = null!;
 
     // Client-side terminal line buffer. Routes user keystrokes through
     // a local 254-char accumulator that only flushes to the wire on
@@ -8244,13 +8246,16 @@ public sealed class AppServices
         // for the duration so it can't fire a second, uncoordinated `rm` that races
         // the solver's. On stock (no `rm`) the solver uses the look-sweep and this
         // gate no-ops anyway.
-        Recovery.TryResync = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason);
+        // The server's room data (GMCP) answers first in each of these: it sends nothing.
+        Recovery.TryResync = reason => !MazeSolver.Active
+            && (GmcpLocator.TryLocate(reason) || ParadigmResync.TryRequestResync(reason));
         // Forced variant used at the gate's give-up boundaries (before the
         // heuristic backtrack, and again before the "Lost" dialog): skips the
         // resolver's anti-storm throttle so a client about to fail out always gets
         // one authoritative `rm` first (report paradigm-20260902-223159). Same
         // maze-solver guard — the solver owns `rm` during a solve.
-        Recovery.TryResyncForced = reason => !MazeSolver.Active && ParadigmResync.TryRequestResync(reason, force: true);
+        Recovery.TryResyncForced = reason => !MazeSolver.Active
+            && (GmcpLocator.TryLocate(reason) || ParadigmResync.TryRequestResync(reason, force: true));
         // Confusion awareness: `rm` only fails to answer when a confusion fumble
         // eats the command, so a timed-out forced resync while confused is re-asked
         // (confusion self-clears) rather than dropped to Lost. Same source the
@@ -8266,7 +8271,8 @@ public sealed class AppServices
         // loop (report stock-20260904-143436).
         Recovery.TryResyncOnce = (reason, onResolved, onFailed) =>
             !MazeSolver.Active
-            && (ParadigmResync.RequestResyncOnce(reason, onResolved, onFailed)
+            && (GmcpLocator.TryLocateOnce(reason, onResolved, onFailed)
+                || ParadigmResync.RequestResyncOnce(reason, onResolved, onFailed)
                 // Sysop mirror of the loop/replan one-shot `rm`. forRecovery bypasses
                 // the locate throttle: a loop blocked at source re-enters recovery on
                 // the 2s attempt spacing (stock-20260904-143436 showed three reroutes
@@ -8285,11 +8291,13 @@ public sealed class AppServices
         // This is the fix asked for with no engine running, so on a move made by
         // hand: with the master switch off it is not sent (no `rm`, no `sys st`).
         // The tracker goes on reading the rooms it is shown.
+        // The server's room data sends nothing, so the master switch doesn't hold it.
         RoomTracker.RequestAuthoritativeResync = reason =>
             Recovery.AttachedEngine is null && !MazeSolver.Active
-            && !AutoModeController.Blocks("Position fixes")
-            && (ParadigmResync.TryRequestResync(reason)
-                || SysopLocate.TryRequestLocate(reason));   // sysop mirror of the no-engine `rm` gap (throttled)
+            && (GmcpLocator.TryLocateTracker(reason)
+                || !AutoModeController.Blocks("Position fixes")
+                && (ParadigmResync.TryRequestResync(reason)
+                    || SysopLocate.TryRequestLocate(reason)));   // sysop mirror of the no-engine `rm` gap (throttled)
         // DeathRecoveryManager's Walk-to-Room / Recover-Now actions route
         // through the walker — attached here since the walker is built
         // after the manager.
@@ -11117,6 +11125,10 @@ public sealed class AppServices
         Gmcp.BindConsumers(Conditions, Stealth, MonsterHpEstimates);
         PartyPoller.AskServerForParty = Gmcp.RequestGroup;
         Gmcp.BindMilestone2(Inventory, AutoBuy, Spellbook, SpellList, Party, Chat, AbilBreakdown, CastDirector);
+        GmcpLocator = new Game.Gmcp.GmcpPositionLocator(Gmcp, RoomTracker, Recovery, uiOneShot, Log);
+        // Where reading the displays runs out with no engine driving, the server's
+        // room, when it is the room shown; the gate asks for itself while one drives.
+        RoomTracker.ServerRoom = shown => Recovery.AttachedEngine is null && !MazeSolver.Active ? Gmcp.ServerRoom(shown) : null;
         LairTimers.GmcpEligibility = Gmcp.LairEligibility;
         PromptScanner.PromptObserved += Gmcp.ObservePrompt;
         Profile.ProfileClosed += Gmcp.Disconnected;
