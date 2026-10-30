@@ -1,5 +1,13 @@
 # Version history
 
+## 3.191.0
+
+- GMCP Shadow takes the server's data as a fallback: vitals, stats, spells, inventory and party until the text first reads them
+- A stalled walk, loop or Auto-Lair resumes from the server's room instead of walking back or going Lost, ahead of any `rm` or `sys st`
+- With nothing driving, a room display no single map room fits places you in the server's room when the names match
+- A monster with no max HP in the game data shows the server's HP
+- The program log and bug report say what the Shadow fallback wrote and where the server's room placed you
+
 ## 3.190.6
 
 - A profile file damaged by a power cut no longer stops the client from starting; it opens the default profile and says why

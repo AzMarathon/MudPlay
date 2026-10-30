@@ -10,9 +10,10 @@ namespace MudPlay.Game.Gmcp;
 // told which packages the server owns (its Gmcp... flags), so its text parser
 // stands aside while a package is Active and in hand, and gets the snapshot
 // through its own Apply method, so the single-writer owners still do every write.
-// A package that can't be applied goes back to text. In Shadow mode nothing is
-// applied: the fields both sources carry are compared and differences logged under
-// "GMCP shadow".
+// A package that can't be applied goes back to text. In Shadow mode the text is the
+// source: the fields both sources carry are compared and differences logged under
+// "GMCP shadow", and the server's data stands in only where the text hasn't answered
+// (GmcpIntegration.Fallback).
 public sealed partial class GmcpIntegration
 {
     // Every package the client takes, in the order the settings list them.
@@ -70,6 +71,7 @@ public sealed partial class GmcpIntegration
         encumbrance.GmcpOwnsStatus = player.GmcpOwnsStatus;
         classifier.GmcpOwnsOccupants = OwnsOccupants;
         classifier.TextObserved += ObserveOccupants;
+        stats.ScreenParsed += _ => NoteTextRead(TextRead.StatScreen);
         State.Diagnostic += message => log.Warn("GMCP", message);
         State.Changed += Apply;
         State.Communication += OnCommunication;
@@ -87,10 +89,13 @@ public sealed partial class GmcpIntegration
         _stealth = stealth;
         _hp = hp;
         stealth.GmcpOwnsStatus = () => State.Owns("Anomaly.Char.Status");
+        // A monster carries the server's id only from an Active roster or the Shadow
+        // fallback's match (ServerMonsterNamed), so a Shadow reading reaches no other.
         hp.GmcpRead = uid =>
-            State.Mode("Anomaly.Mob") == GmcpMode.Active && State.LiveMonsters.TryGetValue(uid, out JsonElement live)
+            State.Mode("Anomaly.Mob") != GmcpMode.Off && State.LiveMonsters.TryGetValue(uid, out JsonElement live)
                 ? new MonsterHpRead(live.GetProperty("maxhp").GetInt32(), live.GetProperty("hp").GetInt32())
                 : null;
+        hp.ServerIdFor = ServerMonsterNamed;
     }
 
     public void Configure(IReadOnlyDictionary<string, GmcpMode> modes)
@@ -216,11 +221,13 @@ public sealed partial class GmcpIntegration
                     walkedOut: package == "Anomaly.Mob.Gone" && State.LastGoneWalkedOut);
                 _hp?.NotifyGmcpChanged();
             }
+            else if (package.StartsWith("Anomaly.Mob", StringComparison.Ordinal)) _hp?.NotifyGmcpChanged();
             if (Applies(package, "Anomaly.Room.Info"))
             {
                 applying = "Anomaly.Room.Info";
                 ApplyRoomOnceTextShown(State.Snapshot(applying)!.Value);
             }
+            ApplyFallback(package, ref applying);
         }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
                                        or ArgumentException or KeyNotFoundException)
@@ -235,14 +242,20 @@ public sealed partial class GmcpIntegration
 
     private void ApplyVitals(JsonElement value)
     {
+        ApplyPromptVitals(value);
+        _stats.ApplyGmcpVitals(value, expGainCounts: _vitalsGeneration == State.SessionGeneration);
+        _vitalsGeneration = State.SessionGeneration;
+    }
+
+    // The vitals a prompt carries.
+    private void ApplyPromptVitals(JsonElement value)
+    {
         int maxMana = value.GetProperty("maxmana").GetInt32();
         ManaType manaType = maxMana == 0 ? ManaType.None
             : value.GetProperty("manaType").GetString() == "kai" ? ManaType.Kai
             : ManaType.Mana;
         _player.ApplyGmcpVitals(value.GetProperty("hp").GetInt32(), value.GetProperty("maxhp").GetInt32(),
             value.GetProperty("mana").GetInt32(), maxMana, manaType);
-        _stats.ApplyGmcpVitals(value, expGainCounts: _vitalsGeneration == State.SessionGeneration);
-        _vitalsGeneration = State.SessionGeneration;
     }
 
     // The session whose vitals were last applied; -1 before any.
@@ -342,7 +355,11 @@ public sealed partial class GmcpIntegration
     // prompt, so vitals that arrive mid-move wait for the next.
     private PromptObservation? _lastPrompt;
 
-    public void ObservePrompt(PromptObservation prompt) => _lastPrompt = prompt;
+    public void ObservePrompt(PromptObservation prompt)
+    {
+        _lastPrompt = prompt;
+        NoteTextRead(TextRead.Prompt);
+    }
 
     private void CompareVitals()
     {

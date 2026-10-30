@@ -58,6 +58,7 @@ public sealed partial class GmcpIntegration
         director.GmcpTimers = EffectTimers;
 
         chat.TextClassified += ObserveChat;
+        party.ParReplyRead += OnPartyRead;
         inventory.TextInventoryObserved += ObserveInventory;
         spellParser.TextSpellsObserved += ObserveSpells;
         abilities.BreakdownParsed += ObserveAbility;
@@ -185,12 +186,12 @@ public sealed partial class GmcpIntegration
         if (_groupApplied && !State.Owns("Anomaly.Group.Members"))
         {
             // An empty formation takes the server's party back off the members list.
-            _party?.ApplyGmcpGroup(JsonSerializer.SerializeToElement(new { leader = (string?)null, members = Array.Empty<object>() }));
+            ApplyServerParty(JsonSerializer.SerializeToElement(new { leader = (string?)null, members = Array.Empty<object>() }));
             _groupApplied = false;
         }
         if (Applies(package, "Anomaly.Group.Members"))
         {
-            _party?.ApplyGmcpGroup(State.Snapshot("Anomaly.Group.Members")!.Value);
+            ApplyServerParty(State.Snapshot("Anomaly.Group.Members")!.Value);
             _groupApplied = true;
         }
 
@@ -283,11 +284,15 @@ public sealed partial class GmcpIntegration
         return $"Contract: {State.ServerContract ?? "none"}; boot: {State.Boot ?? "none"}; session: {State.InSession}; "
             + $"room: {State.CurrentRoom ?? "none"}\n"
             + $"Item cards: {State.ItemCards.Count}; current usability responses: {State.ItemUsability.Count}; "
-            + $"communication authority: {State.OwnsCommunication}\n{modes}";
+            + $"communication authority: {State.OwnsCommunication}\n{DescribeFallback()}\n{modes}";
     }
 
+    // Raised before the text's list is written (SpellListParser.Commit), so a server
+    // list the Shadow fallback holds is handed back first and the text's lands.
     private void ObserveSpells(IReadOnlyList<string> names)
     {
+        NoteTextRead(TextRead.Spells);
+        HandBackFallbackSpells();
         if (State.Mode("Anomaly.Spells.List") != GmcpMode.Shadow || State.Snapshot("Anomaly.Spells.List") is not { } value) return;
         static string Canonical(IEnumerable<string> entries) =>
             string.Join("|", entries.Select(s => s.ToLowerInvariant()).Order(StringComparer.Ordinal));
@@ -314,6 +319,7 @@ public sealed partial class GmcpIntegration
 
     private void ObserveInventory(InventorySnapshot observed)
     {
+        NoteTextRead(TextRead.Inventory);
         if (State.Owns("Anomaly.Items.List") && State.Snapshot("Anomaly.Items.List") is { } active)
         {
             // Text supplies the readied-light reading that the item snapshot omits.
