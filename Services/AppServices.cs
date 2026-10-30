@@ -6530,6 +6530,9 @@ public sealed class AppServices
         // — subsequent prompts no-op), so BBS-menu / login time never counts.
         // Same WirePromptScanner the EventScheduler uses for its in-game latch.
         PromptScanner.PromptObserved += _ => TimeAnalysis.NoteInGame();
+        // Why we stand still, read each second: the holds change with no event of
+        // their own the tracker hears.
+        Tick.HeartbeatElapsed += () => TimeAnalysis.NoteWaitCause(TimeAnalysisWaitCause());
         // Same in-game gate resumes the party wall-clock cadences (par poll +
         // @health) once we're back in the realm after a disconnect — they were
         // suspended on the drop so nothing leaks into the login-menu nav.
@@ -12031,6 +12034,23 @@ public sealed class AppServices
         };
 
         return mv with { PauseReason = reason };
+    }
+
+    // What Time Analysis books a stretch of Waiting to: the hold the Navigation top
+    // bar would name (NavActivity), a pause, a fight that has no swing in it yet or
+    // any more, a walk between steps, or nothing running at all.
+    private string TimeAnalysisWaitCause()
+    {
+        (string text, ViewModels.Navigation.NavActivityKind kind) = ViewModels.Navigation.NavActivity.Describe(
+            MovementCoordinator.AssertedGates, MovementCoordinator.IsPaused, Conditions.IsMovementPrevented);
+        return kind switch
+        {
+            ViewModels.Navigation.NavActivityKind.Paused => "paused",
+            ViewModels.Navigation.NavActivityKind.Fighting => "a fight here, not swinging",
+            ViewModels.Navigation.NavActivityKind.Waiting => ViewModels.Navigation.NavActivity.HoldSuffix(text, kind) ?? text,
+            _ when MovementControl.IsIdle => Game.Combat.TimeAnalysisTracker.NothingRunning,
+            _ => "a walk or loop between steps",
+        };
     }
 
     // Live read of the master auto-combat toggle — the same GeneralSettings

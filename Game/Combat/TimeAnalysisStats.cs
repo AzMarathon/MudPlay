@@ -28,6 +28,10 @@ public readonly record struct TimeAnalysisStats(
     TimeSpan Confused,
     TimeSpan Held)
 {
+    // Waiting split by what held the character still, longest first; sums to
+    // Waiting.
+    public IReadOnlyList<WaitCauseTime> WaitingBy { get; init; } = [];
+
     // Total time resting, regardless of which pool was regenerating.
     public TimeSpan Resting => RestingHp + RestingMa;
 

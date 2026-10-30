@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -90,7 +91,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DurationText), nameof(MovingText), nameof(AttackingText),
-        nameof(RestingText), nameof(WaitingText), nameof(RestingHpText), nameof(RestingMaText),
+        nameof(RestingText), nameof(WaitingText), nameof(WaitingTip), nameof(RestingHpText), nameof(RestingMaText),
         nameof(BlindedText), nameof(PoisonedText), nameof(DiseasedText), nameof(ConfusedText),
         nameof(HeldText))]
     private TimeAnalysisStats _time;
@@ -359,6 +360,19 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     public string AttackingText => Fmt(Time.Attacking);
     public string RestingText   => Fmt(Time.Resting);
     public string WaitingText   => Fmt(Time.Waiting);
+
+    // What the Waiting total is made of: each thing that held the character still
+    // and for how long, longest first, then the total they add up to.
+    public string WaitingTip
+    {
+        get
+        {
+            if (Time.WaitingBy.Count == 0) return "Time standing still, not moving, fighting or resting. Nothing yet.";
+            StringBuilder sb = new("Time standing still, by what held it:\n");
+            foreach (WaitCauseTime w in Time.WaitingBy) sb.Append('\n').Append(Fmt(w.Time)).Append("  ").Append(w.Cause);
+            return sb.Append("\n\n").Append(Fmt(Time.Waiting)).Append("  total").ToString();
+        }
+    }
     public string RestingHpText => Fmt(Time.RestingHp);
     public string RestingMaText => Fmt(Time.RestingMa);
     public string BlindedText   => Fmt(Time.Blinded);

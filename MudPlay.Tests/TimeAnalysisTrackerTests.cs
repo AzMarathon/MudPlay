@@ -65,6 +65,39 @@ public sealed class TimeAnalysisTrackerTests
         Assert.Equal(TimeSpan.Zero, s.Attacking);
     }
 
+    // ----- Waiting by cause ----------------------------------------------
+
+    // Each stretch of Waiting is booked to the cause that held across it, and the
+    // causes add up to Waiting; time in a fight is no cause's, and a reset clears them.
+    [Fact]
+    public void Waiting_IsSplitByTheCauseThatHeldIt_AndAddsUpToTheTotal()
+    {
+        (TimeAnalysisTracker t, Clock c) = Make();
+        c.Advance(4);
+        t.NoteWaitCause("Low HP");
+        c.Advance(6);
+        Combat(t, true);
+        t.NoteWaitCause("a fight here, not swinging");
+        c.Advance(20);
+        Combat(t, false);
+        c.Advance(2);
+        t.NoteWaitCause("Low HP");
+        c.Advance(3);
+
+        TimeAnalysisStats s = t.Snapshot();
+        Assert.Equal(new[]
+        {
+            new WaitCauseTime("Low HP", TimeSpan.FromSeconds(9)),
+            new WaitCauseTime(TimeAnalysisTracker.NothingRunning, TimeSpan.FromSeconds(4)),
+            new WaitCauseTime("a fight here, not swinging", TimeSpan.FromSeconds(2)),
+        }, s.WaitingBy);
+        Assert.Equal(TimeSpan.FromSeconds(15), s.Waiting);
+        Assert.Equal(TimeSpan.FromSeconds(20), s.Attacking);
+
+        t.Reset();
+        Assert.Empty(t.Snapshot().WaitingBy);
+    }
+
     // ----- activity partition ------------------------------------------
 
     [Fact]

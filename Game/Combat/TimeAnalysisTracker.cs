@@ -25,8 +25,14 @@ namespace MudPlay.Game.Combat;
 // a long idle after a hop doesn't over-count movement, with no periodic tick
 // required.
 //
+// Waiting is also split by why the character stood still (NoteWaitCause: a hold
+// on movement, a pause, nothing running), so the panel can show what the total is
+// made of. The cause is an input like the others: the slice is booked to the one
+// that held across it.
+//
 // Inputs are pushed in via the Note* methods rather than subscribed here, since
-// they span three sources (PlayerState, ConditionTracker, RoomTracker);
+// they span four sources (PlayerState, ConditionTracker, RoomTracker, the
+// movement holds);
 // AppServices wires those events to the forwarders. Every Note* call and
 // Snapshot runs on the marshalled dispatch thread (the sources all fire there),
 // so the counters are lock-free, matching CombatSessionTracker. The clock is
@@ -67,9 +73,15 @@ public sealed class TimeAnalysisTracker
     private PlayerPosition _position;
     private int _hp, _maxHp, _ma, _maxMa;
     private DateTimeOffset? _lastRoomChangeAt;
+    private string _waitCause = NothingRunning;
 
     // Activity partition (sums to TimeOn).
     private TimeSpan _waiting, _moving, _attacking, _restingHp, _restingMa;
+    // Waiting by cause; sums to _waiting.
+    private readonly Dictionary<string, TimeSpan> _waitingBy = new(StringComparer.Ordinal);
+
+    // The cause before any is noted, and when nothing holds and nothing runs.
+    public const string NothingRunning = "nothing running";
 
     // Affliction overlays — each its own little in/out timer, indexed by
     // Affliction. Parallel arrays keep the five overlays uniform: _afflictionOn
@@ -141,6 +153,15 @@ public sealed class TimeAnalysisTracker
         Changed?.Invoke();
     }
 
+    // Why the character is standing still now, for the Waiting breakdown. Settles
+    // the slice so far to the cause that held across it.
+    public void NoteWaitCause(string cause)
+    {
+        if (string.IsNullOrWhiteSpace(cause) || cause == _waitCause) return;
+        Settle(_clock());
+        _waitCause = cause;
+    }
+
     // Arm the tracker: the player reached the in-game prompt, so begin
     // attributing wall-clock time. Idempotent within a session — only the first
     // call after construction / Suspend takes effect, so it's safe to wire to
@@ -188,7 +209,12 @@ public sealed class TimeAnalysisTracker
             Poisoned:  _afflictionTotal[(int)Affliction.Poisoned],
             Diseased:  _afflictionTotal[(int)Affliction.Diseased],
             Confused:  _afflictionTotal[(int)Affliction.Confused],
-            Held:      _afflictionTotal[(int)Affliction.Held]);
+            Held:      _afflictionTotal[(int)Affliction.Held])
+        {
+            WaitingBy = _waitingBy.Where(kv => kv.Value > TimeSpan.Zero)
+                .OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => new WaitCauseTime(kv.Key, kv.Value)).ToArray(),
+        };
     }
 
     // Zero every counter and re-anchor the settle cursor — the @reset / "Reset
@@ -200,6 +226,7 @@ public sealed class TimeAnalysisTracker
         DateTimeOffset now = _clock();
         _lastSettle = now;
         _waiting = _moving = _attacking = _restingHp = _restingMa = TimeSpan.Zero;
+        _waitingBy.Clear();
         _inCombat = false;
         _position = PlayerPosition.Standing;
         _hp = _maxHp = _ma = _maxMa = 0;
@@ -267,7 +294,10 @@ public sealed class TimeAnalysisTracker
     {
         switch (a)
         {
-            case Activity.Waiting:   _waiting   += d; break;
+            case Activity.Waiting:
+                _waiting += d;
+                _waitingBy[_waitCause] = _waitingBy.GetValueOrDefault(_waitCause) + d;
+                break;
             case Activity.Moving:    _moving    += d; break;
             case Activity.Attacking: _attacking += d; break;
             case Activity.RestingHp: _restingHp += d; break;
