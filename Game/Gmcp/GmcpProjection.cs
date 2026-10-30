@@ -89,7 +89,9 @@ internal static class GmcpProjection
         };
     }
 
-    // What a room display would have shown: a hidden exit only once found.
+    // What a room display would have shown: a hidden exit only once found, and never
+    // an exit taken by a command (`go path`, `go manhole`), which "Obvious exits:"
+    // doesn't list. Counted as shown, it read as a plain exit open to step through.
     public static RoomObservation Observation(JsonElement value)
     {
         HashSet<Direction> shown = new();
@@ -98,7 +100,9 @@ internal static class GmcpProjection
         foreach (JsonElement edge in value.GetProperty("exits").EnumerateArray())
         {
             Direction direction = Enum.Parse<Direction>(edge.GetProperty("dir").GetString()!, ignoreCase: true);
-            if (!edge.GetProperty("hidden").GetBoolean() || edge.GetProperty("found").GetBoolean()) shown.Add(direction);
+            bool listed = edge.GetProperty("kind").GetString() != "text"
+                && (!edge.GetProperty("hidden").GetBoolean() || edge.GetProperty("found").GetBoolean());
+            if (listed) shown.Add(direction);
             JsonElement door = edge.GetProperty("door");
             if (door.ValueKind != JsonValueKind.Object) continue;
             if (door.GetProperty("state").GetString() == "open") open.Add(direction);

@@ -381,6 +381,32 @@ public sealed partial class GmcpIntegrationTests
         Assert.Empty(session.Log.Snapshot().Where(entry => entry.Source == "GMCP shadow").Select(entry => entry.Message));
     }
 
+    // The game prints a regen tick's prompt first and the server's vitals follow, up
+    // to a second behind (export gmcp-20261029-150714: [HP=10] at 64.866 s, its
+    // vitals at 65.811 s). Compared at the prompt, against the vitals still showing
+    // the tick before, nearly every tick read as a difference: 267 in a 22-minute
+    // session (export gmcp-20261029-152755). Compared as the vitals arrive, only a
+    // real difference shows.
+    [Fact]
+    public void ShadowVitals_AreComparedAsTheyArrive_NotAtThePromptAhead()
+    {
+        using Session session = new(active: false);
+        session.Replay("01-handshake");
+        static object Vitals(int hp) => new { hp, maxhp = 32, mana = 18, maxmana = 22, manaType = "mana", level = 1, exp = 728, expNeeded = 1850 };
+        string[] Shadow() => session.Log.Snapshot().Where(e => e.Source == "GMCP shadow").Select(e => e.Message).ToArray();
+
+        session.Text("[HP=9/MA=18]:\r\n");
+        session.Send("Anomaly.Char.Vitals", Vitals(9));
+        session.Text("[HP=10/MA=18]:\r\n");          // the tick, its vitals still on the way
+        Assert.Empty(Shadow());
+        session.Send("Anomaly.Char.Vitals", Vitals(10));
+        Assert.Empty(Shadow());
+
+        session.Text("[HP=11/MA=18]:\r\n");
+        session.Send("Anomaly.Char.Vitals", Vitals(12));
+        Assert.Equal("Char.Vitals.hp: GMCP=12; text=11", Assert.Single(Shadow()));
+    }
+
     [Fact]
     public void ActiveVitals_OverrideTextOnlyUntilTheirOwnPackageIsReset()
     {
@@ -757,6 +783,27 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(0u, projected.ExitMask & (1u << (int)Direction.Teleport));
     }
 
+    // An exit taken by a command (`go path`, `go manhole`) is in the server's exits
+    // with "kind":"text" but never in the display's "Obvious exits:" (exports
+    // gmcp-20261029-150551 and gmcp-20261029-152626, five rooms). Read as shown, the
+    // shadow compare flagged every such room and the active room read the exit as a
+    // plain one open to step through.
+    [Fact]
+    public void RoomObservation_LeavesOutAnExitTakenByACommand()
+    {
+        JsonElement value = JsonSerializer.SerializeToElement(new
+        {
+            room = "1,1680", name = "Darkwood Forest",
+            exits = new object[]
+            {
+                new { dir = "ne", to = "1,1403", kind = "normal", hidden = false, found = true, door = (object?)null, gate = (object?)null, toll = (object?)null, phrase = (string?)null },
+                new { dir = "sw", to = "1,1403", kind = "text", hidden = false, found = true, door = (object?)null, gate = (object?)null, toll = (object?)null, phrase = "go path" },
+            },
+        });
+
+        Assert.Equal(new[] { Direction.NE }, GmcpProjection.Observation(value).Exits.ToArray());
+    }
+
     // The server names no kind for a trap, a teleport or a ticket (the kinds it sends
     // are in export gmcp-20261029-143336), so it calls those exits "normal". Read as
     // plain, they lost what the walker acts on: the trap's disarm, the ticket gate and
@@ -814,6 +861,8 @@ public sealed partial class GmcpIntegrationTests
         Assert.False(session.Player.HasPromptData);
         session.Text("[HP=4]:\r\n");
         Assert.Equal(4, session.Player.Hp);
+        // Compared as the server's vitals arrive, against the prompt before them.
+        session.Send("Anomaly.Char.Vitals", session.Gmcp.State.Snapshot("Anomaly.Char.Vitals")!.Value);
         Assert.Contains(session.Log.Snapshot(), item => item.Source == "GMCP shadow" && item.Message.Contains("Char.Vitals.hp", StringComparison.Ordinal));
         Assert.DoesNotContain(session.Log.Snapshot(), item => item.Source == "GMCP shadow" && item.Message.Contains("drop", StringComparison.OrdinalIgnoreCase));
     }
