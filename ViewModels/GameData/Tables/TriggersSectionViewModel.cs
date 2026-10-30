@@ -11,8 +11,8 @@ using MudPlay.ViewModels.Guides;
 
 namespace MudPlay.ViewModels.GameData.Tables;
 
-// Game Data Browser → Triggers tab. Surfaces the active character's user-defined triggers from
-// TriggerEngine. Editable — double-click a row opens the TriggerEditDialogViewModel; save routes
+// Game Data Browser → Triggers tab. Surfaces the active character's user-defined triggers (its own,
+// its realm's and its BBS's) from TriggerEngine. Editable — double-click a row opens the TriggerEditDialogViewModel; save routes
 // through TriggerEngine.Replace.
 public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IEditableTableSectionViewModel
 {
@@ -29,11 +29,11 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Enabled", "Name", "Scope", "Match", "Pattern", "Response",
+        "Enabled", "Applies to", "Name", "Scope", "Match", "Pattern", "Response",
     };
 
-    // Engine-backed table — every row lives only at the Char tier, so the "Use" badge would
-    // always read the same value.
+    // Engine-backed table: the "Use" badge reads settings tiers, which triggers don't
+    // have. Where a trigger is kept is its "Applies to" column.
     public override bool ShowUseColumn => false;
 
     public override IEnumerable<string> SearchableLabels => new[]
@@ -89,8 +89,9 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
         {
             var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Enabled"]  = t.Enabled ? "✓" : "",
-                ["Name"]     = t.Name,
+                ["Enabled"]    = t.Enabled ? "✓" : "",
+                ["Applies to"] = FormatLevel(t.Level) + (_engine.IsOverridden(t) ? " (overridden)" : ""),
+                ["Name"]       = t.Name,
                 ["Scope"]    = FormatScope(t.Scope),
                 ["Match"]    = t.MatchType.ToString(),
                 ["Pattern"]  = t.Pattern,
@@ -112,7 +113,7 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
             MatchType: TriggerMatchType.Literal,
             Pattern:   string.Empty,
             Response:  string.Empty);
-        TriggerEditDialogViewModel vm = new(blank, isNew: true);
+        TriggerEditDialogViewModel vm = new(blank, isNew: true, _engine.Levels);
         Trigger? created = await _dialogs.OpenWindowAsync<TriggerEditDialogViewModel, Trigger>(vm);
         if (created is null) return;
         _engine.Add(created);
@@ -159,11 +160,18 @@ public sealed class TriggersSectionViewModel : GameDataTableSectionViewModel, IE
         if (row is null || _dialogs is null) return;
         if (!_rowToTrigger.TryGetValue(row, out Trigger? original)) return;
 
-        TriggerEditDialogViewModel vm = new(original, isNew: false);
+        TriggerEditDialogViewModel vm = new(original, isNew: false, _engine.Levels);
         Trigger? updated = await _dialogs.OpenWindowAsync<TriggerEditDialogViewModel, Trigger>(vm);
         if (updated is null) return;
         _engine.Replace(original, updated);
     }
+
+    private static string FormatLevel(TriggerLevel level) => level switch
+    {
+        TriggerLevel.Realm => "Realm",
+        TriggerLevel.Bbs   => "BBS",
+        _                  => "Character",
+    };
 
     // Friendly column label for the scope enum — the underlying values are PascalCase
     // (GameMessages, ChatTelepath) which reads awkwardly in a table.

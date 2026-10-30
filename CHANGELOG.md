@@ -1,5 +1,11 @@
 # Version history
 
+## 3.192.0
+
+- Triggers can apply to only this character, every character on the realm, or every character on the BBS
+- Of triggers sharing a name the nearest is used, so a character can change or switch off a shared one for itself
+- A shared trigger edited on one client works on the others within a second or two
+
 ## 3.191.0
 
 - GMCP Shadow takes the server's data as a fallback: vitals, stats, spells, inventory and party until the text first reads them

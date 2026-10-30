@@ -3226,6 +3226,16 @@ public sealed class AppServices
         {
             BlockedByMasterSwitch = MasterSwitchOff("Triggers"),
         };
+        // A realm's triggers are kept in its folder, a BBS's beside its bbs.json. A
+        // realm folder there means the BBS's name is usable as a folder too.
+        Triggers.ShareWith(
+            () => ActiveRealmFolder() is { } folder ? AppPaths.RealmTriggersFile(folder) : null,
+            () => ActiveRealmFolder() is not null && ResolveActiveRealm() is { } played
+                ? AppPaths.BbsTriggersFile(played.Bbs.Name) : null);
+        Profile.BbsPinApplied += _ => Triggers.ReloadShared();
+        // A rename moves the folder, and the triggers file with it.
+        Profile.BbsRenamed += (_, _) => Triggers.ReloadShared();
+        Profile.RealmRenamed += (_, _, _) => Triggers.ReloadShared();
         Aliases = new AliasEngine(Profile);
         Macros = new MacroStore(Profile);
         MacroDispatcher = new MacroDispatcher(Macros);
@@ -4122,6 +4132,8 @@ public sealed class AppServices
             LearnedRoomNames.OnFolderRenamed(AppPaths.RealmFolder(bbs, from), AppPaths.RealmFolder(bbs, to));
         LearnedRoomNames.OnRealmChanged();
         Tick.HeartbeatElapsed += () => LearnedRoomNames.TakeInOutsideChanges();
+        // A shared trigger edited on another client works here at once (user, 2026-10-30).
+        Tick.HeartbeatElapsed += Triggers.TakeInOutsideChanges;
         Tick.HeartbeatElapsed += RoomGraph.TellKeptListsWhenQuiet;
         // Once a set's graph is loaded, build the lists Navigation, Settings and the
         // map's right-click menu show, off the UI thread, so the first open doesn't

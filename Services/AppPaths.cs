@@ -726,6 +726,14 @@ public static class AppPaths
     public static string RealmsDir(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "Realms");
 
+    // Triggers every character on the BBS shares (TriggerLevel.Bbs).
+    public static string BbsTriggersFile(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "triggers.json");
+
+    // Triggers every character playing the realm shares (TriggerLevel.Realm).
+    public static string RealmTriggersFile(string realmFolder) =>
+        Path.Combine(realmFolder, "triggers.json");
+
     // Observed players. One PlayerObservation per player ever seen on the realm,
     // so the same name on another realm (or board) counts as a different person.
     public static string RealmPlayersFile(string realmFolder) =>
