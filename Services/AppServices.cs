@@ -238,6 +238,10 @@ public sealed class AppServices
     // GlobalSettings.AutoCheckForUpdates) set its availability flag; the splash banner
     // and the main window's title-bar crawl read it. It never installs on its own.
     public Services.Update.UpdateService Update { get; }
+    // A Windows client's unpacked copy, held open for the client's life so a temp-file
+    // clean-up can't remove an assembly it hasn't loaded yet. Null on a build that
+    // isn't running unpacked, and until startup has taken it.
+    public Services.Update.UnpackedCopyHold? UnpackedCopy { get; private set; }
 
     // Tees Log to a rolling on-disk file (Logs/{ts}-program.log) so a
     // hard hang / kill leaves a post-mortem trail the in-memory ring can't.
@@ -3046,14 +3050,16 @@ public sealed class AppServices
         // After the switches above, so an auto-collected program log carries it.
         Services.Update.BundleExtraction.Layout bundle = Services.Update.BundleExtraction.Current();
         Log.Info("Startup", "program: " + Services.Update.BundleExtraction.Describe(bundle));
-        // Older versions' unpacked copies, off the UI thread: a folder of them is
-        // hundreds of files.
+        // This client's unpacked copy held, then older versions' removed, off the UI
+        // thread: a folder of them is hundreds of files.
         if (bundle == Services.Update.BundleExtraction.Layout.Extracted && OperatingSystem.IsWindows()
             && Services.Update.UpdatePlatform.IsSelfContainedInstall())
             _ = Task.Run(() =>
             {
                 try
                 {
+                    UnpackedCopy = Services.Update.UnpackedCopyHold.Take(AppContext.BaseDirectory);
+                    Log.Info("Startup", "program: " + UnpackedCopy.Describe());
                     foreach (string line in Services.Update.BundleExtraction.CleanOld(AppContext.BaseDirectory))
                         Log.Info("Update", line);
                 }

@@ -22,6 +22,15 @@ public sealed class CrashReporterTests
         Assert.Contains("boom", md);
     }
 
+    // A missing assembly is named even when the runtime's message for it is empty.
+    [Fact]
+    public void Build_NamesTheFileAMissingFileFaultWasFor()
+    {
+        string md = CrashReporter.Build(new FileNotFoundException("", "System.ComponentModel.Annotations, Version=10.0.0.0"), "UI run loop");
+
+        Assert.Contains("**System.IO.FileNotFoundException**:  (file: System.ComponentModel.Annotations, Version=10.0.0.0)", md);
+    }
+
     [Fact]
     public void Build_WalksInnerExceptionChain()
     {

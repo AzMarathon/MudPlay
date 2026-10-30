@@ -208,7 +208,10 @@ public static class CrashReporter
         for (Exception? e = ex; e is not null; e = e.InnerException)
         {
             sb.Append("**").Append(e.GetType().FullName).Append("**: ")
-              .Append(e.Message).Append("\n\n```\n")
+              .Append(e.Message)
+              // The runtime's own wording of a missing assembly can itself be missing.
+              .Append(e is FileNotFoundException { FileName: { Length: > 0 } missing } ? $" (file: {missing})" : string.Empty)
+              .Append("\n\n```\n")
               .Append(e.StackTrace ?? "(no stack trace)").Append("\n```\n\n");
             // An AggregateException's InnerException is only the first of its
             // faults: a task that failed twice over shows every one.

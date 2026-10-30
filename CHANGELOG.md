@@ -1,5 +1,11 @@
 # Version history
 
+## 3.192.2
+
+- No more crash on a click after a long session on Windows: the client keeps its unpacked files open so temp clean-up can't remove them
+- A crash report on a missing file names the file
+- bug reports addressed: Crash-20261030-084406, Crash-20261030-084407
+
 ## 3.192.0
 
 - Triggers can apply to only this character, every character on the realm, or every character on the BBS
