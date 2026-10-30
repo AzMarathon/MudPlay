@@ -130,7 +130,11 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
     public static string AvailableLine(string name)
     {
         string shown = name.Trim();
-        return shown.EndsWith("Quest", StringComparison.OrdinalIgnoreCase)
+        // The word, not the letters: a separate "Quest" or a run-together one
+        // ("CartographerQuest"), never "The Conquest" or "A Merchant's Request".
+        return shown.Equals("Quest", StringComparison.OrdinalIgnoreCase)
+               || shown.EndsWith(" Quest", StringComparison.OrdinalIgnoreCase)
+               || shown.EndsWith("Quest", StringComparison.Ordinal)
             ? $"[{shown} is Now Available]"
             : $"[{shown} Quest is Now Available]";
     }

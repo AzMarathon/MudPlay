@@ -170,38 +170,44 @@ public sealed class QuestStore
     }
 
     // The name a quest is shown under: the user's own, else the realm's, else the
-    // seed's; empty when none names it (the caller builds a title from the flag).
-    // startValue is the flag value the quest's stage starts at (a band's
-    // CrawledQuest.StepRangeStart), which the realm's ranges are in; 0 for a quest
-    // that is the whole flag.
+    // seed's unless the user cleared it; empty when none names it (the caller builds
+    // a title from the flag). startValue is the flag value the quest's stage starts
+    // at (a band's CrawledQuest.StepRangeStart), which the realm's ranges are in; 0
+    // for a quest that is the whole flag.
     public string DisplayName(int flag, int step, int startValue) =>
         UserName(flag, step) is { Length: > 0 } user ? user
-        : ServerName(flag, startValue) ?? SeedName(flag, step);
+        : ServerName(flag, startValue) ?? ShownSeedName(flag, step);
 
     // One name for the whole flag, when only the flag is known (the @quest reply):
-    // a name the user gave any of its steps, else the realm's for its first range,
-    // else the seed's. loggedSteps are the character's steps for the flag, which may
-    // be ones neither layer lists.
-    public string FlagName(int flag, IEnumerable<int> loggedSteps)
+    // a name the user gave any of its steps, else the realm's for the range the
+    // character's flag value is in (its lowest range before a value is read), else
+    // the seed's. log is the character's quest log; its steps for the flag may be
+    // ones neither layer lists.
+    public string FlagName(int flag, IEnumerable<QuestProgress> log)
     {
-        List<int> steps = StepsForFlag(flag).Concat(loggedSteps).Distinct().ToList();
+        ArgumentNullException.ThrowIfNull(log);
+        List<QuestProgress> mine = log.Where(p => p.Flag == flag).ToList();
+        List<int> steps = StepsForFlag(flag).Concat(mine.Select(p => p.Step)).Distinct().ToList();
+        int reached = mine.Select(p => p.FlagValue ?? 0).DefaultIfEmpty(0).Max();
         return steps.Select(s => UserName(flag, s)).FirstOrDefault(n => n.Length > 0)
+            ?? (reached > 0 ? ServerName(flag, reached) : null)
             ?? ServerName(flag, 0)
-            ?? steps.Select(s => SeedName(flag, s)).FirstOrDefault(n => n.Length > 0)
+            ?? steps.Select(s => ShownSeedName(flag, s)).FirstOrDefault(n => n.Length > 0)
             ?? string.Empty;
     }
 
     // The realm's name for the range that holds value, or for a whole-flag lookup
-    // (value 0) its first range.
+    // (value 0) the range starting lowest, whatever order the server listed them in.
     private string? ServerName(int flag, int value)
     {
-        IReadOnlyList<ServerQuestName> held = _server;
-        foreach (ServerQuestName name in held)
-            if (name.Flag == flag && name.Covers(value)) return name.Name;
-        if (value > 0) return null;
-        foreach (ServerQuestName name in held)
-            if (name.Flag == flag) return name.Name;
-        return null;
+        ServerQuestName? lowest = null;
+        foreach (ServerQuestName name in _server)
+        {
+            if (name.Flag != flag) continue;
+            if (name.Covers(value)) return name.Name;
+            if (lowest is not { } low || name.From < low.From) lowest = name;
+        }
+        return value > 0 ? null : lowest?.Name;
     }
 
     // A name in the overlay counts as the user's only when it isn't the seed's: an
@@ -219,6 +225,15 @@ public sealed class QuestStore
         _seed.TryGetValue((flag, step), out QuestDefinition? seeded) && !string.IsNullOrWhiteSpace(seeded.Name)
             ? seeded.Name.Trim()
             : string.Empty;
+
+    // The seed's name unless the user cleared it: the editor saves a blank name only
+    // when the user emptied the box (or typed the auto-draft title back), so the quest
+    // goes back to its flag's title. The clearing was of the seed's name, the only
+    // one the editor offers, so the realm's name still ranks above it.
+    private string ShownSeedName(int flag, int step) =>
+        _overlay.TryGetValue((flag, step), out QuestDefinition? user) && string.IsNullOrWhiteSpace(user.Name)
+            ? string.Empty
+            : SeedName(flag, step);
 
     // Persist the user's edited definitions to the active set's overlay
     // (its quests.json) and refresh the in-memory layer so later
@@ -301,7 +316,7 @@ public sealed class QuestStore
         foreach ((int Flag, int Step) k in keys)
         {
             if (UserName(k.Flag, k.Step) is { Length: > 0 } user) yield return (k.Flag, user);
-            else if (SeedName(k.Flag, k.Step) is { Length: > 0 } seed) seeded.Add((k.Flag, seed));
+            else if (ShownSeedName(k.Flag, k.Step) is { Length: > 0 } seed) seeded.Add((k.Flag, seed));
         }
         foreach (ServerQuestName name in _server) yield return (name.Flag, name.Name);
         foreach ((int Flag, string Name) seed in seeded) yield return seed;

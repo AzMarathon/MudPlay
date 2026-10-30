@@ -97,7 +97,7 @@ public sealed partial class GmcpIntegrationTests
         Assert.Equal(3200, QuestNameResolver.Resolve("kotar", store.NamedQuests()));
         Assert.Equal("Kotar: The Price of an Open Gate", QuestNameResolver.Label(3200, store.FlagName(3200, [])));
         Assert.Equal("My Ormund", QuestNameResolver.Label(201, store.FlagName(201, [])));
-        Assert.Equal("Good align", QuestNameResolver.Label(126, store.FlagName(126, [10])));
+        Assert.Equal("Good align", QuestNameResolver.Label(126, store.FlagName(126, [new QuestProgress { Flag = 126, Step = 10 }])));
 
         // The definitions the editor reads and saves are the user's and the seed's alone.
         Assert.Equal("", store.Resolve(3200, 0).Name);
@@ -107,6 +107,55 @@ public sealed partial class GmcpIntegrationTests
         Assert.DoesNotContain("Kotar", saved);
         Assert.DoesNotContain("Price of Iron", saved);
         Assert.Contains("My Ormund", saved);
+    }
+
+    // A seeded name the user cleared in the editor (saved blank) gives the flag's own
+    // title back, and isn't offered to @quest; the realm's name still ranks above it.
+    [Fact]
+    public void QuestNames_ASeededNameTheUserCleared_StaysCleared()
+    {
+        using Session session = new();
+        using QuestLayers layers = new(session,
+            seed: [new(4000, 0, "Seed Only"), new(3300, 0, "Paradigm Iron")],
+            overlay: [new(4000, 0, ""), new(3300, 0, "")]);
+        QuestStore store = layers.Store;
+
+        Assert.Equal("Ability 4000", QuestTextFormatter.Title(store, new CrawledQuest(4000, 0, 0, [], [])));
+        Assert.Equal("", store.FlagName(4000, []));
+        Assert.DoesNotContain(store.NamedQuests(), q => q.Name == "Seed Only");
+        Assert.Equal("", store.DisplayName(3300, 0, 0));
+
+        session.Replay("15-quest-names");
+
+        Assert.Equal("The Price of Iron", store.DisplayName(3300, 0, 0));
+        Assert.Equal("", store.DisplayName(4000, 0, 0));
+    }
+
+    // @quest names a flag by the range the character's flag value is in, its lowest
+    // before a value is read; a whole-flag lookup takes the lowest range whatever
+    // order the server listed them in.
+    [Fact]
+    public void QuestNames_AFlagIsNamedByTheRangeTheCharacterIsIn()
+    {
+        using Session session = new();
+        using QuestLayers layers = new(session);
+        QuestStore store = layers.Store;
+        session.Replay("15-quest-names");
+
+        Assert.Equal("1st Alignment Quest", store.FlagName(126, []));
+        Assert.Equal("2nd Alignment Quest", store.FlagName(126, [new QuestProgress { Flag = 126, Step = 20, FlagValue = 9 }]));
+        Assert.Equal("1st Alignment Quest", store.FlagName(126, [new QuestProgress { Flag = 126, Step = 30, FlagValue = 40 }]));
+
+        session.Send(QuestNames, new
+        {
+            quests = new object[]
+            {
+                new { flag = 4100, from = 6, to = (int?)null, name = "The Smuggler's Return", level = (int?)null },
+                new { flag = 4100, from = 1, to = (int?)5, name = "The Lost Shipment", level = (int?)null },
+            },
+        });
+        Assert.Equal("The Lost Shipment", store.DisplayName(4100, 0, 0));
+        Assert.Equal("The Smuggler's Return", store.FlagName(4100, [new QuestProgress { Flag = 4100, Step = 0, FlagValue = 8 }]));
     }
 
     [Fact]

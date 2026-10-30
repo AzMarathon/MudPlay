@@ -105,7 +105,7 @@ public sealed class QuestQueryHandler : IDisposable
             return;
         }
 
-        string label = QuestNameResolver.Label(flag, ResolveName(flag, log));
+        string label = QuestNameResolver.Label(flag, _quests.FlagName(flag, log));
         string marked = QuestQueryReport.FormatFlag(flag, label, log, _quests.StepsForFlag(flag));
 
         // Pick the live-read path exactly as QuestFlagSyncManager does. Stock without
@@ -143,7 +143,7 @@ public sealed class QuestQueryHandler : IDisposable
         // The read proves what's done — mark it, then report the updated state.
         int newly = _sync.MarkObserved(observed).Count;
         List<QuestProgress> log = _profile()?.QuestLog ?? new List<QuestProgress>();
-        string label = QuestNameResolver.Label(flag, ResolveName(flag, log));
+        string label = QuestNameResolver.Label(flag, _quests.FlagName(flag, log));
         string now = QuestQueryReport.FormatFlag(flag, label, log, _quests.StepsForFlag(flag));
         ctx.Reply(newly > 0
             ? $"{now}. Abil: {flag} step {step} ({newly} newly marked)"
@@ -195,9 +195,4 @@ public sealed class QuestQueryHandler : IDisposable
             if (AbilityNames.GetName(flag) is { Length: > 0 } n)
                 yield return (flag, n);
     }
-
-    // The quest's name for a flag, or empty when none — feeds the display label so a
-    // named quest shows its name rather than the AbilityNames code.
-    private string ResolveName(int flag, List<QuestProgress> log) =>
-        _quests.FlagName(flag, log.Where(p => p.Flag == flag).Select(p => p.Step));
 }

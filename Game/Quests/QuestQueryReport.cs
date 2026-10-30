@@ -52,7 +52,7 @@ public static class QuestQueryReport
         {
             IReadOnlyList<int> ordinals = MarkedOrdinals(flag, log, quests.StepsForFlag(flag));
             if (ordinals.Count == 0) continue;
-            string label = QuestNameResolver.Label(flag, quests.FlagName(flag, log.Where(p => p.Flag == flag).Select(p => p.Step)));
+            string label = QuestNameResolver.Label(flag, quests.FlagName(flag, log));
             parts.Add($"{label} {string.Join(", ", ordinals)}");
         }
 

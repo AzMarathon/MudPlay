@@ -228,15 +228,20 @@ public sealed partial class GmcpIntegration
                 ApplyRoomOnceTextShown(State.Snapshot(applying)!.Value);
             }
             ApplyFallback(package, ref applying);
-            ApplyQuestNames(package, ref applying);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
-                                       or ArgumentException or KeyNotFoundException)
+        catch (Exception ex) when (IsApplyFault(ex))
         {
             _log.Warn("GMCP", $"Cannot apply {applying}: {ex.Message}; returning affected state to text.");
             State.SetMode(applying, GmcpMode.Off);
         }
+        // Apart from the rest: a fault above must not leave one session's quest names
+        // standing on a reset that should drop them.
+        ApplyQuestNames(package);
     }
+
+    // What a snapshot of the wrong shape throws as it is read.
+    private static bool IsApplyFault(Exception ex) =>
+        ex is InvalidOperationException or FormatException or OverflowException or ArgumentException or KeyNotFoundException;
 
     private bool Applies(string changed, string package) =>
         (changed == "*" || changed == package) && State.Owns(package);

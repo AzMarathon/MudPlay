@@ -18,15 +18,23 @@ public sealed partial class GmcpIntegration
 
     public void BindQuests(QuestStore quests) => _quests = quests;
 
-    private void ApplyQuestNames(string package, ref string applying)
+    private void ApplyQuestNames(string package)
     {
         if (_quests is null || package is not ("*" or QuestNamesPackage)) return;
-        applying = QuestNamesPackage;
-        _quests.ApplyServerNames(
-            State.Compatible && State.InSession && State.Mode(QuestNamesPackage) != GmcpMode.Off
-            && State.Snapshot(QuestNamesPackage) is { } value
-                ? QuestNames(value)
-                : Array.Empty<ServerQuestName>());
+        try
+        {
+            _quests.ApplyServerNames(
+                State.Compatible && State.InSession && State.Mode(QuestNamesPackage) != GmcpMode.Off
+                && State.Snapshot(QuestNamesPackage) is { } value
+                    ? QuestNames(value)
+                    : Array.Empty<ServerQuestName>());
+        }
+        catch (Exception ex) when (IsApplyFault(ex))
+        {
+            // Off re-applies the package, which drops the names held.
+            _log.Warn("GMCP", $"Cannot apply {QuestNamesPackage}: {ex.Message}; dropping the realm's quest names.");
+            State.SetMode(QuestNamesPackage, GmcpMode.Off);
+        }
     }
 
     private static List<ServerQuestName> QuestNames(JsonElement value) =>

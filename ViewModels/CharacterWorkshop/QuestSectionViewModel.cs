@@ -420,8 +420,9 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             _profile.Current?.QuestAlignNeutral ?? false,
             _profile.Current?.QuestAlignEvil ?? false,
             showAnyway);
-        bool? saved = await AppServices.Current.Dialogs
-            .OpenWindowAsync<QuestEditorViewModel, bool>(editor);
+        bool? saved;
+        try { saved = await AppServices.Current.Dialogs.OpenWindowAsync<QuestEditorViewModel, bool>(editor); }
+        finally { editor.Dispose(); }
         if (saved != true) return;
 
         // The show-anyway opt-in is per character, so it lands on QuestProgress here (the
