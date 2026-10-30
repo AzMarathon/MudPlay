@@ -180,6 +180,8 @@ public sealed partial class GmcpIntegration
             _classifier.NoteGameLeft();
         }
 
+        if (package == "Anomaly.Char.Vitals") CompareVitals();
+
         string applying = package;
         try
         {
@@ -331,9 +333,22 @@ public sealed partial class GmcpIntegration
 
     // ----- Shadow comparisons ----------------------------------------------
 
-    public void ObservePrompt(PromptObservation prompt)
+    // The vitals are compared as they arrive, against the prompt before them: the
+    // game prints a change (a hit, a regen tick) and its prompt first, and the
+    // server's vitals follow, up to a second behind for a tick. Compared at the
+    // prompt, almost every tick read as a mismatch: 267 in a 22-minute session
+    // (export gmcp-20261029-152755), filling the warnings a bug report keeps. A
+    // move's data is the exception: it comes ahead of the room's display and its
+    // prompt, so vitals that arrive mid-move wait for the next.
+    private PromptObservation? _lastPrompt;
+
+    public void ObservePrompt(PromptObservation prompt) => _lastPrompt = prompt;
+
+    private void CompareVitals()
     {
-        if (State.Mode("Anomaly.Char.Vitals") != GmcpMode.Shadow || State.Snapshot("Anomaly.Char.Vitals") is not { } value) return;
+        if (State.Mode("Anomaly.Char.Vitals") != GmcpMode.Shadow || _lastPrompt is not { } prompt
+            || _tracker.HasQueuedMoves || State.Snapshot("Anomaly.Char.Vitals") is not { } value)
+            return;
         Compare("Char.Vitals.hp", value.GetProperty("hp").GetInt32(), prompt.Hp);
         Compare("Char.Vitals.mana", value.GetProperty("mana").GetInt32(), prompt.Mana);
     }

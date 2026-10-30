@@ -105,7 +105,7 @@ internal static class JsonStore
         string json = JsonSerializer.Serialize(value, options);
         try
         {
-            File.WriteAllText(tmp, json);
+            WriteToDisk(tmp, json);
             MoveWithRetry(tmp, path);
         }
         catch
@@ -115,6 +115,19 @@ internal static class JsonStore
             try { File.Delete(tmp); } catch { /* best-effort cleanup */ }
             throw;
         }
+    }
+
+    // The temp file's text is on the disk before the rename makes it the file. The
+    // rename can reach the disk ahead of the data otherwise: a power cut then leaves
+    // the file its full length in zero bytes, a profile that wouldn't load and
+    // stopped the client at startup (report Crash-20261029-161814).
+    private static void WriteToDisk(string path, string text)
+    {
+        using FileStream file = new(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        using StreamWriter writer = new(file, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        writer.Write(text);
+        writer.Flush();
+        file.Flush(flushToDisk: true);
     }
 
     // Windows holds a just-written file for a moment — another client's replace of

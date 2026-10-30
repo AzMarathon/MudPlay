@@ -3107,8 +3107,7 @@ public sealed class AppServices
         // way, so this can't make startup any slower than it already is.
         if (Settings.Current.StartupProfile() is { } startupPrediction)
         {
-            string? predictedRealm = JsonStore.Load<Models.Profile.CharacterProfile>(
-                AppPaths.CharacterProfileFile(startupPrediction.Bbs, startupPrediction.Name))?.Realm;
+            string? predictedRealm = Profile.RealmOf(startupPrediction);
             string? predictedSet = Bbs.Get(startupPrediction.Bbs)?.RealmFor(predictedRealm)?.ActiveGameDataSet
                 ?? Settings.Current.DefaultGameDataSet;
             if (!string.IsNullOrWhiteSpace(predictedSet))

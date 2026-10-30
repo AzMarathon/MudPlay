@@ -188,7 +188,7 @@ public sealed class RegenReadoutTests : IDisposable
     }
 
     [Fact]
-    public void LastTick_NamesItsPosture_WhenThatIsntTheCharactersNow_AndBlanksAfterTwoMinutes()
+    public void LastTick_NamesItsPosture_WhenThatIsntTheCharactersNow_AndShowsADashAfterTwoMinutes()
     {
         OneStockTick();
 
@@ -199,8 +199,8 @@ public sealed class RegenReadoutTests : IDisposable
         _clock.Advance(RegenReadout.LastTickShownFor);
         Assert.Equal("HP +4 (standing)", _readout.HpLastText);
         _clock.Advance(TimeSpan.FromSeconds(1));
-        Assert.Equal(string.Empty, _readout.HpLastText);
-        Assert.Equal(string.Empty, _readout.MaLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
     }
 
     [Fact]
@@ -209,8 +209,8 @@ public sealed class RegenReadoutTests : IDisposable
         OneStockTick();
         _inGame.NotifyDisconnected();
 
-        Assert.Equal(string.Empty, _readout.HpLastText);
-        Assert.Equal(string.Empty, _readout.MaLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
     }
 
     [Fact]
@@ -219,8 +219,8 @@ public sealed class RegenReadoutTests : IDisposable
         OneStockTick();
         _feed.Line("You have been killed!");
 
-        Assert.Equal(string.Empty, _readout.HpLastText);
-        Assert.Equal(string.Empty, _readout.MaLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
     }
 
     [Fact]
@@ -229,8 +229,8 @@ public sealed class RegenReadoutTests : IDisposable
         OneStockTick();
         _profile.LoadDefaultProfile();
 
-        Assert.Equal(string.Empty, _readout.HpLastText);
-        Assert.Equal(string.Empty, _readout.MaLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
     }
 
     [Fact]
@@ -239,7 +239,20 @@ public sealed class RegenReadoutTests : IDisposable
         OneStockTick();
         _gameData.SwitchSet("paradigm");
 
-        Assert.Equal(string.Empty, _readout.HpLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
+    }
+
+    // An empty item takes no room on the bar: a mana caster fighting for two minutes,
+    // whose ticks the casts hide, saw the item vanish and read it as removed (report
+    // paradigm-20261029-213729). With no tick the pool and a dash show instead; a pool
+    // the character hasn't got shows nothing.
+    [Fact]
+    public void LastTick_NoneYet_ShowsADash_ButNotForAPoolTheCharacterHasNot()
+    {
+        Prompt("[HP=100]:");
+
+        Assert.Equal("HP –", _readout.HpLastText);
         Assert.Equal(string.Empty, _readout.MaLastText);
     }
 
@@ -252,8 +265,8 @@ public sealed class RegenReadoutTests : IDisposable
 
         Assert.Equal(string.Empty, _readout.HpExpectedText);
         Assert.Equal(string.Empty, _readout.MaExpectedText);
-        Assert.Equal(string.Empty, _readout.HpLastText);
-        Assert.Equal(string.Empty, _readout.MaLastText);
+        Assert.Equal("HP –", _readout.HpLastText);
+        Assert.Equal("MA –", _readout.MaLastText);
     }
 
     // Report paradigm-20261004-140923: a level 28 Paladin, Health 71, a ring with

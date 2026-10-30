@@ -98,8 +98,8 @@ public sealed class RegenReadout : IDisposable
 
     // ----- what the bar shows ---------------------------------------------------
 
-    public string HpLastText => Shown(_hpLast);
-    public string MaLastText => Shown(_maLast);
+    public string HpLastText => Shown(_hpLast, "HP", _state.MaxHp > 0);
+    public string MaLastText => Shown(_maLast, _state.ManaType == ManaType.Kai ? "KAI" : "MA", _state.MaxMa > 0);
     public string HpExpectedText { get; private set; } = string.Empty;
 
     public string MaExpectedText
@@ -115,9 +115,14 @@ public sealed class RegenReadout : IDisposable
         }
     }
 
-    private string Shown(Kept? kept)
+    // With no tick to show, the pool and a dash: an empty item takes no room on the
+    // bar, so a mana caster fighting for two minutes, whose ticks the casts hide, saw
+    // the item vanish once Settings stopped previewing its sample and read it as
+    // removed (report paradigm-20261029-213729). A pool the character hasn't got
+    // shows nothing.
+    private string Shown(Kept? kept, string pool, bool hasPool)
     {
-        if (kept is null || _clock() - kept.At > LastTickShownFor) return string.Empty;
+        if (kept is null || _clock() - kept.At > LastTickShownFor) return hasPool ? $"{pool} –" : string.Empty;
         return kept.Position == _state.Position ? kept.Text : kept.TextWithPosture;
     }
 
@@ -317,7 +322,7 @@ public sealed class RegenReadout : IDisposable
         string Last(Kept? kept) => kept is null
             ? "(none kept)"
             : $"{Signed(kept.Delta)}, {Word(kept.Position)}, {(now - kept.At).TotalSeconds:0} s ago"
-              + (now - kept.At > LastTickShownFor ? " (too old: the bar shows nothing)" : string.Empty);
+              + (now - kept.At > LastTickShownFor ? " (too old: the bar shows a dash)" : string.Empty);
         return $"Regen readout (status bar), {Word(_state.Position)} now:\n"
             + $"- HP last tick: {Last(_hpLast)}\n"
             + $"- HP expected: {Logged(HpExpectedText)} — {_hpExpectedInputs}\n"

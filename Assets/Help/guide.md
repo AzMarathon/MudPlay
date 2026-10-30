@@ -5504,7 +5504,7 @@ Above the rows, **Preview** draws the bar as it would look with your edits so fa
 
 The Combat and Session stats items are the same tallies the **Session Stats** window shows.
 
-**The regen items.** The two *last tick* items show what the last HP or mana (kai) regen tick gave, `HP +7`. A heal isn't counted, and neither is a tick that filled the pool, since it was cut short. When the tick came in another posture than yours now, it says so (`HP +7 (resting)`). The item empties after two minutes without a tick, and when you disconnect, leave the game, die, load a profile or switch game data. The two *expected* items show what your level, stats, worn gear, race, class and completed quests say a tick gives in your posture. They use the stats from your last `stat`, which are kept with the profile, so they show from the start once a character has read `stat` before; a character that never has shows nothing until it does. Buffs that raise HP regen aren't counted.
+**The regen items.** The two *last tick* items show what the last HP or mana (kai) regen tick gave, `HP +7`. A heal isn't counted, and neither is a tick that filled the pool, since it was cut short. When the tick came in another posture than yours now, it says so (`HP +7 (resting)`). After two minutes without a tick it shows a dash (`MA –`), as it does after you disconnect, leave the game, die, load a profile or switch game data. In a fight that's usual for mana: a tick that comes with casts can't be told apart from them. The two *expected* items show what your level, stats, worn gear, race, class and completed quests say a tick gives in your posture. They use the stats from your last `stat`, which are kept with the profile, so they show from the start once a character has read `stat` before; a character that never has shows nothing until it does. Buffs that raise HP regen aren't counted.
 - **HP on Stock:** `HP +6/tick` every 30 s; resting, `HP +18/rest tick (+6/30s)`, since the 30 s tick keeps paying beside the rest tick.
 - **HP on Paradigm:** the 30 s amount comes in thirds, with the regen bonus on the last of each three: `HP +2/+2/+3 per 10s`. Resting, a gain comes every 5 s, three small then three whole: `HP +2/+2/+3 then +7/+7/+7 per 5s`. Lying down again starts back at the small ones.
 - **Mana:** `MA +29/tick` every 30 s. Meditating adds a tick every 15 s that pays your base without the mana-regen bonus: `MA +30/meditate tick (+29/30s)`. A mystic's kai regenerates 1 a tick, and 1 more for every 100 mana regen from gear, race, class and quests together: `KAI +2/tick`. Meditating (Paradigm only) brings the kai ticks faster but no bigger: `KAI +2/meditate tick`. A class with no mana shows nothing.
@@ -6968,6 +6968,12 @@ With more than one able member, the first to report the way clear moves you on, 
 **Default:** 10
 **What it does:** Caps how many times the walker retries **picking** a locked door before giving up (picking is probabilistic — it can fail even when your skill meets the requirement). **Bashing has no cap**: bashing a door drains HP, so instead of a fixed retry count the walker bashes a genuinely bashable door until it opens, pausing to **rest to your rest-max** whenever HP dips to your Health-tab rest trigger, then resuming. A door that isn't actually bashable (strength/requirement too high) still falls through to picking or a key rather than bashing forever. The one bash with a cap is at a door the game data gives only a key for (see **Doors**): it stops after this many misses, like the picks. When the picks run out and nothing else opens the door, the walk goes round it if it can (see **Doors** under *The map and obstacles*).
 
+### Hidden exit max searches
+
+**Default:** 20
+**Available options:** 0–100; **0** is no limit
+**What it does:** Caps how many times a walk or loop sends `search <dir>` for a hidden exit it needs and hasn't found yet, before it stops at that exit. A search can fail even when your skill is up to it, so a low cap can stop a walk at an exit it would have found with a few more tries. At **0** it keeps searching until the exit shows, you stop the walk, or you leave the room. A MegaMUD profile import takes MegaMUD's own search limit; MegaMUD's 0 (no searching) comes in as 1, since 0 here means no limit.
+
 ### Pick locks instead of bashing
 
 **Default:** Off (bash first)
@@ -7729,6 +7735,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max pick / Pick over bash | 10 / false | 1–100 / bool | `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
+| Hidden exit max searches | 20 | 0–100 (0 = no limit) | `MaxHiddenSearchAttempts` | Models/Profile/OtherSettings.cs |
 | Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |

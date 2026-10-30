@@ -660,7 +660,19 @@ public sealed class ProfileService
         // The realm alone: the Recent menu, Profile Management and the realm catalogue
         // ask this of every saved character, and reading each whole profile (its
         // records, its values checked) for one string held up the UI thread.
-        return JsonStore.Load<RealmOnly>(AppPaths.CharacterProfileFile(reference.Bbs, reference.Name))?.Realm;
+        string path = AppPaths.CharacterProfileFile(reference.Bbs, reference.Name);
+        try
+        {
+            return JsonStore.Load<RealmOnly>(path)?.Realm;
+        }
+        // A file that can't be read answers as no realm: a profile left as zeros by a
+        // power cut mid-write stopped the client at startup, asked for its realm
+        // before the window was up (report Crash-20261029-161814). Loading it says why.
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            Log?.Warn(LogCategory, $"Couldn't read the realm of '{reference.Name}' on '{reference.Bbs}': {ex.Message}");
+            return null;
+        }
     }
 
     private sealed class RealmOnly
