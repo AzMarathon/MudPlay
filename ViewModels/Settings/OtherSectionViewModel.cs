@@ -99,6 +99,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
 
     // Walker max pick <dir> retries before falling back to bash / failing.
     [ObservableProperty] private int _maxPickAttempts = 10;
+    [ObservableProperty] private int _maxHiddenSearchAttempts = 20;
 
     // Auto-Sneak stands down while a carried item leaves the sn chance under this
     // percentage. Read live by CarriedStealthPenalty through the resolver.
@@ -249,6 +250,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             UtilizeDisarmTrapsIfAble = UtilizeDisarmTrapsIfAble,
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
+            MaxHiddenSearchAttempts = Math.Clamp(MaxHiddenSearchAttempts, 1, 100),
             SneakStandDownChance  = Math.Clamp(SneakStandDownChance,  0, 95),
             PicklocksOverBash     = PicklocksOverBash,
             HideWhenDiscarding    = HideWhenDiscarding,
@@ -333,6 +335,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         UtilizeDisarmTrapsIfAble = dto.UtilizeDisarmTrapsIfAble;
         MaxTrapDisarmAttempts = dto.MaxTrapDisarmAttempts;
         MaxPickAttempts       = dto.MaxPickAttempts;
+        MaxHiddenSearchAttempts = dto.MaxHiddenSearchAttempts;
         SneakStandDownChance  = dto.SneakStandDownChance;
         PicklocksOverBash     = dto.PicklocksOverBash;
         HideWhenDiscarding    = dto.HideWhenDiscarding;
@@ -389,6 +392,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnUtilizeDisarmTrapsIfAbleChanged(bool value) => MarkDirty();
     partial void OnMaxTrapDisarmAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
+    partial void OnMaxHiddenSearchAttemptsChanged(int value) => MarkDirty();
     partial void OnSneakStandDownChanceChanged(int value)  => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();

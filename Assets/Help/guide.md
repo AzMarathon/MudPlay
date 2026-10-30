@@ -6968,6 +6968,12 @@ With more than one able member, the first to report the way clear moves you on, 
 **Default:** 10
 **What it does:** Caps how many times the walker retries **picking** a locked door before giving up (picking is probabilistic — it can fail even when your skill meets the requirement). **Bashing has no cap**: bashing a door drains HP, so instead of a fixed retry count the walker bashes a genuinely bashable door until it opens, pausing to **rest to your rest-max** whenever HP dips to your Health-tab rest trigger, then resuming. A door that isn't actually bashable (strength/requirement too high) still falls through to picking or a key rather than bashing forever. The one bash with a cap is at a door the game data gives only a key for (see **Doors**): it stops after this many misses, like the picks. When the picks run out and nothing else opens the door, the walk goes round it if it can (see **Doors** under *The map and obstacles*).
 
+### Hidden exit max searches
+
+**Default:** 20
+**Available options:** 1–100
+**What it does:** Caps how many times a walk or loop sends `search <dir>` for a hidden exit it needs and hasn't found yet, before it stops at that exit. A search can fail even when your skill is up to it, so a low cap can stop a walk at an exit it would have found with a few more tries. A MegaMUD profile import takes MegaMUD's own search limit, which can be as low as 1.
+
 ### Pick locks instead of bashing
 
 **Default:** Off (bash first)
@@ -7729,6 +7735,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max pick / Pick over bash | 10 / false | 1–100 / bool | `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
+| Hidden exit max searches | 20 | 1–100 | `MaxHiddenSearchAttempts` | Models/Profile/OtherSettings.cs |
 | Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |

@@ -1,13 +1,14 @@
 # Version history
 
-## 3.190.5
+## 3.190.6
 
 - A profile file damaged by a power cut no longer stops the client from starting; it opens the default profile and says why
 - Settings and profiles are written to the disk in full before they replace the old file
 - GMCP shadow compares vitals as the server sends them, so regen ticks no longer flood the warnings
 - An exit taken by a command (`go path`) no longer counts as a shown exit with server room data
 - The status bar's last-tick regen items show a dash instead of vanishing when no recent tick is known
-- bug reports addressed: Crash-20261029-161814, paradigm-20261029-213729
+- Settings → Other gets a Hidden exit max searches setting, and saving that tab no longer resets it
+- bug reports addressed: Crash-20261029-161814, paradigm-20261029-213729, paradigm-20261029-230237
 
 ## 3.190.1
 

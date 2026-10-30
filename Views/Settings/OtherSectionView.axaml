@@ -91,6 +91,17 @@
                                ToolTip.Tip="Caps the `disarm trap &lt;dir&gt;` retry loop. Default 5."/>
             </Grid>
 
+            <!-- Walker / loop hidden-exit search cap. Read live on each retry. -->
+            <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto" Margin="0,12,0,0" ColumnSpacing="8" RowSpacing="4">
+                <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Hidden exit max searches"/>
+                <NumericUpDown Grid.Row="0" Grid.Column="1"
+                               Value="{Binding MaxHiddenSearchAttempts, Mode=TwoWay}"
+                               Minimum="1" Maximum="100" Increment="1"
+                               FormatString="0" ShowButtonSpinner="True"
+                               Width="120" MinWidth="120"
+                               ToolTip.Tip="Caps the `search &lt;dir&gt;` retries when a walk or loop needs a hidden exit it hasn't found yet. Default 20. A search can fail even with the skill for it, so a low cap can stop the walk at an exit it would have found."/>
+            </Grid>
+
             <!-- Walker door pick cap + verb preference. Bashing has no cap: a
                  bashable door is bashed until it opens, resting to rest-max
                  whenever HP dips (see Health tab). The "Pick locks instead of
