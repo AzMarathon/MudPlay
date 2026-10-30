@@ -1,7 +1,9 @@
+using System.Text.Json.Serialization;
+
 namespace MudPlay.Models.GameData;
 
-// User-defined incoming-text pattern → response. Per-character; persisted
-// on CharacterProfile. Loaded into TriggerEngine on profile load; the
+// User-defined incoming-text pattern → response. Kept on the character, the realm
+// or the BBS (Level). Loaded into TriggerEngine on profile load; the
 // engine subscribes to LineExtractor, ChatRouter, and LogService —
 // filtering each emitted line by Scope, matching with MatchType + Pattern,
 // capturing {name} / {1} placeholders into the trigger-wildcard store
@@ -16,7 +18,8 @@ namespace MudPlay.Models.GameData;
 // and sends a bare carriage return. SoundFile is an optional sound file
 // played on match, gated and levelled by the Trigger cue on Settings → Sounds.
 //
-// Every trigger is the character's own, saved on CharacterProfile.Triggers.
+// A character's own triggers are saved on CharacterProfile.Triggers; a realm's and a
+// BBS's in a file every character on it shares (SharedTriggerFile).
 public sealed record Trigger(
     string Name,
     bool Enabled,
@@ -24,7 +27,18 @@ public sealed record Trigger(
     TriggerMatchType MatchType,
     string Pattern,
     string Response,
-    string? SoundFile = null);
+    string? SoundFile = null)
+{
+    // Where the trigger is kept, and so who it fires for. Not written out: the file
+    // it is kept in says.
+    [JsonIgnore] public TriggerLevel Level { get; init; }
+}
+
+// Where a trigger is kept: on the character, with the realm (every character
+// playing it) or with the BBS (every character on it). Of triggers sharing a name,
+// the nearest is the one used, as with settings (user, 2026-10-30), so a character
+// can change or switch off a shared trigger for itself with its own copy.
+public enum TriggerLevel { Character, Realm, Bbs }
 
 // What syntax Trigger.Pattern uses.
 public enum TriggerMatchType

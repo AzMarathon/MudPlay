@@ -11,8 +11,9 @@ using MudPlay.Terminal;
 
 namespace MudPlay.Services;
 
-// In-memory cache of the active character's triggers + the app-session named
-// variable store, plus the runtime dispatch path.
+// In-memory cache of the active character's triggers (its own, its realm's and its
+// BBS's: Trigger.Level) + the app-session named variable store, plus the runtime
+// dispatch path.
 //
 // Three subscription surfaces: ChatRouter.EntryClassified for chat-scoped
 // triggers, LineExtractor.LineEmitted for GameMessages (non-chat) lines, and
@@ -63,8 +64,18 @@ public sealed class TriggerEngine
     // LineExtractor.LineEmitted path.
     private readonly Queue<(DateTimeOffset At, string Text)> _recentChat = new();
 
-    // The loaded character's triggers — empty when no profile is active.
+    // The loaded character's triggers: its own, then its realm's, then its BBS's
+    // (Trigger.Level). Empty when no profile is active.
     public ObservableCollection<Trigger> Triggers { get; } = new();
+
+    // The realm's and the BBS's triggers, and where their files are for the loaded
+    // character (ShareWith).
+    private readonly SharedTriggerFile _realm;
+    private readonly SharedTriggerFile _bbs;
+    private Func<string?>? _realmFile;
+    private Func<string?>? _bbsFile;
+    // The nearest level each trigger name is kept at: only the trigger kept there fires.
+    private Dictionary<string, TriggerLevel> _nearest = new(StringComparer.OrdinalIgnoreCase);
 
     // App-session-scoped trigger-wildcard store. Populated by pattern captures;
     // read during Response / Notify interpolation. Trigger-only — see the class
@@ -83,13 +94,19 @@ public sealed class TriggerEngine
         _profileSet = profileSet;
         // Before the first load below, which logs what a profile took.
         _log = log;
+        _realm = new SharedTriggerFile(TriggerLevel.Realm, log);
+        _bbs = new SharedTriggerFile(TriggerLevel.Bbs, log);
         profile.ProfileLoaded += LoadFrom;
         profile.ProfileClosed += Clear;
         profile.ProfileSaving += SnapshotForSave;
         // Bust the regex cache whenever the trigger list mutates — Save
         // path uses Replace, which swaps in a new Trigger record, so the
         // old cached compile may no longer match the new pattern.
-        Triggers.CollectionChanged += (_, _) => _regexCache.Clear();
+        Triggers.CollectionChanged += (_, _) =>
+        {
+            _regexCache.Clear();
+            _nearest = Nearest(Triggers);
+        };
         if (profile.Current is { } current) LoadFrom(current);
     }
 
@@ -130,34 +147,134 @@ public sealed class TriggerEngine
         _sender = sender;
     }
 
-    // Insert a new trigger and save the profile.
-    public void Add(Trigger trigger)
+    // Where the realm's and the BBS's triggers are kept for the loaded character, or
+    // null with no realm or BBS to share with. Asked again at each load.
+    public void ShareWith(Func<string?> realmFile, Func<string?> bbsFile)
     {
-        ArgumentNullException.ThrowIfNull(trigger);
-        Triggers.Add(trigger);
-        _profile.Save();
+        _realmFile = realmFile;
+        _bbsFile = bbsFile;
+        ReloadShared();
     }
 
-    // Replace an existing trigger by reference. Returns false when the original
-    // isn't found.
+    // The levels a trigger can be kept at now: the character's, and the realm's and
+    // the BBS's when there is one to share with.
+    public IReadOnlyList<TriggerLevel> Levels
+    {
+        get
+        {
+            List<TriggerLevel> levels = [TriggerLevel.Character];
+            if (_realm.Path is not null) levels.Add(TriggerLevel.Realm);
+            if (_bbs.Path is not null) levels.Add(TriggerLevel.Bbs);
+            return levels;
+        }
+    }
+
+    // A trigger of the same name kept nearer is the one used (TriggerLevel).
+    public bool IsOverridden(Trigger trigger) =>
+        _nearest.TryGetValue(trigger.Name.Trim(), out TriggerLevel nearest) && nearest < trigger.Level;
+
+    // The nearest level each trigger name in the list is kept at.
+    public static Dictionary<string, TriggerLevel> Nearest(IEnumerable<Trigger> triggers)
+    {
+        Dictionary<string, TriggerLevel> nearest = new(StringComparer.OrdinalIgnoreCase);
+        foreach (Trigger t in triggers)
+        {
+            string name = t.Name.Trim();
+            if (!nearest.TryGetValue(name, out TriggerLevel held) || t.Level < held) nearest[name] = t.Level;
+        }
+        return nearest;
+    }
+
+    // Reads the realm's and the BBS's triggers again, for the loaded character's
+    // realm and BBS.
+    public void ReloadShared()
+    {
+        _realm.Open(_realmFile?.Invoke());
+        _bbs.Open(_bbsFile?.Invoke());
+        ShowShared();
+    }
+
+    // Takes in another client's change to the realm's or the BBS's triggers.
+    public void TakeInOutsideChanges()
+    {
+        bool realm = _realm.TakeIn();
+        bool bbs = _bbs.TakeIn();
+        if (realm || bbs) ShowShared();
+    }
+
+    // Keep a new trigger at its level: a character's is saved with the profile, a
+    // realm's or a BBS's written to its file. False when it couldn't be kept.
+    public bool Add(Trigger trigger)
+    {
+        ArgumentNullException.ThrowIfNull(trigger);
+        if (trigger.Level == TriggerLevel.Character)
+        {
+            Triggers.Insert(Triggers.Count(t => t.Level == TriggerLevel.Character), trigger);
+            _profile.Save();
+            return true;
+        }
+        if (!Shared(trigger.Level).Change(list => list.Add(trigger))) return false;
+        ShowShared();
+        return true;
+    }
+
+    // Replace an existing trigger. One moved to another level is kept at the new
+    // level before it leaves the old, so a failed write loses nothing. Returns false
+    // when the original isn't found or the change couldn't be kept.
     public bool Replace(Trigger original, Trigger updated)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(updated);
-        int index = Triggers.IndexOf(original);
-        if (index < 0) return false;
-        Triggers[index] = updated;
-        _profile.Save();
-        return true;
+        if (original.Level != updated.Level)
+        {
+            if (!Add(updated)) return false;
+            Remove(original);
+            return true;
+        }
+        if (original.Level == TriggerLevel.Character)
+        {
+            int index = Triggers.IndexOf(original);
+            if (index < 0) return false;
+            Triggers[index] = updated;
+            _profile.Save();
+            return true;
+        }
+        bool found = false;
+        if (!Shared(original.Level).Change(list =>
+            {
+                int index = list.IndexOf(original);
+                found = index >= 0;
+                if (found) list[index] = updated;
+            }))
+            return false;
+        ShowShared();
+        return found;
     }
 
-    // Remove a trigger by reference. Returns false if not found.
+    // Remove a trigger. Returns false if not found or the change couldn't be kept.
     public bool Remove(Trigger trigger)
     {
         ArgumentNullException.ThrowIfNull(trigger);
-        bool removed = Triggers.Remove(trigger);
-        if (removed) _profile.Save();
-        return removed;
+        if (trigger.Level == TriggerLevel.Character)
+        {
+            bool removed = Triggers.Remove(trigger);
+            if (removed) _profile.Save();
+            return removed;
+        }
+        bool gone = false;
+        if (!Shared(trigger.Level).Change(list => gone = list.Remove(trigger))) return false;
+        ShowShared();
+        return gone;
+    }
+
+    private SharedTriggerFile Shared(TriggerLevel level) => level == TriggerLevel.Realm ? _realm : _bbs;
+
+    // The character's own triggers stay first; the realm's and then the BBS's follow.
+    private void ShowShared()
+    {
+        for (int i = Triggers.Count - 1; i >= 0; i--)
+            if (Triggers[i].Level != TriggerLevel.Character) Triggers.RemoveAt(i);
+        foreach (Trigger t in _realm.Triggers.Concat(_bbs.Triggers)) Triggers.Add(t);
     }
 
     // Empty the wildcard store — the viewer's "Clear" affordance. Fires
@@ -230,6 +347,7 @@ public sealed class TriggerEngine
         {
             if (!t.Enabled) continue;
             if (t.Scope != scope) continue;
+            if (IsOverridden(t)) continue;
             TryFire(t, text);
         }
     }
@@ -483,8 +601,9 @@ public sealed class TriggerEngine
     {
         Triggers.Clear();
         if (!profile.OwnsTriggers) TakeFirstList(profile);
-        if (profile.Triggers is null) return;
-        foreach (Trigger t in profile.Triggers) Triggers.Add(t);
+        if (profile.Triggers is not null)
+            foreach (Trigger t in profile.Triggers) Triggers.Add(t);
+        ReloadShared();
     }
 
     // Give a profile the triggers it used to get from outside itself. A character
@@ -520,9 +639,15 @@ public sealed class TriggerEngine
             : $"Started with the {taken} default trigger(s).");
     }
 
-    private void Clear() => Triggers.Clear();
+    private void Clear()
+    {
+        Triggers.Clear();
+        _realm.Open(null);
+        _bbs.Open(null);
+    }
 
-    private void SnapshotForSave(CharacterProfile profile) => profile.Triggers = Triggers.ToList();
+    private void SnapshotForSave(CharacterProfile profile) =>
+        profile.Triggers = Triggers.Where(t => t.Level == TriggerLevel.Character).ToList();
 
     // The triggers in a file, or none when it is missing or unreadable.
     private List<Trigger> ReadTriggers(string path)

@@ -4499,6 +4499,11 @@ How to keep it current:
 - Checks: turning a literal pattern into a regex (wildcards, numbered captures), interpolating variables into the response, capture-and-reply end to end, the master switch skipping triggers, and the wildcard store and its events.
 - Why: numbered-wildcard bug; master-switch rule (user, 2026-10-09).
 
+### TriggerLevelTests.cs
+- Covers: Services/TriggerEngine (Trigger.Level, ShareWith, Add / Replace / Remove by level, TakeInOutsideChanges, IsOverridden), Services/SharedTriggerFile, driven as several clients: characters saved on a test BBS, each engine fed through ServerFeed and sending through SetSender.
+- Checks: of triggers sharing a name the nearest fires (character over realm over BBS); a character's own copy switched off silences the shared one for that character only; a realm's and a BBS's triggers reach the other clients at their next poll, a BBS's on another realm of the board and a realm's on its own realm only; two clients adding before either took in the other's keep both; a trigger moved to the realm leaves the character's saved profile and reaches the others; a character loaded on another realm has that realm's triggers; a damaged shared file isn't written over and the change isn't made; with no realm or BBS only the character's level is offered.
+- Why: triggers per character, per realm or per BBS (user, 2026-10-30), shared live across clients without one client's edit lost to another's older copy.
+
 ### TriggerOwnershipTests.cs
 - Covers: Services/TriggerEngine (profile load/save), Services/ProfileService
 - Checks: an older profile takes a one-time copy of the game-data set's legacy triggers; a new character doesn't; edits save on the character.

@@ -77,9 +77,12 @@ public static class BugReportAutomationSections
 
         sb.Append("**Triggers** (").Append(triggers.Count).Append(")\n\n");
         if (triggers.Count == 0) sb.Append("_(none)_\n");
+        Dictionary<string, TriggerLevel> nearest = TriggerEngine.Nearest(triggers);
         foreach (Trigger t in triggers)
             Definition(sb, scrubber, t.Name + t.Pattern + t.Response,
-                $"{Name(t.Name)}{Off(t.Enabled)} — {t.Scope}, {t.MatchType}: `{t.Pattern}` → `{censor.CensorSentCommand(t.Response)}`"
+                $"{Name(t.Name)}{Off(t.Enabled)} [{t.Level}"
+                + (nearest[t.Name.Trim()] < t.Level ? $", overridden by the {nearest[t.Name.Trim()]}'s" : string.Empty)
+                + $"] — {t.Scope}, {t.MatchType}: `{t.Pattern}` → `{censor.CensorSentCommand(t.Response)}`"
                 + (string.IsNullOrEmpty(t.SoundFile) ? string.Empty : " (plays a sound)"));
 
         sb.Append("\n**Aliases** (").Append(aliases.Count).Append(")\n\n");

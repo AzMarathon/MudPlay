@@ -11,7 +11,8 @@ using MudPlay.Models.GameData;
 namespace MudPlay.ViewModels.GameData.Edit;
 
 // Per-record edit dialog for Game Data Browser → Triggers. Editable fields cover the full Trigger
-// record: Name / Enabled / Scope / MatchType / Pattern / Response, plus an optional Sound sidecar.
+// record: Name / Enabled / Scope / MatchType / Pattern / Response, plus an optional Sound sidecar,
+// and where it is kept (Applies to: Trigger.Level).
 //
 // Validation is live: name + pattern must be non-empty, and regex patterns must compile. The
 // capture-hints panel parses the current pattern for {name} placeholders (Literal mode) or
@@ -61,6 +62,11 @@ public sealed partial class TriggerEditDialogViewModel : ObservableObject, Servi
 
     [ObservableProperty] private string _response = string.Empty;
     [ObservableProperty] private string _soundFile = string.Empty;
+    [ObservableProperty] private TriggerLevel _level;
+
+    // Where the trigger can be kept: the levels open now (TriggerEngine.Levels), and
+    // the one it is kept at already.
+    public IReadOnlyList<LevelOption> LevelOptions { get; }
 
     // Available enum values for the Scope dropdown.
     public IReadOnlyList<ScopeOption> ScopeOptions { get; } = new[]
@@ -131,11 +137,14 @@ public sealed partial class TriggerEditDialogViewModel : ObservableObject, Servi
         }
     }
 
-    public TriggerEditDialogViewModel(Trigger original, bool isNew)
+    public TriggerEditDialogViewModel(Trigger original, bool isNew, IReadOnlyList<TriggerLevel>? levels = null)
     {
         _original = original;
         _isNew    = isNew;
 
+        LevelOptions = (levels ?? [TriggerLevel.Character]).Append(original.Level).Distinct().Order()
+            .Select(l => new LevelOption(l, LevelLabel(l))).ToArray();
+        Level     = original.Level;
         Name      = original.Name;
         Enabled   = original.Enabled;
         Scope     = original.Scope;
@@ -191,9 +200,19 @@ public sealed partial class TriggerEditDialogViewModel : ObservableObject, Servi
             MatchType: MatchType,
             Pattern:   Pattern,
             Response:  Response ?? string.Empty,
-            SoundFile: string.IsNullOrWhiteSpace(SoundFile) ? null : SoundFile.Trim());
+            SoundFile: string.IsNullOrWhiteSpace(SoundFile) ? null : SoundFile.Trim())
+        {
+            Level = Level,
+        };
         CloseRequested?.Invoke(updated);
     }
+
+    public static string LevelLabel(TriggerLevel level) => level switch
+    {
+        TriggerLevel.Realm => "Every character on this realm",
+        TriggerLevel.Bbs   => "Every character on this BBS",
+        _                  => "Only this character",
+    };
 
     [RelayCommand]
     private void Cancel() => CloseRequested?.Invoke(null);
@@ -203,4 +222,7 @@ public sealed partial class TriggerEditDialogViewModel : ObservableObject, Servi
 
     // One match-type dropdown row — pairs the enum value with its friendly label.
     public sealed record MatchOption(TriggerMatchType Value, string Label);
+
+    // One "Applies to" dropdown row.
+    public sealed record LevelOption(TriggerLevel Value, string Label);
 }
