@@ -100,8 +100,7 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             AppServices.Current?.RoomSearch?.QuestKillRooms();
         ItemSourceIndex? itemSources = AppServices.Current?.ItemSources;
         MonsterDropIndex? itemDrops = AppServices.Current?.MonsterDrops;
-        string TierTitle(CrawledQuest c) => quests.Resolve(c.Flag, c.Step).Name is { } n && !string.IsNullOrWhiteSpace(n)
-            ? n : QuestTextFormatter.FallbackTitle(c);
+        string TierTitle(CrawledQuest c) => QuestTextFormatter.Title(quests, c);
 
         foreach (CrawledQuest q in QuestCrawler.Crawl(gameData, classId))
         {

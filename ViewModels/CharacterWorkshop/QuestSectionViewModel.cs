@@ -218,7 +218,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
                 var steps = new ObservableCollection<QuestStepRowViewModel>();
                 var card = new QuestCardViewModel(
                     q.Flag, q.Step,
-                    ResolveTitle(def, q),
+                    QuestTextFormatter.Title(_quests, q),
                     requiredLevel,
                     QuestTextFormatter.Level(requiredLevel),
                     QuestTextFormatter.Bonuses(q.Bonuses),
@@ -307,7 +307,7 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             : null;
         // A later tier opens with a plain "-Complete <tier> first-" line, which is no
         // checkbox, so the checkbox indices above still line up.
-        string? prior = QuestTextFormatter.PriorTierLine(_gameData, q, c => ResolveTitle(_quests.Resolve(c.Flag, c.Step), c));
+        string? prior = QuestTextFormatter.PriorTierLine(_gameData, q, c => QuestTextFormatter.Title(_quests, c));
         AddStepRows(card, string.Join("\n", new[] { prior }.OfType<string>().Concat(entries.Select(e => e.Line))),
             prog, provenDone);
     }
@@ -555,10 +555,6 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
         int num = GetInt(_gameData.FindRowByName("Races", _stats.Race), "Number");
         return num > 0 ? num : null;
     }
-
-    // The user's name for the quest, else the fallback title built from the crawl.
-    private static string ResolveTitle(QuestDefinition def, CrawledQuest q) =>
-        !string.IsNullOrWhiteSpace(def.Name) ? def.Name : QuestTextFormatter.FallbackTitle(q);
 
     private static int GetInt(GameRow? row, string property)
     {

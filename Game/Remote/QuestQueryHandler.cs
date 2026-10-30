@@ -196,15 +196,8 @@ public sealed class QuestQueryHandler : IDisposable
                 yield return (flag, n);
     }
 
-    // The user-set name for a flag (first named band), or empty when none — feeds the
-    // display label so a named quest shows its name rather than the AbilityNames code.
-    private string ResolveName(int flag, List<QuestProgress> log)
-    {
-        foreach (int step in _quests.StepsForFlag(flag).Concat(log.Where(p => p.Flag == flag).Select(p => p.Step)))
-        {
-            string name = _quests.Resolve(flag, step).Name;
-            if (!string.IsNullOrWhiteSpace(name)) return name;
-        }
-        return string.Empty;
-    }
+    // The quest's name for a flag, or empty when none — feeds the display label so a
+    // named quest shows its name rather than the AbilityNames code.
+    private string ResolveName(int flag, List<QuestProgress> log) =>
+        _quests.FlagName(flag, log.Where(p => p.Flag == flag).Select(p => p.Step));
 }

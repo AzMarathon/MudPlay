@@ -23,7 +23,7 @@ public sealed partial class GmcpIntegration
         "Anomaly.Room.Info", "Anomaly.Room.Occupants", "Anomaly.Room.Lair", "Anomaly.Mob",
         "Anomaly.Items.List", "Anomaly.Items.Detail", "Anomaly.Items.Usable", "Anomaly.Shop.List",
         "Anomaly.Spells.List", "Anomaly.Char.Effects", "Anomaly.Char.Abilities",
-        "Anomaly.Group.Members", "Anomaly.Comm.Line",
+        "Anomaly.Group.Members", "Anomaly.Comm.Line", "Anomaly.Quests.Names",
     ];
 
     private readonly PromptParser _player;
@@ -228,6 +228,7 @@ public sealed partial class GmcpIntegration
                 ApplyRoomOnceTextShown(State.Snapshot(applying)!.Value);
             }
             ApplyFallback(package, ref applying);
+            ApplyQuestNames(package, ref applying);
         }
         catch (Exception ex) when (ex is InvalidOperationException or FormatException or OverflowException
                                        or ArgumentException or KeyNotFoundException)

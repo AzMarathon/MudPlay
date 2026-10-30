@@ -38,7 +38,7 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
     private bool _disposed;
 
     // Raised with a quest's display name when it becomes available. The app subscribes and
-    // writes the "[<name> Quest is Now Available]" line to the terminal.
+    // writes its AvailableLine to the terminal.
     public event Action<string>? QuestBecameAvailable;
 
     public QuestAvailabilityAnnouncer(
@@ -122,6 +122,17 @@ public sealed class QuestAvailabilityAnnouncer : IDisposable
             if (enabled) Raise(q.Name);
         }
         if (_baselineLevel < level) _baselineLevel = level;
+    }
+
+    // The terminal line for an available quest. A name that already ends in "Quest"
+    // ("Cartographer's Quest", a realm's "1st Alignment Quest") is shown as it is, not
+    // as "… Quest Quest".
+    public static string AvailableLine(string name)
+    {
+        string shown = name.Trim();
+        return shown.EndsWith("Quest", StringComparison.OrdinalIgnoreCase)
+            ? $"[{shown} is Now Available]"
+            : $"[{shown} Quest is Now Available]";
     }
 
     private bool AnnounceEnabled() => _profile.Current?.AnnounceAvailableQuests ?? true;
