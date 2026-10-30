@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.190.1**
-> - Windows open on the client's monitor: centred over the window they were opened from, or at their remembered spot moved onto that monitor
+> **Version 3.190.2**
+> - A profile file damaged by a power cut no longer stops the client from starting; it opens the default profile and says why
+> - Settings and profiles are written to the disk in full before they replace the old file
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

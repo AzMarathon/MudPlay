@@ -356,9 +356,9 @@ How to keep it current:
 - Why: the PvP checks at each room arrival and the bash rule a route search reads parsed bbs.json from disk on every call, 70 KB a time, which on Windows cost each search and arrival far more (report paradigm-20261026-201217). Another client's change must still be seen right away.
 
 ### BbsRealmTests.cs
-- Covers: Services/BbsProfileStore, ProfileService, RealmCatalog, Models/Settings/BbsProfile.RealmFor
-- Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades.
-- Why: the realm-tier migration from BBS-tier files.
+- Covers: Services/BbsProfileStore, ProfileService, RealmCatalog, Models/Settings/BbsProfile.RealmFor; JsonStore.Save
+- Checks: a pre-realm BBS migrates to one realm with its settings and data files; RealmFor matching; renaming a realm repoints its characters; the realm catalog add/rename/remove cascades. A profile.json of zero bytes answers RealmOf as no realm and its Load throws naming the file; a saved profile reads back whole with no temporary file left.
+- Why: the realm-tier migration from BBS-tier files; a profile zeroed by a power cut stopped the client at startup (report `Crash-20261029-161814`).
 
 ### BbsRealmMergeTests.cs
 - Covers: Services/JsonThreeWayMerge (keyed arrays, renames), BbsProfileStore.Save, ViewModels/Settings/BbsSectionViewModel, Services/RealmCatalog (Rename, Remove), Game/Recovery/StandardListContradictions

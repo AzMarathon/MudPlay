@@ -84,6 +84,36 @@ public sealed class BbsRealmTests : IDisposable
         Assert.Equal("PVP", profiles.RealmOf(new ProfileRef(_bbs, "Paladin")));
     }
 
+    // A profile.json left as zero bytes by a power cut mid-write: asked for its realm
+    // at startup, before the window was up, it threw and the client never started
+    // (report Crash-20261029-161814). It answers as no realm; loading it still throws
+    // with the file named, which the startup auto-load turns into the default profile
+    // and a notice.
+    [Fact]
+    public void AProfileLeftAsZeroBytes_HasNoRealm_AndItsLoadSaysWhy()
+    {
+        ProfileRef monk = Seed("Monk");
+        File.WriteAllBytes(AppPaths.CharacterProfileFile(_bbs, "Monk"), new byte[4096]);
+        ProfileService profiles = new();
+
+        Assert.Null(profiles.RealmOf(monk));
+        InvalidDataException thrown = Assert.Throws<InvalidDataException>(() => profiles.Load(_bbs, "Monk"));
+        Assert.Contains("profile.json", thrown.Message);
+    }
+
+    // A save is whole on the disk, with no temporary file left beside it.
+    [Fact]
+    public void ASavedProfile_ReadsBackWhole_AndLeavesNoTemporaryFile()
+    {
+        ProfileRef priest = Seed("Priest");
+        new ProfileService().AssignRealm(priest, "PVE");
+
+        Assert.Equal("PVE", new ProfileService().RealmOf(priest));
+        string folder = Path.GetDirectoryName(AppPaths.CharacterProfileFile(_bbs, "Priest"))!;
+        Assert.Empty(Directory.GetFiles(folder, "*.tmp"));
+        Assert.NotEqual(0, File.ReadAllBytes(AppPaths.CharacterProfileFile(_bbs, "Priest"))[0]);
+    }
+
     private ProfileRef Seed(string name)
     {
         string path = AppPaths.CharacterProfileFile(_bbs, name);
