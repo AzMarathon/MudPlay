@@ -4288,8 +4288,8 @@ How to keep it current:
 
 ### TimeAnalysisTrackerTests.cs
 - Covers: Game/Combat/TimeAnalysisTracker
-- Checks: activity split (waiting, moving window, attacking, resting HP or mana); affliction time tracked alongside, separately; the activity buckets sum to time on; Waiting split by the cause that held each stretch, adding up to it; counting starts on entering the game, pauses on suspend, and reset works; the Changed event.
-- Why: the Time Analysis panel (MegaMUD parity); Waiting's breakdown on hover (user, 2026-10-30).
+- Checks: activity split (waiting, moving window, a move on its way counted as moving until it lands, attacking, resting HP or mana); affliction time tracked alongside, separately; the activity buckets sum to time on; Waiting split by the cause that held each stretch, adding up to it; counting starts on entering the game, pauses on suspend, and reset works; the Changed event.
+- Why: the Time Analysis panel (MegaMUD parity); Waiting's breakdown on hover (user, 2026-10-30); report `paradigm-20261030-133853` (the second between a kill and the next room's display was booked to Waiting, once a fight).
 
 ### TimeZoneAbbreviationTests.cs
 - Covers: Services/TimeZoneAbbreviation

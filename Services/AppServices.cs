@@ -6523,6 +6523,7 @@ public sealed class AppServices
         };
         RoomTracker.StateChanged += Game.Map.RoomTracker.Named("time analysis", t =>
         {
+            TimeAnalysis.NoteMoveInFlight(t.NewConfidence == Game.Map.RoomConfidence.Pending);
             if (t.NewRoom is not null && !ReferenceEquals(t.NewRoom, t.PreviousRoom))
                 TimeAnalysis.NoteRoomChanged();
         });

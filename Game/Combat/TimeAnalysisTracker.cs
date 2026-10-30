@@ -9,7 +9,8 @@ namespace MudPlay.Game.Combat;
 //
 // The five activity buckets are mutually exclusive — at any instant the player
 // is in exactly one — so they partition the session and sum to "time on". A
-// priority resolves overlap: combat > movement > resting > waiting. Blinded /
+// priority resolves overlap: combat > movement (a move on its way, or the window
+// after a room change) > resting > waiting. Blinded /
 // poisoned / diseased / confused / held are overlays measured independently: an
 // affliction runs concurrently with whatever you're doing (you stay poisoned
 // through a fight), so folding it into the activity partition would swallow
@@ -73,6 +74,7 @@ public sealed class TimeAnalysisTracker
     private PlayerPosition _position;
     private int _hp, _maxHp, _ma, _maxMa;
     private DateTimeOffset? _lastRoomChangeAt;
+    private bool _moveInFlight;
     private string _waitCause = NothingRunning;
 
     // Activity partition (sums to TimeOn).
@@ -162,6 +164,17 @@ public sealed class TimeAnalysisTracker
         _waitCause = cause;
     }
 
+    // A move has gone out and the game hasn't yet shown where it landed (the room
+    // tracker's Pending). That second or so is travel: a loop that moves on the
+    // moment a fight ends would otherwise book it to Waiting after every kill.
+    public void NoteMoveInFlight(bool inFlight)
+    {
+        if (inFlight == _moveInFlight) return;
+        Settle(_clock());
+        _moveInFlight = inFlight;
+        Changed?.Invoke();
+    }
+
     // Arm the tracker: the player reached the in-game prompt, so begin
     // attributing wall-clock time. Idempotent within a session — only the first
     // call after construction / Suspend takes effect, so it's safe to wire to
@@ -231,6 +244,7 @@ public sealed class TimeAnalysisTracker
         _position = PlayerPosition.Standing;
         _hp = _maxHp = _ma = _maxMa = 0;
         _lastRoomChangeAt = null;
+        _moveInFlight = false;
         for (int i = 0; i < AfflictionCount; i++)
         {
             _afflictionOn[i] = false;
@@ -254,7 +268,9 @@ public sealed class TimeAnalysisTracker
         {
             Activity a = Classify(cursor);
             DateTimeOffset sliceEnd = now;
-            if (a == Activity.Moving && _lastRoomChangeAt is { } moved)
+            // A move in flight is travel until it lands, however long; only the
+            // window after a room change runs out by itself.
+            if (a == Activity.Moving && !_moveInFlight && _lastRoomChangeAt is { } moved)
             {
                 DateTimeOffset windowEnd = moved + MovementWindow;
                 if (windowEnd < sliceEnd) sliceEnd = windowEnd;
@@ -273,11 +289,12 @@ public sealed class TimeAnalysisTracker
     }
 
     // The active activity bucket at instant 'at', by priority: combat > movement
-    // (within the window) > resting > waiting. Afflictions are overlays and
+    // (a move in flight, or within the window) > resting > waiting. Afflictions are overlays and
     // deliberately absent here.
     private Activity Classify(DateTimeOffset at)
     {
         if (_inCombat) return Activity.Attacking;
+        if (_moveInFlight) return Activity.Moving;
         if (_lastRoomChangeAt is { } moved && at - moved < MovementWindow)
             return Activity.Moving;
         // Meditating regains mana; plain resting regains HP first, then mana

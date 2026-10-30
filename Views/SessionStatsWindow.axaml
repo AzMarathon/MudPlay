@@ -483,7 +483,7 @@
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Moving"
-                                   ToolTip.Tip="Time travelling: the few seconds after each room change."/>
+                                   ToolTip.Tip="Time travelling: from a move going out until the next room shows, and the few seconds after."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding MovingText}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">

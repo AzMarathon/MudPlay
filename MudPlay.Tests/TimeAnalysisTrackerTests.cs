@@ -65,6 +65,33 @@ public sealed class TimeAnalysisTrackerTests
         Assert.Equal(TimeSpan.Zero, s.Attacking);
     }
 
+    // A loop moves on the moment a fight ends; the game shows the next room about a
+    // second later. That second is travel, not Waiting: booked to Waiting it added
+    // a second after every kill (report paradigm-20261030-133853). A move that is
+    // out longer than the window stays travel until it lands.
+    [Fact]
+    public void AMoveOnItsWay_IsMoving_UntilItLands()
+    {
+        (TimeAnalysisTracker t, Clock c) = Make();
+        Combat(t, true);
+        c.Advance(9);
+        Combat(t, false);
+        t.NoteMoveInFlight(true);
+        c.Advance(1.1);
+        t.NoteMoveInFlight(false);
+        t.NoteRoomChanged();
+        Combat(t, true);
+        c.Advance(4);
+        Combat(t, false);
+        t.NoteMoveInFlight(true);
+        c.Advance(5);
+
+        TimeAnalysisStats s = t.Snapshot();
+        Assert.Equal(TimeSpan.Zero, s.Waiting);
+        Assert.Equal(TimeSpan.FromSeconds(6.1), s.Moving);
+        Assert.Equal(TimeSpan.FromSeconds(13), s.Attacking);
+    }
+
     // ----- Waiting by cause ----------------------------------------------
 
     // Each stretch of Waiting is booked to the cause that held across it, and the
