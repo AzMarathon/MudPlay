@@ -30,7 +30,7 @@ public static class MegaMudProfileImporter
         MapBbs(new Pass(ini, bbsLines, edits: null), new Models.Settings.BbsProfile());
         lines.AddRange(bbsLines);
         string? user = Clean(ini.Get("BBS", "UserID"));
-        string? password = Clean(ini.Get("BBS", "Password"));
+        string? password = DecodeBbsPassword(ini.Get("BBS", "Password"));
         if (user is not null || password is not null)
             lines.Add(new MegaMudImportLine("Login", "BBS user ID and password",
                 "for the BBS this character is added to (optional, see the tick box)"));
@@ -42,6 +42,35 @@ public static class MegaMudProfileImporter
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // MegaMUD keeps the BBS password in the `.ini` as a fixed 30-byte buffer written
+    // out as 60 hex digits, each byte a reversible per-position transform of the
+    // character there: out[i] = ( -( (i*i + pw[i]) mod 256 ) ) mod 256. The plaintext
+    // comes straight back with pw[i] = (-out[i] - i*i) mod 256, so it can go through
+    // MudPlay's own protection as plaintext like any login. A password shorter than the
+    // buffer is null-terminated and the bytes after the null are leftover memory, not
+    // zeros, so decoding stops at the first position that reads back 0x00; the field
+    // caps the password at 30 characters, so there is nothing past that to recover.
+    private static string? DecodeBbsPassword(string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored)) return null;
+        string hex = stored.Trim();
+        if (hex.Length % 2 != 0) return null;
+
+        byte[] bytes;
+        try { bytes = Convert.FromHexString(hex); }
+        catch (FormatException) { return null; } // not a hex string: leave the password unset
+
+        var chars = new char[bytes.Length];
+        int n = 0;
+        for (int i = 0; i < bytes.Length; i++)
+        {
+            int pw = (-bytes[i] - i * i) & 0xFF;
+            if (pw == 0) break; // null terminator: the password ends here
+            chars[n++] = (char)pw;
+        }
+        return n == 0 ? null : new string(chars, 0, n);
+    }
 
     // edits: what the user changed in the review, by MegaMudImportLine.EditKey. Each
     // stands in for the file's own value and goes through the same mapping.

@@ -289,6 +289,44 @@ public sealed class MegaMudProfileImporterTests
         Assert.Null(without.BbsCredentials);
     }
 
+    // MegaMUD obfuscates the stored password; the import decodes it so the login is
+    // kept as plaintext through MudPlay's own protection. The hex vectors are real
+    // megamud.exe output captured from a live install (2026-10-29).
+    [Theory]
+    [InlineData("8C9A8983F0E7DCCFC0AF9C8770573C1F00DFBC9770471CEFC08F5C27F0B7", "test")]
+    [InlineData("989A908B81E7A597877F6B8704EEC8AB947A4F3602471CEFC08F5C27F0B7", "hello")]
+    [InlineData("B09E898479786A6B8FAF6B8704EEC8AB947A4F3602471CEFC08F5C27F0B7", "Password1")]
+    [InlineData("90BF8984D070AC5D5C8E9C8704EEC8AB947A4F3602471CEFC08F5C27F0B7", "p@ss w0rd!")]
+    // Longer than the 30-character field, so only the first 30 come back.
+    [InlineData("BFBDB9B3ABA195877765513B2309EDCFAF8D69431BF1C59767352CF6BE84", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123")]
+    public void Login_DecodesTheStoredPassword(string stored, string expected) =>
+        Assert.Equal(expected, ImportedPassword(stored));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("8C9A8")]   // odd number of hex digits
+    [InlineData("zzzz")]    // not hex
+    [InlineData("00")]      // decodes empty (leading null terminator)
+    public void Login_LeavesThePasswordUnset_WhenItCannotBeRead(string stored) =>
+        Assert.Null(ImportedPassword(stored));
+
+    // Runs the real import path and hands back the password it stored, decrypted.
+    private static string? ImportedPassword(string storedHex)
+    {
+        MegaMudImportPlan plan = MegaMudProfileImporter.Read(
+            MegaMudIni.Parse($"[BBS]\r\nUserID=u\r\nPassword={storedHex}\r\n"), "Cleric");
+        var made = new CharacterProfile();
+        string keyFile = Path.Combine(Path.GetTempPath(), "mudplay-megamud-import-" + Path.GetRandomFileName());
+        var protector = new PasswordProtector(keyFile);
+        plan.ApplyTo(made, "Paradigm", withLogin: true, protector);
+        try
+        {
+            string? encrypted = made.BbsCredentials?["Paradigm"].EncryptedPassword;
+            return string.IsNullOrEmpty(encrypted) ? null : protector.Unprotect(encrypted);
+        }
+        finally { try { File.Delete(keyFile); } catch (IOException) { /* best-effort */ } }
+    }
+
     // The redial and cleanup settings are the board's, so the character import
     // leaves them alone and ApplyToBbs writes them, held to what BBS settings takes.
     [Fact]
